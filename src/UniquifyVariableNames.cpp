@@ -25,13 +25,13 @@ class UniquifyVariableNames : public IRMutator {
     // Get a new previously unused name for a let binding or for loop,
     // and push it onto the renaming. Will return the original name if
     // possible, but pushes unconditionally to simplify cleanup.
-    string make_new_name(const string &base) {
+    string make_new_name(std::string_view base) {
         if (!renaming.contains(base)) {
-            renaming.push(base, base);
-            return base;
+            renaming.push(base, std::string{base});
+            return std::string{base};
         }
         for (size_t i = std::max((size_t)1, renaming.count(base));; i++) {
-            string candidate = base + "_" + std::to_string(i);
+            string candidate = concat(base, "_", std::to_string(i));
             if (!renaming.contains(candidate)) {
                 // Reserve this name for this base name
                 renaming.push(base, candidate);
@@ -127,7 +127,7 @@ class FindFreeVars : public IRVisitor {
 
     void visit(const Variable *op) override {
         if (!scope.contains(op->name)) {
-            free_vars.push(op->name, op->name);
+            free_vars.push(op->name, std::string{op->name});
         }
     }
 

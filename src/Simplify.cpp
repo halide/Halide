@@ -71,14 +71,14 @@ std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vect
     return {std::move(new_exprs), changed};
 }
 
-void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
+void Simplify::found_buffer_reference(std::string_view name, size_t dimensions) {
     for (size_t i = 0; i < dimensions; i++) {
-        string stride = name + ".stride." + std::to_string(i);
+        string stride = concat(name, ".stride.", std::to_string(i));
         if (var_info.contains(stride)) {
             var_info.ref(stride).old_uses++;
         }
 
-        string min = name + ".min." + std::to_string(i);
+        string min = concat(name, ".min.", std::to_string(i));
         if (var_info.contains(min)) {
             var_info.ref(min).old_uses++;
         }
@@ -421,7 +421,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
                     return Variable::make(op->type, lets.get(op->name));
                 } else if (it == vars.end()) {
                     std::string name = "v" + std::to_string(count++);
-                    vars[op->name] = name;
+                    vars.emplace(op->name, name);
                     out_vars.emplace_back(op->type, name);
                     return Variable::make(op->type, name);
                 } else {
@@ -436,7 +436,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
             }
 
             int count = 0;
-            map<string, string> vars;
+            StringMap<string> vars;
             Scope<string> lets;
             std::vector<pair<Type, string>> out_vars;
         } renamer;
@@ -446,7 +446,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         // Look for a concrete counter-example with random probing
         static std::mt19937 rng(0);
         for (int i = 0; i < 100; i++) {
-            map<string, Expr> s;
+            StringMap<Expr> s;
             for (const auto &p : renamer.out_vars) {
                 if (p.first.is_handle()) {
                     // This aint gonna work

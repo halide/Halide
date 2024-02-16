@@ -30,12 +30,12 @@ Expr cse_and_simplify(const Expr &x) {
 class AllocationInference : public IRMutator {
     using IRMutator::visit;
 
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
     const FuncValueBounds &func_bounds;
-    set<string> touched_by_extern;
+    StringSet touched_by_extern;
 
     Stmt visit(const Realize *op) override {
-        map<string, Function>::const_iterator iter = env.find(op->name);
+        auto iter = env.find(op->name);
         internal_assert(iter != env.end());
         Function f = iter->second;
         const vector<string> f_args = f.args();
@@ -63,7 +63,7 @@ class AllocationInference : public IRMutator {
                 }
             }
 
-            string prefix = op->name + "." + f_args[i];
+            string prefix = concat(op->name, ".", f_args[i]);
             string min_name = prefix + ".min_realized";
             string max_name = prefix + ".max_realized";
             string extent_name = prefix + ".extent_realized";
@@ -110,7 +110,7 @@ class AllocationInference : public IRMutator {
             internal_assert(max_var.type() == max.type());
 
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
-                                        {f_args[i], f.name(), min_var, max_var, b[i].min, b[i].max},
+                                        {Expr(f_args[i]), Expr(f.name()), min_var, max_var, b[i].min, b[i].max},
                                         Call::Extern);
 
             if (bound.min.defined()) {
@@ -128,19 +128,19 @@ class AllocationInference : public IRMutator {
     }
 
 public:
-    AllocationInference(const map<string, Function> &e, const FuncValueBounds &fb)
+    AllocationInference(const StringMap<Function> &e, const FuncValueBounds &fb)
         : env(e), func_bounds(fb) {
         // Figure out which buffers are touched by extern stages
         for (const auto &iter : e) {
             Function f = iter.second;
             if (f.has_extern_definition()) {
-                touched_by_extern.insert(f.name());
+                touched_by_extern.emplace(f.name());
                 for (const auto &arg : f.extern_arguments()) {
                     if (!arg.is_func()) {
                         continue;
                     }
                     Function input(arg.func);
-                    touched_by_extern.insert(input.name());
+                    touched_by_extern.emplace(input.name());
                 }
             }
         }
@@ -167,7 +167,7 @@ class StripDeclareBoxTouched : public IRMutator {
 }  // namespace
 
 Stmt allocation_bounds_inference(Stmt s,
-                                 const map<string, Function> &env,
+                                 const StringMap<Function> &env,
                                  const FuncValueBounds &fb) {
     s = AllocationInference(env, fb).mutate(s);
     s = StripDeclareBoxTouched().mutate(s);

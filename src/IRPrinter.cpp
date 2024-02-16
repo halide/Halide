@@ -236,7 +236,7 @@ void IRPrinter::test() {
     Stmt pipeline = Block::make(producer, consumer);
 
     Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
-                                                         {string("y"), y, 3}, Call::Extern));
+                                                         {Expr("y"), y, 3}, Call::Extern));
     Stmt block = Block::make(assertion, pipeline);
     Stmt let_stmt = LetStmt::make("y", 17, block);
     Stmt allocate = Allocate::make("buf", f32, MemoryType::Stack, {1023}, const_true(), let_stmt);

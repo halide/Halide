@@ -104,7 +104,7 @@ class Inliner : public IRMutator {
             auto args = mutate(op->args);
 
             // Grab the body
-            Expr body = qualify(func.name() + ".", func.values()[op->value_index]);
+            Expr body = qualify(concat(func.name(), "."), func.values()[op->value_index]);
 
             const vector<string> func_args = func.args();
 
@@ -112,10 +112,11 @@ class Inliner : public IRMutator {
             internal_assert(args.size() == func_args.size());
 
             for (size_t i = 0; i < args.size(); i++) {
+                std::string qualified_arg = concat(func.name(), ".", func_args[i]);
                 if (is_const(args[i]) || args[i].as<Variable>()) {
-                    body = substitute(func.name() + "." + func_args[i], args[i], body);
+                    body = substitute(qualified_arg, args[i], body);
                 } else {
-                    body = Let::make(func.name() + "." + func_args[i], args[i], body);
+                    body = Let::make(qualified_arg, args[i], body);
                 }
             }
 
@@ -129,24 +130,24 @@ class Inliner : public IRMutator {
     }
 
     Expr visit(const Variable *op) override {
-        if (op->name == func.name() + ".buffer") {
+        if (op->name == concat(func.name(), ".buffer")) {
             const Call *call = func.is_wrapper();
             internal_assert(call);
             // Do a whole-image inline. Substitute the .buffer symbol
             // for the wrapped object's .buffer symbol.
-            string buf_name;
             if (call->call_type == Call::Halide) {
-                buf_name = call->name;
+                string buf_name;
                 if (Function(call->func).outputs() > 1) {
-                    buf_name += "." + std::to_string(call->value_index);
+                    buf_name = concat(call->name, ".", std::to_string(call->value_index), ".buffer");
+                } else {
+                    buf_name = concat(call->name, ".buffer");
                 }
-                buf_name += ".buffer";
                 return Variable::make(type_of<halide_buffer_t *>(), buf_name);
             } else if (call->param.defined()) {
-                return Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->param);
+                return Variable::make(type_of<halide_buffer_t *>(), concat(call->name, ".buffer"), call->param);
             } else {
                 internal_assert(call->image.defined());
-                return Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->image);
+                return Variable::make(type_of<halide_buffer_t *>(), concat(call->name, ".buffer"), call->image);
             }
         } else {
             return op;

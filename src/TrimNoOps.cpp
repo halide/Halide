@@ -45,16 +45,16 @@ class LoadsFromBuffer : public IRVisitor {
         }
     }
 
-    string buffer;
+    std::string_view buffer;
 
 public:
     bool result = false;
-    LoadsFromBuffer(const string &b)
+    LoadsFromBuffer(std::string_view b)
         : buffer(b) {
     }
 };
 
-bool loads_from_buffer(const Expr &e, const string &buf) {
+bool loads_from_buffer(const Expr &e, std::string_view buf) {
     LoadsFromBuffer l(buf);
     e.accept(&l);
     return l.result;
@@ -315,7 +315,7 @@ class SimplifyUsingBounds : public IRMutator {
         Expr value = mutate(op->value);
         StmtOrExpr body;
         if (value.type() == Int(32) && is_pure(value)) {
-            containing_loops.push_back({op->name, {value, value}});
+            containing_loops.push_back({std::string{op->name}, {value, value}});
             body = mutate(op->body);
             containing_loops.pop_back();
         } else {
@@ -336,15 +336,15 @@ class SimplifyUsingBounds : public IRMutator {
         // Simplify the loop bounds.
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
-        containing_loops.push_back({op->name, {min, min + extent - 1}});
+        containing_loops.push_back({std::string{op->name}, {min, min + extent - 1}});
         Stmt body = mutate(op->body);
         containing_loops.pop_back();
         return For::make(op->name, min, extent, op->for_type, op->partition_policy, op->device_api, body);
     }
 
 public:
-    SimplifyUsingBounds(const string &v, const Interval &i) {
-        containing_loops.push_back({v, i});
+    SimplifyUsingBounds(std::string_view v, const Interval &i) {
+        containing_loops.push_back({std::string{v}, i});
     }
 
     SimplifyUsingBounds() = default;
@@ -408,9 +408,9 @@ class TrimNoOps : public IRMutator {
         // loop range is now truncated
         body = simplify(SimplifyUsingBounds(op->name, i).mutate(body));
 
-        string new_min_name = unique_name(op->name + ".new_min");
-        string new_max_name = unique_name(op->name + ".new_max");
-        string old_max_name = unique_name(op->name + ".old_max");
+        string new_min_name = unique_name(concat(op->name, ".new_min"));
+        string new_max_name = unique_name(concat(op->name, ".new_max"));
+        string old_max_name = unique_name(concat(op->name, ".old_max"));
         Expr new_min_var = Variable::make(Int(32), new_min_name);
         Expr new_max_var = Variable::make(Int(32), new_max_name);
         Expr old_max_var = Variable::make(Int(32), old_max_name);

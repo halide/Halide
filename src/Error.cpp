@@ -40,8 +40,9 @@ Error::Error(const char *msg)
     strcpy(what_, msg);
 }
 
-Error::Error(const std::string &msg)
-    : Error(msg.c_str()) {
+Error::Error(std::string_view msg)
+    : what_(new char[msg.size() + 1]) {
+    memcpy(what_, msg.data(), msg.size());
 }
 
 Error::Error(const Error &that)
@@ -79,15 +80,15 @@ const char *Error::what() const noexcept {
     return what_;
 }
 
-CompileError::CompileError(const std::string &msg)
+CompileError::CompileError(std::string_view msg)
     : Error(msg) {
 }
 
-RuntimeError::RuntimeError(const std::string &msg)
+RuntimeError::RuntimeError(std::string_view msg)
     : Error(msg) {
 }
 
-InternalError::InternalError(const std::string &msg)
+InternalError::InternalError(std::string_view msg)
     : Error(msg) {
 }
 

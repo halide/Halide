@@ -58,12 +58,12 @@ Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, pair<Function, int>> &e,
+    FlattenDimensions(const StringMap<pair<Function, int>> &e,
                       const vector<Function> &o,
                       const Target &t)
         : env(e), target(t) {
         for (const auto &f : o) {
-            outputs.insert(f.name());
+            outputs.emplace(f.name());
         }
     }
 
@@ -92,28 +92,28 @@ private:
         Scope<Interval> loop_vars;
         Scope<Expr> scope;
 
-        HoistedStorageData(const string &n)
+        HoistedStorageData(std::string_view n)
             : name(n) {
         }
     };
 
-    const map<string, pair<Function, int>> &env;
-    set<string> outputs;
-    set<string> textures;
+    const StringMap<pair<Function, int>> &env;
+    StringSet outputs;
+    StringSet textures;
     const Target &target;
     Scope<> realizations;
     bool in_gpu = false;
     vector<HoistedStorageData> hoisted_storages;
-    map<string, int> hoisted_storages_map;
+    StringMap<int> hoisted_storages_map;
 
-    Expr make_shape_var(string name, const string &field, size_t dim,
+    Expr make_shape_var(std::string_view name, std::string_view field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
         ReductionDomain rdom;
-        name = name + "." + field + "." + std::to_string(dim);
-        return Variable::make(Int(32), name, buf, param, rdom);
+        std::string n = concat(name, ".", field, ".", std::to_string(dim));
+        return Variable::make(Int(32), std::move(n), buf, param, rdom);
     }
 
-    Expr flatten_args(const string &name, vector<Expr> args,
+    Expr flatten_args(std::string_view name, vector<Expr> args,
                       const Buffer<> &buf, const Parameter &param) {
         bool internal = realizations.contains(name);
         Expr idx = target.has_large_buffers() ? make_zero(Int(64)) : 0;
@@ -173,7 +173,7 @@ private:
     Stmt visit(const HoistedStorage *op) override {
         hoisted_storages.emplace_back(op->name);
         // Record index in the stack.
-        hoisted_storages_map[op->name] = hoisted_storages.size() - 1;
+        hoisted_storages_map.emplace(op->name, hoisted_storages.size() - 1);
         Stmt body = mutate(op->body);
         internal_assert(!hoisted_storages.back().hoisted_allocations.empty()) << "Couldn't find a matching Realize node for Hoisted storage " << op->name << "\n";
         const auto &alloc_info = hoisted_storages.back().hoisted_allocations.front();
@@ -195,7 +195,7 @@ private:
         realizations.push(op->name);
 
         if (op->memory_type == MemoryType::GPUTexture) {
-            textures.insert(op->name);
+            textures.emplace(op->name);
             debug(2) << "found texture " << op->name << "\n";
         }
 
@@ -269,9 +269,9 @@ private:
         vector<string> min_name(dims), extent_name(dims), stride_name(dims);
         for (int i = 0; i < dims; i++) {
             string d = std::to_string(i);
-            min_name[i] = op->name + ".min." + d;
-            stride_name[i] = op->name + ".stride." + d;
-            extent_name[i] = op->name + ".extent." + d;
+            min_name[i] = concat(op->name, ".min.", d);
+            stride_name[i] = concat(op->name, ".stride.", d);
+            extent_name[i] = concat(op->name, ".extent.", d);
         }
         vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
         for (int i = 0; i < dims; i++) {
@@ -291,9 +291,11 @@ private:
             builder.extents.push_back(extent_var[i]);
             builder.strides.push_back(stride_var[i]);
         }
-        stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
-        if (hoisted_storages_map.count(op->name) > 0) {
-            HoistedStorageData &hoisted_storage_data = hoisted_storages[hoisted_storages_map[op->name]];
+        stmt = LetStmt::make(concat(op->name, ".buffer"), builder.build(), stmt);
+        if (auto iter = hoisted_storages_map.find(op->name);
+            iter != hoisted_storages_map.end()) {
+            HoistedStorageData &hoisted_storage_data =
+                hoisted_storages[iter->second];
             vector<Expr> bounded_extents;
             for (const auto &e : allocation_extents) {
                 Expr expanded_extent = e;
@@ -310,7 +312,7 @@ private:
                 bounded_extents.push_back(bounds.max);
             }
 
-            HoistedAllocationInfo hoisted_alloc(op->name, op->types[0], op->memory_type, bounded_extents, condition);
+            HoistedAllocationInfo hoisted_alloc(std::string{op->name}, op->types[0], op->memory_type, bounded_extents, condition);
 
             hoisted_storage_data.hoisted_allocations.push_back(hoisted_alloc);
         } else {
@@ -367,7 +369,7 @@ private:
 
         if (output_buf.defined()) {
             if (output_buf.memory_type() == MemoryType::GPUTexture) {
-                textures.insert(op->name);
+                textures.emplace(op->name);
             }
         }
 
@@ -375,12 +377,12 @@ private:
         Expr predicate = mutate(op->predicate);
         if (in_gpu && textures.count(op->name)) {
             Expr buffer_var =
-                Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer", output_buf);
+                Variable::make(type_of<halide_buffer_t *>(), concat(op->name, ".buffer"), output_buf);
             vector<Expr> args(2);
-            args[0] = op->name;
+            args[0] = Expr(op->name);
             args[1] = buffer_var;
             for (size_t i = 0; i < op->args.size(); i++) {
-                Expr min = Variable::make(Int(32), op->name + ".min." + std::to_string(i));
+                Expr min = Variable::make(Int(32), concat(op->name, ".min.", std::to_string(i)));
                 args.push_back(op->args[i] - min);
             }
             args.push_back(value);
@@ -408,7 +410,7 @@ private:
                          << "\n";
 
                 if (op->param.memory_type() == MemoryType::GPUTexture) {
-                    textures.insert(op->name);
+                    textures.emplace(op->name);
                 }
             }
 
@@ -417,14 +419,14 @@ private:
             if (in_gpu && textures.count(op->name)) {
                 ReductionDomain rdom;
                 Expr buffer_var =
-                    Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer",
+                    Variable::make(type_of<halide_buffer_t *>(), concat(op->name, ".buffer"),
                                    op->image, op->param, rdom);
 
                 // Create image_load("name", name.buffer, x - x_min, x_extent,
                 // y - y_min, y_extent, ...).  Extents can be used by
                 // successive passes.
                 vector<Expr> args(2);
-                args[0] = op->name;
+                args[0] = Expr(op->name);
                 args[1] = buffer_var;
                 for (size_t i = 0; i < op->args.size(); i++) {
                     Expr min = make_shape_var(op->name, "min", i, op->image, op->param);
@@ -464,7 +466,7 @@ private:
         for (size_t i = 0; i < op->bounds.size(); i++) {
             prefetch_min[i] = mutate(op->bounds[i].min);
             prefetch_extent[i] = mutate(op->bounds[i].extent);
-            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->prefetch.param);
+            prefetch_stride[i] = Variable::make(Int(32), concat(op->name, ".stride.", std::to_string(i)), op->prefetch.param);
         }
 
         Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->prefetch.param));
@@ -597,18 +599,18 @@ class PromoteToMemoryType : public IRMutator {
 
 Stmt storage_flattening(Stmt s,
                         const vector<Function> &outputs,
-                        const map<string, Function> &env,
+                        const StringMap<Function> &env,
                         const Target &target) {
     s = zero_gpu_loop_mins(s);
 
     // Make an environment that makes it easier to figure out which
     // Function corresponds to a tuple component. foo.0, foo.1, foo.2,
     // all point to the function foo.
-    map<string, pair<Function, int>> tuple_env;
+    StringMap<pair<Function, int>> tuple_env;
     for (const auto &p : env) {
         if (p.second.outputs() > 1) {
             for (int i = 0; i < p.second.outputs(); i++) {
-                tuple_env[p.first + "." + std::to_string(i)] = {p.second, i};
+                tuple_env[concat(p.first, ".", std::to_string(i))] = {p.second, i};
             }
         } else {
             tuple_env[p.first] = {p.second, 0};

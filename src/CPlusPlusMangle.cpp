@@ -29,7 +29,7 @@ struct MangledNamePart {
     std::string with_substitutions;
 
     MangledNamePart() = default;
-    MangledNamePart(const std::string &mangled)
+    MangledNamePart(std::string_view mangled)
         : full_name(mangled), with_substitutions(mangled) {
     }
     MangledNamePart(const char *mangled)
@@ -49,10 +49,10 @@ Type non_null_void_star_type() {
 namespace WindowsMangling {
 
 struct PreviousDeclarations {
-    std::map<std::string, int> prev_types;
-    std::map<std::string, int> prev_names;
+    StringMap<int> prev_types;
+    StringMap<int> prev_names;
 
-    std::string check_and_enter(std::map<std::string, int> &table, const std::string &name, const std::string &full) {
+    std::string check_and_enter(StringMap<int> &table, std::string_view name, std::string_view full) {
         int sub = -1;
         if (table.size() >= 10) {
             auto i = table.find(name);
@@ -60,7 +60,7 @@ struct PreviousDeclarations {
                 sub = i->second;
             }
         } else {
-            auto insert_result = table.insert({name, table.size()});
+            auto insert_result = table.emplace(name, table.size());
             if (!insert_result.second) {
                 sub = insert_result.first->second;
             }
@@ -68,7 +68,7 @@ struct PreviousDeclarations {
         if (sub != -1) {
             return std::string(1, (char)('0' + sub));
         } else {
-            return full;
+            return std::string{full};
         }
     }
 
@@ -79,12 +79,12 @@ struct PreviousDeclarations {
         return check_and_enter(prev_types, mangled.full_name, mangled.with_substitutions);
     }
 
-    std::string check_and_enter_name(const std::string &name) {
-        return check_and_enter(prev_names, name, name + "@");
+    std::string check_and_enter_name(std::string_view name) {
+        return check_and_enter(prev_names, name, concat(name, "@"));
     }
 };
 
-std::string simple_type_to_mangle_char(const std::string &type_name, const Target &target) {
+std::string simple_type_to_mangle_char(std::string_view type_name, const Target &target) {
     if (type_name == "void") {
         return "X";
     } else if (type_name == "bool") {
@@ -117,17 +117,17 @@ std::string simple_type_to_mangle_char(const std::string &type_name, const Targe
     return "";
 }
 
-std::string one_qualifier_set(bool is_const, bool is_volatile, bool is_restrict, bool is_pointer_target, const std::string &base_mode) {
+std::string one_qualifier_set(bool is_const, bool is_volatile, bool is_restrict, bool is_pointer_target, std::string_view base_mode) {
     if (is_const && is_volatile) {
-        return (is_pointer_target ? ("S" + base_mode) : "D");
+        return (is_pointer_target ? concat("S", base_mode) : "D");
     } else if (is_const) {
-        return (is_pointer_target ? ("Q" + base_mode) : "B");
+        return (is_pointer_target ? concat("Q", base_mode) : "B");
     } else if (is_volatile) {
-        return (is_pointer_target ? ("R" + base_mode) : "C");
+        return (is_pointer_target ? concat("R", base_mode) : "C");
     } else if (is_restrict && is_pointer_target) {
-        return ("P" + base_mode + "I");
+        return concat("P", base_mode, "I");
     } else {
-        return (is_pointer_target ? ("P" + base_mode) : "A");
+        return (is_pointer_target ? concat("P", base_mode) : "A");
     }
 }
 
@@ -140,7 +140,7 @@ struct QualsState {
 
     bool finished{false};
 
-    QualsState(const Type &type, const std::string &base_mode)
+    QualsState(const Type &type, std::string_view base_mode)
         : type(type), base_mode(base_mode) {
     }
 
@@ -182,10 +182,6 @@ struct QualsState {
             result = "$$Q" + base_mode + result;
         }
     }
-
-    const std::string &get_result() const {
-        return result;
-    }
 };
 
 std::string mangle_indirection_and_cvr_quals(const Type &type, const Target &target) {
@@ -195,16 +191,16 @@ std::string mangle_indirection_and_cvr_quals(const Type &type, const Target &tar
     }
     state.final();
 
-    return state.get_result();
+    return std::move(state.result);
 }
 
 MangledNamePart mangle_inner_name(const Type &type, const Target &target, PreviousDeclarations &prev_decls) {
-    MangledNamePart result("");
 
     std::string quals = mangle_indirection_and_cvr_quals(type, target);
     if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
-        return quals + simple_type_to_mangle_char(type.handle_type->inner_name.name, target);
+        return MangledNamePart{quals + simple_type_to_mangle_char(type.handle_type->inner_name.name, target)};
     } else {
+        MangledNamePart result("");
         std::string code;
         if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct) {
             code = "U";
@@ -282,7 +278,7 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
     return "";
 }
 
-std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
+std::string cplusplus_function_mangled_name(std::string_view name, const std::vector<std::string> &namespaces,
                                             Type return_type, const std::vector<ExternFuncArgument> &args,
                                             const Target &target) {
     std::string result("\1?");
@@ -321,13 +317,13 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 
 namespace ItaniumABIMangling {
 
-std::string itanium_mangle_id(const std::string &id) {
+std::string itanium_mangle_id(std::string_view id) {
     std::ostringstream oss;
     oss << id.size() << id;
     return oss.str();
 }
 
-std::string simple_type_to_mangle_char(const std::string &type_name, const Target &target) {
+std::string simple_type_to_mangle_char(std::string_view type_name, const Target &target) {
     if (type_name == "void") {
         return "v";
     } else if (type_name == "bool") {
@@ -380,8 +376,8 @@ struct Quals {
 struct PrevPrefixes {
     std::map<std::string, int32_t> prev_seen;
 
-    bool check_and_enter(const std::string &prefix, std::string &substitute) {
-        auto place = prev_seen.insert({prefix, prev_seen.size()});
+    bool check_and_enter(std::string_view prefix, std::string &substitute) {
+        auto place = prev_seen.emplace(prefix, prev_seen.size());
         if (place.first->second == 0) {
             substitute = "S_";
         } else {
@@ -402,25 +398,25 @@ struct PrevPrefixes {
         return !place.second;
     }
 
-    bool extend_name_part(MangledNamePart &name_part, const std::string &mangled) {
+    bool extend_name_part(MangledNamePart &name_part, std::string_view mangled) {
         std::string substitute;
-        bool found = check_and_enter(name_part.with_substitutions + mangled, substitute);
+        bool found = check_and_enter(concat(name_part.with_substitutions, mangled), substitute);
         if (found) {
             name_part.full_name = substitute;
         } else {
-            name_part.full_name = name_part.full_name + mangled;
+            name_part.full_name += mangled;
         }
         name_part.with_substitutions = substitute;
         return found;
     }
 
-    bool prepend_name_part(const std::string &mangled, MangledNamePart &name_part) {
+    bool prepend_name_part(std::string_view mangled, MangledNamePart &name_part) {
         std::string substitute;
-        bool found = check_and_enter(mangled + name_part.with_substitutions, substitute);
+        bool found = check_and_enter(concat(mangled, name_part.with_substitutions), substitute);
         if (found) {
             name_part.full_name = substitute;
         } else {
-            name_part.full_name = mangled + name_part.full_name;
+            name_part.full_name = concat(mangled, name_part.full_name);
         }
         name_part.with_substitutions = substitute;
         return found;
@@ -469,7 +465,7 @@ MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePar
     return name_part;
 }
 
-MangledNamePart mangle_qualified_name(const std::string &name, const std::vector<std::string> &namespaces,
+MangledNamePart mangle_qualified_name(std::string_view name, const std::vector<std::string> &namespaces,
                                       const std::vector<halide_cplusplus_type_name> &enclosing_types,
                                       bool can_substitute, PrevPrefixes &prevs) {
     MangledNamePart result;
@@ -518,7 +514,7 @@ MangledNamePart mangle_qualified_name(const std::string &name, const std::vector
 
 std::string mangle_inner_name(const Type &type, const Target &target, PrevPrefixes &prevs) {
     if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
-        MangledNamePart result = simple_type_to_mangle_char(type.handle_type->inner_name.name, target);
+        MangledNamePart result{simple_type_to_mangle_char(type.handle_type->inner_name.name, target)};
         return apply_indirection_and_cvr_quals(type, result, prevs).full_name;
     } else {
         MangledNamePart mangled = mangle_qualified_name(type.handle_type->inner_name.name, type.handle_type->namespaces,
@@ -594,7 +590,7 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
     return "";
 }
 
-std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
+std::string cplusplus_function_mangled_name(std::string_view name, const std::vector<std::string> &namespaces,
                                             Type return_type, const std::vector<ExternFuncArgument> &args,
                                             const Target &target) {
     std::string result("_Z");
@@ -615,7 +611,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 
 }  // namespace ItaniumABIMangling
 
-std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
+std::string cplusplus_function_mangled_name(std::string_view name, const std::vector<std::string> &namespaces,
                                             Type return_type, const std::vector<ExternFuncArgument> &args,
                                             const Target &target) {
     if (target.os == Target::Windows) {
@@ -819,7 +815,7 @@ MangleResult two_void_stars_win32[] = {
 };
 
 void check_result(const MangleResult *expecteds, size_t &expected_index,
-                  const Target &target, const std::string &mangled_name) {
+                  const Target &target, std::string_view mangled_name) {
     internal_assert(mangled_name == expecteds[expected_index].expected) << "Mangling for " << expecteds[expected_index].label << " expected\n    " << expecteds[expected_index].expected << " got\n    " << mangled_name << "\nfor target " << target.to_string();
     expected_index++;
 }

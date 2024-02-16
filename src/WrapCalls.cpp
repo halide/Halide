@@ -51,7 +51,7 @@ void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers
 }
 
 void validate_custom_wrapper(const Function &in_func, const Function &wrapped, const Function &wrapper) {
-    map<string, Function> callees = find_direct_calls(in_func);
+    StringMap<Function> callees = find_direct_calls(in_func);
     if (!callees.count(wrapper.name())) {
         std::ostringstream callees_text;
         for (const auto &it : callees) {
@@ -69,11 +69,11 @@ void validate_custom_wrapper(const Function &in_func, const Function &wrapped, c
 
 }  // anonymous namespace
 
-map<string, Function> wrap_func_calls(const map<string, Function> &env) {
-    map<string, Function> wrapped_env;
+StringMap<Function> wrap_func_calls(const StringMap<Function> &env) {
+    StringMap<Function> wrapped_env;
 
     map<FunctionPtr, SubstitutionMap> func_wrappers_map;  // In Func -> [wrapped Func -> wrapper]
-    set<string> global_wrappers;
+    StringSet global_wrappers;
 
     for (const auto &iter : env) {
         wrapped_env.emplace(iter.first, iter.second);
@@ -87,9 +87,9 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
 
         // Put the names of all wrappers of this Function into the set for
         // faster comparison during the substitution.
-        set<string> all_func_wrappers;
+        StringSet all_func_wrappers;
         for (const auto &iter : wrappers) {
-            all_func_wrappers.insert(Function(iter.second).name());
+            all_func_wrappers.emplace(Function(iter.second).name());
         }
 
         for (const auto &iter : wrappers) {
@@ -97,7 +97,7 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
             FunctionPtr wrapper = iter.second;
 
             if (in_func.empty()) {  // Global wrapper
-                global_wrappers.insert(Function(wrapper).name());
+                global_wrappers.emplace(Function(wrapper).name());
                 for (const auto &wrapped_env_iter : wrapped_env) {
                     in_func = wrapped_env_iter.first;
                     if ((wrapped_fname == in_func) ||

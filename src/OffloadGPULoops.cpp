@@ -97,7 +97,7 @@ class InjectGpuOffload : public IRMutator {
     /** Child code generator for device kernels. */
     map<DeviceAPI, unique_ptr<CodeGen_GPU_Dev>> cgdev;
 
-    map<string, bool> state_needed;
+    StringMap<bool> state_needed;
 
     const Target &target;
 
@@ -109,9 +109,9 @@ class InjectGpuOffload : public IRMutator {
     }
 
     Expr make_state_var(const string &name) {
-        auto storage = Buffer<void *>::make_scalar(name + "_buf");
+        auto storage = Buffer<void *>::make_scalar(concat(name, "_buf"));
         storage() = nullptr;
-        Expr buf = Variable::make(type_of<halide_buffer_t *>(), storage.name() + ".buffer", storage);
+        Expr buf = Variable::make(type_of<halide_buffer_t *>(), concat(storage.name(), ".buffer"), storage);
         return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
     }
 
@@ -120,7 +120,7 @@ class InjectGpuOffload : public IRMutator {
     Expr make_buffer_ptr(const vector<char> &data, const string &name) {
         Buffer<uint8_t> code((int)data.size(), name);
         memcpy(code.data(), data.data(), (int)data.size());
-        Expr buf = Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", code);
+        Expr buf = Variable::make(type_of<halide_buffer_t *>(), concat(name, ".buffer"), code);
         return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
     }
 
@@ -177,7 +177,7 @@ class InjectGpuOffload : public IRMutator {
              });
 
         // compile the kernel
-        string kernel_name = c_print_name(unique_name("kernel_" + loop->name));
+        string kernel_name = c_print_name(unique_name(concat("kernel_", loop->name)));
 
         CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api].get();
         user_assert(gpu_codegen != nullptr)
@@ -196,7 +196,7 @@ class InjectGpuOffload : public IRMutator {
         for (const DeviceArgument &i : closure_args) {
             Expr val;
             if (i.is_buffer) {
-                val = Variable::make(Handle(), i.name + ".buffer");
+                val = Variable::make(Handle(), concat(i.name, ".buffer"));
             } else {
                 val = Variable::make(i.type, i.name);
                 val = Call::make(type_of<void *>(), Call::make_struct, {val}, Call::Intrinsic);
@@ -236,7 +236,7 @@ class InjectGpuOffload : public IRMutator {
         string api_unique_name = gpu_codegen->api_unique_name();
         vector<Expr> run_args = {
             get_state_var(api_unique_name),
-            kernel_name,
+            Expr(kernel_name),
             Expr(bounds.num_blocks[0]),
             Expr(bounds.num_blocks[1]),
             Expr(bounds.num_blocks[2]),
@@ -248,7 +248,7 @@ class InjectGpuOffload : public IRMutator {
             Call::make(Handle(), Call::make_struct, args, Call::Intrinsic),
             Call::make(Handle(), Call::make_struct, arg_is_buffer, Call::Intrinsic),
         };
-        Stmt run_and_assert = call_extern_and_assert("halide_" + api_unique_name + "_run", run_args);
+        Stmt run_and_assert = call_extern_and_assert(concat("halide_", api_unique_name, "_run"), run_args);
         if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
             Expr device_interface = make_device_interface_call(loop->device_api, MemoryType::Auto);
             Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
@@ -309,13 +309,13 @@ public:
 
             debug(2) << "Generating init_kernels for " << api_unique_name << "\n";
             vector<char> kernel_src = i.second->compile_to_src();
-            Expr kernel_src_buf = make_buffer_ptr(kernel_src, api_unique_name + "_gpu_source_kernels");
+            Expr kernel_src_buf = make_buffer_ptr(kernel_src, concat(api_unique_name, "_gpu_source_kernels"));
 
-            string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
+            string init_kernels_name = concat("halide_", api_unique_name, "_initialize_kernels");
             vector<Expr> init_args = {state_ptr_var, kernel_src_buf, Expr((int)kernel_src.size())};
             Stmt init_kernels = call_extern_and_assert(init_kernels_name, init_args);
 
-            string destructor_name = "halide_" + api_unique_name + "_finalize_kernels";
+            string destructor_name = concat("halide_", api_unique_name, "_finalize_kernels");
             vector<Expr> finalize_args = {Expr(destructor_name), get_state_var(api_unique_name)};
             Stmt register_destructor = Evaluate::make(
                 Call::make(Handle(), Call::register_destructor, finalize_args, Call::Intrinsic));

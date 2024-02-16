@@ -206,7 +206,7 @@ struct CheckVars : public IRGraphVisitor {
     const std::string name;
     bool unbound_reduction_vars_ok = false;
 
-    CheckVars(const std::string &n)
+    CheckVars(std::string_view n)
         : name(n) {
     }
 
@@ -281,7 +281,7 @@ struct CheckVars : public IRGraphVisitor {
 class FreezeFunctions : public IRGraphVisitor {
     using IRGraphVisitor::visit;
 
-    const string &func;
+    std::string_view func;
 
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
@@ -294,7 +294,7 @@ class FreezeFunctions : public IRGraphVisitor {
     }
 
 public:
-    FreezeFunctions(const string &f)
+    FreezeFunctions(std::string_view f)
         : func(f) {
     }
 };
@@ -312,7 +312,7 @@ Function::Function(const FunctionPtr &ptr)
         << "Can't construct Function from undefined FunctionContents ptr\n";
 }
 
-Function::Function(const std::string &n) {
+Function::Function(std::string_view n) {
     for (size_t i = 0; i < n.size(); i++) {
         user_assert(n[i] != '.')
             << "Func name \"" << n << "\" is invalid. "
@@ -325,15 +325,15 @@ Function::Function(const std::string &n) {
     contents->origin_name = n;
 }
 
-Function::Function(const std::vector<Type> &required_types, int required_dims, const std::string &n)
+Function::Function(const std::vector<Type> &required_types, int required_dims, std::string_view n)
     : Function(n) {
     user_assert(required_dims >= AnyDims);
     contents->required_types = required_types;
     contents->required_dims = required_dims;
 }
 
-void Function::update_with_deserialization(const std::string &name,
-                                           const std::string &origin_name,
+void Function::update_with_deserialization(std::string_view name,
+                                           std::string_view origin_name,
                                            const std::vector<Halide::Type> &output_types,
                                            const std::vector<Halide::Type> &required_types,
                                            int required_dims,
@@ -341,10 +341,10 @@ void Function::update_with_deserialization(const std::string &name,
                                            const FuncSchedule &func_schedule,
                                            const Definition &init_def,
                                            const std::vector<Definition> &updates,
-                                           const std::string &debug_file,
+                                           std::string_view debug_file,
                                            const std::vector<Parameter> &output_buffers,
                                            const std::vector<ExternFuncArgument> &extern_arguments,
-                                           const std::string &extern_function_name,
+                                           std::string_view extern_function_name,
                                            NameMangling name_mangling,
                                            DeviceAPI device_api,
                                            const Expr &extern_proxy_expr,
@@ -534,9 +534,9 @@ void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const
     }
 }
 
-void Function::deep_copy(string name, const FunctionPtr &copy, DeepCopyMap &copied_map) const {
+void Function::deep_copy(std::string_view name, const FunctionPtr &copy, DeepCopyMap &copied_map) const {
     deep_copy(copy, copied_map);
-    copy->name = std::move(name);
+    copy->name = std::string{name};
 }
 
 void Function::define(const vector<string> &args, vector<Expr> values) {
@@ -634,7 +634,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     // Add the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
+        Dim d = {std::string{Var::outermost().name()}, ForType::Serial, DeviceAPI::None, DimType::PureVar};
         contents->init_def.schedule().dims().push_back(d);
     }
 
@@ -662,7 +662,7 @@ void Function::create_output_buffers(const std::vector<Type> &types, int dims) c
     internal_assert(!types.empty() && dims != AnyDims);
 
     for (size_t i = 0; i < types.size(); i++) {
-        string buffer_name = name();
+        string buffer_name{name()};
         if (types.size() > 1) {
             buffer_name += '.' + std::to_string((int)i);
         }
@@ -833,7 +833,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             // reorder)? It's pure if one value of the RVar can never
             // access from the same memory that another RVar is
             // writing to.
-            const string &v = rvar.var;
+            const std::string &v = rvar.var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
             Dim d = {v, ForType::Serial, DeviceAPI::None,
@@ -852,7 +852,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // Then the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
+        Dim d = {std::string{Var::outermost().name()}, ForType::Serial, DeviceAPI::None, DimType::PureVar};
         r.schedule().dims().push_back(d);
     }
 
@@ -873,7 +873,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     contents->updates.push_back(r);
 }
 
-void Function::define_extern(const std::string &function_name,
+void Function::define_extern(std::string_view function_name,
                              const std::vector<ExternFuncArgument> &extern_args,
                              const std::vector<Type> &types,
                              const std::vector<Var> &args,
@@ -893,7 +893,7 @@ void Function::define_extern(const std::string &function_name,
     std::vector<string> arg_names;
     std::vector<Expr> arg_exprs;
     for (const auto &arg : args) {
-        arg_names.push_back(arg.name());
+        arg_names.emplace_back(arg.name());
         arg_exprs.push_back(arg);
     }
     contents->args = arg_names;
@@ -906,7 +906,7 @@ void Function::define_extern(const std::string &function_name,
     std::vector<Expr> values;
     contents->output_buffers.clear();
     for (size_t i = 0; i < types.size(); i++) {
-        string buffer_name = name();
+        string buffer_name{name()};
         if (types.size() > 1) {
             buffer_name += '.' + std::to_string((int)i);
         }
@@ -928,7 +928,7 @@ void Function::define_extern(const std::string &function_name,
         contents->init_def.schedule().dims().push_back(d);
     }
     // Add the dummy outermost dim
-    Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
+    Dim d = {std::string{Var::outermost().name()}, ForType::Serial, DeviceAPI::None, DimType::PureVar};
     contents->init_def.schedule().dims().push_back(d);
 }
 
@@ -940,11 +940,11 @@ void Function::mutate(IRMutator *mutator) {
     contents->mutate(mutator);
 }
 
-const std::string &Function::name() const {
+std::string_view Function::name() const {
     return contents->name;
 }
 
-const std::string &Function::origin_name() const {
+std::string_view Function::origin_name() const {
     return contents->origin_name;
 }
 
@@ -962,7 +962,7 @@ const std::vector<std::string> &Function::args() const {
     return contents->args;
 }
 
-bool Function::is_pure_arg(const std::string &name) const {
+bool Function::is_pure_arg(std::string_view name) const {
     return std::find(args().begin(), args().end(), name) != args().end();
 }
 
@@ -1093,7 +1093,7 @@ std::vector<ExternFuncArgument> &Function::extern_arguments() {
     return contents->extern_arguments;
 }
 
-const std::string &Function::extern_function_name() const {
+std::string_view Function::extern_function_name() const {
     return contents->extern_function_name;
 }
 
@@ -1101,7 +1101,7 @@ DeviceAPI Function::extern_function_device_api() const {
     return contents->extern_function_device_api;
 }
 
-const std::string &Function::debug_file() const {
+std::string_view Function::debug_file() const {
     return contents->debug_file;
 }
 
@@ -1122,8 +1122,8 @@ void Function::trace_stores() {
 void Function::trace_realizations() {
     contents->trace_realizations = true;
 }
-void Function::add_trace_tag(const std::string &trace_tag) {
-    contents->trace_tags.push_back(trace_tag);
+void Function::add_trace_tag(std::string_view trace_tag) {
+    contents->trace_tags.emplace_back(trace_tag);
 }
 
 bool Function::is_tracing_loads() const {
@@ -1170,11 +1170,11 @@ bool Function::frozen() const {
     return contents->frozen;
 }
 
-const map<string, FunctionPtr> &Function::wrappers() const {
+const StringMap<FunctionPtr> &Function::wrappers() const {
     return contents->func_schedule.wrappers();
 }
 
-Function Function::new_function_in_same_group(const std::string &f) {
+Function Function::new_function_in_same_group(std::string_view f) {
     int group_size = (int)(contents.group()->members.size());
     contents.group()->members.resize(group_size + 1);
     contents.group()->members[group_size].name = f;
@@ -1184,7 +1184,7 @@ Function Function::new_function_in_same_group(const std::string &f) {
     return Function(ptr);
 }
 
-void Function::add_wrapper(const std::string &f, Function &wrapper) {
+void Function::add_wrapper(std::string_view f, Function &wrapper) {
     wrapper.freeze();
     FunctionPtr ptr = wrapper.contents;
 
@@ -1207,7 +1207,7 @@ const Call *Function::is_wrapper() const {
         return nullptr;
     }
     vector<Expr> expected_args;
-    for (const string &v : args()) {
+    for (const std::string &v : args()) {
         expected_args.push_back(Variable::make(Int(32), v));
     }
     Expr expected_rhs =
@@ -1274,10 +1274,10 @@ Function &Function::substitute_calls(const Function &orig, const Function &subst
 }
 
 // Deep copy an entire Function DAG.
-pair<vector<Function>, map<string, Function>> deep_copy(
-    const vector<Function> &outputs, const map<string, Function> &env) {
+pair<vector<Function>, StringMap<Function>> deep_copy(
+    const vector<Function> &outputs, const StringMap<Function> &env) {
     vector<Function> copy_outputs;
-    map<string, Function> copy_env;
+    StringMap<Function> copy_env;
 
     // Create empty deep-copies of all Functions in 'env'
     DeepCopyMap copied_map;  // Original Function -> Deep-copy

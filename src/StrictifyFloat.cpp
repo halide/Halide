@@ -63,7 +63,7 @@ public:
 
 }  // namespace
 
-bool strictify_float(std::map<std::string, Function> &env, const Target &t) {
+bool strictify_float(StringMap<Function> &env, const Target &t) {
     bool any_strict_float = false;
     for (auto &iter : env) {
         Function &func = iter.second;

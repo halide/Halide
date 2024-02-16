@@ -66,7 +66,7 @@ Stmt claim_sampling_token(const Stmt &s, const Expr &shared_token, const Expr &l
 class InjectProfiling : public IRMutator {
 
 public:
-    map<string, int> indices;  // maps from func name -> index in buffer.
+    StringMap<int> indices;  // maps from func name -> index in buffer.
 
     vector<int> stack;  // What produce nodes are we currently inside of.
 
@@ -76,7 +76,7 @@ public:
     bool in_parallel = false;
     bool in_leaf_task = false;
 
-    InjectProfiling(const string &pipeline_name)
+    InjectProfiling(std::string_view pipeline_name)
         : pipeline_name(pipeline_name) {
         stack.push_back(get_func_id("overhead"));
         // ID 0 is treated specially in the runtime as overhead
@@ -119,19 +119,19 @@ private:
     bool profiling_memory = true;
 
     // Strip down the tuple name, e.g. f.0 into f
-    string normalize_name(const string &name) {
+    string normalize_name(std::string_view name) {
         vector<string> v = split_string(name, ".");
         internal_assert(!v.empty());
         return v[0];
     }
 
-    int get_func_id(const string &name) {
+    int get_func_id(std::string_view name) {
         string norm_name = normalize_name(name);
         int idx = -1;
-        map<string, int>::iterator iter = indices.find(norm_name);
+        StringMap<int>::iterator iter = indices.find(norm_name);
         if (iter == indices.end()) {
             idx = (int)indices.size();
-            indices[norm_name] = idx;
+            indices.emplace(norm_name, idx);
         } else {
             idx = iter->second;
         }
@@ -154,7 +154,7 @@ private:
     Expr compute_allocation_size(const vector<Expr> &extents,
                                  const Expr &condition,
                                  const Type &type,
-                                 const std::string &name,
+                                 std::string_view name,
                                  bool &on_stack) {
         on_stack = true;
 
@@ -498,7 +498,7 @@ private:
 
 }  // namespace
 
-Stmt inject_profiling(Stmt s, const string &pipeline_name) {
+Stmt inject_profiling(Stmt s, std::string_view pipeline_name) {
     InjectProfiling profiling(pipeline_name);
     s = profiling.mutate(s);
 
@@ -507,11 +507,11 @@ Stmt inject_profiling(Stmt s, const string &pipeline_name) {
     Expr func_names_buf = Variable::make(Handle(), "profiling_func_names");
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_pipeline_start",
-                                     {pipeline_name, num_funcs, func_names_buf}, Call::Extern);
+                                     {Expr(pipeline_name), num_funcs, func_names_buf}, Call::Extern);
 
     Expr get_state = Call::make(Handle(), "halide_profiler_get_state", {}, Call::Extern);
 
-    Expr get_pipeline_state = Call::make(Handle(), "halide_profiler_get_pipeline_state", {pipeline_name}, Call::Extern);
+    Expr get_pipeline_state = Call::make(Handle(), "halide_profiler_get_pipeline_state", {Expr(pipeline_name)}, Call::Extern);
 
     Expr profiler_token = Variable::make(Int(32), "profiler_token");
 
@@ -561,7 +561,7 @@ Stmt inject_profiling(Stmt s, const string &pipeline_name) {
     }
 
     for (const auto &p : profiling.indices) {
-        s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
+        s = Block::make(Store::make("profiling_func_names", Expr(p.first), p.second, Parameter(), const_true(), ModulusRemainder()), s);
     }
 
     s = Block::make(s, Free::make("profiling_func_names"));

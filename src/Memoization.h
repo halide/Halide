@@ -23,8 +23,8 @@ class Function;
  *  the cache.
  *  Should leave non-memoized Funcs unchanged.
  */
-Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &env,
-                        const std::string &name,
+Stmt inject_memoization(const Stmt &s, const StringMap<Function> &env,
+                        std::string_view name,
                         const std::vector<Function> &outputs);
 
 /** This should be called after Storage Flattening has added Allocation
@@ -33,7 +33,7 @@ Stmt inject_memoization(const Stmt &s, const std::map<std::string, Function> &en
  *  are released when no longer used.
  *  Should not affect allocations for non-memoized Funcs.
  */
-Stmt rewrite_memoized_allocations(const Stmt &s, const std::map<std::string, Function> &env);
+Stmt rewrite_memoized_allocations(const Stmt &s, const StringMap<Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

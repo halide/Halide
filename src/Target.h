@@ -194,12 +194,12 @@ struct Target {
      * Invalid target strings will fail with a user_error.
      */
     // @{
-    explicit Target(const std::string &s);
+    explicit Target(std::string_view s);
     explicit Target(const char *s);
     // @}
 
     /** Check if a target string is valid. */
-    static bool validate_target_string(const std::string &s);
+    static bool validate_target_string(std::string_view s);
 
     /** Return true if any of the arch/bits/os fields are "unknown"/0;
         return false otherwise. */
@@ -349,7 +349,7 @@ struct Target {
     /** Return the feature corresponding to a given name, in the form
      * used to construct Target strings (e.g., Feature::Debug is "debug" and not "Debug").
      * If the string is not a known feature name, return FeatureEnd. */
-    static Target::Feature feature_from_name(const std::string &name);
+    static Target::Feature feature_from_name(std::string_view name);
 
 private:
     /** A bitmask that stores the active features. */

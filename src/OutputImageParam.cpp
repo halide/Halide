@@ -11,7 +11,7 @@ OutputImageParam::OutputImageParam(const Parameter &p, Argument::Kind k, Func f)
     : param(p), kind(k), func(std::move(f)) {
 }
 
-const std::string &OutputImageParam::name() const {
+std::string_view OutputImageParam::name() const {
     return param.name();
 }
 

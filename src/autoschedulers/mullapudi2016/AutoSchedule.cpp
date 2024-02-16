@@ -44,7 +44,7 @@ void substitute_estimates_box(Box &box) {
 }
 
 // Substitute parameter estimates into the boxes in 'region'.
-void substitute_estimates_region(map<string, Box> &region) {
+void substitute_estimates_region(StringMap<Box> &region) {
     for (auto &iter : region) {
         substitute_estimates_box(iter.second);
     }
@@ -69,7 +69,7 @@ void simplify_box(Box &b) {
 }
 
 // Helper function to merge the partial region map into the result region map.
-void merge_regions(map<string, Box> &result, const map<string, Box> &partial) {
+void merge_regions(StringMap<Box> &result, const StringMap<Box> &partial) {
     // Merge regions from 'partial' with an existing region in 'result'.
     for (const auto &reg : partial) {
         auto iter = result.find(reg.first);
@@ -82,7 +82,8 @@ void merge_regions(map<string, Box> &result, const map<string, Box> &partial) {
 }
 
 // Replace all occurrences of non-alphanumeric chars in 'name' with '_'.
-string get_sanitized_name(string name) {
+string get_sanitized_name(std::string_view n) {
+    std::string name{n};
     if (isdigit(name[0])) {
         name = "_" + name;
     }
@@ -153,17 +154,17 @@ void check_estimates_on_outputs(const vector<Function> &outputs) {
 
 struct DependenceAnalysis {
     // Map containing all the functions in the pipeline.
-    map<string, Function> env;
+    StringMap<Function> env;
     vector<string> order;
     FuncValueBounds func_val_bounds;
 
     struct RegionsRequiredQuery {
         string f;
         int stage;
-        set<string> prods;
+        StringSet prods;
         bool only_regions_computed;
 
-        RegionsRequiredQuery(const string &f, int stage, const set<string> &prods,
+        RegionsRequiredQuery(std::string_view f, int stage, const StringSet &prods,
                              bool only_regions_computed)
             : f(f), stage(stage), prods(prods),
               only_regions_computed(only_regions_computed) {
@@ -196,8 +197,8 @@ struct DependenceAnalysis {
         DimBounds bounds;
         // Regions required to compute 'bounds' given a particular
         // RegionsRequiredQuery.
-        map<string, Box> regions;
-        RegionsRequired(const DimBounds &b, const map<string, Box> &r)
+        StringMap<Box> regions;
+        RegionsRequired(const DimBounds &b, const StringMap<Box> &r)
             : bounds(b), regions(r) {
         }
     };
@@ -205,7 +206,7 @@ struct DependenceAnalysis {
     // common during the grouping process).
     map<RegionsRequiredQuery, vector<RegionsRequired>> regions_required_cache;
 
-    DependenceAnalysis(const map<string, Function> &env, const vector<string> &order,
+    DependenceAnalysis(const StringMap<Function> &env, const vector<string> &order,
                        const FuncValueBounds &func_val_bounds)
         : env(env), order(order), func_val_bounds(func_val_bounds) {
     }
@@ -214,21 +215,21 @@ struct DependenceAnalysis {
     // of the function stage ('f', 'stage_num') specified by 'bounds'. When
     // 'only_regions_computed' is set to true, this only returns the computed
     // regions and not the total allocated regions.
-    map<string, Box> regions_required(const Function &f, int stage_num,
-                                      const DimBounds &bounds,
-                                      const set<string> &prods,
-                                      bool only_regions_computed,
-                                      const Scope<Interval> *input_estimates);
+    StringMap<Box> regions_required(const Function &f, int stage_num,
+                                    const DimBounds &bounds,
+                                    const StringSet &prods,
+                                    bool only_regions_computed,
+                                    const Scope<Interval> *input_estimates);
 
     // Return the regions of the producers ('prods') required to compute the region
     // of the function specified by 'pure_bounds'. When 'only_regions_computed'
     // is set to true, this only returns the computed regions and not the total
     // allocated regions.
-    map<string, Box> regions_required(const Function &f,
-                                      const DimBounds &pure_bounds,
-                                      const set<string> &prods,
-                                      bool only_regions_computed,
-                                      const Scope<Interval> *input_estimates);
+    StringMap<Box> regions_required(const Function &f,
+                                    const DimBounds &pure_bounds,
+                                    const StringSet &prods,
+                                    bool only_regions_computed,
+                                    const Scope<Interval> *input_estimates);
 
     // Return redundantly computed regions of producers ('prods') while computing
     // a region of the function stage ('f', 'stage_num') specified by 'bounds'.
@@ -237,33 +238,33 @@ struct DependenceAnalysis {
     // regions and not the total allocated regions. When 'only_regions_computed'
     // is set to true, this only returns the computed regions and not the total
     // allocated regions.
-    map<string, Box> redundant_regions(const Function &f, int stage_num, const string &var,
-                                       const DimBounds &bounds,
-                                       const set<string> &prods,
-                                       bool only_regions_computed,
-                                       const Scope<Interval> *input_estimates);
+    StringMap<Box> redundant_regions(const Function &f, int stage_num, std::string_view var,
+                                     const DimBounds &bounds,
+                                     const StringSet &prods,
+                                     bool only_regions_computed,
+                                     const Scope<Interval> *input_estimates);
 
     // Return overlapping regions of producers ('prods') while computing a function
     // stage along each of the dimensions.
-    vector<map<string, Box>>
+    vector<StringMap<Box>>
     overlap_regions(const Function &f, int stage_num, const DimBounds &bounds,
-                    const set<string> &prods, bool only_regions_computed,
+                    const StringSet &prods, bool only_regions_computed,
                     const Scope<Interval> *input_estimates);
 };
 
 // Return the regions of the producers ('prods') required to compute the region
 // of the function specified by 'pure_bounds'.
-map<string, Box>
+StringMap<Box>
 DependenceAnalysis::regions_required(const Function &f, const DimBounds &pure_bounds,
-                                     const set<string> &prods,
+                                     const StringSet &prods,
                                      bool only_regions_computed,
                                      const Scope<Interval> *input_estimates) {
     // Find the regions required for each stage and merge them.
-    map<string, Box> regions;
+    StringMap<Box> regions;
     int num_stages = f.updates().size() + 1;
     for (int s = 0; s < num_stages; s++) {
         DimBounds bounds = get_stage_bounds(f, s, pure_bounds);
-        map<string, Box> stage_regions =
+        StringMap<Box> stage_regions =
             regions_required(f, s, bounds, prods, only_regions_computed, input_estimates);
 
         merge_regions(regions, stage_regions);
@@ -352,12 +353,12 @@ void queue_func_regions(map<FStage, DimBounds> &fs_bounds,
 // and adding them to the queue of regions that need to be traversed.
 // 'prods' is the set of producer functions that are under consideration.
 void merge_and_queue_regions(map<FStage, DimBounds> &fs_bounds,
-                             map<string, Box> &regions,
-                             map<string, Box> &curr_regions,
-                             const set<string> &prods,
-                             const map<string, Function> &env,
+                             StringMap<Box> &regions,
+                             StringMap<Box> &curr_regions,
+                             const StringSet &prods,
+                             const StringMap<Function> &env,
                              bool only_regions_computed,
-                             const string &curr_func_name,
+                             std::string_view curr_func_name,
                              const set<StageBounds> &visited) {
     for (const auto &reg : curr_regions) {
         // Merge region with an existing region of a function in the
@@ -389,10 +390,10 @@ void merge_and_queue_regions(map<FStage, DimBounds> &fs_bounds,
 
 // Return the regions of the producers ('prods') required to compute the region
 // of the function stage ('f', 'stage_num') specified by 'bounds'.
-map<string, Box>
+StringMap<Box>
 DependenceAnalysis::regions_required(const Function &f, int stage_num,
                                      const DimBounds &bounds,
-                                     const set<string> &prods,
+                                     const StringSet &prods,
                                      bool only_regions_computed,
                                      const Scope<Interval> *input_estimates) {
     // Iteratively compute the required regions by traversing the chain
@@ -411,7 +412,7 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
     }
 
     // Map of all the required regions.
-    map<string, Box> regions;
+    StringMap<Box> regions;
     map<FStage, DimBounds> fs_bounds;
     set<StageBounds> visited;
 
@@ -452,9 +453,9 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
                             // function required are unknown. Create an infinite region
                             // of the correct dimension, update the region map, and
                             // add it to the queue.
-                            string prod_name = Function(arg.func).name();
+                            string prod_name{Function(arg.func).name()};
                             const Function &prod_func = get_element(env, prod_name);
-                            map<string, Box> prod_reg;
+                            StringMap<Box> prod_reg;
                             const vector<string> &args = prod_func.args();
                             for (size_t v = 0; v < args.size(); v++) {
                                 prod_reg[prod_name].push_back(Interval());
@@ -465,7 +466,7 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
                             // Find the boxes required for the expression and add the regions
                             // to the queue.
                             Expr subs_arg = substitute_var_estimates(arg.expr);
-                            map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+                            StringMap<Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
                             substitute_estimates_region(arg_regions);
                             merge_and_queue_regions(fs_bounds, regions, arg_regions, prods, env,
                                                     only_regions_computed, s.func.name(), visited);
@@ -479,7 +480,7 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
                             } else {
                                 buf = arg.buffer;
                             }
-                            map<string, Box> buf_reg;
+                            StringMap<Box> buf_reg;
                             for (int v = 0; v < buf.dimensions(); v++) {
                                 buf_reg[buf.name()].push_back(Interval());
                             }
@@ -517,7 +518,7 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
                         // Substitute the parameter estimates into the expression and get
                         // the regions required for the expression.
                         Expr subs_val = substitute_var_estimates(val);
-                        map<string, Box> curr_regions = boxes_required(subs_val, curr_scope, func_val_bounds);
+                        StringMap<Box> curr_regions = boxes_required(subs_val, curr_scope, func_val_bounds);
                         substitute_estimates_region(curr_regions);
 
                         // Arguments to the definition may require regions of functions.
@@ -526,7 +527,7 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
                         Box left_reg;
                         for (const Expr &arg : def.args()) {
                             Expr subs_arg = substitute_var_estimates(arg);
-                            map<string, Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
+                            StringMap<Box> arg_regions = boxes_required(subs_arg, curr_scope, func_val_bounds);
                             substitute_estimates_region(arg_regions);
 
                             // Merge the regions with the regions found while looking at
@@ -559,7 +560,7 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
     // Simplify the bounds on each region and substitute global pipeline
     // bounds for function regions which lower and upper bounds could not be
     // determined.
-    map<string, Box> concrete_regions;
+    StringMap<Box> concrete_regions;
 
     for (auto &f_reg : regions) {
         simplify_box(f_reg.second);
@@ -607,15 +608,15 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
 // Return redundantly computed regions of producers ('prods') while computing a
 // region of the function stage ('f', 'stage_num') specified by 'bounds'. 'var'
 // is the dimension along which redundant computation is accounted for.
-map<string, Box>
-DependenceAnalysis::redundant_regions(const Function &f, int stage_num, const string &var,
+StringMap<Box>
+DependenceAnalysis::redundant_regions(const Function &f, int stage_num, std::string_view var,
                                       const DimBounds &bounds,
-                                      const set<string> &prods,
+                                      const StringSet &prods,
                                       bool only_regions_computed,
                                       const Scope<Interval> *input_estimates) {
     // Find the regions required to compute the region of 'f' specified
     // by 'bounds'.
-    map<string, Box> regions = regions_required(
+    StringMap<Box> regions = regions_required(
         f, stage_num, bounds, prods, only_regions_computed, input_estimates);
 
     // Shift the bounds by the size of the interval along the direction
@@ -634,12 +635,12 @@ DependenceAnalysis::redundant_regions(const Function &f, int stage_num, const st
 
     // Find the regions required to compute the region of f specified
     // by shifted_bounds.
-    map<string, Box> regions_shifted = regions_required(
+    StringMap<Box> regions_shifted = regions_required(
         f, stage_num, shifted_bounds, prods, only_regions_computed, input_estimates);
 
     // Compute the overlaps between 'regions_shifted' and the original
     // regions required.
-    map<string, Box> overlaps;
+    StringMap<Box> overlaps;
     for (const auto &reg : regions) {
         auto iter = regions_shifted.find(reg.first);
         if (iter == regions.end()) {
@@ -673,20 +674,20 @@ DependenceAnalysis::redundant_regions(const Function &f, int stage_num, const st
 
 // Return overlapping regions of producers ('prods') while computing a function
 // stage along each of the dimensions.
-vector<map<string, Box>>
+vector<StringMap<Box>>
 DependenceAnalysis::overlap_regions(const Function &f, int stage_num,
                                     const DimBounds &bounds,
-                                    const set<string> &prods,
+                                    const StringSet &prods,
                                     bool only_regions_computed,
                                     const Scope<Interval> *input_estimates) {
-    vector<map<string, Box>> conc_overlaps;
+    vector<StringMap<Box>> conc_overlaps;
 
     const vector<Dim> &dims = get_stage_dims(f, stage_num);
 
     // Get the redundant regions along each dimension of f.
     for (int d = 0; d < (int)dims.size() - 1; d++) {
-        map<string, Box> conc_reg = redundant_regions(f, stage_num, dims[d].var, bounds,
-                                                      prods, only_regions_computed, input_estimates);
+        StringMap<Box> conc_reg = redundant_regions(f, stage_num, dims[d].var, bounds,
+                                                    prods, only_regions_computed, input_estimates);
         conc_overlaps.push_back(conc_reg);
     }
     return conc_overlaps;
@@ -694,10 +695,10 @@ DependenceAnalysis::overlap_regions(const Function &f, int stage_num,
 
 // Return the regions of each function required for computing the
 // outputs of the pipeline.
-map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
-                                     const vector<Function> &outputs,
-                                     const Scope<Interval> *input_estimates) {
-    map<string, Box> pipeline_bounds;
+StringMap<Box> get_pipeline_bounds(DependenceAnalysis &analysis,
+                                   const vector<Function> &outputs,
+                                   const Scope<Interval> *input_estimates) {
+    StringMap<Box> pipeline_bounds;
 
     // Find the regions required for each of the outputs and merge them
     // to compute the full pipeline_bounds.
@@ -721,13 +722,13 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
             internal_assert(i >= 0) << "Could not find estimate for " << arg << "\n";
         }
 
-        set<string> prods;
+        StringSet prods;
         for (const pair<const string, Function> &fpair : analysis.env) {
             prods.insert(fpair.first);
         }
 
-        map<string, Box> regions = analysis.regions_required(out, pure_bounds, prods,
-                                                             false, input_estimates);
+        StringMap<Box> regions = analysis.regions_required(out, pure_bounds, prods,
+                                                           false, input_estimates);
 
         // Add the output region to the pipeline bounds as well.
         regions.emplace(out.name(), out_box);
@@ -743,7 +744,7 @@ struct AutoSchedule {
         string function;
         size_t stage;
 
-        Stage(const string &f, size_t s)
+        Stage(std::string_view f, size_t s)
             : function(f), stage(s) {
         }
 
@@ -755,25 +756,25 @@ struct AutoSchedule {
         }
     };
 
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
 
     // Contain maps from function name to the topological order of the pipeline.
-    map<string, size_t> topological_order;
+    StringMap<size_t> topological_order;
 
     // Cache for storing all internal vars/rvars that have been declared during
     // the course of schedule generation, to ensure that we don't introduce any
     // duplicates in the string representation of the schedules.
-    map<string, VarOrRVar> internal_vars;
+    StringMap<VarOrRVar> internal_vars;
 
     // Store the list of schedules applied to some function stages (most recent
     // schedule is placed last in the list).
-    map<string, map<int, vector<string>>> func_schedules;
+    StringMap<map<int, vector<string>>> func_schedules;
 
     // Store the list of vars/rvars used in the schedule applied to some
     // function stages.
-    map<string, map<int, set<string>>> used_vars;
+    StringMap<map<int, StringSet>> used_vars;
 
-    AutoSchedule(const map<string, Function> &env, const vector<string> &order)
+    AutoSchedule(const StringMap<Function> &env, const vector<string> &order)
         : env(env) {
         for (size_t i = 0; i < order.size(); ++i) {
             topological_order.emplace(order[i], i);
@@ -788,9 +789,9 @@ struct AutoSchedule {
 
     // Given a function name, return a string representation of getting the
     // function handle
-    string get_func_handle(const string &name) const {
+    string get_func_handle(std::string_view name) const {
         size_t index = get_element(topological_order, name);
-        return "pipeline.get_func(" + std::to_string(index) + ")";
+        return concat("pipeline.get_func(", std::to_string(index), ")");
     }
 
     friend std::ostream &operator<<(std::ostream &stream, const AutoSchedule &sched) {
@@ -809,7 +810,7 @@ struct AutoSchedule {
         std::ostringstream schedule_ss;
 
         for (const auto &f : sched.func_schedules) {
-            const string &fname = get_sanitized_name(f.first);
+            std::string fname{get_sanitized_name(f.first)};
             func_ss << "Func " << fname << " = " << sched.get_func_handle(f.first) << ";\n";
 
             schedule_ss << "{\n";
@@ -822,10 +823,10 @@ struct AutoSchedule {
                                 << fname << ".args()[" << i << "];\n";
                 }
             }
-            set<string> declared_rvars;
+            StringSet declared_rvars;
             for (size_t i = 0; i < func.updates().size(); ++i) {
                 const vector<ReductionVariable> &rvars = func.updates()[i].schedule().rvars();
-                const set<string> &var_list = sched.used_vars.at(func.name()).at(i + 1);
+                const StringSet &var_list = sched.used_vars.at(func.name()).at(i + 1);
                 for (size_t j = 0; j < rvars.size(); ++j) {
                     if ((var_list.find(rvars[j].var) == var_list.end()) ||
                         (declared_rvars.find(rvars[j].var) != declared_rvars.end())) {
@@ -867,8 +868,8 @@ struct AutoSchedule {
         return stream;
     }
 
-    void push_schedule(const string &stage_name, size_t stage_num,
-                       const string &sched, const set<string> &vars) {
+    void push_schedule(std::string_view stage_name, size_t stage_num,
+                       std::string_view sched, const StringSet &vars) {
         vector<string> v = split_string(stage_name, ".");
         internal_assert(!v.empty());
 
@@ -878,10 +879,10 @@ struct AutoSchedule {
         // there is no need to re-apply the schedule
         auto &schedules = func_schedules[v[0]][stage_num];
         if (schedules.empty()) {
-            schedules.push_back(sched);
+            schedules.emplace_back(sched);
         } else {
             if (schedules[schedules.size() - 1] != sched) {
-                schedules.push_back(sched);
+                schedules.emplace_back(sched);
             }
         }
     }
@@ -895,7 +896,7 @@ struct Partitioner {
         string prod;
         FStage cons;
 
-        GroupingChoice(const string &prod, const FStage &cons)
+        GroupingChoice(std::string_view prod, const FStage &cons)
             : prod(prod), cons(cons) {
         }
 
@@ -967,9 +968,9 @@ struct Partitioner {
         // Functions that belong to the group.
         vector<FStage> members;
         // Members of the group which are inlined.
-        set<string> inlined;
+        StringSet inlined;
         // Tile sizes along dimensions of the output function of the group.
-        map<string, Expr> tile_sizes;
+        StringMap<Expr> tile_sizes;
 
         Group(const FStage &output, const vector<FStage> &members)
             : output(output), members(members) {
@@ -1046,13 +1047,13 @@ struct Partitioner {
     // set of functions that are computed together in tiles and the group config
     // specifies at what granularity they are computed together ('tile_sizes').
     struct GroupConfig {
-        map<string, Expr> tile_sizes;
+        StringMap<Expr> tile_sizes;
         GroupAnalysis analysis;
-        GroupConfig(const map<string, Expr> &tile_sizes, const GroupAnalysis &analysis)
+        GroupConfig(const StringMap<Expr> &tile_sizes, const GroupAnalysis &analysis)
             : tile_sizes(tile_sizes), analysis(analysis) {
         }
         GroupConfig()
-            : tile_sizes(map<string, Expr>()), analysis(GroupAnalysis()) {
+            : tile_sizes(StringMap<Expr>()), analysis(GroupAnalysis()) {
         }
     };
 
@@ -1084,7 +1085,7 @@ struct Partitioner {
 
     // Bounds of each function stage in the pipeline. These bounds are inferred from the
     // estimates of the outputs and other functions in the pipeline.
-    const map<string, Box> &pipeline_bounds;
+    const StringMap<Box> &pipeline_bounds;
     // Parameters of the machine model that is used for estimating the cost of each
     // group in the pipeline.
     const ArchParams &arch_params;
@@ -1097,7 +1098,7 @@ struct Partitioner {
     // Output functions of the pipeline.
     const vector<Function> &outputs;
 
-    Partitioner(const map<string, Box> &_pipeline_bounds,
+    Partitioner(const StringMap<Box> &_pipeline_bounds,
                 const ArchParams &_arch_params,
                 const vector<Function> &_outputs,
                 DependenceAnalysis &_dep_analysis,
@@ -1121,7 +1122,7 @@ struct Partitioner {
 
     // For each group in the partition, return the regions of the producers
     // need to be allocated to compute a tile of the group's output.
-    map<FStage, map<string, Box>> group_storage_bounds();
+    map<FStage, StringMap<Box>> group_storage_bounds();
 
     // For each group in the partition, return the regions of the producers
     // required to compute a tile of the group's output.
@@ -1147,19 +1148,19 @@ struct Partitioner {
 
     // Return the bounds required to produce a tile of a function stage.
     DimBounds get_bounds_from_tile_sizes(const FStage &stg,
-                                         const map<string, Expr> &tile_sizes);
+                                         const StringMap<Expr> &tile_sizes);
 
     // Return the estimated size of the bounds.
-    map<string, Expr> bounds_to_estimates(const DimBounds &bounds);
+    StringMap<Expr> bounds_to_estimates(const DimBounds &bounds);
 
     // Given a function stage, return a vector of possible tile configurations for
     // that function stage.
-    vector<map<string, Expr>> generate_tile_configs(const FStage &stg);
+    vector<StringMap<Expr>> generate_tile_configs(const FStage &stg);
 
     // Find the best tiling configuration for a group 'g' among a set of tile
     // configurations. This returns a pair of configuration with the highest
     // estimated benefit and the estimated benefit.
-    pair<map<string, Expr>, GroupAnalysis> find_best_tile_config(const Group &g);
+    pair<StringMap<Expr>, GroupAnalysis> find_best_tile_config(const Group &g);
 
     // Estimate the benefit (arithmetic + memory) of 'new_grouping' over 'old_grouping'.
     // Positive values indicates that 'new_grouping' may be preferrable over 'old_grouping'.
@@ -1184,18 +1185,18 @@ struct Partitioner {
     // loop variable specified in 'vars'. Access expressions along each dimension
     // of the allocation are specified by 'acc_exprs'. The dimension bounds of the
     // allocation are specified by 'buffer_bounds'.
-    Expr find_max_access_stride(const Scope<> &vars, const string &func_acc,
+    Expr find_max_access_stride(const Scope<> &vars, std::string_view func_acc,
                                 const vector<Expr> &acc_exprs, const Box &buffer_bounds);
 
     // Return the sum of access strides along each of the loop variables in
     // a function stage. The bounds of all the allocations accessed are specified
     // in 'allocation_bounds'. Return an empty map if it can't figure out any of
     // the stride dimension.
-    map<string, Expr> analyze_spatial_locality(
-        const FStage &stg, const map<string, Box> &parent_bounds,
-        const set<string> &inlines = set<string>());
+    StringMap<Expr> analyze_spatial_locality(
+        const FStage &stg, const StringMap<Box> &parent_bounds,
+        const StringSet &inlines = StringSet());
 
-    map<string, Expr> evaluate_reuse(const FStage &stg, const set<string> &prods);
+    StringMap<Expr> evaluate_reuse(const FStage &stg, const StringSet &prods);
 
     // Generate and apply schedules for all functions within a pipeline by
     // following their grouping structure.
@@ -1216,8 +1217,8 @@ struct Partitioner {
 
     void generate_group_cpu_schedule(const Group &g, const Target &t,
                                      const map<FStage, DimBounds> &group_loop_bounds,
-                                     const map<string, Box> &group_storage_bounds,
-                                     const set<string> &inlines,
+                                     const StringMap<Box> &group_storage_bounds,
+                                     const StringSet &inlines,
                                      AutoSchedule &sched);
 
     // Split the dimension of stage 'f_handle' along 'v' into inner and outer
@@ -1225,22 +1226,22 @@ struct Partitioner {
     // schedule to 'sched'.
     pair<VarOrRVar, VarOrRVar> split_dim(
         const Group &g, Stage f_handle, int stage_num, const Definition &def,
-        bool is_group_output, const VarOrRVar &v, const Expr &factor, const string &in_suffix,
-        const string &out_suffix, map<string, Expr> &estimates, AutoSchedule &sched);
+        bool is_group_output, const VarOrRVar &v, const Expr &factor, std::string_view in_suffix,
+        std::string_view out_suffix, StringMap<Expr> &estimates, AutoSchedule &sched);
 
     // Loop over the dimensions of function stage 'f_handle' starting from innermost
     // and vectorize the first pure dimension encountered.
     void vectorize_stage(
         const Group &g, Stage f_handle, int stage_num, Definition def,
-        const Function &func, bool is_group_output, const Target &t, set<string> &rvars,
-        map<string, Expr> &estimates, AutoSchedule &sched);
+        const Function &func, bool is_group_output, const Target &t, StringSet &rvars,
+        StringMap<Expr> &estimates, AutoSchedule &sched);
 
     // Reorder the dimensions to preserve spatial locality. This function
     // checks the stride of each access. The dimensions of the loop are reordered
     // such that the dimension with the smallest access stride is innermost.
     // This takes the strides along each dimension as input.
     void reorder_dims(Stage f_handle, int stage_num, Definition def,
-                      map<string, Expr> strides, AutoSchedule &sched);
+                      StringMap<Expr> strides, AutoSchedule &sched);
 
     // Helper functions to display partition information of the pipeline.
     void disp_pipeline_costs();
@@ -1337,7 +1338,7 @@ void Partitioner::disp_pipeline_costs() {
 
 // Construct a partitioner and build the pipeline graph on which the grouping
 // algorithm operates.
-Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
+Partitioner::Partitioner(const StringMap<Box> &_pipeline_bounds,
                          const ArchParams &_arch_params,
                          const vector<Function> &_outputs,
                          DependenceAnalysis &_dep_analysis,
@@ -1367,7 +1368,7 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
     for (const auto &f : dep_analysis.env) {
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
-            set<string> parents = get_parents(f.second, s);
+            StringSet parents = get_parents(f.second, s);
             for (const string &c : parents) {
                 // Filter out the calls to pipeline inputs. 'env' only contains
                 // the functions computed and not the inputs.
@@ -1397,16 +1398,16 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
 
 void Partitioner::initialize_groups() {
     for (pair<const FStage, Group> &g : groups) {
-        pair<map<string, Expr>, GroupAnalysis> best = find_best_tile_config(g.second);
+        pair<StringMap<Expr>, GroupAnalysis> best = find_best_tile_config(g.second);
         g.second.tile_sizes = best.first;
         group_costs.emplace(g.second.output, best.second);
     }
     grouping_cache.clear();
 }
 
-map<string, Expr> Partitioner::evaluate_reuse(const FStage &stg,
-                                              const set<string> &prods) {
-    map<string, Expr> reuse;
+StringMap<Expr> Partitioner::evaluate_reuse(const FStage &stg,
+                                            const StringSet &prods) {
+    StringMap<Expr> reuse;
     Function f = stg.func;
 
     // TODO: Check if tile size of 1 in each dimension gives a reasonable
@@ -1415,7 +1416,7 @@ map<string, Expr> Partitioner::evaluate_reuse(const FStage &stg,
     // is to prove the dimension has no reuse. The only downside with the
     // symbolic method is that it is totally at the mercy of the simplifier.
     // Another option is sampling or using a larger granularity.
-    map<string, Expr> tile_sizes;
+    StringMap<Expr> tile_sizes;
 
     const vector<Dim> &dims = get_stage_dims(stg.func, stg.stage_num);
     for (int d = 0; d < (int)dims.size() - 1; d++) {
@@ -1424,7 +1425,7 @@ map<string, Expr> Partitioner::evaluate_reuse(const FStage &stg,
 
     DimBounds bounds = get_bounds_from_tile_sizes(stg, tile_sizes);
 
-    vector<map<string, Box>> reuse_regions =
+    vector<StringMap<Box>> reuse_regions =
         dep_analysis.overlap_regions(stg.func, stg.stage_num, bounds, prods,
                                      false, &costs.input_estimates);
 
@@ -1506,7 +1507,7 @@ Partitioner::choose_candidate_grouping(const vector<pair<string, string>> &cands
     return best_grouping;
 }
 
-inline bool operator==(const map<string, Expr> &m1, const map<string, Expr> &m2) {
+inline bool operator==(const StringMap<Expr> &m1, const StringMap<Expr> &m2) {
     if (m1.size() != m2.size()) {
         return false;
     }
@@ -1521,7 +1522,7 @@ inline bool operator==(const map<string, Expr> &m1, const map<string, Expr> &m2)
     return true;
 }
 
-vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) {
+vector<StringMap<Expr>> Partitioner::generate_tile_configs(const FStage &stg) {
     // TODO: This is a wart due to the cost model not taking vectorization
     // and pre-fetching into account. Ensuring the innermost dimension has
     // at least size of 64 gives enough values for vectorization and can help
@@ -1541,7 +1542,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
     }
 
     vector<int> size_variants = {1, 4, 8, 16, 32, 64, 128, 256};
-    vector<map<string, Expr>> tile_configs;
+    vector<StringMap<Expr>> tile_configs;
 
     // For all the tile configurations generated, we force the innermost dimension
     // to be at least of size 64 to ensure enough values for vectorization.
@@ -1549,7 +1550,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
     // Skewed tile configurations
     for (size_t i = 0; i < tile_vars.size(); i++) {
         for (const auto &dim_size : size_variants) {
-            map<string, Expr> tiling;
+            StringMap<Expr> tiling;
             tiling.emplace(tile_vars[i],
                            (i == 0) ? std::max(dim_size, min_inner_dim_size) : dim_size);
             for (size_t j = 0; j < tile_vars.size(); j++) {
@@ -1562,7 +1563,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
             if (!tiling.empty()) {
                 bool is_duplicate =
                     std::find_if(tile_configs.begin(), tile_configs.end(),
-                                 [&tiling](const map<string, Expr> &m) { return (tiling == m); }) != tile_configs.end();
+                                 [&tiling](const StringMap<Expr> &m) { return (tiling == m); }) != tile_configs.end();
                 if (!is_duplicate) {
                     tile_configs.push_back(tiling);
                 }
@@ -1572,7 +1573,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
 
     // Almost square tile configurations
     for (const auto &dim_size : size_variants) {
-        map<string, Expr> tiling;
+        StringMap<Expr> tiling;
         for (size_t j = 0; j < tile_vars.size(); j++) {
             tiling.emplace(tile_vars[j],
                            (j == 0) ? std::max(dim_size, min_inner_dim_size) : dim_size);
@@ -1580,7 +1581,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
         if (!tiling.empty()) {
             bool is_duplicate =
                 std::find_if(tile_configs.begin(), tile_configs.end(),
-                             [&tiling](const map<string, Expr> &m) { return (tiling == m); }) != tile_configs.end();
+                             [&tiling](const StringMap<Expr> &m) { return (tiling == m); }) != tile_configs.end();
             if (!is_duplicate) {
                 tile_configs.push_back(tiling);
             }
@@ -1589,7 +1590,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
 
     // Reorder tile configurations
     for (int i = 0; i < (1 << (tile_vars.size())); i++) {
-        map<string, Expr> tiling;
+        StringMap<Expr> tiling;
         for (size_t j = 0; j < tile_vars.size(); j++) {
             if (((i >> (j)) & 1) == 1) {
                 if (j == 0) {
@@ -1602,7 +1603,7 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
         if (!tiling.empty()) {
             bool is_duplicate =
                 std::find_if(tile_configs.begin(), tile_configs.end(),
-                             [&tiling](const map<string, Expr> &m) { return (tiling == m); }) != tile_configs.end();
+                             [&tiling](const StringMap<Expr> &m) { return (tiling == m); }) != tile_configs.end();
             if (!is_duplicate) {
                 tile_configs.push_back(tiling);
             }
@@ -1612,10 +1613,10 @@ vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg) 
     return tile_configs;
 }
 
-pair<map<string, Expr>, Partitioner::GroupAnalysis>
+pair<StringMap<Expr>, Partitioner::GroupAnalysis>
 Partitioner::find_best_tile_config(const Group &g) {
     // Initialize to no tiling
-    map<string, Expr> no_tile_config;
+    StringMap<Expr> no_tile_config;
     Group no_tile = g;
     no_tile.tile_sizes = no_tile_config;
 
@@ -1623,13 +1624,13 @@ Partitioner::find_best_tile_config(const Group &g) {
     GroupAnalysis no_tile_analysis = analyze_group(no_tile, show_analysis);
 
     GroupAnalysis best_analysis = no_tile_analysis;
-    map<string, Expr> best_config = no_tile_config;
+    StringMap<Expr> best_config = no_tile_config;
     if (!best_analysis.cost.defined()) {
         return make_pair(best_config, best_analysis);
     }
 
     // Generate tiling configurations
-    vector<map<string, Expr>> configs = generate_tile_configs(g.output);
+    vector<StringMap<Expr>> configs = generate_tile_configs(g.output);
 
     Group best_group = g;
     for (const auto &config : configs) {
@@ -1692,9 +1693,9 @@ void Partitioner::group(Partitioner::Level level) {
             if (iter != children.end()) {
                 // All the stages belonging to a function are considered to be a
                 // single child.
-                set<string> child_groups;
+                StringSet child_groups;
                 for (const FStage &s : iter->second) {
-                    child_groups.insert(s.func.name());
+                    child_groups.emplace(s.func.name());
                 }
 
                 int num_children = child_groups.size();
@@ -1703,11 +1704,11 @@ void Partitioner::group(Partitioner::Level level) {
                 // TODO: The current scheduling model does not allow functions
                 // to be computed at different points.
                 if ((num_children == 1) && (level == Partitioner::Level::FastMem)) {
-                    const string &prod_name = prod_f.name();
-                    const string &cons_name = (*child_groups.begin());
+                    std::string_view prod_name = prod_f.name();
+                    std::string_view cons_name = (*child_groups.begin());
                     candidates.emplace_back(prod_name, cons_name);
                 } else if ((level == Partitioner::Level::Inline) && prod_f.is_pure()) {
-                    const string &prod_name = prod_f.name();
+                    std::string_view prod_name = prod_f.name();
                     candidates.emplace_back(prod_name, "");
                 }
             }
@@ -1798,10 +1799,10 @@ DimBounds Partitioner::get_bounds(const FStage &s) {
 }
 
 DimBounds Partitioner::get_bounds_from_tile_sizes(const FStage &s,
-                                                  const map<string, Expr> &tile_sizes) {
-    map<string, Interval> bounds;
+                                                  const StringMap<Expr> &tile_sizes) {
+    StringMap<Interval> bounds;
 
-    const map<string, Interval> &def_bounds = get_bounds(s);
+    const StringMap<Interval> &def_bounds = get_bounds(s);
     const vector<Dim> &dims = get_stage_dims(s.func, s.stage_num);
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
@@ -1831,12 +1832,12 @@ DimBounds Partitioner::get_bounds_from_tile_sizes(const FStage &s,
 }
 
 Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_analysis) {
-    set<string> group_inputs;
-    set<string> group_members;
+    StringSet group_inputs;
+    StringSet group_members;
 
     for (const auto &stg : g.members) {
-        group_members.insert(stg.func.name());
-        set<string> parents = get_parents(stg.func, stg.stage_num);
+        group_members.emplace(stg.func.name());
+        StringSet parents = get_parents(stg.func, stg.stage_num);
         for (const auto &c : parents) {
             bool is_member = false;
             for (const auto &m : g.members) {
@@ -1886,13 +1887,13 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     // Get the regions of the pipeline required to compute a tile of the group
     DimBounds tile_bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
 
-    map<string, Box> alloc_regions = dep_analysis.regions_required(
+    StringMap<Box> alloc_regions = dep_analysis.regions_required(
         g.output.func, g.output.stage_num, tile_bounds, group_members, false, &costs.input_estimates);
 
-    map<string, Box> compute_regions = dep_analysis.regions_required(
+    StringMap<Box> compute_regions = dep_analysis.regions_required(
         g.output.func, g.output.stage_num, tile_bounds, group_members, true, &costs.input_estimates);
 
-    map<string, Box> group_reg, prod_reg, input_reg;
+    StringMap<Box> group_reg, prod_reg, input_reg;
 
     // Separating into regions that computed within the group and regions that
     // are input to the group
@@ -1933,10 +1934,10 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
                     simplify(tile_cost.memory + out_cost.memory));
 
     // Detailed load costs for all the group intermediates
-    map<string, Expr> group_load_costs =
+    StringMap<Expr> group_load_costs =
         costs.detailed_load_costs(group_reg, g.inlined);
 
-    map<string, Expr> out_load_costs =
+    StringMap<Expr> out_load_costs =
         costs.stage_detailed_load_costs(g.output.func.name(),
                                         g.output.stage_num,
                                         tile_bounds, g.inlined);
@@ -2105,11 +2106,11 @@ void Partitioner::merge_groups(const GroupingChoice &choice, const GroupConfig &
 
         if (level == Partitioner::Level::Inline) {
             for (const auto &stg : cand_group.members) {
-                child_group.inlined.insert(stg.func.name());
+                child_group.inlined.emplace(stg.func.name());
             }
         } else {
             for (const auto &in : cand_group.inlined) {
-                child_group.inlined.insert(in);
+                child_group.inlined.emplace(in);
             }
         }
     }
@@ -2142,11 +2143,11 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(const GroupingChoice &choi
     }
 
     GroupAnalysis group_analysis;
-    map<string, Expr> best_tile_config;
+    StringMap<Expr> best_tile_config;
 
     if (level == Partitioner::Level::Inline) {
         // Set the tile sizes to one along all dimensions of the consumer group
-        map<string, Expr> tile_sizes;
+        StringMap<Expr> tile_sizes;
 
         const Function &cons_f = cons.output.func;
 
@@ -2159,7 +2160,7 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(const GroupingChoice &choi
 
         for (const auto &prod_g : prod_groups) {
             for (const FStage &s : prod_g.members) {
-                group.inlined.insert(s.func.name());
+                group.inlined.emplace(s.func.name());
             }
         }
 
@@ -2171,7 +2172,7 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(const GroupingChoice &choi
         best_tile_config = tile_sizes;
 
     } else {
-        pair<map<string, Expr>, GroupAnalysis> config = find_best_tile_config(group);
+        pair<StringMap<Expr>, GroupAnalysis> config = find_best_tile_config(group);
         best_tile_config = config.first;
         group_analysis = config.second;
     }
@@ -2256,29 +2257,29 @@ Expr Partitioner::estimate_benefit(
                             no_redundant_work, ensure_parallelism);
 }
 
-map<string, Expr> Partitioner::bounds_to_estimates(const DimBounds &bounds) {
-    map<string, Expr> estimates;
+StringMap<Expr> Partitioner::bounds_to_estimates(const DimBounds &bounds) {
+    StringMap<Expr> estimates;
     for (const auto &bound : bounds) {
         estimates.emplace(bound.first, get_extent(bound.second));
     }
     return estimates;
 }
 
-map<FStage, map<string, Box>> Partitioner::group_storage_bounds() {
-    map<FStage, map<string, Box>> group_storage_bounds;
+map<FStage, StringMap<Box>> Partitioner::group_storage_bounds() {
+    map<FStage, StringMap<Box>> group_storage_bounds;
     for (const pair<const FStage, Group> &gpair : groups) {
         const Group &g = gpair.second;
         DimBounds bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
 
-        set<string> prods;
+        StringSet prods;
         for (const FStage &s : g.members) {
-            prods.insert(s.func.name());
+            prods.emplace(s.func.name());
         }
 
-        map<string, Box> reg_alloc =
+        StringMap<Box> reg_alloc =
             dep_analysis.regions_required(g.output.func, g.output.stage_num,
                                           bounds, prods, false, &costs.input_estimates);
-        map<string, Box> group_alloc;
+        StringMap<Box> group_alloc;
         for (const FStage &s : g.members) {
             const auto &iter = reg_alloc.find(s.func.name());
             if ((iter != reg_alloc.end()) && (s.func.name() != g.output.func.name())) {
@@ -2300,19 +2301,19 @@ map<FStage, map<FStage, DimBounds>> Partitioner::group_loop_bounds() {
 
         DimBounds bounds = get_bounds_from_tile_sizes(g.output, g.tile_sizes);
 
-        set<string> prods;
+        StringSet prods;
         for (const FStage &s : g.members) {
-            prods.insert(s.func.name());
+            prods.emplace(s.func.name());
         }
 
-        map<string, Box> reg_computed =
+        StringMap<Box> reg_computed =
             dep_analysis.regions_required(g.output.func, g.output.stage_num,
                                           bounds, prods, true, &costs.input_estimates);
 
         for (const FStage &s : g.members) {
             const auto &iter = reg_computed.find(s.func.name());
             if (iter != reg_computed.end()) {
-                map<string, Expr> tile_sizes;
+                StringMap<Expr> tile_sizes;
                 const vector<string> &args = s.func.args();
                 for (size_t arg = 0; arg < args.size(); arg++) {
                     tile_sizes[args[arg]] = get_extent(iter->second[arg]);
@@ -2342,12 +2343,12 @@ string get_base_name(string name) {
 
 pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
     const Group &g, Stage f_handle, int stage_num, const Definition &def,
-    bool is_group_output, const VarOrRVar &v, const Expr &factor, const string &in_suffix,
-    const string &out_suffix, map<string, Expr> &estimates, AutoSchedule &sched) {
+    bool is_group_output, const VarOrRVar &v, const Expr &factor, std::string_view in_suffix,
+    std::string_view out_suffix, StringMap<Expr> &estimates, AutoSchedule &sched) {
     // Create new variables for the split dimensions
-    string arg_name = v.name();
-    string inner_name = arg_name + in_suffix;
-    string outer_name = arg_name + out_suffix;
+    string arg_name{v.name()};
+    string inner_name = concat(arg_name, in_suffix);
+    string outer_name = concat(arg_name, out_suffix);
     VarOrRVar inner(inner_name, v.is_rvar), outer(outer_name, v.is_rvar);
 
     {
@@ -2427,8 +2428,8 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
 
 void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
                                   Definition def, const Function &func, bool is_group_output,
-                                  const Target &t, set<string> &rvars,
-                                  map<string, Expr> &estimates, AutoSchedule &sched) {
+                                  const Target &t, StringSet &rvars,
+                                  StringMap<Expr> &estimates, AutoSchedule &sched) {
     vector<Dim> &dims = def.schedule().dims();
     int vec_dim_index = -1;
 
@@ -2466,13 +2467,13 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
 
         f_handle.vectorize(split_vars.first);
         sched.push_schedule(f_handle.name(), stage_num,
-                            "vectorize(" + split_vars.first.name() + ")",
-                            {split_vars.first.name()});
+                            concat("vectorize(", split_vars.first.name(), ")"),
+                            {std::string{split_vars.first.name()}});
 
         if (is_rvar) {
             rvars.erase(vec_dim_name);
-            rvars.insert(split_vars.first.name());
-            rvars.insert(split_vars.second.name());
+            rvars.emplace(split_vars.first.name());
+            rvars.emplace(split_vars.second.name());
         }
 
         // TODO: Reorder vector dim to innermost if it is the innermost
@@ -2510,7 +2511,7 @@ inline bool operator!=(const vector<Dim> &dims, const vector<VarOrRVar> &orderin
 }
 
 void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
-                               map<string, Expr> strides, AutoSchedule &sched) {
+                               StringMap<Expr> strides, AutoSchedule &sched) {
     vector<Dim> &dims = def.schedule().dims();
     internal_assert(dims.size() > 1);
     vector<pair<string, int>> order;
@@ -2597,16 +2598,17 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     }
 
     internal_assert(!ordering.empty());
-    set<string> var_list = {ordering[0].name()};
-    string var_order = ordering[0].name();
+    StringSet var_list;
+    var_list.emplace(ordering[0].name());
+    string var_order{ordering[0].name()};
     for (size_t o = 1; o < ordering.size(); o++) {
-        var_order += ", " + ordering[o].name();
-        var_list.insert(ordering[o].name());
+        var_order += concat(", ", ordering[o].name());
+        var_list.emplace(ordering[o].name());
     }
 
     if (dims != ordering) {
         f_handle.reorder(ordering);
-        sched.push_schedule(f_handle.name(), stage_num, "reorder(" + var_order + ")", var_list);
+        sched.push_schedule(f_handle.name(), stage_num, concat("reorder(", var_order, ")"), var_list);
     }
 }
 
@@ -2625,7 +2627,7 @@ class FindVarsUsingVar : public IRVisitor {
 public:
     Scope<> vars;
 
-    explicit FindVarsUsingVar(const string &var) {
+    explicit FindVarsUsingVar(std::string_view var) {
         vars.push(var);
     }
 };
@@ -2633,10 +2635,10 @@ public:
 void Partitioner::generate_group_cpu_schedule(
     const Group &g, const Target &t,
     const map<FStage, DimBounds> &group_loop_bounds,
-    const map<string, Box> &group_storage_bounds,
-    const set<string> &inlines,
+    const StringMap<Box> &group_storage_bounds,
+    const StringSet &inlines,
     AutoSchedule &sched) {
-    string out_f_name = g.output.func.name();
+    string out_f_name{g.output.func.name()};
     Function g_out = g.output.func;
 
     debug(3) << "\n================\n"
@@ -2653,7 +2655,7 @@ void Partitioner::generate_group_cpu_schedule(
 
     // Get the estimates for stage bounds
     DimBounds stg_bounds = get_bounds(g.output);
-    map<string, Expr> stg_estimates = bounds_to_estimates(stg_bounds);
+    StringMap<Expr> stg_estimates = bounds_to_estimates(stg_bounds);
 
     Stage f_handle = Stage(Func(g_out));
 
@@ -2678,10 +2680,10 @@ void Partitioner::generate_group_cpu_schedule(
     vector<Dim> &dims = def.schedule().dims();
 
     // Keep track of the rvars
-    set<string> rvars;
+    StringSet rvars;
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         if (dims[d].is_rvar()) {
-            rvars.insert(get_base_name(dims[d].var));
+            rvars.emplace(get_base_name(dims[d].var));
         }
     }
 
@@ -2689,7 +2691,7 @@ void Partitioner::generate_group_cpu_schedule(
     // is innermost). If we only have one dimension (excluding __outermost),
     // there is nothing to reorder.
     if (dims.size() > 2) {
-        map<string, Expr> strides =
+        StringMap<Expr> strides =
             analyze_spatial_locality(g.output, group_storage_bounds, inlines);
         if (!strides.empty()) {
             reorder_dims(f_handle, g.output.stage_num, def, strides, sched);
@@ -2723,8 +2725,8 @@ void Partitioner::generate_group_cpu_schedule(
 
                 if (is_rvar) {
                     rvars.erase(var);
-                    rvars.insert(tile_vars.first.name());
-                    rvars.insert(tile_vars.second.name());
+                    rvars.emplace(tile_vars.first.name());
+                    rvars.emplace(tile_vars.second.name());
                 }
             }
         } else {
@@ -2743,17 +2745,17 @@ void Partitioner::generate_group_cpu_schedule(
             ordering.push_back(v);
         }
 
-        set<string> var_list;
-        string var_order = ordering[0].name();
+        StringSet var_list;
+        string var_order{ordering[0].name()};
         for (size_t o = 1; o < ordering.size(); o++) {
-            var_order += ", " + ordering[o].name();
-            var_list.insert(ordering[o].name());
+            var_order += concat(", ", ordering[o].name());
+            var_list.emplace(ordering[o].name());
         }
 
         if (dims != ordering) {
             f_handle.reorder(ordering);
             sched.push_schedule(f_handle.name(), g.output.stage_num,
-                                "reorder(" + var_order + ")", var_list);
+                                concat("reorder(", var_order, ")"), var_list);
         }
     }
 
@@ -2801,12 +2803,12 @@ void Partitioner::generate_group_cpu_schedule(
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
                     f_handle.reorder(seq, v);
                     sched.push_schedule(f_handle.name(), g.output.stage_num,
-                                        "reorder(" + seq_var + ", " + var + ")",
+                                        concat("reorder(", seq_var, ", ", var, ")"),
                                         {seq_var, var});
                 }
                 f_handle.parallel(v);
                 sched.push_schedule(f_handle.name(), g.output.stage_num,
-                                    "parallel(" + var + ")", {var});
+                                    concat("parallel(", var, ")"), {var});
                 def_par = simplify(def_par * iter->second);
             } else {
                 break;
@@ -2842,14 +2844,14 @@ void Partitioner::generate_group_cpu_schedule(
         Definition mem_def = get_stage_definition(mem.func, mem.stage_num);
 
         // Get the estimates for the dimensions of the member stage
-        map<string, Expr> mem_estimates =
+        StringMap<Expr> mem_estimates =
             bounds_to_estimates(get_element(group_loop_bounds, mem));
 
-        set<string> mem_rvars;
+        StringSet mem_rvars;
         vector<Dim> &mem_dims = mem_def.schedule().dims();
         for (int d = 0; d < (int)mem_dims.size() - 1; d++) {
             if (mem_dims[d].is_rvar()) {
-                mem_rvars.insert(get_base_name(mem_dims[d].var));
+                mem_rvars.emplace(get_base_name(mem_dims[d].var));
             }
         }
 
@@ -2867,8 +2869,8 @@ void Partitioner::generate_group_cpu_schedule(
                 }
                 string sanitized_g_out = get_sanitized_name(g_out.name());
                 sched.push_schedule(mem_handle.name(), mem.stage_num,
-                                    "compute_at(" + sanitized_g_out + ", " + tile_inner_var.name() + ")",
-                                    {sanitized_g_out, tile_inner_var.name()});
+                                    concat("compute_at(", sanitized_g_out, ", ", tile_inner_var.name(), ")"),
+                                    {sanitized_g_out, std::string{tile_inner_var.name()}});
             } else {
                 user_warning << "Degenerate tiling. No dimensions are tiled"
                              << "\n";
@@ -2882,7 +2884,7 @@ void Partitioner::generate_group_cpu_schedule(
         // Reorder the dimensions for better spatial locality. If we only have
         // one dimension (excluding __outermost), there is nothing to reorder.
         if (dims.size() > 2) {
-            map<string, Expr> mem_strides =
+            StringMap<Expr> mem_strides =
                 analyze_spatial_locality(mem, group_storage_bounds, inlines);
             if (!mem_strides.empty()) {
                 reorder_dims(mem_handle, mem.stage_num, mem_def, mem_strides, sched);
@@ -2898,13 +2900,13 @@ void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
     // Grab the group bounds early as they rely on the dimensions of the group
     // outputs which will be altered by modifying schedules.
     map<FStage, map<FStage, DimBounds>> loop_bounds = group_loop_bounds();
-    map<FStage, map<string, Box>> storage_bounds = group_storage_bounds();
+    map<FStage, StringMap<Box>> storage_bounds = group_storage_bounds();
 
-    set<string> inlines;
+    StringSet inlines;
     // Mark all functions that are inlined.
     for (const pair<const FStage, Group> &g : groups) {
         for (const string &inline_func : g.second.inlined) {
-            inlines.insert(inline_func);
+            inlines.emplace(inline_func);
         }
     }
 
@@ -2924,7 +2926,7 @@ void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
 }
 
 Expr Partitioner::find_max_access_stride(const Scope<> &vars,
-                                         const string &func_acc,
+                                         std::string_view func_acc,
                                          const vector<Expr> &acc_exprs,
                                          const Box &buffer_bounds) {
     size_t num_storage_dims = 0;
@@ -2966,10 +2968,10 @@ Expr Partitioner::find_max_access_stride(const Scope<> &vars,
     return simplify(stride);
 }
 
-map<string, Expr>
+StringMap<Expr>
 Partitioner::analyze_spatial_locality(const FStage &stg,
-                                      const map<string, Box> &allocation_bounds,
-                                      const set<string> &inlines) {
+                                      const StringMap<Box> &allocation_bounds,
+                                      const StringSet &inlines) {
     internal_assert(!stg.func.has_extern_definition());
     // Handle inlining. When a function is inlined into another, the stride of
     // the accesses should be computed on the expression post inlining.
@@ -3006,7 +3008,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     call_args.emplace_back(stg.func.name(), def.args());
 
     // Map for holding the strides across each dimension
-    map<string, Expr> var_strides;
+    StringMap<Expr> var_strides;
     const vector<Dim> &dims = def.schedule().dims();
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
@@ -3028,7 +3030,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
             Expr current_stride = find_max_access_stride(dep_vars.vars, call.first,
                                                          call.second, call_alloc_reg);
             if (!current_stride.defined()) {
-                return map<string, Expr>();
+                return StringMap<Expr>();
             }
             total_stride += current_stride;
         }
@@ -3139,7 +3141,7 @@ void validate_no_partial_schedules(const Function &f, bool is_output) {
 }
 
 // Return true if 'f' is used by some extern Func.
-bool used_by_extern_func(const map<string, Function> &env, const Function &f) {
+bool used_by_extern_func(const StringMap<Function> &env, const Function &f) {
     for (const auto &iter : env) {
         for (const ExternFuncArgument &arg : iter.second.extern_arguments()) {
             if (arg.is_func()) {
@@ -3154,9 +3156,9 @@ bool used_by_extern_func(const map<string, Function> &env, const Function &f) {
 
 // If the bounds of a Func are undefined, then we should just inline the Func
 // as long as it is legal to inline or used by some extern Func.
-set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
-                                    const map<string, Function> &env) {
-    set<string> unbounded;
+StringSet get_unbounded_functions(const StringMap<Box> &pipeline_bounds,
+                                  const StringMap<Function> &env) {
+    StringSet unbounded;
     for (const auto &iter : env) {
         if (!pipeline_bounds.count(iter.first)) {
             debug(5) << "...Skip checking function \"" << iter.first
@@ -3169,7 +3171,7 @@ set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
         }
         const Box &bound = get_element(pipeline_bounds, iter.first);
         if (is_box_unbounded(bound)) {
-            unbounded.insert(iter.first);
+            unbounded.emplace(iter.first);
         }
     }
     return unbounded;
@@ -3177,8 +3179,8 @@ set<string> get_unbounded_functions(const map<string, Box> &pipeline_bounds,
 
 bool inline_unbounded(const vector<Function> &outputs,
                       const vector<string> &order,
-                      const map<string, Function> &env,
-                      const set<string> &unbounded) {
+                      const StringMap<Function> &env,
+                      const StringSet &unbounded) {
     bool inlined = false;
     // The very last few functions in 'order' are the last to be realized in the
     // pipeline (the final producers) so there is no point in checking it.
@@ -3208,9 +3210,9 @@ bool inline_unbounded(const vector<Function> &outputs,
 string generate_schedules(const vector<Function> &outputs, const Target &target,
                           const ArchParams &arch_params) {
     // Make an environment map which is used throughout the auto scheduling process.
-    map<string, Function> env;
+    StringMap<Function> env;
     for (const Function &f : outputs) {
-        map<string, Function> more_funcs = find_transitive_calls(f);
+        StringMap<Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
@@ -3262,7 +3264,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         // recompute the 'env' from scratch.
         env.clear();
         for (const Function &f : outputs) {
-            map<string, Function> more_funcs = find_transitive_calls(f);
+            StringMap<Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
     }
@@ -3288,7 +3290,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         // inline_all_trivial_functions
         env.clear();
         for (const Function &f : outputs) {
-            map<string, Function> more_funcs = find_transitive_calls(f);
+            StringMap<Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
         order = realization_order(outputs, env).first;
@@ -3312,13 +3314,13 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // Compute bounds of all functions in the pipeline given estimates on
     // outputs. Also report functions which bounds could not be inferred.
     debug(2) << "Computing pipeline bounds...\n";
-    map<string, Box> pipeline_bounds =
+    StringMap<Box> pipeline_bounds =
         get_pipeline_bounds(dep_analysis, outputs, &costs.input_estimates);
 
     // Determine all unbounded functions that are not extern Func or
     // used by some extern Funcs.
     debug(2) << "Determining all unbounded functions...\n";
-    set<string> unbounded = get_unbounded_functions(pipeline_bounds, env);
+    StringSet unbounded = get_unbounded_functions(pipeline_bounds, env);
     if (!unbounded.empty()) {
         // If some functions are unbounded, we should inline those directly.
         // Also, we need to recompute 'env' and re-initialize 'costs' and
@@ -3328,7 +3330,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 
         env.clear();
         for (const Function &f : outputs) {
-            map<string, Function> more_funcs = find_transitive_calls(f);
+            StringMap<Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
         order = realization_order(outputs, env).first;
@@ -3354,7 +3356,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         int num_stages = f.second.updates().size() + 1;
         for (int s = 0; s < num_stages; s++) {
             FStage curr_s(f.second, s);
-            map<string, Expr> reuse = part.evaluate_reuse(curr_s, find.funcs_called);
+            StringMap<Expr> reuse = part.evaluate_reuse(curr_s, find.funcs_called);
             debug(0) << curr_s << "\n";
             for (const auto &dir : reuse) {
                 debug(0) << dir.first << " " << dir.second << ",";

@@ -57,13 +57,13 @@ class IRMatch : public IRVisitor {
 public:
     bool result;
     vector<Expr> *matches;
-    map<string, Expr> *var_matches;
+    StringMap<Expr> *var_matches;
     Expr expr;
 
     IRMatch(Expr e, vector<Expr> &m)
         : result(true), matches(&m), var_matches(nullptr), expr(std::move(e)) {
     }
-    IRMatch(Expr e, map<string, Expr> &m)
+    IRMatch(Expr e, StringMap<Expr> &m)
         : result(true), matches(nullptr), var_matches(&m), expr(std::move(e)) {
     }
 
@@ -141,11 +141,11 @@ public:
                 result = e && (e->name == op->name);
             }
         } else if (var_matches) {
-            Expr &match = (*var_matches)[op->name];
-            if (match.defined()) {
-                result = equal(match, expr);
+            auto it = var_matches->find(op->name);
+            if (it == var_matches->end()) {
+                var_matches->emplace(op->name, expr);
             } else {
-                match = expr;
+                result = equal(it->second, expr);
             }
         }
     }
@@ -328,7 +328,7 @@ bool expr_match(const Expr &pattern, const Expr &expr, vector<Expr> &matches) {
     }
 }
 
-bool expr_match(const Expr &pattern, const Expr &expr, map<string, Expr> &matches) {
+bool expr_match(const Expr &pattern, const Expr &expr, StringMap<Expr> &matches) {
     // Explicitly don't clear matches. This allows usages to pre-match
     // some variables.
 
@@ -426,6 +426,18 @@ bool equal_helper(int a, int b) {
 
 template<typename T>
 HALIDE_ALWAYS_INLINE bool equal_helper(const std::vector<T> &a, const std::vector<T> &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (!equal_helper(a[i], b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+HALIDE_ALWAYS_INLINE bool equal_helper(const ExprVector &a, const ExprVector &b) {
     if (a.size() != b.size()) {
         return false;
     }

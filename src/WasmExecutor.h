@@ -39,7 +39,7 @@ struct WasmModule {
     static WasmModule compile(
         const Module &module,
         const std::vector<Argument> &arguments,
-        const std::string &fn_name,
+        std::string_view fn_name,
         const std::map<std::string, JITExtern> &externs,
         const std::vector<JITModule> &extern_deps);
 

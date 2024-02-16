@@ -396,7 +396,7 @@ Target::Feature get_host_vulkan_capability(Target t) {
     return cap;
 }
 
-const std::map<std::string, Target::OS> os_name_map = {
+const Internal::StringMap<Target::OS> os_name_map = {
     {"os_unknown", Target::OSUnknown},
     {"linux", Target::Linux},
     {"windows", Target::Windows},
@@ -408,7 +408,7 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"fuchsia", Target::Fuchsia},
     {"wasmrt", Target::WebAssemblyRuntime}};
 
-bool lookup_os(const std::string &tok, Target::OS &result) {
+bool lookup_os(std::string_view tok, Target::OS &result) {
     auto os_iter = os_name_map.find(tok);
     if (os_iter != os_name_map.end()) {
         result = os_iter->second;
@@ -417,7 +417,7 @@ bool lookup_os(const std::string &tok, Target::OS &result) {
     return false;
 }
 
-const std::map<std::string, Target::Arch> arch_name_map = {
+const Internal::StringMap<Target::Arch> arch_name_map = {
     {"arch_unknown", Target::ArchUnknown},
     {"x86", Target::X86},
     {"arm", Target::ARM},
@@ -427,7 +427,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"riscv", Target::RISCV},
 };
 
-bool lookup_arch(const std::string &tok, Target::Arch &result) {
+bool lookup_arch(std::string_view tok, Target::Arch &result) {
     auto arch_iter = arch_name_map.find(tok);
     if (arch_iter != arch_name_map.end()) {
         result = arch_iter->second;
@@ -443,7 +443,7 @@ bool lookup_arch(const std::string &tok, Target::Arch &result) {
 /// and prepending "tune_" prefix)
 ///
 /// Please keep sorted.
-const std::map<std::string, Target::Processor> processor_name_map = {
+const Internal::StringMap<Target::Processor> processor_name_map = {
     {"tune_amdfam10", Target::Processor::AMDFam10},
     {"tune_bdver1", Target::Processor::BdVer1},
     {"tune_bdver2", Target::Processor::BdVer2},
@@ -460,7 +460,7 @@ const std::map<std::string, Target::Processor> processor_name_map = {
     {"tune_znver4", Target::Processor::ZnVer4},
 };
 
-bool lookup_processor(const std::string &tok, Target::Processor &result) {
+bool lookup_processor(std::string_view tok, Target::Processor &result) {
     auto processor_iter = processor_name_map.find(tok);
     if (processor_iter != processor_name_map.end()) {
         result = processor_iter->second;
@@ -469,7 +469,7 @@ bool lookup_processor(const std::string &tok, Target::Processor &result) {
     return false;
 }
 
-const std::map<std::string, Target::Feature> feature_name_map = {
+const Internal::StringMap<Target::Feature> feature_name_map = {
     {"jit", Target::JIT},
     {"debug", Target::Debug},
     {"no_asserts", Target::NoAsserts},
@@ -559,7 +559,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
-bool lookup_feature(const std::string &tok, Target::Feature &result) {
+bool lookup_feature(std::string_view tok, Target::Feature &result) {
     auto feature_iter = feature_name_map.find(tok);
     if (feature_iter != feature_name_map.end()) {
         result = feature_iter->second;
@@ -568,9 +568,9 @@ bool lookup_feature(const std::string &tok, Target::Feature &result) {
     return false;
 }
 
-int parse_vector_bits(const std::string &tok) {
+int parse_vector_bits(std::string_view tok) {
     if (tok.find("vector_bits_") == 0) {
-        std::string num = tok.substr(sizeof("vector_bits_") - 1, std::string::npos);
+        std::string num{tok.substr(sizeof("vector_bits_") - 1, std::string::npos)};
         size_t end_index;
         int parsed = std::stoi(num, &end_index);
         if (end_index == num.size()) {
@@ -630,9 +630,9 @@ Target get_jit_target_from_environment() {
 }
 
 namespace {
-bool merge_string(Target &t, const std::string &target) {
-    string rest = target;
-    vector<string> tokens;
+bool merge_string(Target &t, std::string_view target) {
+    std::string_view rest = target;
+    vector<std::string_view> tokens;
     size_t first_dash;
     while ((first_dash = rest.find('-')) != string::npos) {
         // Internal::debug(0) << first_dash << ", " << rest << "\n";
@@ -645,7 +645,7 @@ bool merge_string(Target &t, const std::string &target) {
     bool is_host = false;
 
     for (size_t i = 0; i < tokens.size(); i++) {
-        const string &tok = tokens[i];
+        std::string_view tok = tokens[i];
         Target::Feature feature;
         int vector_bits;
 
@@ -661,7 +661,7 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             bits_specified = true;
-            t.bits = std::stoi(tok);
+            t.bits = std::stoi(std::string{tok});
         } else if (lookup_arch(tok, t.arch)) {
             if (arch_specified) {
                 return false;
@@ -731,7 +731,7 @@ bool merge_string(Target &t, const std::string &target) {
     return true;
 }
 
-void bad_target_string(const std::string &target) {
+void bad_target_string(std::string_view target) {
     const char *separator = "";
     std::string architectures;
     for (const auto &arch_entry : arch_name_map) {
@@ -868,7 +868,7 @@ void Target::validate_features() const {
     }
 }
 
-Target::Target(const std::string &target) {
+Target::Target(std::string_view target) {
     Target host = get_host_target();
 
     if (target.empty()) {
@@ -886,7 +886,7 @@ Target::Target(const char *s)
     : Target(std::string(s)) {
 }
 
-bool Target::validate_target_string(const std::string &s) {
+bool Target::validate_target_string(std::string_view s) {
     Target t;
     return merge_string(t, s) && !t.has_unknowns();
 }
@@ -901,7 +901,7 @@ std::string Target::feature_to_name(Target::Feature feature) {
     return "";
 }
 
-Target::Feature Target::feature_from_name(const std::string &name) {
+Target::Feature Target::feature_from_name(std::string_view name) {
     Target::Feature feature;
     if (lookup_feature(name, feature)) {
         return feature;

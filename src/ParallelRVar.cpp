@@ -23,7 +23,7 @@ namespace {
 class FindLoads : public IRVisitor {
     using IRVisitor::visit;
 
-    const string &func;
+    std::string_view func;
 
     void visit(const Call *op) override {
         if (op->name == func && op->call_type == Call::Halide) {
@@ -42,7 +42,7 @@ class FindLoads : public IRVisitor {
     }
 
 public:
-    FindLoads(const string &f)
+    FindLoads(std::string_view f)
         : func(f) {
     }
 
@@ -53,7 +53,7 @@ public:
 class RenameFreeVars : public IRMutator {
     using IRMutator::visit;
 
-    map<string, string> new_names;
+    StringMap<string> new_names;
 
     Expr visit(const Variable *op) override {
         if (!op->param.defined() && !op->image.defined()) {
@@ -64,13 +64,13 @@ class RenameFreeVars : public IRMutator {
     }
 
 public:
-    string get_new_name(const string &s) {
-        map<string, string>::iterator iter = new_names.find(s);
+    string get_new_name(std::string_view s) {
+        auto iter = new_names.find(s);
         if (iter != new_names.end()) {
             return iter->second;
         } else {
-            string new_name = s + "$_";
-            new_names[s] = new_name;
+            string new_name = concat(s, "$_");
+            new_names.emplace(s, new_name);
             return new_name;
         }
     }
@@ -90,8 +90,8 @@ class SubstituteInBooleanLets : public IRMutator {
 };
 }  // namespace
 
-bool can_parallelize_rvar(const string &v,
-                          const string &f,
+bool can_parallelize_rvar(std::string_view v,
+                          std::string_view f,
                           const Definition &r) {
     const vector<Expr> &values = r.values();
     const vector<Expr> &args = r.args();

@@ -129,7 +129,7 @@ class DetermineAllocStride : public IRVisitor {
 
     using IRVisitor::visit;
 
-    const string &alloc, &lane_var;
+    std::string_view alloc, lane_var;
     Expr warp_size;
     bool single_thread = false;
     vector<Expr> loads, stores, single_stores;
@@ -278,7 +278,7 @@ class DetermineAllocStride : public IRVisitor {
     }
 
 public:
-    DetermineAllocStride(const string &alloc, const string &lane_var, const Expr &warp_size)
+    DetermineAllocStride(std::string_view alloc, std::string_view lane_var, const Expr &warp_size)
         : alloc(alloc), lane_var(lane_var), warp_size(warp_size) {
         dependent_vars.push(lane_var, 1);
     }
@@ -414,7 +414,7 @@ class LowerWarpShuffles : public IRMutator {
                 const int64_t *sz = as_const_int(new_size);
                 user_assert(sz) << "Warp-level allocation with non-constant size: "
                                 << alloc->extents[0] << ". Use Func::bound_extent.";
-                DetermineAllocStride stride(alloc->name, op->name, warp_size);
+                DetermineAllocStride stride(std::string{alloc->name}, std::string{op->name}, warp_size);
                 body.accept(&stride);
                 allocation_info.push(alloc->name, {(int)(*sz), stride.get_stride()});
             }
@@ -515,7 +515,7 @@ class LowerWarpShuffles : public IRMutator {
         }
     }
 
-    Expr make_warp_load(Type type, const string &name, const Expr &idx, Expr lane) {
+    Expr make_warp_load(Type type, std::string_view name, const Expr &idx, Expr lane) {
         // idx: The index of the value within the local allocation
         // lane: Which thread's value we want. If it's our own, we can just use a load.
 
@@ -703,7 +703,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         }
 
         if (should_lift) {
-            lifted_lets.push_back({op->name, value});
+            lifted_lets.emplace_back(op->name, value);
             return body;
         } else {
             return LetOrLetStmt::make(op->name, value, body);

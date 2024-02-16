@@ -273,7 +273,7 @@ private:
         }
     };
 
-    Callable(const std::string &name,
+    Callable(std::string_view name,
              const JITHandlers &jit_handlers,
              const std::map<std::string, JITExtern> &jit_externs,
              Internal::JITCache &&jit_cache);

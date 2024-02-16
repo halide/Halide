@@ -186,7 +186,7 @@ public:
 
 }  // namespace
 
-CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
+CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, std::string_view guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind) {
 
     if (output_kind == CPlusPlusFunctionInfoHeader) {
@@ -403,7 +403,7 @@ string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     return oss.str();
 }
 
-string CodeGen_C::print_name(const string &name) {
+string CodeGen_C::print_name(std::string_view name) {
     return c_print_name(name);
 }
 
@@ -411,54 +411,54 @@ namespace {
 class ExternCallPrototypes : public IRGraphVisitor {
     struct NamespaceOrCall {
         const Call *call;  // nullptr if this is a subnamespace
-        std::map<string, NamespaceOrCall> names;
+        StringMap<NamespaceOrCall> names;
         NamespaceOrCall(const Call *call = nullptr)
             : call(call) {
         }
     };
-    std::map<string, NamespaceOrCall> c_plus_plus_externs;
-    std::map<string, const Call *> c_externs;
-    std::set<std::string> processed;
-    std::set<std::string> internal_linkage;
-    std::set<std::string> destructors;
+    StringMap<NamespaceOrCall> c_plus_plus_externs;
+    StringMap<const Call *> c_externs;
+    StringSet processed;
+    StringSet internal_linkage;
+    StringSet destructors;
 
     using IRGraphVisitor::visit;
 
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
 
-        if (!processed.count(op->name)) {
+        if (!processed.count(std::string{op->name})) {
             if (op->call_type == Call::Extern || op->call_type == Call::PureExtern) {
-                c_externs.insert({op->name, op});
+                c_externs.emplace(op->name, op);
             } else if (op->call_type == Call::ExternCPlusPlus) {
                 std::vector<std::string> namespaces;
                 std::string name = extract_namespaces(op->name, namespaces);
-                std::map<string, NamespaceOrCall> *namespace_map = &c_plus_plus_externs;
+                StringMap<NamespaceOrCall> *namespace_map = &c_plus_plus_externs;
                 for (const auto &ns : namespaces) {
                     auto insertion = namespace_map->insert({ns, NamespaceOrCall()});
                     namespace_map = &insertion.first->second.names;
                 }
                 namespace_map->insert({name, NamespaceOrCall(op)});
             }
-            processed.insert(op->name);
+            processed.emplace(op->name);
         }
 
         if (op->is_intrinsic(Call::register_destructor)) {
             internal_assert(op->args.size() == 2);
             const StringImm *fn = op->args[0].as<StringImm>();
             internal_assert(fn);
-            destructors.insert(fn->value);
+            destructors.emplace(fn->value);
         }
     }
 
     void visit(const Allocate *op) override {
         IRGraphVisitor::visit(op);
         if (!op->free_function.empty()) {
-            destructors.insert(op->free_function);
+            destructors.emplace(op->free_function);
         }
     }
 
-    void emit_function_decl(ostream &stream, const Call *op, const std::string &name) const {
+    void emit_function_decl(ostream &stream, const Call *op, std::string_view name) const {
         // op->name (rather than the name arg) since we need the fully-qualified C++ name
         if (internal_linkage.count(op->name)) {
             stream << "static ";
@@ -483,7 +483,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         stream << ");\n";
     }
 
-    void emit_namespace_or_call(ostream &stream, const NamespaceOrCall &ns_or_call, const std::string &name) const {
+    void emit_namespace_or_call(ostream &stream, const NamespaceOrCall &ns_or_call, std::string_view name) const {
         if (ns_or_call.call == nullptr) {
             stream << "namespace " << name << " {\n";
             for (const auto &ns_or_call_inner : ns_or_call.names) {
@@ -523,8 +523,8 @@ public:
         }
     }
 
-    void set_internal_linkage(const std::string &name) {
-        internal_linkage.insert(name);
+    void set_internal_linkage(std::string_view name) {
+        internal_linkage.emplace(name);
     }
 
     bool has_c_declarations() const {
@@ -588,7 +588,7 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
     forward_declared.insert(t.handle_type);
 }
 
-void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
+void CodeGen_C::emit_argv_wrapper(std::string_view function_name,
                                   const std::vector<LoweredArgument> &args) {
     if (is_header_or_extern_decl()) {
         stream << "\nHALIDE_FUNCTION_ATTRS\nint " << function_name << "_argv(void **args);\n";
@@ -620,7 +620,7 @@ void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
     stream << "}";
 }
 
-void CodeGen_C::emit_metadata_getter(const std::string &function_name,
+void CodeGen_C::emit_metadata_getter(std::string_view function_name,
                                      const std::vector<LoweredArgument> &args,
                                      const MetadataNameMap &metadata_name_map) {
     if (is_header_or_extern_decl()) {
@@ -828,7 +828,7 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
     stream << "}\n";
 }
 
-void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
+void CodeGen_C::emit_constexpr_function_info(std::string_view function_name,
                                              const std::vector<LoweredArgument> &args,
                                              const MetadataNameMap &metadata_name_map) {
     internal_assert(!extern_c_open)
@@ -884,7 +884,7 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
     stream << "}\n";
 }
 
-void CodeGen_C::emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function) {
+void CodeGen_C::emit_halide_free_helper(std::string_view alloc_name, std::string_view free_function) {
     stream << get_indent() << "HalideFreeHelper<" << free_function << "> "
            << alloc_name << "_free(_ucon, " << alloc_name << ");\n";
 }
@@ -1246,7 +1246,7 @@ void CodeGen_C::print_stmt(const Stmt &s) {
     s.accept(this);
 }
 
-string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
+string CodeGen_C::print_assignment(Type t, std::string_view rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
@@ -1272,7 +1272,7 @@ void CodeGen_C::open_scope() {
     stream << "{\n";
 }
 
-void CodeGen_C::close_scope(const std::string &comment) {
+void CodeGen_C::close_scope(std::string_view comment) {
     cache.clear();
     indent--;
     stream << get_indent();
@@ -1496,7 +1496,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 3);
         const StringImm *string_imm = op->args[0].as<StringImm>();
         internal_assert(string_imm);
-        string filename = string_imm->value;
+        string filename{string_imm->value};
         string typecode = print_expr(op->args[1]);
         string buffer = print_name(print_expr(op->args[2]));
 
@@ -2126,7 +2126,7 @@ void CodeGen_C::visit(const LetStmt *op) {
 // supposed to clean up and make the containing function return
 // -1, so we can't use the C version of assert. Instead we convert
 // to an if statement.
-void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
+void CodeGen_C::create_assertion(std::string_view id_cond, const Expr &message) {
     internal_assert(!message.defined() || message.type() == Int(32))
         << "Assertion result is not an int: " << message;
 
@@ -2323,7 +2323,7 @@ void CodeGen_C::visit(const Allocate *op) {
             stream << "halide_error(_ucon, "
                    << "\"32-bit signed overflow computing size of allocation " << op->name << "\\n\");\n";
             stream << get_indent() << "return -1;\n";
-            close_scope("overflow test " + op->name);
+            close_scope(concat("overflow test ", op->name));
         }
 
         // Check the condition to see if this allocation should actually be created.
@@ -2383,7 +2383,7 @@ void CodeGen_C::visit(const Allocate *op) {
         }
         create_assertion("(" + check.str() + ")", Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
-        string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
+        std::string_view free_function = op->free_function.empty() ? "halide_free" : op->free_function;
         emit_halide_free_helper(op_name, free_function);
     }
 
@@ -2399,7 +2399,7 @@ void CodeGen_C::visit(const Allocate *op) {
     close_scope("alloc " + print_name(op->name));
 }
 
-void CodeGen_C::print_heap_free(const std::string &alloc_name) {
+void CodeGen_C::print_heap_free(std::string_view alloc_name) {
     if (heap_allocations.contains(alloc_name)) {
         stream << get_indent() << print_name(alloc_name) << "_free.free();\n";
         heap_allocations.pop(alloc_name);

@@ -5,8 +5,7 @@
  * Defines a lowering pass to make all floating-point strict for all top-level Exprs.
  */
 
-#include <map>
-#include <string>
+#include "Util.h"
 
 namespace Halide {
 
@@ -24,7 +23,7 @@ class Function;
  * whether any strict floating-point is used in any function in the
  * passed in env.
  */
-bool strictify_float(std::map<std::string, Function> &env, const Target &t);
+bool strictify_float(StringMap<Function> &env, const Target &t);
 
 }  // namespace Internal
 }  // namespace Halide

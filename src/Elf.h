@@ -84,13 +84,13 @@ private:
 
 public:
     Symbol() = default;
-    Symbol(const std::string &name)
+    Symbol(std::string_view name)
         : name(name) {
     }
 
     /** Accesses the name of this symbol. */
     ///@{
-    Symbol &set_name(const std::string &name) {
+    Symbol &set_name(std::string_view name) {
         this->name = name;
         return *this;
     }
@@ -257,11 +257,11 @@ private:
 
 public:
     Section() = default;
-    Section(const std::string &name, Type type)
+    Section(std::string_view name, Type type)
         : name(name), type(type) {
     }
 
-    Section &set_name(const std::string &name) {
+    Section &set_name(std::string_view name) {
         this->name = name;
         return *this;
     }
@@ -535,7 +535,7 @@ public:
 
     /** Write a shared object in memory. */
     std::vector<char> write_shared_object(Linker *linker, const std::vector<std::string> &depedencies = {},
-                                          const std::string &soname = "");
+                                          std::string_view soname = "");
 
     section_iterator sections_begin() {
         return secs.begin();
@@ -558,9 +558,9 @@ public:
     size_t sections_size() const {
         return secs.size();
     }
-    section_iterator find_section(const std::string &name);
+    section_iterator find_section(std::string_view name);
 
-    section_iterator add_section(const std::string &name, Section::Type type);
+    section_iterator add_section(std::string_view name, Section::Type type);
     section_iterator add_relocation_section(const Section &for_section);
     section_iterator erase_section(section_iterator i) {
         return secs.erase(i);
@@ -590,10 +590,10 @@ public:
     size_t symbols_size() const {
         return syms.size();
     }
-    symbol_iterator find_symbol(const std::string &name);
-    const_symbol_iterator find_symbol(const std::string &name) const;
+    symbol_iterator find_symbol(std::string_view name);
+    const_symbol_iterator find_symbol(std::string_view name) const;
 
-    symbol_iterator add_symbol(const std::string &name);
+    symbol_iterator add_symbol(std::string_view name);
 };
 
 }  // namespace Elf

@@ -28,7 +28,7 @@ public:
      * with different kernels, which will all be accumulated into a single
      * source module shared by a given Halide pipeline. */
     void add_kernel(Stmt stmt,
-                    const std::string &name,
+                    std::string_view name,
                     const std::vector<DeviceArgument> &args) override;
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
@@ -42,7 +42,7 @@ public:
 
     void dump() override;
 
-    std::string print_gpu_name(const std::string &name) override;
+    std::string print_gpu_name(std::string_view name) override;
 
     std::string api_unique_name() override {
         return "metal";
@@ -59,7 +59,7 @@ protected:
             : CodeGen_GPU_C(s, t) {
         }
         void add_kernel(const Stmt &stmt,
-                        const std::string &name,
+                        std::string_view name,
                         const std::vector<DeviceArgument> &args);
 
     protected:
@@ -77,7 +77,7 @@ protected:
         std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_extern_call(const Call *op) override;
 
-        std::string get_memory_space(const std::string &);
+        std::string get_memory_space(std::string_view);
 
         std::string shared_name;
 
@@ -186,7 +186,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, const Ex
 }
 
 namespace {
-string simt_intrinsic(const string &name) {
+string simt_intrinsic(std::string_view name) {
     if (ends_with(name, ".__thread_id_x")) {
         return "tid_in_tgroup.x";
     } else if (ends_with(name, ".__thread_id_y")) {
@@ -360,7 +360,7 @@ Expr is_ramp_one(const Expr &e) {
 }
 }  // namespace
 
-string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
+string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(std::string_view buf) {
     if (buf == shared_name) {
         return "threadgroup";
     } else {
@@ -403,7 +403,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
     }
     rhs << "[" << id_index << "]";
 
-    std::map<string, string>::iterator cached = cache.find(rhs.str());
+    StringMap<string>::iterator cached = cache.find(rhs.str());
     if (cached != cache.end()) {
         id = cached->second;
         return;
@@ -562,7 +562,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
 }
 
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
-                                   const string &name,
+                                   std::string_view name,
                                    const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_Metal_Dev::compile " << name << "\n";
 
@@ -595,7 +595,7 @@ struct BufferSize {
 }  // namespace
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
-                                                    const string &name,
+                                                    std::string_view name,
                                                     const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding Metal kernel " << name << "\n";
@@ -657,7 +657,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     for (const auto &arg : args) {
         if (!arg.is_buffer) {
             if (!any_scalar_args) {
-                stream << "struct " + name + "_args {\n";
+                stream << "struct " << name << "_args {\n";
                 any_scalar_args = true;
             }
             stream << print_type(arg.type)
@@ -736,7 +736,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     }
 
     print(s);
-    close_scope("kernel " + name);
+    close_scope(concat("kernel ", name));
 
     for (const auto &arg : args) {
         // Remove buffer arguments from allocation scope
@@ -854,8 +854,8 @@ void CodeGen_Metal_Dev::dump() {
     std::cerr << src_stream.str() << "\n";
 }
 
-std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {
-    return name;
+std::string CodeGen_Metal_Dev::print_gpu_name(std::string_view name) {
+    return std::string{name};
 }
 
 }  // namespace

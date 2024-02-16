@@ -37,11 +37,11 @@ class Func;
  * scheduled innermost within g.
  */
 //@{
-Expr sum(Expr, const std::string &s = "sum");
-Expr saturating_sum(Expr, const std::string &s = "saturating_sum");
-Expr product(Expr, const std::string &s = "product");
-Expr maximum(Expr, const std::string &s = "maximum");
-Expr minimum(Expr, const std::string &s = "minimum");
+Expr sum(Expr, std::string_view s = "sum");
+Expr saturating_sum(Expr, std::string_view s = "saturating_sum");
+Expr product(Expr, std::string_view s = "product");
+Expr maximum(Expr, std::string_view s = "maximum");
+Expr minimum(Expr, std::string_view s = "minimum");
 //@}
 
 /** Variants of the inline reduction in which the RDom is stated
@@ -54,11 +54,11 @@ Expr minimum(Expr, const std::string &s = "minimum");
  \endcode
 */
 // @{
-Expr sum(const RDom &, Expr, const std::string &s = "sum");
-Expr saturating_sum(const RDom &r, Expr e, const std::string &s = "saturating_sum");
-Expr product(const RDom &, Expr, const std::string &s = "product");
-Expr maximum(const RDom &, Expr, const std::string &s = "maximum");
-Expr minimum(const RDom &, Expr, const std::string &s = "minimum");
+Expr sum(const RDom &, Expr, std::string_view s = "sum");
+Expr saturating_sum(const RDom &r, Expr e, std::string_view s = "saturating_sum");
+Expr product(const RDom &, Expr, std::string_view s = "product");
+Expr maximum(const RDom &, Expr, std::string_view s = "maximum");
+Expr minimum(const RDom &, Expr, std::string_view s = "minimum");
 // @}
 
 /** Returns an Expr or Tuple representing the coordinates of the point
@@ -66,10 +66,10 @@ Expr minimum(const RDom &, Expr, const std::string &s = "minimum");
  * expression must refer to some RDom. Also returns the extreme value
  * of the expression as the last element of the tuple. */
 // @{
-Tuple argmax(Expr, const std::string &s = "argmax");
-Tuple argmin(Expr, const std::string &s = "argmin");
-Tuple argmax(const RDom &, Expr, const std::string &s = "argmax");
-Tuple argmin(const RDom &, Expr, const std::string &s = "argmin");
+Tuple argmax(Expr, std::string_view s = "argmax");
+Tuple argmin(Expr, std::string_view s = "argmin");
+Tuple argmax(const RDom &, Expr, std::string_view s = "argmax");
+Tuple argmin(const RDom &, Expr, std::string_view s = "argmin");
 // @}
 
 /** Inline reductions create an anonymous helper Func to do the

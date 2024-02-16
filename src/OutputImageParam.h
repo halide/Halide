@@ -44,7 +44,7 @@ public:
     OutputImageParam() = default;
 
     /** Get the name of this Param */
-    const std::string &name() const;
+    std::string_view name() const;
 
     /** Get the type of the image data this Param refers to */
     Type type() const;

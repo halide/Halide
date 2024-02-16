@@ -31,13 +31,13 @@ namespace {
 
 class PrintLoopNest : public IRVisitor {
 public:
-    PrintLoopNest(std::ostream &output, const map<string, Function> &e)
+    PrintLoopNest(std::ostream &output, const StringMap<Function> &e)
         : out(output), env(e) {
     }
 
 private:
     std::ostream &out;
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
     int indent = 0;
 
     Scope<Expr> constants;
@@ -48,15 +48,15 @@ private:
         return Indentation{indent};
     }
 
-    string simplify_var_name(const string &s) {
+    string simplify_var_name(std::string_view s) {
         return simplify_name(s, false);
     }
 
-    string simplify_func_name(const string &s) {
+    string simplify_func_name(std::string_view s) {
         return simplify_name(s, true);
     }
 
-    string simplify_name(const string &s, bool is_func) {
+    string simplify_name(std::string_view s, bool is_func) {
         // Trim the function name and stage number from the for loop,
         // as well as any uniqueness $n suffixes on variables.
         std::ostringstream trimmed_name;

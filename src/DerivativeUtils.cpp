@@ -72,12 +72,12 @@ vector<int> gather_variables(const Expr &expr,
     vector<string> str_filter;
     str_filter.reserve(filter.size());
     for (const auto &var : filter) {
-        str_filter.push_back(var.name());
+        str_filter.emplace_back(var.name());
     }
     return gather_variables(expr, str_filter);
 }
 
-map<string, ReductionVariableInfo> gather_rvariables(const Tuple &tuple) {
+StringMap<ReductionVariableInfo> gather_rvariables(const Tuple &tuple) {
 
     class GatherRVars : public IRGraphVisitor {
     public:
@@ -91,7 +91,7 @@ map<string, ReductionVariableInfo> gather_rvariables(const Tuple &tuple) {
                     const ReductionVariable &rv = domain[i];
                     if (rv.var == op->name) {
                         rvar_map[op->name] = ReductionVariableInfo{
-                            rv.min, rv.extent, i, op->reduction_domain, op->name};
+                            rv.min, rv.extent, i, op->reduction_domain, std::string{op->name}};
                         return;
                     }
                 }
@@ -99,7 +99,7 @@ map<string, ReductionVariableInfo> gather_rvariables(const Tuple &tuple) {
             }
         }
 
-        map<string, ReductionVariableInfo> rvar_map;
+        StringMap<ReductionVariableInfo> rvar_map;
     } gatherer;
 
     for (const auto &expr : tuple.as_vector()) {
@@ -108,12 +108,12 @@ map<string, ReductionVariableInfo> gather_rvariables(const Tuple &tuple) {
     return gatherer.rvar_map;
 }
 
-map<string, ReductionVariableInfo> gather_rvariables(const Expr &expr) {
+StringMap<ReductionVariableInfo> gather_rvariables(const Expr &expr) {
     return gather_rvariables(Tuple(expr));
 }
 
 Expr add_let_expression(const Expr &expr,
-                        const map<string, Expr> &let_var_mapping,
+                        const StringMap<Expr> &let_var_mapping,
                         const vector<string> &let_variables) {
     // TODO: find a faster way to do this
     Expr ret = StripLets().mutate(expr);
@@ -156,7 +156,7 @@ protected:
 private:
     set<const IRNode *> visited_exprs;
     vector<Expr> expr_list;
-    map<string, Expr> let_var_mapping;
+    StringMap<Expr> let_var_mapping;
 };
 
 vector<Expr> ExpressionSorter::sort(const Expr &e) {
@@ -211,8 +211,8 @@ vector<Expr> sort_expressions(const Expr &expr) {
     return sorter.sort(expr);
 }
 
-map<string, Box> inference_bounds(const vector<Func> &funcs,
-                                  const vector<Box> &output_bounds) {
+StringMap<Box> inference_bounds(const vector<Func> &funcs,
+                                const vector<Box> &output_bounds) {
     internal_assert(funcs.size() == output_bounds.size());
     // Obtain all dependencies
     vector<Function> functions;
@@ -220,9 +220,9 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
     for (const auto &func : funcs) {
         functions.push_back(func.function());
     }
-    map<string, Function> env;
+    StringMap<Function> env;
     for (const auto &func : functions) {
-        map<string, Function> local_env = find_transitive_calls(func);
+        StringMap<Function> local_env = find_transitive_calls(func);
         env.insert(local_env.begin(), local_env.end());
     }
 
@@ -231,7 +231,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
     for (const auto &it : env) {
         Func func = Func(it.second);
         for (int i = 0; i < func.num_update_definitions(); i++) {
-            map<string, ReductionVariableInfo> rvars =
+            StringMap<ReductionVariableInfo> rvars =
                 gather_rvariables(func.update_values(i));
             for (const auto &it : rvars) {
                 Interval interval(it.second.min, it.second.min + it.second.extent - 1);
@@ -243,11 +243,11 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
     vector<string> order = realization_order(functions, env).first;
     FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
 
-    map<string, Box> bounds;
+    StringMap<Box> bounds;
     // Set up bounds for outputs
     for (int i = 0; i < (int)funcs.size(); i++) {
         const Func &func = funcs[i];
-        bounds[func.name()] = output_bounds[i];
+        bounds.emplace(func.name(), output_bounds[i]);
     }
     // Traverse from the consumers to the producers
     for (auto it = order.rbegin(); it != order.rend(); it++) {
@@ -258,7 +258,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
         internal_assert(func.args().size() == current_bounds.size());
         // We know the range for each argument of this function
         for (int i = 0; i < (int)current_bounds.size(); i++) {
-            string arg = func.args()[i].name();
+            std::string_view arg = func.args()[i].name();
             scope.push(arg, current_bounds[i]);
         }
         // Propagate the bounds
@@ -268,7 +268,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
             for (const auto &expr : tuple.as_vector()) {
                 // For all the immediate dependencies of this expression,
                 // find the required ranges
-                map<string, Box> update_bounds =
+                StringMap<Box> update_bounds =
                     boxes_required(expr, scope, func_value_bounds);
                 // Loop over the dependencies
                 for (const auto &it : update_bounds) {
@@ -301,8 +301,8 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
     return bounds;
 }
 
-map<string, Box> inference_bounds(const Func &func,
-                                  const Box &output_bounds) {
+StringMap<Box> inference_bounds(const Func &func,
+                                const Box &output_bounds) {
     return inference_bounds(vector<Func>{func},
                             vector<Box>{output_bounds});
 }
@@ -333,7 +333,7 @@ vector<string> vars_to_strings(const vector<Var> &vars) {
     vector<string> ret;
     ret.reserve(vars.size());
     for (const auto &var : vars) {
-        ret.push_back(var.name());
+        ret.emplace_back(var.name());
     }
     return ret;
 }
@@ -366,8 +366,8 @@ ReductionDomain extract_rdom(const Expr &expr) {
 }
 
 pair<bool, Expr> solve_inverse(Expr expr,
-                               const string &new_var,
-                               const string &var) {
+                               std::string_view new_var,
+                               std::string_view var) {
     expr = substitute_in_all_lets(simplify(expr));
     Interval interval = solve_for_outer_interval(expr, var);
     if (!interval.is_bounded()) {
@@ -400,7 +400,7 @@ namespace {
 struct BufferDimensionsFinder : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
-    map<string, BufferInfo> find(const Func &func) {
+    StringMap<BufferInfo> find(const Func &func) {
         buffer_calls.clear();
         vector<Expr> vals = func.values().as_vector();
         for (const Expr &val : vals) {
@@ -440,12 +440,12 @@ public:
         }
     }
 
-    map<string, BufferInfo> buffer_calls;
+    StringMap<BufferInfo> buffer_calls;
 };
 
 }  // namespace
 
-map<string, BufferInfo> find_buffer_param_calls(const Func &func) {
+StringMap<BufferInfo> find_buffer_param_calls(const Func &func) {
     BufferDimensionsFinder finder;
     return finder.find(func);
 }
@@ -455,7 +455,7 @@ namespace {
 struct ImplicitVariablesFinder : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
-    set<string> find(const Expr &expr) {
+    StringSet find(const Expr &expr) {
         implicit_variables.clear();
         expr.accept(this);
         return implicit_variables;
@@ -464,24 +464,24 @@ public:
     void visit(const Variable *op) override {
         IRGraphVisitor::visit(op);
         if (Var::is_implicit(op->name)) {
-            implicit_variables.insert(op->name);
+            implicit_variables.emplace(op->name);
         }
     }
 
-    set<string> implicit_variables;
+    StringSet implicit_variables;
 };
 
 }  // namespace
 
-set<string> find_implicit_variables(const Expr &expr) {
+StringSet find_implicit_variables(const Expr &expr) {
     ImplicitVariablesFinder finder;
     return finder.find(expr);
 }
 
 Expr substitute_rdom_predicate(
-    const string &name, const Expr &replacement, const Expr &expr) {
+    std::string_view name, const Expr &replacement, const Expr &expr) {
     Expr substituted = substitute(name, replacement, expr);
-    map<string, ReductionVariableInfo> rvars =
+    StringMap<ReductionVariableInfo> rvars =
         gather_rvariables(substituted);
     set<ReductionDomain, ReductionDomain::Compare> rdoms_set;
     for (const auto &it : rvars) {
@@ -502,10 +502,10 @@ namespace {
 struct FunctionCallFinder : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
-    bool find(const string &func_name_,
+    bool find(std::string_view func_name_,
               const Expr &expr,
-              const map<string, Expr> &let_var_mapping_) {
-        func_name = func_name_;
+              const StringMap<Expr> &let_var_mapping_) {
+        func_name = std::string{func_name_};
         let_var_mapping = &let_var_mapping_;
         found = false;
         expr.accept(this);
@@ -513,7 +513,7 @@ public:
     }
 
     bool find(const Expr &expr,
-              const map<string, Expr> &let_var_mapping_) {
+              const StringMap<Expr> &let_var_mapping_) {
         func_name = "";
         let_var_mapping = &let_var_mapping_;
         found = false;
@@ -542,22 +542,22 @@ public:
     }
 
     string func_name;
-    map<string, Expr> const *let_var_mapping;
+    StringMap<Expr> const *let_var_mapping;
     bool found;
 };
 
 }  // namespace
 
 bool is_calling_function(
-    const string &func_name, const Expr &expr,
-    const map<string, Expr> &let_var_mapping) {
+    std::string_view func_name, const Expr &expr,
+    const StringMap<Expr> &let_var_mapping) {
     FunctionCallFinder finder;
     return finder.find(func_name, expr, let_var_mapping);
 }
 
 bool is_calling_function(
     const Expr &expr,
-    const map<string, Expr> &let_var_mapping) {
+    const StringMap<Expr> &let_var_mapping) {
     FunctionCallFinder finder;
     return finder.find(expr, let_var_mapping);
 }

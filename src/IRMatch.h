@@ -48,7 +48,7 @@ bool expr_match(const Expr &pattern, const Expr &expr, std::vector<Expr> &result
  \endcode
  * should return true, and set result["x"] = a, and result["y"] = b.
  */
-bool expr_match(const Expr &pattern, const Expr &expr, std::map<std::string, Expr> &result);
+bool expr_match(const Expr &pattern, const Expr &expr, StringMap<Expr> &result);
 
 /** Rewrite the expression x to have `lanes` lanes. This is useful
  * for substituting the results of expr_match into a pattern expression. */

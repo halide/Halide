@@ -50,10 +50,10 @@ struct AutoschedulerParams {
     std::map<std::string, std::string> extra;
 
     AutoschedulerParams() = default;
-    /*not-explicit*/ AutoschedulerParams(const std::string &name)
+    /*not-explicit*/ AutoschedulerParams(std::string_view name)
         : name(name) {
     }
-    AutoschedulerParams(const std::string &name, const std::map<std::string, std::string> &extra)
+    AutoschedulerParams(std::string_view name, const std::map<std::string, std::string> &extra)
         : name(name), extra(extra) {
     }
 
@@ -157,7 +157,7 @@ private:
 
     static std::map<std::string, AutoSchedulerFn> &get_autoscheduler_map();
 
-    static AutoSchedulerFn find_autoscheduler(const std::string &autoscheduler_name);
+    static AutoSchedulerFn find_autoscheduler(std::string_view autoscheduler_name);
 
     int call_jit_code(const Internal::JITCallArgs &args);
 
@@ -200,7 +200,7 @@ public:
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
-    static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler);
+    static void add_autoscheduler(std::string_view autoscheduler_name, const AutoSchedulerFn &autoscheduler);
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */
@@ -212,25 +212,25 @@ public:
      */
     void compile_to(const std::map<OutputFileType, std::string> &output_files,
                     const std::vector<Argument> &args,
-                    const std::string &fn_name,
+                    std::string_view fn_name,
                     const Target &target);
 
     /** Statically compile a pipeline to llvm bitcode, with the given
      * filename (which should probably end in .bc), type signature,
      * and C function name. If you're compiling a pipeline with a
      * single output Func, see also Func::compile_to_bitcode. */
-    void compile_to_bitcode(const std::string &filename,
+    void compile_to_bitcode(std::string_view filename,
                             const std::vector<Argument> &args,
-                            const std::string &fn_name,
+                            std::string_view fn_name,
                             const Target &target = get_target_from_environment());
 
     /** Statically compile a pipeline to llvm assembly, with the given
      * filename (which should probably end in .ll), type signature,
      * and C function name. If you're compiling a pipeline with a
      * single output Func, see also Func::compile_to_llvm_assembly. */
-    void compile_to_llvm_assembly(const std::string &filename,
+    void compile_to_llvm_assembly(std::string_view filename,
                                   const std::vector<Argument> &args,
-                                  const std::string &fn_name,
+                                  std::string_view fn_name,
                                   const Target &target = get_target_from_environment());
 
     /** Statically compile a pipeline with multiple output functions to an
@@ -238,9 +238,9 @@ public:
      * .o or .obj), type signature, and C function name (which defaults to
      * the same name as this halide function. You probably don't want to
      * use this directly; call compile_to_static_library or compile_to_file instead. */
-    void compile_to_object(const std::string &filename,
+    void compile_to_object(std::string_view filename,
                            const std::vector<Argument> &,
-                           const std::string &fn_name,
+                           std::string_view fn_name,
                            const Target &target = get_target_from_environment());
 
     /** Emit a header file with the given filename for a pipeline. The
@@ -249,9 +249,9 @@ public:
      * actually have to have defined any of these functions yet to
      * call this. You probably don't want to use this directly; call
      * compile_to_static_library or compile_to_file instead. */
-    void compile_to_header(const std::string &filename,
+    void compile_to_header(std::string_view filename,
                            const std::vector<Argument> &,
-                           const std::string &fn_name,
+                           std::string_view fn_name,
                            const Target &target = get_target_from_environment());
 
     /** Statically compile a pipeline to text assembly equivalent to
@@ -259,24 +259,24 @@ public:
      * for checking what Halide is producing without having to
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file. */
-    void compile_to_assembly(const std::string &filename,
+    void compile_to_assembly(std::string_view filename,
                              const std::vector<Argument> &args,
-                             const std::string &fn_name,
+                             std::string_view fn_name,
                              const Target &target = get_target_from_environment());
 
     /** Statically compile a pipeline to C source code. This is useful
      * for providing fallback code paths that will compile on many
      * platforms. Vectorization will fail, and parallelization will
      * produce serial code. */
-    void compile_to_c(const std::string &filename,
+    void compile_to_c(std::string_view filename,
                       const std::vector<Argument> &,
-                      const std::string &fn_name,
+                      std::string_view fn_name,
                       const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */
-    void compile_to_lowered_stmt(const std::string &filename,
+    void compile_to_lowered_stmt(std::string_view filename,
                                  const std::vector<Argument> &args,
                                  StmtOutputFormat fmt = Text,
                                  const Target &target = get_target_from_environment());
@@ -288,16 +288,16 @@ public:
 
     /** Compile to object file and header pair, with the given
      * arguments. */
-    void compile_to_file(const std::string &filename_prefix,
+    void compile_to_file(std::string_view filename_prefix,
                          const std::vector<Argument> &args,
-                         const std::string &fn_name,
+                         std::string_view fn_name,
                          const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair, with the given
      * arguments. */
-    void compile_to_static_library(const std::string &filename_prefix,
+    void compile_to_static_library(std::string_view filename_prefix,
                                    const std::vector<Argument> &args,
-                                   const std::string &fn_name,
+                                   std::string_view fn_name,
                                    const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair once for each target;
@@ -307,7 +307,7 @@ public:
      * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
      * All targets must have identical arch-os-bits.
      */
-    void compile_to_multitarget_static_library(const std::string &filename_prefix,
+    void compile_to_multitarget_static_library(std::string_view filename_prefix,
                                                const std::vector<Argument> &args,
                                                const std::vector<Target> &targets);
 
@@ -324,7 +324,7 @@ public:
      * Note that if `targets.size()` > 1 and `no_runtime` is not specified, the runtime
      * will be generated with the filename `${filename_prefix}_runtime.o`
      */
-    void compile_to_multitarget_object_files(const std::string &filename_prefix,
+    void compile_to_multitarget_object_files(std::string_view filename_prefix,
                                              const std::vector<Argument> &args,
                                              const std::vector<Target> &targets,
                                              const std::vector<std::string> &suffixes);
@@ -332,7 +332,7 @@ public:
     /** Create an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
     Module compile_to_module(const std::vector<Argument> &args,
-                             const std::string &fn_name,
+                             std::string_view fn_name,
                              const Target &target = get_target_from_environment(),
                              LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 

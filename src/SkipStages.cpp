@@ -22,7 +22,7 @@ using std::vector;
 
 namespace {
 
-bool extern_call_uses_buffer(const Call *op, const std::string &func) {
+bool extern_call_uses_buffer(const Call *op, std::string_view func) {
     if (op->is_extern()) {
         if (starts_with(op->name, "halide_memoization")) {
             return false;
@@ -30,7 +30,7 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
         for (const auto &arg : op->args) {
             const Variable *var = arg.as<Variable>();
             if (var &&
-                starts_with(var->name, func + ".") &&
+                starts_with(var->name, func, ".") &&
                 ends_with(var->name, ".buffer")) {
                 return true;
             }
@@ -42,7 +42,7 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
 class PredicateFinder : public IRVisitor {
 public:
     Expr predicate;
-    PredicateFinder(const string &b, bool s)
+    PredicateFinder(std::string_view b, bool s)
         : predicate(const_false()),
           buffer(b),
 
@@ -253,14 +253,14 @@ private:
         // allocation.
         ScopedBinding<>
             bind_host_ptr(varying, op->name),
-            bind_buffer(varying, op->name + ".buffer");
+            bind_buffer(varying, concat(op->name, ".buffer"));
         IRVisitor::visit(op);
     }
 };
 
 class ProductionGuarder : public IRMutator {
 public:
-    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p)
+    ProductionGuarder(std::string_view b, Expr compute_p, Expr alloc_p)
         : buffer(b), compute_predicate(std::move(compute_p)), alloc_predicate(std::move(alloc_p)) {
     }
 
@@ -277,7 +277,7 @@ private:
         for (const auto &arg : op->args) {
             const Variable *var = arg.as<Variable>();
             if (var &&
-                starts_with(var->name, buffer + ".") &&
+                starts_with(var->name, buffer, ".") &&
                 ends_with(var->name, ".buffer")) {
                 return true;
             }
@@ -330,7 +330,7 @@ private:
 
 class StageSkipper : public IRMutator {
 public:
-    StageSkipper(const string &f)
+    StageSkipper(std::string_view f)
         : func(f) {
     }
 
@@ -447,20 +447,20 @@ class MightBeSkippable : public IRVisitor {
     void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->call_type == Call::Halide) {
-            unconditionally_used.insert(op->name);
+            unconditionally_used.emplace(op->name);
         }
     }
 
     void visit(const IfThenElse *op) override {
         op->condition.accept(this);
 
-        std::set<string> old;
+        StringSet old;
         unconditionally_used.swap(old);
 
         ScopedValue<bool> old_in_conditional(in_conditional_stmt, true);
         op->then_case.accept(this);
 
-        std::set<string> used_in_true;
+        StringSet used_in_true;
         used_in_true.swap(unconditionally_used);
         if (op->else_case.defined()) {
             op->else_case.accept(this);
@@ -477,11 +477,11 @@ class MightBeSkippable : public IRVisitor {
     void visit(const Select *op) override {
         op->condition.accept(this);
 
-        std::set<string> old;
+        StringSet old;
         unconditionally_used.swap(old);
 
         op->true_value.accept(this);
-        std::set<string> used_in_true;
+        StringSet used_in_true;
         used_in_true.swap(unconditionally_used);
 
         op->false_value.accept(this);
@@ -500,7 +500,7 @@ class MightBeSkippable : public IRVisitor {
             if (!unconditionally_used.count(op->name) || in_conditional_stmt) {
                 // This Func has a least one consume clause in which
                 // it is only used conditionally.
-                candidates.insert(op->name);
+                candidates.emplace(op->name);
             }
         } else {
             IRVisitor::visit(op);
@@ -509,10 +509,10 @@ class MightBeSkippable : public IRVisitor {
         }
     }
 
-    set<string> unconditionally_used;
+    StringSet unconditionally_used;
 
 public:
-    set<string> candidates;
+    StringSet candidates;
 };
 
 }  // namespace

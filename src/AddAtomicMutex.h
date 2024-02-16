@@ -23,7 +23,7 @@ namespace Internal {
 
 class Function;
 
-Stmt add_atomic_mutex(Stmt s, const std::map<std::string, Function> &env);
+Stmt add_atomic_mutex(Stmt s, const StringMap<Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

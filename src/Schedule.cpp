@@ -3,6 +3,7 @@
 #include "Function.h"
 #include "IR.h"
 #include "IRMutator.h"
+#include "Util.h"
 #include "Var.h"
 
 namespace {
@@ -31,8 +32,8 @@ struct LoopLevelContents {
     bool is_rvar;
     bool locked;
 
-    LoopLevelContents(const std::string &func_name,
-                      const std::string &var_name,
+    LoopLevelContents(std::string_view func_name,
+                      std::string_view var_name,
                       bool is_rvar,
                       int stage_index,
                       bool locked)
@@ -53,7 +54,7 @@ void destroy<LoopLevelContents>(const LoopLevelContents *p) {
 
 }  // namespace Internal
 
-LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name,
+LoopLevel::LoopLevel(std::string_view func_name, std::string_view var_name,
                      bool is_rvar, int stage_index, bool locked)
     : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar, stage_index, locked)) {
 }
@@ -188,21 +189,21 @@ bool LoopLevel::locked() const {
 std::string LoopLevel::to_string() const {
     check_defined_and_locked();
     if (contents->stage_index == -1) {
-        return contents->func_name + "." + contents->var_name;
+        return Internal::concat(contents->func_name, ".", contents->var_name);
     } else {
-        return contents->func_name + ".s" + std::to_string(contents->stage_index) + "." + contents->var_name;
+        return Internal::concat(contents->func_name, ".s", std::to_string(contents->stage_index), ".", contents->var_name);
     }
 }
 
-bool LoopLevel::match(const std::string &loop) const {
+bool LoopLevel::match(std::string_view loop) const {
     check_defined_and_locked();
     if (contents->stage_index == -1) {
-        return Internal::starts_with(loop, contents->func_name + ".") &&
-               Internal::ends_with(loop, "." + contents->var_name);
+        return Internal::starts_with(loop, contents->func_name, ".") &&
+               Internal::ends_with(loop, ".", contents->var_name);
     } else {
-        std::string prefix = contents->func_name + ".s" + std::to_string(contents->stage_index) + ".";
+        std::string prefix = Internal::concat(contents->func_name, ".s", std::to_string(contents->stage_index), ".");
         return Internal::starts_with(loop, prefix) &&
-               Internal::ends_with(loop, "." + contents->var_name);
+               Internal::ends_with(loop, ".", contents->var_name);
     }
 }
 
@@ -211,8 +212,8 @@ bool LoopLevel::match(const LoopLevel &other) const {
     other.check_defined_and_locked();
     return (contents->func_name == other.contents->func_name &&
             (contents->var_name == other.contents->var_name ||
-             Internal::ends_with(contents->var_name, "." + other.contents->var_name) ||
-             Internal::ends_with(other.contents->var_name, "." + contents->var_name)) &&
+             Internal::ends_with(contents->var_name, ".", other.contents->var_name) ||
+             Internal::ends_with(other.contents->var_name, ".", contents->var_name)) &&
             (contents->stage_index == other.contents->stage_index));
 }
 
@@ -237,7 +238,7 @@ struct FuncScheduleContents {
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
     std::vector<Bound> estimates;
-    std::map<std::string, Internal::FunctionPtr> wrappers;
+    StringMap<Internal::FunctionPtr> wrappers;
     MemoryType memory_type = MemoryType::Auto;
     bool memoized = false;
     bool async = false;
@@ -440,25 +441,28 @@ const std::vector<Bound> &FuncSchedule::estimates() const {
     return contents->estimates;
 }
 
-std::map<std::string, Internal::FunctionPtr> &FuncSchedule::wrappers() {
+StringMap<Internal::FunctionPtr> &FuncSchedule::wrappers() {
     return contents->wrappers;
 }
 
-const std::map<std::string, Internal::FunctionPtr> &FuncSchedule::wrappers() const {
+const StringMap<Internal::FunctionPtr> &FuncSchedule::wrappers() const {
     return contents->wrappers;
 }
 
-void FuncSchedule::add_wrapper(const std::string &f,
+void FuncSchedule::add_wrapper(std::string_view f,
                                const Internal::FunctionPtr &wrapper) {
-    if (contents->wrappers.count(f)) {
+    if (auto it = contents->wrappers.find(f);
+        it != contents->wrappers.end()) {
         if (f.empty()) {
             user_warning << "Replacing previous definition of global wrapper in function \""
                          << f << "\"\n";
+            it->second = wrapper;
         } else {
             internal_error << "Wrapper redefinition in function \"" << f << "\" is not allowed\n";
         }
+    } else {
+        contents->wrappers.emplace(f, wrapper);
     }
-    contents->wrappers[f] = wrapper;
 }
 
 LoopLevel &FuncSchedule::store_level() {

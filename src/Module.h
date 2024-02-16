@@ -90,7 +90,7 @@ struct LoweredArgument : public Argument {
     explicit LoweredArgument(const Argument &arg)
         : Argument(arg) {
     }
-    LoweredArgument(const std::string &_name, Kind _kind, const Type &_type, uint8_t _dimensions, const ArgumentEstimates &argument_estimates)
+    LoweredArgument(std::string_view _name, Kind _kind, const Type &_type, uint8_t _dimensions, const ArgumentEstimates &argument_estimates)
         : Argument(_name, _kind, _type, _dimensions, argument_estimates) {
     }
 };
@@ -114,12 +114,12 @@ struct LoweredFunc {
      * the Target. */
     NameMangling name_mangling;
 
-    LoweredFunc(const std::string &name,
+    LoweredFunc(std::string_view name,
                 const std::vector<LoweredArgument> &args,
                 Stmt body,
                 LinkageType linkage,
                 NameMangling mangling = NameMangling::Default);
-    LoweredFunc(const std::string &name,
+    LoweredFunc(std::string_view name,
                 const std::vector<Argument> &args,
                 Stmt body,
                 LinkageType linkage,
@@ -143,14 +143,14 @@ class Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
 
 public:
-    Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map = {});
+    Module(std::string_view name, const Target &target, const MetadataNameMap &metadata_name_map = {});
 
     /** Get the target this module has been lowered for. */
     const Target &target() const;
 
     /** The name of this module. This is used as the default filename
      * for output operations. */
-    const std::string &name() const;
+    std::string_view name() const;
 
     /** If this Module had an auto-generated schedule, return a read-only pointer
      * to the AutoSchedulerResults. If not, return nullptr. */
@@ -180,7 +180,7 @@ public:
 
     /** Return the function with the given name. If no such function
      * exists in this module, assert. */
-    Internal::LoweredFunc get_function_by_name(const std::string &name) const;
+    Internal::LoweredFunc get_function_by_name(std::string_view name) const;
 
     /** Add a declaration to this module. */
     // @{
@@ -204,7 +204,7 @@ public:
 
     /** When generating metadata from this module, remap any occurrences
      * of 'from' into 'to'. */
-    void remap_metadata_name(const std::string &from, const std::string &to) const;
+    void remap_metadata_name(std::string_view from, std::string_view to) const;
 
     /** Retrieve the metadata name map. */
     MetadataNameMap get_metadata_name_map() const;
@@ -224,12 +224,12 @@ public:
 };
 
 /** Link a set of modules together into one module. */
-Module link_modules(const std::string &name, const std::vector<Module> &modules);
+Module link_modules(std::string_view name, const std::vector<Module> &modules);
 
 /** Create an object file containing the Halide runtime for a given target. For
  * use with Target::NoRuntime. Standalone runtimes are only compatible with
  * pipelines compiled by the same build of Halide used to call this function. */
-void compile_standalone_runtime(const std::string &object_filename, const Target &t);
+void compile_standalone_runtime(std::string_view object_filename, const Target &t);
 
 /** Create an object and/or static library file containing the Halide runtime
  * for a given target. For use with Target::NoRuntime. Standalone runtimes are
@@ -239,10 +239,10 @@ void compile_standalone_runtime(const std::string &object_filename, const Target
  */
 std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t);
 
-using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
-using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;
+using ModuleFactory = std::function<Module(std::string_view fn_name, const Target &target)>;
+using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(std::string_view fn_name, const Target &target)>;
 
-void compile_multitarget(const std::string &fn_name,
+void compile_multitarget(std::string_view fn_name,
                          const std::map<OutputFileType, std::string> &output_files,
                          const std::vector<Target> &targets,
                          const std::vector<std::string> &suffixes,

@@ -17,6 +17,8 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -141,7 +143,7 @@ DstType reinterpret_bits(const SrcType &src) {
 /** Make a unique name for an object based on the name of the stack
  * variable passed in. If introspection isn't working or there are no
  * debug symbols, just uses unique_name with the given prefix. */
-std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
+std::string make_entity_name(void *stack_ptr, std::string_view type, char prefix);
 
 /** Get value of an environment variable. Returns its value
  * is defined in the environment. If the var is not defined, an empty string
@@ -171,24 +173,85 @@ std::string running_program_name();
  */
 // @{
 std::string unique_name(char prefix);
-std::string unique_name(const std::string &prefix);
+std::string unique_name(std::string_view prefix);
 // @}
 
+// TODO: variadic forms of the below would be useful to avoid concat used to construct prefixes and suffixes
+
 /** Test if the first string starts with the second string */
-bool starts_with(const std::string &str, const std::string &prefix);
+bool starts_with(std::string_view str, std::string_view prefix);
+
+template<typename... Args>
+bool starts_with(std::string_view str, std::string_view prefix, Args... rest) {
+    if (!starts_with(str, prefix)) {
+        return false;
+    } else {
+        str.remove_prefix(prefix.size());
+        return starts_with(str, rest...);
+    }
+}
 
 /** Test if the first string ends with the second string */
-bool ends_with(const std::string &str, const std::string &suffix);
+bool ends_with(std::string_view str, std::string_view suffix);
+
+inline bool ends_with_helper(std::string_view *str) {
+    return true;
+}
+
+template<typename... Args>
+bool ends_with_helper(std::string_view *str, std::string_view suffix, Args... rest) {
+    if (!ends_with_helper(str, rest...)) {
+        return false;
+    }
+    if (!ends_with(*str, suffix)) {
+        return false;
+    }
+    str->remove_suffix(suffix.size());
+    return true;
+}
+
+template<typename... Args>
+bool ends_with(std::string_view str, std::string_view prefix, Args... rest) {
+    return ends_with_helper(&str, prefix, rest...);
+}
+
+template<typename... Args>
+std::string concat(Args &&...args) {
+    struct SizeHelper {
+        size_t size(const char *str) {
+            return strlen(str);
+        }
+        size_t size(std::string_view str) {
+            return str.size();
+        }
+    } helper;
+
+    size_t total_size = (helper.size(std::forward<Args>(args)) + ...);
+
+    struct ConcatHelper {
+        std::string result;
+        void operator()(const char *str) {
+            result += str;
+        }
+        void operator()(std::string_view str) {
+            result += str;
+        }
+    } concat_helper;
+    concat_helper.result.reserve(total_size);
+    (concat_helper(std::forward<Args>(args)), ...);
+
+    return concat_helper.result;
+}
 
 /** Replace all matches of the second string in the first string with the last string */
-std::string replace_all(const std::string &str, const std::string &find, const std::string &replace);
+std::string replace_all(std::string_view str, std::string_view find, std::string_view replace);
 
 /** Split the source string using 'delim' as the divider. */
-std::vector<std::string> split_string(const std::string &source, const std::string &delim);
+std::vector<std::string> split_string(std::string_view source, std::string_view delim);
 
 /** Join the source vector using 'delim' as the divider. */
 template<typename T>
-std::string join_strings(const std::vector<T> &sources, const std::string &delim) {
+std::string join_strings(const std::vector<T> &sources, std::string_view delim) {
     size_t sz = 0;
     if (!sources.empty()) {
         sz += delim.size() * (sources.size() - 1);
@@ -256,10 +319,10 @@ template<typename To, typename... Args>
 struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 
 /** Returns base name and fills in namespaces, outermost one first in vector. */
-std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
+std::string extract_namespaces(std::string_view name, std::vector<std::string> &namespaces);
 
 /** Like extract_namespaces(), but strip and discard the namespaces, returning base name only */
-std::string strip_namespaces(const std::string &name);
+std::string strip_namespaces(std::string_view name);
 
 struct FileStat {
     uint64_t file_size;
@@ -279,7 +342,7 @@ struct FileStat {
  * file, the caller is responsibly for deleting it. Neither the prefix nor suffix
  * may contain a directory separator.
  */
-std::string file_make_temp(const std::string &prefix, const std::string &suffix);
+std::string file_make_temp(std::string_view prefix, std::string_view suffix);
 
 /** Create a unique directory in an arbitrary (but writable) directory; this is
  * typically somewhere inside /tmp, but the specific location is not guaranteed.
@@ -335,7 +398,7 @@ inline void write_entire_file(const std::string &pathname, const std::vector<cha
  */
 class TemporaryFile final {
 public:
-    TemporaryFile(const std::string &prefix, const std::string &suffix)
+    TemporaryFile(std::string_view prefix, std::string_view suffix)
         : temp_path(file_make_temp(prefix, suffix)) {
     }
     const std::string &pathname() const {
@@ -466,7 +529,7 @@ struct IsRoundtrippable {
  * If prefix_underscore is true (the default), an underscore will be prepended if the
  * input starts with an alphabetic character to avoid reserved word clashes.
  */
-std::string c_print_name(const std::string &name, bool prefix_underscore = true);
+std::string c_print_name(std::string_view name, bool prefix_underscore = true);
 
 /** Return the LLVM_VERSION against which this libHalide is compiled. This is provided
  * only for internal tests which need to verify behavior; please don't use this outside
@@ -531,6 +594,81 @@ int popcount64(uint64_t x);
 int clz64(uint64_t x);
 int ctz64(uint64_t x);
 // @}
+
+/** Classes for string maps and sets. We want std::less<> as the comparator so
+ * that we can use string_views as keys, so we can't use a regular
+ * std::map<std::string, T>. Some methods that are missing in C++17 but are to
+ * come in later versions of C++ have also been added.  */
+template<typename T>
+using StringMapBase = std::map<std::string, T, std::less<>>;
+template<typename T>
+class StringMap : public StringMapBase<T> {
+public:
+    using StringMapBase<T>::StringMapBase;
+
+#if __cplusplus < 202300L
+    // Erase the element with key that compares equal to k if it exists. Coming
+    // in C++23.
+    using StringMapBase<T>::erase;
+    size_t erase(std::string_view k) {
+        auto it = this->find(k);
+        if (it != this->end()) {
+            this->erase(it);
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+#endif
+
+#if __cplusplus < 202600L
+    // Get a reference to an element with key that compares equal to k (creating
+    // it if it doesn't already exist). Coming in C++26.
+    using StringMapBase<T>::operator[];
+    T &operator[](std::string_view k) {
+        return this->emplace(k, T{}).first->second;
+    }
+    T &operator[](const char *k) {
+        return (*this)[std::string_view{k}];
+    }
+
+    // Return a reference to the mapped value with a key that compares equal to
+    // k, or throw an out_of_range exception. Coming in C++26
+    using StringMapBase<T>::at;
+    const T &at(std::string_view k) const {
+        auto it = this->find(k);
+        if (it != this->end()) {
+            return it->second;
+        } else {
+            // Throw the correct kind of error by just calling the string
+            // version. Constructs a string wastefully, but this is an error
+            // path anyway.
+            return this->at(std::string{k});
+        }
+    }
+#endif
+};
+
+using StringSetBase = std::set<std::string, std::less<>>;
+class StringSet : public StringSetBase {
+public:
+    using StringSetBase::StringSetBase;
+
+#if __cplusplus < 202300L
+    // Erase an element with key that compares equal to k if it exists. Coming
+    // in C++23
+    using StringSetBase::erase;
+    size_t erase(std::string_view k) {
+        auto it = this->find(k);
+        if (it != this->end()) {
+            this->erase(it);
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+#endif
+};
 
 }  // namespace Internal
 }  // namespace Halide

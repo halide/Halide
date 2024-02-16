@@ -17,14 +17,14 @@ using std::vector;
 
 namespace {
 
-void find_fused_groups_dfs(const string &current,
-                           const map<string, set<string>> &fuse_adjacency_list,
-                           set<string> &visited,
+void find_fused_groups_dfs(std::string_view current,
+                           const StringMap<StringSet> &fuse_adjacency_list,
+                           StringSet &visited,
                            vector<string> &group) {
-    visited.insert(current);
-    group.push_back(current);
+    visited.emplace(current);
+    group.emplace_back(current);
 
-    map<string, set<string>>::const_iterator iter = fuse_adjacency_list.find(current);
+    auto iter = fuse_adjacency_list.find(current);
     internal_assert(iter != fuse_adjacency_list.end());
 
     for (const string &fn : iter->second) {
@@ -34,12 +34,12 @@ void find_fused_groups_dfs(const string &current,
     }
 }
 
-pair<map<string, vector<string>>, map<string, string>>
-find_fused_groups(const map<string, Function> &env,
-                  const map<string, set<string>> &fuse_adjacency_list) {
-    set<string> visited;
-    map<string, vector<string>> fused_groups;
-    map<string, string> group_name;
+pair<StringMap<vector<string>>, StringMap<string>>
+find_fused_groups(const StringMap<Function> &env,
+                  const StringMap<StringSet> &fuse_adjacency_list) {
+    StringSet visited;
+    StringMap<vector<string>> fused_groups;
+    StringMap<string> group_name;
 
     for (const auto &iter : env) {
         const string &fn = iter.first;
@@ -58,12 +58,12 @@ find_fused_groups(const map<string, Function> &env,
     return {fused_groups, group_name};
 }
 
-void realization_order_dfs(const string &current,
-                           const map<string, vector<string>> &graph,
-                           set<string> &visited,
-                           set<string> &result_set,
+void realization_order_dfs(std::string_view current,
+                           const StringMap<vector<string>> &graph,
+                           StringSet &visited,
+                           StringSet &result_set,
                            vector<string> &order) {
-    visited.insert(current);
+    visited.emplace(current);
 
     const auto &iter = graph.find(current);
     internal_assert(iter != graph.end());
@@ -79,14 +79,14 @@ void realization_order_dfs(const string &current,
         }
     }
 
-    result_set.insert(current);
-    order.push_back(current);
+    result_set.emplace(current);
+    order.emplace_back(current);
 }
 
 // Check the validity of a pair of fused stages.
-void validate_fused_pair(const string &fn, size_t stage_index,
-                         const map<string, Function> &env,
-                         const map<string, map<string, Function>> &indirect_calls,
+void validate_fused_pair(std::string_view fn, size_t stage_index,
+                         const StringMap<Function> &env,
+                         const StringMap<StringMap<Function>> &indirect_calls,
                          const FusedPair &p,
                          const vector<FusedPair> &func_fused_pairs) {
     internal_assert((p.func_1 == fn) && (p.stage_1 == stage_index));
@@ -125,8 +125,8 @@ void validate_fused_pair(const string &fn, size_t stage_index,
 // functions.
 void collect_fused_pairs(const FusedPair &p,
                          vector<FusedPair> &func_fused_pairs,
-                         map<string, vector<string>> &graph,
-                         map<string, set<string>> &fuse_adjacency_list) {
+                         StringMap<vector<string>> &graph,
+                         StringMap<StringSet> &fuse_adjacency_list) {
     fuse_adjacency_list[p.func_1].insert(p.func_2);
     fuse_adjacency_list[p.func_2].insert(p.func_1);
 
@@ -139,8 +139,8 @@ void collect_fused_pairs(const FusedPair &p,
 }
 
 // Populate the 'fused_pairs' list in Schedule of each function stage.
-void populate_fused_pairs_list(const string &func, const Definition &def,
-                               size_t stage_index, map<string, Function> &env) {
+void populate_fused_pairs_list(std::string_view func, const Definition &def,
+                               size_t stage_index, StringMap<Function> &env) {
     internal_assert(def.defined());
     const LoopLevel &fuse_level = def.schedule().fuse_level().level;
     if (fuse_level.is_inlined() || fuse_level.is_root()) {
@@ -177,7 +177,7 @@ void populate_fused_pairs_list(const string &func, const Definition &def,
 
 // Make sure we don't have cyclic compute_with: if Func 'f' is computed after
 // Func 'g', Func 'g' should not be computed after Func 'f'.
-void check_no_cyclic_compute_with(const map<string, vector<FusedPair>> &fused_pairs_graph) {
+void check_no_cyclic_compute_with(const StringMap<vector<FusedPair>> &fused_pairs_graph) {
     for (const auto &iter : fused_pairs_graph) {
         for (const auto &pair : iter.second) {
             internal_assert(pair.func_1 != pair.func_2);
@@ -238,7 +238,7 @@ void check_fused_stages_are_scheduled_in_order(const Function &f) {
 }  // anonymous namespace
 
 pair<vector<string>, vector<vector<string>>> realization_order(
-    const vector<Function> &outputs, map<string, Function> &env) {
+    const vector<Function> &outputs, StringMap<Function> &env) {
 
     // Populate the fused_pairs list of each function definition (i.e. list of
     // all function definitions that are to be computed with that function).
@@ -257,21 +257,21 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     }
 
     // Collect all indirect calls made by all the functions in "env".
-    map<string, map<string, Function>> indirect_calls;
+    StringMap<StringMap<Function>> indirect_calls;
     for (const pair<const string, Function> &caller : env) {
-        map<string, Function> more_funcs = find_transitive_calls(caller.second);
+        StringMap<Function> more_funcs = find_transitive_calls(caller.second);
         indirect_calls.emplace(caller.first, more_funcs);
     }
 
     // 'graph' is a DAG representing the pipeline. Each function maps to the
     // set describing its inputs.
-    map<string, vector<string>> graph;
+    StringMap<vector<string>> graph;
 
     // Make a directed and non-directed graph representing the compute_with
     // dependencies between functions. Each function maps to the list of
     // functions computed_with it.
-    map<string, vector<FusedPair>> fused_pairs_graph;
-    map<string, set<string>> fuse_adjacency_list;
+    StringMap<vector<FusedPair>> fused_pairs_graph;
+    StringMap<StringSet> fuse_adjacency_list;
 
     for (const pair<const string, Function> &caller : env) {
         // Find all compute_with (fused) pairs. We have to look at the update
@@ -322,8 +322,8 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     // Compute the realization order of the fused groups (i.e. the dummy nodes)
     // and also the realization order of the functions within a fused group.
     vector<string> temp;
-    set<string> result_set;
-    set<string> visited;
+    StringSet result_set;
+    StringSet visited;
     for (const Function &f : outputs) {
         if (visited.find(f.name()) == visited.end()) {
             realization_order_dfs(f.name(), graph, visited, result_set, temp);
@@ -362,11 +362,11 @@ pair<vector<string>, vector<vector<string>>> realization_order(
 }
 
 vector<string> topological_order(const vector<Function> &outputs,
-                                 const map<string, Function> &env) {
+                                 const StringMap<Function> &env) {
 
     // Make a DAG representing the pipeline. Each function maps to the
     // set describing its inputs.
-    map<string, vector<string>> graph;
+    StringMap<vector<string>> graph;
 
     for (const pair<const string, Function> &caller : env) {
         vector<string> s;
@@ -380,8 +380,8 @@ vector<string> topological_order(const vector<Function> &outputs,
     }
 
     vector<string> order;
-    set<string> result_set;
-    set<string> visited;
+    StringSet result_set;
+    StringSet visited;
     for (const Function &f : outputs) {
         if (visited.find(f.name()) == visited.end()) {
             realization_order_dfs(f.name(), graph, visited, result_set, order);

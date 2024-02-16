@@ -42,7 +42,7 @@ namespace Internal {
 llvm::Type *get_vector_element_type(llvm::Type *);
 
 /** Which built-in functions require a user-context first argument? */
-bool function_takes_user_context(const std::string &name);
+bool function_takes_user_context(std::string_view name);
 
 /** Given a size (in bytes), return True if the allocation size can fit
  * on the stack; otherwise, return False. This routine asserts if size is
@@ -107,7 +107,7 @@ void set_function_attributes_from_halide_target_options(llvm::Function &);
  * data in the __LLVM,__bitcode section. Emulates clang's
  * -fembed-bitcode flag and is useful to satisfy Apple's bitcode
  * inclusion requirements.  */
-void embed_bitcode(llvm::Module *M, const std::string &halide_command);
+void embed_bitcode(llvm::Module *M, std::string_view halide_command);
 
 }  // namespace Internal
 }  // namespace Halide

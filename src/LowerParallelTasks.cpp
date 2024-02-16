@@ -18,12 +18,12 @@ namespace Internal {
 
 namespace {
 
-LoweredArgument make_scalar_arg(const std::string &name, const Type &type) {
+LoweredArgument make_scalar_arg(std::string_view name, const Type &type) {
     return LoweredArgument(name, Argument::Kind::InputScalar, type, 0, ArgumentEstimates());
 }
 
 template<typename T>
-LoweredArgument make_scalar_arg(const std::string &name) {
+LoweredArgument make_scalar_arg(std::string_view name) {
     return make_scalar_arg(name, type_of<T>());
 }
 
@@ -42,7 +42,7 @@ void add_fork(std::pair<std::string, int> &prefix) {
     prefix.second++;
 }
 
-void add_suffix(std::pair<std::string, int> &prefix, const std::string &suffix) {
+void add_suffix(std::pair<std::string, int> &prefix, std::string_view suffix) {
     if (prefix.second > 1) {
         prefix.first += "_" + std::to_string(prefix.second - 1);
         prefix.second = 0;
@@ -373,7 +373,7 @@ struct LowerParallelTasks : public IRMutator {
         } else if (!loop && acquire) {
             const Variable *v = acquire->semaphore.as<Variable>();
             internal_assert(v);
-            add_suffix(prefix, "." + v->name);
+            add_suffix(prefix, concat(".", v->name));
             ParallelTask t{s, {}, "", 0, 1, const_false(), task_debug_name(prefix), Partition::Never};
             while (acquire) {
                 t.semaphores.push_back({acquire->semaphore, acquire->count});
@@ -382,8 +382,8 @@ struct LowerParallelTasks : public IRMutator {
             }
             result.emplace_back(std::move(t));
         } else if (loop && loop->for_type == ForType::Parallel) {
-            add_suffix(prefix, ".par_for." + loop->name);
-            ParallelTask t{loop->body, {}, loop->name, loop->min, loop->extent, const_false(), task_debug_name(prefix), loop->partition_policy};
+            add_suffix(prefix, concat(".par_for.", loop->name));
+            ParallelTask t{loop->body, {}, std::string{loop->name}, loop->min, loop->extent, const_false(), task_debug_name(prefix), loop->partition_policy};
             result.emplace_back(std::move(t));
         } else if (loop &&
                    loop->for_type == ForType::Serial &&
@@ -391,8 +391,8 @@ struct LowerParallelTasks : public IRMutator {
                    !expr_uses_var(acquire->count, loop->name)) {
             const Variable *v = acquire->semaphore.as<Variable>();
             internal_assert(v);
-            add_suffix(prefix, ".for." + v->name);
-            ParallelTask t{loop->body, {}, loop->name, loop->min, loop->extent, const_true(), task_debug_name(prefix), loop->partition_policy};
+            add_suffix(prefix, concat(".for.", v->name));
+            ParallelTask t{loop->body, {}, std::string{loop->name}, loop->min, loop->extent, const_true(), task_debug_name(prefix), loop->partition_policy};
             while (acquire) {
                 t.semaphores.push_back({acquire->semaphore, acquire->count});
                 t.body = acquire->body;
@@ -400,7 +400,7 @@ struct LowerParallelTasks : public IRMutator {
             }
             result.emplace_back(std::move(t));
         } else {
-            add_suffix(prefix, "." + std::to_string(result.size()));
+            add_suffix(prefix, concat(".", std::to_string(result.size())));
             ParallelTask t{s, {}, "", 0, 1, const_false(), task_debug_name(prefix), Partition::Never};
             result.emplace_back(std::move(t));
         }
@@ -412,7 +412,7 @@ struct LowerParallelTasks : public IRMutator {
         return rewrite_parallel_tasks(tasks);
     }
 
-    LowerParallelTasks(const std::string &name, const Target &t)
+    LowerParallelTasks(std::string_view name, const Target &t)
         : function_name(name), target(t) {
     }
 
@@ -425,7 +425,7 @@ struct LowerParallelTasks : public IRMutator {
 }  // namespace
 
 Stmt lower_parallel_tasks(const Stmt &s, std::vector<LoweredFunc> &closure_implementations,
-                          const std::string &name, const Target &t) {
+                          std::string_view name, const Target &t) {
     LowerParallelTasks lowering_mutator(name, t);
     Stmt result = lowering_mutator.mutate(s);
 

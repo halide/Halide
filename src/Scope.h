@@ -93,7 +93,7 @@ public:
 template<typename T = void>
 class Scope {
 private:
-    std::map<std::string, SmallStack<T>> table;
+    StringMap<SmallStack<T>> table;
 
     const Scope<T> *containing_scope = nullptr;
 
@@ -125,8 +125,8 @@ public:
     /** Retrieve the value referred to by a name */
     template<typename T2 = T,
              typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
-    T2 get(const std::string &name) const {
-        typename std::map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
+    T2 get(std::string_view name) const {
+        auto iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             if (containing_scope) {
                 return containing_scope->get(name);
@@ -141,8 +141,8 @@ public:
     /** Return a reference to an entry. Does not consider the containing scope. */
     template<typename T2 = T,
              typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
-    T2 &ref(const std::string &name) {
-        typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
+    T2 &ref(std::string_view name) {
+        auto iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             internal_error << "Name not in Scope: " << name << "\n"
                            << *this << "\n";
@@ -151,8 +151,8 @@ public:
     }
 
     /** Tests if a name is in scope */
-    bool contains(const std::string &name) const {
-        typename std::map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
+    bool contains(std::string_view name) const {
+        auto iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             if (containing_scope) {
                 return containing_scope->contains(name);
@@ -164,7 +164,7 @@ public:
     }
 
     /** How many nested definitions of a single name exist? */
-    size_t count(const std::string &name) const {
+    size_t count(std::string_view name) const {
         auto it = table.find(name);
         if (it == table.end()) {
             return 0;
@@ -178,20 +178,20 @@ public:
      */
     template<typename T2 = T,
              typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
-    void push(const std::string &name, T2 &&value) {
+    void push(std::string_view name, T2 &&value) {
         table[name].push(std::forward<T2>(value));
     }
 
     template<typename T2 = T,
              typename = typename std::enable_if<std::is_same<T2, void>::value>::type>
-    void push(const std::string &name) {
+    void push(std::string_view name) {
         table[name].push();
     }
 
     /** A name goes out of scope. Restore whatever its old value
      * was (or remove it entirely if there was nothing else of the
      * same name in an outer scope) */
-    void pop(const std::string &name) {
+    void pop(std::string_view name) {
         typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
         internal_assert(iter != table.end()) << "Name not in Scope: " << name << "\n"
                                              << *this << "\n";
@@ -220,7 +220,7 @@ public:
             ++iter;
         }
 
-        const std::string &name() {
+        std::string_view name() {
             return iter->first;
         }
 
@@ -275,12 +275,12 @@ struct ScopedBinding {
 
     ScopedBinding() = default;
 
-    ScopedBinding(Scope<T> &s, const std::string &n, T value)
+    ScopedBinding(Scope<T> &s, std::string_view n, T value)
         : scope(&s), name(n) {
         scope->push(name, std::move(value));
     }
 
-    ScopedBinding(bool condition, Scope<T> &s, const std::string &n, const T &value)
+    ScopedBinding(bool condition, Scope<T> &s, std::string_view n, const T &value)
         : scope(condition ? &s : nullptr), name(n) {
         if (condition) {
             scope->push(name, value);
@@ -314,11 +314,11 @@ template<>
 struct ScopedBinding<void> {
     Scope<> *scope;
     std::string name;
-    ScopedBinding(Scope<> &s, const std::string &n)
+    ScopedBinding(Scope<> &s, std::string_view n)
         : scope(&s), name(n) {
         scope->push(name);
     }
-    ScopedBinding(bool condition, Scope<> &s, const std::string &n)
+    ScopedBinding(bool condition, Scope<> &s, std::string_view n)
         : scope(condition ? &s : nullptr), name(n) {
         if (condition) {
             scope->push(name);

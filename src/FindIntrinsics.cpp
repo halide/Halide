@@ -1096,7 +1096,7 @@ class SubstituteInWideningLets : public IRMutator {
             std::string name;
             Expr new_value;
             ScopedBinding<Expr> bind;
-            Frame(const std::string &name, const Expr &new_value, ScopedBinding<Expr> &&bind)
+            Frame(std::string_view name, const Expr &new_value, ScopedBinding<Expr> &&bind)
                 : name(name), new_value(new_value), bind(std::move(bind)) {
             }
         };

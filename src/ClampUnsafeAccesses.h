@@ -16,7 +16,7 @@ namespace Halide::Internal {
  * 2. The FuncValueBounds of h are smaller than those of its type
  * 3. The allocation bounds of h might be wider than its compute bounds.
  */
-Stmt clamp_unsafe_accesses(const Stmt &s, const std::map<std::string, Function> &env, FuncValueBounds &func_bounds);
+Stmt clamp_unsafe_accesses(const Stmt &s, const StringMap<Function> &env, FuncValueBounds &func_bounds);
 
 }  // namespace Halide::Internal
 

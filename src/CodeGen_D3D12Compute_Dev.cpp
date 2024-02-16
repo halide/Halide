@@ -34,7 +34,7 @@ public:
      * with different kernels, which will all be accumulated into a single
      * source module shared by a given Halide pipeline. */
     void add_kernel(Stmt stmt,
-                    const std::string &name,
+                    std::string_view name,
                     const std::vector<DeviceArgument> &args) override;
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
@@ -48,7 +48,7 @@ public:
 
     void dump() override;
 
-    std::string print_gpu_name(const std::string &name) override;
+    std::string print_gpu_name(std::string_view name) override;
 
     std::string api_unique_name() override {
         return "d3d12compute";
@@ -68,7 +68,7 @@ protected:
             integer_suffix_style = IntegerSuffixStyle::HLSL;
         }
         void add_kernel(Stmt stmt,
-                        const std::string &name,
+                        std::string_view name,
                         const std::vector<DeviceArgument> &args);
 
     protected:
@@ -80,12 +80,12 @@ protected:
         std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_extern_call(const Call *op) override;
 
-        std::string print_vanilla_cast(Type type, const std::string &value_expr);
-        std::string print_reinforced_cast(Type type, const std::string &value_expr);
-        std::string print_cast(Type target_type, Type source_type, const std::string &value_expr);
-        std::string print_reinterpret_cast(Type type, const std::string &value_expr);
+        std::string print_vanilla_cast(Type type, std::string_view value_expr);
+        std::string print_reinforced_cast(Type type, std::string_view value_expr);
+        std::string print_cast(Type target_type, Type source_type, std::string_view value_expr);
+        std::string print_reinterpret_cast(Type type, std::string_view value_expr);
 
-        std::string print_assignment(Type t, const std::string &rhs) override;
+        std::string print_assignment(Type t, std::string_view rhs) override;
 
         using CodeGen_GPU_C::visit;
         void visit(const Evaluate *op) override;
@@ -220,7 +220,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type 
 }
 
 namespace {
-string simt_intrinsic(const string &name) {
+string simt_intrinsic(std::string_view name) {
     if (ends_with(name, ".__thread_id_x")) {
         return "tid_in_tgroup.x";
     } else if (ends_with(name, ".__thread_id_y")) {
@@ -622,7 +622,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
         }
     }
 
-    std::map<string, string>::iterator cached = cache.find(rhs.str());
+    StringMap<string>::iterator cached = cache.find(rhs.str());
     if (cached != cache.end()) {
         id = cached->second;
         return;
@@ -815,20 +815,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
     }
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, const string &rhs) {
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, std::string_view rhs) {
     string rhs_modified = print_reinforced_cast(type, rhs);
     return CodeGen_GPU_C::print_assignment(type, rhs_modified);
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, const string &value_expr) {
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, std::string_view value_expr) {
     ostringstream ss;
     ss << print_type(type) << "(" << value_expr << ")";
     return ss.str();
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(Type type, const string &value_expr) {
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(Type type, std::string_view value_expr) {
     if (type.is_float() || type.is_bool() || type.bits() == 32) {
-        return value_expr;
+        return std::string{value_expr};
     }
 
     // HLSL SM 5.1 only supports 32bit integer types; smaller integer types have
@@ -846,7 +846,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
     return rsr.str();
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(Type type, const string &value_expr) {
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(Type type, std::string_view value_expr) {
     type = type.element_of();
 
     string cast_expr;
@@ -867,11 +867,10 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(
         user_error << "Invalid reinterpret cast.\n";
         break;
     }
-    cast_expr += "(" + value_expr + ")";
-    return cast_expr;
+    return concat(cast_expr, "(", value_expr, ")");
 }
 
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_type, Type source_type, const string &value_expr) {
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_type, Type source_type, std::string_view value_expr) {
     // casting to or from a float type? just use the language cast:
     if (target_type.is_float() || source_type.is_float()) {
         return print_vanilla_cast(target_type, value_expr);
@@ -922,9 +921,10 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     // Case 2: casting from a signed source to an unsigned target
     if (source_type.is_int() && target_type.is_uint()) {
         // reinterpret resulting bits as uint(32):
-        string masked = value_expr;
+        string masked{value_expr};
         if (target_type.bits() < 32) {
-            masked = "(" + value_expr + ")" + " & " + hex_literal((1 << target_type.bits()) - 1);  // mask target LSB
+            masked =
+                concat("(", value_expr, ") & ", hex_literal((1 << target_type.bits()) - 1));  // mask target LSB
         }
         return print_reinterpret_cast(target_type, masked);
     }
@@ -969,7 +969,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const FloatImm *op)
 }
 
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
-                                          const string &name,
+                                          std::string_view name,
                                           const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_D3D12Compute_Dev::compile " << name << "\n";
 
@@ -1002,7 +1002,7 @@ struct BufferSize {
 }  // namespace
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
-                                                                  const string &name,
+                                                                  std::string_view name,
                                                                   const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding D3D12Compute kernel " << name << "\n";
@@ -1046,7 +1046,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 // Because these will go in global scope,
                 // we need to ensure they have unique names.
                 std::string new_name = unique_name(op->name);
-                replacements[op->name] = new_name;
+                replacements.emplace(op->name, new_name);
 
                 auto new_extents = mutate(op->extents);
                 Stmt new_body = mutate(op->body);
@@ -1099,7 +1099,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             }
         }
 
-        std::map<string, string> replacements;
+        StringMap<string> replacements;
         friend class CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
         vector<Stmt> allocs;
     };
@@ -1173,11 +1173,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             debug(4) << "Thread group size for index " << index << " is " << numthreads[index] << "\n";
             loop->body.accept(this);
         }
-        int thread_loop_workgroup_index(const string &name) {
-            string ids[] = {".__thread_id_x",
-                            ".__thread_id_y",
-                            ".__thread_id_z",
-                            ".__thread_id_w"};
+        int thread_loop_workgroup_index(std::string_view name) {
+            static const std::string_view ids[] = {".__thread_id_x",
+                                                   ".__thread_id_y",
+                                                   ".__thread_id_z",
+                                                   ".__thread_id_w"};
             for (auto &id : ids) {
                 if (ends_with(name, id)) {
                     return (&id - ids);
@@ -1231,7 +1231,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 
     open_scope();
     print(s);
-    close_scope("kernel " + name);
+    close_scope(concat("kernel ", name));
 
     for (const auto &arg : args) {
         // Remove buffer arguments from allocation scope
@@ -1371,8 +1371,8 @@ void CodeGen_D3D12Compute_Dev::dump() {
     std::cerr << src_stream.str() << "\n";
 }
 
-std::string CodeGen_D3D12Compute_Dev::print_gpu_name(const std::string &name) {
-    return name;
+std::string CodeGen_D3D12Compute_Dev::print_gpu_name(std::string_view name) {
+    return std::string{name};
 }
 
 }  // namespace

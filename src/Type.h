@@ -48,7 +48,7 @@ struct halide_cplusplus_type_name {
 
     std::string name;
 
-    halide_cplusplus_type_name(CPPTypeType cpp_type_type, const std::string &name)
+    halide_cplusplus_type_name(CPPTypeType cpp_type_type, std::string_view name)
         : cpp_type_type(cpp_type_type), name(name) {
     }
 

@@ -23,46 +23,44 @@ struct BufferInfo {
 class FindBufferSymbols : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit_param(const string &ref_name, const Parameter &param) {
+    void visit_param(std::string_view ref_name, const Parameter &param) {
         if (param.defined() && param.is_buffer()) {
-            const string &name = param.name();
-            buffers[name] =
-                BufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", param),
-                           param.dimensions()};
+            std::string_view name = param.name();
+            Expr var = Variable::make(type_of<halide_buffer_t *>(), concat(name, ".buffer"), param);
+            buffers.emplace(name, BufferInfo{var, param.dimensions()});
         }
     }
 
-    void visit_buffer(const string &ref_name, const Buffer<> &buffer) {
+    void visit_buffer(std::string_view ref_name, const Buffer<> &buffer) {
         if (buffer.defined()) {
-            const string &name = buffer.name();
-            buffers[name] =
-                BufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", buffer),
-                           buffer.dimensions()};
+            std::string_view name = buffer.name();
+            Expr var = Variable::make(type_of<halide_buffer_t *>(), concat(name, ".buffer"), buffer);
+            buffers.emplace(name, BufferInfo{var, buffer.dimensions()});
         }
     }
 
     void visit(const Variable *op) override {
         visit_param(op->name, op->param);
         visit_buffer(op->name, op->image);
-        symbols.insert(op->name);
+        symbols.emplace(op->name);
     }
 
     void visit(const Load *op) override {
         visit_param(op->name, op->param);
         visit_buffer(op->name, op->image);
-        symbols.insert(op->name);
+        symbols.emplace(op->name);
         IRVisitor::visit(op);
     }
 
     void visit(const Store *op) override {
         visit_param(op->name, op->param);
-        symbols.insert(op->name);
+        symbols.emplace(op->name);
         IRVisitor::visit(op);
     }
 
 public:
-    set<string> symbols;
-    map<string, BufferInfo> buffers;
+    StringSet symbols;
+    StringMap<BufferInfo> buffers;
 };
 
 }  // namespace
@@ -137,7 +135,7 @@ Stmt unpack_buffers(Stmt s) {
         Expr buf = p.second.handle;
         Expr cond = reinterpret<uint64_t>(buf) != 0;
         Expr error = Call::make(Int(32), "halide_error_buffer_argument_is_null",
-                                {p.first}, Call::Extern);
+                                {Expr(p.first)}, Call::Extern);
         Stmt check = AssertStmt::make(cond, error);
         s = Block::make(check, s);
     }

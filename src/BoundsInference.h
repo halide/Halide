@@ -28,7 +28,7 @@ Stmt bounds_inference(Stmt,
                       const std::vector<Function> &outputs,
                       const std::vector<std::string> &realization_order,
                       const std::vector<std::vector<std::string>> &fused_groups,
-                      const std::map<std::string, Function> &environment,
+                      const StringMap<Function> &environment,
                       const std::map<std::pair<std::string, int>, Interval> &func_bounds,
                       const Target &target);
 

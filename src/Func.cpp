@@ -56,15 +56,23 @@ std::string dump_dim_list(const vector<DimType> &dims) {
 
 }  // namespace
 
-Func::Func(const string &name)
+Func::Func(std::string_view name)
     : func(unique_name(name)) {
 }
 
-Func::Func(const Type &required_type, int required_dims, const string &name)
+Func::Func(const std::string &name)
+    : func(unique_name(name)) {
+}
+
+Func::Func(const char *name)
+    : func(unique_name(name)) {
+}
+
+Func::Func(const Type &required_type, int required_dims, std::string_view name)
     : func({required_type}, required_dims, unique_name(name)) {
 }
 
-Func::Func(const std::vector<Type> &required_types, int required_dims, const string &name)
+Func::Func(const std::vector<Type> &required_types, int required_dims, std::string_view name)
     : func(required_types, required_dims, unique_name(name)) {
 }
 
@@ -81,7 +89,7 @@ Func::Func(Function f)
     : func(std::move(f)) {
 }
 
-const string &Func::name() const {
+std::string_view Func::name() const {
     return func.name();
 }
 
@@ -187,7 +195,7 @@ bool Func::is_extern() const {
 }
 
 /** Add an extern definition for this Func. */
-void Func::define_extern(const std::string &function_name,
+void Func::define_extern(std::string_view function_name,
                          const std::vector<ExternFuncArgument> &args,
                          const std::vector<Type> &types,
                          const std::vector<Var> &arguments,
@@ -228,7 +236,7 @@ int Func::outputs() const {
 
 /** Get the name of the extern function called for an extern
  * definition. */
-const std::string &Func::extern_function_name() const {
+std::string_view Func::extern_function_name() const {
     return func.extern_function_name();
 }
 
@@ -314,24 +322,27 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
 }
 
 namespace {
-bool var_name_match(const string &candidate, const string &var) {
+bool var_name_match(std::string_view candidate, std::string_view var) {
     internal_assert(var.find('.') == string::npos)
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
     if (candidate == var) {
         return true;
     }
-    return Internal::ends_with(candidate, "." + var);
+    return Internal::ends_with(candidate, ".", var);
 }
 }  // namespace
 
 std::string Stage::name() const {
-    std::string stage_name = (stage_index == 0) ? function.name() : function.name() + ".update(" + std::to_string(stage_index - 1) + ")";
+    std::string stage_name =
+        (stage_index == 0) ?
+            std::string{function.name()} :
+            concat(function.name(), ".update(", std::to_string(stage_index - 1), ")");
     return stage_name;
 }
 
 namespace {
-bool is_const_assignment(const string &func_name, const vector<Expr> &args, const vector<Expr> &values) {
+bool is_const_assignment(std::string_view func_name, const vector<Expr> &args, const vector<Expr> &values) {
     // Check if an update definition is a non-recursive and just
     // scatters a value that doesn't depend on the reduction
     // domain. Such definitions can be treated the same as
@@ -355,10 +366,10 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
             IRVisitor::visit(op);
         }
 
-        const string &func_name;
+        std::string_view func_name;
 
     public:
-        Checker(const string &func_name)
+        Checker(std::string_view func_name)
             : func_name(func_name) {
         }
 
@@ -394,7 +405,7 @@ void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
         return;
     }
 
-    std::set<std::string> parallel;
+    StringSet parallel;
     for (const auto &dim : sched.dims()) {
         if (is_unordered_parallel(dim.for_type)) {
             parallel.insert(dim.var);
@@ -467,7 +478,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
                         // We only allow allow associative atomic operations
-                        const string &func_name = function.name();
+                        std::string_view func_name = function.name();
                         vector<Expr> &args = definition.args();
                         vector<Expr> &values = definition.values();
 
@@ -569,7 +580,7 @@ class SubstituteSelfReference : public IRMutator {
     }
 
 public:
-    SubstituteSelfReference(const string &func, const Function &substitute,
+    SubstituteSelfReference(std::string_view func, const Function &substitute,
                             const vector<Var> &new_args)
         : func(func), substitute(substitute), new_args(new_args) {
         internal_assert(substitute.get_contents().defined());
@@ -579,7 +590,7 @@ public:
 /** Substitute all self-reference calls to 'func' with 'substitute' which
  * args (LHS) is the old args (LHS) plus 'new_args' in that order.
  * Expect this method to be called on the value (RHS) of an update definition. */
-Expr substitute_self_reference(Expr val, const string &func, const Function &substitute,
+Expr substitute_self_reference(Expr val, std::string_view func, const Function &substitute,
                                const vector<Var> &new_args) {
     SubstituteSelfReference subs(func, substitute, new_args);
     val = subs.mutate(val);
@@ -587,7 +598,7 @@ Expr substitute_self_reference(Expr val, const string &func, const Function &sub
 }
 
 // Substitute the occurrence of 'name' in 'exprs' with 'value'.
-void substitute_var_in_exprs(const string &name, const Expr &value, vector<Expr> &exprs) {
+void substitute_var_in_exprs(std::string_view name, const Expr &value, vector<Expr> &exprs) {
     for (auto &expr : exprs) {
         expr = substitute(name, value, expr);
     }
@@ -626,7 +637,7 @@ void apply_split_result(const vector<pair<string, Expr>> &bounds_let_stmts,
  * new predicates corresponding to the TailStrategy to the RDom predicate list. */
 bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
                  vector<Expr> &predicates, vector<Expr> &args,
-                 vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
+                 vector<Expr> &values, StringMap<Expr> &dim_extent_alignment) {
     internal_assert(s.is_split());
     const auto it = std::find_if(rvars.begin(), rvars.end(),
                                  [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
@@ -659,7 +670,7 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
  * fused RVars from the list and add the fused RVar to the list. */
 bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
                 vector<Expr> &predicates, vector<Expr> &args,
-                vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
+                vector<Expr> &values, StringMap<Expr> &dim_extent_alignment) {
     internal_assert(s.is_fuse());
     const auto &iter_outer = std::find_if(rvars.begin(), rvars.end(),
                                           [&s](const ReductionVariable &rv) { return (s.outer == rv.var); });
@@ -696,7 +707,7 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
  * to a Var. */
 bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
                   vector<Expr> &predicates, vector<Expr> &args,
-                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
+                  vector<Expr> &values, StringMap<Expr> &dim_extent_alignment) {
     internal_assert(s.is_purify());
     const auto &iter = std::find_if(rvars.begin(), rvars.end(),
                                     [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
@@ -717,7 +728,7 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
 /** Apply rename directives on the reduction variables. */
 bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
                   vector<Expr> &predicates, vector<Expr> &args,
-                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
+                  vector<Expr> &values, StringMap<Expr> &dim_extent_alignment) {
     internal_assert(s.is_rename());
     const auto &iter = std::find_if(rvars.begin(), rvars.end(),
                                     [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
@@ -739,7 +750,7 @@ bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
 bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
                            vector<Expr> &predicates, vector<Expr> &args,
                            vector<Expr> &values) {
-    map<string, Expr> dim_extent_alignment;
+    StringMap<Expr> dim_extent_alignment;
     for (const ReductionVariable &rv : rvars) {
         dim_extent_alignment[rv.var] = rv.extent;
     }
@@ -784,17 +795,17 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 
     definition.schedule().touched() = true;
 
-    const string &func_name = function.name();
+    std::string_view func_name = function.name();
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
 
     // Figure out which pure vars were used in this update definition.
-    std::set<string> pure_vars_used;
+    StringSet pure_vars_used;
     internal_assert(args.size() == dim_vars.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (const Internal::Variable *var = args[i].as<Variable>()) {
             if (var->name == dim_vars[i].name()) {
-                pure_vars_used.insert(var->name);
+                pure_vars_used.emplace(var->name);
             }
         }
     }
@@ -950,7 +961,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         init_vals[i] = prover_result.pattern.identities[i];
     }
 
-    Func intm(func_name + "_intm");
+    Func intm(concat(func_name, "_intm"));
     intm(init_args) = Tuple(init_vals);
 
     // Args of the update definition of the intermediate Func
@@ -959,7 +970,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     // We need to substitute the reference to the old RDom's RVars with
     // the new RDom's RVars. Also, substitute the reference to RVars which
     // are in 'rvars_kept' with their corresponding new pure Vars
-    map<string, Expr> substitution_map;
+    StringMap<Expr> substitution_map;
     for (size_t i = 0; i < intm_rvars.size(); ++i) {
         substitution_map[intm_rvars[i].var] = intm_rdom[i];
     }
@@ -1031,14 +1042,14 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     // if they are not already in the list
     for (const Var &v : dim_vars) {
         if (!pure_vars_used.count(v.name())) {
-            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
+            Dim d = {std::string{v.name()}, ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
             // Insert it just before Var::outermost
             dims.insert(dims.end() - 1, d);
         }
     }
 
     // Then, we need to remove lifted RVars from the dims list
-    for (const string &rv : rvars_removed) {
+    for (std::string_view rv : rvars_removed) {
         remove(rv);
     }
 
@@ -1066,7 +1077,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 
     // There might be cross-dependencies between tuple elements, so we need
     // to collect all substitutions first.
-    map<string, Expr> replacements;
+    StringMap<Expr> replacements;
     for (size_t i = 0; i < f_values.size(); ++i) {
         if (!prover_result.ys[i].var.empty()) {
             Expr r = (values.size() == 1) ? Expr(intm(f_load_args)) : Expr(intm(f_load_args)[i]);
@@ -1095,7 +1106,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     return intm;
 }
 
-void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor, bool exact, TailStrategy tail) {
+void Stage::split(std::string_view old, std::string_view outer, std::string_view inner, const Expr &factor, bool exact, TailStrategy tail) {
     debug(4) << "In schedule for " << name() << ", split " << old << " into "
              << outer << " and " << inner << " with factor of " << factor << "\n";
     vector<Dim> &dims = definition.schedule().dims();
@@ -1110,7 +1121,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
 
     // Check that the new names aren't already in the dims list.
     for (auto &dim : dims) {
-        string new_names[2] = {inner, outer};
+        std::string_view new_names[2] = {inner, outer};
         for (const auto &new_name : new_names) {
             if (var_name_match(dim.var, new_name) && new_name != old) {
                 user_error << "In schedule for " << name()
@@ -1130,8 +1141,8 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
         if (var_name_match(dims[i].var, old)) {
             found = true;
             old_name = dims[i].var;
-            inner_name = old_name + "." + inner;
-            outer_name = old_name + "." + outer;
+            inner_name = concat(old_name, ".", inner);
+            outer_name = concat(old_name, ".", outer);
             dims.insert(dims.begin() + i, dims[i]);
             dims[i].var = inner_name;
             dims[i + 1].var = outer_name;
@@ -1156,7 +1167,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
         // is OK. Otherwise we need GuardWithIf to avoid
         // recomputing values in the case where the inner split
         // factor does not divide the outer split factor.
-        std::set<string> inner_vars;
+        StringSet inner_vars;
         for (const Split &s : definition.schedule().splits()) {
             if (s.is_split()) {
                 inner_vars.insert(s.inner);
@@ -1186,7 +1197,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     if (predicate_loads_ok && tail == TailStrategy::PredicateLoads) {
         // If it's the outermost split in this dimension, PredicateLoads
         // is OK. Otherwise we can't prove it's safe.
-        std::set<string> inner_vars;
+        StringSet inner_vars;
         for (const Split &s : definition.schedule().splits()) {
             if (s.is_split()) {
                 inner_vars.insert(s.inner);
@@ -1240,7 +1251,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
             //
             // It's only the tail/epilogue that changes.
 
-            std::map<string, Expr> descends_from_shiftinwards_outer;
+            StringMap<Expr> descends_from_shiftinwards_outer;
             for (const Split &s : definition.schedule().splits()) {
                 auto it = descends_from_shiftinwards_outer.find(s.old_var);
                 if (s.is_split() && s.tail == TailStrategy::ShiftInwards) {
@@ -1338,7 +1349,7 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
         if (var_name_match(dims[i].var, inner.name())) {
             found_inner = true;
             inner_name = dims[i].var;
-            fused_name = inner_name + "." + fused.name();
+            fused_name = concat(inner_name, ".", fused.name());
             dims[i].var = fused_name;
 
             if (dims[i].dim_type == DimType::ImpureRVar ||
@@ -1417,7 +1428,7 @@ Stage Stage::specialize(const Expr &condition) {
     return Stage(function, s.definition, stage_index);
 }
 
-void Stage::specialize_fail(const std::string &message) {
+void Stage::specialize_fail(std::string_view message) {
     user_assert(!message.empty()) << "Argument passed to specialize_fail() must not be empty.\n";
     const vector<Specialization> &specializations = definition.specializations();
     user_assert(specializations.empty() || specializations.back().failure_message.empty())
@@ -1444,7 +1455,7 @@ Stage &Stage::purify(const VarOrRVar &old_var, const VarOrRVar &new_var) {
 
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
-    string old_name, new_name = new_var.name();
+    string old_name, new_name{new_var.name()};
     vector<Dim> &dims = schedule.dims();
 
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
@@ -1470,14 +1481,14 @@ Stage &Stage::purify(const VarOrRVar &old_var, const VarOrRVar &new_var) {
     return *this;
 }
 
-void Stage::remove(const string &var) {
+void Stage::remove(std::string_view var) {
     debug(4) << "In schedule for " << name() << ", remove " << var << "\n";
 
     StageSchedule &schedule = definition.schedule();
 
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
-    string old_name = var;
+    string old_name{var};
     vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
         if (dims[i].var == var) {
@@ -1496,12 +1507,12 @@ void Stage::remove(const string &var) {
             << dump_argument_list();
     }
 
-    std::set<string> removed_vars;
-    removed_vars.insert(var);
+    StringSet removed_vars;
+    removed_vars.emplace(var);
 
-    auto should_remove = [&removed_vars](const string &var) {
+    auto should_remove = [&removed_vars](std::string_view var) {
         const auto &iter = std::find_if(
-            removed_vars.begin(), removed_vars.end(), [&var](const string &rv) { return rv == var; });
+            removed_vars.begin(), removed_vars.end(), [&var](std::string_view rv) { return rv == var; });
         return iter != removed_vars.end();
     };
 
@@ -1593,11 +1604,11 @@ Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
         if (var_name_match(dims[i].var, old_var.name())) {
             found = true;
             old_name = dims[i].var;
-            dims[i].var += "." + new_var.name();
+            dims[i].var = concat(old_name, ".", new_var.name());
         }
     }
 
-    string new_name = old_name + "." + new_var.name();
+    string new_name = concat(old_name, ".", new_var.name());
 
     if (!found) {
         user_error
@@ -1838,7 +1849,7 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
 
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     definition.schedule().touched() = true;
-    const string &func_name = function.name();
+    std::string_view func_name = function.name();
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
     vector<Dim> &dims_old = definition.schedule().dims();
@@ -2083,19 +2094,29 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
 
 Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     definition.schedule().touched() = true;
-    PrefetchDirective prefetch = {f.name(), at.name(), from.name(), std::move(offset), strategy, Parameter()};
+    PrefetchDirective prefetch = {std::string{f.name()},
+                                  std::string{at.name()},
+                                  std::string{from.name()},
+                                  std::move(offset),
+                                  strategy,
+                                  Parameter()};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
 Stage &Stage::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     definition.schedule().touched() = true;
-    PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
+    PrefetchDirective prefetch = {std::string{param.name()},
+                                  std::string{at.name()},
+                                  std::string{from.name()},
+                                  std::move(offset),
+                                  strategy,
+                                  param};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
-Stage &Stage::compute_with(LoopLevel loop_level, const map<string, LoopAlignStrategy> &align) {
+Stage &Stage::compute_with(LoopLevel loop_level, const StringMap<LoopAlignStrategy> &align) {
     definition.schedule().touched() = true;
     loop_level.lock();
     user_assert(!loop_level.is_inlined() && !loop_level.is_root())
@@ -2124,7 +2145,7 @@ Stage &Stage::compute_with(LoopLevel loop_level, const map<string, LoopAlignStra
 }
 
 Stage &Stage::compute_with(LoopLevel loop_level, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
-    map<string, LoopAlignStrategy> align_str;
+    StringMap<LoopAlignStrategy> align_str;
     for (const auto &iter : align) {
         align_str.emplace(iter.first.name(), iter.second);
     }
@@ -2132,7 +2153,8 @@ Stage &Stage::compute_with(LoopLevel loop_level, const vector<pair<VarOrRVar, Lo
 }
 
 Stage &Stage::compute_with(LoopLevel loop_level, LoopAlignStrategy align) {
-    map<string, LoopAlignStrategy> align_str = {{loop_level.lock().var().name(), align}};
+    StringMap<LoopAlignStrategy> align_str =
+        {{std::string{loop_level.lock().var().name()}, align}};
     return compute_with(loop_level, align_str);
 }
 
@@ -2165,7 +2187,7 @@ void Func::invalidate_cache() {
 
 namespace {
 
-void validate_wrapper(const string &name, const map<string, FunctionPtr> &wrappers,
+void validate_wrapper(std::string_view name, const StringMap<FunctionPtr> &wrappers,
                       const vector<Func> &fs, const FunctionPtr &wrapper) {
     if (!wrappers.empty() && !fs.empty()) {
         internal_assert(wrapper.defined() && !name.empty());
@@ -2192,14 +2214,14 @@ void validate_wrapper(const string &name, const map<string, FunctionPtr> &wrappe
     }
 }
 
-Func create_in_wrapper(Function wrapped_fn, const string &wrapper_name) {
+Func create_in_wrapper(Function wrapped_fn, std::string_view wrapper_name) {
     Func wrapper(wrapped_fn.new_function_in_same_group(wrapper_name));
     vector<Var> args = Func(wrapped_fn).args();
     wrapper(args) = Func(wrapped_fn)(args);
     return wrapper;
 }
 
-Func create_clone_wrapper(Function wrapped_fn, const string &wrapper_name) {
+Func create_clone_wrapper(Function wrapped_fn, std::string_view wrapper_name) {
     Func wrapper(wrapped_fn.new_function_in_same_group(wrapper_name));
     std::map<FunctionPtr, FunctionPtr> remapping;
     wrapped_fn.deep_copy(wrapper.name(), wrapper.function().get_contents(), remapping);
@@ -2217,7 +2239,7 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
     // Either all Funcs in 'fs' have the same wrapper or they don't already
     // have any wrappers. Otherwise, throw an error. If 'fs' is empty, then
     // it is a global wrapper.
-    const map<string, FunctionPtr> &wrappers = wrapped_fn.wrappers();
+    const StringMap<FunctionPtr> &wrappers = wrapped_fn.wrappers();
     wrapper_name += ("$" + std::to_string(wrappers.size()));
     const auto &iter = fs.empty() ? wrappers.find("") : wrappers.find(fs[0].name());
     if (iter == wrappers.end()) {
@@ -2254,7 +2276,7 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
 Func Func::in(const Func &f) {
     invalidate_cache();
     vector<Func> fs = {f};
-    return get_wrapper(func, name() + "_in_" + f.name(), fs, false);
+    return get_wrapper(func, concat(name(), "_in_", f.name()), fs, false);
 }
 
 Func Func::in(const vector<Func> &fs) {
@@ -2262,18 +2284,18 @@ Func Func::in(const vector<Func> &fs) {
         user_error << "Could not create a in wrapper for an empty list of Funcs\n";
     }
     invalidate_cache();
-    return get_wrapper(func, name() + "_wrapper", fs, false);
+    return get_wrapper(func, concat(name(), "_wrapper"), fs, false);
 }
 
 Func Func::in() {
     invalidate_cache();
-    return get_wrapper(func, name() + "_global_wrapper", {}, false);
+    return get_wrapper(func, concat(name(), "_global_wrapper"), {}, false);
 }
 
 Func Func::clone_in(const Func &f) {
     invalidate_cache();
     vector<Func> fs = {f};
-    return get_wrapper(func, name() + "_clone_in_" + f.name(), fs, true);
+    return get_wrapper(func, concat(name(), "_clone_in_", f.name()), fs, true);
 }
 
 Func Func::clone_in(const vector<Func> &fs) {
@@ -2281,7 +2303,7 @@ Func Func::clone_in(const vector<Func> &fs) {
         user_error << "Could not create a clone wrapper for an empty list of Funcs\n";
     }
     invalidate_cache();
-    return get_wrapper(func, name() + "_clone", fs, true);
+    return get_wrapper(func, concat(name(), "_clone"), fs, true);
 }
 
 Func Func::copy_to_device(DeviceAPI d) {
@@ -2429,7 +2451,7 @@ Stage Func::specialize(const Expr &c) {
     return Stage(func, func.definition(), 0).specialize(c);
 }
 
-void Func::specialize_fail(const std::string &message) {
+void Func::specialize_fail(std::string_view message) {
     invalidate_cache();
     (void)Stage(func, func.definition(), 0).specialize_fail(message);
 }
@@ -2524,7 +2546,7 @@ Func &Func::bound(const Var &var, Expr min, Expr extent) {
         << " because " << var.name()
         << " is not one of the pure variables of " << name() << ".\n";
 
-    Bound b = {var.name(), min, extent, Expr(), Expr()};
+    Bound b = {std::string{var.name()}, min, extent, Expr(), Expr()};
     func.schedule().bounds().push_back(b);
 
     // Propagate constant bounds into estimates as well.
@@ -2548,7 +2570,7 @@ Func &Func::set_estimate(const Var &var, const Expr &min, const Expr &extent) {
         << " because " << var.name()
         << " is not one of the pure variables of " << name() << ".\n";
 
-    Bound b = {var.name(), min, extent, Expr(), Expr()};
+    Bound b = {std::string{var.name()}, min, extent, Expr(), Expr()};
     func.schedule().estimates().push_back(b);
 
     // Propagate the estimate into the Parameter as well, so that
@@ -2609,7 +2631,7 @@ Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
         << " because " << var.name()
         << " is not one of the pure variables of " << name() << ".\n";
 
-    Bound b = {var.name(), Expr(), Expr(), modulus, remainder};
+    Bound b = {std::string{var.name()}, Expr(), Expr(), modulus, remainder};
     func.schedule().bounds().push_back(b);
     return *this;
 }
@@ -2629,7 +2651,7 @@ Func &Func::align_extent(const Var &var, Expr modulus) {
         << " because " << var.name()
         << " is not one of the pure variables of " << name() << ".\n";
 
-    Bound b = {var.name(), Expr(), Expr(), modulus, Expr()};
+    Bound b = {std::string{var.name()}, Expr(), Expr(), modulus, Expr()};
     func.schedule().bounds().push_back(b);
     return *this;
 }
@@ -3031,13 +3053,13 @@ Func &Func::trace_realizations() {
     return *this;
 }
 
-Func &Func::add_trace_tag(const std::string &trace_tag) {
+Func &Func::add_trace_tag(std::string_view trace_tag) {
     invalidate_cache();
     func.add_trace_tag(trace_tag);
     return *this;
 }
 
-void Func::debug_to_file(const string &filename) {
+void Func::debug_to_file(std::string_view filename) {
     invalidate_cache();
     func.debug_file() = filename;
 }
@@ -3490,58 +3512,58 @@ std::string Func::source_location() const {
     return func.definition().source_location();
 }
 
-Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
+Module Func::compile_to_module(const vector<Argument> &args, std::string_view fn_name, const Target &target) {
     return pipeline().compile_to_module(args, fn_name, target);
 }
 
 void Func::compile_to(const map<OutputFileType, string> &output_files,
                       const vector<Argument> &args,
-                      const string &fn_name,
+                      std::string_view fn_name,
                       const Target &target) {
     pipeline().compile_to(output_files, args, fn_name, target);
 }
 
-void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const string &fn_name,
+void Func::compile_to_bitcode(std::string_view filename, const vector<Argument> &args, std::string_view fn_name,
                               const Target &target) {
     pipeline().compile_to_bitcode(filename, args, fn_name, target);
 }
 
-void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args,
+void Func::compile_to_bitcode(std::string_view filename, const vector<Argument> &args,
                               const Target &target) {
     pipeline().compile_to_bitcode(filename, args, "", target);
 }
 
-void Func::compile_to_llvm_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
+void Func::compile_to_llvm_assembly(std::string_view filename, const vector<Argument> &args, std::string_view fn_name,
                                     const Target &target) {
     pipeline().compile_to_llvm_assembly(filename, args, fn_name, target);
 }
 
-void Func::compile_to_llvm_assembly(const string &filename, const vector<Argument> &args,
+void Func::compile_to_llvm_assembly(std::string_view filename, const vector<Argument> &args,
                                     const Target &target) {
     pipeline().compile_to_llvm_assembly(filename, args, "", target);
 }
 
-void Func::compile_to_object(const string &filename, const vector<Argument> &args,
-                             const string &fn_name, const Target &target) {
+void Func::compile_to_object(std::string_view filename, const vector<Argument> &args,
+                             std::string_view fn_name, const Target &target) {
     pipeline().compile_to_object(filename, args, fn_name, target);
 }
 
-void Func::compile_to_object(const string &filename, const vector<Argument> &args,
+void Func::compile_to_object(std::string_view filename, const vector<Argument> &args,
                              const Target &target) {
     pipeline().compile_to_object(filename, args, "", target);
 }
 
-void Func::compile_to_header(const string &filename, const vector<Argument> &args,
-                             const string &fn_name, const Target &target) {
+void Func::compile_to_header(std::string_view filename, const vector<Argument> &args,
+                             std::string_view fn_name, const Target &target) {
     pipeline().compile_to_header(filename, args, fn_name, target);
 }
 
-void Func::compile_to_c(const string &filename, const vector<Argument> &args,
-                        const string &fn_name, const Target &target) {
+void Func::compile_to_c(std::string_view filename, const vector<Argument> &args,
+                        std::string_view fn_name, const Target &target) {
     pipeline().compile_to_c(filename, args, fn_name, target);
 }
 
-void Func::compile_to_lowered_stmt(const string &filename,
+void Func::compile_to_lowered_stmt(std::string_view filename,
                                    const vector<Argument> &args,
                                    StmtOutputFormat fmt,
                                    const Target &target) {
@@ -3552,39 +3574,39 @@ void Func::print_loop_nest() {
     pipeline().print_loop_nest();
 }
 
-void Func::compile_to_file(const string &filename_prefix,
+void Func::compile_to_file(std::string_view filename_prefix,
                            const vector<Argument> &args,
-                           const std::string &fn_name,
+                           std::string_view fn_name,
                            const Target &target) {
     pipeline().compile_to_file(filename_prefix, args, fn_name, target);
 }
 
-void Func::compile_to_static_library(const string &filename_prefix,
+void Func::compile_to_static_library(std::string_view filename_prefix,
                                      const vector<Argument> &args,
-                                     const std::string &fn_name,
+                                     std::string_view fn_name,
                                      const Target &target) {
     pipeline().compile_to_static_library(filename_prefix, args, fn_name, target);
 }
 
-void Func::compile_to_multitarget_static_library(const std::string &filename_prefix,
+void Func::compile_to_multitarget_static_library(std::string_view filename_prefix,
                                                  const std::vector<Argument> &args,
                                                  const std::vector<Target> &targets) {
     pipeline().compile_to_multitarget_static_library(filename_prefix, args, targets);
 }
 
-void Func::compile_to_multitarget_object_files(const std::string &filename_prefix,
+void Func::compile_to_multitarget_object_files(std::string_view filename_prefix,
                                                const std::vector<Argument> &args,
                                                const std::vector<Target> &targets,
                                                const std::vector<std::string> &suffixes) {
     pipeline().compile_to_multitarget_object_files(filename_prefix, args, targets, suffixes);
 }
 
-void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
+void Func::compile_to_assembly(std::string_view filename, const vector<Argument> &args, std::string_view fn_name,
                                const Target &target) {
     pipeline().compile_to_assembly(filename, args, fn_name, target);
 }
 
-void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const Target &target) {
+void Func::compile_to_assembly(std::string_view filename, const vector<Argument> &args, const Target &target) {
     pipeline().compile_to_assembly(filename, args, "", target);
 }
 

@@ -25,7 +25,7 @@ class Function;
  * Allocate, Store, and Load nodes respectively. */
 Stmt storage_flattening(Stmt s,
                         const std::vector<Function> &outputs,
-                        const std::map<std::string, Function> &env,
+                        const StringMap<Function> &env,
                         const Target &target);
 
 }  // namespace Internal

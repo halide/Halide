@@ -603,7 +603,7 @@ private:
         return ++loop_id;
     }
 
-    std::string gen_loop_asm_marker(int id, const std::string &loop_var) {
+    std::string gen_loop_asm_marker(int id, std::string_view loop_var) {
         std::regex dollar("\\$");
         std::string marker = "%\"";
         if (ids_are_known) {
@@ -611,7 +611,7 @@ private:
         } else {
             marker += "\\d+";
         }
-        marker += "_for_" + loop_var;
+        marker += concat("_for_", loop_var);
         marker = std::regex_replace(marker, dollar, "\\$");
         return marker;
     }
@@ -622,7 +622,7 @@ private:
         return ++prodcons_id;
     }
 
-    std::string gen_prodcons_asm_marker(int id, const std::string &var, bool is_producer) {
+    std::string gen_prodcons_asm_marker(int id, std::string_view var, bool is_producer) {
         std::regex dollar("\\$");
         std::string marker = "%\"";
         if (ids_are_known) {
@@ -630,7 +630,7 @@ private:
         } else {
             marker += "\\d+";
         }
-        marker += (is_producer ? "_produce_" : "_consume_") + var;
+        marker += concat((is_producer ? "_produce_" : "_consume_"), var);
         marker = std::regex_replace(marker, dollar, "\\$");
         return marker;
     }
@@ -702,7 +702,7 @@ public:
         // -- print text
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "module");
-        print_text(" name=" + m.name() + ", target=" + m.target().to_string());
+        print_text(concat(" name=", m.name(), ", target=", m.target().to_string()));
         print_closing_tag("span");
 
         // Open code block to hold module body
@@ -751,7 +751,7 @@ public:
         // -- print text
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "module");
-        print_text(" name=" + m.name() + ", target=" + m.target().to_string());
+        print_text(concat(" name=", m.name(), ", target=", m.target().to_string()));
         print_closing_tag("span");
 
         // Open code block to hold module body
@@ -1063,7 +1063,7 @@ private:
 
     // Prints the opening tag for the specified html element. A unique ID is
     // auto-generated unless provided.
-    void print_opening_tag(const std::string &tag, const std::string &cls, const std::string &tooltip = "", int id = -1) {
+    void print_opening_tag(std::string_view tag, std::string_view cls, std::string_view tooltip = "", int id = -1) {
         stream << "<" << tag << " class='" << cls << "'";
         if (!tooltip.empty()) {
             stream << " title='" << tooltip << "'";
@@ -1077,20 +1077,20 @@ private:
         }
         stream << "'>";
         context_stack.push_back(gen_unique_id());
-        context_stack_tags.push_back(tag);
+        context_stack_tags.emplace_back(tag);
     }
 
     // Prints the closing tag for the specified html element.
-    void print_closing_tag(const std::string &tag) {
+    void print_closing_tag(std::string_view tag) {
         internal_assert(!context_stack.empty() && tag == context_stack_tags.back())
             << tag << " " << context_stack.empty() << " " << context_stack_tags.back();
         context_stack.pop_back();
         context_stack_tags.pop_back();
-        stream << "</" + tag + ">";
+        stream << concat("</", tag, ">");
     }
 
     // Prints an html element: opening tag, body and closing tag
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, const std::string &tooltip = "", int id = -1) {
+    void print_html_element(std::string_view tag, std::string_view cls, std::string_view body, std::string_view tooltip = "", int id = -1) {
         print_opening_tag(tag, cls, tooltip, id);
         stream << body;
         print_closing_tag(tag);
@@ -1128,11 +1128,11 @@ private:
     }
 
     // Prints a variable to stream
-    void print_variable(const std::string &x, Type type) {
+    void print_variable(std::string_view x, Type type) {
         stream << variable(x, type);
     }
 
-    std::string variable(const std::string &x, const std::string &tooltip) {
+    std::string variable(std::string_view x, std::string_view tooltip) {
         int id;
         if (scope.contains(x)) {
             id = scope.get(x);
@@ -1149,12 +1149,12 @@ private:
         return s.str();
     }
 
-    std::string variable(const std::string &x, Type type) {
+    std::string variable(std::string_view x, Type type) {
         return variable(x, type_to_string(type));
     }
 
     // Prints text to stream
-    void print_text(const std::string &x) {
+    void print_text(std::string_view x) {
         stream << x;
     }
 
@@ -1222,7 +1222,7 @@ private:
         print_closing_tag("span");
     }
 
-    void print_function_call(std::string fn_name, const std::vector<Expr> &args, const std::string &tooltip) {
+    void print_function_call(std::string_view fn_name, const std::vector<Expr> &args, std::string_view tooltip) {
         print_opening_tag("span", "matched");
         print_html_element("span", "Symbol matched", fn_name, tooltip);
         print_text("(");
@@ -1852,7 +1852,7 @@ private:
             print_html_element("span", "keyword", " custom_free");
             print_text(" {");
             print_closing_tag("span");
-            print_text(" " + op->free_function + "(); ");
+            print_text(concat(" ", op->free_function, "(); "));
             print_html_element("span", "matched", "}");
         }
 

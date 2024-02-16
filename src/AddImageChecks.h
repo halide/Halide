@@ -29,7 +29,7 @@ Stmt add_image_checks(const Stmt &s,
                       const std::vector<Function> &outputs,
                       const Target &t,
                       const std::vector<std::string> &order,
-                      const std::map<std::string, Function> &env,
+                      const StringMap<Function> &env,
                       const FuncValueBounds &fb,
                       bool will_inject_host_copies);
 

@@ -18,7 +18,7 @@ Argument to_argument(const Parameter &param) {
 
 }  // namespace
 
-Module AbstractGenerator::build_module(const std::string &function_name) {
+Module AbstractGenerator::build_module(std::string_view function_name) {
     const LinkageType linkage_type = LinkageType::ExternalPlusMetadata;
 
     Pipeline pipeline = build_pipeline();
@@ -54,7 +54,7 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
         for (size_t i = 0; i < output_funcs.size(); ++i) {
             const Func &f = output_funcs[i];
 
-            const std::string &from = f.name();
+            std::string_view from = f.name();
             std::string to = a.name;
             if (output_funcs.size() > 1) {
                 to += "_" + std::to_string(i);
@@ -63,7 +63,7 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
             const int tuple_size = f.outputs();
             for (int t = 0; t < tuple_size; ++t) {
                 const std::string suffix = (tuple_size > 1) ? ("." + std::to_string(t)) : "";
-                result.remap_metadata_name(from + suffix, to + suffix);
+                result.remap_metadata_name(concat(from, suffix), concat(to, suffix));
             }
         }
     }
@@ -73,7 +73,7 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
     return result;
 }
 
-Module AbstractGenerator::build_gradient_module(const std::string &function_name) {
+Module AbstractGenerator::build_gradient_module(std::string_view function_name) {
     constexpr int DBG = 1;
 
     // I doubt these ever need customizing; if they do, we can make them arguments to this function.
@@ -118,7 +118,7 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
         }
         for (const auto &f : output_func(a.name)) {
             const Parameter &p = f.output_buffer().parameter();
-            const std::string &output_name = p.name();
+            std::string_view output_name = p.name();
             // output_name is something like "funcname_i"
             const std::string grad_in_name = replace_all(grad_input_pattern, "$OUT$", output_name);
             // TODO(srj): does it make sense for gradient to be a non-float type?
@@ -154,13 +154,13 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
         Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
         Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
 
-        const std::string &output_name = original_output.name();
+        std::string_view output_name = original_output.name();
         for (const auto &a : arg_infos) {
             if (a.dir != ArgInfoDirection::Input) {
                 continue;
             }
             for (const auto &p : input_parameter(a.name)) {
-                const std::string &input_name = p.name();
+                std::string_view input_name = p.name();
 
                 if (!p.is_buffer()) {
                     // Not sure if skipping scalar inputs is correct, but that's
@@ -173,7 +173,7 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
                 // Func, and we can't create a new one with an identical name (since
                 // Func's ctor will uniquify the name for us). Let's just look up
                 // by the original string instead.
-                Func d_f = d(input_name + "_im");
+                Func d_f = d(concat(input_name, "_im"));
 
                 std::string grad_out_name = replace_all(replace_all(grad_output_pattern, "$OUT$", output_name), "$IN$", input_name);
                 if (!d_f.defined()) {

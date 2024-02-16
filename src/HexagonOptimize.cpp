@@ -1310,7 +1310,7 @@ class VectorReducePatterns : public IRMutator {
                 }
             } else {
                 if (sig.flags & Signature::SlidingWindow) {
-                    string name = "halide.hexagon.add_" + std::to_string(factor) + "mpy" + suffix;
+                    string name = concat("halide.hexagon.add_", std::to_string(factor), "mpy", suffix);
                     result = native_interleave(Call::make(result_type, name, {a, b}, Call::PureExtern));
                 } else {
                     // factor == 3 has only sliding window reductions.
@@ -1352,7 +1352,7 @@ class EliminateInterleaves : public IRMutator {
         }
 
         const Variable *var = x.as<Variable>();
-        if (var && vars.contains(var->name + ".deinterleaved")) {
+        if (var && vars.contains(concat(var->name, ".deinterleaved"))) {
             return true;
         }
 
@@ -1393,7 +1393,7 @@ class EliminateInterleaves : public IRMutator {
         // yields_removable_interleave. These are lets that can be
         // deinterleaved freely, but are not actually interleaves.
         const Variable *var = x.as<Variable>();
-        if (var && vars.contains(var->name + ".weak_deinterleaved")) {
+        if (var && vars.contains(std::string{var->name} + ".weak_deinterleaved")) {
             return true;
         }
 
@@ -1437,10 +1437,10 @@ class EliminateInterleaves : public IRMutator {
         }
 
         if (const Variable *var = x.as<Variable>()) {
-            if (vars.contains(var->name + ".deinterleaved")) {
-                return Variable::make(var->type, var->name + ".deinterleaved");
-            } else if (vars.contains(var->name + ".weak_deinterleaved")) {
-                return Variable::make(var->type, var->name + ".weak_deinterleaved");
+            if (vars.contains(concat(var->name, ".deinterleaved"))) {
+                return Variable::make(var->type, concat(var->name, ".deinterleaved"));
+            } else if (vars.contains(concat(var->name, ".weak_deinterleaved"))) {
+                return Variable::make(var->type, concat(var->name, ".weak_deinterleaved"));
             }
         }
 
@@ -1546,13 +1546,13 @@ class EliminateInterleaves : public IRMutator {
         // let labelled "deinterleaved".
         if (yields_removable_interleave(value)) {
             // We can provide a deinterleaved version of this let value.
-            deinterleaved_name = op->name + ".deinterleaved";
+            deinterleaved_name = concat(op->name, ".deinterleaved");
             vars.push(deinterleaved_name, true);
             body = mutate(op->body);
             vars.pop(deinterleaved_name);
         } else if (yields_interleave(value)) {
             // We have a soft deinterleaved version of this let value.
-            deinterleaved_name = op->name + ".weak_deinterleaved";
+            deinterleaved_name = concat(op->name, ".weak_deinterleaved");
             vars.push(deinterleaved_name, true);
             body = mutate(op->body);
             vars.pop(deinterleaved_name);
@@ -1638,7 +1638,7 @@ class EliminateInterleaves : public IRMutator {
     static bool is_interleavable(const Call *op) {
         // These calls can have interleaves moved from operands to the
         // result...
-        static const set<string> interleavable = {
+        static const StringSet interleavable = {
             Call::get_intrinsic_name(Call::bitwise_and),
             Call::get_intrinsic_name(Call::bitwise_not),
             Call::get_intrinsic_name(Call::bitwise_xor),
@@ -1654,7 +1654,7 @@ class EliminateInterleaves : public IRMutator {
         // ...these calls cannot. Furthermore, these calls have the
         // same return type as the arguments, which means our test
         // below will be inaccurate.
-        static const set<string> not_interleavable = {
+        static const StringSet not_interleavable = {
             "halide.hexagon.interleave.vb",
             "halide.hexagon.interleave.vh",
             "halide.hexagon.interleave.vw",
@@ -1702,7 +1702,7 @@ class EliminateInterleaves : public IRMutator {
         // does not deinterleave, and then opportunistically select
         // the interleaving alternative when we can cancel out to the
         // interleave.
-        static std::map<string, string> deinterleaving_alts = {
+        static StringMap<string> deinterleaving_alts = {
             {"halide.hexagon.pack.vh", "halide.hexagon.trunc.vh"},
             {"halide.hexagon.pack.vw", "halide.hexagon.trunc.vw"},
             {"halide.hexagon.packhi.vh", "halide.hexagon.trunclo.vh"},
@@ -1715,7 +1715,7 @@ class EliminateInterleaves : public IRMutator {
         };
 
         // The reverse mapping of the above.
-        static std::map<string, string> interleaving_alts = {
+        static StringMap<string> interleaving_alts = {
             {"halide.hexagon.trunc.vh", "halide.hexagon.pack.vh"},
             {"halide.hexagon.trunc.vw", "halide.hexagon.pack.vw"},
             {"halide.hexagon.trunclo.vh", "halide.hexagon.packhi.vh"},
@@ -1738,7 +1738,8 @@ class EliminateInterleaves : public IRMutator {
                                    op->func, op->value_index, op->image, op->param);
             // Add the interleave back to the result of the call.
             return native_interleave(expr);
-        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() &&
+        } else if (auto it = deinterleaving_alts.find(op->name);
+                   it != deinterleaving_alts.end() &&
                    yields_removable_interleave(args)) {
             // This call has a deinterleaving alternative, and the
             // arguments are interleaved, so we should use the
@@ -1746,14 +1747,16 @@ class EliminateInterleaves : public IRMutator {
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            return Call::make(op->type, deinterleaving_alts[op->name], args, op->call_type);
-        } else if (interleaving_alts.count(op->name) && is_native_deinterleave(args[0])) {
+            return Call::make(op->type, it->second, args, op->call_type);
+        } else if (auto it = interleaving_alts.find(op->name);
+                   it != interleaving_alts.end() &&
+                   is_native_deinterleave(args[0])) {
             // This is an interleaving alternative with a
             // deinterleave, which can be generated when we
             // deinterleave storage. Revert back to the interleaving
             // op so we can remove the deinterleave.
             Expr arg = args[0].as<Call>()->args[0];
-            return Call::make(op->type, interleaving_alts[op->name], {arg}, op->call_type,
+            return Call::make(op->type, it->second, {arg}, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (changed) {
             return Call::make(op->type, op->name, args, op->call_type,
@@ -1946,7 +1949,7 @@ class FuseInterleaves : public IRMutator {
 // For vgathers out and lut should be in VTCM in a single page.
 class ScatterGatherGenerator : public IRMutator {
     Scope<Interval> bounds;
-    std::unordered_map<string, const Allocate *> allocations;
+    StringMap<const Allocate *> allocations;
 
     using IRMutator::visit;
 
@@ -1983,7 +1986,7 @@ class ScatterGatherGenerator : public IRMutator {
 
     Stmt visit(const Allocate *op) override {
         // Create a map of the allocation
-        allocations[op->name] = op;
+        allocations.emplace(op->name, op);
         return IRMutator::visit(op);
     }
 
@@ -2104,7 +2107,7 @@ class ScatterGatherGenerator : public IRMutator {
 class SyncronizationBarriers : public IRMutator {
     // Keep track of all scatter-gather operations in flight which could cause
     // a hazard in the future.
-    std::map<string, vector<const Stmt *>> in_flight;
+    StringMap<vector<const Stmt *>> in_flight;
     // Trail of For Blocks to reach a stmt.
     vector<const Stmt *> curr_path;
     // Current Stmt being mutated.
@@ -2118,11 +2121,11 @@ class SyncronizationBarriers : public IRMutator {
         if (op->is_intrinsic(Call::hvx_scatter) ||
             op->is_intrinsic(Call::hvx_scatter_acc) ||
             op->is_intrinsic(Call::hvx_gather)) {
-            string name = op->args[0].as<Variable>()->name;
+            std::string_view name = op->args[0].as<Variable>()->name;
             // Check if the scatter-gather encountered conflicts with any
             // previous operation. If yes, insert a scatter-release.
             check_hazard(name);
-            in_flight[name] = curr_path;
+            in_flight.emplace(name, curr_path);
         }
         return IRMutator::visit(op);
     }
@@ -2137,17 +2140,18 @@ class SyncronizationBarriers : public IRMutator {
 
     // Creates entry in sync map for the stmt requiring a
     // scatter-release instruction before it.
-    void check_hazard(const string &name) {
-        if (in_flight.find(name) == in_flight.end()) {
+    void check_hazard(std::string_view name) {
+        auto it = in_flight.find(name);
+        if (it == in_flight.end()) {
             return;
         }
         // Sync Needed. Add the scatter-release before the first different For
         // loop lock between the curr_path and the hazard src location.
-        size_t min_size = std::min(in_flight[name].size(), curr_path.size());
+        size_t min_size = std::min(it->second.size(), curr_path.size());
         size_t i = 0;
         // Find the first different For loop block.
         for (; i < min_size; i++) {
-            if (in_flight[name][i] != curr_path[i]) {
+            if (it->second[i] != curr_path[i]) {
                 break;
             }
         }

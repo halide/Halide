@@ -187,7 +187,7 @@ class Featurizer : public IRVisitor {
                 // An argument
                 return {true, 0, 1};
             } else if (lets.contains(var->name)) {
-                string key = v + " " + var->name;
+                string key = concat(v, " ", var->name);
                 if (dlets.contains(key)) {
                     return dlets.get(key);
                 }
@@ -236,7 +236,7 @@ class Featurizer : public IRVisitor {
         return {false, 0, 0};
     }
 
-    void visit_memory_access(const std::string &name, Type t, const vector<Expr> &args, PipelineFeatures::AccessType type) {
+    void visit_memory_access(std::string_view name, Type t, const vector<Expr> &args, PipelineFeatures::AccessType type) {
         // Compute matrix of partial derivatives of args w.r.t. loop params
         vector<vector<OptionalRational>> matrix;
         vector<size_t> ones_per_row(args.size(), 0),
@@ -297,7 +297,7 @@ public:
         : func(func), stage(stage) {
     }
 
-    void visit_store_args(const std::string &name, Type t, vector<Expr> args) {
+    void visit_store_args(std::string_view name, Type t, vector<Expr> args) {
         for (auto &e : args) {
             e = common_subexpression_elimination(simplify(e));  // Get things into canonical form
         }
@@ -397,7 +397,7 @@ void BoundContents::Layout::release(const BoundContents *b) const {
 
 void FunctionDAG::Node::loop_nest_for_region(int stage_idx, const Span *computed, Span *loop) const {
     const auto &s = stages[stage_idx];
-    map<string, Expr> computed_map;
+    StringMap<Expr> computed_map;
     if (!s.loop_nest_all_common_cases) {
         for (int i = 0; i < func.dimensions(); i++) {
             computed_map[region_required[i].min.name()] = (int)computed[i].min();
@@ -423,7 +423,7 @@ void FunctionDAG::Node::loop_nest_for_region(int stage_idx, const Span *computed
 }
 
 void FunctionDAG::Node::required_to_computed(const Span *required, Span *computed) const {
-    map<string, Expr> required_map;
+    StringMap<Expr> required_map;
     if (!region_computed_all_common_cases) {
         // Make a binding for the value of each symbolic variable
         for (int i = 0; i < func.dimensions(); i++) {
@@ -480,11 +480,11 @@ FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consum
         consumer_dim = -1;
         for (int i = 0; i < (int)consumer.loop.size(); i++) {
             const auto &in = consumer.loop[i];
-            if (var->name == consumer.node->func.name() + "." + in.var + ".min") {
+            if (var->name == concat(consumer.node->func.name(), ".", in.var, ".min")) {
                 consumer_dim = i;
                 uses_max = false;
                 break;
-            } else if (var->name == consumer.node->func.name() + "." + in.var + ".max") {
+            } else if (var->name == concat(consumer.node->func.name(), ".", in.var, ".max")) {
                 consumer_dim = i;
                 uses_max = true;
                 break;
@@ -510,13 +510,13 @@ void FunctionDAG::Edge::add_load_jacobian(LoadJacobian j1) {
 void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *producer_required) const {
     // Create a map from the symbolic loop variables to the actual loop size
     const auto &symbolic_loop = consumer->loop;
-    map<string, Expr> s;
+    StringMap<Expr> s;
     if (!all_bounds_affine) {
         for (size_t i = 0; i < symbolic_loop.size(); i++) {
             auto p = consumer_loop[i];
             const string &var = symbolic_loop[i].var;
-            s[consumer->node->func.name() + "." + var + ".min"] = (int)p.min();
-            s[consumer->node->func.name() + "." + var + ".max"] = (int)p.max();
+            s[concat(consumer->node->func.name(), ".", var, ".min")] = (int)p.min();
+            s[concat(consumer->node->func.name(), ".", var, ".max")] = (int)p.max();
         }
     }
     // Apply that map to the bounds relationship encoded
@@ -573,7 +573,7 @@ bool depends_on_estimate(const Expr &expr) {
 }
 
 FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) {
-    map<string, Function> env = build_environment(outputs);
+    StringMap<Function> env = build_environment(outputs);
 
     // A mutator to apply parameter estimates to the expressions
     // we encounter while constructing the graph.
@@ -587,9 +587,9 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                     expr = op->param.estimate();
                 } else {
                     for (int i = 0; i < op->param.dimensions(); i++) {
-                        if (op->name == op->param.name() + ".min." + std::to_string(i)) {
+                        if (op->name == concat(op->param.name(), ".min.", std::to_string(i))) {
                             expr = op->param.min_constraint_estimate(i);
-                        } else if (op->name == op->param.name() + ".extent." + std::to_string(i)) {
+                        } else if (op->name == concat(op->param.name(), ".extent.", std::to_string(i))) {
                             expr = op->param.extent_constraint_estimate(i);
                         }
                     }
@@ -626,8 +626,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
 
         // Create a symbolic region for this Func.
         for (int j = 0; j < consumer.dimensions(); j++) {
-            Halide::Var min_var(consumer.name() + "." + consumer.args()[j] + ".min");
-            Halide::Var max_var(consumer.name() + "." + consumer.args()[j] + ".max");
+            Halide::Var min_var(concat(consumer.name(), ".", consumer.args()[j], ".min"));
+            Halide::Var max_var(concat(consumer.name(), ".", consumer.args()[j], ".max"));
             Interval interval(min_var, max_var);
             scope.push(consumer.args()[j], interval);
             node.region_required.emplace_back(SymbolicInterval{min_var, max_var});
@@ -662,8 +662,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                 Expr min = simplify(apply_param_estimates.mutate(rv.min));
                 Expr max = simplify(apply_param_estimates.mutate(rv.min + rv.extent - 1));
                 stage_scope_with_concrete_rvar_bounds.push(rv.var, Interval(min, max));
-                min = Variable::make(Int(32), consumer.name() + "." + rv.var + ".min");
-                max = Variable::make(Int(32), consumer.name() + "." + rv.var + ".max");
+                min = Variable::make(Int(32), concat(consumer.name(), ".", rv.var, ".min"));
+                max = Variable::make(Int(32), concat(consumer.name(), ".", rv.var, ".max"));
                 stage_scope_with_symbolic_rvar_bounds.push(rv.var, Interval(min, max));
             }
 
@@ -728,7 +728,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
 
                 Node::Loop l;
                 l.var = d.var;
-                l.accessor = stage.name + ".get_schedule().dims()[" + std::to_string(i) + "].var";
+                l.accessor = concat(stage.name, ".get_schedule().dims()[", std::to_string(i), "].var");
 
                 // We already have the right variable names in the stage scope
                 Interval in = stage_scope_with_concrete_rvar_bounds.get(l.var);
@@ -836,7 +836,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                 bool is_pointwise = true;
                 int leaves = 0;
                 Type narrowest_type;
-                map<string, int> calls;
+                StringMap<int> calls;
                 explicit CheckTypes(const Function &f)
                     : func(f) {
                 }
@@ -872,7 +872,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
 
             if (node.is_output) {
                 // Get the bounds estimate
-                map<string, Span> estimates;
+                StringMap<Span> estimates;
                 for (const auto &b : consumer.schedule().estimates()) {
                     const int64_t *i_min = as_const_int(b.min);
                     const int64_t *i_extent = as_const_int(b.extent);
@@ -893,7 +893,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                         // constant makes it possible to do things
                         // like unroll across color channels, so
                         // it affects the scheduling space.
-                        Func(node.func).bound(b.var, b.min, b.extent);
+                        Func(node.func).bound(Var{b.var}, b.min, b.extent);
                         estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, true);
                     } else {
                         estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, false);

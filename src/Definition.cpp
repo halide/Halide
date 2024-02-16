@@ -109,7 +109,7 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
 }
 
 Definition::Definition(bool is_init, const Expr &predicate, const std::vector<Expr> &args, const std::vector<Expr> &values,
-                       const StageSchedule &schedule, const std::vector<Specialization> &specializations, const std::string &source_location)
+                       const StageSchedule &schedule, const std::vector<Specialization> &specializations, std::string_view source_location)
     : contents(new DefinitionContents) {
     contents->is_init = is_init;
     contents->values = values;

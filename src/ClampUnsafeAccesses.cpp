@@ -9,15 +9,15 @@ namespace Halide::Internal {
 namespace {
 
 struct ClampUnsafeAccesses : IRMutator {
-    const std::map<std::string, Function> &env;
+    const StringMap<Function> &env;
     FuncValueBounds &func_bounds;
     std::vector<std::string> realizes_inside_current_producer;
 
-    ClampUnsafeAccesses(const std::map<std::string, Function> &env, FuncValueBounds &func_bounds)
+    ClampUnsafeAccesses(const StringMap<Function> &env, FuncValueBounds &func_bounds)
         : env(env), func_bounds(func_bounds) {
     }
 
-    bool is_realize_inside_current_producer(const std::string &n) const {
+    bool is_realize_inside_current_producer(std::string_view n) const {
         return std::find(realizes_inside_current_producer.begin(),
                          realizes_inside_current_producer.end(), n) != realizes_inside_current_producer.end();
     }
@@ -35,7 +35,7 @@ protected:
     }
 
     Stmt visit(const Realize *op) override {
-        realizes_inside_current_producer.push_back(op->name);
+        realizes_inside_current_producer.emplace_back(op->name);
         auto new_stmt = IRMutator::visit(op);
         realizes_inside_current_producer.pop_back();
         return new_stmt;
@@ -61,7 +61,7 @@ protected:
         // the compute bounds of this call should be known to cover all loaded values, so we
         // should be able to safely skip the clamp injection (see #6297).
         if (call->call_type == Call::Halide && is_inside_indexing && !is_realize_inside_current_producer(call->name)) {
-            auto bounds = func_bounds.at({call->name, call->value_index});
+            auto bounds = func_bounds.at({std::string{call->name}, call->value_index});
             if (bounds_smaller_than_type(bounds, call->type)) {
                 // TODO(#6297): check that the clamped function's allocation bounds might be wider than its compute bounds
                 auto [new_args, changed] = mutate_with_changes(call->args);
@@ -104,7 +104,7 @@ private:
 
 }  // namespace
 
-Stmt clamp_unsafe_accesses(const Stmt &s, const std::map<std::string, Function> &env, FuncValueBounds &func_bounds) {
+Stmt clamp_unsafe_accesses(const Stmt &s, const StringMap<Function> &env, FuncValueBounds &func_bounds) {
     return ClampUnsafeAccesses(env, func_bounds).mutate(s);
 }
 

@@ -4,7 +4,7 @@
 
 namespace Halide {
 
-Var::Var(const std::string &n)
+Var::Var(std::string_view n)
     : e(Internal::Variable::make(Int(32), n)) {
 }
 
@@ -16,12 +16,12 @@ Var Var::implicit(int n) {
     return Var("_" + std::to_string(n));
 }
 
-bool Var::is_implicit(const std::string &name) {
+bool Var::is_implicit(std::string_view name) {
     return Internal::starts_with(name, "_") &&
            name.find_first_not_of("0123456789", 1) == std::string::npos;
 }
 
-const std::string &Var::name() const {
+std::string_view Var::name() const {
     return e.as<Internal::Variable>()->name;
 }
 

@@ -13,7 +13,7 @@ ImageParam::ImageParam(Type t, int d)
     func = create_func();
 }
 
-ImageParam::ImageParam(Type t, int d, const std::string &n)
+ImageParam::ImageParam(Type t, int d, std::string_view n)
     : OutputImageParam(
           Parameter(t, true, d, n),
           Argument::InputBuffer,
@@ -33,7 +33,7 @@ Func ImageParam::create_func() const {
         // Discourage future Funcs from having the same name
         Internal::unique_name(name());
     }
-    Func f(param.type(), param.dimensions(), name() + "_im");
+    Func f(param.type(), param.dimensions(), std::string{name()} + "_im");
     f(args) = Internal::Call::make(param, args_expr);
     return f;
 }
@@ -89,7 +89,7 @@ void ImageParam::trace_loads() {
     func.trace_loads();
 }
 
-ImageParam &ImageParam::add_trace_tag(const std::string &trace_tag) {
+ImageParam &ImageParam::add_trace_tag(std::string_view trace_tag) {
     internal_assert(func.defined());
     func.add_trace_tag(trace_tag);
     return *this;

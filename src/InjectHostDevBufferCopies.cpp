@@ -18,9 +18,9 @@ using std::set;
 using std::string;
 using std::vector;
 
-Stmt call_extern_and_assert(const string &name, const vector<Expr> &args) {
+Stmt call_extern_and_assert(std::string_view name, const vector<Expr> &args) {
     Expr call = Call::make(Int(32), name, args, Call::Extern);
-    string call_result_name = unique_name(name + "_result");
+    string call_result_name = unique_name(concat(name, "_result"));
     Expr call_result_var = Variable::make(Int(32), call_result_name);
     return LetStmt::make(call_result_name, call,
                          AssertStmt::make(EQ::make(call_result_var, 0), call_result_var));
@@ -48,7 +48,7 @@ class FindBufferUsage : public IRVisitor {
 
     bool is_buffer_var(const Expr &e) {
         const Variable *var = e.as<Variable>();
-        return var && (var->name == buffer + ".buffer");
+        return var && (var->name == concat(buffer, ".buffer"));
     }
 
     void visit(const Call *op) override {
@@ -130,7 +130,7 @@ public:
     // bits and device allocation messed with.
     std::set<DeviceAPI> devices_touched_by_extern;
 
-    FindBufferUsage(const std::string &buf, DeviceAPI d)
+    FindBufferUsage(std::string_view buf, DeviceAPI d)
         : buffer(buf), current_device_api(d) {
     }
 };
@@ -181,7 +181,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     } state;
 
     Expr buffer_var() {
-        return Variable::make(type_of<struct halide_buffer_t *>(), buffer + ".buffer");
+        return Variable::make(type_of<struct halide_buffer_t *>(), concat(buffer, ".buffer"));
     }
 
     Stmt make_device_malloc(DeviceAPI target_device_api) {
@@ -422,7 +422,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
 public:
-    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e, MemoryType m)
+    InjectBufferCopiesForSingleBuffer(std::string_view b, bool e, MemoryType m)
         : buffer(b), is_external(e), memory_type(m) {
         if (is_external) {
             // The state of the buffer is totally unknown, which is
@@ -443,7 +443,7 @@ class FindLastUse : public IRVisitor {
 public:
     Stmt last_use;
 
-    FindLastUse(const string &b)
+    FindLastUse(std::string_view b)
         : buffer(b) {
     }
 
@@ -543,8 +543,8 @@ class InjectBufferCopies : public IRMutator {
         using IRMutator::visit;
 
         Stmt visit(const LetStmt *op) override {
-            if (op->name == buffer + ".buffer") {
-                Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buffer + ".buffer");
+            if (op->name == concat(buffer, ".buffer")) {
+                Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), op->name);
                 Stmt body = op->body;
 
                 // The allocate node is innermost
@@ -584,8 +584,8 @@ class InjectBufferCopies : public IRMutator {
         Expr device_interface;
 
     public:
-        InjectCombinedAllocation(string b, Type t, vector<Expr> e, Expr c, Expr d)
-            : buffer(std::move(b)), type(t), extents(std::move(e)),
+        InjectCombinedAllocation(std::string_view b, Type t, vector<Expr> e, Expr c, Expr d)
+            : buffer(b), type(t), extents(std::move(e)),
               condition(std::move(c)), device_interface(std::move(d)) {
         }
     };
@@ -630,7 +630,7 @@ class InjectBufferCopies : public IRMutator {
         InjectBufferCopiesForSingleBuffer injector(op->name, false, op->memory_type);
         body = injector.mutate(body);
 
-        string buffer_name = op->name + ".buffer";
+        string buffer_name = concat(op->name, ".buffer");
         Expr buffer = Variable::make(Handle(), buffer_name);
 
         // Device what type of allocation to make.
@@ -744,15 +744,15 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
 
         void include(const Parameter &p) {
             if (p.defined()) {
-                result.insert(p.name());
-                result_storage[p.name()] = p.memory_type();
+                result.emplace(p.name());
+                result_storage.emplace(p.name(), p.memory_type());
             }
         }
 
         void include(const Buffer<> &b) {
             if (b.defined()) {
-                result.insert(b.name());
-                result_storage[b.name()] = MemoryType::Auto;
+                result.emplace(b.name());
+                result_storage.emplace(b.name(), MemoryType::Auto);
             }
         }
 
@@ -783,8 +783,8 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
         }
 
     public:
-        set<string> result;
-        std::map<string, MemoryType> result_storage;
+        StringSet result;
+        StringMap<MemoryType> result_storage;
     };
 
 public:
@@ -795,7 +795,7 @@ public:
             FindInputsAndOutputs finder;
             s.accept(&finder);
             Stmt new_stmt = s;
-            for (const string &buf : finder.result) {
+            for (const std::string &buf : finder.result) {
                 new_stmt = InjectBufferCopiesForSingleBuffer(buf, true, finder.result_storage.at(buf)).mutate(new_stmt);
             }
             return new_stmt;

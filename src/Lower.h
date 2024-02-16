@@ -30,7 +30,7 @@ class IRMutator;
  * engine or API as well as buffers that are used in the passed in
  * Stmt. */
 Module lower(const std::vector<Function> &output_funcs,
-             const std::string &pipeline_name,
+             std::string_view pipeline_name,
              const Target &t,
              const std::vector<Argument> &args,
              LinkageType linkage_type,
@@ -44,7 +44,7 @@ Module lower(const std::vector<Function> &output_funcs,
  * a convenience function in tests that wish to assert some property
  * of the lowered IR. */
 Stmt lower_main_stmt(const std::vector<Function> &output_funcs,
-                     const std::string &pipeline_name,
+                     std::string_view pipeline_name,
                      const Target &t,
                      const std::vector<Stmt> &requirements = std::vector<Stmt>(),
                      bool trace_pipeline = false,

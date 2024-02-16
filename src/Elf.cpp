@@ -237,7 +237,7 @@ class StringTable {
     // TODO: We could be smarter and find substrings in the existing
     // table, not just whole strings. It would probably be fine to just
     // put every substring of each new string into the cache.
-    std::map<std::string, uint32_t> cache;
+    StringMap<uint32_t> cache;
 
 public:
     std::vector<char> table;
@@ -249,12 +249,16 @@ public:
         table.push_back(0);
     }
 
-    uint32_t get(const std::string &str) {
-        uint32_t &index = cache[str];
-        if (index == 0) {
+    uint32_t get(std::string_view str) {
+        auto it = cache.find(str);
+        uint32_t index;
+        if (it == cache.end()) {
             index = table.size();
             table.insert(table.end(), str.begin(), str.end());
             table.push_back(0);
+            cache.emplace(str, index);
+        } else {
+            index = it->second;
         }
         return index;
     }
@@ -426,17 +430,17 @@ std::unique_ptr<Object> Object::parse_object(const char *data, size_t size) {
     return parse_object_internal<Types<32>>(data, size);
 }
 
-Object::symbol_iterator Object::add_symbol(const std::string &name) {
+Object::symbol_iterator Object::add_symbol(std::string_view name) {
     syms.emplace_back(name);
     return std::prev(syms.end());
 }
 
-Object::section_iterator Object::add_section(const std::string &name, Section::Type type) {
+Object::section_iterator Object::add_section(std::string_view name, Section::Type type) {
     secs.emplace_back(name, type);
     return std::prev(secs.end());
 }
 
-Object::section_iterator Object::find_section(const std::string &name) {
+Object::section_iterator Object::find_section(std::string_view name) {
     for (section_iterator i = sections_begin(); i != sections_end(); ++i) {
         if (i->get_name() == name) {
             return i;
@@ -445,7 +449,7 @@ Object::section_iterator Object::find_section(const std::string &name) {
     return sections_end();
 }
 
-Object::symbol_iterator Object::find_symbol(const std::string &name) {
+Object::symbol_iterator Object::find_symbol(std::string_view name) {
     for (symbol_iterator i = symbols_begin(); i != symbols_end(); ++i) {
         if (i->get_name() == name) {
             return i;
@@ -454,7 +458,7 @@ Object::symbol_iterator Object::find_symbol(const std::string &name) {
     return symbols_end();
 }
 
-Object::const_symbol_iterator Object::find_symbol(const std::string &name) const {
+Object::const_symbol_iterator Object::find_symbol(std::string_view name) const {
     for (const_symbol_iterator i = symbols_begin(); i != symbols_end(); ++i) {
         if (i->get_name() == name) {
             return i;
@@ -523,7 +527,7 @@ Object::section_iterator Object::merge_text_sections() {
 
 template<typename T>
 std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, const std::vector<std::string> &dependencies,
-                                               const std::string &soname) {
+                                               std::string_view soname) {
     typedef typename T::addr_t addr_t;
 
     // The buffer we will be writing to.
@@ -1038,7 +1042,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 }
 
 std::vector<char> Object::write_shared_object(Linker *linker, const std::vector<std::string> &dependencies,
-                                              const std::string &soname) {
+                                              std::string_view soname) {
     return write_shared_object_internal<Types<32>>(*this, linker, dependencies, soname);
 }
 

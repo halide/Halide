@@ -36,33 +36,33 @@ public:
 
 private:
     const vector<Function> outputs;
-    set<string> visited_functions;
+    StringSet visited_functions;
 
     struct ParamOrBuffer {
         Parameter param;
         Buffer<> buffer;
     };
-    map<string, ParamOrBuffer> args_by_name;
+    StringMap<ParamOrBuffer> args_by_name;
 
     using IRGraphVisitor::visit;
 
-    bool is_output_name(const string &name) const {
+    bool is_output_name(std::string_view name) const {
         for (const Function &output : outputs) {
-            if (name == output.name() || starts_with(name, output.name() + ".")) {
+            if (name == output.name() || starts_with(name, output.name(), ".")) {
                 return true;
             }
         }
         return false;
     }
 
-    static bool dupe_names_error(const string &name) {
+    static bool dupe_names_error(std::string_view name) {
         user_error << "All Params and embedded Buffers must have unique names, but the name '"
                    << name << "' was seen multiple times.\n";
         return false;  // not reached
     }
 
     bool already_have(const Parameter &p) {
-        const string &name = p.name();
+        std::string_view name = p.name();
 
         // Ignore dependencies on the output buffers
         if (is_output_name(name)) {
@@ -73,9 +73,9 @@ private:
         if (it == args_by_name.end()) {
             // If the Parameter is already bound to a Buffer, include it here.
             if (p.is_buffer() && p.buffer().defined()) {
-                args_by_name[name] = {p, p.buffer()};
+                args_by_name.emplace(name, ParamOrBuffer{p, p.buffer()});
             } else {
-                args_by_name[name] = {p, Buffer<>()};
+                args_by_name.emplace(name, ParamOrBuffer{p, Buffer<>()});
             }
             return false;
         }
@@ -108,7 +108,7 @@ private:
     }
 
     bool already_have(const Buffer<> &b) {
-        const string &name = b.name();
+        std::string_view name = b.name();
 
         // Ignore dependencies on the output buffers
         if (is_output_name(name)) {
@@ -117,7 +117,7 @@ private:
 
         auto it = args_by_name.find(name);
         if (it == args_by_name.end()) {
-            args_by_name[name] = {Parameter(), b};
+            args_by_name.emplace(name, ParamOrBuffer{Parameter(), b});
             return false;
         }
 
@@ -165,7 +165,7 @@ private:
         if (visited_functions.count(func.name())) {
             return;
         }
-        visited_functions.insert(func.name());
+        visited_functions.emplace(func.name());
 
         func.accept(this);
 

@@ -34,7 +34,7 @@ bool no_overflow_int(Type t) {
  */
 class SolveExpression : public IRMutator {
 public:
-    SolveExpression(const string &v, const Scope<Expr> &es)
+    SolveExpression(std::string_view v, const Scope<Expr> &es)
         : var(v), external_scope(es) {
     }
 
@@ -70,7 +70,7 @@ public:
 
 private:
     // The variable we're solving for.
-    string var;
+    std::string_view var;
 
     // Whether or not the just-mutated expression uses the variable.
     bool uses_var = false;
@@ -819,7 +819,7 @@ private:
 
 class SolveForInterval : public IRVisitor {
     // The var we're solving for
-    const string &var;
+    std::string_view var;
 
     // Whether we're trying to make the condition true or false
     bool target = true;
@@ -949,7 +949,7 @@ class SolveForInterval : public IRVisitor {
     void visit(const Variable *op) override {
         internal_assert(op->type.is_bool());
         if (scope.contains(op->name)) {
-            pair<string, bool> key = {op->name, target};
+            pair<string, bool> key = {std::string{op->name}, target};
             auto it = solved_vars.find(key);
             if (it != solved_vars.end()) {
                 result = it->second;
@@ -1156,14 +1156,14 @@ class SolveForInterval : public IRVisitor {
 public:
     Interval result;
 
-    SolveForInterval(const string &v, bool o)
+    SolveForInterval(std::string_view v, bool o)
         : var(v), outer(o) {
     }
 };
 
 }  // Anonymous namespace
 
-SolverResult solve_expression(const Expr &e, const std::string &variable, const Scope<Expr> &scope) {
+SolverResult solve_expression(const Expr &e, std::string_view variable, const Scope<Expr> &scope) {
     SolveExpression solver(variable, scope);
     Expr new_e = solver.mutate(e);
     // The process has expanded lets. Re-collect them.
@@ -1174,7 +1174,7 @@ SolverResult solve_expression(const Expr &e, const std::string &variable, const 
     return {new_e, !solver.failed};
 }
 
-Interval solve_for_inner_interval(const Expr &c, const std::string &var) {
+Interval solve_for_inner_interval(const Expr &c, std::string_view var) {
     SolveForInterval s(var, false);
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())
@@ -1188,7 +1188,7 @@ Interval solve_for_inner_interval(const Expr &c, const std::string &var) {
     return s.result;
 }
 
-Interval solve_for_outer_interval(const Expr &c, const std::string &var) {
+Interval solve_for_outer_interval(const Expr &c, std::string_view var) {
     SolveForInterval s(var, true);
     c.accept(&s);
     internal_assert(s.result.min.defined() && s.result.max.defined())

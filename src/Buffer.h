@@ -33,20 +33,20 @@ struct all_ints_and_optional_name<First, Rest...> : meta_and<std::is_convertible
                                                              all_ints_and_optional_name<Rest...>> {};
 
 template<typename T>
-struct all_ints_and_optional_name<T> : meta_or<std::is_convertible<T, std::string>,
+struct all_ints_and_optional_name<T> : meta_or<std::is_convertible<T, std::string_view>,
                                                std::is_convertible<T, int>> {};
 
 template<>
 struct all_ints_and_optional_name<> : std::true_type {};
 
 template<typename T,
-         typename = typename std::enable_if<!std::is_convertible<T, std::string>::value>::type>
+         typename = typename std::enable_if<!std::is_convertible<T, std::string_view>::value>::type>
 std::string get_name_from_end_of_parameter_pack(T &&) {
     return "";
 }
 
-inline std::string get_name_from_end_of_parameter_pack(const std::string &n) {
-    return n;
+inline std::string get_name_from_end_of_parameter_pack(std::string_view n) {
+    return std::string{n};
 }
 
 inline std::string get_name_from_end_of_parameter_pack() {
@@ -60,7 +60,7 @@ std::string get_name_from_end_of_parameter_pack(First first, Second second, Args
     return get_name_from_end_of_parameter_pack(second, std::forward<Args>(rest)...);
 }
 
-inline void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &, const std::string &) {
+inline void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &, std::string_view) {
 }
 
 inline void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &) {
@@ -192,7 +192,7 @@ public:
 
     /** Construct a Buffer that captures and owns an rvalue Runtime::Buffer */
     template<int D2>
-    Buffer(Runtime::Buffer<T, D2> &&buf, const std::string &name = "")
+    Buffer(Runtime::Buffer<T, D2> &&buf, std::string_view name = "")
         : contents(new Internal::BufferContents) {
         contents->buf = std::move(buf);
         if (name.empty()) {
@@ -216,7 +216,7 @@ public:
     }
 
     explicit Buffer(const halide_buffer_t &buf,
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(buf), name) {
     }
 
@@ -229,31 +229,31 @@ public:
 
     explicit Buffer(Type t,
                     const std::vector<int> &sizes,
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(t, sizes), name) {
     }
 
     explicit Buffer(Type t,
                     const std::vector<int> &sizes,
                     const std::vector<int> &storage_order,
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(t, sizes, storage_order), name) {
     }
 
     explicit Buffer(const std::vector<int> &sizes,
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(sizes), name) {
     }
 
     explicit Buffer(const std::vector<int> &sizes,
                     const std::vector<int> &storage_order,
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(sizes, storage_order), name) {
     }
 
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N],
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(vals), name) {
     }
 
@@ -271,7 +271,7 @@ public:
     explicit Buffer(Type t,
                     Internal::add_const_if_T_is_const<T, void> *data,
                     const std::vector<int> &sizes,
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(t, data, sizes, name)) {
     }
 
@@ -285,14 +285,14 @@ public:
 
     explicit Buffer(T *data,
                     const std::vector<int> &sizes,
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(data, sizes), name) {
     }
 
     explicit Buffer(Type t,
                     Internal::add_const_if_T_is_const<T, void> *data,
                     const std::vector<int> &sizes,
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(t, data, sizes), name) {
     }
 
@@ -300,43 +300,43 @@ public:
                     Internal::add_const_if_T_is_const<T, void> *data,
                     int d,
                     const halide_dimension_t *shape,
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(t, data, d, shape), name) {
     }
 
     explicit Buffer(T *data,
                     int d,
                     const halide_dimension_t *shape,
-                    const std::string &name = "")
+                    std::string_view name = "")
         : Buffer(Runtime::Buffer<T, Dims>(data, d, shape), name) {
     }
 
-    static Buffer<T, Dims> make_scalar(const std::string &name = "") {
+    static Buffer<T, Dims> make_scalar(std::string_view name = "") {
         return Buffer<T, Dims>(Runtime::Buffer<T, Dims>::make_scalar(), name);
     }
 
-    static Buffer<> make_scalar(Type t, const std::string &name = "") {
+    static Buffer<> make_scalar(Type t, std::string_view name = "") {
         return Buffer<>(Runtime::Buffer<>::make_scalar(t), name);
     }
 
-    static Buffer<T, Dims> make_scalar(T *data, const std::string &name = "") {
+    static Buffer<T, Dims> make_scalar(T *data, std::string_view name = "") {
         return Buffer<T, Dims>(Runtime::Buffer<T, Dims>::make_scalar(data), name);
     }
 
-    static Buffer<T, Dims> make_interleaved(int width, int height, int channels, const std::string &name = "") {
+    static Buffer<T, Dims> make_interleaved(int width, int height, int channels, std::string_view name = "") {
         return Buffer<T, Dims>(Runtime::Buffer<T, Dims>::make_interleaved(width, height, channels), name);
     }
 
-    static Buffer<> make_interleaved(Type t, int width, int height, int channels, const std::string &name = "") {
+    static Buffer<> make_interleaved(Type t, int width, int height, int channels, std::string_view name = "") {
         return Buffer<>(Runtime::Buffer<>::make_interleaved(t, width, height, channels), name);
     }
 
-    static Buffer<T, Dims> make_interleaved(T *data, int width, int height, int channels, const std::string &name = "") {
+    static Buffer<T, Dims> make_interleaved(T *data, int width, int height, int channels, std::string_view name = "") {
         return Buffer<T, Dims>(Runtime::Buffer<T, Dims>::make_interleaved(data, width, height, channels), name);
     }
 
     static Buffer<Internal::add_const_if_T_is_const<T, void>>
-    make_interleaved(Type t, T *data, int width, int height, int channels, const std::string &name = "") {
+    make_interleaved(Type t, T *data, int width, int height, int channels, std::string_view name = "") {
         using T2 = Internal::add_const_if_T_is_const<T, void>;
         return Buffer<T2, Dims>(Runtime::Buffer<T2, Dims>::make_interleaved(t, data, width, height, channels), name);
     }
@@ -345,7 +345,7 @@ public:
     static Buffer<T, Dims> make_with_shape_of(Buffer<T2, D2> src,
                                               void *(*allocate_fn)(size_t) = nullptr,
                                               void (*deallocate_fn)(void *) = nullptr,
-                                              const std::string &name = "") {
+                                              std::string_view name = "") {
         return Buffer<T, Dims>(Runtime::Buffer<T, Dims>::make_with_shape_of(*src.get(), allocate_fn, deallocate_fn), name);
     }
 
@@ -353,18 +353,18 @@ public:
     static Buffer<T, Dims> make_with_shape_of(const Runtime::Buffer<T2, D2> &src,
                                               void *(*allocate_fn)(size_t) = nullptr,
                                               void (*deallocate_fn)(void *) = nullptr,
-                                              const std::string &name = "") {
+                                              std::string_view name = "") {
         return Buffer<T, Dims>(Runtime::Buffer<T, Dims>::make_with_shape_of(src, allocate_fn, deallocate_fn), name);
     }
     // @}
 
     /** Buffers are optionally named. */
     // @{
-    void set_name(const std::string &n) {
+    void set_name(std::string_view n) {
         contents->name = n;
     }
 
-    const std::string &name() const {
+    std::string_view name() const {
         return contents->name;
     }
     // @}
@@ -394,18 +394,18 @@ public:
     // @}
 
     // We forward numerous methods from the underlying Buffer
-#define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                             \
-    template<typename... Args>                                                                                                          \
-    auto method(Args &&...args) const -> decltype(std::declval<const Runtime::Buffer<T, Dims>>().method(std::forward<Args>(args)...)) { \
-        user_assert(defined()) << "Undefined buffer calling const method " #method "\n";                                                \
-        return get()->method(std::forward<Args>(args)...);                                                                              \
+#define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                           \
+    template<typename... Args>                                                                                                        \
+    auto method(Args &&...args) const->decltype(std::declval<const Runtime::Buffer<T, Dims>>().method(std::forward<Args>(args)...)) { \
+        user_assert(defined()) << "Undefined buffer calling const method " #method "\n";                                              \
+        return get()->method(std::forward<Args>(args)...);                                                                            \
     }
 
-#define HALIDE_BUFFER_FORWARD(method)                                                                                       \
-    template<typename... Args>                                                                                              \
-    auto method(Args &&...args) -> decltype(std::declval<Runtime::Buffer<T, Dims>>().method(std::forward<Args>(args)...)) { \
-        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                                          \
-        return get()->method(std::forward<Args>(args)...);                                                                  \
+#define HALIDE_BUFFER_FORWARD(method)                                                                                     \
+    template<typename... Args>                                                                                            \
+    auto method(Args &&...args)->decltype(std::declval<Runtime::Buffer<T, Dims>>().method(std::forward<Args>(args)...)) { \
+        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                                        \
+        return get()->method(std::forward<Args>(args)...);                                                                \
     }
 
 // This is a weird-looking but effective workaround for a deficiency in "perfect forwarding":
@@ -418,10 +418,10 @@ public:
 // and forward it as is, we can just use ... to allow an arbitrary number of commas,
 // then use __VA_ARGS__ to forward the mess as-is, and while it looks horrible, it
 // works.
-#define HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(method, ...)                                                    \
-    inline auto method(const __VA_ARGS__ &a) -> decltype(std::declval<Runtime::Buffer<T, Dims>>().method(a)) { \
-        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                             \
-        return get()->method(a);                                                                               \
+#define HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(method, ...)                                                  \
+    inline auto method(const __VA_ARGS__ &a)->decltype(std::declval<Runtime::Buffer<T, Dims>>().method(a)) { \
+        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                           \
+        return get()->method(a);                                                                             \
     }
 
     /** Does the same thing as the equivalent Halide::Runtime::Buffer method */

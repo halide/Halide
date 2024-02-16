@@ -27,7 +27,7 @@ class OutputImageParam;
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
 struct VarOrRVar {
-    VarOrRVar(const std::string &n, bool r)
+    VarOrRVar(std::string_view n, bool r)
         : var(n), rvar(n), is_rvar(r) {
     }
     VarOrRVar(const Var &v)
@@ -44,7 +44,7 @@ struct VarOrRVar {
         : var(u), is_rvar(false) {
     }
 
-    const std::string &name() const {
+    std::string_view name() const {
         if (is_rvar) {
             return rvar.name();
         } else {
@@ -78,16 +78,16 @@ class Stage {
 
     void set_dim_type(const VarOrRVar &var, Internal::ForType t);
     void set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api);
-    void split(const std::string &old, const std::string &outer, const std::string &inner,
+    void split(std::string_view old, std::string_view outer, std::string_view inner,
                const Expr &factor, bool exact, TailStrategy tail);
-    void remove(const std::string &var);
+    void remove(std::string_view var);
     Stage &purify(const VarOrRVar &old_name, const VarOrRVar &new_name);
 
     const std::vector<Internal::StorageDim> &storage_dims() const {
         return function.schedule().storage_dims();
     }
 
-    Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
+    Stage &compute_with(LoopLevel loop_level, const Internal::StringMap<LoopAlignStrategy> &align);
 
 public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
@@ -401,7 +401,7 @@ public:
 
     Stage &rename(const VarOrRVar &old_name, const VarOrRVar &new_name);
     Stage specialize(const Expr &condition);
-    void specialize_fail(const std::string &message);
+    void specialize_fail(std::string_view message);
 
     Stage &gpu_threads(const VarOrRVar &thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     Stage &gpu_threads(const VarOrRVar &thread_x, const VarOrRVar &thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -732,20 +732,24 @@ class Func {
 
 public:
     /** Declare a new undefined function with the given name */
+    // @{
+    explicit Func(const char *name);
+    explicit Func(std::string_view name);
     explicit Func(const std::string &name);
+    // @}
 
     /** Declare a new undefined function with the given name.
      * The function will be constrained to represent Exprs of required_type.
      * If required_dims is not AnyDims, the function will be constrained to exactly
      * that many dimensions. */
-    explicit Func(const Type &required_type, int required_dims, const std::string &name);
+    explicit Func(const Type &required_type, int required_dims, std::string_view name);
 
     /** Declare a new undefined function with the given name.
      * If required_types is not empty, the function will be constrained to represent
      * Tuples of the same arity and types. (If required_types is empty, there is no constraint.)
      * If required_dims is not AnyDims, the function will be constrained to exactly
      * that many dimensions. */
-    explicit Func(const std::vector<Type> &required_types, int required_dims, const std::string &name);
+    explicit Func(const std::vector<Type> &required_types, int required_dims, std::string_view name);
 
     /** Declare a new undefined function with an
      * automatically-generated unique name */
@@ -892,9 +896,9 @@ public:
      * signature, and C function name (which defaults to the same name
      * as this halide function */
     //@{
-    void compile_to_bitcode(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
+    void compile_to_bitcode(std::string_view filename, const std::vector<Argument> &, std::string_view fn_name,
                             const Target &target = get_target_from_environment());
-    void compile_to_bitcode(const std::string &filename, const std::vector<Argument> &,
+    void compile_to_bitcode(std::string_view filename, const std::vector<Argument> &,
                             const Target &target = get_target_from_environment());
     // @}
 
@@ -903,9 +907,9 @@ public:
      * signature, and C function name (which defaults to the same name
      * as this halide function */
     //@{
-    void compile_to_llvm_assembly(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
+    void compile_to_llvm_assembly(std::string_view filename, const std::vector<Argument> &, std::string_view fn_name,
                                   const Target &target = get_target_from_environment());
-    void compile_to_llvm_assembly(const std::string &filename, const std::vector<Argument> &,
+    void compile_to_llvm_assembly(std::string_view filename, const std::vector<Argument> &,
                                   const Target &target = get_target_from_environment());
     // @}
 
@@ -915,9 +919,9 @@ public:
      * as this halide function. You probably don't want to use this
      * directly; call compile_to_static_library or compile_to_file instead. */
     //@{
-    void compile_to_object(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
+    void compile_to_object(std::string_view filename, const std::vector<Argument> &, std::string_view fn_name,
                            const Target &target = get_target_from_environment());
-    void compile_to_object(const std::string &filename, const std::vector<Argument> &,
+    void compile_to_object(std::string_view filename, const std::vector<Argument> &,
                            const Target &target = get_target_from_environment());
     // @}
 
@@ -928,7 +932,7 @@ public:
      * function. You don't actually have to have defined this function
      * yet to call this. You probably don't want to use this directly;
      * call compile_to_static_library or compile_to_file instead. */
-    void compile_to_header(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name = "",
+    void compile_to_header(std::string_view filename, const std::vector<Argument> &, std::string_view fn_name = "",
                            const Target &target = get_target_from_environment());
 
     /** Statically compile this function to text assembly equivalent
@@ -937,9 +941,9 @@ public:
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
     //@{
-    void compile_to_assembly(const std::string &filename, const std::vector<Argument> &, const std::string &fn_name,
+    void compile_to_assembly(std::string_view filename, const std::vector<Argument> &, std::string_view fn_name,
                              const Target &target = get_target_from_environment());
-    void compile_to_assembly(const std::string &filename, const std::vector<Argument> &,
+    void compile_to_assembly(std::string_view filename, const std::vector<Argument> &,
                              const Target &target = get_target_from_environment());
     // @}
 
@@ -947,15 +951,15 @@ public:
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
      * will produce serial code. */
-    void compile_to_c(const std::string &filename,
+    void compile_to_c(std::string_view filename,
                       const std::vector<Argument> &,
-                      const std::string &fn_name = "",
+                      std::string_view fn_name = "",
                       const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */
-    void compile_to_lowered_stmt(const std::string &filename,
+    void compile_to_lowered_stmt(std::string_view filename,
                                  const std::vector<Argument> &args,
                                  StmtOutputFormat fmt = Text,
                                  const Target &target = get_target_from_environment());
@@ -969,16 +973,16 @@ public:
      * arguments. The name defaults to the same name as this halide
      * function.
      */
-    void compile_to_file(const std::string &filename_prefix, const std::vector<Argument> &args,
-                         const std::string &fn_name = "",
+    void compile_to_file(std::string_view filename_prefix, const std::vector<Argument> &args,
+                         std::string_view fn_name = "",
                          const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair, with the given
      * arguments. The name defaults to the same name as this halide
      * function.
      */
-    void compile_to_static_library(const std::string &filename_prefix, const std::vector<Argument> &args,
-                                   const std::string &fn_name = "",
+    void compile_to_static_library(std::string_view filename_prefix, const std::vector<Argument> &args,
+                                   std::string_view fn_name = "",
                                    const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair once for each target;
@@ -988,7 +992,7 @@ public:
      * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
      * All targets must have identical arch-os-bits.
      */
-    void compile_to_multitarget_static_library(const std::string &filename_prefix,
+    void compile_to_multitarget_static_library(std::string_view filename_prefix,
                                                const std::vector<Argument> &args,
                                                const std::vector<Target> &targets);
 
@@ -1005,14 +1009,14 @@ public:
      * Note that if `targets.size()` > 1 and `no_runtime` is not specified, the runtime
      * will be generated with the filename `${filename_prefix}_runtime.o`
      */
-    void compile_to_multitarget_object_files(const std::string &filename_prefix,
+    void compile_to_multitarget_object_files(std::string_view filename_prefix,
                                              const std::vector<Argument> &args,
                                              const std::vector<Target> &targets,
                                              const std::vector<std::string> &suffixes);
 
     /** Store an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
-    Module compile_to_module(const std::vector<Argument> &args, const std::string &fn_name = "",
+    Module compile_to_module(const std::vector<Argument> &args, std::string_view fn_name = "",
                              const Target &target = get_target_from_environment());
 
     /** Compile and generate multiple target files with single call.
@@ -1021,7 +1025,7 @@ public:
      */
     void compile_to(const std::map<OutputFileType, std::string> &output_files,
                     const std::vector<Argument> &args,
-                    const std::string &fn_name,
+                    std::string_view fn_name,
                     const Target &target = get_target_from_environment());
 
     /** Eagerly jit compile the function to machine code. This
@@ -1090,11 +1094,11 @@ public:
      * data follows the header, as a densely packed array of the given
      * size and the given type. If given the extension .tmp, this file
      * format can be natively read by the program ImageStack. */
-    void debug_to_file(const std::string &filename);
+    void debug_to_file(std::string_view filename);
 
     /** The name of this function, either given during construction,
      * or automatically generated. */
-    const std::string &name() const;
+    std::string_view name() const;
 
     /** Get the pure arguments. */
     std::vector<Var> args() const;
@@ -1149,7 +1153,7 @@ public:
      * example, use it to wrap a call to an extern library such as
      * fftw. */
     // @{
-    void define_extern(const std::string &function_name,
+    void define_extern(std::string_view function_name,
                        const std::vector<ExternFuncArgument> &params, Type t,
                        int dimensionality,
                        NameMangling mangling = NameMangling::Default,
@@ -1159,7 +1163,7 @@ public:
                       device_api);
     }
 
-    void define_extern(const std::string &function_name,
+    void define_extern(std::string_view function_name,
                        const std::vector<ExternFuncArgument> &params,
                        const std::vector<Type> &types, int dimensionality,
                        NameMangling mangling) {
@@ -1167,7 +1171,7 @@ public:
                       Internal::make_argument_list(dimensionality), mangling);
     }
 
-    void define_extern(const std::string &function_name,
+    void define_extern(std::string_view function_name,
                        const std::vector<ExternFuncArgument> &params,
                        const std::vector<Type> &types, int dimensionality,
                        NameMangling mangling = NameMangling::Default,
@@ -1177,7 +1181,7 @@ public:
                       device_api);
     }
 
-    void define_extern(const std::string &function_name,
+    void define_extern(std::string_view function_name,
                        const std::vector<ExternFuncArgument> &params, Type t,
                        const std::vector<Var> &arguments,
                        NameMangling mangling = NameMangling::Default,
@@ -1186,7 +1190,7 @@ public:
                       mangling, device_api);
     }
 
-    void define_extern(const std::string &function_name,
+    void define_extern(std::string_view function_name,
                        const std::vector<ExternFuncArgument> &params,
                        const std::vector<Type> &types,
                        const std::vector<Var> &arguments,
@@ -1216,7 +1220,7 @@ public:
 
     /** Get the name of the extern function called for an extern
      * definition. */
-    const std::string &extern_function_name() const;
+    std::string_view extern_function_name() const;
 
     /** The dimensionality (number of arguments) of this function.
      * If the Func isn't yet defined, but was specified with required dimensionality,
@@ -1869,7 +1873,7 @@ public:
      * for a given Func; you cannot create new specializations for the Func
      * afterwards (though you can retrieve handles to previous specializations).
      */
-    void specialize_fail(const std::string &message);
+    void specialize_fail(std::string_view message);
 
     /** Tell Halide that the following dimensions correspond to GPU
      * thread indices. This is useful if you compute a producer
@@ -2557,7 +2561,7 @@ public:
      * inlined won't have their tags emitted.) Ignored entirely if
      * tracing is not enabled for the Func (or globally).
      */
-    Func &add_trace_tag(const std::string &trace_tag);
+    Func &add_trace_tag(std::string_view trace_tag);
 
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide

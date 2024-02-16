@@ -87,7 +87,7 @@ Expr combine_strings(const std::vector<Expr> &args) {
         const auto *cur_str = strings[i].as<StringImm>();
         const auto *next_str = strings[i + 1].as<StringImm>();
         if (cur_str && next_str) {
-            strings[i] = StringImm::make(cur_str->value + next_str->value);
+            strings[i] = StringImm::make(concat(cur_str->value, next_str->value));
             strings.erase(strings.begin() + i + 1);
             continue;
         }

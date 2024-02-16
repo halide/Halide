@@ -52,10 +52,10 @@ struct Container {
     }
 };
 
-bool var_name_match(const string &v1, const string &v2) {
+bool var_name_match(std::string_view v1, std::string_view v2) {
     return ((v1 == v2) ||
-            Internal::ends_with(v1, "." + v2) ||
-            Internal::ends_with(v2, "." + v1));
+            Internal::ends_with(v1, ".", v2) ||
+            Internal::ends_with(v2, ".", v1));
 }
 
 class ContainsImpureCall : public IRVisitor {
@@ -82,7 +82,7 @@ bool contains_impure_call(const Expr &expr) {
 // A mutator that performs a substitute operation only on either the values or the
 // arguments of Provide nodes.
 class SubstituteIn : public IRGraphMutator {
-    const string &name;
+    std::string_view name;
     const Expr &value;
     bool calls;
     bool provides;
@@ -115,12 +115,12 @@ class SubstituteIn : public IRGraphMutator {
     }
 
 public:
-    SubstituteIn(const string &name, const Expr &value, bool calls, bool provides)
+    SubstituteIn(std::string_view name, const Expr &value, bool calls, bool provides)
         : name(name), value(value), calls(calls), provides(provides) {
     }
 };
 
-Stmt substitute_in(const string &name, const Expr &value, bool calls, bool provides, const Stmt &s) {
+Stmt substitute_in(std::string_view name, const Expr &value, bool calls, bool provides, const Stmt &s) {
     return SubstituteIn(name, value, calls, provides).mutate(s);
 }
 
@@ -171,7 +171,7 @@ Stmt add_predicates(const Expr &cond, const Function &func, ApplySplitResult::Ty
 // Build a loop nest about a provide node using a schedule
 Stmt build_loop_nest(
     const Stmt &body,
-    const string &prefix,
+    std::string_view prefix,
     int start_fuse,
     const Function &func,
     const Definition &def,
@@ -189,7 +189,7 @@ Stmt build_loop_nest(
     // multiple of some Expr. This can happen due to a bound, or
     // align_bounds directive, or if a dim comes from the inside
     // of a split.
-    map<string, Expr> dim_extent_alignment;
+    StringMap<Expr> dim_extent_alignment;
 
     // First hunt through the bounds for them.
     for (const Bound &i : func_s.bounds()) {
@@ -208,7 +208,7 @@ Stmt build_loop_nest(
     vector<Split> splits = stage_s.splits();
 
     // Find all the predicated inner variables. We can't split these.
-    set<string> predicated_vars;
+    StringSet predicated_vars;
     for (const Split &split : splits) {
         if (split.tail == TailStrategy::PredicateLoads || split.tail == TailStrategy::PredicateStores) {
             predicated_vars.insert(split.inner);
@@ -262,7 +262,7 @@ Stmt build_loop_nest(
     // Put the desired loop nest into the containers vector.
     for (int i = (int)stage_s.dims().size() - 1; i >= 0; i--) {
         const Dim &dim = stage_s.dims()[i];
-        nest.emplace_back(Container::For, i, prefix + dim.var, Expr());
+        nest.emplace_back(Container::For, i, concat(prefix, dim.var), Expr());
     }
 
     vector<Container> pred_container;
@@ -271,7 +271,7 @@ Stmt build_loop_nest(
         const auto *let = stmt.as<LetStmt>();
         const auto *if_else = stmt.as<IfThenElse>();
         if (let) {
-            nest.emplace_back(Container::Let, 0, let->name, let->value);
+            nest.emplace_back(Container::Let, 0, std::string{let->name}, let->value);
             stmt = let->body;
         } else if (if_else && !if_else->else_case.defined()) {
             pred_container.emplace_back(Container::If, 0, "", if_else->condition);
@@ -288,7 +288,7 @@ Stmt build_loop_nest(
     // otherwise, this may mess up the bounds_touched computation.
     int n_predicates_inner = 0;
     for (int i = start_fuse; (i >= 0) && (i < (int)stage_s.dims().size() - 1); ++i) {
-        string dim_var = prefix + stage_s.dims()[i].var;
+        string dim_var = concat(prefix, stage_s.dims()[i].var);
         Expr var = Variable::make(Int(32), dim_var);
         Expr max = Variable::make(Int(32), dim_var + ".loop_max");
         Expr min = Variable::make(Int(32), dim_var + ".loop_min");
@@ -421,7 +421,7 @@ Stmt build_loop_nest(
 
     // Define the bounds on the outermost dummy dimension.
     {
-        string o = prefix + Var::outermost().name();
+        string o = concat(prefix, Var::outermost().name());
         stmt = LetStmt::make(o + ".loop_min", 0, stmt);
         stmt = LetStmt::make(o + ".loop_max", 0, stmt);
         stmt = LetStmt::make(o + ".loop_extent", 1, stmt);
@@ -429,7 +429,7 @@ Stmt build_loop_nest(
 
     // Define the loop mins and extents in terms of the mins and maxs produced by bounds inference
     for (const std::string &i : dims) {
-        string var = prefix + i;
+        string var = concat(prefix, i);
         Expr max = Variable::make(Int(32), var + ".max");
         Expr min = Variable::make(Int(32), var + ".min");  // Inject instance name here? (compute instance names during lowering)
         stmt = LetStmt::make(var + ".loop_extent",
@@ -442,7 +442,7 @@ Stmt build_loop_nest(
     // Define the loop mins and extents for the reduction domain (if there is any)
     // in terms of the mins and maxs produced by bounds inference
     for (const ReductionVariable &rv : stage_s.rvars()) {
-        string p = prefix + rv.var;
+        string p = concat(prefix, rv.var);
         Expr rmin = Variable::make(Int(32), p + ".min");
         Expr rmax = Variable::make(Int(32), p + ".max");
         stmt = LetStmt::make(p + ".loop_min", rmin, stmt);
@@ -454,8 +454,8 @@ Stmt build_loop_nest(
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest(const map<string, Function> &env,
-                             const string &prefix,
+Stmt build_provide_loop_nest(const StringMap<Function> &env,
+                             std::string_view prefix,
                              const Function &func,
                              const Definition &def,
                              int start_fuse,
@@ -491,7 +491,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         if (any_unordered_parallel) {
             // If required, we will allocate a mutex buffer called func.name() + ".mutex"
             // The buffer is added in the AddAtomicMutex pass.
-            body = Atomic::make(func.name(), func.name() + ".mutex", body);
+            body = Atomic::make(func.name(), concat(func.name(), ".mutex"), body);
         } else {
             // No mutex is required if there is no parallelism, and it
             // wouldn't work if all parallelism is synchronous
@@ -537,14 +537,14 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_extern_produce(const map<string, Function> &env, Function f, const Target &target) {
+Stmt build_extern_produce(const StringMap<Function> &env, Function f, const Target &target) {
     // Call the external function
 
     // Build an argument list
     vector<Expr> extern_call_args;
     const vector<ExternFuncArgument> &args = f.extern_arguments();
 
-    const string &extern_name = f.extern_function_name();
+    std::string_view extern_name = f.extern_function_name();
 
     // We need to generate crops of the input and output buffers if the
     // extern stage has some non-extern loops, aside from the outermost
@@ -574,11 +574,12 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             Function input(arg.func);
             if (!needs_crops && input.schedule().store_level() == input.schedule().compute_level()) {
                 for (int k = 0; k < input.outputs(); k++) {
-                    string buf_name = input.name();
+                    string buf_name;
                     if (input.outputs() > 1) {
-                        buf_name += "." + std::to_string(k);
+                        buf_name = concat(input.name(), ".", std::to_string(k), ".buffer");
+                    } else {
+                        buf_name = concat(input.name(), ".buffer");
                     }
-                    buf_name += ".buffer";
                     Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                     extern_call_args.push_back(buffer);
                     buffers_to_annotate.emplace_back(buffer, input.dimensions());
@@ -591,14 +592,15 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
                 // stages, so if the fold does indeed occur, we'll
                 // assert later that the crop doesn't cross over a
                 // fold.
-                string stage_name = input.name() + ".s" + std::to_string(input.updates().size()) + ".";
+                string stage_name = concat(input.name(), ".s", std::to_string(input.updates().size()), ".");
                 const vector<string> &input_args = input.args();
                 for (int k = 0; k < input.outputs(); k++) {
-                    string src_buf_name = input.name();
+                    string src_buf_name;
                     if (input.outputs() > 1) {
-                        src_buf_name += "." + std::to_string(k);
+                        src_buf_name = concat(input.name(), ".", std::to_string(k), ".buffer");
+                    } else {
+                        src_buf_name = concat(input.name(), ".buffer");
                     }
-                    src_buf_name += ".buffer";
                     Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
 
                     Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
@@ -614,9 +616,8 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
                     vector<Expr> mins, extents;
                     internal_assert(input.dimensions() == (int)input_args.size());
                     for (const string &arg : input_args) {
-                        string var = stage_name + arg;
-                        Expr min = Variable::make(Int(32), var + ".min");
-                        Expr max = Variable::make(Int(32), var + ".max");
+                        Expr min = Variable::make(Int(32), concat(stage_name, arg, ".min"));
+                        Expr max = Variable::make(Int(32), concat(stage_name, arg, ".max"));
                         mins.push_back(min);
                         extents.push_back(max - min + 1);
                     }
@@ -626,7 +627,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
                     cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop,
                                                args, Call::Extern);
 
-                    string buf_name = input.name() + "." + std::to_string(k) + ".tmp_buffer";
+                    string buf_name = concat(input.name(), ".", std::to_string(k), ".tmp_buffer");
                     extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                     buffers_to_annotate.emplace_back(extern_call_args.back(), input.dimensions());
                     buffers_contents_to_annotate.push_back(cropped_input);
@@ -638,13 +639,13 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             Buffer<> b = arg.buffer;
             Parameter p(b.type(), true, b.dimensions(), b.name());
             p.set_buffer(b);
-            Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), b.name() + ".buffer", p);
+            Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), concat(b.name(), ".buffer"), p);
             extern_call_args.push_back(buf);
             buffers_to_annotate.emplace_back(buf, b.dimensions());
             buffers_contents_to_annotate.push_back(buf);
         } else if (arg.is_image_param()) {
             Parameter p = arg.image_param;
-            Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), p.name() + ".buffer", p);
+            Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), concat(p.name(), ".buffer"), p);
             extern_call_args.push_back(buf);
             // Do not annotate ImageParams: both the halide_buffer_t itself,
             // and the contents it points to, should be filled by the caller;
@@ -663,11 +664,12 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
     // in the symbol table.
     if (!needs_crops && f.schedule().store_level() == f.schedule().compute_level()) {
         for (int j = 0; j < f.outputs(); j++) {
-            string buf_name = f.name();
+            string buf_name;
             if (f.outputs() > 1) {
-                buf_name += "." + std::to_string(j);
+                buf_name = concat(f.name(), ".", std::to_string(j), ".buffer");
+            } else {
+                buf_name = concat(f.name(), ".buffer");
             }
-            buf_name += ".buffer";
             Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
             extern_call_args.push_back(buffer);
             // Since this is a temporary, internal-only buffer, make sure it's marked.
@@ -678,14 +680,15 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
     } else {
         // Store level doesn't match compute level. Make an output
         // buffer just for this subregion.
-        string stage_name = f.name() + ".s0.";
+        string stage_name = concat(f.name(), ".s0.");
         const vector<string> &f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
-            string src_buf_name = f.name();
+            string src_buf_name;
             if (f.outputs() > 1) {
-                src_buf_name += "." + std::to_string(j);
+                src_buf_name = concat(f.name(), ".", std::to_string(j), ".buffer");
+            } else {
+                src_buf_name = concat(f.name(), ".buffer");
             }
-            src_buf_name += ".buffer";
             Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
 
             Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
@@ -701,9 +704,8 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             vector<Expr> mins, extents;
             internal_assert(f.dimensions() == (int)f_args.size());
             for (const string &arg : f_args) {
-                string var = stage_name + arg;
-                Expr min = Variable::make(Int(32), var + ".min");
-                Expr max = Variable::make(Int(32), var + ".max");
+                Expr min = Variable::make(Int(32), concat(stage_name, arg, ".min"));
+                Expr max = Variable::make(Int(32), concat(stage_name, arg, ".max"));
                 mins.push_back(min);
                 extents.push_back(max - min + 1);
             }
@@ -713,7 +715,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop, args,
                                          Call::Extern);
 
-            string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
+            string buf_name = concat(f.name(), ".", std::to_string(j), ".tmp_buffer");
             extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
             // Since this is a temporary, internal-only buffer, make sure it's marked.
             // (but not the contents! callee is expected to fill that in.)
@@ -784,7 +786,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
     string result_name = unique_name('t');
     Expr result = Variable::make(Int(32), result_name);
     Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
-                            {extern_name, result}, Call::Extern);
+                            {Expr(extern_name), result}, Call::Extern);
     Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 
     if (!cropped_buffers.empty()) {
@@ -847,7 +849,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
 
     Definition f_def_no_pred = f.definition().get_copy();
     f_def_no_pred.predicate() = const_true();
-    return build_loop_nest(check, f.name() + ".s0.", -1, f, f_def_no_pred, false);
+    return build_loop_nest(check, concat(f.name(), ".s0."), -1, f, f_def_no_pred, false);
 }
 
 // A schedule may include explicit bounds on some dimension. This
@@ -857,7 +859,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
     const FuncSchedule &s = func.schedule();
     for (size_t stage = 0; stage <= func.updates().size(); stage++) {
         for (auto b : s.bounds()) {
-            string prefix = func.name() + ".s" + std::to_string(stage) + "." + b.var;
+            string prefix = concat(func.name(), ".s", std::to_string(stage), ".", b.var);
             string min_name = prefix + ".min_unbounded";
             string max_name = prefix + ".max_unbounded";
             Expr min_var = Variable::make(Int(32), min_name);
@@ -875,7 +877,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
 
             Expr check = (min_val <= min_var) && (max_val >= max_var);
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
-                                        {b.var, func.name(), min_val, max_val, min_var, max_var},
+                                        {Expr(b.var), Expr(func.name()), min_val, max_val, min_var, max_var},
                                         Call::Extern);
             body = Block::make(AssertStmt::make(check, error_msg), body);
         }
@@ -885,7 +887,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
 }
 
 class IsUsedInStmt : public IRVisitor {
-    const string &func;
+    std::string_view func;
 
     using IRVisitor::visit;
 
@@ -899,7 +901,7 @@ class IsUsedInStmt : public IRVisitor {
     // A reference to the function's buffers counts as a use
     void visit(const Variable *op) override {
         if (op->type.is_handle() &&
-            starts_with(op->name, func + ".") &&
+            starts_with(op->name, func, ".") &&
             ends_with(op->name, ".buffer")) {
             result = true;
         }
@@ -920,7 +922,7 @@ bool function_is_used_in_stmt(const Function &f, const Stmt &s) {
 }
 
 class IsRealizedInStmt : public IRVisitor {
-    const string &func;
+    std::string_view func;
 
     using IRVisitor::visit;
 
@@ -1000,14 +1002,14 @@ Stmt inject_stmt(Stmt root, Stmt injected, const LoopLevel &level) {
 class CollectBounds : public IRVisitor {
 public:
     template<typename T>
-    static map<string, Expr> collect_bounds(const T &node) {
+    static StringMap<Expr> collect_bounds(const T &node) {
         CollectBounds bounds;
         node.accept(&bounds);
         return bounds.bounds;
     }
 
 private:
-    map<string, Expr> bounds;
+    StringMap<Expr> bounds;
 
     using IRVisitor::visit;
 
@@ -1023,8 +1025,8 @@ private:
 
 class SubstituteFusedBounds : public IRMutator {
 public:
-    const map<string, Expr> &replacements;
-    explicit SubstituteFusedBounds(const map<string, Expr> &r)
+    const StringMap<Expr> &replacements;
+    explicit SubstituteFusedBounds(const StringMap<Expr> &r)
         : replacements(r) {
     }
 
@@ -1056,7 +1058,7 @@ private:
 
             size_t last_dot = op->name.rfind('.');
             internal_assert(last_dot != string::npos);
-            string new_var = op->name.substr(0, last_dot) + ".fused." + op->name.substr(last_dot + 1);
+            string new_var = concat(op->name.substr(0, last_dot), ".fused.", op->name.substr(last_dot + 1));
 
             ForType for_type = op->for_type;
             DeviceAPI device_api = op->device_api;
@@ -1070,14 +1072,14 @@ private:
                 device_api = DeviceAPI::None;
             }
 
-            Stmt stmt = For::make(new_var, Variable::make(Int(32), new_var + ".loop_min"),
-                                  Variable::make(Int(32), new_var + ".loop_extent"),
+            Stmt stmt = For::make(new_var, Variable::make(Int(32), concat(new_var, ".loop_min")),
+                                  Variable::make(Int(32), concat(new_var, ".loop_extent")),
                                   for_type, op->partition_policy, device_api, body);
 
             // Add let stmts defining the bound of the renamed for-loop.
-            stmt = LetStmt::make(new_var + ".loop_min", min_val, stmt);
-            stmt = LetStmt::make(new_var + ".loop_max", simplify(min_val + extent_val - 1), stmt);
-            stmt = LetStmt::make(new_var + ".loop_extent", extent_val, stmt);
+            stmt = LetStmt::make(concat(new_var, ".loop_min"), min_val, stmt);
+            stmt = LetStmt::make(concat(new_var, ".loop_max"), simplify(min_val + extent_val - 1), stmt);
+            stmt = LetStmt::make(concat(new_var, ".loop_extent"), extent_val, stmt);
             // Replace any reference to the old loop name with the new one.
             stmt = substitute(op->name, Variable::make(Int(32), new_var), stmt);
             return stmt;
@@ -1090,7 +1092,7 @@ private:
 // The bounds of every loop exist in 'replacements' should be replaced. The
 // loop is also renamed by adding '.fused' in the original name before the
 // variable name.
-Stmt substitute_fused_bounds(Stmt s, const map<string, Expr> &replacements) {
+Stmt substitute_fused_bounds(Stmt s, const StringMap<Expr> &replacements) {
     if (!s.defined() || replacements.empty()) {
         return s;
     } else {
@@ -1100,7 +1102,7 @@ Stmt substitute_fused_bounds(Stmt s, const map<string, Expr> &replacements) {
 
 // Shift the iteration domain of a loop nest by some factor.
 class ShiftLoopNest : public IRMutator {
-    const map<string, Expr> &shifts;  // Add the shift factor to the old var
+    const StringMap<Expr> &shifts;  // Add the shift factor to the old var
 
     using IRMutator::visit;
 
@@ -1119,12 +1121,12 @@ class ShiftLoopNest : public IRMutator {
     }
 
 public:
-    explicit ShiftLoopNest(const map<string, Expr> &s)
+    explicit ShiftLoopNest(const StringMap<Expr> &s)
         : shifts(s) {
     }
 
     template<typename T>
-    static T apply_shift(const map<string, Expr> &shifts, const T &node) {
+    static T apply_shift(const StringMap<Expr> &shifts, const T &node) {
         if (shifts.empty()) {
             return node;
         }
@@ -1134,11 +1136,11 @@ public:
 };
 
 struct PlaceholderPrefetch {
-    const string &name;
+    std::string_view name;
     const vector<Type> &types;
     const PrefetchDirective &prefetch;
 
-    PlaceholderPrefetch(const string &name, const vector<Type> &types, const PrefetchDirective &prefetch)
+    PlaceholderPrefetch(std::string_view name, const vector<Type> &types, const PrefetchDirective &prefetch)
         : name(name),
           types(types),
           prefetch(prefetch) {
@@ -1150,7 +1152,7 @@ public:
     InjectFunctionRealization(const vector<Function> &funcs,
                               const vector<bool> &is_output_list,
                               const Target &target,
-                              const map<string, Function> &env)
+                              const StringMap<Function> &env)
         : funcs(funcs),
           is_output_list(is_output_list),
           target(target),
@@ -1170,8 +1172,8 @@ public:
 
 protected:
     bool _found_compute_level{};
-    std::set<string> _found_store_levels_for_funcs;
-    std::set<string> _found_hoist_storage_levels_for_funcs;
+    StringSet _found_store_levels_for_funcs;
+    StringSet _found_hoist_storage_levels_for_funcs;
 
     using IRMutator::visit;
 
@@ -1231,8 +1233,8 @@ protected:
 
             Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
             _found_compute_level = true;
-            _found_store_levels_for_funcs.insert(funcs[0].name());
-            _found_hoist_storage_levels_for_funcs.insert(funcs[0].name());
+            _found_store_levels_for_funcs.emplace(funcs[0].name());
+            _found_hoist_storage_levels_for_funcs.emplace(funcs[0].name());
             return stmt;
         }
 
@@ -1249,7 +1251,7 @@ protected:
                 if (funcs[i].schedule().store_level().match(for_loop->name)) {
                     debug(3) << "Found store level for " << funcs[i].name() << " at " << for_loop->name << "\n";
                     body = build_realize_function_from_group(body, i);
-                    _found_store_levels_for_funcs.insert(funcs[i].name());
+                    _found_store_levels_for_funcs.emplace(funcs[i].name());
                 }
             }
             for (size_t i = 0; i < funcs.size(); i++) {
@@ -1257,9 +1259,8 @@ protected:
                     debug(3) << "Found hoist storage level for " << funcs[i].name() << " at " << for_loop->name << "\n";
                     if (funcs[i].schedule().hoist_storage_level() != funcs[i].schedule().store_level()) {
                         body = HoistedStorage::make(funcs[i].name(), body);
-                    } else {
                     }
-                    _found_hoist_storage_levels_for_funcs.insert(funcs[i].name());
+                    _found_hoist_storage_levels_for_funcs.emplace(funcs[i].name());
                 }
             }
         }
@@ -1300,7 +1301,7 @@ protected:
 
     // If we're an inline update or extern, we may need to inject a realization around
     // the Provide node (or a Provide node surrounded by an Atomic).
-    Stmt inline_to_provide(const std::string &provide_name, Stmt provide_op) {
+    Stmt inline_to_provide(std::string_view provide_name, Stmt provide_op) {
         // none of the functions in a fused group can be inlined, so this will only
         // happen when we're lowering a single func.
         if (provide_name != funcs[0].name() &&
@@ -1311,8 +1312,8 @@ protected:
             // Prefix all calls to func in op
             Stmt stmt = build_realize(build_pipeline_group(provide_op), funcs[0], is_output_list[0]);
             _found_compute_level = true;
-            _found_store_levels_for_funcs.insert(funcs[0].name());
-            _found_hoist_storage_levels_for_funcs.insert(funcs[0].name());
+            _found_store_levels_for_funcs.emplace(funcs[0].name());
+            _found_hoist_storage_levels_for_funcs.emplace(funcs[0].name());
             return stmt;
         }
 
@@ -1331,7 +1332,7 @@ private:
     const vector<Function> &funcs;
     const vector<bool> &is_output_list;
     const Target &target;
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
     const LoopLevel &compute_level;
 
     Stmt build_realize(Stmt s, const Function &func, bool is_output) {
@@ -1341,7 +1342,7 @@ private:
             vector<Expr> args;
             args.emplace_back(Variable::make(Handle(), func.name()));
             for (int i = 0; i < func.dimensions(); i++) {
-                string prefix = func.name() + ".s0." + func.args()[i];
+                string prefix = concat(func.name(), ".s0.", func.args()[i]);
                 string min_name = prefix + ".min";
                 string max_name = prefix + ".max";
 
@@ -1354,12 +1355,12 @@ private:
 
         if (!is_output) {
             Region bounds;
-            const string &name = func.name();
+            std::string_view name = func.name();
             const vector<string> &func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
                 const string &arg = func_args[i];
-                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
-                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
+                Expr min = Variable::make(Int(32), concat(name, ".", arg, ".min_realized"));
+                Expr extent = Variable::make(Int(32), concat(name, ".", arg, ".extent_realized"));
                 bounds.emplace_back(min, extent);
             }
 
@@ -1384,15 +1385,15 @@ private:
 
     // Compute the shift factor required to align iteration of
     // a function stage with its fused parent loop nest.
-    void compute_shift_factor(const Function &f, const string &prefix, const Definition &def,
-                              map<string, Expr> &bounds, map<string, Expr> &shifts) {
+    void compute_shift_factor(const Function &f, std::string_view prefix, const Definition &def,
+                              StringMap<Expr> &bounds, StringMap<Expr> &shifts) {
         if (!def.defined()) {
             return;
         }
 
         const vector<Dim> &dims = def.schedule().dims();  // From inner to outer
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
-        const map<string, LoopAlignStrategy> &align_strategy = def.schedule().fuse_level().align;
+        const StringMap<LoopAlignStrategy> &align_strategy = def.schedule().fuse_level().align;
 
         if (fuse_level.is_inlined() || fuse_level.is_root()) {
             return;
@@ -1433,34 +1434,34 @@ private:
                 continue;
             }
 
-            string parent_prefix = fuse_level.func() + ".s" + std::to_string(fuse_level.stage_index()) + ".";
+            string parent_prefix = concat(fuse_level.func(), ".s", std::to_string(fuse_level.stage_index()), ".");
             int parent_var_index = (i - start_fuse) + (int)parent_dims.size() - 1 - fused_vars_num;
             internal_assert(parent_var_index >= 0);
             string parent_var = parent_dims[parent_var_index].var;
 
-            auto it_min = bounds.find(prefix + var + ".loop_min");
-            auto it_max = bounds.find(prefix + var + ".loop_max");
+            auto it_min = bounds.find(concat(prefix, var, ".loop_min"));
+            auto it_max = bounds.find(concat(prefix, var, ".loop_max"));
             internal_assert((it_min != bounds.end()) && (it_max != bounds.end()));
 
             if (iter->second == LoopAlignStrategy::AlignStart) {
-                auto parent_min = bounds.find(parent_prefix + parent_var + ".loop_min");
+                auto parent_min = bounds.find(concat(parent_prefix, parent_var, ".loop_min"));
                 internal_assert(parent_min != bounds.end());
                 shift_val = parent_min->second - it_min->second;
             } else {
-                auto parent_max = bounds.find(parent_prefix + parent_var + ".loop_max");
+                auto parent_max = bounds.find(concat(parent_prefix, parent_var, ".loop_max"));
                 internal_assert(parent_max != bounds.end());
                 shift_val = parent_max->second - it_max->second;
             }
 
             internal_assert(shift_val.defined());
-            shifts.emplace(prefix + var, simplify(-shift_val));
+            shifts.emplace(concat(prefix, var), simplify(-shift_val));
             it_min->second = simplify(shift_val + it_min->second);
             it_max->second = simplify(shift_val + it_max->second);
         }
     }
 
-    Stmt build_produce_definition(const Function &f, const string &prefix, const Definition &def, bool is_update,
-                                  map<string, Expr> &replacements, vector<pair<string, Expr>> &add_lets) {
+    Stmt build_produce_definition(const Function &f, std::string_view prefix, const Definition &def, bool is_update,
+                                  StringMap<Expr> &replacements, vector<pair<string, Expr>> &add_lets) {
         const vector<Dim> &dims = def.schedule().dims();  // From inner to outer
         const LoopLevel &fuse_level = def.schedule().fuse_level().level;
 
@@ -1489,16 +1490,16 @@ private:
             start_fuse = std::min(start_fuse, (size_t)(iter - dims.begin()));
             // Should ignore the __outermost dummy dimension.
             for (size_t i = (size_t)(iter - dims.begin()); i < dims.size() - 1; ++i) {
-                string var_orig = pair.func_1 + ".s" + std::to_string(pair.stage_1) + "." + dims[i].var;
+                string var_orig = concat(pair.func_1, ".s", std::to_string(pair.stage_1), ".", dims[i].var);
                 Expr val = Variable::make(Int(32), var_orig);
 
                 int dim2_idx = (int)(dims_2.size() - (dims.size() - i));
                 internal_assert(dim2_idx < (int)dims_2.size());
-                string var = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + dims_2[dim2_idx].var;
+                string var = concat(pair.func_2, ".s", std::to_string(pair.stage_2), ".", dims_2[dim2_idx].var);
 
-                replacements.emplace(var + ".loop_extent", make_const(Int(32), 1));
-                replacements.emplace(var + ".loop_min", val);
-                replacements.emplace(var + ".loop_max", val);
+                replacements.emplace(concat(var, ".loop_extent"), make_const(Int(32), 1));
+                replacements.emplace(concat(var, ".loop_min"), val);
+                replacements.emplace(concat(var, ".loop_max"), val);
             }
         }
 
@@ -1514,15 +1515,15 @@ private:
         return produce;
     }
 
-    void collect_all_dependence_helper(const string &prefix, const Definition &def, const FusedPair &p,
-                                       vector<FusedPair> &dependence, set<string> &visited) {
-        visited.insert(prefix);
+    void collect_all_dependence_helper(std::string_view prefix, const Definition &def, const FusedPair &p,
+                                       vector<FusedPair> &dependence, StringSet &visited) {
+        visited.emplace(prefix);
         dependence.push_back(p);
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
             const auto &iter = env.find(pair.func_2);
             internal_assert(iter != env.end());
             const Function &f = iter->second;
-            string prefix_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
+            string prefix_2 = concat(pair.func_2, ".s", std::to_string(pair.stage_2), ".", pair.var_name);
             if (visited.find(prefix_2) == visited.end()) {
                 const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
                 collect_all_dependence_helper(prefix_2, def_2, pair, dependence, visited);
@@ -1532,14 +1533,14 @@ private:
 
     // Collect all fused pairs that directly/indirectly related to 'def'
     vector<FusedPair> collect_all_dependence(const Definition &def) {
-        set<string> visited;
+        StringSet visited;
         vector<FusedPair> dependence;
 
         for (const FusedPair &pair : def.schedule().fused_pairs()) {
             const auto &iter = env.find(pair.func_2);
             internal_assert(iter != env.end());
             const Function &f = iter->second;
-            string prefix = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + pair.var_name;
+            string prefix = concat(pair.func_2, ".s", std::to_string(pair.stage_2), ".", pair.var_name);
             if (visited.find(prefix) == visited.end()) {
                 const Definition &def_2 = (pair.stage_2 == 0) ? f.definition() : f.update((int)(pair.stage_2 - 1));
                 collect_all_dependence_helper(prefix, def_2, pair, dependence, visited);
@@ -1550,8 +1551,8 @@ private:
 
     // Replace the bounds of the parent fused loop (i.e. the first one to be
     // realized in the group) with union of the bounds of the fused group.
-    Stmt replace_parent_bound_with_union_bound(const Function &f, Stmt produce, const map<string, Expr> &bounds) {
-        string prefix = f.name() + ".s0";
+    Stmt replace_parent_bound_with_union_bound(const Function &f, Stmt produce, const StringMap<Expr> &bounds) {
+        string prefix = concat(f.name(), ".s0");
         const Definition &def = f.definition();
 
         if (!def.defined()) {
@@ -1560,7 +1561,7 @@ private:
 
         const vector<Dim> &dims = def.schedule().dims();  // From inner to outer
 
-        map<string, Expr> replacements;
+        StringMap<Expr> replacements;
 
         vector<FusedPair> dependence = collect_all_dependence(def);
 
@@ -1583,8 +1584,8 @@ private:
                 int dim2_idx = (int)(dims_2.size() - (dims.size() - i));
                 internal_assert(dim2_idx < (int)dims_2.size());
 
-                string var_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) +
-                               "." + dims_2[dim2_idx].var;
+                string var_2 = concat(pair.func_2, ".s", std::to_string(pair.stage_2),
+                                      ".", dims_2[dim2_idx].var);
                 internal_assert(bounds.count(var_2 + ".loop_min"));
                 internal_assert(bounds.count(var_2 + ".loop_max"));
                 internal_assert(bounds.count(var_2 + ".loop_extent"));
@@ -1592,7 +1593,7 @@ private:
                 Expr max_2 = bounds.find(var_2 + ".loop_max")->second;
                 Expr extent_2 = bounds.find(var_2 + ".loop_extent")->second;
 
-                string var_1 = prefix + "." + dims[i].var;
+                string var_1 = concat(prefix, ".", dims[i].var);
                 internal_assert(bounds.count(var_1 + ".loop_min"));
                 internal_assert(bounds.count(var_1 + ".loop_max"));
                 internal_assert(bounds.count(var_1 + ".loop_extent"));
@@ -1641,7 +1642,7 @@ private:
         // Order of the stages for building produce definitions.
         vector<pair<Function, int>> stage_order;
         // Inverse map from function name to the index.
-        map<string, int> func_name_to_index;
+        StringMap<int> func_name_to_index;
         // Contains a number of dependencies which need to go first for a given stage of the function.
         vector<vector<int>> stage_dependencies(funcs.size());
 
@@ -1659,7 +1660,7 @@ private:
         for (size_t i = 0; i < funcs.size(); i++) {
             stage_dependencies[i].resize(1 + funcs[i].updates().size(), 0);
             adj_list[i].resize(1 + funcs[i].updates().size());
-            func_name_to_index[funcs[i].name()] = i;
+            func_name_to_index.emplace(funcs[i].name(), i);
         }
 
         // Figure out dependencies between the stages.
@@ -1746,7 +1747,7 @@ private:
 
         // Build the loops.
         Stmt producer;
-        map<string, Expr> replacements;
+        StringMap<Expr> replacements;
         vector<pair<string, Expr>> add_lets;
 
         for (const auto &func_stage : stage_order) {
@@ -1758,7 +1759,7 @@ private:
                 continue;
             }
 
-            string def_prefix = f.name() + ".s" + std::to_string(func_stage.second) + ".";
+            string def_prefix = concat(f.name(), ".s", std::to_string(func_stage.second), ".");
             const auto &def = (func_stage.second == 0) ? f.definition() : f.updates()[func_stage.second - 1];
 
             const Stmt &produceDef = build_produce_definition(f, def_prefix, def, func_stage.second > 0,
@@ -1780,12 +1781,12 @@ private:
         // Compute the shift factors based on the alignment strategies
         // starting from the the parent (root loop) to the children. The root
         // loop bounds should remain unchanged.
-        map<string, Expr> shifts;
+        StringMap<Expr> shifts;
         for (auto i = funcs.size(); i-- > 0;) {
             const auto &func = funcs[i];
-            compute_shift_factor(func, func.name() + ".s0.", func.definition(), bounds, shifts);
+            compute_shift_factor(func, concat(func.name(), ".s0."), func.definition(), bounds, shifts);
             for (size_t j = 0; j < func.updates().size(); ++j) {
-                string prefix = func.name() + ".s" + std::to_string(j + 1) + ".";
+                string prefix = concat(func.name(), ".s", std::to_string(j + 1), ".");
                 compute_shift_factor(func, prefix, func.updates()[j], bounds, shifts);
             }
         }
@@ -1832,7 +1833,7 @@ public:
     vector<Site> sites_allowed;
     bool found = false;
 
-    ComputeLegalSchedules(Function f, const map<string, Function> &env)
+    ComputeLegalSchedules(Function f, const StringMap<Function> &env)
         : func(std::move(f)), env(env) {
     }
 
@@ -1842,14 +1843,14 @@ private:
     vector<Site> sites;
     Function func;
 
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
 
     void visit(const For *f) override {
         size_t first_dot = f->name.find('.');
         size_t last_dot = f->name.rfind('.');
         internal_assert(first_dot != string::npos && last_dot != string::npos);
-        string func = f->name.substr(0, first_dot);
-        string var = f->name.substr(last_dot + 1);
+        std::string_view func = f->name.substr(0, first_dot);
+        std::string_view var = f->name.substr(last_dot + 1);
         LoopLevel loop_level;
         if (func.empty()) {
             internal_assert(!var.empty());
@@ -1903,7 +1904,7 @@ private:
 
     void visit(const Variable *v) override {
         if (v->type.is_handle() &&
-            starts_with(v->name, func.name() + ".") &&
+            starts_with(v->name, func.name(), ".") &&
             ends_with(v->name, ".buffer")) {
             register_use();
         }
@@ -1920,7 +1921,7 @@ string schedule_to_source(const Function &f, const LoopLevel &store_at, const Lo
             if (store_at.is_root()) {
                 ss << ".store_root()";
             } else {
-                string store_var_name = store_at.var().name();
+                std::string_view store_var_name = store_at.var().name();
                 if (store_var_name == Var::outermost().name()) {
                     store_var_name = "Var::outermost()";
                 }
@@ -1930,7 +1931,7 @@ string schedule_to_source(const Function &f, const LoopLevel &store_at, const Lo
         if (compute_at.is_root()) {
             ss << ".compute_root()";
         } else {
-            string compute_var_name = compute_at.var().name();
+            std::string_view compute_var_name = compute_at.var().name();
             if (compute_var_name == Var::outermost().name()) {
                 compute_var_name = "Var::outermost()";
             }
@@ -1943,7 +1944,7 @@ string schedule_to_source(const Function &f, const LoopLevel &store_at, const Lo
 
 class StmtUsesFunc : public IRVisitor {
     using IRVisitor::visit;
-    const string &func;
+    std::string_view func;
     void visit(const Call *op) override {
         if (op->name == func) {
             result = true;
@@ -1952,7 +1953,7 @@ class StmtUsesFunc : public IRVisitor {
     }
     void visit(const Variable *op) override {
         if (op->type.is_handle() &&
-            starts_with(op->name, func + ".") &&
+            starts_with(op->name, func, ".") &&
             ends_with(op->name, ".buffer")) {
             result = true;
         }
@@ -1961,7 +1962,7 @@ class StmtUsesFunc : public IRVisitor {
 
 public:
     bool result = false;
-    explicit StmtUsesFunc(const string &f)
+    explicit StmtUsesFunc(std::string_view f)
         : func(f) {
     }
 };
@@ -1970,7 +1971,7 @@ class PrintUsesOfFunc : public IRVisitor {
     using IRVisitor::visit;
 
     int indent = 1;
-    string func, caller;
+    std::string_view func, caller;
     bool last_print_was_ellipsis = false;
     std::ostream &stream;
 
@@ -2006,7 +2007,7 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
-            string old_caller = caller;
+            std::string_view old_caller = caller;
             caller = op->name;
             op->body.accept(this);
             caller = old_caller;
@@ -2026,7 +2027,7 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const Variable *op) override {
         if (op->type.is_handle() &&
-            starts_with(op->name, func + ".") &&
+            starts_with(op->name, func, ".") &&
             ends_with(op->name, ".buffer")) {
             stream << get_indent() << caller << " uses " << func << "\n";
             last_print_was_ellipsis = false;
@@ -2036,8 +2037,8 @@ class PrintUsesOfFunc : public IRVisitor {
     }
 
 public:
-    PrintUsesOfFunc(string f, std::ostream &s)
-        : func(std::move(f)), stream(s) {
+    PrintUsesOfFunc(std::string_view f, std::ostream &s)
+        : func(f), stream(s) {
     }
 };
 
@@ -2045,7 +2046,7 @@ public:
 // whether or not a realization of the Func should be injected. Unused
 // intermediate Funcs that somehow made it into the Func DAG can be
 // discarded.
-bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_output, const map<string, Function> &env) {
+bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_output, const StringMap<Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
@@ -2130,7 +2131,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     int allow_race_conditions_count = 0;
     for (const Definition &def : definitions) {
         const StageSchedule &s = def.schedule();
-        set<string> parallel_vars;
+        StringSet parallel_vars;
         for (const Dim &d : s.dims()) {
             // We don't care about GPU parallelism here
             if (d.for_type == ForType::Parallel) {
@@ -2312,10 +2313,10 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     return true;
 }
 
-void validate_fused_group_schedule_helper(const string &fn,
+void validate_fused_group_schedule_helper(std::string_view fn,
                                           size_t stage_index,
                                           const Definition &def_1,
-                                          const map<string, Function> &env) {
+                                          const StringMap<Function> &env) {
     internal_assert(def_1.defined());
     for (const auto &p : def_1.schedule().fused_pairs()) {
         internal_assert((fn == p.func_1) && (stage_index == p.stage_1));
@@ -2414,7 +2415,7 @@ void validate_fused_group_schedule_helper(const string &fn,
     }
 }
 
-void validate_fused_groups_schedule(const vector<vector<string>> &fused_groups, const map<string, Function> &env) {
+void validate_fused_groups_schedule(const vector<vector<string>> &fused_groups, const StringMap<Function> &env) {
     for (const vector<string> &group : fused_groups) {
         for (const auto &fn : group) {
             const auto &iter = env.find(fn);
@@ -2475,7 +2476,8 @@ bool group_should_be_inlined(const vector<Function> &funcs) {
 
 }  // namespace
 
-std::ostream &operator<<(std::ostream &out, const std::vector<Function> &v) {
+std::ostream &
+operator<<(std::ostream &out, const std::vector<Function> &v) {
     out << "{ ";
     for (size_t i = 0; i < v.size(); ++i) {
         out << v[i].name();
@@ -2489,7 +2491,7 @@ std::ostream &operator<<(std::ostream &out, const std::vector<Function> &v) {
 
 Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<vector<string>> &fused_groups,
-                        const map<string, Function> &env,
+                        const StringMap<Function> &env,
                         const Target &target,
                         bool &any_memoized) {
     string root_var = LoopLevel::root().lock().to_string();

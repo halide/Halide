@@ -15,7 +15,7 @@ class UnifyDuplicateLets : public IRMutator {
     using IRMutator::visit;
 
     map<Expr, string, IRDeepCompare> scope;
-    map<string, string> rewrites;
+    StringMap<string> rewrites;
     string producing;
 
 public:
@@ -36,7 +36,7 @@ public:
 
 protected:
     Expr visit(const Variable *op) override {
-        map<string, string>::iterator iter = rewrites.find(op->name);
+        StringMap<string>::iterator iter = rewrites.find(op->name);
         if (iter != rewrites.end()) {
             return Variable::make(op->type, iter->second);
         } else {
@@ -84,7 +84,7 @@ protected:
                 should_pop = true;
             } else {
                 value = Variable::make(value.type(), iter->second);
-                rewrites[op->name] = iter->second;
+                rewrites.emplace(op->name, iter->second);
                 should_erase = true;
             }
         }

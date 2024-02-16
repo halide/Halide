@@ -64,7 +64,7 @@ protected:
      * we enter a new function. */
     Scope<Allocation> allocations;
 
-    std::string get_allocation_name(const std::string &n) override;
+    std::string get_allocation_name(std::string_view n) override;
 
 private:
     /** Stack allocations that were freed, but haven't gone out of
@@ -80,7 +80,7 @@ private:
      * list of its extents and its size. Fires a runtime assert
      * (halide_error) if the size overflows 2^31 -1, the maximum
      * positive number an int32_t can hold. */
-    llvm::Value *codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, const Expr &condition);
+    llvm::Value *codegen_allocation_size(std::string_view name, Type type, const std::vector<Expr> &extents, const Expr &condition);
 
     /** Allocates some memory on either the stack or the heap, and
      * returns an Allocation object describing it. For heap
@@ -95,13 +95,13 @@ private:
      *
      * When the allocation can be freed call 'free_allocation', and
      * when it goes out of scope call 'destroy_allocation'. */
-    Allocation create_allocation(const std::string &name, Type type, MemoryType memory_type,
+    Allocation create_allocation(std::string_view name, Type type, MemoryType memory_type,
                                  const std::vector<Expr> &extents, const Expr &condition,
-                                 const Expr &new_expr, std::string free_function, int padding);
+                                 const Expr &new_expr, std::string_view free_function, int padding);
 
     /** Free an allocation previously allocated with
      * create_allocation */
-    void free_allocation(const std::string &name);
+    void free_allocation(std::string_view name);
 };
 
 }  // namespace Internal

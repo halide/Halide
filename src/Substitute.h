@@ -19,16 +19,16 @@ namespace Internal {
  * statements with the same name as the first argument, moving a piece
  * of syntax around can change its meaning, because it can cross lets
  * that redefine variable names that it includes references to. */
-Expr substitute(const std::string &name, const Expr &replacement, const Expr &expr);
+Expr substitute(std::string_view name, const Expr &replacement, const Expr &expr);
 
 /** Substitute variables with the given name with the replacement
  * expression within stmt. */
-Stmt substitute(const std::string &name, const Expr &replacement, const Stmt &stmt);
+Stmt substitute(std::string_view name, const Expr &replacement, const Stmt &stmt);
 
 /** Substitute variables with names in the map. */
 // @{
-Expr substitute(const std::map<std::string, Expr> &replacements, const Expr &expr);
-Stmt substitute(const std::map<std::string, Expr> &replacements, const Stmt &stmt);
+Expr substitute(const StringMap<Expr> &replacements, const Expr &expr);
+Stmt substitute(const StringMap<Expr> &replacements, const Stmt &stmt);
 // @}
 
 /** Substitute expressions for other expressions. */
@@ -40,8 +40,8 @@ Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt);
 /** Substitutions where the IR may be a general graph (and not just a
  * DAG). */
 // @{
-Expr graph_substitute(const std::string &name, const Expr &replacement, const Expr &expr);
-Stmt graph_substitute(const std::string &name, const Expr &replacement, const Stmt &stmt);
+Expr graph_substitute(std::string_view name, const Expr &replacement, const Expr &expr);
+Stmt graph_substitute(std::string_view name, const Expr &replacement, const Stmt &stmt);
 Expr graph_substitute(const Expr &find, const Expr &replacement, const Expr &expr);
 Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stmt);
 // @}

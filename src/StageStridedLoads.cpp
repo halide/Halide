@@ -106,7 +106,7 @@ protected:
                     if (allocation_scope.contains(op->name)) {
                         a = allocation_scope.get(op->name);
                     }
-                    found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
+                    found_loads[Key{std::string{op->name}, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
                 }
             }
         }

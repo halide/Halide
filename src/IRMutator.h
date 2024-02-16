@@ -39,8 +39,14 @@ public:
     // a flag that is true iff at least one item in the list changed.
     std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &);
 
+    std::pair<std::vector<Expr>, bool> mutate_with_changes(const ExprVector &);
+
     // Like mutate_with_changes, but discard the changes flag.
     std::vector<Expr> mutate(const std::vector<Expr> &exprs) {
+        return mutate_with_changes(exprs).first;
+    }
+
+    std::vector<Expr> mutate(const ExprVector &exprs) {
         return mutate_with_changes(exprs).first;
     }
 

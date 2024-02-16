@@ -30,11 +30,13 @@ using FuncKey = Derivative::FuncKey;
 namespace Internal {
 namespace {
 
-bool is_float_extern(const string &op_name,
-                     const string &func_name) {
-    return op_name == (func_name + "_f16") ||
-           op_name == (func_name + "_f32") ||
-           op_name == (func_name + "_f64");
+bool is_float_extern(std::string_view op_name,
+                     std::string_view func_name) {
+    return (op_name.size() == func_name.size() + 4 &&
+            starts_with(op_name, func_name) &&
+            (ends_with(op_name, "_f16") ||
+             ends_with(op_name, "_f32") ||
+             ends_with(op_name, "_f64")));
 };
 
 /** Compute derivatives through reverse accumulation
@@ -148,7 +150,7 @@ private:
 
     void propagate_halide_function_call(
         Expr adjoint,
-        const std::string &name,             // called function name
+        std::string_view name,               // called function name
         const FunctionPtr &func_ptr,         // pointer to halide function, is null if this is a call to buffer or param
         const std::vector<Expr> &call_args,  // call arguments
         int value_index,                     // which element in the tuple
@@ -160,10 +162,10 @@ private:
     // For each function and each update, we store the accumulated adjoints func
     map<FuncKey, Func> adjoint_funcs;
     // Let variables and their mapping
-    map<string, Expr> let_var_mapping;
+    StringMap<Expr> let_var_mapping;
     vector<string> let_variables;
     // Bounds of functions
-    map<string, Box> func_bounds;
+    StringMap<Box> func_bounds;
     // Current function that scatters its adjoints to its dependencies
     Func current_func;
     // Current update of the function
@@ -186,7 +188,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     const Func &adjoint,
     const Region &output_bounds) {
     // Topologically sort the functions
-    map<string, Function> env = find_transitive_calls(output.function());
+    StringMap<Function> env = find_transitive_calls(output.function());
     vector<string> order =
         realization_order({output.function()}, env).first;
     vector<Func> funcs;
@@ -340,9 +342,9 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 if (expr.get()->node_type == IRNodeType::Let) {
                     const Let *op = expr.as<Let>();
                     // Assume Let variables are unique
-                    internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
-                    let_var_mapping[op->name] = op->value;
-                    let_variables.push_back(op->name);
+                    internal_assert(let_var_mapping.find(std::string{op->name}) == let_var_mapping.end());  // FIXME
+                    let_var_mapping.emplace(op->name, op->value);
+                    let_variables.emplace_back(op->name);
                 }
             }
 
@@ -506,7 +508,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     for (int func_id = 0; func_id < (int)funcs.size(); func_id++) {
         const Func &func = funcs[func_id];
         for (int update_id = -1; update_id < func.num_update_definitions(); update_id++) {
-            Func adjoint_func(func.name() + "_" + std::to_string(update_id + 1) + "_d_def__");
+            Func adjoint_func(concat(func.name(), "_", std::to_string(update_id + 1), "_d_def__"));
             bool is_final_output = func_id == (int)funcs.size() - 1 &&
                                    update_id == func.num_update_definitions() - 1;
             vector<Var> args = func.args();
@@ -536,9 +538,9 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         }
     }
     // Also create stubs for buffers referenced by the functions
-    map<string, BufferInfo> called_buffers_or_param;
+    StringMap<BufferInfo> called_buffers_or_param;
     for (auto &func : funcs) {
-        map<string, BufferInfo> buffers = find_buffer_param_calls(func);
+        StringMap<BufferInfo> buffers = find_buffer_param_calls(func);
         called_buffers_or_param.insert(buffers.begin(), buffers.end());
     }
     for (const auto &it : called_buffers_or_param) {
@@ -593,7 +595,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 vector<Expr> update_args = func.update_args(update_id);
                 // Replace implicit variables
                 for (auto &arg : update_args) {
-                    set<string> implicit_variables =
+                    StringSet implicit_variables =
                         find_implicit_variables(arg);
                     for (const auto &var : implicit_variables) {
                         arg = substitute(var, prev_args[Var::implicit_index(var)], arg);
@@ -666,8 +668,8 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                     const Let *op = expr.as<Let>();
                     // Assume Let variables are unique
                     internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
-                    let_var_mapping[op->name] = op->value;
-                    let_variables.push_back(op->name);
+                    let_var_mapping.emplace(op->name, op->value);
+                    let_variables.emplace_back(op->name);
                 }
             }
 
@@ -1205,7 +1207,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
 }
 
 void ReverseAccumulationVisitor::propagate_halide_function_call(
-    Expr adjoint, const std::string &name, const FunctionPtr &func_ptr,
+    Expr adjoint, std::string_view name, const FunctionPtr &func_ptr,
     const std::vector<Expr> &call_args, int value_index, const Type &type) {
     if (!type.is_float()) {
         // If the function call does not return continuous output,
@@ -1306,13 +1308,13 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 
     // Replace implicit variables
     for (auto &arg : lhs) {
-        set<string> implicit_variables = find_implicit_variables(arg);
+        StringSet implicit_variables = find_implicit_variables(arg);
         for (const auto &var : implicit_variables) {
             arg = substitute(var, current_args[Var::implicit_index(var)], arg);
         }
     }
     {
-        set<string> implicit_variables =
+        StringSet implicit_variables =
             find_implicit_variables(adjoint);
         for (const auto &var : implicit_variables) {
             adjoint = substitute(
@@ -1376,8 +1378,8 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     // Loop over the left hand side of the update, construct equations
     // and invert them.
     vector<bool> canonicalized(lhs.size(), false);
-    set<string> canonicalized_vars;
-    map<string, Var> lhs_substitute_map;
+    StringSet canonicalized_vars;
+    StringMap<Var> lhs_substitute_map;
     for (int arg_id = 0; arg_id < (int)lhs.size(); arg_id++) {
         // Gather all pure variables at call_args[arg_id],
         // substitute them with new_args
@@ -1389,7 +1391,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
         }
 
         int variable_id = variable_ids[0];
-        const string &variable = current_args[variable_id].name();
+        std::string_view variable = current_args[variable_id].name();
         auto [solved, result_rhs] =
             solve_inverse(new_args[arg_id] == lhs[arg_id],
                           new_args[arg_id].name(),
@@ -1421,8 +1423,8 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
         // Record that we successfully invert, for those we fail
         // we need to perform general scattering.
         canonicalized[arg_id] = true;
-        canonicalized_vars.insert(variable);
-        lhs_substitute_map[variable] = new_args[arg_id];
+        canonicalized_vars.emplace(variable);
+        lhs_substitute_map.emplace(variable, new_args[arg_id]);
     }
 
     // Consider the following case:
@@ -1660,18 +1662,18 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     // We can only have one RDom for each update.
     // Therefore we have to merge RDoms on both lhs and rhs
     // To make use of better locality we preserve partial order
-    map<string, ReductionVariableInfo> rvar_maps =
+    StringMap<ReductionVariableInfo> rvar_maps =
         gather_rvariables(adjoint);
     for (const auto &lhs_arg : lhs) {
-        map<string, ReductionVariableInfo> maps =
+        StringMap<ReductionVariableInfo> maps =
             gather_rvariables(lhs_arg);
         rvar_maps.insert(maps.begin(), maps.end());
     }
     // Original set of reduction variables
-    map<string, ReductionVariableInfo> org_rvar_maps =
+    StringMap<ReductionVariableInfo> org_rvar_maps =
         gather_rvariables(adjoint_before_canonicalize);
     for (const auto &lhs_arg : lhs_before_canonicalize) {
-        map<string, ReductionVariableInfo> maps =
+        StringMap<ReductionVariableInfo> maps =
             gather_rvariables(lhs_arg);
         org_rvar_maps.insert(maps.begin(), maps.end());
     }
@@ -1949,7 +1951,7 @@ Func Derivative::operator()(const Param<> &param) const {
     return it->second;
 }
 
-Func Derivative::operator()(const std::string &name) const {
+Func Derivative::operator()(std::string_view name) const {
     auto it = adjoints.find(FuncKey{name, -1});
     if (it == adjoints.end()) {
         Internal::debug(1) << "Could not find name: " << name << "\n";

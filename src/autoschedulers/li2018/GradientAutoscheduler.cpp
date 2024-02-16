@@ -14,8 +14,8 @@ struct GradientAutoschedulerParams {
     int parallelism = 16;
 };
 
-std::map<std::string, Box> inference_bounds(const std::vector<Function> &functions,
-                                            const std::vector<Box> &output_bounds) {
+StringMap<Box> inference_bounds(const std::vector<Function> &functions,
+                                const std::vector<Box> &output_bounds) {
     std::vector<Func> funcs;
     funcs.reserve(functions.size());
     for (const auto &f : functions) {
@@ -827,9 +827,9 @@ void generate_schedule(const std::vector<Function> &outputs,
                        AutoSchedulerResults *auto_scheduler_results) {
     // The first few steps are the same as src/AutoSchedule.cpp
     // Make an environment map which is used throughout the auto scheduling process.
-    std::map<std::string, Function> env;
+    StringMap<Function> env;
     for (const auto &func : outputs) {
-        std::map<std::string, Function> local_env =
+        StringMap<Function> local_env =
             find_transitive_calls(func);
         env.insert(local_env.begin(), local_env.end());
     }
@@ -849,7 +849,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         // Recompute env map since some functions are inlined.
         env.clear();
         for (const Function &f : outputs) {
-            std::map<std::string, Function> more_funcs = find_transitive_calls(f);
+            StringMap<Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
     }
@@ -860,7 +860,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         // Recompute env map since some functions are inlined.
         env.clear();
         for (const Function &f : outputs) {
-            std::map<std::string, Function> more_funcs = find_transitive_calls(f);
+            StringMap<Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
         order = realization_order(outputs, env).first;
@@ -894,7 +894,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         output_bounds_expr.emplace_back(b);
     }
 
-    std::map<std::string, Box> func_bounds = inference_bounds(outputs, output_bounds_expr);
+    StringMap<Box> func_bounds = inference_bounds(outputs, output_bounds_expr);
     for (const auto &it : func_bounds) {
         const Box &bounds = it.second;
         for (int d = 0; d < (int)bounds.size(); d++) {
@@ -903,9 +903,9 @@ void generate_schedule(const std::vector<Function> &outputs,
         }
     }
 
-    std::set<std::string> output_set;
+    StringSet output_set;
     for (const auto &output : outputs) {
-        output_set.insert(output.name());
+        output_set.emplace(output.name());
     }
 
     std::ostringstream schedule_source;

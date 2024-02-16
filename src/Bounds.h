@@ -112,58 +112,58 @@ bool box_contains(const Box &a, const Box &b);
  * pass. If it encounters an assert(false) in one if branch, assumes the
  * opposite if branch runs unconditionally. */
 // @{
-std::map<std::string, Box> boxes_required(const Expr &e,
-                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
-std::map<std::string, Box> boxes_required(Stmt s,
-                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
+StringMap<Box> boxes_required(const Expr &e,
+                                                       const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                                                       const FuncValueBounds &func_bounds = empty_func_value_bounds());
+StringMap<Box> boxes_required(Stmt s,
+                                                       const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                                                       const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
 
 /** Compute rectangular domains large enough to cover all the 'Provides's to
  * each function that occurs within a given statement or expression. Handles
  * asserts in the same way as boxes_required. */
 // @{
-std::map<std::string, Box> boxes_provided(const Expr &e,
-                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
-std::map<std::string, Box> boxes_provided(Stmt s,
-                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
+StringMap<Box> boxes_provided(const Expr &e,
+                                                       const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                                                       const FuncValueBounds &func_bounds = empty_func_value_bounds());
+StringMap<Box> boxes_provided(Stmt s,
+                                                       const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                                                       const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
 
 /** Compute rectangular domains large enough to cover all the 'Call's and
  * 'Provides's to each function that occurs within a given statement or
  * expression. Handles asserts in the same way as boxes_required. */
 // @{
-std::map<std::string, Box> boxes_touched(const Expr &e,
-                                         const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                         const FuncValueBounds &func_bounds = empty_func_value_bounds());
-std::map<std::string, Box> boxes_touched(Stmt s,
-                                         const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                         const FuncValueBounds &func_bounds = empty_func_value_bounds());
+StringMap<Box> boxes_touched(const Expr &e,
+                                                      const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                                                      const FuncValueBounds &func_bounds = empty_func_value_bounds());
+StringMap<Box> boxes_touched(Stmt s,
+                                                      const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                                                      const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
 
 /** Variants of the above that are only concerned with a single function. */
 // @{
-Box box_required(const Expr &e, const std::string &fn,
+Box box_required(const Expr &e, std::string_view fn,
                  const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                  const FuncValueBounds &func_bounds = empty_func_value_bounds());
-Box box_required(Stmt s, const std::string &fn,
-                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                 const FuncValueBounds &func_bounds = empty_func_value_bounds());
-
-Box box_provided(const Expr &e, const std::string &fn,
-                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                 const FuncValueBounds &func_bounds = empty_func_value_bounds());
-Box box_provided(Stmt s, const std::string &fn,
+Box box_required(Stmt s, std::string_view fn,
                  const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                  const FuncValueBounds &func_bounds = empty_func_value_bounds());
 
-Box box_touched(const Expr &e, const std::string &fn,
+Box box_provided(const Expr &e, std::string_view fn,
+                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                 const FuncValueBounds &func_bounds = empty_func_value_bounds());
+Box box_provided(Stmt s, std::string_view fn,
+                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                 const FuncValueBounds &func_bounds = empty_func_value_bounds());
+
+Box box_touched(const Expr &e, std::string_view fn,
                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                 const FuncValueBounds &func_bounds = empty_func_value_bounds());
-Box box_touched(Stmt s, const std::string &fn,
+Box box_touched(Stmt s, std::string_view fn,
                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                 const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
@@ -171,7 +171,7 @@ Box box_touched(Stmt s, const std::string &fn,
 /** Compute the maximum and minimum possible value for each function
  * in an environment. */
 FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
-                                              const std::map<std::string, Function> &env);
+                                              const StringMap<Function> &env);
 
 /* Find an upper bound of bounds.max - bounds.min. */
 Expr span_of_bounds(const Interval &bounds);

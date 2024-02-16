@@ -22,7 +22,7 @@ struct CodeGen_GPU_Dev {
      * with different kernels, which will all be accumulated into a single
      * source module shared by a given Halide pipeline. */
     virtual void add_kernel(Stmt stmt,
-                            const std::string &name,
+                            std::string_view name,
                             const std::vector<DeviceArgument> &args) = 0;
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
@@ -45,7 +45,7 @@ struct CodeGen_GPU_Dev {
     /** Returns the specified name transformed by the variable naming rules
      * for the GPU language backend. Used to determine the name of a parameter
      * during host codegen. */
-    virtual std::string print_gpu_name(const std::string &name) = 0;
+    virtual std::string print_gpu_name(std::string_view name) = 0;
 
     /** Allows the GPU device specific code to request halide_type_t
      * values to be passed to the kernel_run routine rather than just
@@ -55,9 +55,9 @@ struct CodeGen_GPU_Dev {
         return false;
     }
 
-    static bool is_gpu_var(const std::string &name);
-    static bool is_gpu_block_var(const std::string &name);
-    static bool is_gpu_thread_var(const std::string &name);
+    static bool is_gpu_var(std::string_view name);
+    static bool is_gpu_block_var(std::string_view name);
+    static bool is_gpu_thread_var(std::string_view name);
 
     /** Checks if expr is block uniform, i.e. does not depend on a thread
      * var. */
@@ -67,7 +67,7 @@ struct CodeGen_GPU_Dev {
      * written to and performs well for block uniform accesses. A buffer is a
      * candidate for constant storage if it is never written to, and loads are
      * uniform within the workgroup. */
-    static bool is_buffer_constant(const Stmt &kernel, const std::string &buffer);
+    static bool is_buffer_constant(const Stmt &kernel, std::string_view buffer);
 
     /** Modifies predicated loads and stores to be non-predicated, since most
      * GPU backends do not support predication. */

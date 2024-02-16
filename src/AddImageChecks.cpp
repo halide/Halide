@@ -29,7 +29,7 @@ public:
         bool used_on_host{false};
     };
 
-    map<string, Result> buffers;
+    StringMap<Result> buffers;
     bool in_device_loop = false;
 
     using IRGraphVisitor::visit;
@@ -49,17 +49,29 @@ public:
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->image.defined()) {
-            Result &r = buffers[op->name];
-            r.image = op->image;
-            r.type = op->type.element_of();
-            r.dimensions = (int)op->args.size();
-            r.used_on_host = r.used_on_host || (!in_device_loop);
+            auto it = buffers.find(op->name);
+            if (it == buffers.end()) {
+                Result r;
+                r.image = op->image;
+                r.type = op->type.element_of();
+                r.dimensions = (int)op->args.size();
+                r.used_on_host = !in_device_loop;
+                buffers.emplace(op->name, std::move(r));
+            } else {
+                it->second.used_on_host |= !in_device_loop;
+            }
         } else if (op->param.defined()) {
-            Result &r = buffers[op->name];
-            r.param = op->param;
-            r.type = op->type.element_of();
-            r.dimensions = (int)op->args.size();
-            r.used_on_host = r.used_on_host || (!in_device_loop);
+            auto it = buffers.find(op->name);
+            if (it == buffers.end()) {
+                Result r;
+                r.param = op->param;
+                r.type = op->type.element_of();
+                r.dimensions = (int)op->args.size();
+                r.used_on_host = !in_device_loop;
+                buffers.emplace(op->name, std::move(r));
+            } else {
+                it->second.used_on_host |= !in_device_loop;
+            }
         }
     }
 
@@ -72,7 +84,7 @@ public:
             }
         } else {
             for (size_t i = 0; i < op->values.size(); i++) {
-                string name = op->name + "." + std::to_string(i);
+                string name = concat(op->name, ".", std::to_string(i));
                 auto it = buffers.find(name);
                 if (it != buffers.end() && !in_device_loop) {
                     it->second.used_on_host = true;
@@ -90,7 +102,7 @@ public:
             r.type = op->param.type();
             r.dimensions = op->param.dimensions();
             r.used_on_host = false;
-            buffers[op->param.name()] = r;
+            buffers.emplace(op->param.name(), std::move(r));
         } else if (op->reduction_domain.defined()) {
             // The bounds of reduction domains are not yet defined,
             // and they may be the only reference to some parameters.
@@ -101,14 +113,14 @@ public:
 
 class TrimStmtToPartsThatAccessBuffers : public IRMutator {
     bool touches_buffer = false;
-    const map<string, FindBuffers::Result> &buffers;
+    const StringMap<FindBuffers::Result> &buffers;
 
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         touches_buffer |=
             (buffers.count(op->name) > 0) ||
-            (buffers.count(op->name + "." + std::to_string(op->value_index)));
+            (buffers.count(concat(op->name, ".", std::to_string(op->value_index))));
         // Output Tuple params are in the buffers map under their qualified
         // tuple name, not the Func name.
         return IRMutator::visit(op);
@@ -119,7 +131,7 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
         } else {
             // It's a Tuple. Just check if the first Tuple component corresponds
             // to an output buffer. If it does, they all do.
-            touches_buffer |= (buffers.find(op->name + ".0") != buffers.end());
+            touches_buffer |= (buffers.find(concat(op->name, ".0")) != buffers.end());
         }
         return IRMutator::visit(op);
     }
@@ -149,7 +161,7 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
     }
 
 public:
-    TrimStmtToPartsThatAccessBuffers(const map<string, FindBuffers::Result> &bufs)
+    TrimStmtToPartsThatAccessBuffers(const StringMap<FindBuffers::Result> &bufs)
         : buffers(bufs) {
     }
 };
@@ -158,7 +170,7 @@ Stmt add_image_checks_inner(Stmt s,
                             const vector<Function> &outputs,
                             const Target &t,
                             const vector<string> &order,
-                            const map<string, Function> &env,
+                            const StringMap<Function> &env,
                             const FuncValueBounds &fb,
                             bool will_inject_host_copies) {
 
@@ -166,7 +178,7 @@ Stmt add_image_checks_inner(Stmt s,
 
     // First hunt for all the referenced buffers
     FindBuffers finder;
-    map<string, FindBuffers::Result> &bufs = finder.buffers;
+    StringMap<FindBuffers::Result> &bufs = finder.buffers;
 
     // Add the output buffer(s).
     for (const Function &f : outputs) {
@@ -176,9 +188,9 @@ Stmt add_image_checks_inner(Stmt s,
             output_buffer.param = f.output_buffers()[i];
             output_buffer.dimensions = f.dimensions();
             if (f.values().size() > 1) {
-                bufs[f.name() + '.' + std::to_string(i)] = output_buffer;
+                bufs.emplace(concat(f.name(), ".", std::to_string(i)), std::move(output_buffer));
             } else {
-                bufs[f.name()] = output_buffer;
+                bufs.emplace(f.name(), std::move(output_buffer));
             }
         }
     }
@@ -189,7 +201,7 @@ Stmt add_image_checks_inner(Stmt s,
 
     Scope<Interval> empty_scope;
     Stmt sub_stmt = TrimStmtToPartsThatAccessBuffers(bufs).mutate(s);
-    map<string, Box> boxes = boxes_touched(sub_stmt, empty_scope, fb);
+    StringMap<Box> boxes = boxes_touched(sub_stmt, empty_scope, fb);
 
     // Now iterate through all the buffers, creating a list of lets
     // and a list of asserts.
@@ -215,7 +227,7 @@ Stmt add_image_checks_inner(Stmt s,
     // and extent. To do this we have to substitute all references to
     // the actual sizes of the input images in the constraints with
     // references to the required sizes.
-    map<string, Expr> replace_with_required;
+    StringMap<Expr> replace_with_required;
 
     for (const pair<const string, FindBuffers::Result> &buf : bufs) {
         const string &name = buf.first;
@@ -238,7 +250,7 @@ Stmt add_image_checks_inner(Stmt s,
     // in with the constrained version. This is applied to the rest of
     // the lowered pipeline to take advantage of the constraints,
     // e.g. for constant folding.
-    map<string, Expr> replace_with_constrained;
+    StringMap<Expr> replace_with_constrained;
 
     for (pair<const string, FindBuffers::Result> &buf : bufs) {
         const string &name = buf.first;
@@ -296,7 +308,7 @@ Stmt add_image_checks_inner(Stmt s,
             for (auto &extern_user : extern_users) {
                 Box query_box;
                 Expr query_buf = Variable::make(type_of<struct halide_buffer_t *>(),
-                                                param.name() + ".bounds_query." + extern_user);
+                                                concat(param.name(), ".bounds_query.", extern_user));
                 for (int j = 0; j < dimensions; j++) {
                     Expr min = Call::make(Int(32), Call::buffer_get_min,
                                           {query_buf, j}, Call::Extern);
@@ -319,8 +331,7 @@ Stmt add_image_checks_inner(Stmt s,
         maybe_return_condition = maybe_return_condition || inference_mode;
 
         // Come up with a name to refer to this buffer in the error messages
-        string error_name = (is_output_buffer ? "Output" : "Input");
-        error_name += " buffer " + name;
+        Expr error_name{concat(is_output_buffer ? "Output buffer " : "Input buffer ", name)};
 
         if (!is_output_buffer && t.has_feature(Target::MSAN)) {
             Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
@@ -443,7 +454,7 @@ Stmt add_image_checks_inner(Stmt s,
             Expr max_extent = make_const(UInt(64), 0x7fffffff);
             Expr actual_size = abs(cast<int64_t>(actual_extent) * actual_stride);
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
-                                                    {name, actual_size, max_size}, Call::Extern);
+                                                    {Expr(name), actual_size, max_size}, Call::Extern);
             Stmt check = AssertStmt::make(actual_size <= max_size, allocation_size_error);
             dims_no_overflow_asserts.push_back(check);
 
@@ -458,7 +469,7 @@ Stmt add_image_checks_inner(Stmt s,
                     Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
                     lets_overflow.emplace_back(name + ".total_extent." + dim, this_dim);
                     Expr error = Call::make(Int(32), "halide_error_buffer_extents_too_large",
-                                            {name, this_dim_var, max_size}, Call::Extern);
+                                            {Expr(name), this_dim_var, max_size}, Call::Extern);
                     Stmt check = AssertStmt::make(this_dim_var <= max_size, error);
                     dims_no_overflow_asserts.push_back(check);
                 }
@@ -602,23 +613,24 @@ Stmt add_image_checks_inner(Stmt s,
         // Assert all the conditions, and set the new values
         for (const auto &constraint : constraints) {
             Expr var = constraint.first;
-            const string &name = var.as<Variable>()->name;
-            Expr constrained_var = Variable::make(Int(32), name + ".constrained");
+            std::string_view name = var.as<Variable>()->name;
+            std::string constrained_name = concat(name, ".constrained");
+            Expr constrained_var = Variable::make(Int(32), constrained_name);
 
             std::ostringstream ss;
             ss << constraint.second;
             string constrained_var_str = ss.str();
 
-            lets_constrained.emplace_back(name + ".constrained", constraint.second);
+            lets_constrained.emplace_back(std::move(constrained_name), constraint.second);
 
             // Substituting in complex expressions is not typically a good idea
             if (constraint.second.as<Variable>() ||
                 is_const(constraint.second)) {
-                replace_with_constrained[name] = constrained_var;
+                replace_with_constrained.emplace(name, constrained_var);
             }
 
             Expr error = Call::make(Int(32), "halide_error_constraint_violated",
-                                    {name, var, constrained_var_str, constrained_var},
+                                    {Expr(name), var, Expr(constrained_var_str), constrained_var},
                                     Call::Extern);
 
             // Check the var passed in equals the constrained version (when not in inference mode)
@@ -655,7 +667,7 @@ Stmt add_image_checks_inner(Stmt s,
             Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
             Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
             Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
-                                    {name, alignment_required}, Call::Extern);
+                                    {Expr(name), alignment_required}, Call::Extern);
             asserts_host_alignment.push_back(AssertStmt::make(align_condition, error));
         }
     }
@@ -728,7 +740,7 @@ Stmt add_image_checks(const Stmt &s,
                       const vector<Function> &outputs,
                       const Target &t,
                       const vector<string> &order,
-                      const map<string, Function> &env,
+                      const StringMap<Function> &env,
                       const FuncValueBounds &fb,
                       bool will_inject_host_copies) {
 
@@ -751,15 +763,15 @@ Stmt add_image_checks(const Stmt &s,
             if (p.defined() && p.is_buffer()) {
                 for (int i = 0; i < p.dimensions(); i++) {
                     if (p.min_constraint(i).defined() &&
-                        op->name == p.name() + ".min." + std::to_string(i)) {
+                        op->name == concat(p.name(), ".min.", std::to_string(i))) {
                         return p.min_constraint(i);
                     }
                     if (p.extent_constraint(i).defined() &&
-                        op->name == p.name() + ".extent." + std::to_string(i)) {
+                        op->name == concat(p.name(), ".extent.", std::to_string(i))) {
                         return p.extent_constraint(i);
                     }
                     if (p.stride_constraint(i).defined() &&
-                        op->name == p.name() + ".stride." + std::to_string(i)) {
+                        op->name == concat(p.name(), ".stride.", std::to_string(i))) {
                         return p.stride_constraint(i);
                     }
                 }
@@ -779,7 +791,7 @@ Stmt add_image_checks(const Stmt &s,
         const vector<Function> &outputs;
         const Target &t;
         const vector<string> &order;
-        const map<string, Function> &env;
+        const StringMap<Function> &env;
         const FuncValueBounds &fb;
         bool will_inject_host_copies;
 
@@ -787,7 +799,7 @@ Stmt add_image_checks(const Stmt &s,
         Injector(const vector<Function> &outputs,
                  const Target &t,
                  const vector<string> &order,
-                 const map<string, Function> &env,
+                 const StringMap<Function> &env,
                  const FuncValueBounds &fb,
                  bool will_inject_host_copies)
             : outputs(outputs), t(t), order(order), env(env), fb(fb), will_inject_host_copies(will_inject_host_copies) {

@@ -33,7 +33,7 @@ class ExprUsesVars : public IRGraphVisitor {
         IRGraphVisitor::include(s);
     }
 
-    void visit_name(const std::string &name) {
+    void visit_name(std::string_view name) {
         if (vars.contains(name)) {
             result = true;
         } else if (scope.contains(name)) {
@@ -110,7 +110,7 @@ inline bool stmt_or_expr_uses_vars(const StmtOrExpr &e, const Scope<T> &v,
  * scope provided in the final argument.
  */
 template<typename StmtOrExpr>
-inline bool stmt_or_expr_uses_var(const StmtOrExpr &e, const std::string &v,
+inline bool stmt_or_expr_uses_var(const StmtOrExpr &e, std::string_view v,
                                   const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     Scope<> vars;
     vars.push(v);
@@ -121,7 +121,7 @@ inline bool stmt_or_expr_uses_var(const StmtOrExpr &e, const std::string &v,
  *  additionally considering variables bound to Expr's in the scope
  *  provided in the final argument.
  */
-inline bool expr_uses_var(const Expr &e, const std::string &v,
+inline bool expr_uses_var(const Expr &e, std::string_view v,
                           const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     return stmt_or_expr_uses_var(e, v, s);
 }
@@ -130,7 +130,7 @@ inline bool expr_uses_var(const Expr &e, const std::string &v,
  *  additionally considering variables bound to Expr's in the scope
  *  provided in the final argument.
  */
-inline bool stmt_uses_var(const Stmt &stmt, const std::string &v,
+inline bool stmt_uses_var(const Stmt &stmt, std::string_view v,
                           const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     return stmt_or_expr_uses_var(stmt, v, s);
 }

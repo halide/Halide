@@ -18,7 +18,8 @@ const IntImm *IntImm::make(Type t, int64_t value) {
     // Then sign-extending to get them back
     value >>= (64 - t.bits());
 
-    IntImm *node = new IntImm;
+    IntImm *node = (IntImm *)malloc(sizeof(IntImm));
+    new (node) IntImm;
     node->type = t;
     node->value = value;
     return node;
@@ -34,7 +35,8 @@ const UIntImm *UIntImm::make(Type t, uint64_t value) {
     value <<= (64 - t.bits());
     value >>= (64 - t.bits());
 
-    UIntImm *node = new UIntImm;
+    UIntImm *node = (UIntImm *)malloc(sizeof(IntImm));
+    new (node) UIntImm;
     node->type = t;
     node->value = value;
     return node;
@@ -43,7 +45,8 @@ const UIntImm *UIntImm::make(Type t, uint64_t value) {
 const FloatImm *FloatImm::make(Type t, double value) {
     internal_assert(t.is_float() && t.is_scalar())
         << "FloatImm must be a scalar Float\n";
-    FloatImm *node = new FloatImm;
+    FloatImm *node = (FloatImm *)malloc(sizeof(IntImm));
+    new (node) FloatImm;
     node->type = t;
     switch (t.bits()) {
     case 16:
@@ -66,10 +69,12 @@ const FloatImm *FloatImm::make(Type t, double value) {
     return node;
 }
 
-const StringImm *StringImm::make(const std::string &val) {
-    StringImm *node = new StringImm;
+const StringImm *StringImm::make(std::string_view val) {
+    StringImm *node = (StringImm *)malloc(sizeof(StringImm) + val.size());
+    new (node) StringImm;
+    node->value = std::string_view((char *)(node + 1), val.size());
+    memcpy((char *)(node + 1), val.data(), val.size());
     node->type = type_of<const char *>();
-    node->value = val;
     return node;
 }
 

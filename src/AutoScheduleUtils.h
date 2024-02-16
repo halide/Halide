@@ -17,7 +17,7 @@
 namespace Halide {
 namespace Internal {
 
-typedef std::map<std::string, Interval> DimBounds;
+typedef StringMap<Interval> DimBounds;
 
 const int64_t unknown = std::numeric_limits<int64_t>::min();
 
@@ -28,7 +28,7 @@ class FindAllCalls : public IRVisitor {
 
     void visit(const Call *call) override {
         if (call->call_type == Call::Halide || call->call_type == Call::Image) {
-            funcs_called.insert(call->name);
+            funcs_called.insert(std::string{call->name});
             call_args.emplace_back(call->name, call->args);
         }
         for (const auto &arg : call->args) {
@@ -37,12 +37,12 @@ class FindAllCalls : public IRVisitor {
     }
 
 public:
-    std::set<std::string> funcs_called;
+    StringSet funcs_called;
     std::vector<std::pair<std::string, std::vector<Expr>>> call_args;
 };
 
 /** Return an int representation of 's'. Throw an error on failure. */
-int string_to_int(const std::string &s);
+int string_to_int(const std::string &);
 
 /** Substitute every variable in an Expr or a Stmt with its estimate
  * if specified. */
@@ -59,7 +59,7 @@ Expr get_extent(const Interval &i);
 Expr box_size(const Box &b);
 
 /** Helper function to print the bounds of a region. */
-void disp_regions(const std::map<std::string, Box> &regions);
+void disp_regions(const StringMap<Box> &regions);
 
 /** Return the corresponding definition of a function given the stage. This
  * will throw an assertion if the function is an extern function (Extern Func
@@ -72,8 +72,8 @@ Definition get_stage_definition(const Function &f, int stage_num);
 std::vector<Dim> &get_stage_dims(const Function &f, int stage_num);
 
 /** Add partial load costs to the corresponding function in the result costs. */
-void combine_load_costs(std::map<std::string, Expr> &result,
-                        const std::map<std::string, Expr> &partial);
+void combine_load_costs(StringMap<Expr> &result,
+                        const StringMap<Expr> &partial);
 
 /** Return the required bounds of an intermediate stage (f, stage_num) of
  * function 'f' given the bounds of the pure dimensions. */
@@ -87,25 +87,25 @@ std::vector<DimBounds> get_stage_bounds(const Function &f, const DimBounds &pure
  * expression 'e' and return the resulting expression. If 'order' is
  * passed, inlining will be done in the reverse order of function realization
  * to avoid extra inlining works. */
-Expr perform_inline(Expr e, const std::map<std::string, Function> &env,
-                    const std::set<std::string> &inlines = std::set<std::string>(),
+Expr perform_inline(Expr e, const StringMap<Function> &env,
+                    const StringSet &inlines = StringSet(),
                     const std::vector<std::string> &order = std::vector<std::string>());
 
 /** Return all functions that are directly called by a function stage (f, stage). */
-std::set<std::string> get_parents(Function f, int stage);
+StringSet get_parents(Function f, int stage);
 
 /** Return value of element within a map. This will assert if the element is not
  * in the map. */
 // @{
-template<typename K, typename V>
-V get_element(const std::map<K, V> &m, const K &key) {
+template<typename K1, typename K2, typename V, typename Cmp>
+V get_element(const std::map<K1, V, Cmp> &m, const K2 &key) {
     const auto &iter = m.find(key);
     internal_assert(iter != m.end());
     return iter->second;
 }
 
-template<typename K, typename V>
-V &get_element(std::map<K, V> &m, const K &key) {
+template<typename K1, typename K2, typename V, typename Cmp>
+V &get_element(std::map<K1, V, Cmp> &m, const K2 &key) {
     const auto &iter = m.find(key);
     internal_assert(iter != m.end());
     return iter->second;
@@ -116,19 +116,19 @@ V &get_element(std::map<K, V> &m, const K &key) {
  * inline the Func. Return true of any of the Funcs is inlined. */
 bool inline_all_trivial_functions(const std::vector<Function> &outputs,
                                   const std::vector<std::string> &order,
-                                  const std::map<std::string, Function> &env);
+                                  const StringMap<Function> &env);
 
 /** Determine if a Func (order[index]) is only consumed by another single Func
  * in element-wise manner. If it is, return the name of the consumer Func;
  * otherwise, return an empty string. */
 std::string is_func_called_element_wise(const std::vector<std::string> &order, size_t index,
-                                        const std::map<std::string, Function> &env);
+                                        const StringMap<Function> &env);
 
 /** Inline a Func if its values are only consumed by another single Func in
  * element-wise manner. */
 bool inline_all_element_wise_functions(const std::vector<Function> &outputs,
                                        const std::vector<std::string> &order,
-                                       const std::map<std::string, Function> &env);
+                                       const StringMap<Function> &env);
 
 void propagate_estimate_test();
 

@@ -42,17 +42,17 @@ namespace {
 // Collect the bounds of all the externally referenced buffers in a stmt.
 class CollectExternalBufferBounds : public IRVisitor {
 public:
-    map<string, Box> buffers;
+    StringMap<Box> buffers;
 
     using IRVisitor::visit;
 
-    void add_buffer_bounds(const string &name, const Buffer<> &image, const Parameter &param, int dims) {
+    void add_buffer_bounds(std::string_view name, const Buffer<> &image, const Parameter &param, int dims) {
         Box b;
         for (int i = 0; i < dims; ++i) {
             string dim_name = std::to_string(i);
-            Expr buf_min_i = Variable::make(Int(32), name + ".min." + dim_name,
+            Expr buf_min_i = Variable::make(Int(32), concat(name, ".min.", dim_name),
                                             image, param, ReductionDomain());
-            Expr buf_extent_i = Variable::make(Int(32), name + ".extent." + dim_name,
+            Expr buf_extent_i = Variable::make(Int(32), concat(name, ".extent.", dim_name),
                                                image, param, ReductionDomain());
             Expr buf_max_i = buf_min_i + buf_extent_i - 1;
             b.push_back(Interval(buf_min_i, buf_max_i));
@@ -74,18 +74,18 @@ public:
 
 class InjectPrefetch : public IRMutator {
 public:
-    InjectPrefetch(const map<string, Function> &e, const map<string, Box> &buffers)
+    InjectPrefetch(const StringMap<Function> &e, const StringMap<Box> &buffers)
         : env(e), external_buffers(buffers) {
     }
 
 private:
-    const map<string, Function> &env;
-    const map<string, Box> &external_buffers;
+    const StringMap<Function> &env;
+    const StringMap<Box> &external_buffers;
     Scope<Box> buffer_bounds;
 
     using IRMutator::visit;
 
-    Box get_buffer_bounds(const string &name, int dims) {
+    Box get_buffer_bounds(std::string_view name, int dims) {
         if (buffer_bounds.contains(name)) {
             const Box &b = buffer_bounds.ref(name);
             internal_assert((int)b.size() == dims);
@@ -120,7 +120,7 @@ private:
 
         // Add loop variable + prefetch offset to interval scope for box computation
         Expr fetch_at = from + p.offset;
-        map<string, Box> boxes_rw = boxes_touched(LetStmt::make(p.from, fetch_at, body));
+        StringMap<Box> boxes_rw = boxes_touched(LetStmt::make(p.from, fetch_at, body));
 
         // TODO(psuriana): Only prefetch the newly accessed data. We
         // should subtract the box accessed during previous iteration
@@ -183,20 +183,20 @@ private:
 
 class InjectPlaceholderPrefetch : public IRMutator {
 public:
-    InjectPlaceholderPrefetch(const map<string, Function> &e, const string &prefix,
+    InjectPlaceholderPrefetch(const StringMap<Function> &e, std::string_view prefix,
                               const vector<PrefetchDirective> &prefetches)
         : env(e), prefix(prefix), prefetch_list(prefetches) {
     }
 
 private:
-    const map<string, Function> &env;
-    const string &prefix;
+    const StringMap<Function> &env;
+    std::string_view prefix;
     const vector<PrefetchDirective> &prefetch_list;
     std::vector<string> loop_nest;
 
     using IRMutator::visit;
 
-    Stmt add_placeholder_prefetch(const string &at, const string &from, PrefetchDirective p, Stmt body) {
+    Stmt add_placeholder_prefetch(std::string_view at, std::string_view from, PrefetchDirective p, Stmt body) {
         debug(5) << "...Injecting placeholder prefetch for loop " << at << " from " << from << "\n";
         p.at = at;
         p.from = from;
@@ -211,17 +211,17 @@ private:
     }
 
     Stmt visit(const For *op) override {
-        loop_nest.push_back(op->name);
+        loop_nest.emplace_back(op->name);
 
         Stmt body = mutate(op->body);
 
         if (!prefetch_list.empty() && starts_with(op->name, prefix)) {
             // If there are multiple prefetches of the same Func or ImageParam,
             // use the most recent one
-            set<string> seen;
+            StringSet seen;
             for (int i = prefetch_list.size() - 1; i >= 0; --i) {
                 const PrefetchDirective &p = prefetch_list[i];
-                if (!ends_with(op->name, "." + p.at) || (seen.find(p.name) != seen.end())) {
+                if (!ends_with(op->name, ".", p.at) || (seen.find(p.name) != seen.end())) {
                     continue;
                 }
                 seen.insert(p.name);
@@ -233,7 +233,7 @@ private:
                 // prefix = g.s0, from = xo, but the var we seek is actually g.s0.x.xo (because 'g' was split at x).
                 string from_var;
                 for (int j = (int)loop_nest.size() - 1; j >= 0; --j) {
-                    if (starts_with(loop_nest[j], prefix) && ends_with(loop_nest[j], "." + p.from)) {
+                    if (starts_with(loop_nest[j], prefix) && ends_with(loop_nest[j], ".", p.from)) {
                         from_var = loop_nest[j];
                         debug(5) << "Prefetch from " << p.from << " -> from_var " << from_var << "\n";
                         break;
@@ -290,7 +290,7 @@ class ReducePrefetchDimension : public IRMutator {
             for (size_t i = max_arg_size; i < prefetch->args.size(); i += 2) {
                 // const Expr &extent = prefetch->args[i + 0];  // unused
                 const Expr &stride = prefetch->args[i + 1];
-                string index_name = "prefetch_reduce_" + base->name + "." + std::to_string((i - 1) / 2);
+                string index_name = concat("prefetch_reduce_", base->name, ".", std::to_string((i - 1) / 2));
                 index_names.push_back(index_name);
                 new_offset += Variable::make(Int(32), index_name) * stride;
             }
@@ -348,7 +348,7 @@ class SplitPrefetch : public IRMutator {
                 Expr stride = prefetch->args[i + 1];
                 Expr stride_bytes = stride * elem_size;
 
-                string index_name = "prefetch_split_" + base->name + "." + std::to_string((i - 1) / 2);
+                string index_name = concat("prefetch_split_", base->name, ".", std::to_string((i - 1) / 2));
                 index_names.push_back(index_name);
 
                 Expr is_negative_stride = (stride < 0);
@@ -431,14 +431,14 @@ class HoistPrefetches : public IRMutator {
 
 }  // anonymous namespace
 
-Stmt inject_placeholder_prefetch(const Stmt &s, const map<string, Function> &env,
-                                 const string &prefix,
+Stmt inject_placeholder_prefetch(const Stmt &s, const StringMap<Function> &env,
+                                 std::string_view prefix,
                                  const vector<PrefetchDirective> &prefetches) {
     Stmt stmt = InjectPlaceholderPrefetch(env, prefix, prefetches).mutate(s);
     return stmt;
 }
 
-Stmt inject_prefetch(const Stmt &s, const map<string, Function> &env) {
+Stmt inject_prefetch(const Stmt &s, const StringMap<Function> &env) {
     CollectExternalBufferBounds finder;
     s.accept(&finder);
     return InjectPrefetch(env, finder.buffers).mutate(s);

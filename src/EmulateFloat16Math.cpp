@@ -113,7 +113,7 @@ Expr float32_to_float16(Expr value) {
 
 namespace {
 
-const std::map<std::string, std::string> transcendental_remapping =
+const StringMap<std::string> transcendental_remapping =
     {{"sin_f16", "sin_f32"},
      {"asin_f16", "asin_f32"},
      {"cos_f16", "cos_f32"},

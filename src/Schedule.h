@@ -223,7 +223,7 @@ public:
     LoopLevel();
 
     /** For deserialization only. */
-    LoopLevel(const std::string &func_name, const std::string &var_name,
+    LoopLevel(std::string_view func_name, std::string_view var_name,
               bool is_rvar, int stage_index, bool locked = false);
 
     /** Construct a special LoopLevel value that implies
@@ -284,7 +284,7 @@ public:
     // Compare this loop level against the variable name of a for
     // loop, to see if this loop level refers to the site
     // immediately inside this loop. Asserts if !defined().
-    bool match(const std::string &loop) const;
+    bool match(std::string_view loop) const;
 
     bool match(const LoopLevel &other) const;
 
@@ -307,12 +307,12 @@ struct FuseLoopLevel {
      * dimension name). If not in the map, use the default alignment strategy
      * to align the fused dimension (see \ref LoopAlignStrategy::Auto).
      */
-    std::map<std::string, LoopAlignStrategy> align;
+    Internal::StringMap<LoopAlignStrategy> align;
 
     FuseLoopLevel()
         : level(LoopLevel::inlined().lock()) {
     }
-    FuseLoopLevel(const LoopLevel &level, const std::map<std::string, LoopAlignStrategy> &align)
+    FuseLoopLevel(const LoopLevel &level, const Internal::StringMap<LoopAlignStrategy> &align)
         : level(level), align(align) {
     }
 };
@@ -552,8 +552,8 @@ struct FusedPair {
     std::string var_name;
 
     FusedPair() = default;
-    FusedPair(const std::string &f1, size_t s1, const std::string &f2,
-              size_t s2, const std::string &var)
+    FusedPair(std::string_view f1, size_t s1, std::string_view f2,
+              size_t s2, std::string_view var)
         : func_1(f1), func_2(f2), stage_1(s1), stage_2(s2), var_name(var) {
     }
 
@@ -663,9 +663,9 @@ public:
      * (excluding itself) in the pipeline with the global identity wrapper.
      * See \ref Func::in and \ref Func::clone_in for more details. */
     // @{
-    const std::map<std::string, Internal::FunctionPtr> &wrappers() const;
-    std::map<std::string, Internal::FunctionPtr> &wrappers();
-    void add_wrapper(const std::string &f,
+    const StringMap<Internal::FunctionPtr> &wrappers() const;
+    StringMap<Internal::FunctionPtr> &wrappers();
+    void add_wrapper(std::string_view f,
                      const Internal::FunctionPtr &wrapper);
     // @}
 

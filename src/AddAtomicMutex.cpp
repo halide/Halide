@@ -20,7 +20,7 @@ namespace {
 /** Collect names of all stores matching the producer name inside a statement. */
 class CollectProducerStoreNames : public IRGraphVisitor {
 public:
-    CollectProducerStoreNames(const std::string &producer_name)
+    CollectProducerStoreNames(std::string_view producer_name)
         : producer_name(producer_name) {
     }
 
@@ -31,20 +31,20 @@ protected:
 
     void visit(const Store *op) override {
         IRGraphVisitor::visit(op);
-        if (op->name == producer_name || starts_with(op->name, producer_name + ".")) {
+        if (op->name == producer_name || starts_with(op->name, producer_name, ".")) {
             // This is a Store for the desginated Producer.
             store_names.push(op->name);
         }
     }
 
-    const std::string &producer_name;
+    std::string_view producer_name;
 };
 
 /** Find Store inside of an Atomic node for the designated producer
  *  and return their indices. */
 class FindProducerStoreIndex : public IRGraphVisitor {
 public:
-    FindProducerStoreIndex(const std::string &producer_name)
+    FindProducerStoreIndex(std::string_view producer_name)
         : producer_name(producer_name) {
     }
 
@@ -73,7 +73,7 @@ protected:
 
     void visit(const Store *op) override {
         IRGraphVisitor::visit(op);
-        if (op->name == producer_name || starts_with(op->name, producer_name + ".")) {
+        if (op->name == producer_name || starts_with(op->name, producer_name, ".")) {
             // This is a Store for the designated producer.
 
             // Ideally we want to insert equal() checks here for different stores,
@@ -88,7 +88,7 @@ protected:
         }
     }
 
-    const std::string &producer_name;
+    std::string_view producer_name;
 };
 
 /** Throws an assertion for cases where the indexing on left-hand-side of
@@ -163,7 +163,7 @@ protected:
         if (store_names.contains(op->name)) {
             // If we are in a designated store and op->value has a let binding
             // that uses one of the store_names, we found a lifted let.
-            ScopedValue<string> old_inside_store(inside_store, op->name);
+            ScopedValue<std::string> old_inside_store(inside_store, std::string{op->name});
             include(op->value);
         } else {
             include(op->value);
@@ -179,7 +179,7 @@ protected:
 /** Clear out the Atomic node's mutex usages if it doesn't need one. */
 class RemoveUnnecessaryMutexUse : public IRMutator {
 public:
-    set<string> remove_mutex_lock_names;
+    set<string, std::less<>> remove_mutex_lock_names;
 
 protected:
     using IRMutator::visit;
@@ -197,7 +197,7 @@ protected:
             // Can't remove mutex lock. Leave the Stmt as is.
             return IRMutator::visit(op);
         } else {
-            remove_mutex_lock_names.insert(op->mutex_name);
+            remove_mutex_lock_names.insert(std::string{op->mutex_name});
             Stmt body = mutate(op->body);
             return Atomic::make(op->producer_name,
                                 string(),
@@ -211,7 +211,7 @@ class FindStoreInAtomicMutex : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
 
-    FindStoreInAtomicMutex(const std::set<std::string> &store_names)
+    FindStoreInAtomicMutex(const std::set<std::string, std::less<>> &store_names)
         : store_names(store_names) {
     }
 
@@ -245,13 +245,13 @@ protected:
     }
 
     bool in_atomic_mutex = false;
-    const set<string> &store_names;
+    const set<string, std::less<>> &store_names;
 };
 
 /** Replace the indices in the Store nodes with the specified variable. */
 class ReplaceStoreIndexWithVar : public IRMutator {
 public:
-    ReplaceStoreIndexWithVar(const std::string &producer_name, Expr var)
+    ReplaceStoreIndexWithVar(std::string_view producer_name, Expr var)
         : producer_name(producer_name), var(std::move(var)) {
     }
 
@@ -269,23 +269,23 @@ protected:
                            op->alignment);
     }
 
-    const std::string &producer_name;
+    std::string_view producer_name;
     Expr var;
 };
 
 /** Add mutex allocation & lock & unlock if required. */
 class AddAtomicMutex : public IRMutator {
 public:
-    AddAtomicMutex(const map<string, Function> &env)
+    AddAtomicMutex(const StringMap<Function> &env)
         : env(env) {
     }
 
 protected:
     using IRMutator::visit;
 
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
     // The set of producers that have allocated a mutex buffer
-    set<string> allocated_mutexes;
+    set<string, std::less<>> allocated_mutexes;
 
     Stmt allocate_mutex(const string &mutex_name, Expr extent, Stmt body) {
         Expr mutex_array = Call::make(type_of<halide_mutex_array *>(),
@@ -309,7 +309,7 @@ protected:
         // If this Allocate node is allocating a buffer for a producer,
         // and there is a Store node inside of an Atomic node requiring mutex lock
         // matching the name of the Allocate, allocate a mutex lock.
-        set<string> store_names{op->name};
+        set<string, std::less<>> store_names{std::string{op->name}};
         FindStoreInAtomicMutex finder(store_names);
         op->body.accept(&finder);
         if (!finder.found) {
@@ -364,9 +364,9 @@ protected:
             return IRMutator::visit(op);
         }
 
-        set<string> store_names;
+        set<string, std::less<>> store_names;
         for (const auto &buffer : f.output_buffers()) {
-            store_names.insert(buffer.name());
+            store_names.emplace(buffer.name());
         }
 
         FindStoreInAtomicMutex finder(store_names);
@@ -450,7 +450,7 @@ protected:
 
 }  // namespace
 
-Stmt add_atomic_mutex(Stmt s, const map<string, Function> &env) {
+Stmt add_atomic_mutex(Stmt s, const StringMap<Function> &env) {
     CheckAtomicValidity check;
     s.accept(&check);
     s = RemoveUnnecessaryMutexUse().mutate(s);

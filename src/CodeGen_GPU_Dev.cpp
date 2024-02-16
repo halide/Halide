@@ -9,18 +9,18 @@ namespace Internal {
 
 CodeGen_GPU_Dev::~CodeGen_GPU_Dev() = default;
 
-bool CodeGen_GPU_Dev::is_gpu_var(const std::string &name) {
+bool CodeGen_GPU_Dev::is_gpu_var(std::string_view name) {
     return is_gpu_block_var(name) || is_gpu_thread_var(name);
 }
 
-bool CodeGen_GPU_Dev::is_gpu_block_var(const std::string &name) {
+bool CodeGen_GPU_Dev::is_gpu_block_var(std::string_view name) {
     return (ends_with(name, ".__block_id_x") ||
             ends_with(name, ".__block_id_y") ||
             ends_with(name, ".__block_id_z") ||
             ends_with(name, ".__block_id_w"));
 }
 
-bool CodeGen_GPU_Dev::is_gpu_thread_var(const std::string &name) {
+bool CodeGen_GPU_Dev::is_gpu_thread_var(std::string_view name) {
     return (ends_with(name, ".__thread_id_x") ||
             ends_with(name, ".__thread_id_y") ||
             ends_with(name, ".__thread_id_z") ||
@@ -81,16 +81,16 @@ class IsBufferConstant : public IRVisitor {
 
 public:
     bool result = true;
-    const std::string &buffer;
+    std::string_view buffer;
 
-    IsBufferConstant(const std::string &b)
+    IsBufferConstant(std::string_view b)
         : buffer(b) {
     }
 };
 }  // namespace
 
 bool CodeGen_GPU_Dev::is_buffer_constant(const Stmt &kernel,
-                                         const std::string &buffer) {
+                                         std::string_view buffer) {
     IsBufferConstant v(buffer);
     kernel.accept(&v);
     return v.result;

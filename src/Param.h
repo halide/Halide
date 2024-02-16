@@ -69,7 +69,7 @@ public:
 
     /** Construct a scalar parameter of type T with the given name. */
     // @{
-    explicit Param(const std::string &n)
+    explicit Param(std::string_view n)
         : param(type_of<T>(), false, 0, n) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         check_name();
@@ -79,7 +79,7 @@ public:
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         check_name();
     }
-    Param(Type t, const std::string &n)
+    Param(Type t, std::string_view n)
         : param(t, false, 0, n) {
         static_assert(!has_static_type, "Cannot use this ctor with an explicit type.");
         check_name();
@@ -97,7 +97,7 @@ public:
 
     /** Construct a scalar parameter of type T with the given name
      * and an initial value of 'val'. */
-    Param(const std::string &n, not_void_T val)
+    Param(std::string_view n, not_void_T val)
         : param(type_of<T>(), false, 0, n) {
         check_name();
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
@@ -115,7 +115,7 @@ public:
 
     /** Construct a scalar parameter of type T with the given name
      * and an initial value of 'val' and a given min and max. */
-    Param(const std::string &n, not_void_T val, const Expr &min, const Expr &max)
+    Param(std::string_view n, not_void_T val, const Expr &min, const Expr &max)
         : param(type_of<T>(), false, 0, n) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
         check_name();
@@ -157,7 +157,7 @@ public:
     }
 
     /** Get the name of this parameter */
-    const std::string &name() const {
+    std::string_view name() const {
         return param.name();
     }
 

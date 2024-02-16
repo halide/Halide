@@ -4,7 +4,8 @@
 /** \file
  * Defines the Var - the front-end variable
  */
-#include <string>
+#include <charconv>
+#include <string_view>
 #include <vector>
 
 #include "Expr.h"
@@ -26,13 +27,13 @@ class Var {
 
 public:
     /** Construct a Var with the given name */
-    Var(const std::string &n);
+    Var(std::string_view n);
 
     /** Construct a Var with an automatically-generated unique name. */
     Var();
 
     /** Get the name of a Var */
-    const std::string &name() const;
+    std::string_view name() const;
 
     /** Test if two Vars are the same. This simply compares the names. */
     bool same_as(const Var &other) const {
@@ -125,7 +126,7 @@ public:
      * user Var declarations from making names of this form.
      */
     //{
-    static bool is_implicit(const std::string &name);
+    static bool is_implicit(std::string_view name);
     bool is_implicit() const {
         return is_implicit(name());
     }
@@ -136,9 +137,16 @@ public:
      *  the variable is not of implicit form.
      */
     //{
-    static int implicit_index(const std::string &name) {
-        return is_implicit(name) ? atoi(name.c_str() + 1) : -1;
+    static int implicit_index(std::string_view name) {
+        if (!is_implicit(name)) {
+            return -1;
+        } else {
+            // TODO: std::from_chars
+            std::string n{name};
+            return atoi(n.c_str() + 1);
+        }
     }
+
     int implicit_index() const {
         return implicit_index(name());
     }
@@ -146,7 +154,7 @@ public:
 
     /** Test if a var is the placeholder variable _ */
     //{
-    static bool is_placeholder(const std::string &name) {
+    static bool is_placeholder(std::string_view name) {
         return name == "_";
     }
     bool is_placeholder() const {

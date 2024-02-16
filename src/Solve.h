@@ -25,18 +25,18 @@ struct SolverResult {
  * in the result. If it is false, the expression has only been partially
  * solved, and there are still multiple instances of the variable. */
 SolverResult solve_expression(
-    const Expr &e, const std::string &variable,
+    const Expr &e, std::string_view variable,
     const Scope<Expr> &scope = Scope<Expr>::empty_scope());
 
 /** Find the smallest interval such that the condition is either true
  * or false inside of it, but definitely false outside of it. Never
  * returns undefined Exprs, instead it uses variables called "pos_inf"
  * and "neg_inf" to represent positive and negative infinity. */
-Interval solve_for_outer_interval(const Expr &c, const std::string &variable);
+Interval solve_for_outer_interval(const Expr &c, std::string_view variable);
 
 /** Find the largest interval such that the condition is definitely
  * true inside of it, and might be true or false outside of it. */
-Interval solve_for_inner_interval(const Expr &c, const std::string &variable);
+Interval solve_for_inner_interval(const Expr &c, std::string_view variable);
 
 /** Take a conditional that includes variables that vary over some
  * domain, and convert it to a more conservative (less frequently

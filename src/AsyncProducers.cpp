@@ -116,14 +116,14 @@ protected:
 };
 
 class GenerateProducerBody : public NoOpCollapsingMutator {
-    const string &func;
+    std::string_view func;
     vector<Expr> sema;
-    std::set<string> producers_dropped;
+    StringSet producers_dropped;
     bool found_producer = false;
 
     using NoOpCollapsingMutator::visit;
 
-    void bad_producer_nesting_error(const string &producer, const string &async_consumer) {
+    void bad_producer_nesting_error(std::string_view producer, std::string_view async_consumer) {
         user_error
             << "The Func " << producer << " is consumed by async Func " << async_consumer
             << " and has a compute_at location in between the store_at "
@@ -147,7 +147,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             // where the producer has gone to the consumer side of the fork
             // node.
             class FindBadConsumeNodes : public IRVisitor {
-                const std::set<string> &producers_dropped;
+                const std::set<string, std::less<>> &producers_dropped;
                 using IRVisitor::visit;
 
                 void visit(const ProducerConsumer *op) override {
@@ -158,7 +158,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
 
             public:
                 string found;
-                FindBadConsumeNodes(const std::set<string> &p)
+                FindBadConsumeNodes(const std::set<string, std::less<>> &p)
                     : producers_dropped(p) {
                 }
             } finder(producers_dropped);
@@ -175,7 +175,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             return ProducerConsumer::make_produce(op->name, body);
         } else {
             if (op->is_producer) {
-                producers_dropped.insert(op->name);
+                producers_dropped.emplace(op->name);
             }
             bool found_producer_before = found_producer;
             Stmt body = mutate(op->body);
@@ -204,10 +204,10 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
     }
 
     Stmt visit(const Store *op) override {
-        if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
+        if (starts_with(op->name, func, ".folding_semaphore.") && ends_with(op->name, ".head")) {
             // This is a counter associated with the producer side of a storage-folding semaphore. Keep it.
             return op;
-        } else if (starts_with(op->name, func + ".ring_buffer.")) {
+        } else if (starts_with(op->name, func, ".ring_buffer.")) {
             // This is a counter associated with the producer side of a ring buffering.
             return op;
         } else {
@@ -229,14 +229,14 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         internal_assert(var);
         if (is_no_op(body)) {
             return body;
-        } else if (starts_with(var->name, func + ".folding_semaphore.")) {
+        } else if (starts_with(var->name, func, ".folding_semaphore.")) {
             // This is a storage-folding semaphore for the func we're producing. Keep it.
             return Acquire::make(op->semaphore, op->count, body);
         } else {
             // This semaphore will end up on both sides of the fork,
             // so we'd better duplicate it.
             vector<string> &clones = cloned_acquires[var->name];
-            clones.push_back(var->name + unique_name('_'));
+            clones.push_back(concat(var->name, unique_name('_')));
             return Acquire::make(Variable::make(type_of<halide_semaphore_t *>(), clones.back()), op->count, body);
         }
     }
@@ -250,7 +250,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             internal_assert(op->args.size() == 2);
             const Variable *var = op->args[0].as<Variable>();
             internal_assert(var);
-            inner_semaphores.insert(var->name);
+            inner_semaphores.emplace(var->name);
         }
         return op;
     }
@@ -271,7 +271,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         if (is_no_op(body)) {
             return body;
         } else {
-            inner_realizes.insert(op->name);
+            inner_realizes.emplace(op->name);
             return Realize::make(op->name, op->types, op->memory_type,
                                  op->bounds, op->condition, body);
         }
@@ -288,18 +288,18 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         }
     }
 
-    map<string, vector<string>> &cloned_acquires;
-    set<string> inner_semaphores;
-    set<string> inner_realizes;
+    StringMap<vector<string>> &cloned_acquires;
+    StringSet inner_semaphores;
+    StringSet inner_realizes;
 
 public:
-    GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, vector<string>> &a)
+    GenerateProducerBody(std::string_view f, const vector<Expr> &s, StringMap<vector<string>> &a)
         : func(f), sema(s), cloned_acquires(a) {
     }
 };
 
 class GenerateConsumerBody : public NoOpCollapsingMutator {
-    const string &func;
+    std::string_view func;
     vector<Expr> sema;
 
     using NoOpCollapsingMutator::visit;
@@ -322,7 +322,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
 
     Stmt visit(const Allocate *op) override {
         // Don't want to keep the producer's storage-folding tracker - it's dead code on the consumer side
-        if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
+        if (starts_with(op->name, func, ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return mutate(op->body);
         } else {
             return NoOpCollapsingMutator::visit(op);
@@ -330,7 +330,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
     }
 
     Stmt visit(const Store *op) override {
-        if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
+        if (starts_with(op->name, func, ".folding_semaphore.") && ends_with(op->name, ".head")) {
             return Evaluate::make(0);
         } else {
             return NoOpCollapsingMutator::visit(op);
@@ -342,7 +342,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
         // Ones from folding should go to the producer side.
         const Variable *var = op->semaphore.as<Variable>();
         internal_assert(var);
-        if (starts_with(var->name, func + ".folding_semaphore.")) {
+        if (starts_with(var->name, func, ".folding_semaphore.")) {
             return mutate(op->body);
         } else {
             return NoOpCollapsingMutator::visit(op);
@@ -350,7 +350,7 @@ class GenerateConsumerBody : public NoOpCollapsingMutator {
     }
 
 public:
-    GenerateConsumerBody(const string &f, const vector<Expr> &s)
+    GenerateConsumerBody(std::string_view f, const vector<Expr> &s)
         : func(f), sema(s) {
     }
 };
@@ -358,7 +358,7 @@ public:
 class CloneAcquire : public IRMutator {
     using IRMutator::visit;
 
-    const string &old_name;
+    std::string_view old_name;
     Expr new_var;
 
     Stmt visit(const Evaluate *op) override {
@@ -378,14 +378,14 @@ class CloneAcquire : public IRMutator {
     }
 
 public:
-    CloneAcquire(const string &o, const string &new_name)
+    CloneAcquire(std::string_view o, std::string_view new_name)
         : old_name(o) {
         new_var = Variable::make(type_of<halide_semaphore_t *>(), new_name);
     }
 };
 
 class CountConsumeNodes : public IRVisitor {
-    const string &func;
+    std::string_view func;
 
     using IRVisitor::visit;
 
@@ -397,7 +397,7 @@ class CountConsumeNodes : public IRVisitor {
     }
 
 public:
-    CountConsumeNodes(const string &f)
+    CountConsumeNodes(std::string_view f)
         : func(f) {
     }
     int count = 0;
@@ -406,12 +406,12 @@ public:
 class ForkAsyncProducers : public IRMutator {
     using IRMutator::visit;
 
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
 
-    map<string, vector<string>> cloned_acquires;
-    std::set<string> hoisted_storages;
+    StringMap<vector<string>> cloned_acquires;
+    StringSet hoisted_storages;
 
-    Stmt process_body(const string &name, Stmt body) {
+    Stmt process_body(std::string_view name, Stmt body) {
         // Make two copies of the body, one which only does the
         // producer, and one which only does the consumer. Inject
         // synchronization to preserve dependencies. Put them in a
@@ -424,7 +424,7 @@ class ForkAsyncProducers : public IRMutator {
         vector<string> sema_names;
         vector<Expr> sema_vars;
         for (int i = 0; i < consumes.count; i++) {
-            sema_names.push_back(name + ".semaphore_" + std::to_string(i));
+            sema_names.push_back(concat(name, ".semaphore_", std::to_string(i)));
             sema_vars.push_back(Variable::make(type_of<halide_semaphore_t *>(), sema_names.back()));
         }
 
@@ -438,7 +438,7 @@ class ForkAsyncProducers : public IRMutator {
         // Run them concurrently
         body = Fork::make(producer, consumer);
 
-        for (const string &sema_name : sema_names) {
+        for (std::string_view sema_name : sema_names) {
             // Make a semaphore on the stack
             Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
                                          {0}, Call::Extern);
@@ -459,7 +459,7 @@ class ForkAsyncProducers : public IRMutator {
     }
 
     Stmt visit(const HoistedStorage *op) override {
-        hoisted_storages.insert(op->name);
+        hoisted_storages.emplace(op->name);
         Stmt body = op->body;
 
         auto it = env.find(op->name);
@@ -489,7 +489,7 @@ class ForkAsyncProducers : public IRMutator {
     }
 
 public:
-    ForkAsyncProducers(const map<string, Function> &e)
+    ForkAsyncProducers(const StringMap<Function> &e)
         : env(e) {
     }
 };
@@ -573,7 +573,7 @@ class InitializeSemaphores : public IRMutator {
 class TightenProducerConsumerNodes : public IRMutator {
     using IRMutator::visit;
 
-    Stmt make_producer_consumer(const string &name, bool is_producer, Stmt body, const Scope<int> &scope) {
+    Stmt make_producer_consumer(std::string_view name, bool is_producer, Stmt body, const Scope<int> &scope) {
         if (const LetStmt *let = body.as<LetStmt>()) {
             Stmt orig = body;
             // 'orig' is only used to keep a reference to the let
@@ -642,19 +642,19 @@ class TightenProducerConsumerNodes : public IRMutator {
         scope.push(op->name, 0);
         Function f = env.find(op->name)->second;
         if (f.outputs() == 1) {
-            scope.push(op->name + ".buffer", 0);
+            scope.push(concat(op->name, ".buffer"), 0);
         } else {
             for (int i = 0; i < f.outputs(); i++) {
-                scope.push(op->name + "." + std::to_string(i) + ".buffer", 0);
+                scope.push(concat(op->name, ".", std::to_string(i), ".buffer"), 0);
             }
         }
         return make_producer_consumer(op->name, op->is_producer, body, scope);
     }
 
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
 
 public:
-    TightenProducerConsumerNodes(const map<string, Function> &e)
+    TightenProducerConsumerNodes(const StringMap<Function> &e)
         : env(e) {
     }
 };
@@ -685,7 +685,7 @@ class UpdateIndices : public IRMutator {
     Expr ring_buffer_index;
 
 public:
-    UpdateIndices(const string &fn, Expr di)
+    UpdateIndices(std::string_view fn, Expr di)
         : func_name(fn), ring_buffer_index(std::move(di)) {
     }
 };
@@ -699,14 +699,14 @@ class InjectRingBuffering : public IRMutator {
         Expr min;
         Expr extent;
 
-        Loop(std::string n, Expr m, Expr e)
-            : name(std::move(n)), min(std::move(m)), extent(std::move(e)) {
+        Loop(std::string_view n, Expr m, Expr e)
+            : name(n), min(std::move(m)), extent(std::move(e)) {
         }
     };
 
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
     std::vector<Loop> loops;
-    std::map<std::string, int> hoist_storage_loop_index;
+    StringMap<int> hoist_storage_loop_index;
 
     Stmt visit(const Realize *op) override {
         Stmt body = mutate(op->body);
@@ -731,7 +731,7 @@ class InjectRingBuffering : public IRMutator {
             body = UpdateIndices(op->name, current_index).mutate(body);
 
             if (f.schedule().async()) {
-                Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.ring_buffer");
+                Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), concat(f.name(), ".folding_semaphore.ring_buffer"));
                 Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
                 Stmt release = Evaluate::make(release_producer);
                 body = Block::make(body, release);
@@ -744,7 +744,7 @@ class InjectRingBuffering : public IRMutator {
 
     Stmt visit(const HoistedStorage *op) override {
         // Store the index of the last loop we encountered.
-        hoist_storage_loop_index[op->name] = loops.size() - 1;
+        hoist_storage_loop_index.emplace(op->name, loops.size() - 1);
         Function f = env.find(op->name)->second;
 
         Stmt mutated = mutate(op->body);
@@ -754,8 +754,9 @@ class InjectRingBuffering : public IRMutator {
             // Make a semaphore on the stack
             Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
                                          {2}, Call::Extern);
-            mutated = LetStmt::make(f.name() + std::string(".folding_semaphore.ring_buffer"), sema_space, mutated);
+            mutated = LetStmt::make(concat(f.name(), ".folding_semaphore.ring_buffer"), sema_space, mutated);
         }
+        // TODO: save an iterator above instead
         hoist_storage_loop_index.erase(op->name);
         return mutated;
     }
@@ -768,7 +769,7 @@ class InjectRingBuffering : public IRMutator {
     }
 
 public:
-    InjectRingBuffering(const map<string, Function> &e)
+    InjectRingBuffering(const StringMap<Function> &e)
         : env(e) {
     }
 };
@@ -932,7 +933,9 @@ class TightenForkNodes : public IRMutator {
     // This is also a good time to nuke any dangling allocations and lets in the fork children.
     Stmt visit(const Realize *op) override {
         Stmt body = mutate(op->body);
-        if (in_fork && !stmt_uses_var(body, op->name) && !stmt_uses_var(body, op->name + ".buffer")) {
+        if (in_fork &&
+            !stmt_uses_var(body, op->name) &&
+            !stmt_uses_var(body, concat(op->name, ".buffer"))) {
             return body;
         } else {
             return Realize::make(op->name, op->types, op->memory_type,
@@ -965,7 +968,7 @@ class TightenForkNodes : public IRMutator {
 
 }  // namespace
 
-Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
+Stmt fork_async_producers(Stmt s, const StringMap<Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);
     s = InjectRingBuffering(env).mutate(s);
     s = ForkAsyncProducers(env).mutate(s);

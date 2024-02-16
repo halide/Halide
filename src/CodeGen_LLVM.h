@@ -78,7 +78,7 @@ public:
     static std::unique_ptr<llvm::Module> compile_trampolines(
         const Target &target,
         llvm::LLVMContext &context,
-        const std::string &suffix,
+        std::string_view suffix,
         const std::vector<std::pair<std::string, ExternSignature>> &externs);
 
     size_t get_requested_alloca_total() const {
@@ -90,7 +90,7 @@ protected:
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
-    virtual void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
+    virtual void compile_func(const LoweredFunc &func, std::string_view simple_name, std::string_view extern_name);
     virtual void compile_buffer(const Buffer<> &buffer);
     // @}
 
@@ -101,8 +101,8 @@ protected:
      * call to end_func with the same arguments, to generate the
      * appropriate cleanup code. */
     // @{
-    virtual void begin_func(LinkageType linkage, const std::string &simple_name,
-                            const std::string &extern_name, const std::vector<LoweredArgument> &args);
+    virtual void begin_func(LinkageType linkage, std::string_view simple_name,
+                            std::string_view extern_name, const std::vector<LoweredArgument> &args);
     virtual void end_func(const std::vector<LoweredArgument> &args);
     // @}
 
@@ -186,21 +186,21 @@ protected:
 
     /** Add an entry to the symbol table, hiding previous entries with
      * the same name. Call this when new values come into scope. */
-    void sym_push(const std::string &name, llvm::Value *value);
+    void sym_push(std::string_view name, llvm::Value *value);
 
     /** Remove an entry for the symbol table, revealing any previous
      * entries with the same name. Call this when values go out of
      * scope. */
-    void sym_pop(const std::string &name);
+    void sym_pop(std::string_view name);
 
     /** Fetch an entry from the symbol table. If the symbol is not
      * found, it either errors out (if the second arg is true), or
      * returns nullptr. */
-    llvm::Value *sym_get(const std::string &name,
+    llvm::Value *sym_get(std::string_view name,
                          bool must_succeed = true) const;
 
     /** Test if an item exists in the symbol table. */
-    bool sym_exists(const std::string &name) const;
+    bool sym_exists(std::string_view name) const;
 
     /** Given a Halide ExternSignature, return the equivalent llvm::FunctionType. */
     llvm::FunctionType *signature_to_type(const ExternSignature &signature);
@@ -284,10 +284,10 @@ protected:
     void return_with_error_code(llvm::Value *error_code);
 
     /** Put a string constant in the module as a global variable and return a pointer to it. */
-    llvm::Constant *create_string_constant(const std::string &str);
+    llvm::Constant *create_string_constant(std::string_view str);
 
     /** Put a binary blob in the module as a global variable and return a pointer to it. */
-    llvm::Constant *create_binary_blob(const std::vector<char> &data, const std::string &name, bool constant = true);
+    llvm::Constant *create_binary_blob(const std::vector<char> &data, std::string_view name, bool constant = true);
 
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
     llvm::Value *create_broadcast(llvm::Value *, int lanes);
@@ -296,8 +296,8 @@ protected:
      * given type. The index counts according to the scalar type of
      * the type passed in. */
     // @{
-    llvm::Value *codegen_buffer_pointer(const std::string &buffer, Type type, llvm::Value *index);
-    llvm::Value *codegen_buffer_pointer(const std::string &buffer, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(std::string_view buffer, Type type, llvm::Value *index);
+    llvm::Value *codegen_buffer_pointer(std::string_view buffer, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
@@ -316,13 +316,13 @@ protected:
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
-    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, const Expr &index);
+    void add_tbaa_metadata(llvm::Instruction *inst, std::string_view buffer, const Expr &index);
 
     /** Get a unique name for the actual block of memory that an
      * allocate node uses. Used so that alias analysis understands
      * when multiple Allocate nodes shared the same memory. */
-    virtual std::string get_allocation_name(const std::string &n) {
-        return n;
+    virtual std::string get_allocation_name(std::string_view n) {
+        return std::string{n};
     }
 
     /** Add the appropriate function attribute to tell LLVM that the function
@@ -412,7 +412,7 @@ protected:
      * on function exit. */
     llvm::Value *create_alloca_at_entry(llvm::Type *type, int n,
                                         bool zero_initialize = false,
-                                        const std::string &name = "");
+                                        std::string_view name = std::string_view{});
 
     /** A (very) conservative guess at the size of all alloca() storage requested
      * (including alignment padding). It's currently meant only to be used as
@@ -450,16 +450,16 @@ protected:
         }
     };
     /** Mapping of intrinsic functions to the various overloads implementing it. */
-    std::map<std::string, std::vector<Intrinsic>> intrinsics;
+    StringMap<std::vector<Intrinsic>> intrinsics;
 
     /** Get an LLVM intrinsic declaration. If it doesn't exist, it will be created. */
-    llvm::Function *get_llvm_intrin(const Type &ret_type, const std::string &name, const std::vector<Type> &arg_types, bool scalars_are_vectors = false);
-    llvm::Function *get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type *> &arg_types);
+    llvm::Function *get_llvm_intrin(const Type &ret_type, std::string_view name, const std::vector<Type> &arg_types, bool scalars_are_vectors = false);
+    llvm::Function *get_llvm_intrin(llvm::Type *ret_type, std::string_view name, const std::vector<llvm::Type *> &arg_types);
     /** Declare an intrinsic function that participates in overload resolution. */
-    llvm::Function *declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors = false);
-    void declare_intrin_overload(const std::string &name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types);
+    llvm::Function *declare_intrin_overload(std::string_view name, const Type &ret_type, std::string_view impl_name, std::vector<Type> arg_types, bool scalars_are_vectors = false);
+    void declare_intrin_overload(std::string_view name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types);
     /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found. */
-    llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
+    llvm::Value *call_overloaded_intrin(const Type &result_type, std::string_view name, const std::vector<Expr> &args);
 
     /** Generate a call to a vector intrinsic or runtime inlined
      * function. The arguments are sliced up into vectors of the width
@@ -471,11 +471,11 @@ protected:
      * 'called_lanes'. */
     // @{
     llvm::Value *call_intrin(const Type &t, int intrin_lanes,
-                             const std::string &name, std::vector<Expr>);
+                             std::string_view name, std::vector<Expr>);
     llvm::Value *call_intrin(const Type &t, int intrin_lanes,
                              llvm::Function *intrin, std::vector<Expr>);
     llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
-                             const std::string &name, std::vector<llvm::Value *>,
+                             std::string_view name, std::vector<llvm::Value *>,
                              bool scalable_vector_result = false, bool is_reduction = false);
     llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
                              llvm::Function *intrin, std::vector<llvm::Value *>,
@@ -511,7 +511,7 @@ protected:
      *
      * If there's no match, returns (nullptr, 0).
      */
-    std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int lanes);
+    std::pair<llvm::Function *, int> find_vector_runtime_function(std::string_view name, int lanes);
 
     virtual bool supports_atomic_add(const Type &t) const;
 
@@ -537,7 +537,7 @@ protected:
      * when one has carefully set things up for a specific architecture. This
      * just does the bare minimum. call_intrin should be refactored and could
      * call this, possibly with renaming of the methods. */
-    llvm::Value *simple_call_intrin(const std::string &intrin,
+    llvm::Value *simple_call_intrin(std::string_view intrin,
                                     const std::vector<llvm::Value *> &args,
                                     llvm::Type *result_type);
 
@@ -614,7 +614,7 @@ protected:
      * type. If generated, assigns result of vp intrinsic to value and
      * returns true if it an instuction is generated, otherwise
      * returns false. */
-    bool try_vector_predication_comparison(const std::string &name, const Type &result_type,
+    bool try_vector_predication_comparison(std::string_view name, const Type &result_type,
                                            MaskVariant mask, llvm::Value *a, llvm::Value *b,
                                            const char *cmp_op);
 
@@ -630,7 +630,7 @@ protected:
      * and length is greater than 1. If generated, assigns result
      * of vp intrinsic to value and returns true if it an instuction
      * is generated, otherwise returns false. */
-    bool try_vector_predication_intrinsic(const std::string &name, VPResultType result_type,
+    bool try_vector_predication_intrinsic(std::string_view name, VPResultType result_type,
                                           int32_t length, MaskVariant mask, std::vector<VPArg> args);
 
     /** Controls use of vector predicated intrinsics for vector operations.
@@ -656,7 +656,7 @@ private:
 
     /** String constants already emitted to the module. Tracked to
      * prevent emitting the same string many times. */
-    std::map<std::string, llvm::Constant *> string_constants;
+    StringMap<llvm::Constant *> string_constants;
 
     /** A basic block to branch to on error that triggers all
      * destructors. As destructors are registered, code gets added
@@ -686,18 +686,18 @@ private:
      * as extern "C" linkage. Note that the return value is a function-returning-
      * pointer-to-constant-data.
      */
-    llvm::Function *embed_metadata_getter(const std::string &metadata_getter_name,
-                                          const std::string &function_name, const std::vector<LoweredArgument> &args,
+    llvm::Function *embed_metadata_getter(std::string_view metadata_getter_name,
+                                          std::string_view function_name, const std::vector<LoweredArgument> &args,
                                           const MetadataNameMap &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
     llvm::Constant *embed_constant_scalar_value_t(const Expr &e);
 
-    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name,
+    llvm::Function *add_argv_wrapper(llvm::Function *fn, std::string_view name,
                                      bool result_in_argv, std::vector<bool> &arg_is_buffer);
 
-    llvm::Value *codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
+    llvm::Value *codegen_vector_load(const Type &type, std::string_view name, const Expr &base,
                                      const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
                                      llvm::Value *vpred = nullptr, bool slice_to_native = true, llvm::Value *stride = nullptr);
 
@@ -706,7 +706,7 @@ private:
 
     void codegen_atomic_rmw(const Store *op);
 
-    void init_codegen(const std::string &name, bool any_strict_float = false);
+    void init_codegen(std::string_view name, bool any_strict_float = false);
     std::unique_ptr<llvm::Module> finish_codegen();
 
     /** A helper routine for generating folded vector reductions. */

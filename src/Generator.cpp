@@ -55,7 +55,7 @@ bool is_alnum(char c) {
 //
 // -- initial _ is forbidden (rather than merely "reserved")
 // -- two underscores in a row is also forbidden
-bool is_valid_name(const std::string &n) {
+bool is_valid_name(std::string_view n) {
     if (n.empty()) {
         return false;
     }
@@ -79,20 +79,20 @@ bool is_valid_name(const std::string &n) {
 }
 
 std::map<OutputFileType, std::string> compute_output_files(const Target &target,
-                                                           const std::string &base_path,
+                                                           std::string_view base_path,
                                                            const std::set<OutputFileType> &outputs) {
     std::map<OutputFileType, const OutputInfo> output_info = get_output_info(target);
 
     std::map<OutputFileType, std::string> output_files;
     for (auto o : outputs) {
-        output_files[o] = base_path + output_info.at(o).extension;
+        output_files[o] = concat(base_path, output_info.at(o).extension);
     }
     return output_files;
 }
 
-Func make_param_func(const Parameter &p, const std::string &name) {
+Func make_param_func(const Parameter &p, std::string_view name) {
     internal_assert(p.is_buffer());
-    Func f(p.type(), p.dimensions(), name + "_im");
+    Func f(p.type(), p.dimensions(), concat(name, "_im"));
     auto b = p.buffer();
     if (b.defined()) {
         // If the Parameter has an explicit BufferPtr set, bind directly to it
@@ -112,7 +112,7 @@ Func make_param_func(const Parameter &p, const std::string &name) {
 
 }  // namespace
 
-std::vector<Type> parse_halide_type_list(const std::string &types) {
+std::vector<Type> parse_halide_type_list(std::string_view types) {
     const auto &e = get_halide_type_enum_map();
     std::vector<Type> result;
     for (const auto &t : split_string(types, ",")) {
@@ -126,8 +126,8 @@ std::vector<Type> parse_halide_type_list(const std::string &types) {
 class StubEmitter {
 public:
     StubEmitter(std::ostream &dest,
-                const std::string &generator_registered_name,
-                const std::string &generator_stub_name,
+                std::string_view generator_registered_name,
+                std::string_view generator_stub_name,
                 const std::vector<Internal::GeneratorParamBase *> &generator_params,
                 const std::vector<Internal::GeneratorInputBase *> &inputs,
                 const std::vector<Internal::GeneratorOutputBase *> &outputs)
@@ -243,7 +243,7 @@ void StubEmitter::emit_inputs_struct() {
         if (input->is_array()) {
             c_type = "std::vector<" + c_type + ">";
         }
-        in_info.push_back({c_type, input->name()});
+        in_info.emplace_back(InInfo{c_type, std::string{input->name()}});
     }
 
     const std::string name = "Inputs";
@@ -305,7 +305,7 @@ void StubEmitter::emit() {
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         const bool is_func = (c_type == "Func");
-        std::string getter = "generator->output_func(\"" + output->name() + "\")";
+        std::string getter = concat("generator->output_func(\"", output->name(), "\")");
         if (!is_func) {
             getter = c_type + "::to_output_buffers(" + getter + ", generator)";
         }
@@ -313,9 +313,9 @@ void StubEmitter::emit() {
             getter = getter + ".at(0)";
         }
 
-        out_info.push_back({output->name(),
-                            output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-                            getter});
+        out_info.emplace_back(OutputInfo{std::string{output->name()},
+                                         output->is_array() ? "std::vector<" + c_type + ">" : c_type,
+                                         getter});
         if (c_type != "Func") {
             all_outputs_are_func = false;
         }
@@ -504,7 +504,7 @@ void StubEmitter::emit() {
         if (p->is_looplevel_param()) {
             stream << "generator_params." << p->name();
         } else {
-            stream << p->call_to_string("generator_params." + p->name());
+            stream << p->call_to_string(concat("generator_params.", p->name()));
         }
         stream << ");\n";
     }
@@ -679,7 +679,7 @@ gengen
  -v  If nonzero, log the path to all generated files to stdout.
 )INLINE_CODE";
 
-    std::map<std::string, std::string> flags_info = {
+    StringMap<std::string> flags_info = {
         {"-d", "0"},
         {"-e", ""},
         {"-f", ""},
@@ -741,7 +741,7 @@ gengen
 
     const std::vector<std::string> generator_names = generator_factory_provider.enumerate();
 
-    const auto create_generator = [&](const std::string &generator_name, const Halide::GeneratorContext &context) -> AbstractGeneratorPtr {
+    const auto create_generator = [&](std::string_view generator_name, const Halide::GeneratorContext &context) -> AbstractGeneratorPtr {
         internal_assert(generator_name == args.generator_name);
         auto g = generator_factory_provider.create(generator_name, context);
         if (!g) {
@@ -798,7 +798,7 @@ gengen
 
         // Build a reverse lookup table. Allow some legacy aliases on the command line,
         // to allow legacy build systems to work more easily.
-        std::map<std::string, OutputFileType> output_name_to_enum = {
+        StringMap<OutputFileType> output_name_to_enum = {
             {"cpp", OutputFileType::c_source},
             {"h", OutputFileType::c_header},
             {"hlpipe", OutputFileType::hlpipe},
@@ -813,7 +813,7 @@ gengen
             output_name_to_enum[it.second.name] = it.first;
         }
 
-        for (const std::string &opt : emit_flags) {
+        for (std::string_view opt : emit_flags) {
             auto it = output_name_to_enum.find(opt);
             if (it == output_name_to_enum.end()) {
                 std::ostringstream o;
@@ -859,7 +859,7 @@ gengen
     if (do_compiler_logging) {
         const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
         args.compiler_logger_factory =
-            [obfuscate_compiler_logging, &args](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
+            [obfuscate_compiler_logging, &args](std::string_view function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
             // rebuild generator_args from the map so that they are always canonical
             std::string generator_args_string, autoscheduler_name;
             std::string sep;
@@ -915,7 +915,7 @@ public:
         return GeneratorRegistry::enumerate();
     }
 
-    AbstractGeneratorPtr create(const std::string &name,
+    AbstractGeneratorPtr create(std::string_view name,
                                 const Halide::GeneratorContext &context) const override {
         return GeneratorRegistry::create(name, context);
     }
@@ -931,7 +931,7 @@ const GeneratorFactoryProvider &get_registered_generators() {
 }  // namespace Internal
 
 Callable create_callable_from_generator(const GeneratorContext &context,
-                                        const std::string &name,
+                                        std::string_view name,
                                         const GeneratorParamsMap &generator_params) {
     auto g = Internal::get_registered_generators().create(name, context);
     user_assert(g != nullptr) << "There is no Generator with the name '" << name << "' currently available.";
@@ -940,7 +940,7 @@ Callable create_callable_from_generator(const GeneratorContext &context,
 }
 
 Callable create_callable_from_generator(const Target &target,
-                                        const std::string &name,
+                                        std::string_view name,
                                         const GeneratorParamsMap &generator_params) {
     return create_callable_from_generator(GeneratorContext(target), name, generator_params);
 }
@@ -980,12 +980,12 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
     const auto fix_defaults = [](const ExecuteGeneratorArgs &args_in) -> ExecuteGeneratorArgs {
         ExecuteGeneratorArgs args = args_in;
         if (!args.create_generator) {
-            args.create_generator = [](const std::string &generator_name, const GeneratorContext &context) -> AbstractGeneratorPtr {
+            args.create_generator = [](std::string_view generator_name, const GeneratorContext &context) -> AbstractGeneratorPtr {
                 return GeneratorRegistry::create(generator_name, context);
             };
         }
         if (!args.compiler_logger_factory) {
-            args.compiler_logger_factory = [](const std::string &, const Target &) -> std::unique_ptr<CompilerLogger> {
+            args.compiler_logger_factory = [](std::string_view, const Target &) -> std::unique_ptr<CompilerLogger> {
                 return nullptr;
             };
         }
@@ -1011,10 +1011,10 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         internal_assert(!args.targets.empty());
     }
 
-    const auto ensure_valid_name = [](const std::string &s) {
+    const auto ensure_valid_name = [](std::string_view s) {
         internal_assert(s.empty() || is_valid_name(s)) << "string '" << s << "' is not a valid Generator name.";
     };
-    const auto ensure_not_pathname = [](const std::string &s) {
+    const auto ensure_not_pathname = [](std::string_view s) {
         for (char c : "/\\") {
             internal_assert(s.find(c) == std::string::npos) << "string '" << s << "' must not contain '" << c << "', but saw '" << s << "'";
         }
@@ -1057,7 +1057,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         debug(1) << "Generator " << args.generator_name << " has base_path " << base_path << "\n";
 
         // Factory function for creating a generator instance for a given function name and target
-        auto generator_factory = [&](const std::string &function_name, const Target &target) -> AbstractGeneratorPtr {
+        auto generator_factory = [&](std::string_view function_name, const Target &target) -> AbstractGeneratorPtr {
             // Must re-create each time since each instance will have a different Target.
             auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
             for (const auto &kv : args.generator_params) {
@@ -1096,7 +1096,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!cpp_stub_only) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
-            auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
+            auto module_factory = [&](std::string_view function_name, const Target &target) -> Module {
                 auto gen = generator_factory(function_name, target);
                 return args.build_mode == ExecuteGeneratorArgs::Gradient ?
                            gen->build_gradient_module(function_name) :
@@ -1112,7 +1112,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
     }
 }
 
-GeneratorParamBase::GeneratorParamBase(const std::string &name)
+GeneratorParamBase::GeneratorParamBase(std::string_view name)
     : name_(name) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
                                               this, nullptr);
@@ -1149,7 +1149,7 @@ GeneratorParam_AutoSchedulerParams::GeneratorParam_AutoSchedulerParams()
     : GeneratorParamImpl<AutoschedulerParams>("autoscheduler", {}) {
 }
 
-void GeneratorParam_AutoSchedulerParams::set_from_string(const std::string &new_value_string) {
+void GeneratorParam_AutoSchedulerParams::set_from_string(std::string_view new_value_string) {
     internal_error << "This method should never be called.";
 }
 
@@ -1158,7 +1158,7 @@ std::string GeneratorParam_AutoSchedulerParams::get_default_value() const {
     return "";
 }
 
-std::string GeneratorParam_AutoSchedulerParams::call_to_string(const std::string &v) const {
+std::string GeneratorParam_AutoSchedulerParams::call_to_string(std::string_view v) const {
     internal_error << "This method should never be called.";
     return "";
 }
@@ -1168,14 +1168,14 @@ std::string GeneratorParam_AutoSchedulerParams::get_c_type() const {
     return "";
 }
 
-bool GeneratorParam_AutoSchedulerParams::try_set(const std::string &key, const std::string &value) {
+bool GeneratorParam_AutoSchedulerParams::try_set(std::string_view key, std::string_view value) {
     const auto &n = this->name();
     if (key == n) {
         user_assert(this->value_.name.empty()) << "The GeneratorParam " << key << " cannot be set more than once.\n";
         this->value_.name = value;
         return true;
-    } else if (starts_with(key, n + ".")) {
-        const auto sub_key = key.substr(n.size() + 1);
+    } else if (starts_with(key, n, ".")) {
+        std::string sub_key{key.substr(n.size() + 1)};
         user_assert(this->value_.extra.count(sub_key) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
         this->value_.extra[sub_key] = value;
         return true;
@@ -1191,18 +1191,18 @@ GeneratorRegistry &GeneratorRegistry::get_registry() {
 }
 
 /* static */
-void GeneratorRegistry::register_factory(const std::string &name,
+void GeneratorRegistry::register_factory(std::string_view name,
                                          GeneratorFactory generator_factory) {
     user_assert(is_valid_name(name)) << "Invalid Generator name: " << name;
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     internal_assert(registry.factories.find(name) == registry.factories.end())
         << "Duplicate Generator name: " << name;
-    registry.factories[name] = std::move(generator_factory);
+    registry.factories.emplace(name, std::move(generator_factory));
 }
 
 /* static */
-void GeneratorRegistry::unregister_factory(const std::string &name) {
+void GeneratorRegistry::unregister_factory(std::string_view name) {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     internal_assert(registry.factories.find(name) != registry.factories.end())
@@ -1211,7 +1211,7 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
 }
 
 /* static */
-AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
+AbstractGeneratorPtr GeneratorRegistry::create(std::string_view name,
                                                const GeneratorContext &context) {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
@@ -1249,18 +1249,18 @@ GeneratorBase::~GeneratorBase() {
 
 GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t size) {
     const auto add_synthetic_params = [this, generator](GIOBase *gio) {
-        const std::string &n = gio->name();
-        const std::string &gn = generator->generator_registered_name;
+        std::string_view n = gio->name();
+        std::string_view gn = generator->generator_registered_name;
 
-        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->gio_types_defined()));
+        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, concat(n, ".type"), *gio, SyntheticParamType::Type, gio->gio_types_defined()));
         filter_generator_params.push_back(owned_synthetic_params.back().get());
 
         if (gio->kind() != ArgInfoKind::Scalar) {
-            owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, gn, n + ".dim", *gio, SyntheticParamType::Dim, gio->dims_defined()));
+            owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, gn, concat(n, ".dim"), *gio, SyntheticParamType::Dim, gio->dims_defined()));
             filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
         if (gio->is_array()) {
-            owned_synthetic_params.push_back(GeneratorParam_Synthetic<size_t>::make(generator, gn, n + ".size", *gio, SyntheticParamType::ArraySize, gio->array_size_defined()));
+            owned_synthetic_params.push_back(GeneratorParam_Synthetic<size_t>::make(generator, gn, concat(n, ".size"), *gio, SyntheticParamType::ArraySize, gio->array_size_defined()));
             filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
     };
@@ -1281,7 +1281,7 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
             internal_assert(param != nullptr);
             user_assert(is_valid_name(param->name())) << "Invalid GeneratorParam name: " << param->name();
             user_assert(!names.count(param->name())) << "Duplicate GeneratorParam name: " << param->name();
-            names.insert(param->name());
+            names.emplace(param->name());
             internal_assert(param->generator == nullptr || param->generator == generator);
             param->generator = generator;
             filter_generator_params.push_back(param);
@@ -1297,7 +1297,7 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
             internal_assert(input != nullptr);
             user_assert(is_valid_name(input->name())) << "Invalid Input name: (" << input->name() << ")\n";
             user_assert(!names.count(input->name())) << "Duplicate Input name: " << input->name();
-            names.insert(input->name());
+            names.emplace(input->name());
             internal_assert(input->generator == nullptr || input->generator == generator);
             input->generator = generator;
             filter_inputs.push_back(input);
@@ -1310,7 +1310,7 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
             internal_assert(output != nullptr);
             user_assert(is_valid_name(output->name())) << "Invalid Output name: (" << output->name() << ")\n";
             user_assert(!names.count(output->name())) << "Duplicate Output name: " << output->name();
-            names.insert(output->name());
+            names.emplace(output->name());
             internal_assert(output->generator == nullptr || output->generator == generator);
             output->generator = generator;
             filter_outputs.push_back(output);
@@ -1339,13 +1339,13 @@ GeneratorParamInfo &GeneratorBase::param_info() {
     return *param_info_ptr;
 }
 
-GeneratorInputBase *GeneratorBase::find_input_by_name(const std::string &name) {
+GeneratorInputBase *GeneratorBase::find_input_by_name(std::string_view name) {
     auto *t = GeneratorBase::find_by_name(name, param_info().inputs());
     internal_assert(t != nullptr) << "Input " << name << " not found.";
     return t;
 }
 
-GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name) {
+GeneratorOutputBase *GeneratorBase::find_output_by_name(std::string_view name) {
     auto *t = GeneratorBase::find_by_name(name, param_info().outputs());
     internal_assert(t != nullptr) << "Output " << name << " not found.";
     return t;
@@ -1364,7 +1364,7 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     param_info_ptr = std::make_unique<GeneratorParamInfo>(this, size);
 }
 
-void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {
+void GeneratorBase::set_generator_names(std::string_view registered_name, std::string_view stub_name) {
     user_assert(is_valid_name(registered_name)) << "Invalid Generator name: " << registered_name;
     internal_assert(!registered_name.empty() && !stub_name.empty());
     internal_assert(generator_registered_name.empty() && generator_stub_name.empty());
@@ -1513,7 +1513,7 @@ void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal:
         << "Input " << in->name() << " cannot be set with the type specified.";
 }
 
-void GeneratorBase::set_generatorparam_value(const std::string &name, const std::string &value) {
+void GeneratorBase::set_generatorparam_value(std::string_view name, std::string_view value) {
     user_assert(name != "target") << "The GeneratorParam named " << name << " cannot be set by set_generatorparam_value().\n";
     if (autoscheduler_.try_set(name, value)) {
         return;
@@ -1532,7 +1532,7 @@ void GeneratorBase::set_generatorparam_value(const std::string &name, const std:
         << "Generator " << generator_registered_name << " has no GeneratorParam named: " << name << "\n";
 }
 
-void GeneratorBase::set_generatorparam_value(const std::string &name, const LoopLevel &value) {
+void GeneratorBase::set_generatorparam_value(std::string_view name, const LoopLevel &value) {
     GeneratorParamInfo &pi = param_info();
     for (auto *g : pi.generator_params()) {
         if (g->name() != name) {
@@ -1563,7 +1563,7 @@ bool GeneratorBase::allow_out_of_order_inputs_and_outputs() const {
     return false;
 }
 
-std::vector<Parameter> GeneratorBase::input_parameter(const std::string &name) {
+std::vector<Parameter> GeneratorBase::input_parameter(std::string_view name) {
     auto *input = find_input_by_name(name);
 
     const size_t params_size = input->parameters_.size();
@@ -1590,7 +1590,7 @@ std::vector<Parameter> GeneratorBase::input_parameter(const std::string &name) {
     return params;
 }
 
-std::vector<Func> GeneratorBase::output_func(const std::string &n) {
+std::vector<Func> GeneratorBase::output_func(std::string_view n) {
     check_min_phase(GenerateCalled);
     auto *output = find_output_by_name(n);
     // Call for the side-effect of asserting if the value isn't defined.
@@ -1601,7 +1601,7 @@ std::vector<Func> GeneratorBase::output_func(const std::string &n) {
     return output->funcs();
 }
 
-void GeneratorBase::bind_input(const std::string &name, const std::vector<Parameter> &v) {
+void GeneratorBase::bind_input(std::string_view name, const std::vector<Parameter> &v) {
     ensure_configure_has_been_called();
     advance_phase(InputsSet);
     std::vector<StubInput> si;
@@ -1609,7 +1609,7 @@ void GeneratorBase::bind_input(const std::string &name, const std::vector<Parame
     find_input_by_name(name)->set_inputs(si);
 }
 
-void GeneratorBase::bind_input(const std::string &name, const std::vector<Func> &v) {
+void GeneratorBase::bind_input(std::string_view name, const std::vector<Func> &v) {
     ensure_configure_has_been_called();
     advance_phase(InputsSet);
     std::vector<StubInput> si;
@@ -1617,7 +1617,7 @@ void GeneratorBase::bind_input(const std::string &name, const std::vector<Func> 
     find_input_by_name(name)->set_inputs(si);
 }
 
-void GeneratorBase::bind_input(const std::string &name, const std::vector<Expr> &v) {
+void GeneratorBase::bind_input(std::string_view name, const std::vector<Expr> &v) {
     ensure_configure_has_been_called();
     advance_phase(InputsSet);
     std::vector<StubInput> si;
@@ -1625,7 +1625,7 @@ void GeneratorBase::bind_input(const std::string &name, const std::vector<Expr> 
     find_input_by_name(name)->set_inputs(si);
 }
 
-bool GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
+bool GeneratorBase::emit_cpp_stub(std::string_view stub_file_path) {
     user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
     // Make sure we call configure() so that extra inputs/outputs are added as necessary.
     ensure_configure_has_been_called();
@@ -1633,13 +1633,13 @@ bool GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
     GeneratorParamInfo &pi = param_info();
-    std::ofstream file(stub_file_path);
+    std::ofstream file(std::string{stub_file_path});
     StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params(), pi.inputs(), pi.outputs());
     emit.emit();
     return true;
 }
 
-bool GeneratorBase::emit_hlpipe(const std::string &hlpipe_file_path) {
+bool GeneratorBase::emit_hlpipe(std::string_view hlpipe_file_path) {
 #ifdef WITH_SERIALIZATION
     user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
     Pipeline pipeline = build_pipeline();
@@ -1660,7 +1660,7 @@ bool GeneratorBase::emit_hlpipe(const std::string &hlpipe_file_path) {
 }
 
 GIOBase::GIOBase(size_t array_size,
-                 const std::string &name,
+                 std::string_view name,
                  ArgInfoKind kind,
                  const std::vector<Type> &types,
                  int dims)
@@ -1682,7 +1682,7 @@ bool GIOBase::is_array() const {
     return false;
 }
 
-const std::string &GIOBase::name() const {
+std::string_view GIOBase::name() const {
     return name_;
 }
 
@@ -1797,11 +1797,11 @@ void GIOBase::verify_internals() {
 }
 
 std::string GIOBase::array_name(size_t i) const {
-    std::string n = name();
     if (is_array()) {
-        n += "_" + std::to_string(i);
+        return concat(name(), "_", std::to_string(i));
+    } else {
+        return std::string{name()};
     }
-    return n;
 }
 
 // If our type(s) are defined, ensure it matches the ones passed in, asserting if not.
@@ -1846,7 +1846,7 @@ void GIOBase::check_matching_array_size(size_t size) const {
 }
 
 GeneratorInputBase::GeneratorInputBase(size_t array_size,
-                                       const std::string &name,
+                                       std::string_view name,
                                        ArgInfoKind kind,
                                        const std::vector<Type> &t,
                                        int d)
@@ -1854,7 +1854,7 @@ GeneratorInputBase::GeneratorInputBase(size_t array_size,
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorInput, this, nullptr);
 }
 
-GeneratorInputBase::GeneratorInputBase(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
+GeneratorInputBase::GeneratorInputBase(std::string_view name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GeneratorInputBase(1, name, kind, t, d) {
     // nothing
 }
@@ -1991,14 +1991,14 @@ void GeneratorInputBase::set_estimates_impl(const Region &estimates) {
     }
 }
 
-GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
+GeneratorOutputBase::GeneratorOutputBase(size_t array_size, std::string_view name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GIOBase(array_size, name, kind, t, d) {
     internal_assert(kind != ArgInfoKind::Scalar);
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorOutput,
                                               this, nullptr);
 }
 
-GeneratorOutputBase::GeneratorOutputBase(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
+GeneratorOutputBase::GeneratorOutputBase(std::string_view name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GeneratorOutputBase(1, name, kind, t, d) {
     // nothing
 }

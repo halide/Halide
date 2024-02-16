@@ -22,11 +22,11 @@ std::unique_ptr<CompilerLogger> active_compiler_logger;
 class ObfuscateNames : public IRMutator {
     using IRMutator::visit;
 
-    std::map<std::string, std::string> remapping;
+    StringMap<std::string> remapping;
 
     Expr visit(const Call *op) override {
         auto args = mutate(op->args);
-        std::string name = op->name;
+        std::string name{op->name};
         if (op->call_type == Call::Extern ||
             op->call_type == Call::ExternCPlusPlus ||
             op->call_type == Call::Halide ||
@@ -63,9 +63,9 @@ public:
         : remapping(values) {
     }
 
-    std::string remap(const std::string &var_name) {
+    std::string remap(std::string_view var_name) {
         std::string anon_name = "anon" + std::to_string(remapping.size());
-        auto p = remapping.insert({var_name, std::move(anon_name)});
+        auto p = remapping.emplace(var_name, std::move(anon_name));
         return p.first->second;
     }
 };
@@ -83,11 +83,11 @@ CompilerLogger *get_compiler_logger() {
 }
 
 JSONCompilerLogger::JSONCompilerLogger(
-    const std::string &generator_name,
-    const std::string &function_name,
-    const std::string &autoscheduler_name,
+    std::string_view generator_name,
+    std::string_view function_name,
+    std::string_view autoscheduler_name,
     const Target &target,
-    const std::string &generator_args,
+    std::string_view generator_args,
     bool obfuscate_exprs)
     : generator_name(generator_name),
       function_name(function_name),
@@ -97,11 +97,11 @@ JSONCompilerLogger::JSONCompilerLogger(
       obfuscate_exprs(obfuscate_exprs) {
 }
 
-void JSONCompilerLogger::record_matched_simplifier_rule(const std::string &rulename, Expr expr) {
+void JSONCompilerLogger::record_matched_simplifier_rule(std::string_view rulename, Expr expr) {
     matched_simplifier_rules[rulename].emplace_back(std::move(expr));
 }
 
-void JSONCompilerLogger::record_non_monotonic_loop_var(const std::string &loop_var, Expr expr) {
+void JSONCompilerLogger::record_non_monotonic_loop_var(std::string_view loop_var, Expr expr) {
     non_monotonic_loop_vars[loop_var].emplace_back(std::move(expr));
 }
 void JSONCompilerLogger::record_failed_to_prove(Expr failed_to_prove, Expr original_expr) {
@@ -118,7 +118,7 @@ void JSONCompilerLogger::record_compilation_time(Phase phase, double duration) {
 
 void JSONCompilerLogger::obfuscate() {
     {
-        std::map<std::string, std::vector<Expr>> n;
+        StringMap<std::vector<Expr>> n;
         for (const auto &it : matched_simplifier_rules) {
             std::string rule = it.first;
             for (const auto &e : it.second) {
@@ -151,13 +151,13 @@ std::ostream &emit_eol(std::ostream &o, bool comma = true) {
     return o;
 }
 
-std::ostream &emit_key(std::ostream &o, int indent, const std::string &key) {
+std::ostream &emit_key(std::ostream &o, int indent, std::string_view key) {
     std::string spaces(indent, ' ');
     o << spaces << "\"" << key << "\" : ";
     return o;
 }
 
-std::ostream &emit_object_key_open(std::ostream &o, int indent, const std::string &key) {
+std::ostream &emit_object_key_open(std::ostream &o, int indent, std::string_view key) {
     std::string spaces(indent, ' ');
     o << spaces << "\"" << key << "\" : {\n";
     return o;
@@ -178,7 +178,7 @@ std::ostream &emit_value(std::ostream &o, const VALUE &value) {
 
 template<>
 std::ostream &emit_value<std::string>(std::ostream &o, const std::string &value) {
-    std::string v = value;
+    std::string v{value};
     v = replace_all(v, "\\", "\\\\");
     v = replace_all(v, "\"", "\\\"");
     o << "\"" << v << "\"";
@@ -186,14 +186,14 @@ std::ostream &emit_value<std::string>(std::ostream &o, const std::string &value)
 }
 
 template<typename VALUE>
-std::ostream &emit_key_value(std::ostream &o, int indent, const std::string &key, const VALUE &value, bool comma = true) {
+std::ostream &emit_key_value(std::ostream &o, int indent, std::string_view key, const VALUE &value, bool comma = true) {
     emit_key(o, indent, key);
     emit_value(o, value);
     emit_eol(o, comma);
     return o;
 }
 
-std::ostream &emit_optional_key_value(std::ostream &o, int indent, const std::string &key, const std::string &value, bool comma = true) {
+std::ostream &emit_optional_key_value(std::ostream &o, int indent, std::string_view key, std::string_view value, bool comma = true) {
     if (!value.empty()) {
         return emit_key_value(o, indent, key, value, comma);
     }
@@ -201,7 +201,7 @@ std::ostream &emit_optional_key_value(std::ostream &o, int indent, const std::st
 }
 
 template<typename T>
-std::ostream &emit_pairs(std::ostream &o, int indent, const std::string &key, const T &pairs, bool comma = true) {
+std::ostream &emit_pairs(std::ostream &o, int indent, std::string_view key, const T &pairs, bool comma = true) {
     std::string spaces(indent, ' ');
 
     emit_key(o, indent, key);
@@ -240,8 +240,8 @@ std::string expr_to_string(const Expr &e) {
     return s.str();
 }
 
-std::set<std::string> exprs_to_strings(const std::vector<Expr> &exprs) {
-    std::set<std::string> strings;
+StringSet exprs_to_strings(const std::vector<Expr> &exprs) {
+    StringSet strings;
     for (const auto &e : exprs) {
         strings.insert(expr_to_string(e));
     }
@@ -310,7 +310,7 @@ std::ostream &JSONCompilerLogger::emit_to_stream(std::ostream &o) {
         emit_object_key_open(o, indent, "failed_to_prove");
 
         // We'll do deduplication here, during stringification.
-        std::map<std::string, std::set<std::string>> sorted;
+        std::map<std::string, StringSet> sorted;
         for (const auto &it : failed_to_prove_exprs) {
             const auto failed_to_prove_str = expr_to_string(it.first);
             const auto original_expr_str = expr_to_string(it.second);

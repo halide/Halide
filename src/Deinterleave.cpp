@@ -26,7 +26,7 @@ public:
     std::vector<Stmt> &let_stmts;
     std::vector<Stmt> &stores;
 
-    StoreCollector(const std::string &name, int stride, int ms,
+    StoreCollector(std::string_view name, int stride, int ms,
                    std::vector<Stmt> &lets, std::vector<Stmt> &ss)
         : store_name(name), store_stride(stride), max_stores(ms),
           let_stmts(lets), stores(ss) {
@@ -169,7 +169,7 @@ private:
     }
 };
 
-Stmt collect_strided_stores(const Stmt &stmt, const std::string &name, int stride, int max_stores,
+Stmt collect_strided_stores(const Stmt &stmt, std::string_view name, int stride, int max_stores,
                             std::vector<Stmt> lets, std::vector<Stmt> &stores) {
 
     StoreCollector collect(name, stride, max_stores, lets, stores);
@@ -294,23 +294,23 @@ private:
             if (external_lets.contains(op->name) &&
                 starting_lane == 0 &&
                 lane_stride == 2) {
-                return Variable::make(t, op->name + ".even_lanes", op->image, op->param, op->reduction_domain);
+                return Variable::make(t, concat(op->name, ".even_lanes"), op->image, op->param, op->reduction_domain);
             } else if (external_lets.contains(op->name) &&
                        starting_lane == 1 &&
                        lane_stride == 2) {
-                return Variable::make(t, op->name + ".odd_lanes", op->image, op->param, op->reduction_domain);
+                return Variable::make(t, concat(op->name, ".odd_lanes"), op->image, op->param, op->reduction_domain);
             } else if (external_lets.contains(op->name) &&
                        starting_lane == 0 &&
                        lane_stride == 3) {
-                return Variable::make(t, op->name + ".lanes_0_of_3", op->image, op->param, op->reduction_domain);
+                return Variable::make(t, concat(op->name, ".lanes_0_of_3"), op->image, op->param, op->reduction_domain);
             } else if (external_lets.contains(op->name) &&
                        starting_lane == 1 &&
                        lane_stride == 3) {
-                return Variable::make(t, op->name + ".lanes_1_of_3", op->image, op->param, op->reduction_domain);
+                return Variable::make(t, concat(op->name, ".lanes_1_of_3"), op->image, op->param, op->reduction_domain);
             } else if (external_lets.contains(op->name) &&
                        starting_lane == 2 &&
                        lane_stride == 3) {
-                return Variable::make(t, op->name + ".lanes_2_of_3", op->image, op->param, op->reduction_domain);
+                return Variable::make(t, concat(op->name, ".lanes_2_of_3"), op->image, op->param, op->reduction_domain);
             } else {
                 return give_up_and_shuffle(op);
             }
@@ -488,13 +488,13 @@ class Interleaver : public IRMutator {
             // For vector lets, we may additionally need a let defining the even and odd lanes only
             if (value.type().is_vector()) {
                 if (value.type().lanes() % 2 == 0) {
-                    result = T::make(it->op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
-                    result = T::make(it->op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
+                    result = T::make(concat(it->op->name, ".even_lanes"), extract_even_lanes(value, vector_lets), result);
+                    result = T::make(concat(it->op->name, ".odd_lanes"), extract_odd_lanes(value, vector_lets), result);
                 }
                 if (value.type().lanes() % 3 == 0) {
-                    result = T::make(it->op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
-                    result = T::make(it->op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
-                    result = T::make(it->op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+                    result = T::make(concat(it->op->name, ".lanes_0_of_3"), extract_mod3_lanes(value, 0, vector_lets), result);
+                    result = T::make(concat(it->op->name, ".lanes_1_of_3"), extract_mod3_lanes(value, 1, vector_lets), result);
+                    result = T::make(concat(it->op->name, ".lanes_2_of_3"), extract_mod3_lanes(value, 2, vector_lets), result);
                 }
             }
         }

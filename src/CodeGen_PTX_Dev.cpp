@@ -49,7 +49,7 @@ public:
     ~CodeGen_PTX_Dev() override;
 
     void add_kernel(Stmt stmt,
-                    const std::string &name,
+                    std::string_view name,
                     const std::vector<DeviceArgument> &args) override;
 
     static void test();
@@ -59,7 +59,7 @@ public:
 
     void dump() override;
 
-    std::string print_gpu_name(const std::string &name) override;
+    std::string print_gpu_name(std::string_view name) override;
 
     std::string api_unique_name() override {
         return "cuda";
@@ -107,7 +107,7 @@ protected:
 
     /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
      * ptx intrinsic functions to call to get them. */
-    std::string simt_intrinsic(const std::string &name);
+    const char *simt_intrinsic(std::string_view name);
 
     bool supports_atomic_add(const Type &t) const override;
 };
@@ -135,7 +135,7 @@ Type CodeGen_PTX_Dev::upgrade_type_for_storage(const Type &t) const {
 }
 
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
-                                 const std::string &name,
+                                 std::string_view name,
                                  const std::vector<DeviceArgument> &args) {
     internal_assert(module != nullptr);
 
@@ -281,7 +281,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
     }
 }
 
-string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
+const char *CodeGen_PTX_Dev::simt_intrinsic(std::string_view name) {
     if (ends_with(name, ".__thread_id_x")) {
         return "llvm.nvvm.read.ptx.sreg.tid.x";
     } else if (ends_with(name, ".__thread_id_y")) {
@@ -325,7 +325,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
     } else {
         debug(2) << "Allocate " << alloc->name << " on device\n";
 
-        string allocation_name = alloc->name;
+        std::string_view allocation_name = alloc->name;
         debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
         // Jump back to the entry and generate an alloca. Note that by
@@ -766,9 +766,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu_target() + " " + ptx.pathname() + " -o " + sass.pathname();
+        string cmd =
+            concat("ptxas --gpu-name ", mcpu_target(), " ", ptx.pathname(), " -o ", sass.pathname());
         if (system(cmd.c_str()) == 0) {
-            cmd = "nvdisasm " + sass.pathname();
+            cmd = concat("nvdisasm ", sass.pathname());
             int ret = system(cmd.c_str());
             (void)ret;  // Don't care if it fails
         }
@@ -807,8 +808,8 @@ void CodeGen_PTX_Dev::dump() {
     module->print(dbgs(), nullptr, false, true);
 }
 
-std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
-    return name;
+std::string CodeGen_PTX_Dev::print_gpu_name(std::string_view name) {
+    return std::string{name};
 }
 
 bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {

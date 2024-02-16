@@ -192,8 +192,8 @@ class DebugSections {
 public:
     bool working = false;
 
-    DebugSections(const std::string &binary) {
-        std::string binary_path = binary;
+    DebugSections(std::string_view binary) {
+        std::string binary_path{binary};
 #ifdef __APPLE__
         size_t last_slash = binary_path.rfind('/');
         if (last_slash == std::string::npos ||
@@ -342,7 +342,7 @@ public:
     }
 
     // Get the debug name of a global var from a pointer to it
-    std::string get_global_variable_name(const void *global_pointer, const std::string &type_name = "") {
+    std::string get_global_variable_name(const void *global_pointer, std::string_view type_name = "") {
         // Find the index of the first global variable with this address
         int idx = find_global_variable(global_pointer);
 
@@ -353,7 +353,7 @@ public:
 
         uint64_t address = (uint64_t)global_pointer;
 
-        std::regex re(type_name);
+        std::regex re(std::string{type_name});
 
         // Now test all of them
         for (; (size_t)idx < global_variables.size() && global_variables[idx].addr <= address; idx++) {
@@ -498,7 +498,7 @@ public:
     }
 
     // Get the debug name of a member of a heap variable from a pointer to it
-    std::string get_heap_member_name(const void *ptr, const std::string &type_name = "") {
+    std::string get_heap_member_name(const void *ptr, std::string_view type_name = "") {
         debug(5) << "Getting heap member name of " << ptr << "\n";
 
         if (heap_objects.empty()) {
@@ -528,7 +528,7 @@ public:
 
         std::ostringstream name;
 
-        std::regex re(type_name);
+        std::regex re(std::string{type_name});
 
         // Look in the members for the appropriate offset.
         for (const auto &member : obj.members) {
@@ -584,7 +584,7 @@ public:
     }
 
     // Get the debug name of a stack variable from a pointer to it
-    std::string get_stack_variable_name(const void *stack_pointer, const std::string &type_name = "") {
+    std::string get_stack_variable_name(const void *stack_pointer, std::string_view type_name = "") {
 
         // Check it's a plausible stack pointer
         int marker = 0;
@@ -674,7 +674,7 @@ public:
 
         debug(5) << "Searching for var at offset " << offset << "\n";
 
-        std::regex re(type_name);
+        std::regex re(std::string{type_name});
 
         for (auto &var : func->variables) {
             debug(5) << "Var " << var.name << " is at offset " << var.stack_offset << "\n";
@@ -808,7 +808,7 @@ public:
                 }
             }
 
-            const std::string &file = source_files[source_lines[lo].file];
+            std::string_view file = source_files[source_lines[lo].file];
             int line = source_lines[lo].line;
 
             std::ostringstream oss;
@@ -914,7 +914,7 @@ public:
     }
 
 private:
-    void load_and_parse_object_file(const std::string &binary) {
+    void load_and_parse_object_file(std::string_view binary) {
         llvm::object::ObjectFile *obj = nullptr;
 
         // Open the object file in question.

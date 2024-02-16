@@ -28,7 +28,7 @@ public:
     }
 
     // Deserialize a pipeline from the given filename
-    Pipeline deserialize(const std::string &filename);
+    Pipeline deserialize(std::string_view filename);
 
     // Deserialize a pipeline from the given input stream
     Pipeline deserialize(std::istream &in);
@@ -38,7 +38,7 @@ public:
 
     // Deserialize just the unbound external parameters that need to be defined for the pipeline from the given filename
     // (so they can be remapped and overridden with user parameters prior to deserializing the pipeline)
-    std::map<std::string, Parameter> deserialize_parameters(const std::string &filename);
+    std::map<std::string, Parameter> deserialize_parameters(std::string_view filename);
 
     // Deserialize just the unbound external parameters that need to be defined for the pipeline from the given input stream
     std::map<std::string, Parameter> deserialize_parameters(std::istream &in);
@@ -70,7 +70,7 @@ private:
 
     // A lookup table for finding buffer object via their names,
     // used for preventing the same buffer being deserialized multiple times
-    std::map<std::string, Buffer<>> buffers_in_pipeline;
+    std::map<std::string, Buffer<>, std::less<>> buffers_in_pipeline;
 
     // External parameters that are not deserialized but will be used in the pipeline
     std::map<std::string, Parameter> user_params;
@@ -156,7 +156,7 @@ private:
 
     ExternFuncArgument deserialize_extern_func_argument(const Serialize::ExternFuncArgument *extern_func_argument);
 
-    std::map<std::string, FunctionPtr> deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Serialize::WrapperRef>> *wrappers);
+    StringMap<FunctionPtr> deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Serialize::WrapperRef>> *wrappers);
 
     Buffer<> deserialize_buffer(const Serialize::Buffer *buffer);
 
@@ -1011,7 +1011,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
                                                                                   &Deserializer::deserialize_bound);
     const std::vector<Bound> estimates = deserialize_vector<Serialize::Bound, Bound>(func_schedule->estimates(),
                                                                                      &Deserializer::deserialize_bound);
-    const std::map<std::string, FunctionPtr> wrappers = deserialize_wrapper_refs(func_schedule->wrappers());
+    const StringMap<FunctionPtr> wrappers = deserialize_wrapper_refs(func_schedule->wrappers());
     const auto memory_type = deserialize_memory_type(func_schedule->memory_type());
     const auto memoized = func_schedule->memoized();
     const auto async = func_schedule->async();
@@ -1161,7 +1161,7 @@ FuseLoopLevel Deserializer::deserialize_fuse_loop_level(const Serialize::FuseLoo
     for (const auto &align_strategy : *fuse_loop_level->align_strategies()) {
         align_strategies.push_back(deserialize_loop_align_strategy((Serialize::LoopAlignStrategy)align_strategy));
     }
-    std::map<std::string, LoopAlignStrategy> align;
+    StringMap<LoopAlignStrategy> align;
     for (size_t i = 0; i < align_dimension_names.size(); ++i) {
         align[align_dimension_names[i]] = align_strategies[i];
     }
@@ -1343,9 +1343,9 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
     return hl_buffer;
 }
 
-std::map<std::string, FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Serialize::WrapperRef>> *wrappers) {
+StringMap<FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Serialize::WrapperRef>> *wrappers) {
     user_assert(wrappers != nullptr);
-    std::map<std::string, FunctionPtr> result;
+    StringMap<FunctionPtr> result;
     for (const auto &wrapper : *wrappers) {
         const auto name = deserialize_string(wrapper->func_name());
         const int32_t func_index = wrapper->func_index();
@@ -1373,8 +1373,8 @@ void Deserializer::build_reverse_function_mappings(const std::vector<Function> &
     }
 }
 
-Pipeline Deserializer::deserialize(const std::string &filename) {
-    std::ifstream in(filename, std::ios::binary | std::ios::in);
+Pipeline Deserializer::deserialize(std::string_view filename) {
+    std::ifstream in(std::string{filename}, std::ios::binary | std::ios::in);
     if (!in) {
         user_error << "failed to open file " << filename << "\n";
         return Pipeline();
@@ -1447,22 +1447,24 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
         deserialize_vector<Serialize::Buffer, Buffer<>>(pipeline_obj->buffers(),
                                                         &Deserializer::deserialize_buffer);
     for (const auto &buffer : buffers) {
-        user_assert(buffers_in_pipeline.count(buffer.name()) == 0) << "duplicate buffer " << buffer.name() << " in pipeline\n";
-        buffers_in_pipeline[buffer.name()] = buffer;
+        user_assert(buffers_in_pipeline.count(std::string{buffer.name()}) == 0)
+            << "duplicate buffer " << buffer.name() << " in pipeline\n";
+        buffers_in_pipeline.emplace(buffer.name(), buffer);
     }
     const std::vector<Parameter> parameters =
         deserialize_vector<Serialize::Parameter, Parameter>(pipeline_obj->parameters(),
                                                             &Deserializer::deserialize_parameter);
     for (const auto &param : parameters) {
-        user_assert(parameters_in_pipeline.count(param.name()) == 0) << "duplicate parameter " << param.name() << " in pipeline\n";
-        parameters_in_pipeline[param.name()] = param;
+        user_assert(parameters_in_pipeline.count(std::string{param.name()}) == 0)
+            << "duplicate parameter " << param.name() << " in pipeline\n";
+        parameters_in_pipeline.emplace(param.name(), param);
     }
 
     const std::vector<Parameter> parameters_external =
         deserialize_vector<Serialize::ExternalParameter, Parameter>(pipeline_obj->external_parameters(),
                                                                     &Deserializer::deserialize_external_parameter);
     for (const auto &param : parameters_external) {
-        external_params[param.name()] = param;
+        external_params.emplace(param.name(), param);
     }
 
     std::vector<Func> funcs;
@@ -1495,9 +1497,9 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
     return Pipeline(output_funcs, requirements);
 }
 
-std::map<std::string, Parameter> Deserializer::deserialize_parameters(const std::string &filename) {
+std::map<std::string, Parameter> Deserializer::deserialize_parameters(std::string_view filename) {
     std::map<std::string, Parameter> empty;
-    std::ifstream in(filename, std::ios::binary | std::ios::in);
+    std::ifstream in(std::string{filename}, std::ios::binary | std::ios::in);
     if (!in) {
         user_error << "failed to open file " << filename << "\n";
         return empty;
@@ -1538,14 +1540,14 @@ std::map<std::string, Parameter> Deserializer::deserialize_parameters(const std:
                                                                     &Deserializer::deserialize_external_parameter);
 
     for (const auto &param : external_parameters) {
-        external_parameters_by_name[param.name()] = param;
+        external_parameters_by_name.emplace(param.name(), param);
     }
     return external_parameters_by_name;
 }
 
 }  // namespace Internal
 
-Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Parameter> &user_params) {
+Pipeline deserialize_pipeline(std::string_view filename, const std::map<std::string, Parameter> &user_params) {
     Internal::Deserializer deserializer(user_params);
     return deserializer.deserialize(filename);
 }
@@ -1560,7 +1562,7 @@ Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map
     return deserializer.deserialize(buffer);
 }
 
-std::map<std::string, Parameter> deserialize_parameters(const std::string &filename) {
+std::map<std::string, Parameter> deserialize_parameters(std::string_view filename) {
     Internal::Deserializer deserializer;
     return deserializer.deserialize_parameters(filename);
 }
@@ -1581,7 +1583,7 @@ std::map<std::string, Parameter> deserialize_parameters(const std::vector<uint8_
 
 namespace Halide {
 
-Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Parameter> &user_params) {
+Pipeline deserialize_pipeline(std::string_view filename, const std::map<std::string, Parameter> &user_params) {
     user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
     return Pipeline();
 }
@@ -1596,7 +1598,7 @@ Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map
     return Pipeline();
 }
 
-std::map<std::string, Parameter> deserialize_parameters(const std::string &filename) {
+std::map<std::string, Parameter> deserialize_parameters(std::string_view filename) {
     user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
     return {};
 }

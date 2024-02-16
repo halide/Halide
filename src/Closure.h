@@ -63,7 +63,7 @@ public:
     };
 
 protected:
-    void found_buffer_ref(const std::string &name, Type type,
+    void found_buffer_ref(std::string_view name, Type type,
                           bool read, bool written, const Halide::Buffer<> &image);
 
 public:
@@ -86,15 +86,15 @@ public:
      * Calling this multiple times (on multiple statements) is legal
      * (and will produce a unified closure).
      **/
-    void include(const Stmt &s, const std::string &loop_variable = "");
+    void include(const Stmt &s, std::string_view loop_variable = "");
 
     /** External variables referenced. There's code that assumes iterating over
      * this repeatedly gives a consistent order, so don't swap out the data type
      * for something non-deterministic. */
-    std::map<std::string, Type> vars;
+    StringMap<Type> vars;
 
     /** External allocations referenced. */
-    std::map<std::string, Buffer> buffers;
+    StringMap<Buffer> buffers;
 
     /** Pack a closure into a struct. */
     Expr pack_into_struct() const;

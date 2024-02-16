@@ -18,7 +18,7 @@ class RemoveDeadAllocations : public IRMutator {
             for (const auto &arg : op->args) {
                 const Variable *var = arg.as<Variable>();
                 if (var && ends_with(var->name, ".buffer")) {
-                    std::string func = var->name.substr(0, var->name.find_first_of('.'));
+                    std::string_view func = var->name.substr(0, var->name.find_first_of('.'));
                     if (allocs.contains(func)) {
                         allocs.pop(func);
                     }

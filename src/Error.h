@@ -26,7 +26,7 @@ struct HALIDE_EXPORT_SYMBOL Error {
     // Give each class a non-inlined constructor so that the type
     // doesn't get separately instantiated in each compilation unit.
     explicit Error(const char *msg);
-    explicit Error(const std::string &msg);
+    explicit Error(std::string_view msg);
 
     Error(const Error &);
     Error &operator=(const Error &);
@@ -48,14 +48,14 @@ private:
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
 struct HALIDE_EXPORT_SYMBOL RuntimeError : public Error {
     explicit RuntimeError(const char *msg);
-    explicit RuntimeError(const std::string &msg);
+    explicit RuntimeError(std::string_view msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to a user error. */
 struct HALIDE_EXPORT_SYMBOL CompileError : public Error {
     explicit CompileError(const char *msg);
-    explicit CompileError(const std::string &msg);
+    explicit CompileError(std::string_view msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
@@ -63,7 +63,7 @@ struct HALIDE_EXPORT_SYMBOL CompileError : public Error {
  * Halide's internals. */
 struct HALIDE_EXPORT_SYMBOL InternalError : public Error {
     explicit InternalError(const char *msg);
-    explicit InternalError(const std::string &msg);
+    explicit InternalError(std::string_view msg);
 };
 
 /** CompileTimeErrorReporter is used at compile time (*not* runtime) when

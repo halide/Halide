@@ -120,7 +120,8 @@ inline RefCount &ref_count<IRNode>(const IRNode *t) noexcept {
 
 template<>
 inline void destroy<IRNode>(const IRNode *t) {
-    delete t;
+    t->~IRNode();
+    free(const_cast<IRNode *>(t));
 }
 
 /** IR nodes are split into expressions and statements. These are
@@ -243,9 +244,9 @@ struct FloatImm : public ExprNode<FloatImm> {
 
 /** String constants */
 struct StringImm : public ExprNode<StringImm> {
-    std::string value;
+    std::string_view value;
 
-    static const StringImm *make(const std::string &val);
+    static const StringImm *make(std::string_view val);
 
     static const IRNodeType _node_type = IRNodeType::StringImm;
 };
@@ -307,7 +308,7 @@ struct Expr : public Internal::IRHandle {
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
-    Expr(const std::string &s)
+    explicit Expr(std::string_view s)
         : IRHandle(Internal::StringImm::make(s)) {
     }
 

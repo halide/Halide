@@ -22,7 +22,7 @@ CodeGen_Posix::CodeGen_Posix(const Target &t)
     : CodeGen_LLVM(t) {
 }
 
-Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, const Expr &condition) {
+Value *CodeGen_Posix::codegen_allocation_size(std::string_view name, Type type, const std::vector<Expr> &extents, const Expr &condition) {
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(64));
@@ -67,16 +67,16 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     if (!is_const_one(size_check)) {
         create_assertion(codegen(size_check || !condition),
                          Call::make(Int(32), "halide_error_buffer_allocation_too_large",
-                                    {name, total_size, max_size}, Call::Extern));
+                                    {Expr(name), total_size, max_size}, Call::Extern));
     }
 
     total_size = simplify(total_size);
     return codegen(total_size);
 }
 
-CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, MemoryType memory_type,
+CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(std::string_view name, Type type, MemoryType memory_type,
                                                            const std::vector<Expr> &extents, const Expr &condition,
-                                                           const Expr &new_expr, std::string free_function, int padding) {
+                                                           const Expr &new_expr, std::string_view free_function, int padding) {
     Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);
@@ -207,7 +207,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             free_stack_allocs.erase(it);
         } else {
             // Stack allocation with a dynamic size
-            slot = create_alloca_at_entry(pseudostack_slot_t_type, 1, true, name + ".pseudostack_slot");
+            slot = create_alloca_at_entry(pseudostack_slot_t_type, 1, true,
+                                          concat(name, ".pseudostack_slot"));
             llvm::Function *free_fn = module->getFunction("pseudostack_free");
             allocation.destructor = register_destructor(free_fn, slot, Always);
         }
@@ -321,7 +322,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     return allocation;
 }
 
-void CodeGen_Posix::free_allocation(const std::string &name) {
+void CodeGen_Posix::free_allocation(std::string_view name) {
     Allocation alloc = allocations.get(name);
 
     if (alloc.stack_bytes) {
@@ -341,11 +342,11 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     sym_pop(name);
 }
 
-string CodeGen_Posix::get_allocation_name(const std::string &n) {
+string CodeGen_Posix::get_allocation_name(std::string_view n) {
     if (allocations.contains(n)) {
         return allocations.get(n).name;
     } else {
-        return n;
+        return std::string{n};
     }
 }
 

@@ -27,41 +27,41 @@ using std::vector;
 
 namespace {
 
-std::string output_name(const string &filename, const string &fn_name, const string &ext) {
-    return !filename.empty() ? filename : (fn_name + ext);
+std::string output_name(std::string_view filename, std::string_view fn_name, std::string_view ext) {
+    return !filename.empty() ? std::string{filename} : concat(fn_name, ext);
 }
 
-std::string output_name(const string &filename, const Module &m, const string &ext) {
+std::string output_name(std::string_view filename, const Module &m, std::string_view ext) {
     return output_name(filename, m.name(), ext);
 }
 
-std::map<OutputFileType, std::string> single_output(const string &filename, const Module &m, OutputFileType output_type) {
+std::map<OutputFileType, std::string> single_output(std::string_view filename, const Module &m, OutputFileType output_type) {
     auto ext = get_output_info(m.target());
     std::map<OutputFileType, std::string> outputs = {
         {output_type, output_name(filename, m, ext.at(output_type).extension)}};
     return outputs;
 }
 
-std::map<OutputFileType, std::string> static_library_outputs(const string &filename_prefix, const Target &target) {
+std::map<OutputFileType, std::string> static_library_outputs(std::string_view filename_prefix, const Target &target) {
     auto ext = get_output_info(target);
     std::map<OutputFileType, std::string> outputs = {
-        {OutputFileType::c_header, filename_prefix + ext.at(OutputFileType::c_header).extension},
-        {OutputFileType::static_library, filename_prefix + ext.at(OutputFileType::static_library).extension},
+        {OutputFileType::c_header, concat(filename_prefix, ext.at(OutputFileType::c_header).extension)},
+        {OutputFileType::static_library, concat(filename_prefix, ext.at(OutputFileType::static_library).extension)},
     };
     return outputs;
 }
 
-std::map<OutputFileType, std::string> object_file_outputs(const string &filename_prefix, const Target &target) {
+std::map<OutputFileType, std::string> object_file_outputs(std::string_view filename_prefix, const Target &target) {
     auto ext = get_output_info(target);
     std::map<OutputFileType, std::string> outputs = {
-        {OutputFileType::c_header, filename_prefix + ext.at(OutputFileType::c_header).extension},
-        {OutputFileType::object, filename_prefix + ext.at(OutputFileType::object).extension},
+        {OutputFileType::c_header, concat(filename_prefix, ext.at(OutputFileType::c_header).extension)},
+        {OutputFileType::object, concat(filename_prefix, ext.at(OutputFileType::object).extension)},
     };
     return outputs;
 }
 
-std::string sanitize_function_name(const std::string &s) {
-    string name = s;
+std::string sanitize_function_name(std::string_view s) {
+    string name{s};
     for (char &c : name) {
         if (!isalnum(c)) {
             c = '_';
@@ -234,9 +234,9 @@ std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
 }
 
 /* static */
-AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_name) {
+AutoSchedulerFn Pipeline::find_autoscheduler(std::string_view autoscheduler_name) {
     const auto &m = get_autoscheduler_map();
-    auto it = m.find(autoscheduler_name);
+    auto it = m.find(std::string{autoscheduler_name});
     if (it == m.end()) {
         std::ostringstream o;
         o << "Unknown autoscheduler name '" << autoscheduler_name << "'; known names are:\n";
@@ -265,17 +265,17 @@ AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const A
 }
 
 /* static */
-void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
+void Pipeline::add_autoscheduler(std::string_view autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
     auto &m = get_autoscheduler_map();
-    user_assert(m.find(autoscheduler_name) == m.end()) << "'" << autoscheduler_name << "' is already registered as an autoscheduler.\n";
-    m[autoscheduler_name] = autoscheduler;
+    user_assert(m.find(std::string{autoscheduler_name}) == m.end()) << "'" << autoscheduler_name << "' is already registered as an autoscheduler.\n";
+    m.emplace(autoscheduler_name, autoscheduler);
 }
 
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
-    std::map<string, Function> env;
+    StringMap<Function> env;
     for (const Function &f : contents->outputs) {
-        std::map<string, Function> more_funcs = find_transitive_calls(f);
+        StringMap<Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
     // Compute a topological order
@@ -289,55 +289,55 @@ Func Pipeline::get_func(size_t index) {
 
 void Pipeline::compile_to(const std::map<OutputFileType, std::string> &output_files,
                           const vector<Argument> &args,
-                          const string &fn_name,
+                          std::string_view fn_name,
                           const Target &target) {
     compile_to_module(args, fn_name, target).compile(output_files);
 }
 
-void Pipeline::compile_to_bitcode(const string &filename,
+void Pipeline::compile_to_bitcode(std::string_view filename,
                                   const vector<Argument> &args,
-                                  const string &fn_name,
+                                  std::string_view fn_name,
                                   const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     m.compile(single_output(filename, m, OutputFileType::bitcode));
 }
 
-void Pipeline::compile_to_llvm_assembly(const string &filename,
+void Pipeline::compile_to_llvm_assembly(std::string_view filename,
                                         const vector<Argument> &args,
-                                        const string &fn_name,
+                                        std::string_view fn_name,
                                         const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     m.compile(single_output(filename, m, OutputFileType::llvm_assembly));
 }
 
-void Pipeline::compile_to_object(const string &filename,
+void Pipeline::compile_to_object(std::string_view filename,
                                  const vector<Argument> &args,
-                                 const string &fn_name,
+                                 std::string_view fn_name,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     auto ext = get_output_info(target);
     m.compile({{OutputFileType::object, output_name(filename, m, ext.at(OutputFileType::object).extension)}});
 }
 
-void Pipeline::compile_to_header(const string &filename,
+void Pipeline::compile_to_header(std::string_view filename,
                                  const vector<Argument> &args,
-                                 const string &fn_name,
+                                 std::string_view fn_name,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     m.compile(single_output(filename, m, OutputFileType::c_header));
 }
 
-void Pipeline::compile_to_assembly(const string &filename,
+void Pipeline::compile_to_assembly(std::string_view filename,
                                    const vector<Argument> &args,
-                                   const string &fn_name,
+                                   std::string_view fn_name,
                                    const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     m.compile(single_output(filename, m, OutputFileType::assembly));
 }
 
-void Pipeline::compile_to_c(const string &filename,
+void Pipeline::compile_to_c(std::string_view filename,
                             const vector<Argument> &args,
-                            const string &fn_name,
+                            std::string_view fn_name,
                             const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     m.compile(single_output(filename, m, OutputFileType::c_source));
@@ -348,7 +348,7 @@ void Pipeline::print_loop_nest() {
     debug(0) << Halide::Internal::print_loop_nest(contents->outputs);
 }
 
-void Pipeline::compile_to_lowered_stmt(const string &filename,
+void Pipeline::compile_to_lowered_stmt(std::string_view filename,
                                        const vector<Argument> &args,
                                        StmtOutputFormat fmt,
                                        const Target &target) {
@@ -356,44 +356,44 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
     m.compile(single_output(filename, m, fmt == HTML ? OutputFileType::stmt_html : OutputFileType::stmt));
 }
 
-void Pipeline::compile_to_static_library(const string &filename_prefix,
+void Pipeline::compile_to_static_library(std::string_view filename_prefix,
                                          const vector<Argument> &args,
-                                         const std::string &fn_name,
+                                         std::string_view fn_name,
                                          const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     m.compile(static_library_outputs(filename_prefix, target));
 }
 
-void Pipeline::compile_to_multitarget_static_library(const std::string &filename_prefix,
+void Pipeline::compile_to_multitarget_static_library(std::string_view filename_prefix,
                                                      const std::vector<Argument> &args,
                                                      const std::vector<Target> &targets) {
-    auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
+    auto module_producer = [this, &args](std::string_view name, const Target &target) -> Module {
         return compile_to_module(args, name, target);
     };
     auto outputs = static_library_outputs(filename_prefix, targets.back());
     compile_multitarget(generate_function_name(), outputs, targets, {}, module_producer);
 }
 
-void Pipeline::compile_to_multitarget_object_files(const std::string &filename_prefix,
+void Pipeline::compile_to_multitarget_object_files(std::string_view filename_prefix,
                                                    const std::vector<Argument> &args,
                                                    const std::vector<Target> &targets,
                                                    const std::vector<std::string> &suffixes) {
-    auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
+    auto module_producer = [this, &args](std::string_view name, const Target &target) -> Module {
         return compile_to_module(args, name, target);
     };
     auto outputs = object_file_outputs(filename_prefix, targets.back());
     compile_multitarget(generate_function_name(), outputs, targets, suffixes, module_producer);
 }
 
-void Pipeline::compile_to_file(const string &filename_prefix,
+void Pipeline::compile_to_file(std::string_view filename_prefix,
                                const vector<Argument> &args,
-                               const std::string &fn_name,
+                               std::string_view fn_name,
                                const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     auto ext = get_output_info(target);
     std::map<OutputFileType, std::string> outputs = {
-        {OutputFileType::c_header, filename_prefix + ext.at(OutputFileType::c_header).extension},
-        {OutputFileType::object, filename_prefix + ext.at(OutputFileType::object).extension},
+        {OutputFileType::c_header, concat(filename_prefix, ext.at(OutputFileType::c_header).extension)},
+        {OutputFileType::object, concat(filename_prefix, ext.at(OutputFileType::object).extension)},
     };
     m.compile(outputs);
 }
@@ -441,10 +441,11 @@ class FindExterns : public IRGraphVisitor {
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
 
-        if ((op->call_type == Call::Extern || op->call_type == Call::PureExtern) && externs.count(op->name) == 0) {
-            void *address = get_symbol_address(op->name.c_str());
+        if ((op->call_type == Call::Extern || op->call_type == Call::PureExtern) &&
+            externs.count(std::string{op->name}) == 0) {
+            void *address = get_symbol_address(op->name);
             if (address == nullptr && !starts_with(op->name, "_")) {
-                std::string underscored_name = "_" + op->name;
+                std::string underscored_name = concat("_", op->name);
                 address = get_symbol_address(underscored_name.c_str());
             }
             if (address != nullptr) {
@@ -484,7 +485,7 @@ vector<Argument> Pipeline::infer_arguments() {
 }
 
 Module Pipeline::compile_to_module(const vector<Argument> &args,
-                                   const string &fn_name,
+                                   std::string_view fn_name,
                                    const Target &target,
                                    const LinkageType linkage_type) {
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";

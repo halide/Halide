@@ -21,11 +21,11 @@ namespace {
 // Visitor for keeping track of all input images accessed and their types.
 class FindImageInputs : public IRVisitor {
     using IRVisitor::visit;
-    set<string> seen_image_param;
+    StringSet seen_image_param;
 
     void visit(const Call *call) override {
         if (call->call_type == Call::Image) {
-            input_type[call->name] = call->type;
+            input_type.emplace(call->name, call->type);
 
             // Call to an ImageParam
             if (call->param.defined() && (seen_image_param.count(call->name) == 0)) {
@@ -40,12 +40,12 @@ class FindImageInputs : public IRVisitor {
                         << "AutoSchedule: Estimate of the extent value of ImageParam \""
                         << call->name << "\" in dimension " << i << " is not specified.\n";
 
-                    string min_var = call->param.name() + ".min." + std::to_string(i);
-                    string extent_var = call->param.name() + ".extent." + std::to_string(i);
+                    string min_var = concat(call->param.name(), ".min.", std::to_string(i));
+                    string extent_var = concat(call->param.name(), ".extent.", std::to_string(i));
 
                     input_estimates.emplace(min_var, Interval(min, min));
                     input_estimates.emplace(extent_var, Interval(extent, extent));
-                    seen_image_param.insert(call->name);
+                    seen_image_param.emplace(call->name);
                 }
             }
         }
@@ -55,8 +55,8 @@ class FindImageInputs : public IRVisitor {
     }
 
 public:
-    map<string, Type> input_type;
-    map<string, Interval> input_estimates;
+    StringMap<Type> input_type;
+    StringMap<Interval> input_estimates;
 };
 
 // Visitor for tracking the arithmetic and memory costs.
@@ -314,7 +314,7 @@ public:
     int64_t memory = 0;
     // Detailed breakdown of bytes loaded by the allocation or function
     // they are loaded from.
-    map<string, int64_t> detailed_byte_loads;
+    StringMap<int64_t> detailed_byte_loads;
 
     ExprCost() = default;
 };
@@ -385,14 +385,14 @@ Cost compute_expr_cost(Expr expr) {
     return Cost(cost_visitor.arith, cost_visitor.memory);
 }
 
-map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
+StringMap<Expr> compute_expr_detailed_byte_loads(Expr expr) {
     // TODO: Handle likely
     // expr = LikelyExpression().mutate(expr);
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
 
-    map<string, Expr> loads;
+    StringMap<Expr> loads;
     for (const auto &iter : cost_visitor.detailed_byte_loads) {
         loads.emplace(iter.first, Expr(iter.second));
     }
@@ -401,7 +401,7 @@ map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
 
 }  // anonymous namespace
 
-RegionCosts::RegionCosts(const map<string, Function> &_env,
+RegionCosts::RegionCosts(const StringMap<Function> &_env,
                          const vector<string> &_order)
     : env(_env), order(_order) {
     for (const auto &kv : env) {
@@ -422,8 +422,8 @@ RegionCosts::RegionCosts(const map<string, Function> &_env,
     }
 }
 
-Cost RegionCosts::stage_region_cost(const string &func, int stage, const DimBounds &bounds,
-                                    const set<string> &inlines) {
+Cost RegionCosts::stage_region_cost(std::string_view func, int stage, const DimBounds &bounds,
+                                    const StringSet &inlines) {
     Function curr_f = get_element(env, func);
 
     Box stage_region;
@@ -448,8 +448,8 @@ Cost RegionCosts::stage_region_cost(const string &func, int stage, const DimBoun
     return Cost(simplify(size * cost.arith), simplify(size * cost.memory));
 }
 
-Cost RegionCosts::stage_region_cost(const string &func, int stage, const Box &region,
-                                    const set<string> &inlines) {
+Cost RegionCosts::stage_region_cost(std::string_view func, int stage, const Box &region,
+                                    const StringSet &inlines) {
     Function curr_f = get_element(env, func);
 
     DimBounds pure_bounds;
@@ -463,7 +463,7 @@ Cost RegionCosts::stage_region_cost(const string &func, int stage, const Box &re
     return stage_region_cost(func, stage, stage_bounds, inlines);
 }
 
-Cost RegionCosts::region_cost(const string &func, const Box &region, const set<string> &inlines) {
+Cost RegionCosts::region_cost(std::string_view func, const Box &region, const StringSet &inlines) {
     Function curr_f = get_element(env, func);
     Cost region_cost(0, 0);
 
@@ -483,7 +483,7 @@ Cost RegionCosts::region_cost(const string &func, const Box &region, const set<s
     return region_cost;
 }
 
-Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string> &inlines) {
+Cost RegionCosts::region_cost(const StringMap<Box> &regions, const StringSet &inlines) {
     Cost total_cost(0, 0);
     for (const auto &f : regions) {
         // The cost for pure inlined functions will be accounted in the
@@ -507,10 +507,10 @@ Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string>
     return total_cost;
 }
 
-map<string, Expr>
-RegionCosts::stage_detailed_load_costs(const string &func, int stage,
-                                       const set<string> &inlines) {
-    map<string, Expr> load_costs;
+StringMap<Expr>
+RegionCosts::stage_detailed_load_costs(std::string_view func, int stage,
+                                       const StringSet &inlines) {
+    StringMap<Expr> load_costs;
     Function curr_f = get_element(env, func);
 
     if (curr_f.has_extern_definition()) {
@@ -523,7 +523,7 @@ RegionCosts::stage_detailed_load_costs(const string &func, int stage,
             Expr inlined_expr = perform_inline(e, env, inlines, order);
             inlined_expr = simplify(inlined_expr);
 
-            map<string, Expr> expr_load_costs = compute_expr_detailed_byte_loads(inlined_expr);
+            StringMap<Expr> expr_load_costs = compute_expr_detailed_byte_loads(inlined_expr);
             combine_load_costs(load_costs, expr_load_costs);
 
             auto iter = load_costs.find(func);
@@ -539,10 +539,10 @@ RegionCosts::stage_detailed_load_costs(const string &func, int stage,
     return load_costs;
 }
 
-map<string, Expr>
-RegionCosts::stage_detailed_load_costs(const string &func, int stage,
+StringMap<Expr>
+RegionCosts::stage_detailed_load_costs(std::string_view func, int stage,
                                        DimBounds &bounds,
-                                       const set<string> &inlines) {
+                                       const StringSet &inlines) {
     Function curr_f = get_element(env, func);
 
     Box stage_region;
@@ -552,7 +552,7 @@ RegionCosts::stage_detailed_load_costs(const string &func, int stage,
         stage_region.push_back(get_element(bounds, dims[d].var));
     }
 
-    map<string, Expr> load_costs = stage_detailed_load_costs(func, stage, inlines);
+    StringMap<Expr> load_costs = stage_detailed_load_costs(func, stage, inlines);
 
     Expr size = box_size(stage_region);
     for (auto &kv : load_costs) {
@@ -568,11 +568,11 @@ RegionCosts::stage_detailed_load_costs(const string &func, int stage,
     return load_costs;
 }
 
-map<string, Expr>
-RegionCosts::detailed_load_costs(const string &func, const Box &region,
-                                 const set<string> &inlines) {
+StringMap<Expr>
+RegionCosts::detailed_load_costs(std::string_view func, const Box &region,
+                                 const StringSet &inlines) {
     Function curr_f = get_element(env, func);
-    map<string, Expr> load_costs;
+    StringMap<Expr> load_costs;
 
     int num_stages = curr_f.updates().size() + 1;
 
@@ -586,7 +586,7 @@ RegionCosts::detailed_load_costs(const string &func, const Box &region,
     vector<DimBounds> stage_bounds = get_stage_bounds(curr_f, pure_bounds);
 
     for (int s = 0; s < num_stages; s++) {
-        map<string, Expr> stage_load_costs = stage_detailed_load_costs(func, s, inlines);
+        StringMap<Expr> stage_load_costs = stage_detailed_load_costs(func, s, inlines);
 
         Box stage_region;
 
@@ -612,10 +612,10 @@ RegionCosts::detailed_load_costs(const string &func, const Box &region,
     return load_costs;
 }
 
-map<string, Expr>
-RegionCosts::detailed_load_costs(const map<string, Box> &regions,
-                                 const set<string> &inlines) {
-    map<string, Expr> load_costs;
+StringMap<Expr>
+RegionCosts::detailed_load_costs(const StringMap<Box> &regions,
+                                 const StringSet &inlines) {
+    StringMap<Expr> load_costs;
     for (const auto &r : regions) {
         // The cost for pure inlined functions will be accounted in the
         // consumer of the inlined function so they should be skipped.
@@ -624,7 +624,7 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
             continue;
         }
 
-        map<string, Expr> partial_load_costs = detailed_load_costs(r.first, r.second, inlines);
+        StringMap<Expr> partial_load_costs = detailed_load_costs(r.first, r.second, inlines);
         combine_load_costs(load_costs, partial_load_costs);
     }
 
@@ -632,7 +632,7 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
 }
 
 Cost RegionCosts::get_func_stage_cost(const Function &f, int stage,
-                                      const set<string> &inlines) const {
+                                      const StringSet &inlines) const {
     if (f.has_extern_definition()) {
         return Cost();
     }
@@ -671,7 +671,7 @@ Cost RegionCosts::get_func_stage_cost(const Function &f, int stage,
     return cost;
 }
 
-vector<Cost> RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
+vector<Cost> RegionCosts::get_func_cost(const Function &f, const StringSet &inlines) {
     if (f.has_extern_definition()) {
         return {Cost()};
     }
@@ -684,7 +684,7 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f, const set<string> &in
     return func_costs;
 }
 
-Expr RegionCosts::region_size(const string &func, const Box &region) {
+Expr RegionCosts::region_size(std::string_view func, const Box &region) {
     const Function &f = get_element(env, func);
     Expr size = box_size(region);
     if (!size.defined()) {
@@ -695,14 +695,14 @@ Expr RegionCosts::region_size(const string &func, const Box &region) {
     return simplify(size * size_per_ele);
 }
 
-Expr RegionCosts::region_footprint(const map<string, Box> &regions,
-                                   const set<string> &inlined) {
-    map<string, int> num_consumers;
+Expr RegionCosts::region_footprint(const StringMap<Box> &regions,
+                                   const StringSet &inlined) {
+    StringMap<int> num_consumers;
     for (const auto &f : regions) {
         num_consumers[f.first] = 0;
     }
     for (const auto &f : regions) {
-        map<string, Function> prods = find_direct_calls(get_element(env, f.first));
+        StringMap<Function> prods = find_direct_calls(get_element(env, f.first));
         for (const auto &p : prods) {
             auto iter = num_consumers.find(p.first);
             if (iter != num_consumers.end()) {
@@ -723,7 +723,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
     Expr working_set_size = make_zero(Int(64));
     Expr curr_size = make_zero(Int(64));
 
-    map<string, Expr> func_sizes;
+    StringMap<Expr> func_sizes;
 
     for (const auto &f : regions) {
         // Inlined functions do not have allocations
@@ -741,7 +741,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
             curr_size += get_element(func_sizes, f);
         }
         working_set_size = max(curr_size, working_set_size);
-        map<string, Function> prods = find_direct_calls(get_element(env, f));
+        StringMap<Function> prods = find_direct_calls(get_element(env, f));
         for (const auto &p : prods) {
             auto iter = num_consumers.find(p.first);
             if (iter != num_consumers.end()) {
@@ -757,7 +757,7 @@ Expr RegionCosts::region_footprint(const map<string, Box> &regions,
     return simplify(working_set_size);
 }
 
-Expr RegionCosts::input_region_size(const string &input, const Box &region) {
+Expr RegionCosts::input_region_size(std::string_view input, const Box &region) {
     Expr size = box_size(region);
     if (!size.defined()) {
         return Expr();
@@ -767,7 +767,7 @@ Expr RegionCosts::input_region_size(const string &input, const Box &region) {
     return simplify(size * size_per_ele);
 }
 
-Expr RegionCosts::input_region_size(const map<string, Box> &input_regions) {
+Expr RegionCosts::input_region_size(const StringMap<Box> &input_regions) {
     Expr total_size = make_zero(Int(64));
     for (const auto &reg : input_regions) {
         Expr size = input_region_size(reg.first, reg.second);

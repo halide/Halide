@@ -54,7 +54,7 @@ bool Callable::defined() const {
     return contents.defined();
 }
 
-Callable::Callable(const std::string &name,
+Callable::Callable(std::string_view name,
                    const JITHandlers &jit_handlers,
                    const std::map<std::string, JITExtern> &jit_externs,
                    JITCache &&jit_cache)

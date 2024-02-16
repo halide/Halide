@@ -758,7 +758,7 @@ struct SpvFunctionContents {
 /** Contents of a SPIR-V code module */
 struct SpvModuleContents {
     using Capabilities = std::set<SpvCapability>;
-    using Extensions = std::set<std::string>;
+    using Extensions = StringSet;
     using Imports = std::unordered_map<std::string, SpvId>;
     using Functions = std::vector<SpvFunction>;
     using Instructions = std::vector<SpvInstruction>;

@@ -13,6 +13,7 @@
 #include "Expr.h"
 #include "FunctionPtr.h"
 #include "Schedule.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -55,21 +56,21 @@ public:
     Function() = default;
 
     /** Construct a new function with the given name */
-    explicit Function(const std::string &n);
+    explicit Function(std::string_view n);
 
     /** Construct a new function with the given name,
      * with a requirement that it can only represent Expr(s) of the given type(s),
      * and must have exactly the give nnumber of dimensions.
      * required_types.empty() means there are no constraints on the type(s).
      * required_dims == AnyDims means there are no constraints on the dimensions. */
-    explicit Function(const std::vector<Type> &required_types, int required_dims, const std::string &n);
+    explicit Function(const std::vector<Type> &required_types, int required_dims, std::string_view n);
 
     /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
     explicit Function(const FunctionPtr &);
 
     /** Update a function with deserialized data */
-    void update_with_deserialization(const std::string &name,
-                                     const std::string &origin_name,
+    void update_with_deserialization(std::string_view name,
+                                     std::string_view origin_name,
                                      const std::vector<Halide::Type> &output_types,
                                      const std::vector<Halide::Type> &required_types,
                                      int required_dims,
@@ -77,10 +78,10 @@ public:
                                      const FuncSchedule &func_schedule,
                                      const Definition &init_def,
                                      const std::vector<Definition> &updates,
-                                     const std::string &debug_file,
+                                     std::string_view debug_file,
                                      const std::vector<Parameter> &output_buffers,
                                      const std::vector<ExternFuncArgument> &extern_arguments,
-                                     const std::string &extern_function_name,
+                                     std::string_view extern_function_name,
                                      NameMangling name_mangling,
                                      DeviceAPI device_api,
                                      const Expr &extern_proxy_expr,
@@ -106,7 +107,7 @@ public:
      */
     // @{
     void deep_copy(const FunctionPtr &copy, std::map<FunctionPtr, FunctionPtr> &copied_map) const;
-    void deep_copy(std::string name, const FunctionPtr &copy,
+    void deep_copy(std::string_view name, const FunctionPtr &copy,
                    std::map<FunctionPtr, FunctionPtr> &copied_map) const;
     // @}
 
@@ -135,12 +136,12 @@ public:
     void mutate(IRMutator *mutator);
 
     /** Get the name of the function. */
-    const std::string &name() const;
+    std::string_view name() const;
 
     /** If this is a wrapper of another func, created by a chain of in
      * or clone_in calls, returns the name of the original
      * Func. Otherwise returns the name. */
-    const std::string &origin_name() const;
+    std::string_view origin_name() const;
 
     /** Get a mutable handle to the init definition. */
     Definition &definition();
@@ -240,7 +241,7 @@ public:
     // @}
 
     /** Add an external definition of this Func. */
-    void define_extern(const std::string &function_name,
+    void define_extern(std::string_view function_name,
                        const std::vector<ExternFuncArgument> &args,
                        const std::vector<Type> &types,
                        const std::vector<Var> &dims,
@@ -254,7 +255,7 @@ public:
 
     /** Get the name of the extern function called for an extern
      * definition. */
-    const std::string &extern_function_name() const;
+    std::string_view extern_function_name() const;
 
     /** Get the DeviceAPI declared for an extern function. */
     DeviceAPI extern_function_device_api() const;
@@ -265,7 +266,7 @@ public:
     }
 
     /** Get a const handle to the debug filename. */
-    const std::string &debug_file() const;
+    std::string_view debug_file() const;
 
     /** Get a handle to the debug filename. */
     std::string &debug_file();
@@ -279,7 +280,7 @@ public:
     void trace_loads();
     void trace_stores();
     void trace_realizations();
-    void add_trace_tag(const std::string &trace_tag);
+    void add_trace_tag(std::string_view trace_tag);
     bool is_tracing_loads() const;
     bool is_tracing_stores() const;
     bool is_tracing_realizations() const;
@@ -302,7 +303,7 @@ public:
      * return a strong reference to it. Useful to create Functions which
      * have circular references to this one - e.g. the wrappers
      * produced by Func::in. */
-    Function new_function_in_same_group(const std::string &);
+    Function new_function_in_same_group(std::string_view);
 
     /** Mark calls of this function by 'f' to be replaced with its wrapper
      * during the lowering stage. If the string 'f' is empty, it means replace
@@ -311,8 +312,8 @@ public:
      * user from updating the values of the Function it wraps via the wrapper.
      * See \ref Func::in for more details. */
     // @{
-    void add_wrapper(const std::string &f, Function &wrapper);
-    const std::map<std::string, FunctionPtr> &wrappers() const;
+    void add_wrapper(std::string_view f, Function &wrapper);
+    const StringMap<FunctionPtr> &wrappers() const;
     // @}
 
     /** Check if a Function is a trivial wrapper around another
@@ -330,7 +331,7 @@ public:
     // @}
 
     /** Return true iff the name matches one of the Function's pure args. */
-    bool is_pure_arg(const std::string &name) const;
+    bool is_pure_arg(std::string_view name) const;
 
     /** If the Function has type requirements, check that the given argument
      * is compatible with them. If not, assert-fail. (If there are no type requirements, do nothing.) */
@@ -350,9 +351,9 @@ public:
 };
 
 /** Deep copy an entire Function DAG. */
-std::pair<std::vector<Function>, std::map<std::string, Function>> deep_copy(
+std::pair<std::vector<Function>, StringMap<Function>> deep_copy(
     const std::vector<Function> &outputs,
-    const std::map<std::string, Function> &env);
+    const StringMap<Function> &env);
 
 extern std::atomic<int> random_variable_counter;
 

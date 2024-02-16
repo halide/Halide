@@ -22,7 +22,7 @@ struct ParameterContents {
     const bool is_buffer;
     MemoryType memory_type = MemoryType::Auto;
 
-    ParameterContents(Type t, bool b, int d, const std::string &n)
+    ParameterContents(Type t, bool b, int d, std::string_view n)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()),
           host_alignment(t.bytes()), buffer_constraints(std::max(0, dimensions)), is_buffer(b) {
         // stride_constraint[0] defaults to 1. This is important for
@@ -77,12 +77,12 @@ Parameter::Parameter(const Type &t, bool is_buffer, int d)
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
-Parameter::Parameter(const Type &t, bool is_buffer, int d, const std::string &name)
+Parameter::Parameter(const Type &t, bool is_buffer, int d, std::string_view name)
     : contents(new Internal::ParameterContents(t, is_buffer, d, name)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
-Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
+Parameter::Parameter(const Type &t, int dimensions, std::string_view name,
                      const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
                      MemoryType memory_type)
     : contents(new Internal::ParameterContents(t, /*is_buffer*/ true, dimensions, name)) {
@@ -92,7 +92,7 @@ Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
     contents->memory_type = memory_type;
 }
 
-Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
+Parameter::Parameter(const Type &t, int dimensions, std::string_view name,
                      const std::optional<halide_scalar_value_t> &scalar_data, const Expr &scalar_default, const Expr &scalar_min,
                      const Expr &scalar_max, const Expr &scalar_estimate)
     : contents(new Internal::ParameterContents(t, /*is_buffer*/ false, dimensions, name)) {
@@ -113,7 +113,7 @@ int Parameter::dimensions() const {
     return contents->dimensions;
 }
 
-const std::string &Parameter::name() const {
+std::string_view Parameter::name() const {
     check_defined();
     return contents->name;
 }
@@ -276,10 +276,10 @@ Expr remove_self_references(const Parameter &p, const Expr &e) {
 
         Expr visit(const Variable *var) override {
             if (var->param.same_as(p)) {
-                internal_assert(starts_with(var->name, p.name() + "."));
+                internal_assert(starts_with(var->name, p.name(), "."));
                 return Variable::make(var->type, var->name);
             } else {
-                internal_assert(!starts_with(var->name, p.name() + "."));
+                internal_assert(!starts_with(var->name, p.name(), "."));
             }
             return var;
         }
@@ -301,7 +301,7 @@ Expr restore_self_references(const Parameter &p, const Expr &e) {
             if (!var->image.defined() &&
                 !var->param.defined() &&
                 !var->reduction_domain.defined() &&
-                Internal::starts_with(var->name, p.name() + ".")) {
+                Internal::starts_with(var->name, p.name(), ".")) {
                 return Internal::Variable::make(var->type, var->name, p);
             }
             return var;
@@ -495,7 +495,7 @@ MemoryType Parameter::memory_type() const {
 
 namespace Internal {
 
-void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
+void check_call_arg_types(std::string_view name, std::vector<Expr> *args, int dims) {
     user_assert(args->size() == (size_t)dims)
         << args->size() << "-argument call to \""
         << name << "\", which has " << dims << " dimensions.\n";

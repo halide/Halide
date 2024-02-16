@@ -38,7 +38,7 @@ public:
 
 protected:
     void compile_func(const LoweredFunc &f,
-                      const std::string &simple_name, const std::string &extern_name) override;
+                      std::string_view simple_name, std::string_view extern_name) override;
 
     void init_module() override;
 
@@ -50,7 +50,7 @@ protected:
     int native_vector_bits() const override;
 
     llvm::Function *define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty,
-                                         const std::string &name,
+                                         std::string_view name,
                                          std::vector<Type> arg_types,
                                          int flags);
 
@@ -84,9 +84,9 @@ protected:
      * return null if the maybe option is true and the intrinsic is
      * not found. */
     ///@{
-    llvm::Value *call_intrin(Type t, const std::string &name,
+    llvm::Value *call_intrin(Type t, std::string_view name,
                              std::vector<Expr>, bool maybe = false);
-    llvm::Value *call_intrin(llvm::Type *t, const std::string &name,
+    llvm::Value *call_intrin(llvm::Type *t, std::string_view name,
                              std::vector<llvm::Value *>, bool maybe = false);
     ///@}
 
@@ -117,7 +117,7 @@ private:
      * list of its extents and its size. Fires a runtime assert
      * (halide_error) if the size overflows 2^31 -1, the maximum
      * positive number an int32_t can hold. */
-    llvm::Value *codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, int padding);
+    llvm::Value *codegen_cache_allocation_size(std::string_view name, Type type, const std::vector<Expr> &extents, int padding);
 
     /** Generate a LUT (8/16 bit, max_index < 256) lookup using vlut instructions. */
     llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
@@ -471,8 +471,8 @@ Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
 }
 
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
-                                   const string &simple_name,
-                                   const string &extern_name) {
+                                   std::string_view simple_name,
+                                   std::string_view extern_name) {
     CodeGen_Posix::begin_func(f.linkage, simple_name, extern_name, f.args);
 
     Stmt body = f.body;
@@ -880,7 +880,7 @@ void CodeGen_Hexagon::init_module() {
 
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
                                                       Type ret_ty,
-                                                      const string &name,
+                                                      std::string_view name,
                                                       vector<Type> arg_types,
                                                       int flags) {
     internal_assert(intrin) << "Null definition for intrinsic '" << name << "'\n";
@@ -904,7 +904,7 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
         llvm::FunctionType::get(llvm_type_of(ret_ty), llvm_arg_types, false);
     llvm::Function *wrapper =
         llvm::Function::Create(wrapper_ty, llvm::GlobalValue::InternalLinkage,
-                               "halide.hexagon." + name, module.get());
+                               concat("halide.hexagon.", name), module.get());
     llvm::BasicBlock *block =
         llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
     IRBuilderBase::InsertPoint here = builder->saveIP();
@@ -1740,7 +1740,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
     return vlut(lut, ConstantVector::get(llvm_indices), min_index, max_index);
 }
 
-Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
+Value *CodeGen_Hexagon::call_intrin(Type result_type, std::string_view name,
                                     vector<Expr> args, bool maybe) {
     llvm::Function *fn = module->getFunction(name);
     if (maybe && !fn) {
@@ -1752,7 +1752,7 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
         // We have fewer than half as many lanes in our intrinsic as
         // we have in the call. Check to see if a double vector
         // version of this intrinsic exists.
-        llvm::Function *fn2 = module->getFunction(name + ".dv");
+        llvm::Function *fn2 = module->getFunction(concat(name, ".dv"));
         if (fn2) {
             fn = fn2;
         }
@@ -1763,7 +1763,7 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
                                       fn, std::move(args));
 }
 
-Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
+Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, std::string_view name,
                                     vector<Value *> args, bool maybe) {
     llvm::Function *fn = module->getFunction(name);
     if (maybe && !fn) {
@@ -1775,7 +1775,7 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
         // We have fewer than half as many lanes in our intrinsic as
         // we have in the call. Check to see if a double vector
         // version of this intrinsic exists.
-        llvm::Function *fn2 = module->getFunction(name + ".dv");
+        llvm::Function *fn2 = module->getFunction(concat(name, ".dv"));
         if (fn2) {
             fn = fn2;
         }
@@ -1870,7 +1870,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
     // Map Halide functions to Hexagon intrinsics, plus a boolean
     // indicating if the intrinsic has signed variants or not.
-    static std::map<string, std::pair<string, bool>> functions = {
+    static StringMap<std::pair<string, bool>> functions = {
         {Call::get_intrinsic_name(Call::absd), {"halide.hexagon.absd", true}},
         {Call::get_intrinsic_name(Call::halving_add), {"halide.hexagon.avg", true}},
         {Call::get_intrinsic_name(Call::rounding_halving_add), {"halide.hexagon.avg_rnd", true}},
@@ -1986,8 +1986,10 @@ void CodeGen_Hexagon::visit(const Call *op) {
         int index_lanes = op->type.lanes();
         int intrin_lanes = native_vector_bits() / op->type.bits();
 
-        string name = "halide.hexagon.vgather";
-        name += (op->type.bits() == 16) ? ".h.h" : ".w.w";
+        const char *name =
+            (op->type.bits() == 16) ?
+                "halide.hexagon.vgather.h.h" :
+                "halide.hexagon.vgather.w.w";
         llvm::Function *fn = module->getFunction(name);
 
         Value *dst_buffer = codegen(op->args[0]);
@@ -2096,7 +2098,7 @@ void CodeGen_Hexagon::visit(const Select *op) {
 }
 
 Value *CodeGen_Hexagon::codegen_cache_allocation_size(
-    const std::string &name, Type type,
+    std::string_view name, Type type,
     const std::vector<Expr> &extents, int padding) {
     // Compute size from list of extents checking for overflow.
 
@@ -2142,7 +2144,8 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(
         create_assertion(
             codegen(size_check),
             Call::make(Int(32), "halide_error_buffer_allocation_too_large",
-                       {name, Cast::make(UInt(64), total_size),
+                       {Expr(name),
+                        Cast::make(UInt(64), total_size),
                         Cast::make(UInt(64), max_size)},
                        Call::Extern));
     }

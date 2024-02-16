@@ -35,7 +35,7 @@ public:
     Func operator()(const Func &func, int update_id = -1) const;
     Func operator()(const Buffer<> &buffer) const;
     Func operator()(const Param<> &param) const;
-    Func operator()(const std::string &name) const;
+    Func operator()(std::string_view name) const;
 
 private:
     const std::map<FuncKey, Func> adjoints;

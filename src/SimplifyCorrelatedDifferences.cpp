@@ -119,7 +119,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
                 frames.emplace_back(op, loop_var, monotonic);
                 Expr new_value = mutate(op->value);
                 bool may_substitute_in = new_value.type() == Int(32) && pure;
-                lets.emplace_back(OuterLet{op->name, new_value, may_substitute_in});
+                lets.emplace_back(OuterLet{std::string{op->name}, new_value, may_substitute_in});
                 frames.back().new_value = std::move(new_value);
             } else {
                 // Pure and constant w.r.t the loop var. Doesn't
@@ -175,12 +175,12 @@ class SimplifyCorrelatedDifferences : public IRMutator {
     }
 
     // Add the names of any free variables in an expr to the provided set
-    void track_free_vars(const Expr &e, std::set<std::string> *vars) {
+    void track_free_vars(const Expr &e, StringSet *vars) {
         class TrackFreeVars : public IRVisitor {
             using IRVisitor::visit;
             void visit(const Variable *op) override {
                 if (!scope.contains(op->name)) {
-                    vars->insert(op->name);
+                    vars->emplace(op->name);
                 }
             }
             void visit(const Let *op) override {
@@ -189,9 +189,9 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             }
 
         public:
-            std::set<std::string> *vars;
+            StringSet *vars;
             Scope<> scope;
-            TrackFreeVars(std::set<std::string> *vars)
+            TrackFreeVars(StringSet *vars)
                 : vars(vars) {
             }
         } tracker(vars);
@@ -207,7 +207,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && !correlated) ||
             (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && !correlated)) {
 
-            std::set<std::string> vars;
+            StringSet vars;
             track_free_vars(e, &vars);
 
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {

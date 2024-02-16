@@ -29,14 +29,15 @@ void check_all_split_factors(const Function &f, const Definition &def, std::vect
         // entered, the split factor will be positive. We can still
         // assume the pipeline preconditions, because they will be
         // checked before this.
-        std::ostringstream factor_str;
-        factor_str << split.factor;
+        std::ostringstream sstr;
+        sstr << split.factor;
         Expr error = Call::make(Int(32), "halide_error_split_factor_not_positive",
-                                {f.name(),
-                                 split_string(split.old_var, ".").back(),
-                                 split_string(split.outer, ".").back(),
-                                 split_string(split.inner, ".").back(),
-                                 factor_str.str(), split.factor},
+                                {Expr(f.name()),
+                                 Expr(split_string(split.old_var, ".").back()),
+                                 Expr(split_string(split.outer, ".").back()),
+                                 Expr(split_string(split.inner, ".").back()),
+                                 Expr(sstr.str()),
+                                 split.factor},
                                 Call::Extern);
         stmts->push_back(AssertStmt::make(positive, error));
     }
@@ -48,7 +49,7 @@ void check_all_split_factors(const Function &f, const Definition &def, std::vect
 
 }  // namespace
 
-Stmt add_split_factor_checks(const Stmt &s, const std::map<std::string, Function> &env) {
+Stmt add_split_factor_checks(const Stmt &s, const StringMap<Function> &env) {
     // Check split factors are strictly positive
     std::vector<Stmt> stmts;
 

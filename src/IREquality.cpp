@@ -44,7 +44,7 @@ private:
     Stmt stmt;
     IRCompareCache *cache;
 
-    CmpResult compare_names(const std::string &a, const std::string &b);
+    CmpResult compare_names(std::string_view a, std::string_view b);
     CmpResult compare_types(Type a, Type b);
     CmpResult compare_expr_vector(const std::vector<Expr> &a, const std::vector<Expr> &b);
 
@@ -304,7 +304,7 @@ IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
     return result;
 }
 
-IRComparer::CmpResult IRComparer::compare_names(const string &a, const string &b) {
+IRComparer::CmpResult IRComparer::compare_names(std::string_view a, std::string_view b) {
     if (result != Equal) {
         return result;
     }

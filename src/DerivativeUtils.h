@@ -35,13 +35,13 @@ struct ReductionVariableInfo {
     ReductionDomain domain;
     std::string name;
 };
-std::map<std::string, ReductionVariableInfo> gather_rvariables(const Expr &expr);
-std::map<std::string, ReductionVariableInfo> gather_rvariables(const Tuple &tuple);
+StringMap<ReductionVariableInfo> gather_rvariables(const Expr &expr);
+StringMap<ReductionVariableInfo> gather_rvariables(const Tuple &tuple);
 /**
  * Add necessary let expressions to expr
  */
 Expr add_let_expression(const Expr &expr,
-                        const std::map<std::string, Expr> &let_var_mapping,
+                        const StringMap<Expr> &let_var_mapping,
                         const std::vector<std::string> &let_variables);
 /**
  * Topologically sort the expression graph expressed by expr
@@ -51,9 +51,9 @@ std::vector<Expr> sort_expressions(const Expr &expr);
  * Compute the bounds of funcs. The bounds represent a conservative region
  * that is used by the "consumers" of the function, except of itself.
  */
-std::map<std::string, Box> inference_bounds(const std::vector<Func> &funcs,
+StringMap<Box> inference_bounds(const std::vector<Func> &funcs,
                                             const std::vector<Box> &output_bounds);
-std::map<std::string, Box> inference_bounds(const Func &func,
+StringMap<Box> inference_bounds(const Func &func,
                                             const Box &output_bounds);
 /**
  * Convert Box to vector of (min, extent)
@@ -76,8 +76,8 @@ ReductionDomain extract_rdom(const Expr &expr);
  * if multiple new_var corresponds to same var, introduce a RDom
  */
 std::pair<bool, Expr> solve_inverse(Expr expr,
-                                    const std::string &new_var,
-                                    const std::string &var);
+                                    std::string_view new_var,
+                                    std::string_view var);
 /**
  * Find all calls to image buffers and parameters in the function
  */
@@ -85,29 +85,29 @@ struct BufferInfo {
     int dimension;
     Type type;
 };
-std::map<std::string, BufferInfo> find_buffer_param_calls(const Func &func);
+StringMap<BufferInfo> find_buffer_param_calls(const Func &func);
 /**
  * Find all implicit variables in expr
  */
-std::set<std::string> find_implicit_variables(const Expr &expr);
+StringSet find_implicit_variables(const Expr &expr);
 /**
  * Substitute the variable. Also replace all occurrences in rdom.where() predicates.
  */
 Expr substitute_rdom_predicate(
-    const std::string &name, const Expr &replacement, const Expr &expr);
+    std::string_view name, const Expr &replacement, const Expr &expr);
 
 /**
  * Return true if expr contains call to func_name
  */
 bool is_calling_function(
-    const std::string &func_name, const Expr &expr,
-    const std::map<std::string, Expr> &let_var_mapping);
+    std::string_view func_name, const Expr &expr,
+    const StringMap<Expr> &let_var_mapping);
 /**
  * Return true if expr depends on any function or buffer
  */
 bool is_calling_function(
     const Expr &expr,
-    const std::map<std::string, Expr> &let_var_mapping);
+    const StringMap<Expr> &let_var_mapping);
 
 /**
  * Replaces call to Func f in Expr e such that the call argument at variable_id

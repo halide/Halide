@@ -65,7 +65,7 @@ struct AssociativeOp {
         Expr expr;
 
         Replacement() = default;
-        Replacement(const std::string &var, Expr expr)
+        Replacement(std::string_view var, Expr expr)
             : var(var), expr(std::move(expr)) {
         }
 
@@ -109,7 +109,7 @@ struct AssociativeOp {
  * indicates if the operation was successfuly proven as associative.
  */
 AssociativeOp prove_associativity(
-    const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
+    std::string_view f, std::vector<Expr> args, std::vector<Expr> exprs);
 
 void associativity_test();
 

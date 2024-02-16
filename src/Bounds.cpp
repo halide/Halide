@@ -47,7 +47,8 @@ bool can_widen(const Expr &e) {
     return e.type().bits() <= 32;
 }
 
-bool can_widen_all(const std::vector<Expr> &args) {
+template<typename T>
+bool can_widen_all(const T &args) {
     for (const auto &e : args) {
         if (!can_widen(e)) {
             return false;
@@ -227,11 +228,11 @@ private:
 
 private:
     // Compute the intrinsic bounds of a function.
-    void bounds_of_func(const string &name, int value_index, Type t) {
+    void bounds_of_func(std::string_view name, int value_index, Type t) {
         // if we can't get a good bound from the function, fall back to the bounds of the type.
         bounds_of_type(t);
 
-        pair<string, int> key = {name, value_index};
+        pair<string, int> key = {std::string{name}, value_index};
 
         FuncValueBounds::const_iterator iter = func_bounds.find(key);
 
@@ -1167,12 +1168,12 @@ private:
         // lazily because for many functions we don't need them at all. This class
         // helps avoid accidentally revisiting nodes.
         class LazyArgBounds {
-            const vector<Expr> &args;
+            const ExprVector &args;
             Bounds *visitor;
             vector<Interval> intervals;
 
         public:
-            LazyArgBounds(const vector<Expr> &args, Bounds *visitor)
+            LazyArgBounds(const ExprVector &args, Bounds *visitor)
                 : args(args), visitor(visitor) {
             }
 
@@ -1678,8 +1679,8 @@ private:
         // them in as variables and add an outer let (to avoid
         // combinatorial explosion).
         Interval var;
-        const string min_name = unique_name(op->name + ".min");
-        const string max_name = unique_name(op->name + ".max");
+        const string min_name = unique_name(concat(op->name, ".min"));
+        const string max_name = unique_name(concat(op->name, ".max"));
 
         if (val.has_lower_bound()) {
             if (is_const(val.min)) {
@@ -2073,12 +2074,12 @@ class SolveIfThenElse : public IRMutator {
 
     using IRMutator::visit;
 
-    void push_var(const string &var) {
+    void push_var(std::string_view var) {
         depth += 1;
         vars_depth.push(var, depth);
     }
 
-    void pop_var(const string &var) {
+    void pop_var(std::string_view var) {
         depth -= 1;
         vars_depth.pop(var);
     }
@@ -2139,9 +2140,9 @@ class SolveIfThenElse : public IRMutator {
 class CollectVars : public IRGraphVisitor {
 public:
     string skipped_var;
-    set<string> vars;
+    StringSet vars;
 
-    CollectVars(const string &v)
+    CollectVars(std::string_view v)
         : skipped_var(v) {
     }
 
@@ -2150,7 +2151,7 @@ private:
 
     void visit(const Variable *op) override {
         if (op->name != skipped_var) {
-            vars.insert(op->name);
+            vars.emplace(op->name);
         }
     }
 };
@@ -2159,12 +2160,12 @@ private:
 class BoxesTouched : public IRGraphVisitor {
 
 public:
-    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb)
-        : func(std::move(fn)), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
+    BoxesTouched(bool calls, bool provides, std::string_view fn, const Scope<Interval> *s, const FuncValueBounds &fb)
+        : func(fn), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
         scope.set_containing_scope(s);
     }
 
-    map<string, Box> boxes;
+    StringMap<Box> boxes;
 
 #if DO_TRACK_BOUNDS_INTERVALS
 private:
@@ -2185,7 +2186,7 @@ private:
     struct BoxesTouchedLogger final {
         BoxesTouched *const self;
         BoxesTouchedLogger *const parent_logger;
-        map<string, Box> boxes;
+        StringMap<Box> boxes;
 
         template<typename... Args>
         void log_line(Args &&...args) {
@@ -2231,7 +2232,7 @@ private:
             return true;
         }
 
-        void log_box_diffs(const map<string, Box> &before, const map<string, Box> &after) {
+        void log_box_diffs(const StringMap<Box> &before, const StringMap<Box> &after) {
             const std::string spaces = self->log_spaces();
             for (const auto &it : after) {
                 const auto &key = it.first;
@@ -2297,7 +2298,7 @@ private:
     struct VarInstance {
         string var;
         int instance;
-        VarInstance(const string &v, int i)
+        VarInstance(std::string_view v, int i)
             : var(v), instance(i) {
         }
         VarInstance() = default;
@@ -2321,12 +2322,12 @@ private:
     Scope<Expr> let_stmts;
     // Keep track of variable renaming. Map variable name to instantiation number
     // (0 for the first variable to be defined, 1 for the 1st redefinition, etc.).
-    map<string, int> vars_renaming;
+    StringMap<int> vars_renaming;
     // Map variable name to all other vars which values depend on that variable.
     map<VarInstance, set<VarInstance>> children;
 
     bool in_producer{false}, in_unreachable{false};
-    map<std::string, Expr> buffer_lets;
+    StringMap<Expr> buffer_lets;
 
     using IRGraphVisitor::visit;
 
@@ -2377,7 +2378,7 @@ private:
         if (op->is_intrinsic(Call::declare_box_touched)) {
             internal_assert(!op->args.empty());
             const Variable *handle = op->args[0].as<Variable>();
-            const string &func = handle->name;
+            std::string_view func = handle->name;
             Box b(op->args.size() / 2);
             for (size_t i = 0; i < b.size(); i++) {
                 b[i].min = op->args[2 * i + 1];
@@ -2477,7 +2478,7 @@ private:
         return c.count < 10;
     }
 
-    void push_var(const string &name) {
+    void push_var(std::string_view name) {
         auto iter = vars_renaming.find(name);
         if (iter == vars_renaming.end()) {
             vars_renaming.emplace(name, 0);
@@ -2486,7 +2487,7 @@ private:
         }
     }
 
-    void pop_var(const string &name) {
+    void pop_var(std::string_view name) {
         auto iter = vars_renaming.find(name);
         internal_assert(iter != vars_renaming.end());
         iter->second -= 1;
@@ -2495,7 +2496,7 @@ private:
         }
     }
 
-    VarInstance get_var_instance(const string &name) {
+    VarInstance get_var_instance(std::string_view name) {
         // It is possible for the variable to be not in 'vars_renaming', e.g.
         // the output buffer min/max. In this case, we just add the variable
         // to the renaming map and assign it to instance 0.
@@ -2511,7 +2512,7 @@ private:
         // internal state off the call stack into an explicit stack on
         // the heap.
         struct Frame {
-            set<string> old_let_vars;
+            StringSet old_let_vars;
             const LetOrLetStmt *op;
             VarInstance vi;
             CollectVars collect;
@@ -2530,7 +2531,7 @@ private:
             push_var(op->name);
 
             if (op->value.type() == type_of<struct halide_buffer_t *>()) {
-                buffer_lets[op->name] = op->value;
+                buffer_lets.emplace(op->name, op->value);
             }
 
             if (is_let_stmt::value) {
@@ -2659,12 +2660,12 @@ private:
 
     struct LetBound {
         string var, min_name, max_name;
-        LetBound(const string &v, const string &min, const string &max)
+        LetBound(std::string_view v, std::string_view min, std::string_view max)
             : var(v), min_name(min), max_name(max) {
         }
     };
 
-    void trim_scope_push(const string &name, const Interval &bound, vector<LetBound> &let_bounds) {
+    void trim_scope_push(std::string_view name, const Interval &bound, vector<LetBound> &let_bounds) {
         // We want to add all the children of 'name' to 'let_bounds',
         // but avoiding duplicates (in some cases the dupes can
         // explode the list size by ~80x); note that the exact order
@@ -2714,11 +2715,11 @@ private:
             bool visited_children_already;
         };
         vector<Task> pending;
-        set<string> visited;
+        StringSet visited;
 
         scope.push(name, bound);
-        visited.insert(name);
-        pending.push_back(Task{name, false});
+        visited.emplace(name);
+        pending.push_back(Task{std::string{name}, false});
 
         // We don't want our root node 'name' in the let_bounds list,
         // so we'll stop when there's only one thing left in the
@@ -2745,7 +2746,7 @@ private:
         } while (pending.size() > 1);
     }
 
-    void trim_scope_pop(const string &name, vector<LetBound> &let_bounds) {
+    void trim_scope_pop(std::string_view name, vector<LetBound> &let_bounds) {
         for (const LetBound &l : let_bounds) {
             scope.pop(l.var);
             for (pair<const string, Box> &i : boxes) {
@@ -2944,7 +2945,7 @@ private:
             // the boxes touched on the condition.
 
             // Fork the boxes touched and go down each path
-            map<string, Box> then_boxes, else_boxes;
+            StringMap<Box> then_boxes, else_boxes;
             bool then_unreachable = false, else_unreachable = false;
             then_boxes.swap(boxes);
             std::swap(then_unreachable, in_unreachable);
@@ -3017,14 +3018,14 @@ private:
         }
 
         Expr min_val, max_val;
-        if (scope.contains(op->name + ".loop_min")) {
-            min_val = scope.get(op->name + ".loop_min").min;
+        if (scope.contains(concat(op->name, ".loop_min"))) {
+            min_val = scope.get(concat(op->name, ".loop_min")).min;
         } else {
             min_val = bounds_of_expr_in_scope(op->min, scope, func_bounds).min;
         }
 
-        if (scope.contains(op->name + ".loop_max")) {
-            max_val = scope.get(op->name + ".loop_max").max;
+        if (scope.contains(concat(op->name, ".loop_max"))) {
+            max_val = scope.get(concat(op->name, ".loop_max")).max;
         } else {
             max_val = bounds_of_expr_in_scope(op->extent, scope, func_bounds).max;
             max_val += bounds_of_expr_in_scope(op->min, scope, func_bounds).max;
@@ -3083,8 +3084,8 @@ private:
 
 }  // namespace
 
-map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provides,
-                               const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+StringMap<Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provides,
+                             std::string_view fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     if (!fn.empty() && s.defined()) {
         // Filter things down to the relevant sub-Stmts, so we don't spend a
         // long time reasoning about lets and ifs that don't surround an
@@ -3169,11 +3170,11 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
                 }
             }
 
-            const string &fn;
+            std::string_view fn;
             const string fn_buffer;
             Stmt no_op;
-            Filter(const string &fn)
-                : fn(fn), fn_buffer(fn + ".buffer"), no_op(Evaluate::make(0)) {
+            Filter(std::string_view fn)
+                : fn(fn), fn_buffer(concat(fn, ".buffer")), no_op(Evaluate::make(0)) {
             }
         } filter(fn);
 
@@ -3266,57 +3267,57 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
 }
 
 Box box_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provides,
-                const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
-    map<string, Box> boxes = boxes_touched(e, std::move(s), consider_calls, consider_provides, fn, scope, fb);
+                std::string_view fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    StringMap<Box> boxes = boxes_touched(e, std::move(s), consider_calls, consider_provides, fn, scope, fb);
     internal_assert(boxes.size() <= 1);
     return boxes[fn];
 }
 
-map<string, Box> boxes_required(const Expr &e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+StringMap<Box> boxes_required(const Expr &e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(e, Stmt(), true, false, "", scope, fb);
 }
 
-Box box_required(const Expr &e, const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+Box box_required(const Expr &e, std::string_view fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return box_touched(e, Stmt(), true, false, fn, scope, fb);
 }
 
-map<string, Box> boxes_required(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+StringMap<Box> boxes_required(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(Expr(), std::move(s), true, false, "", scope, fb);
 }
 
-Box box_required(Stmt s, const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+Box box_required(Stmt s, std::string_view fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return box_touched(Expr(), std::move(s), true, false, fn, scope, fb);
 }
 
-map<string, Box> boxes_provided(const Expr &e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+StringMap<Box> boxes_provided(const Expr &e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(e, Stmt(), false, true, "", scope, fb);
 }
 
-Box box_provided(const Expr &e, const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+Box box_provided(const Expr &e, std::string_view fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return box_touched(e, Stmt(), false, true, fn, scope, fb);
 }
 
-map<string, Box> boxes_provided(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+StringMap<Box> boxes_provided(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(Expr(), std::move(s), false, true, "", scope, fb);
 }
 
-Box box_provided(Stmt s, const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+Box box_provided(Stmt s, std::string_view fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return box_touched(Expr(), std::move(s), false, true, fn, scope, fb);
 }
 
-map<string, Box> boxes_touched(const Expr &e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+StringMap<Box> boxes_touched(const Expr &e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(e, Stmt(), true, true, "", scope, fb);
 }
 
-Box box_touched(const Expr &e, const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+Box box_touched(const Expr &e, std::string_view fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return box_touched(e, Stmt(), true, true, fn, scope, fb);
 }
 
-map<string, Box> boxes_touched(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+StringMap<Box> boxes_touched(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(Expr(), std::move(s), true, true, "", scope, fb);
 }
 
-Box box_touched(Stmt s, const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+Box box_touched(Stmt s, std::string_view fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return box_touched(Expr(), std::move(s), true, true, fn, scope, fb);
 }
 
@@ -3336,14 +3337,14 @@ Interval compute_pure_function_definition_value_bounds(
 }
 
 FuncValueBounds compute_function_value_bounds(const vector<string> &order,
-                                              const map<string, Function> &env) {
+                                              const StringMap<Function> &env) {
     FuncValueBounds fb;
 
     for (const auto &func_name : order) {
         Function f = env.find(func_name)->second;
         const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
-            pair<string, int> key = {f.name(), j};
+            pair<string, int> key{f.name(), j};
 
             Interval result;
 
@@ -3862,7 +3863,7 @@ void bounds_test() {
                                         output_site,
                                         const_true()));
 
-    map<string, Box> r;
+    StringMap<Box> r;
     r = boxes_required(loop);
     internal_assert(r.find("output") == r.end());
     internal_assert(r.find("input") != r.end());

@@ -315,7 +315,7 @@ class RewriteAccessToVectorAlloc : public IRMutator {
 
     using IRMutator::visit;
 
-    Expr mutate_index(const string &a, Expr index) {
+    Expr mutate_index(std::string_view a, Expr index) {
         index = mutate(index);
         if (a == alloc) {
             return index * lanes + var;
@@ -324,7 +324,7 @@ class RewriteAccessToVectorAlloc : public IRMutator {
         }
     }
 
-    ModulusRemainder mutate_alignment(const string &a, const ModulusRemainder &align) {
+    ModulusRemainder mutate_alignment(std::string_view a, const ModulusRemainder &align) {
         if (a == alloc) {
             return align * lanes;
         } else {
@@ -343,8 +343,8 @@ class RewriteAccessToVectorAlloc : public IRMutator {
     }
 
 public:
-    RewriteAccessToVectorAlloc(const string &v, string a, int l)
-        : var(Variable::make(Int(32), v)), alloc(std::move(a)), lanes(l) {
+    RewriteAccessToVectorAlloc(std::string_view v, std::string_view a, int l)
+        : var(Variable::make(Int(32), v)), alloc(a), lanes(l) {
     }
 };
 
@@ -480,7 +480,7 @@ class VectorSubs : public IRMutator {
     // What we're replacing it with. Usually a combination of ramps
     // and broadcast. It depends on the current loop level and
     // is updated when vectorized_vars list is updated.
-    std::map<string, Expr> replacements;
+    StringMap<Expr> replacements;
 
     // A scope containing lets and letstmts whose values became
     // vectors. Contains are original, non-vectorized expressions.
@@ -529,13 +529,14 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    string get_widened_var_name(const string &name) {
-        return name + ".widened." + vectorized_vars.back().name;
+    string get_widened_var_name(std::string_view name) {
+        return concat(name, ".widened.", vectorized_vars.back().name);
     }
 
     Expr visit(const Variable *op) override {
-        if (replacements.count(op->name) > 0) {
-            return replacements[op->name];
+        auto it = replacements.find(op->name);
+        if (it != replacements.end()) {
+            return it->second;
         } else if (scope.contains(op->name)) {
             string widened_name = get_widened_var_name(op->name);
             return Variable::make(vector_scope.get(widened_name).type(), widened_name);
@@ -774,7 +775,7 @@ class VectorSubs : public IRMutator {
 
     Stmt visit(const LetStmt *op) override {
         Expr mutated_value = simplify(mutate(op->value));
-        string vectorized_name = op->name;
+        string vectorized_name{op->name};
 
         // Check if the value was vectorized by this mutator.
         bool was_vectorized = (!op->value.type().is_vector() &&
@@ -973,7 +974,7 @@ class VectorSubs : public IRMutator {
                            << "constant extent > 1\n";
             }
 
-            vectorized_vars.push_back({op->name, min, (int)extent_int->value});
+            vectorized_vars.push_back({std::string{op->name}, min, (int)extent_int->value});
             update_replacements();
             // Go over lets which were vectorized in the order of their occurrence and update
             // them according to the current loop level.
@@ -1055,7 +1056,7 @@ class VectorSubs : public IRMutator {
         // Rewrite loads and stores to this allocation like so:
         // foo[x] -> foo[x*lanes + v]
         for (const auto &vv : vectorized_vars) {
-            body = RewriteAccessToVectorAlloc(vv.name + ".from_zero", op->name, vv.lanes).mutate(body);
+            body = RewriteAccessToVectorAlloc(concat(vv.name, ".from_zero"), op->name, vv.lanes).mutate(body);
         }
 
         body = mutate(body);
@@ -1467,7 +1468,7 @@ public:
         return e;
     }
 
-    FindVectorizableExprsInAtomicNode(const string &buf, const map<string, Function> &env) {
+    FindVectorizableExprsInAtomicNode(std::string_view buf, const StringMap<Function> &env) {
         poisoned_names.push(buf);
         auto it = env.find(buf);
         if (it != env.end()) {
@@ -1475,7 +1476,7 @@ public:
             size_t n = it->second.values().size();
             if (n > 1) {
                 for (size_t i = 0; i < n; i++) {
-                    poisoned_names.push(buf + "." + std::to_string(i));
+                    poisoned_names.push(concat(buf, ".", std::to_string(i)));
                 }
             }
         }
@@ -1555,10 +1556,10 @@ class LiftVectorizableExprsOutOfAllAtomicNodes : public IRMutator {
         return new_body;
     }
 
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
 
 public:
-    LiftVectorizableExprsOutOfAllAtomicNodes(const map<string, Function> &env)
+    LiftVectorizableExprsOutOfAllAtomicNodes(const StringMap<Function> &env)
         : env(env) {
     }
 };
@@ -1578,7 +1579,7 @@ class VectorizeLoops : public IRMutator {
                            << "constant extent > 1\n";
             }
 
-            VectorizedVar vectorized_var = {for_loop->name, for_loop->min, (int)extent->value};
+            VectorizedVar vectorized_var = {std::string{for_loop->name}, for_loop->min, (int)extent->value};
             stmt = VectorSubs(vectorized_var).mutate(for_loop->body);
         } else {
             stmt = IRMutator::visit(for_loop);
@@ -1650,7 +1651,7 @@ Stmt vectorize_statement(const Stmt &stmt) {
 }
 
 }  // namespace
-Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
+Stmt vectorize_loops(const Stmt &stmt, const StringMap<Function> &env) {
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.

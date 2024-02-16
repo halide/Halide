@@ -72,7 +72,7 @@ struct DeviceArgument {
 
     DeviceArgument() = default;
 
-    DeviceArgument(const std::string &_name,
+    DeviceArgument(std::string_view _name,
                    bool _is_buffer,
                    MemoryType _mem,
                    Type _type,

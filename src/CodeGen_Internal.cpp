@@ -25,7 +25,7 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
 
 // Returns true if the given function name is one of the Halide runtime
 // functions that takes a user_context pointer as its first parameter.
-bool function_takes_user_context(const std::string &name) {
+bool function_takes_user_context(std::string_view name) {
     static const char *user_context_runtime_funcs[] = {
         "halide_buffer_copy",
         "halide_copy_to_host",
@@ -712,7 +712,7 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     }
 }
 
-void embed_bitcode(llvm::Module *M, const string &halide_command) {
+void embed_bitcode(llvm::Module *M, std::string_view halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
     SmallVector<GlobalValue *, 4> used_globals;

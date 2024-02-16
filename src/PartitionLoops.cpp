@@ -471,7 +471,7 @@ class FindSimplifications : public IRVisitor {
 public:
     vector<Simplification> simplifications;
 
-    FindSimplifications(const std::string &v) {
+    FindSimplifications(std::string_view v) {
         depends_on_loop_var.push(v);
     }
 };
@@ -732,8 +732,8 @@ class PartitionLoops : public IRMutator {
         // Construct variables for the bounds of the simplified middle section
         Expr min_steady = op->min, max_steady = op->extent + op->min;
         Expr prologue_val, epilogue_val;
-        string prologue_name = unique_name(op->name + ".prologue");
-        string epilogue_name = unique_name(op->name + ".epilogue");
+        string prologue_name = unique_name(concat(op->name, ".prologue"));
+        string epilogue_name = unique_name(concat(op->name, ".epilogue"));
 
         if (make_prologue) {
             // They'll simplify better if you put them in

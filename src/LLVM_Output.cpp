@@ -60,18 +60,18 @@ void emit_big_endian_u32(std::ostream &out, uint32_t value) {
     out << static_cast<uint8_t>((value >> 24) & 0xff)
         << static_cast<uint8_t>((value >> 16) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff)
-        << static_cast<uint8_t>((value) & 0xff);
+        << static_cast<uint8_t>((value)&0xff);
 }
 
 void emit_little_endian_u32(std::ostream &out, uint32_t value) {
-    out << static_cast<uint8_t>((value) & 0xff)
+    out << static_cast<uint8_t>((value)&0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff)
         << static_cast<uint8_t>((value >> 16) & 0xff)
         << static_cast<uint8_t>((value >> 24) & 0xff);
 }
 
 void emit_little_endian_u16(std::ostream &out, uint16_t value) {
-    out << static_cast<uint8_t>((value) & 0xff)
+    out << static_cast<uint8_t>((value)&0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff);
 }
 
@@ -303,7 +303,7 @@ void write_coff_archive(std::ostream &out,
 }  // namespace Archive
 }  // namespace Internal
 
-std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename) {
+std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(std::string_view filename) {
     std::string error_string;
     std::error_code err;
     std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::OF_None));
@@ -487,7 +487,7 @@ std::string get_current_directory() {
 #endif
 }
 
-void set_current_directory(const std::string &d) {
+void set_current_directory(std::string_view d) {
 #ifdef _WIN32
     int n_chars = MultiByteToWideChar(CP_UTF8, 0, &d[0], (int)d.size(), nullptr, 0);
     internal_assert(n_chars) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
@@ -498,11 +498,12 @@ void set_current_directory(const std::string &d) {
 
     internal_assert(SetCurrentDirectoryW(wd.c_str())) << "SetCurrentDirectoryW() failed; error " << GetLastError() << "\n";
 #else
-    internal_assert(chdir(d.c_str()) == 0) << "chdir() failed";
+    std::string dir{d};
+    internal_assert(chdir(dir.c_str()) == 0) << "chdir() failed";
 #endif
 }
 
-std::pair<std::string, std::string> dir_and_file(const std::string &path) {
+std::pair<std::string, std::string> dir_and_file(std::string_view path) {
     std::string dir, file;
     size_t slash_pos = path.rfind('/');
 #ifdef _WIN32
@@ -520,9 +521,9 @@ std::pair<std::string, std::string> dir_and_file(const std::string &path) {
     return {dir, file};
 }
 
-std::string make_absolute_path(const std::string &path) {
+std::string make_absolute_path(std::string_view path) {
     bool is_absolute = !path.empty() && path[0] == '/';
-    char sep = '/';
+    const char *sep = "/";
 #ifdef _WIN32
     // Allow for C:\whatever or c:/whatever on Windows
     if (path.size() >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')) {
@@ -535,14 +536,14 @@ std::string make_absolute_path(const std::string &path) {
     }
 #endif
     if (!is_absolute) {
-        return get_current_directory() + sep + path;
+        return Internal::concat(get_current_directory(), sep, path);
     }
-    return path;
+    return std::string{path};
 }
 
 struct SetCwd {
     const std::string original_directory;
-    explicit SetCwd(const std::string &d)
+    explicit SetCwd(std::string_view d)
         : original_directory(get_current_directory()) {
         if (!d.empty()) {
             set_current_directory(d);
@@ -556,7 +557,7 @@ struct SetCwd {
 }  // namespace
 
 void create_static_library(const std::vector<std::string> &src_files_in, const Target &target,
-                           const std::string &dst_file_in, bool deterministic) {
+                           std::string_view dst_file_in, bool deterministic) {
     internal_assert(!src_files_in.empty());
 
     // Ensure that dst_file is an absolute path, since we're going to change the

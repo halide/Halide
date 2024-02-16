@@ -17,7 +17,7 @@ bool may_discard(const Expr &e) {
             // Extern calls that are side-effecty in the sense that you can't
             // move them around in the IR, but we're free to discard because
             // they're just getters.
-            static const std::set<std::string> discardable{
+            static const StringSet discardable{
                 Call::buffer_get_dimensions,
                 Call::buffer_get_min,
                 Call::buffer_get_extent,
@@ -50,7 +50,7 @@ class StripAsserts : public IRMutator {
 
     // We're going to track which symbols are used so that we can strip lets we
     // don't need after removing the asserts.
-    std::set<std::string> used;
+    StringSet used;
 
     // Drop all assert stmts. Assumes that you don't want any side-effects from
     // the condition.
@@ -59,17 +59,17 @@ class StripAsserts : public IRMutator {
     }
 
     Expr visit(const Variable *op) override {
-        used.insert(op->name);
+        used.emplace(op->name);
         return op;
     }
 
     Expr visit(const Load *op) override {
-        used.insert(op->name);
+        used.emplace(op->name);
         return IRMutator::visit(op);
     }
 
     Stmt visit(const Store *op) override {
-        used.insert(op->name);
+        used.emplace(op->name);
         return IRMutator::visit(op);
     }
 

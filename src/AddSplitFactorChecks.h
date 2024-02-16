@@ -17,7 +17,7 @@ class Function;
 
 /** Insert checks that all split factors that depend on scalar parameters are
  * strictly positive. */
-Stmt add_split_factor_checks(const Stmt &s, const std::map<std::string, Function> &env);
+Stmt add_split_factor_checks(const Stmt &s, const StringMap<Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

@@ -41,7 +41,7 @@ public:
     CodeGen_C(std::ostream &dest,
               const Target &target,
               OutputKind output_kind = CImplementation,
-              const std::string &include_guard = "");
+              std::string_view include_guard = "");
     ~CodeGen_C() override;
 
     /** Emit the declarations contained in the module as C code. */
@@ -93,7 +93,7 @@ protected:
     OutputKind output_kind;
 
     /** A cache of generated values in scope */
-    std::map<std::string, std::string> cache;
+    StringMap<std::string> cache;
 
     /** Emit an expression as an assignment, then return the id of the
      * resulting var */
@@ -105,7 +105,7 @@ protected:
     /** Emit a statement */
     void print_stmt(const Stmt &);
 
-    void create_assertion(const std::string &id_cond, const Expr &message);
+    void create_assertion(std::string_view id_cond, const Expr &message);
     void create_assertion(const Expr &cond, const Expr &message);
 
     Expr scalarize_vector_reduce(const VectorReduce *op);
@@ -125,7 +125,7 @@ protected:
     virtual std::string print_reinterpret(Type, const Expr &);
 
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
-    virtual std::string print_name(const std::string &);
+    virtual std::string print_name(std::string_view);
 
     /** Add platform specific prologue */
     virtual void add_platform_prologue();
@@ -141,10 +141,10 @@ protected:
     std::string print_scalarized_expr(const Expr &e);
 
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
-    virtual std::string print_assignment(Type t, const std::string &rhs);
+    virtual std::string print_assignment(Type t, std::string_view rhs);
 
     /** Emit free for the heap allocation. **/
-    void print_heap_free(const std::string &alloc_name);
+    void print_heap_free(std::string_view alloc_name);
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {
@@ -176,7 +176,7 @@ protected:
     void open_scope();
 
     /** Close a C scope (i.e. throw in an end brace, decrease the indent) */
-    void close_scope(const std::string &comment);
+    void close_scope(std::string_view comment);
 
     struct Allocation {
         Type type;
@@ -259,7 +259,7 @@ protected:
     void visit_relop(Type t, const Expr &a, const Expr &b, const char *scalar_op, const char *vector_op);
 
     template<typename T>
-    static std::string with_sep(const std::vector<T> &v, const std::string &sep) {
+    static std::string with_sep(const std::vector<T> &v, std::string_view sep) {
         std::ostringstream o;
         for (size_t i = 0; i < v.size(); ++i) {
             if (i > 0) {
@@ -292,15 +292,15 @@ protected:
      * that may be used in a parallel context. */
     virtual bool is_stack_private_to_thread() const;
 
-    void emit_argv_wrapper(const std::string &function_name,
+    void emit_argv_wrapper(std::string_view function_name,
                            const std::vector<LoweredArgument> &args);
-    void emit_metadata_getter(const std::string &function_name,
+    void emit_metadata_getter(std::string_view function_name,
                               const std::vector<LoweredArgument> &args,
                               const MetadataNameMap &metadata_name_map);
-    void emit_constexpr_function_info(const std::string &function_name,
+    void emit_constexpr_function_info(std::string_view function_name,
                                       const std::vector<LoweredArgument> &args,
                                       const MetadataNameMap &metadata_name_map);
-    void emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function);
+    void emit_halide_free_helper(std::string_view alloc_name, std::string_view free_function);
 };
 
 }  // namespace Internal

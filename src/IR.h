@@ -5,7 +5,7 @@
  * Subtypes for Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
  */
 
-#include <string>
+#include <string_view>
 #include <vector>
 
 #include "Buffer.h"
@@ -20,6 +20,64 @@
 
 namespace Halide {
 namespace Internal {
+
+/** A non-owning array of Exprs, with an interface that mirrors
+ * std::vector. Mostly used for argument passing. */
+struct ExprVector {
+    const Expr *ptr = nullptr;
+    int num = 0;
+
+    ExprVector() = default;
+    ExprVector(const std::vector<Expr> &v)
+        : ptr(v.data()), num((int)v.size()) {
+    }
+
+    ExprVector(const std::initializer_list<Expr> &l) {
+        num = (int)l.size();
+        // If you write this as a member initializer, it warns under some
+        // compiler configs complaining that it doesn't extend the lifetime of
+        // the initializer list. Well yeah, I don't want it to.
+        ptr = l.begin();
+    }
+
+    size_t size() const {
+        return num;
+    }
+
+    bool empty() const {
+        return num == 0;
+    }
+
+    const Expr &operator[](int i) const {
+        return ptr[i];
+    }
+
+    const Expr *begin() const {
+        return ptr;
+    }
+
+    const Expr *end() const {
+        return ptr + num;
+    }
+
+    const Expr &back() const {
+        return ptr[num - 1];
+    }
+
+    const Expr &front() const {
+        return ptr[0];
+    }
+
+    operator std::vector<Expr>() const {
+        return {begin(), end()};
+    }
+
+    void destroy() {
+        for (int i = 0; i < num; i++) {
+            ptr[i].~Expr();
+        }
+    }
+};
 
 class Function;
 
@@ -215,7 +273,7 @@ struct Select : public ExprNode<Select> {
  * enclosing allocation, an input or output buffer, or any other
  * symbol of type Handle(). */
 struct Load : public ExprNode<Load> {
-    std::string name;
+    std::string_view name;
 
     Expr predicate, index;
 
@@ -230,7 +288,7 @@ struct Load : public ExprNode<Load> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
-    static Expr make(Type type, const std::string &name,
+    static Expr make(Type type, std::string_view name,
                      Expr index, Buffer<> image,
                      Parameter param,
                      Expr predicate,
@@ -269,10 +327,10 @@ struct Broadcast : public ExprNode<Broadcast> {
  * language. Within the expression \ref Let::body, instances of the Var
  * node \ref Let::name refer to \ref Let::value. */
 struct Let : public ExprNode<Let> {
-    std::string name;
+    std::string_view name;
     Expr value, body;
 
-    static Expr make(const std::string &name, Expr value, Expr body);
+    static Expr make(std::string_view name, Expr value, Expr body);
 
     static const IRNodeType _node_type = IRNodeType::Let;
 };
@@ -280,11 +338,11 @@ struct Let : public ExprNode<Let> {
 /** The statement form of a let node. Within the statement 'body',
  * instances of the Var named 'name' refer to 'value' */
 struct LetStmt : public StmtNode<LetStmt> {
-    std::string name;
+    std::string_view name;
     Expr value;
     Stmt body;
 
-    static Stmt make(const std::string &name, Expr value, Stmt body);
+    static Stmt make(std::string_view name, Expr value, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::LetStmt;
 };
@@ -313,14 +371,14 @@ struct AssertStmt : public StmtNode<AssertStmt> {
  * being read from or written to in the body of the ProducerConsumer.
  */
 struct ProducerConsumer : public StmtNode<ProducerConsumer> {
-    std::string name;
+    std::string_view name;
     bool is_producer;
     Stmt body;
 
-    static Stmt make(const std::string &name, bool is_producer, Stmt body);
+    static Stmt make(std::string_view name, bool is_producer, Stmt body);
 
-    static Stmt make_produce(const std::string &name, Stmt body);
-    static Stmt make_consume(const std::string &name, Stmt body);
+    static Stmt make_produce(std::string_view name, Stmt body);
+    static Stmt make_consume(std::string_view name, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::ProducerConsumer;
 };
@@ -331,7 +389,7 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
  * Allocate node, an output buffer, or any other symbol of type
  * Handle(). */
 struct Store : public StmtNode<Store> {
-    std::string name;
+    std::string_view name;
     Expr predicate, value, index;
     // If it's a store to an output buffer, then this parameter points to it.
     Parameter param;
@@ -340,7 +398,7 @@ struct Store : public StmtNode<Store> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
-    static Stmt make(const std::string &name, Expr value, Expr index,
+    static Stmt make(std::string_view name, Expr value, Expr index,
                      Parameter param, Expr predicate, ModulusRemainder alignment);
 
     static const IRNodeType _node_type = IRNodeType::Store;
@@ -352,12 +410,12 @@ struct Store : public StmtNode<Store> {
  * correspond to an output buffer or the name of an enclosing Realize
  * node. */
 struct Provide : public StmtNode<Provide> {
-    std::string name;
+    std::string_view name;
     std::vector<Expr> values;
     std::vector<Expr> args;
     Expr predicate;
 
-    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate);
+    static Stmt make(std::string_view name, ExprVector values, ExprVector args, const Expr &predicate);
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };
@@ -369,10 +427,10 @@ struct Provide : public StmtNode<Provide> {
  * condition evaluates to true. Within the body of the allocation,
  * defines a symbol with the given name and the type Handle(). */
 struct Allocate : public StmtNode<Allocate> {
-    std::string name;
+    std::string_view name;
     Type type;
     MemoryType memory_type;
-    std::vector<Expr> extents;
+    ExprVector extents;
 
     // A boolean condition that determines if the allocation needs to be made at all.
     Expr condition;
@@ -385,7 +443,7 @@ struct Allocate : public StmtNode<Allocate> {
     // halide_free). If free_function is left empty, code generator
     // default will be called.
     Expr new_expr;
-    std::string free_function;
+    std::string_view free_function;
 
     // Extra padding elements to allow for overreads. Elements in the padding
     // have undetermined values, but are guaranteed safe to load.
@@ -393,27 +451,31 @@ struct Allocate : public StmtNode<Allocate> {
 
     Stmt body;
 
-    static Stmt make(const std::string &name, Type type, MemoryType memory_type,
-                     const std::vector<Expr> &extents,
+    static Stmt make(std::string_view name, Type type, MemoryType memory_type,
+                     ExprVector extents,
                      Expr condition, Stmt body,
-                     Expr new_expr = Expr(), const std::string &free_function = std::string(), int padding = 0);
+                     Expr new_expr = Expr(), std::string_view free_function = std::string_view(), int padding = 0);
 
     /** A routine to check if the extents are all constants, and if so verify
      * the total size is less than 2^31 - 1. If the result is constant, but
      * overflows, this routine asserts. This returns 0 if the extents are
      * not all constants; otherwise, it returns the total constant allocation
      * size. Does not include any padding bytes. */
-    static int32_t constant_allocation_size(const std::vector<Expr> &extents, const std::string &name);
+    static int32_t constant_allocation_size(ExprVector extents, std::string_view name);
     int32_t constant_allocation_size() const;
 
     static const IRNodeType _node_type = IRNodeType::Allocate;
+
+    ~Allocate() {
+        extents.destroy();
+    }
 };
 
 /** Free the resources associated with the given buffer. */
 struct Free : public StmtNode<Free> {
-    std::string name;
+    std::string_view name;
 
-    static Stmt make(const std::string &name);
+    static Stmt make(std::string_view name);
 
     static const IRNodeType _node_type = IRNodeType::Free;
 };
@@ -425,14 +487,14 @@ struct Free : public StmtNode<Free> {
  * the condition evaluates to true.
  */
 struct Realize : public StmtNode<Realize> {
-    std::string name;
+    std::string_view name;
     std::vector<Type> types;
     MemoryType memory_type;
     Region bounds;
     Expr condition;
     Stmt body;
 
-    static Stmt make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
+    static Stmt make(std::string_view name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Realize;
 };
@@ -488,8 +550,9 @@ struct Evaluate : public StmtNode<Evaluate> {
  * the way down to code generation - the lowering process converts
  * them to Load nodes. */
 struct Call : public ExprNode<Call> {
-    std::string name;
-    std::vector<Expr> args;
+    std::string_view name;
+    ExprVector args;
+
     typedef enum { Image,            ///< A load from an input image
                    Extern,           ///< A call to an external C-ABI function, possibly with side-effects
                    ExternCPlusPlus,  ///< A call to an external C-ABI function, possibly with side-effects
@@ -502,7 +565,7 @@ struct Call : public ExprNode<Call> {
 
     // Halide uses calls internally to represent certain operations
     // (instead of IR nodes). These are matched by name. Note that
-    // these are deliberately char* (rather than std::string) so that
+    // these are deliberately char* (rather than std::string_view) so that
     // they can be referenced at static-initialization time without
     // risking ambiguous initalization order; we use a typedef to simplify
     // declaration.
@@ -671,25 +734,61 @@ struct Call : public ExprNode<Call> {
     // pointer to that
     Parameter param;
 
-    static Expr make(Type type, IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
+    static Expr make(Type type, IntrinsicOp op, int num_args, const Expr *args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
-                     const Buffer<> &image = Buffer<>(), Parameter param = Parameter());
+                     const Buffer<> &image = Buffer<>(), const Parameter &param = Parameter());
 
-    static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
+    template<typename T>
+    static Expr make(Type type, IntrinsicOp op, T &&args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
-                     Buffer<> image = Buffer<>(), Parameter param = Parameter());
+                     const Buffer<> &image = Buffer<>(), const Parameter &param = Parameter()) {
+        return make(type, op, (int)args.size(), &(*args.begin()), call_type, func, value_index, image, param);
+    }
+
+    static Expr make(Type type, IntrinsicOp op, const std::initializer_list<Expr> &args, CallType call_type,
+                     FunctionPtr func = FunctionPtr(), int value_index = 0,
+                     const Buffer<> &image = Buffer<>(), const Parameter &param = Parameter()) {
+        return make(type, op, (int)args.size(), &(*args.begin()), call_type, func, value_index, image, param);
+    }
+
+    static Expr make(Type type, std::string_view name, int num_args, const Expr *args, CallType call_type,
+                     FunctionPtr func = FunctionPtr(), int value_index = 0,
+                     const Buffer<> &image = Buffer<>(),
+                     const Parameter &param = Parameter());
+
+    template<typename T>
+    static Expr make(Type type, std::string_view name, T &&args, CallType call_type,
+                     FunctionPtr func = FunctionPtr(), int value_index = 0,
+                     const Buffer<> &image = Buffer<>(),
+                     const Parameter &param = Parameter()) {
+        return make(type, name, (int)args.size(), &(*args.begin()), call_type, func, value_index, image, param);
+    }
+
+    static Expr make(Type type, std::string_view name, const std::initializer_list<Expr> &args, CallType call_type,
+                     FunctionPtr func = FunctionPtr(), int value_index = 0,
+                     const Buffer<> &image = Buffer<>(),
+                     const Parameter &param = Parameter()) {
+        return make(type, name, (int)args.size(), &(*args.begin()), call_type, func, value_index, image, param);
+    }
 
     /** Convenience constructor for calls to other halide functions */
-    static Expr make(const Function &func, const std::vector<Expr> &args, int idx = 0);
+    static Expr make(const Function &func, int num_args, const Expr *args, int idx = 0);
+
+    template<typename T>
+    static Expr make(const Function &func, T &&args, int idx = 0) {
+        return make(func, (int)args.size(), &(*args.begin()), idx);
+    }
 
     /** Convenience constructor for loads from concrete images */
-    static Expr make(const Buffer<> &image, const std::vector<Expr> &args) {
-        return make(image.type(), image.name(), args, Image, FunctionPtr(), 0, image, Parameter());
+    template<typename T>
+    static Expr make(const Buffer<> &image, T &&args) {
+        return make(image.type(), image.name(), (int)args.size(), &(*args.begin()), Image, FunctionPtr(), 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
-    static Expr make(const Parameter &param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, FunctionPtr(), 0, Buffer<>(), param);
+    template<typename T>
+    static Expr make(const Parameter &param, T &&args) {
+        return make(param.type(), param.name(), (int)args.size(), &(*args.begin()), Image, FunctionPtr(), 0, Buffer<>(), param);
     }
 
     /** Check if a call node is pure within a pipeline, meaning that
@@ -750,13 +849,17 @@ struct Call : public ExprNode<Call> {
     }
 
     static const IRNodeType _node_type = IRNodeType::Call;
+
+    ~Call() {
+        args.destroy();
+    }
 };
 
 /** A named variable. Might be a loop variable, function argument,
  * parameter, reduction variable, or something defined by a Let or
  * LetStmt node. */
 struct Variable : public ExprNode<Variable> {
-    std::string name;
+    std::string_view name;
 
     /** References to scalar parameters, or to the dimensions of buffer
      * parameters hang onto those expressions. */
@@ -768,23 +871,23 @@ struct Variable : public ExprNode<Variable> {
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
-    static Expr make(Type type, const std::string &name) {
+    static Expr make(Type type, std::string_view name) {
         return make(type, name, Buffer<>(), Parameter(), ReductionDomain());
     }
 
-    static Expr make(Type type, const std::string &name, Parameter param) {
+    static Expr make(Type type, std::string_view name, Parameter param) {
         return make(type, name, Buffer<>(), std::move(param), ReductionDomain());
     }
 
-    static Expr make(Type type, const std::string &name, const Buffer<> &image) {
+    static Expr make(Type type, std::string_view name, const Buffer<> &image) {
         return make(type, name, image, Parameter(), ReductionDomain());
     }
 
-    static Expr make(Type type, const std::string &name, ReductionDomain reduction_domain) {
+    static Expr make(Type type, std::string_view name, ReductionDomain reduction_domain) {
         return make(type, name, Buffer<>(), Parameter(), std::move(reduction_domain));
     }
 
-    static Expr make(Type type, const std::string &name, Buffer<> image,
+    static Expr make(Type type, std::string_view name, Buffer<> image,
                      Parameter param, ReductionDomain reduction_domain);
 
     static const IRNodeType _node_type = IRNodeType::Variable;
@@ -803,14 +906,14 @@ struct Variable : public ExprNode<Variable> {
  * statement. Again in this case, 'extent' should be a small
  * integer constant. */
 struct For : public StmtNode<For> {
-    std::string name;
+    std::string_view name;
     Expr min, extent;
     ForType for_type;
     DeviceAPI device_api;
     Stmt body;
     Partition partition_policy;
 
-    static Stmt make(const std::string &name,
+    static Stmt make(std::string_view name,
                      Expr min, Expr extent,
                      ForType for_type, Partition partition_policy,
                      DeviceAPI device_api,
@@ -839,23 +942,23 @@ struct Acquire : public StmtNode<Acquire> {
 /** Construct a new vector by taking elements from another sequence of
  * vectors. */
 struct Shuffle : public ExprNode<Shuffle> {
-    std::vector<Expr> vectors;
+    ExprVector vectors;
 
     /** Indices indicating which vector element to place into the
      * result. The elements are numbered by their position in the
      * concatenation of the vector arguments. */
     std::vector<int> indices;
 
-    static Expr make(const std::vector<Expr> &vectors,
+    static Expr make(ExprVector vectors,
                      const std::vector<int> &indices);
 
     /** Convenience constructor for making a shuffle representing an
      * interleaving of vectors of the same length. */
-    static Expr make_interleave(const std::vector<Expr> &vectors);
+    static Expr make_interleave(ExprVector vectors);
 
     /** Convenience constructor for making a shuffle representing a
      * concatenation of the vectors. */
-    static Expr make_concat(const std::vector<Expr> &vectors);
+    static Expr make_concat(ExprVector vectors);
 
     /** Convenience constructor for making a shuffle representing a
      * broadcast of a vector. */
@@ -903,12 +1006,16 @@ struct Shuffle : public ExprNode<Shuffle> {
     bool is_extract_element() const;
 
     static const IRNodeType _node_type = IRNodeType::Shuffle;
+
+    ~Shuffle() {
+        vectors.destroy();
+    }
 };
 
 /** Represent a multi-dimensional region of a Func or an ImageParam that
  * needs to be prefetched. */
 struct Prefetch : public StmtNode<Prefetch> {
-    std::string name;
+    std::string_view name;
     std::vector<Type> types;
     Region bounds;
     PrefetchDirective prefetch;
@@ -916,7 +1023,7 @@ struct Prefetch : public StmtNode<Prefetch> {
 
     Stmt body;
 
-    static Stmt make(const std::string &name, const std::vector<Type> &types,
+    static Stmt make(std::string_view name, const std::vector<Type> &types,
                      const Region &bounds,
                      const PrefetchDirective &prefetch,
                      Expr condition, Stmt body);
@@ -930,10 +1037,10 @@ struct Prefetch : public StmtNode<Prefetch> {
  *
  */
 struct HoistedStorage : public StmtNode<HoistedStorage> {
-    std::string name;
+    std::string_view name;
     Stmt body;
 
-    static Stmt make(const std::string &name,
+    static Stmt make(std::string_view name,
                      Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::HoistedStorage;
@@ -946,12 +1053,12 @@ struct HoistedStorage : public StmtNode<HoistedStorage> {
  *  mutex_name and mutex_args, by lowering this node into
  *  calls to acquire and release the lock. */
 struct Atomic : public StmtNode<Atomic> {
-    std::string producer_name;
-    std::string mutex_name;  // empty string if not using mutex
+    std::string_view producer_name;
+    std::string_view mutex_name;  // empty string if not using mutex
     Stmt body;
 
-    static Stmt make(const std::string &producer_name,
-                     const std::string &mutex_name,
+    static Stmt make(std::string_view producer_name,
+                     std::string_view mutex_name,
                      Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Atomic;

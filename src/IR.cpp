@@ -10,14 +10,79 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+template<typename T>
+struct AllocateResult {
+    T *node;
+    Expr *exprs;
+    char *chars;
+};
+
+template<typename T>
+AllocateResult<T> allocate_ir_node(int num_exprs, int num_chars) {
+    AllocateResult<T> result;
+    constexpr size_t base_bytes = sizeof(T);
+    const size_t expr_bytes = num_exprs * sizeof(Expr);
+    static_assert(sizeof(T) % sizeof(Expr) == 0);
+    const size_t char_bytes = num_chars;
+    uint8_t *mem = (uint8_t *)malloc(base_bytes + expr_bytes + char_bytes);
+
+    result.node = (T *)mem;
+    new (mem) T;
+    result.exprs = (Expr *)(mem + base_bytes);
+    result.chars = (char *)(mem + base_bytes + expr_bytes);
+    // Zero-initialization is fine for Exprs and chars
+    memset(result.exprs, 0, expr_bytes + char_bytes);
+    return result;
+}
+
+template<typename T>
+AllocateResult<T> allocate_named_ir_node(int num_exprs, std::string_view name) {
+    AllocateResult<T> result;
+    constexpr size_t base_bytes = sizeof(T);
+    const size_t expr_bytes = num_exprs * sizeof(Expr);
+    static_assert(sizeof(T) % sizeof(Expr) == 0);
+    const size_t char_bytes = name.size();
+    uint8_t *mem = (uint8_t *)malloc(base_bytes + expr_bytes + char_bytes);
+
+    result.node = (T *)mem;
+    new (mem) T;
+    result.exprs = (Expr *)(mem + base_bytes);
+    result.chars = (char *)(mem + base_bytes + expr_bytes);
+    memset(result.exprs, 0, expr_bytes);
+    result.node->name = std::string_view(result.chars, name.size());
+    memcpy(result.chars, name.data(), name.size());
+    return result;
+}
+
+template<typename T>
+Expr make_binary_op(Expr a, Expr b) {
+    auto mem = allocate_ir_node<T>(0, 0);
+    mem.node->type = a.type();
+    mem.node->a = std::move(a);
+    mem.node->b = std::move(b);
+    return mem.node;
+}
+
+template<typename T>
+Expr make_comparison_op(Expr a, Expr b) {
+    auto mem = allocate_ir_node<T>(0, 0);
+    mem.node->type = Bool(a.type().lanes());
+    mem.node->a = std::move(a);
+    mem.node->b = std::move(b);
+    return mem.node;
+}
+
+}  // namespace
+
 Expr Cast::make(Type t, Expr v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
     internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths\n";
 
-    Cast *node = new Cast;
-    node->type = t;
-    node->value = std::move(v);
-    return node;
+    auto mem = allocate_ir_node<Cast>(0, 0);
+    mem.node->type = t;
+    mem.node->value = std::move(v);
+    return mem.node;
 }
 
 Expr Reinterpret::make(Type t, Expr v) {
@@ -30,10 +95,10 @@ Expr Reinterpret::make(Type t, Expr v) {
         << " bits, to type " << t
         << " which has " << to_bits << " bits\n";
 
-    Reinterpret *node = new Reinterpret;
-    node->type = t;
-    node->value = std::move(v);
-    return node;
+    auto mem = allocate_ir_node<Reinterpret>(0, 0);
+    mem.node->type = t;
+    mem.node->value = std::move(v);
+    return mem.node;
 }
 
 Expr Add::make(Expr a, Expr b) {
@@ -41,11 +106,7 @@ Expr Add::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "Add of undefined\n";
     internal_assert(a.type() == b.type()) << "Add of mismatched types\n";
 
-    Add *node = new Add;
-    node->type = a.type();
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_binary_op<Add>(std::move(a), std::move(b));
 }
 
 Expr Sub::make(Expr a, Expr b) {
@@ -53,11 +114,7 @@ Expr Sub::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "Sub of undefined\n";
     internal_assert(a.type() == b.type()) << "Sub of mismatched types\n";
 
-    Sub *node = new Sub;
-    node->type = a.type();
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_binary_op<Sub>(std::move(a), std::move(b));
 }
 
 Expr Mul::make(Expr a, Expr b) {
@@ -65,11 +122,7 @@ Expr Mul::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "Mul of undefined\n";
     internal_assert(a.type() == b.type()) << "Mul of mismatched types\n";
 
-    Mul *node = new Mul;
-    node->type = a.type();
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_binary_op<Mul>(std::move(a), std::move(b));
 }
 
 Expr Div::make(Expr a, Expr b) {
@@ -77,11 +130,7 @@ Expr Div::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "Div of undefined\n";
     internal_assert(a.type() == b.type()) << "Div of mismatched types\n";
 
-    Div *node = new Div;
-    node->type = a.type();
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_binary_op<Div>(std::move(a), std::move(b));
 }
 
 Expr Mod::make(Expr a, Expr b) {
@@ -89,11 +138,7 @@ Expr Mod::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "Mod of undefined\n";
     internal_assert(a.type() == b.type()) << "Mod of mismatched types\n";
 
-    Mod *node = new Mod;
-    node->type = a.type();
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_binary_op<Mod>(std::move(a), std::move(b));
 }
 
 Expr Min::make(Expr a, Expr b) {
@@ -101,11 +146,7 @@ Expr Min::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "Min of undefined\n";
     internal_assert(a.type() == b.type()) << "Min of mismatched types\n";
 
-    Min *node = new Min;
-    node->type = a.type();
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_binary_op<Min>(std::move(a), std::move(b));
 }
 
 Expr Max::make(Expr a, Expr b) {
@@ -113,11 +154,7 @@ Expr Max::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "Max of undefined\n";
     internal_assert(a.type() == b.type()) << "Max of mismatched types\n";
 
-    Max *node = new Max;
-    node->type = a.type();
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_binary_op<Max>(std::move(a), std::move(b));
 }
 
 Expr EQ::make(Expr a, Expr b) {
@@ -125,11 +162,7 @@ Expr EQ::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "EQ of undefined\n";
     internal_assert(a.type() == b.type()) << "EQ of mismatched types\n";
 
-    EQ *node = new EQ;
-    node->type = Bool(a.type().lanes());
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_comparison_op<EQ>(std::move(a), std::move(b));
 }
 
 Expr NE::make(Expr a, Expr b) {
@@ -137,11 +170,7 @@ Expr NE::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "NE of undefined\n";
     internal_assert(a.type() == b.type()) << "NE of mismatched types\n";
 
-    NE *node = new NE;
-    node->type = Bool(a.type().lanes());
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_comparison_op<NE>(std::move(a), std::move(b));
 }
 
 Expr LT::make(Expr a, Expr b) {
@@ -149,11 +178,7 @@ Expr LT::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "LT of undefined\n";
     internal_assert(a.type() == b.type()) << "LT of mismatched types\n";
 
-    LT *node = new LT;
-    node->type = Bool(a.type().lanes());
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_comparison_op<LT>(std::move(a), std::move(b));
 }
 
 Expr LE::make(Expr a, Expr b) {
@@ -161,11 +186,7 @@ Expr LE::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "LE of undefined\n";
     internal_assert(a.type() == b.type()) << "LE of mismatched types\n";
 
-    LE *node = new LE;
-    node->type = Bool(a.type().lanes());
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_comparison_op<LE>(std::move(a), std::move(b));
 }
 
 Expr GT::make(Expr a, Expr b) {
@@ -173,11 +194,7 @@ Expr GT::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "GT of undefined\n";
     internal_assert(a.type() == b.type()) << "GT of mismatched types\n";
 
-    GT *node = new GT;
-    node->type = Bool(a.type().lanes());
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_comparison_op<GT>(std::move(a), std::move(b));
 }
 
 Expr GE::make(Expr a, Expr b) {
@@ -185,11 +202,7 @@ Expr GE::make(Expr a, Expr b) {
     internal_assert(b.defined()) << "GE of undefined\n";
     internal_assert(a.type() == b.type()) << "GE of mismatched types\n";
 
-    GE *node = new GE;
-    node->type = Bool(a.type().lanes());
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_comparison_op<GE>(std::move(a), std::move(b));
 }
 
 Expr And::make(Expr a, Expr b) {
@@ -199,11 +212,7 @@ Expr And::make(Expr a, Expr b) {
     internal_assert(b.type().is_bool()) << "rhs of And is not a bool\n";
     internal_assert(a.type() == b.type()) << "And of mismatched types\n";
 
-    And *node = new And;
-    node->type = Bool(a.type().lanes());
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_binary_op<And>(std::move(a), std::move(b));
 }
 
 Expr Or::make(Expr a, Expr b) {
@@ -213,21 +222,17 @@ Expr Or::make(Expr a, Expr b) {
     internal_assert(b.type().is_bool()) << "rhs of Or is not a bool\n";
     internal_assert(a.type() == b.type()) << "Or of mismatched types\n";
 
-    Or *node = new Or;
-    node->type = Bool(a.type().lanes());
-    node->a = std::move(a);
-    node->b = std::move(b);
-    return node;
+    return make_binary_op<Or>(std::move(a), std::move(b));
 }
 
 Expr Not::make(Expr a) {
     internal_assert(a.defined()) << "Not of undefined\n";
     internal_assert(a.type().is_bool()) << "argument of Not is not a bool\n";
 
-    Not *node = new Not;
-    node->type = Bool(a.type().lanes());
-    node->a = std::move(a);
-    return node;
+    auto mem = allocate_ir_node<Not>(0, 0);
+    mem.node->type = Bool(a.type().lanes());
+    mem.node->a = std::move(a);
+    return mem.node;
 }
 
 Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
@@ -240,30 +245,29 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
                     condition.type().lanes() == true_value.type().lanes())
         << "In Select, vector lanes of condition must either be 1, or equal to vector lanes of arguments\n";
 
-    Select *node = new Select;
-    node->type = true_value.type();
-    node->condition = std::move(condition);
-    node->true_value = std::move(true_value);
-    node->false_value = std::move(false_value);
-    return node;
+    auto mem = allocate_ir_node<Select>(0, 0);
+    mem.node->type = true_value.type();
+    mem.node->condition = std::move(condition);
+    mem.node->true_value = std::move(true_value);
+    mem.node->false_value = std::move(false_value);
+    return mem.node;
 }
 
-Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Expr Load::make(Type type, std::string_view name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment) {
     internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
     internal_assert(type.lanes() == predicate.type().lanes())
         << "Vector lanes of Load must match vector lanes of predicate\n";
 
-    Load *node = new Load;
-    node->type = type;
-    node->name = name;
-    node->predicate = std::move(predicate);
-    node->index = std::move(index);
-    node->image = std::move(image);
-    node->param = std::move(param);
-    node->alignment = alignment;
-    return node;
+    auto mem = allocate_named_ir_node<Load>(0, name);
+    mem.node->type = type;
+    mem.node->predicate = std::move(predicate);
+    mem.node->index = std::move(index);
+    mem.node->image = std::move(image);
+    mem.node->param = std::move(param);
+    mem.node->alignment = alignment;
+    return mem.node;
 }
 
 Expr Ramp::make(Expr base, Expr stride, int lanes) {
@@ -272,77 +276,74 @@ Expr Ramp::make(Expr base, Expr stride, int lanes) {
     internal_assert(lanes > 1) << "Ramp of lanes <= 1\n";
     internal_assert(stride.type() == base.type()) << "Ramp of mismatched types\n";
 
-    Ramp *node = new Ramp;
-    node->type = base.type().with_lanes(lanes * base.type().lanes());
-    node->base = std::move(base);
-    node->stride = std::move(stride);
-    node->lanes = lanes;
-    return node;
+    auto mem = allocate_ir_node<Ramp>(0, 0);
+    mem.node->type = base.type().with_lanes(lanes * base.type().lanes());
+    mem.node->base = std::move(base);
+    mem.node->stride = std::move(stride);
+    mem.node->lanes = lanes;
+    return mem.node;
 }
 
 Expr Broadcast::make(Expr value, int lanes) {
     internal_assert(value.defined()) << "Broadcast of undefined\n";
     internal_assert(lanes != 1) << "Broadcast of lanes 1\n";
 
-    Broadcast *node = new Broadcast;
-    node->type = value.type().with_lanes(lanes * value.type().lanes());
-    node->value = std::move(value);
-    node->lanes = lanes;
-    return node;
+    auto mem = allocate_ir_node<Broadcast>(0, 0);
+    mem.node->type = value.type().with_lanes(lanes * value.type().lanes());
+    mem.node->value = std::move(value);
+    mem.node->lanes = lanes;
+    return mem.node;
 }
 
-Expr Let::make(const std::string &name, Expr value, Expr body) {
+Expr Let::make(std::string_view name, Expr value, Expr body) {
     internal_assert(value.defined()) << "Let of undefined\n";
     internal_assert(body.defined()) << "Let of undefined\n";
 
-    Let *node = new Let;
-    node->type = body.type();
-    node->name = name;
-    node->value = std::move(value);
-    node->body = std::move(body);
-    return node;
+    auto mem = allocate_named_ir_node<Let>(0, name);
+    mem.node->type = body.type();
+    mem.node->value = std::move(value);
+    mem.node->body = std::move(body);
+    return mem.node;
 }
 
-Stmt LetStmt::make(const std::string &name, Expr value, Stmt body) {
+Stmt LetStmt::make(std::string_view name, Expr value, Stmt body) {
     internal_assert(value.defined()) << "Let of undefined\n";
     internal_assert(body.defined()) << "Let of undefined\n";
 
-    LetStmt *node = new LetStmt;
-    node->name = name;
-    node->value = std::move(value);
-    node->body = std::move(body);
-    return node;
+    auto mem = allocate_named_ir_node<LetStmt>(0, name);
+    mem.node->value = std::move(value);
+    mem.node->body = std::move(body);
+    return mem.node;
 }
 
 Stmt AssertStmt::make(Expr condition, Expr message) {
     internal_assert(condition.defined()) << "AssertStmt of undefined\n";
     internal_assert(message.type() == Int(32)) << "AssertStmt message must be an int:" << message << "\n";
 
-    AssertStmt *node = new AssertStmt;
-    node->condition = std::move(condition);
-    node->message = std::move(message);
-    return node;
+    auto mem = allocate_ir_node<AssertStmt>(0, 0);
+    mem.node->condition = std::move(condition);
+    mem.node->message = std::move(message);
+    return mem.node;
 }
 
-Stmt ProducerConsumer::make(const std::string &name, bool is_producer, Stmt body) {
+Stmt ProducerConsumer::make(std::string_view name, bool is_producer, Stmt body) {
     internal_assert(body.defined()) << "ProducerConsumer of undefined\n";
 
-    ProducerConsumer *node = new ProducerConsumer;
-    node->name = name;
-    node->is_producer = is_producer;
-    node->body = std::move(body);
-    return node;
+    auto mem = allocate_named_ir_node<ProducerConsumer>(0, name);
+    mem.node->is_producer = is_producer;
+    mem.node->body = std::move(body);
+    return mem.node;
 }
 
-Stmt ProducerConsumer::make_produce(const std::string &name, Stmt body) {
+Stmt ProducerConsumer::make_produce(std::string_view name, Stmt body) {
     return ProducerConsumer::make(name, true, std::move(body));
 }
 
-Stmt ProducerConsumer::make_consume(const std::string &name, Stmt body) {
+Stmt ProducerConsumer::make_consume(std::string_view name, Stmt body) {
     return ProducerConsumer::make(name, false, std::move(body));
 }
 
-Stmt For::make(const std::string &name,
+Stmt For::make(std::string_view name,
                Expr min, Expr extent,
                ForType for_type, Partition partition_policy,
                DeviceAPI device_api,
@@ -353,29 +354,28 @@ Stmt For::make(const std::string &name,
     internal_assert(extent.type() == Int(32)) << "For with non-integer extent\n";
     internal_assert(body.defined()) << "For of undefined\n";
 
-    For *node = new For;
-    node->name = name;
-    node->min = std::move(min);
-    node->extent = std::move(extent);
-    node->for_type = for_type;
-    node->partition_policy = partition_policy;
-    node->device_api = device_api;
-    node->body = std::move(body);
-    return node;
+    auto mem = allocate_named_ir_node<For>(0, name);
+    mem.node->min = std::move(min);
+    mem.node->extent = std::move(extent);
+    mem.node->for_type = for_type;
+    mem.node->partition_policy = partition_policy;
+    mem.node->device_api = device_api;
+    mem.node->body = std::move(body);
+    return mem.node;
 }
 
 Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
     internal_assert(semaphore.defined()) << "Acquire with undefined semaphore\n";
     internal_assert(body.defined()) << "Acquire with undefined body\n";
 
-    Acquire *node = new Acquire;
-    node->semaphore = std::move(semaphore);
-    node->count = std::move(count);
-    node->body = std::move(body);
-    return node;
+    auto mem = allocate_ir_node<Acquire>(0, 0);
+    mem.node->semaphore = std::move(semaphore);
+    mem.node->count = std::move(count);
+    mem.node->body = std::move(body);
+    return mem.node;
 }
 
-Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Stmt Store::make(std::string_view name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment) {
     internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
@@ -383,17 +383,16 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     internal_assert(value.type().lanes() == predicate.type().lanes())
         << "Vector lanes of Store must match vector lanes of predicate\n";
 
-    Store *node = new Store;
-    node->name = name;
-    node->predicate = std::move(predicate);
-    node->value = std::move(value);
-    node->index = std::move(index);
-    node->param = std::move(param);
-    node->alignment = alignment;
-    return node;
+    auto mem = allocate_named_ir_node<Store>(0, name);
+    mem.node->predicate = std::move(predicate);
+    mem.node->value = std::move(value);
+    mem.node->index = std::move(index);
+    mem.node->param = std::move(param);
+    mem.node->alignment = alignment;
+    return mem.node;
 }
 
-Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
+Stmt Provide::make(std::string_view name, ExprVector values, ExprVector args, const Expr &predicate) {
     internal_assert(predicate.defined()) << "Provide with undefined predicate\n";
     internal_assert(!values.empty()) << "Provide of no values\n";
     for (const auto &value : values) {
@@ -403,18 +402,17 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
         internal_assert(arg.defined()) << "Provide to undefined location\n";
     }
 
-    Provide *node = new Provide;
-    node->name = name;
-    node->values = values;
-    node->args = args;
-    node->predicate = predicate;
-    return node;
+    auto mem = allocate_named_ir_node<Provide>(0, name);
+    mem.node->values = values;
+    mem.node->args = args;
+    mem.node->predicate = predicate;
+    return mem.node;
 }
 
-Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
-                    const std::vector<Expr> &extents,
+Stmt Allocate::make(std::string_view name, Type type, MemoryType memory_type,
+                    ExprVector extents,
                     Expr condition, Stmt body,
-                    Expr new_expr, const std::string &free_function, int padding) {
+                    Expr new_expr, std::string_view free_function, int padding) {
     for (const auto &extent : extents) {
         internal_assert(extent.defined()) << "Allocate of undefined extent\n";
         internal_assert(extent.type().is_scalar() == 1) << "Allocate of vector extent\n";
@@ -425,20 +423,27 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
     internal_assert(!(new_expr.defined() && padding))
         << "Allocate nodes with custom new expressions may not have padding\n";
 
-    Allocate *node = new Allocate;
-    node->name = name;
-    node->type = type;
-    node->memory_type = memory_type;
-    node->extents = extents;
-    node->new_expr = std::move(new_expr);
-    node->free_function = free_function;
-    node->condition = std::move(condition);
-    node->padding = padding;
-    node->body = std::move(body);
-    return node;
+    auto mem = allocate_ir_node<Allocate>(extents.size(), name.size() + free_function.size());
+    mem.node->type = type;
+    mem.node->name = std::string_view(mem.chars, name.size());
+    memcpy(mem.chars, name.data(), name.size());
+    mem.node->free_function = std::string_view(mem.chars + name.size(), free_function.size());
+    memcpy(mem.chars + name.size(), free_function.data(), free_function.size());
+    mem.node->memory_type = memory_type;
+    mem.node->extents.ptr = mem.exprs;
+    mem.node->extents.num = extents.size();
+    for (size_t i = 0; i < extents.size(); i++) {
+        new (mem.exprs + i) Expr{extents[i]};
+    }
+    mem.node->new_expr = std::move(new_expr);
+    mem.node->free_function = free_function;
+    mem.node->condition = std::move(condition);
+    mem.node->padding = padding;
+    mem.node->body = std::move(body);
+    return mem.node;
 }
 
-int32_t Allocate::constant_allocation_size(const std::vector<Expr> &extents, const std::string &name) {
+int32_t Allocate::constant_allocation_size(ExprVector extents, std::string_view name) {
     int64_t result = 1;
 
     for (const auto &extent : extents) {
@@ -473,13 +478,12 @@ int32_t Allocate::constant_allocation_size() const {
     return Allocate::constant_allocation_size(extents, name);
 }
 
-Stmt Free::make(const std::string &name) {
-    Free *node = new Free;
-    node->name = name;
-    return node;
+Stmt Free::make(std::string_view name) {
+    auto mem = allocate_named_ir_node<Free>(0, name);
+    return mem.node;
 }
 
-Stmt Realize::make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body) {
+Stmt Realize::make(std::string_view name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body) {
     for (const auto &bound : bounds) {
         internal_assert(bound.min.defined()) << "Realize of undefined\n";
         internal_assert(bound.extent.defined()) << "Realize of undefined\n";
@@ -491,17 +495,16 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, Memo
     internal_assert(condition.defined()) << "Realize with undefined condition\n";
     internal_assert(condition.type().is_bool()) << "Realize condition is not boolean\n";
 
-    Realize *node = new Realize;
-    node->name = name;
-    node->types = types;
-    node->memory_type = memory_type;
-    node->bounds = bounds;
-    node->condition = std::move(condition);
-    node->body = std::move(body);
-    return node;
+    auto mem = allocate_named_ir_node<Realize>(0, name);
+    mem.node->types = types;  // TODO: allocate this inline
+    mem.node->memory_type = memory_type;
+    mem.node->bounds = bounds;  // TODO: allocate this inline
+    mem.node->condition = std::move(condition);
+    mem.node->body = std::move(body);
+    return mem.node;
 }
 
-Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
+Stmt Prefetch::make(std::string_view name, const std::vector<Type> &types,
                     const Region &bounds,
                     const PrefetchDirective &prefetch,
                     Expr condition, Stmt body) {
@@ -518,32 +521,30 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
 
     user_assert(is_pure(prefetch.offset)) << "The offset to the prefetch directive must be pure.";
 
-    Prefetch *node = new Prefetch;
-    node->name = name;
-    node->types = types;
-    node->bounds = bounds;
-    node->prefetch = prefetch;
-    node->condition = std::move(condition);
-    node->body = std::move(body);
-    return node;
+    auto mem = allocate_named_ir_node<Prefetch>(0, name);
+    mem.node->types = types;
+    mem.node->bounds = bounds;
+    mem.node->prefetch = prefetch;
+    mem.node->condition = std::move(condition);
+    mem.node->body = std::move(body);
+    return mem.node;
 }
 
 Stmt Block::make(Stmt first, Stmt rest) {
     internal_assert(first.defined()) << "Block of undefined\n";
     internal_assert(rest.defined()) << "Block of undefined\n";
 
-    Block *node = new Block;
-
+    auto mem = allocate_ir_node<Block>(0, 0);
     if (const Block *b = first.as<Block>()) {
         // Use a canonical block nesting order
-        node->first = b->first;
-        node->rest = Block::make(b->rest, std::move(rest));
+        mem.node->first = b->first;
+        mem.node->rest = Block::make(b->rest, std::move(rest));
     } else {
-        node->first = std::move(first);
-        node->rest = std::move(rest);
+        mem.node->first = std::move(first);
+        mem.node->rest = std::move(rest);
     }
 
-    return node;
+    return mem.node;
 }
 
 Stmt Block::make(const std::vector<Stmt> &stmts) {
@@ -561,18 +562,17 @@ Stmt Fork::make(Stmt first, Stmt rest) {
     internal_assert(first.defined()) << "Fork of undefined\n";
     internal_assert(rest.defined()) << "Fork of undefined\n";
 
-    Fork *node = new Fork;
-
+    auto mem = allocate_ir_node<Fork>(0, 0);
     if (const Fork *b = first.as<Fork>()) {
         // Use a canonical fork nesting order
-        node->first = b->first;
-        node->rest = Fork::make(b->rest, std::move(rest));
+        mem.node->first = b->first;
+        mem.node->rest = Fork::make(b->rest, std::move(rest));
     } else {
-        node->first = std::move(first);
-        node->rest = std::move(rest);
+        mem.node->first = std::move(first);
+        mem.node->rest = std::move(rest);
     }
 
-    return node;
+    return mem.node;
 }
 
 Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
@@ -581,28 +581,28 @@ Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
 
     internal_assert(condition.type().is_scalar()) << "IfThenElse with vector condition\n";
 
-    IfThenElse *node = new IfThenElse;
-    node->condition = std::move(condition);
-    node->then_case = std::move(then_case);
-    node->else_case = std::move(else_case);
-    return node;
+    auto mem = allocate_ir_node<IfThenElse>(0, 0);
+    mem.node->condition = std::move(condition);
+    mem.node->then_case = std::move(then_case);
+    mem.node->else_case = std::move(else_case);
+    return mem.node;
 }
 
 Stmt Evaluate::make(Expr v) {
     internal_assert(v.defined()) << "Evaluate of undefined\n";
 
-    Evaluate *node = new Evaluate;
-    node->value = std::move(v);
-    return node;
+    auto mem = allocate_ir_node<Evaluate>(0, 0);
+    mem.node->value = std::move(v);
+    return mem.node;
 }
 
-Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
+Expr Call::make(const Function &func, int num_args, const Expr *args, int idx) {
     internal_assert(idx >= 0 &&
                     idx < func.outputs())
         << "Value index out of range in call to halide function\n";
     internal_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Call to undefined halide function\n";
-    return make(func.output_types()[(size_t)idx], func.name(), args, Halide,
+    return make(func.output_types()[(size_t)idx], func.name(), num_args, args, Halide,
                 func.get_contents(), idx, Buffer<>(), Parameter());
 }
 
@@ -700,61 +700,61 @@ const char *Call::get_intrinsic_name(IntrinsicOp op) {
     return intrinsic_op_names[op];
 }
 
-Expr Call::make(Type type, Call::IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
+Expr Call::make(Type type, Call::IntrinsicOp op, int num_args, const Expr *args, CallType call_type,
                 FunctionPtr func, int value_index,
-                const Buffer<> &image, Parameter param) {
+                const Buffer<> &image, const Parameter &param) {
     internal_assert(call_type == Call::Intrinsic || call_type == Call::PureIntrinsic);
-    return Call::make(type, intrinsic_op_names[op], args, call_type, std::move(func), value_index, image, std::move(param));
+    return Call::make(type, intrinsic_op_names[op], num_args, args, call_type, std::move(func), value_index, image, std::move(param));
 }
 
-Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
+Expr Call::make(Type type, std::string_view name, int num_args, const Expr *args, CallType call_type,
                 FunctionPtr func, int value_index,
-                Buffer<> image, Parameter param) {
+                const Buffer<> &image, const Parameter &param) {
     if (name == intrinsic_op_names[Call::prefetch] && call_type == Call::Intrinsic) {
-        internal_assert(args.size() % 2 == 0)
+        internal_assert(num_args % 2 == 0)
             << "Number of args to a prefetch call should be even: {base, offset, extent0, stride0, extent1, stride1, ...}\n";
     }
-    for (size_t i = 0; i < args.size(); i++) {
+    for (int i = 0; i < num_args; i++) {
         internal_assert(args[i].defined()) << "Call of " << name << " with argument " << i << " undefined.\n";
     }
-    if (call_type == Halide) {
-        for (const auto &arg : args) {
-            internal_assert(arg.type() == Int(32))
+    if (call_type == Halide || call_type == Image) {
+        for (int i = 0; i < num_args; i++) {
+            internal_assert(args[i].type() == Int(32))
                 << "Args to call to halide function must be type Int(32)\n";
         }
-    } else if (call_type == Image) {
+    }
+    if (call_type == Image) {
         internal_assert((param.defined() || image.defined()))
             << "Call node to undefined image\n";
-        for (const auto &arg : args) {
-            internal_assert(arg.type() == Int(32))
-                << "Args to load from image must be type Int(32)\n";
-        }
     }
 
-    Call *node = new Call;
-    node->type = type;
-    node->name = name;
-    node->args = args;
-    node->call_type = call_type;
-    node->func = std::move(func);
-    node->value_index = value_index;
-    node->image = std::move(image);
-    node->param = std::move(param);
-    return node;
+    auto mem = allocate_named_ir_node<Call>(num_args, name);
+    mem.node->type = type;
+    mem.node->args.ptr = mem.exprs;
+    mem.node->args.num = num_args;
+    mem.node->call_type = call_type;
+    mem.node->func = std::move(func);
+    mem.node->value_index = value_index;
+    mem.node->image = std::move(image);
+    mem.node->param = std::move(param);
+    for (int i = 0; i < num_args; i++) {
+        new (mem.exprs + i) Expr{args[i]};
+    }
+    return mem.node;
 }
 
-Expr Variable::make(Type type, const std::string &name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {
+Expr Variable::make(Type type, std::string_view name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {
     internal_assert(!name.empty());
-    Variable *node = new Variable;
-    node->type = type;
-    node->name = name;
-    node->image = std::move(image);
-    node->param = std::move(param);
-    node->reduction_domain = std::move(reduction_domain);
-    return node;
+
+    auto mem = allocate_named_ir_node<Variable>(0, name);
+    mem.node->type = type;
+    mem.node->image = std::move(image);
+    mem.node->param = std::move(param);
+    mem.node->reduction_domain = std::move(reduction_domain);
+    return mem.node;
 }
 
-Expr Shuffle::make(const std::vector<Expr> &vectors,
+Expr Shuffle::make(ExprVector vectors,
                    const std::vector<int> &indices) {
     internal_assert(!vectors.empty()) << "Shuffle of zero vectors.\n";
     internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
@@ -768,14 +768,18 @@ Expr Shuffle::make(const std::vector<Expr> &vectors,
         internal_assert(0 <= i && i < input_lanes) << "Shuffle vector index out of range: " << i << "\n";
     }
 
-    Shuffle *node = new Shuffle;
-    node->type = element_ty.with_lanes((int)indices.size());
-    node->vectors = vectors;
-    node->indices = indices;
-    return node;
+    auto mem = allocate_ir_node<Shuffle>(vectors.size(), 0);
+    mem.node->type = element_ty.with_lanes((int)indices.size());
+    mem.node->vectors.ptr = mem.exprs;
+    mem.node->vectors.num = vectors.size();
+    for (size_t i = 0; i < vectors.size(); i++) {
+        new (mem.exprs + i) Expr{vectors[i]};
+    }
+    mem.node->indices = indices;  // TODO: embed this
+    return mem.node;
 }
 
-Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
+Expr Shuffle::make_interleave(ExprVector vectors) {
     internal_assert(!vectors.empty()) << "Interleave of zero vectors.\n";
 
     if (vectors.size() == 1) {
@@ -789,6 +793,8 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
             << "Interleave of vectors with different sizes.\n";
     }
 
+    // TODO: All these indices should be done inline instead of by constructing
+    // a vector and then copying it.
     std::vector<int> indices;
     for (int i = 0; i < lanes; i++) {
         for (int j = 0; j < (int)vectors.size(); j++) {
@@ -799,7 +805,7 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
     return make(vectors, indices);
 }
 
-Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
+Expr Shuffle::make_concat(ExprVector vectors) {
     internal_assert(!vectors.empty()) << "Concat of zero vectors.\n";
 
     if (vectors.size() == 1) {
@@ -908,24 +914,26 @@ bool Shuffle::is_interleave() const {
     return true;
 }
 
-Stmt Atomic::make(const std::string &producer_name,
-                  const std::string &mutex_name,
+Stmt Atomic::make(std::string_view producer_name,
+                  std::string_view mutex_name,
                   Stmt body) {
-    Atomic *node = new Atomic;
-    node->producer_name = producer_name;
-    node->mutex_name = mutex_name;
+    auto mem = allocate_ir_node<Atomic>(0, producer_name.size() + mutex_name.size());
+
+    mem.node->producer_name = std::string_view(mem.chars, producer_name.size());
+    memcpy(mem.chars, producer_name.data(), producer_name.size());
+    mem.node->mutex_name = std::string_view(mem.chars + producer_name.size(), mutex_name.size());
+    memcpy(mem.chars + producer_name.size(), mutex_name.data(), mutex_name.size());
     internal_assert(body.defined()) << "Atomic must have a body statement.\n";
-    node->body = std::move(body);
-    return node;
+    mem.node->body = std::move(body);
+    return mem.node;
 }
 
-Stmt HoistedStorage::make(const std::string &name,
+Stmt HoistedStorage::make(std::string_view name,
                           Stmt body) {
     internal_assert(body.defined()) << "HoistedStorage must have a body statement.\n";
-    HoistedStorage *node = new HoistedStorage;
-    node->name = name;
-    node->body = std::move(body);
-    return node;
+    auto mem = allocate_named_ir_node<HoistedStorage>(0, name);
+    mem.node->body = std::move(body);
+    return mem.node;
 }
 
 Expr VectorReduce::make(VectorReduce::Operator op,
@@ -943,11 +951,12 @@ Expr VectorReduce::make(VectorReduce::Operator op,
                     (lanes != 0 && (vec.type().lanes() % lanes == 0)))
         << "Vector reduce output lanes must be a divisor of the number of lanes in the argument "
         << lanes << " " << vec.type().lanes() << "\n";
-    VectorReduce *node = new VectorReduce;
-    node->type = vec.type().with_lanes(lanes);
-    node->op = op;
-    node->value = std::move(vec);
-    return node;
+
+    auto mem = allocate_ir_node<VectorReduce>(0, 0);
+    mem.node->type = vec.type().with_lanes(lanes);
+    mem.node->op = op;
+    mem.node->value = std::move(vec);
+    return mem.node;
 }
 
 namespace {

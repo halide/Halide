@@ -6,8 +6,7 @@
  * Defines pass to replace calls to wrapped Functions with their wrappers.
  */
 
-#include <map>
-#include <string>
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,7 +15,7 @@ class Function;
 
 /** Replace every call to wrapped Functions in the Functions' definitions with
  * call to their wrapper functions. */
-std::map<std::string, Function> wrap_func_calls(const std::map<std::string, Function> &env);
+StringMap<Function> wrap_func_calls(const StringMap<Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

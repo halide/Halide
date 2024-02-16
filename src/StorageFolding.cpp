@@ -27,7 +27,7 @@ using std::vector;
 
 // Count the number of producers of a particular func.
 class CountProducers : public IRVisitor {
-    const std::string &name;
+    std::string_view name;
 
     void visit(const ProducerConsumer *op) override {
         if (op->is_producer && (op->name == name)) {
@@ -42,12 +42,12 @@ class CountProducers : public IRVisitor {
 public:
     int count = 0;
 
-    CountProducers(const std::string &name)
+    CountProducers(std::string_view name)
         : name(name) {
     }
 };
 
-int count_producers(const Stmt &in, const std::string &name) {
+int count_producers(const Stmt &in, std::string_view name) {
     CountProducers counter(name);
     in.accept(&counter);
     return counter.count;
@@ -76,7 +76,7 @@ class FoldStorageOfFunction : public IRMutator {
             Expr source = op->args[2];
             const Variable *buf_var = source.as<Variable>();
             if (buf_var &&
-                starts_with(buf_var->name, func + ".") &&
+                starts_with(buf_var->name, func, ".") &&
                 ends_with(buf_var->name, ".buffer")) {
                 // We are taking a crop of a folded buffer. For now
                 // we'll just assert that the crop doesn't wrap
@@ -150,8 +150,8 @@ class FoldStorageOfFunction : public IRMutator {
     }
 
 public:
-    FoldStorageOfFunction(string f, int d, Expr e, string p)
-        : func(std::move(f)), dim(d), factor(std::move(e)), dynamic_footprint(std::move(p)) {
+    FoldStorageOfFunction(std::string_view f, int d, Expr e, string p)
+        : func(f), dim(d), factor(std::move(e)), dynamic_footprint(std::move(p)) {
     }
 };
 
@@ -203,7 +203,7 @@ class InjectFoldingCheck : public IRMutator {
                     // currently represented.
                     Expr fold_non_monotonic_error =
                         Call::make(Int(32), "halide_error_bad_fold",
-                                   {func.name(), storage_dim.var, loop_var},
+                                   {Expr(func.name()), Expr(storage_dim.var), Expr(loop_var)},
                                    Call::Extern);
 
                     Expr in_valid_range;
@@ -220,7 +220,7 @@ class InjectFoldingCheck : public IRMutator {
                     // Separately check the extent for *this* loop iteration fits.
                     Expr fold_too_small_error =
                         Call::make(Int(32), "halide_error_fold_factor_too_small",
-                                   {func.name(), storage_dim.var, storage_dim.fold_factor, loop_var, extent},
+                                   {Expr(func.name()), Expr(storage_dim.var), storage_dim.fold_factor, Expr(loop_var), extent},
                                    Call::Extern);
 
                     Stmt check_extent =
@@ -291,7 +291,7 @@ class InjectFoldingCheck : public IRMutator {
                             check = (b[dim].max < leading_edge + storage_dim.fold_factor && b[dim].min >= leading_edge);
                         }
                         Expr bad_fold_error = Call::make(Int(32), "halide_error_bad_fold",
-                                                         {func.name(), storage_dim.var, loop_var},
+                                                         {Expr(func.name()), Expr(storage_dim.var), Expr(loop_var)},
                                                          Call::Extern);
                         body = Block::make(AssertStmt::make(check, bad_fold_error), body);
                     }
@@ -305,7 +305,7 @@ class InjectFoldingCheck : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        if (starts_with(op->name, func.name() + ".") &&
+        if (starts_with(op->name, func.name(), ".") &&
             ends_with(op->name, ".tmp_buffer")) {
 
             Stmt body = op->body;
@@ -387,11 +387,11 @@ class InjectFoldingCheck : public IRMutator {
 
 public:
     InjectFoldingCheck(Function func,
-                       string head, string tail,
-                       string loop_var, Expr sema_var,
+                       std::string_view head, std::string_view tail,
+                       std::string_view loop_var, Expr sema_var,
                        int dim, const StorageDim &storage_dim)
-        : func(std::move(func)),
-          head(std::move(head)), tail(std::move(tail)), loop_var(std::move(loop_var)), sema_var(std::move(sema_var)),
+        : func(func),
+          head(head), tail(tail), loop_var(loop_var), sema_var(std::move(sema_var)),
           dim(dim), storage_dim(storage_dim) {
     }
 };
@@ -407,15 +407,15 @@ class HasExternConsumer : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Variable *op) override {
-        if (op->name == func + ".buffer") {
+        if (op->name == concat(func, ".buffer")) {
             result = true;
         }
     }
 
-    const std::string &func;
+    std::string_view func;
 
 public:
-    HasExternConsumer(const std::string &func)
+    HasExternConsumer(std::string_view func)
         : func(func) {
     }
     bool result = false;
@@ -470,12 +470,12 @@ class VectorAccessOfFoldedDim : public IRVisitor {
     }
 
     Scope<> vector_vars;
-    const string &func;
+    std::string_view func;
     int dim;
 
 public:
     bool result = false;
-    VectorAccessOfFoldedDim(const string &func, int dim)
+    VectorAccessOfFoldedDim(std::string_view func, int dim)
         : func(func), dim(dim) {
     }
 };
@@ -539,8 +539,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Box box = box_union(provided, required);
 
         Expr loop_var = Variable::make(Int(32), op->name);
-        Expr loop_min = Variable::make(Int(32), op->name + ".loop_min");
-        Expr loop_max = Variable::make(Int(32), op->name + ".loop_max");
+        Expr loop_min = Variable::make(Int(32), concat(op->name, ".loop_min"));
+        Expr loop_max = Variable::make(Int(32), concat(op->name, ".loop_max"));
 
         string dynamic_footprint;
 
@@ -585,7 +585,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     max_required = simplify(required[dim].max);
                 }
             }
-            string sema_name = func.name() + ".folding_semaphore." + unique_name('_');
+            string sema_name = concat(func.name(), ".folding_semaphore.", unique_name('_'));
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), sema_name);
 
             // Consider the initial iteration and steady state
@@ -683,11 +683,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         // consumer wants to move the counter, it must
                         // also acquire or release the semaphore to
                         // prevent them from diverging too far.
-                        dynamic_footprint = func.name() + ".folding_semaphore." + op->name + unique_name('_');
+                        dynamic_footprint = concat(func.name(), ".folding_semaphore.", op->name, unique_name('_'));
                         head = dynamic_footprint + ".head";
                         tail = dynamic_footprint + ".tail";
                     } else {
-                        dynamic_footprint = func.name() + "." + op->name + unique_name('_') + ".head";
+                        dynamic_footprint = concat(func.name(), ".", op->name, unique_name('_'), ".head");
                         head = tail = dynamic_footprint;
                     }
 
@@ -730,7 +730,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // it will simplify away. For async schedules
                     // it gets dynamically tracked anyway.
                     Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
-                                            {func.name(), storage_dim.var, explicit_factor, op->name, extent},
+                                            {Expr(func.name()), Expr(storage_dim.var), explicit_factor, Expr(op->name), extent},
                                             Call::Extern);
                     body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
                 }
@@ -843,7 +843,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
                     Expr bad_fold_error =
                         Call::make(Int(32), "halide_error_bad_fold",
-                                   {func.name(), storage_dim.var, op->name},
+                                   {Expr(func.name()), Expr(storage_dim.var), Expr(op->name)},
                                    Call::Extern);
 
                     Expr release_producer =
@@ -920,7 +920,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             Expr head = Load::make(Int(32), dynamic_footprint + ".head", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
             Expr tail = Load::make(Int(32), dynamic_footprint + ".tail", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-            Expr step = Variable::make(Int(32), func.name() + ".extent." + std::to_string(dims_folded.back().dim)) + dims_folded.back().factor;
+            Expr step = Variable::make(Int(32), concat(func.name(), ".extent.", std::to_string(dims_folded.back().dim))) + dims_folded.back().factor;
             Stmt reset_head = Store::make(dynamic_footprint + ".head_next", head - step, 0, Parameter(), const_true(), ModulusRemainder());
             Stmt reset_tail = Store::make(dynamic_footprint + ".tail_next", tail - step, 0, Parameter(), const_true(), ModulusRemainder());
             stmt = Block::make({stmt, reset_head, reset_tail});
@@ -945,7 +945,7 @@ public:
 
 // Look for opportunities for storage folding in a statement
 class StorageFolding : public IRMutator {
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
 
     using IRMutator::visit;
 
@@ -1020,7 +1020,7 @@ class StorageFolding : public IRMutator {
     }
 
 public:
-    StorageFolding(const map<string, Function> &env)
+    StorageFolding(const StringMap<Function> &env)
         : env(env) {
     }
 };
@@ -1038,7 +1038,7 @@ class RemoveSlidingWindowMarkers : public IRMutator {
 
 }  // namespace
 
-Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env) {
+Stmt storage_folding(const Stmt &s, const StringMap<Function> &env) {
     Stmt stmt = StorageFolding(env).mutate(s);
     stmt = RemoveSlidingWindowMarkers().mutate(stmt);
     return stmt;

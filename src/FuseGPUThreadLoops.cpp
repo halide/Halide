@@ -38,7 +38,7 @@ class ExtractBlockSize : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void found_thread_for(int dim, const string &name, const Expr &extent) {
+    void found_thread_for(int dim, std::string_view name, const Expr &extent) {
         internal_assert(dim >= 0 && dim < 4);
         if (!block_extent[dim].defined()) {
             block_extent[dim] = extent;
@@ -47,7 +47,7 @@ class ExtractBlockSize : public IRVisitor {
         }
     }
 
-    void found_block_for(int dim, const string &name, Expr extent) {
+    void found_block_for(int dim, std::string_view name, Expr extent) {
         internal_assert(dim >= 0 && dim < 4);
         internal_assert(!block_count[dim].defined());
         block_count[dim] = std::move(extent);
@@ -291,7 +291,7 @@ public:
     vector<SharedAllocation> allocations;
 
 private:
-    map<string, SharedAllocation *> shared;
+    StringMap<SharedAllocation *> shared;
 
     bool in_threads = false;
 
@@ -478,7 +478,7 @@ private:
             << "but is scheduled to live in " << op->memory_type << " memory.\n";
 
         SharedAllocation alloc;
-        alloc.name = op->name + "." + std::to_string(alloc_node_counter++);
+        alloc.name = concat(op->name, ".", std::to_string(alloc_node_counter++));
         alloc.type = op->type;
         alloc.liveness = IntInterval(barrier_stage, barrier_stage);
         alloc.size = 1;
@@ -894,13 +894,13 @@ public:
                                 return IRMutator::visit(op);
                             }
                         }
-                        const string &alloc_name;
-                        const string &cluster_name;
+                        std::string_view alloc_name;
+                        std::string_view cluster_name;
                         const Expr &offset;
 
                     public:
-                        RewriteGroupAccess(const string &alloc_name,
-                                           const string &cluster_name,
+                        RewriteGroupAccess(std::string_view alloc_name,
+                                           std::string_view cluster_name,
                                            const Expr &offset)
                             : alloc_name(alloc_name), cluster_name(cluster_name), offset(offset) {
                         }
@@ -1122,7 +1122,7 @@ class ExtractRegisterAllocations : public IRMutator {
         ScopedBinding<int> p(register_allocations, op->name, 0);
 
         RegisterAllocation alloc;
-        alloc.name = op->name + "." + std::to_string(alloc_node_counter++);
+        alloc.name = concat(op->name, ".", std::to_string(alloc_node_counter++));
         alloc.type = op->type;
         alloc.size = 1;
         alloc.loop_var = loop_var;
@@ -1140,7 +1140,7 @@ class ExtractRegisterAllocations : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        string new_name = op->name;
+        string new_name{op->name};
         if (alloc_renaming.contains(op->name)) {
             new_name = alloc_renaming.get(op->name);
         }
@@ -1150,7 +1150,7 @@ class ExtractRegisterAllocations : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        string new_name = op->name;
+        string new_name{op->name};
         if (alloc_renaming.contains(op->name)) {
             new_name = alloc_renaming.get(op->name);
         }
@@ -1192,7 +1192,7 @@ class ExtractRegisterAllocations : public IRMutator {
 public:
     vector<RegisterAllocation> allocations;
 
-    Stmt rewrap(Stmt body, const string &loop_var) {
+    Stmt rewrap(Stmt body, std::string_view loop_var) {
         for (RegisterAllocation &alloc : allocations) {
             if ((!loop_var.empty() && ends_with(alloc.loop_var, loop_var)) ||
                 (loop_var.empty() && alloc.loop_var.empty())) {
@@ -1214,12 +1214,12 @@ class InjectThreadBarriers : public IRMutator {
     const ExtractSharedAndHeapAllocations &block_allocs;
     const ExtractRegisterAllocations &register_allocs;
 
-    std::set<std::string> shared_stores;
-    std::set<std::string> device_stores;
-    std::set<std::string> shared_loads;
-    std::set<std::string> device_loads;
+    StringSet shared_stores;
+    StringSet device_stores;
+    StringSet shared_loads;
+    StringSet device_loads;
 
-    MemoryType memory_type_for_name(const std::string &name) {
+    MemoryType memory_type_for_name(std::string_view name) {
         for (const auto &x : register_allocs.allocations) {
             if (x.name == name) {
                 return x.memory_type;
@@ -1272,13 +1272,13 @@ class InjectThreadBarriers : public IRMutator {
         switch (mem_type) {
         case MemoryType::GPUShared:
             debug(4) << "   memory type is shared\n";
-            shared_stores.insert(op->name);
+            shared_stores.emplace(op->name);
             break;
         case MemoryType::Auto:
         case MemoryType::Heap:
         case MemoryType::GPUTexture:
             debug(4) << "   memory type is heap or auto\n";
-            device_stores.insert(op->name);
+            device_stores.emplace(op->name);
             break;
         case MemoryType::Stack:
         case MemoryType::Register:
@@ -1297,13 +1297,13 @@ class InjectThreadBarriers : public IRMutator {
         switch (mem_type) {
         case MemoryType::GPUShared:
             debug(4) << "   memory type is shared\n";
-            shared_loads.insert(op->name);
+            shared_loads.emplace(op->name);
             break;
         case MemoryType::Auto:
         case MemoryType::Heap:
         case MemoryType::GPUTexture:
             debug(4) << "   memory type is heap or auto\n";
-            device_loads.insert(op->name);
+            device_loads.emplace(op->name);
             break;
         case MemoryType::Stack:
         case MemoryType::Register:

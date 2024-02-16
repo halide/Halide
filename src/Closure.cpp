@@ -13,7 +13,7 @@ namespace {
 constexpr int DBG = 3;
 }  // namespace
 
-void Closure::include(const Stmt &s, const string &loop_variable) {
+void Closure::include(const Stmt &s, std::string_view loop_variable) {
     if (!loop_variable.empty()) {
         ignore.push(loop_variable);
     }
@@ -42,7 +42,7 @@ void Closure::visit(const For *op) {
     op->body.accept(this);
 }
 
-void Closure::found_buffer_ref(const string &name, Type type,
+void Closure::found_buffer_ref(std::string_view name, Type type,
                                bool read, bool written, const Halide::Buffer<> &image) {
     if (!ignore.contains(name)) {
         debug(DBG) << "Adding buffer " << name << " to closure:\n";
@@ -98,7 +98,7 @@ void Closure::visit(const Variable *op) {
         debug(DBG) << "Not adding var " << op->name << " to closure\n";
     } else {
         debug(DBG) << "Adding var " << op->name << " to closure\n";
-        vars[op->name] = op->type;
+        vars.emplace(op->name, op->type);
     }
 }
 

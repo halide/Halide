@@ -556,7 +556,7 @@ class LoopCarry : public IRMutator {
         if (op->for_type == ForType::Serial && !is_const_one(op->extent)) {
             Stmt stmt;
             Stmt body = mutate(op->body);
-            LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);
+            LoopCarryOverLoop carry(std::string{op->name}, in_consume, max_carried_values);
             body = carry.mutate(body);
             if (body.same_as(op->body)) {
                 stmt = op;

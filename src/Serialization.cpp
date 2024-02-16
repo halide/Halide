@@ -29,30 +29,30 @@ public:
     Serializer() = default;
 
     // Serialize the given pipeline into the given filename
-    void serialize(const Pipeline &pipeline, const std::string &filename);
+    void serialize(const Pipeline &pipeline, std::string_view filename);
 
     // Serialize the given pipeline into given the data buffer
     void serialize(const Pipeline &pipeline, std::vector<uint8_t> &data);
 
-    const std::map<std::string, Parameter> &get_external_parameters() const {
+    const StringMap<Parameter> &get_external_parameters() const {
         return external_parameters;
     }
 
 private:
     // Mapping function names to a unique integer function id
-    std::map<std::string, int32_t> func_mappings;
+    StringMap<int32_t> func_mappings;
 
     // A lookup table for finding parameters via their names,
     // used for preventing the same parameter being serialized multiple times
-    std::map<std::string, Parameter> parameters_in_pipeline;
+    StringMap<Parameter> parameters_in_pipeline;
 
     // A lookup table for finding buffers via their names,
     // used for preventing the same buffer being serialized multiple times
-    std::map<std::string, Buffer<>> buffers_in_pipeline;
+    StringMap<Buffer<>> buffers_in_pipeline;
 
     // A lookup table for parameters that are potentially external to the pipeline,
     // so it can later be used during deserialization to have the correct bindings.
-    std::map<std::string, Parameter> external_parameters;
+    StringMap<Parameter> external_parameters;
 
     Serialize::MemoryType serialize_memory_type(const MemoryType &memory_type);
 
@@ -80,7 +80,7 @@ private:
 
     Serialize::ExternFuncArgumentType serialize_extern_func_argument_type(const ExternFuncArgument::ArgType &extern_func_argument_type);
 
-    Offset<String> serialize_string(FlatBufferBuilder &builder, const std::string &str);
+    Offset<String> serialize_string(FlatBufferBuilder &builder, std::string_view str);
 
     Offset<Serialize::Type> serialize_type(FlatBufferBuilder &builder, const Type &type);
 
@@ -133,9 +133,9 @@ private:
 
     Offset<Serialize::Buffer> serialize_buffer(FlatBufferBuilder &builder, Buffer<> buffer);
 
-    std::vector<Offset<Serialize::WrapperRef>> serialize_wrapper_refs(FlatBufferBuilder &builder, const std::map<std::string, FunctionPtr> &wrappers);
+    std::vector<Offset<Serialize::WrapperRef>> serialize_wrapper_refs(FlatBufferBuilder &builder, const StringMap<FunctionPtr> &wrappers);
 
-    void build_function_mappings(const std::map<std::string, Function> &env);
+    void build_function_mappings(const StringMap<Function> &env);
 };
 
 Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory_type) {
@@ -394,7 +394,7 @@ Serialize::ExternFuncArgumentType Serializer::serialize_extern_func_argument_typ
     }
 }
 
-Offset<String> Serializer::serialize_string(FlatBufferBuilder &builder, const std::string &str) {
+Offset<String> Serializer::serialize_string(FlatBufferBuilder &builder, std::string_view str) {
     return builder.CreateString(str);
 }
 
@@ -465,9 +465,9 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto predicate_serialized = serialize_expr(builder, store_stmt->predicate);
         const auto value_serialized = serialize_expr(builder, store_stmt->value);
         const auto index_serialized = serialize_expr(builder, store_stmt->index);
-        const std::string param_name = store_stmt->param.defined() ? store_stmt->param.name() : "";
+        std::string_view param_name = store_stmt->param.defined() ? store_stmt->param.name() : "";
         if (store_stmt->param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
-            parameters_in_pipeline[param_name] = store_stmt->param;
+            parameters_in_pipeline.emplace(param_name, store_stmt->param);
         }
         const auto param_name_serialized = serialize_string(builder, param_name);
         const auto alignment_serialized = serialize_modulus_remainder(builder, store_stmt->alignment);
@@ -826,14 +826,14 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         const auto name_serialized = serialize_string(builder, load_expr->name);
         const auto predicate_serialized = serialize_expr(builder, load_expr->predicate);
         const auto index_serialized = serialize_expr(builder, load_expr->index);
-        const std::string image_name = load_expr->image.defined() ? load_expr->image.name() : "";
+        const std::string_view image_name = load_expr->image.defined() ? load_expr->image.name() : "";
         if (load_expr->image.defined() && buffers_in_pipeline.find(image_name) == buffers_in_pipeline.end()) {
-            buffers_in_pipeline[image_name] = load_expr->image;
+            buffers_in_pipeline.emplace(image_name, load_expr->image);
         }
         const auto image_name_serialized = serialize_string(builder, image_name);
-        const std::string param_name = load_expr->param.defined() ? load_expr->param.name() : "";
+        const std::string_view param_name = load_expr->param.defined() ? load_expr->param.name() : "";
         if (load_expr->param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
-            parameters_in_pipeline[param_name] = load_expr->param;
+            parameters_in_pipeline.emplace(param_name, load_expr->param);
         }
         const auto param_name_serialized = serialize_string(builder, param_name);
         const auto alignment_serialized = serialize_modulus_remainder(builder, load_expr->alignment);
@@ -889,18 +889,21 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         }
         const auto call_type = serialize_call_type(call_expr->call_type);
         int func_index = -1;
-        if (call_expr->func.defined() && this->func_mappings.find(Function(call_expr->func).name()) != this->func_mappings.end()) {
-            func_index = this->func_mappings[Function(call_expr->func).name()];
+        if (call_expr->func.defined()) {
+            auto it = this->func_mappings.find(Function(call_expr->func).name());
+            if (it != this->func_mappings.end()) {
+                func_index = it->second;
+            }
         }
         const auto value_index = call_expr->value_index;
-        const std::string image_name = call_expr->image.defined() ? call_expr->image.name() : "";
+        const std::string_view image_name = call_expr->image.defined() ? call_expr->image.name() : "";
         if (call_expr->image.defined() && buffers_in_pipeline.find(image_name) == buffers_in_pipeline.end()) {
-            buffers_in_pipeline[image_name] = call_expr->image;
+            buffers_in_pipeline.emplace(image_name, call_expr->image);
         }
         const auto image_name_serialized = serialize_string(builder, image_name);
-        const std::string param_name = call_expr->param.defined() ? call_expr->param.name() : "";
+        const std::string_view param_name = call_expr->param.defined() ? call_expr->param.name() : "";
         if (call_expr->param.defined() && external_parameters.find(param_name) == external_parameters.end()) {
-            external_parameters[param_name] = call_expr->param;
+            external_parameters.emplace(param_name, call_expr->param);
         }
         const auto param_name_serialized = serialize_string(builder, param_name);
         const auto type_serialized = serialize_type(builder, call_expr->type);
@@ -916,14 +919,14 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         const auto *const variable_expr = expr.as<Variable>();
         const auto name_serialized = serialize_string(builder, variable_expr->name);
         const auto type_serialized = serialize_type(builder, variable_expr->type);
-        const std::string param_name = variable_expr->param.defined() ? variable_expr->param.name() : "";
+        const std::string_view param_name = variable_expr->param.defined() ? variable_expr->param.name() : "";
         if (variable_expr->param.defined() && external_parameters.find(param_name) == external_parameters.end()) {
-            external_parameters[param_name] = variable_expr->param;
+            external_parameters.emplace(param_name, variable_expr->param);
         }
         const auto param_name_serialized = serialize_string(builder, param_name);
-        const std::string image_name = variable_expr->image.defined() ? variable_expr->image.name() : "";
+        const std::string_view image_name = variable_expr->image.defined() ? variable_expr->image.name() : "";
         if (variable_expr->image.defined() && buffers_in_pipeline.find(image_name) == buffers_in_pipeline.end()) {
-            buffers_in_pipeline[image_name] = variable_expr->image;
+            buffers_in_pipeline.emplace(image_name, variable_expr->image);
         }
         const auto image_name_serialized = serialize_string(builder, image_name);
         const auto reduction_domain_serialized = serialize_reduction_domain(builder, variable_expr->reduction_domain);
@@ -1005,9 +1008,9 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
     std::vector<Offset<String>> output_buffers_names_serialized;
     output_buffers_names_serialized.reserve(function.output_buffers().size());
     for (const auto &output_buffer : function.output_buffers()) {
-        std::string output_buffer_name = output_buffer.defined() ? output_buffer.name() : "";
+        std::string_view output_buffer_name = output_buffer.defined() ? output_buffer.name() : "";
         if (output_buffer.defined() && parameters_in_pipeline.find(output_buffer_name) == parameters_in_pipeline.end()) {
-            parameters_in_pipeline[output_buffer_name] = output_buffer;
+            parameters_in_pipeline.emplace(output_buffer_name, output_buffer);
         }
         output_buffers_names_serialized.push_back(serialize_string(builder, output_buffer_name));
     }
@@ -1202,9 +1205,9 @@ Offset<Serialize::PrefetchDirective> Serializer::serialize_prefetch_directive(Fl
     const auto from_serialized = serialize_string(builder, prefetch_directive.from);
     const auto offset_serialized = serialize_expr(builder, prefetch_directive.offset);
     const auto strategy_serialized = serialize_prefetch_bound_strategy(prefetch_directive.strategy);
-    const std::string param_name = prefetch_directive.param.defined() ? prefetch_directive.param.name() : "";
+    const std::string_view param_name = prefetch_directive.param.defined() ? prefetch_directive.param.name() : "";
     if (prefetch_directive.param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
-        parameters_in_pipeline[param_name] = prefetch_directive.param;
+        parameters_in_pipeline.emplace(param_name, prefetch_directive.param);
     }
     const auto param_name_serialized = serialize_string(builder, param_name);
     return Serialize::CreatePrefetchDirective(builder, name_serialized,
@@ -1370,14 +1373,15 @@ Offset<Serialize::ExternFuncArgument> Serializer::serialize_extern_func_argument
         return Serialize::CreateExternFuncArgument(builder, arg_type_serialized);
     } else if (extern_func_argument.arg_type == ExternFuncArgument::ArgType::FuncArg) {
         int func_index = -1;
-        if (this->func_mappings.find(Function(extern_func_argument.func).name()) != this->func_mappings.end()) {
-            func_index = this->func_mappings[Function(extern_func_argument.func).name()];
+        auto it = this->func_mappings.find(Function(extern_func_argument.func).name());
+        if (it != this->func_mappings.end()) {
+            func_index = it->second;
         }
         return Serialize::CreateExternFuncArgument(builder, arg_type_serialized, func_index);
     } else if (extern_func_argument.arg_type == ExternFuncArgument::ArgType::BufferArg) {
-        const std::string buffer_name = extern_func_argument.buffer.defined() ? extern_func_argument.buffer.name() : "";
+        const std::string_view buffer_name = extern_func_argument.buffer.defined() ? extern_func_argument.buffer.name() : "";
         if (extern_func_argument.buffer.defined() && buffers_in_pipeline.find(buffer_name) == buffers_in_pipeline.end()) {
-            buffers_in_pipeline[buffer_name] = extern_func_argument.buffer;
+            buffers_in_pipeline.emplace(buffer_name, extern_func_argument.buffer);
         }
         const auto buffer_name_serialized = serialize_string(builder, buffer_name);
         return Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, buffer_name_serialized);
@@ -1385,9 +1389,9 @@ Offset<Serialize::ExternFuncArgument> Serializer::serialize_extern_func_argument
         const auto expr_serialized = serialize_expr(builder, extern_func_argument.expr);
         return Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, 0, expr_serialized.first, expr_serialized.second);
     } else {
-        const std::string image_param_name = extern_func_argument.image_param.defined() ? extern_func_argument.image_param.name() : "";
+        const std::string_view image_param_name = extern_func_argument.image_param.defined() ? extern_func_argument.image_param.name() : "";
         if (extern_func_argument.defined() && external_parameters.find(image_param_name) == external_parameters.end()) {
-            external_parameters[image_param_name] = extern_func_argument.image_param;
+            external_parameters.emplace(image_param_name, extern_func_argument.image_param);
         }
         const auto image_param_name_serialized = serialize_string(builder, image_param_name);
         return Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, 0, Serialize::Expr::NONE, 0, image_param_name_serialized);
@@ -1419,21 +1423,22 @@ Offset<Serialize::Buffer> Serializer::serialize_buffer(FlatBufferBuilder &builde
     return Serialize::CreateBuffer(builder, true, name_serialized, type_serialized, dimensions, builder.CreateVector(buffer_dimensions_serialized), builder.CreateVector(data));
 }
 
-std::vector<Offset<Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(FlatBufferBuilder &builder, const std::map<std::string, FunctionPtr> &wrappers) {
+std::vector<Offset<Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(FlatBufferBuilder &builder, const StringMap<FunctionPtr> &wrappers) {
     std::vector<Offset<Serialize::WrapperRef>> wrapper_refs_serialized;
     wrapper_refs_serialized.reserve(wrappers.size());
     for (const auto &wrapper : wrappers) {
         auto wrapper_name_serialized = serialize_string(builder, wrapper.first);
         int func_index = -1;
-        if (this->func_mappings.find(Function(wrapper.second).name()) != this->func_mappings.end()) {
-            func_index = this->func_mappings[Function(wrapper.second).name()];
+        auto it = this->func_mappings.find(Function(wrapper.second).name());
+        if (it != this->func_mappings.end()) {
+            func_index = it->second;
         }
         wrapper_refs_serialized.push_back(Serialize::CreateWrapperRef(builder, wrapper_name_serialized, func_index));
     }
     return wrapper_refs_serialized;
 }
 
-void Serializer::build_function_mappings(const std::map<std::string, Function> &env) {
+void Serializer::build_function_mappings(const StringMap<Function> &env) {
     if (!this->func_mappings.empty()) {
         this->func_mappings.clear();
     }
@@ -1452,7 +1457,7 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
     for (const Func &func : pipeline.outputs()) {
         outputs_functions.push_back(func.function());
     }
-    std::map<std::string, Function> env = build_environment(outputs_functions);
+    StringMap<Function> env = build_environment(outputs_functions);
     build_function_mappings(env);
 
     std::vector<Offset<String>> func_names_in_order_serialized;
@@ -1537,10 +1542,10 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
     }
 }
 
-void Serializer::serialize(const Pipeline &pipeline, const std::string &filename) {
+void Serializer::serialize(const Pipeline &pipeline, std::string_view filename) {
     std::vector<uint8_t> data;
     serialize(pipeline, data);
-    std::ofstream out(filename, std::ios::out | std::ios::binary);
+    std::ofstream out(std::string{filename}, std::ios::out | std::ios::binary);
     if (!out) {
         user_error << "failed to open file " << filename << "\n";
         exit(1);
@@ -1559,18 +1564,25 @@ void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data) {
 void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data, std::map<std::string, Parameter> &params) {
     Internal::Serializer serializer;
     serializer.serialize(pipeline, data);
-    params = serializer.get_external_parameters();
+    params.clear();
+    const auto &ep = serializer.get_external_parameters();
+    // It's annoying to have to make an entire copy of the map because the
+    // comparator changed from std::less<> to std::less<std::string>, but C++
+    // doesn't know the ordering is the same under those two comparators.
+    params.insert(ep.begin(), ep.end());
 }
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename) {
+void serialize_pipeline(const Pipeline &pipeline, std::string_view filename) {
     Internal::Serializer serializer;
     serializer.serialize(pipeline, filename);
 }
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Parameter> &params) {
+void serialize_pipeline(const Pipeline &pipeline, std::string_view filename, std::map<std::string, Parameter> &params) {
     Internal::Serializer serializer;
     serializer.serialize(pipeline, filename);
-    params = serializer.get_external_parameters();
+    params.clear();
+    const auto &ep = serializer.get_external_parameters();
+    params.insert(ep.begin(), ep.end());
 }
 
 }  // namespace Halide
@@ -1583,15 +1595,15 @@ void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data) {
     user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
 }
 
-void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data, std::map<std::string, Parameter> &params) {
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data, StringMap<Parameter> &params) {
     user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
 }
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename) {
+void serialize_pipeline(const Pipeline &pipeline, std::string_view filename) {
     user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
 }
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Parameter> &params) {
+void serialize_pipeline(const Pipeline &pipeline, std::string_view filename, StringMap<Parameter> &params) {
     user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
 }
 

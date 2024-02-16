@@ -63,7 +63,7 @@ Stmt substitute_var_estimates(Stmt s) {
     return simplify(SubstituteVarEstimates().mutate(s));
 }
 
-int string_to_int(const string &s) {
+int string_to_int(const std::string &s) {
     std::istringstream iss(s);
     int i;
     iss >> i;
@@ -93,7 +93,7 @@ Expr box_size(const Box &b) {
     return simplify(size);
 }
 
-void combine_load_costs(map<string, Expr> &result, const map<string, Expr> &partial) {
+void combine_load_costs(StringMap<Expr> &result, const StringMap<Expr> &partial) {
     for (const auto &kv : partial) {
         auto iter = result.find(kv.first);
         if (iter == result.end()) {
@@ -121,7 +121,7 @@ Definition get_stage_definition(const Function &f, int stage_num) {
 
 vector<Dim> &get_stage_dims(const Function &f, int stage_num) {
     static vector<Dim> outermost_only =
-        {{Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar}};
+        {{std::string{Var::outermost().name()}, ForType::Serial, DeviceAPI::None, DimType::PureVar}};
     if (f.has_extern_definition()) {
         return outermost_only;
     }
@@ -160,8 +160,8 @@ vector<DimBounds> get_stage_bounds(const Function &f, const DimBounds &pure_boun
     return stage_bounds;
 }
 
-Expr perform_inline(Expr e, const map<string, Function> &env,
-                    const set<string> &inlines,
+Expr perform_inline(Expr e, const StringMap<Function> &env,
+                    const StringSet &inlines,
                     const vector<string> &order) {
     if (inlines.empty()) {
         return e;
@@ -175,7 +175,7 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
         // Find all the function calls in the current expression.
         FindAllCalls find;
         inlined_expr.accept(&find);
-        const set<string> &calls_unsorted = find.funcs_called;
+        const StringSet &calls_unsorted = find.funcs_called;
 
         vector<string> calls(calls_unsorted.begin(), calls_unsorted.end());
         // Sort 'calls' based on the realization order in descending order
@@ -209,14 +209,14 @@ Expr perform_inline(Expr e, const map<string, Function> &env,
     return inlined_expr;
 }
 
-set<string> get_parents(Function f, int stage) {
-    set<string> parents;
+StringSet get_parents(Function f, int stage) {
+    StringSet parents;
     if (f.has_extern_definition()) {
         internal_assert(stage == 0);
         for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
-                string prod_name = Function(arg.func).name();
-                parents.insert(prod_name);
+                std::string_view prod_name = Function(arg.func).name();
+                parents.emplace(prod_name);
             } else if (arg.is_expr()) {
                 FindAllCalls find;
                 arg.expr.accept(&find);
@@ -228,7 +228,7 @@ set<string> get_parents(Function f, int stage) {
                 } else {
                     buf = arg.buffer;
                 }
-                parents.insert(buf.name());
+                parents.emplace(buf.name());
             }
         }
     } else {
@@ -240,7 +240,7 @@ set<string> get_parents(Function f, int stage) {
     return parents;
 }
 
-void disp_regions(const map<string, Box> &regions) {
+void disp_regions(const StringMap<Box> &regions) {
     for (const auto &reg : regions) {
         debug(0) << reg.first
                  << " -> "
@@ -253,7 +253,7 @@ void disp_regions(const map<string, Box> &regions) {
 // inline the Func. Return true of any of the Funcs is inlined.
 bool inline_all_trivial_functions(const vector<Function> &outputs,
                                   const vector<string> &order,
-                                  const map<string, Function> &env) {
+                                  const StringMap<Function> &env) {
     bool inlined = false;
     // The very last few functions in 'order' are the last to be realized in the
     // pipeline (the final producers) so there is no point in checking it.
@@ -298,7 +298,7 @@ bool inline_all_trivial_functions(const vector<Function> &outputs,
 // in element-wise manner. If it is, return the name of the consumer Func;
 // otherwise, return an empty string.
 string is_func_called_element_wise(const vector<string> &order, size_t index,
-                                   const map<string, Function> &env) {
+                                   const StringMap<Function> &env) {
     const Function &f1 = env.at(order[index]);
     if (f1.has_extern_definition() || !f1.can_be_inlined()) {
         return "";
@@ -349,7 +349,7 @@ string is_func_called_element_wise(const vector<string> &order, size_t index,
 // element-wise manner.
 bool inline_all_element_wise_functions(const vector<Function> &outputs,
                                        const vector<string> &order,
-                                       const map<string, Function> &env) {
+                                       const StringMap<Function> &env) {
     bool inlined = false;
     // The very last few functions in 'order' are the last to be realized in the
     // pipeline (the final producers) so there is no point in checking it.

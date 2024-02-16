@@ -17,12 +17,12 @@ using std::vector;
 namespace {
 
 class DebugToFile : public IRMutator {
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
 
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
-        map<string, Function>::const_iterator iter = env.find(op->name);
+        StringMap<Function>::const_iterator iter = env.find(std::string{op->name});  // FIXME
         if (iter != env.end() && !iter->second.debug_file().empty()) {
             Function f = iter->second;
             vector<Expr> args;
@@ -69,16 +69,19 @@ class DebugToFile : public IRMutator {
             }
             args.emplace_back(type_code);
 
-            Expr buf = Variable::make(Handle(), f.name() + ".buffer");
+            Expr buf = Variable::make(Handle(), concat(f.name(), ".buffer"));
             args.push_back(buf);
 
             Expr call = Call::make(Int(32), Call::debug_to_file, args, Call::Intrinsic);
             string call_result_name = unique_name("debug_to_file_result");
             Expr call_result_var = Variable::make(Int(32), call_result_name);
-            Stmt body = AssertStmt::make(call_result_var == 0,
-                                         Call::make(Int(32), "halide_error_debug_to_file_failed",
-                                                    {f.name(), f.debug_file(), call_result_var},
-                                                    Call::Extern));
+            Stmt body =
+                AssertStmt::make(call_result_var == 0,
+                                 Call::make(Int(32), "halide_error_debug_to_file_failed",
+                                            {Expr(f.name()),
+                                             Expr(f.debug_file()),
+                                             call_result_var},
+                                            Call::Extern));
             body = LetStmt::make(call_result_name, call, body);
             body = Block::make(mutate(op->body), body);
 
@@ -89,7 +92,7 @@ class DebugToFile : public IRMutator {
     }
 
 public:
-    DebugToFile(const map<string, Function> &e)
+    DebugToFile(const StringMap<Function> &e)
         : env(e) {
     }
 };
@@ -126,8 +129,8 @@ class AddDummyRealizations : public IRMutator {
                 vector<Range> output_bounds;
                 for (int i = 0; i < out.dimensions(); i++) {
                     string dim = std::to_string(i);
-                    Expr min = Variable::make(Int(32), out.name() + ".min." + dim);
-                    Expr extent = Variable::make(Int(32), out.name() + ".extent." + dim);
+                    Expr min = Variable::make(Int(32), concat(out.name(), ".min.", dim));
+                    Expr extent = Variable::make(Int(32), concat(out.name(), ".extent.", dim));
                     output_bounds.emplace_back(min, extent);
                 }
                 return Realize::make(out.name(),
@@ -149,7 +152,7 @@ public:
 
 }  // namespace
 
-Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Function> &env) {
+Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const StringMap<Function> &env) {
     // Temporarily wrap the produce nodes for the output functions in
     // realize nodes so that we know when to write the debug outputs.
     s = AddDummyRealizations(outputs).mutate(s);

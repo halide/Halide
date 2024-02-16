@@ -13,7 +13,7 @@ namespace Halide {
 namespace Internal {
 
 Stmt lower_parallel_tasks(const Stmt &s, std::vector<LoweredFunc> &closure_implementations,
-                          const std::string &name, const Target &t);
+                          std::string_view name, const Target &t);
 
 }  // namespace Internal
 }  // namespace Halide

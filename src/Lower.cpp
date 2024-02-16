@@ -105,7 +105,7 @@ public:
 };
 
 void lower_impl(const vector<Function> &output_funcs,
-                const string &pipeline_name,
+                std::string_view pipeline_name,
                 const Target &t,
                 const vector<Argument> &args,
                 const LinkageType linkage_type,
@@ -588,7 +588,7 @@ void lower_impl(const vector<Function> &output_funcs,
 }  // namespace
 
 Module lower(const vector<Function> &output_funcs,
-             const string &pipeline_name,
+             std::string_view pipeline_name,
              const Target &t,
              const vector<Argument> &args,
              const LinkageType linkage_type,
@@ -603,7 +603,7 @@ Module lower(const vector<Function> &output_funcs,
 }
 
 Stmt lower_main_stmt(const std::vector<Function> &output_funcs,
-                     const std::string &pipeline_name,
+                     std::string_view pipeline_name,
                      const Target &t,
                      const std::vector<Stmt> &requirements,
                      bool trace_pipeline,

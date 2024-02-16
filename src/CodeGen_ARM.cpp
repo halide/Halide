@@ -37,8 +37,8 @@ namespace {
 // interleaved slices of the same load.
 class SubstituteInStridedLoads : public IRMutator {
     Scope<Expr> loads;
-    std::map<std::string, std::vector<std::string>> vars_per_buffer;
-    std::set<std::string> poisoned_vars;
+    StringMap<std::vector<std::string>> vars_per_buffer;
+    StringSet poisoned_vars;
 
     template<typename LetOrLetStmt>
     auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
@@ -47,7 +47,7 @@ class SubstituteInStridedLoads : public IRMutator {
         auto body = op->body;
         if (r && is_const_one(r->stride)) {
             ScopedBinding bind(loads, op->name, op->value);
-            vars_per_buffer[l->name].push_back(op->name);
+            vars_per_buffer[l->name].emplace_back(op->name);
             body = mutate(op->body);
             vars_per_buffer[l->name].pop_back();
             poisoned_vars.erase(l->name);
@@ -112,7 +112,7 @@ protected:
 
     void init_module() override;
     void compile_func(const LoweredFunc &f,
-                      const std::string &simple_name, const std::string &extern_name) override;
+                      std::string_view simple_name, std::string_view extern_name) override;
 
     /** Nodes for which we want to emit specific neon intrinsics */
     // @{
@@ -672,7 +672,7 @@ const ArmIntrinsic intrinsic_defs[] = {
 // Only possible if the target has ARMFp16 feature.
 
 // These can be vectorized as fp16 SIMD instruction
-const std::set<string> float16_native_funcs = {
+const StringSet float16_native_funcs = {
     "ceil_f16",
     "floor_f16",
     "is_finite_f16",
@@ -685,7 +685,7 @@ const std::set<string> float16_native_funcs = {
 // These end up with fp32 math function call.
 // However, data type conversion of fp16 <-> fp32 is performed natively rather than emulation.
 // SIMD instruction is not available, so scalar based instruction is generated.
-const std::map<string, string> float16_transcendental_remapping = {
+const StringMap<string> float16_transcendental_remapping = {
     {"acos_f16", "acos_f32"},
     {"acosh_f16", "acosh_f32"},
     {"asin_f16", "asin_f32"},
@@ -843,8 +843,8 @@ void CodeGen_ARM::init_module() {
 }
 
 void CodeGen_ARM::compile_func(const LoweredFunc &f,
-                               const string &simple_name,
-                               const string &extern_name) {
+                               std::string_view simple_name,
+                               std::string_view extern_name) {
 
     LoweredFunc func = f;
 
@@ -971,7 +971,7 @@ void CodeGen_ARM::visit(const Add *op) {
     };
     // clang-format on
 
-    std::map<std::string, Expr> matches;
+    StringMap<Expr> matches;
     for (const Pattern &p : patterns) {
         if (expr_match(p.pattern, op, matches)) {
             Expr init = matches["init"];

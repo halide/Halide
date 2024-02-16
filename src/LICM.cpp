@@ -209,7 +209,7 @@ class LICM : public IRMutator {
 
     // Compute the cost of computing an expression inside the inner
     // loop, compared to just loading it as a parameter.
-    int cost(const Expr &e, const set<string> &vars) {
+    int cost(const Expr &e, const StringSet &vars) {
         if (is_const(e)) {
             return 0;
         } else if (const Reinterpret *reinterpret = e.as<Reinterpret>()) {
@@ -281,11 +281,11 @@ class LICM : public IRMutator {
             class CollectVars : public IRVisitor {
                 using IRVisitor::visit;
                 void visit(const Variable *op) override {
-                    vars.insert(op->name);
+                    vars.emplace(op->name);
                 }
 
             public:
-                set<string> vars;
+                StringSet vars;
             } vars;
             new_stmt.accept(&vars);
 

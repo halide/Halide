@@ -114,8 +114,8 @@ public:
      * CALL-BEFORE: build_pipeline
      */
     // @{
-    virtual void set_generatorparam_value(const std::string &name, const std::string &value) = 0;
-    virtual void set_generatorparam_value(const std::string &name, const LoopLevel &loop_level) = 0;
+    virtual void set_generatorparam_value(std::string_view name, std::string_view value) = 0;
+    virtual void set_generatorparam_value(std::string_view name, const LoopLevel &loop_level) = 0;
     // @}
 
     /** Build and return the Pipeline for this AbstractGenerator. This method should be called
@@ -133,7 +133,7 @@ public:
      * CALL-AFTER: build_pipeline
      * CALL-BEFORE: none
      */
-    virtual std::vector<Parameter> input_parameter(const std::string &name) = 0;
+    virtual std::vector<Parameter> input_parameter(std::string_view name) = 0;
 
     /** Given the name of an output, return the Func(s) for that output.
      *
@@ -147,7 +147,7 @@ public:
      * CALL-AFTER: build_pipeline()
      * CALL-BEFORE: none
      */
-    virtual std::vector<Func> output_func(const std::string &name) = 0;
+    virtual std::vector<Func> output_func(std::string_view name) = 0;
 
     /** Rebind a specified Input to refer to the given piece of IR, replacing the
      * default ImageParam / Param in place for that Input. Basic type-checking is
@@ -157,9 +157,9 @@ public:
      * CALL-BEFORE: build_pipeline
      */
     // @{
-    virtual void bind_input(const std::string &name, const std::vector<Parameter> &v) = 0;
-    virtual void bind_input(const std::string &name, const std::vector<Func> &v) = 0;
-    virtual void bind_input(const std::string &name, const std::vector<Expr> &v) = 0;
+    virtual void bind_input(std::string_view name, const std::vector<Parameter> &v) = 0;
+    virtual void bind_input(std::string_view name, const std::vector<Func> &v) = 0;
+    virtual void bind_input(std::string_view name, const std::vector<Expr> &v) = 0;
     // @}
 
     /** Emit a Generator Stub (.stub.h) file to the given path. Not all Generators support this.
@@ -175,7 +175,7 @@ public:
      * CALL-AFTER: none
      * CALL-BEFORE: none
      */
-    virtual bool emit_cpp_stub(const std::string &stub_file_path) = 0;
+    virtual bool emit_cpp_stub(std::string_view stub_file_path) = 0;
 
     /** Emit a Serialized Halide Pipeline (.hlpipe) file to the given path. Not all Generators support this.
      *
@@ -190,7 +190,7 @@ public:
      * CALL-AFTER: none
      * CALL-BEFORE: none
      */
-    virtual bool emit_hlpipe(const std::string &hlpipe_file_path) = 0;
+    virtual bool emit_hlpipe(std::string_view hlpipe_file_path) = 0;
 
     /** By default, a Generator must declare all Inputs before all Outputs.
      *  In some unusual situations (e.g. metaprogramming situations), it's
@@ -206,7 +206,7 @@ public:
 
     /** Call generate() and produce a Module for the result.
      *If function_name is empty, generator_name() will be used for the function. */
-    Module build_module(const std::string &function_name = "");
+    Module build_module(std::string_view function_name = "");
 
     /**
      * Build a module that is suitable for using for gradient descent calculation in TensorFlow or PyTorch.
@@ -222,7 +222,7 @@ public:
      *   - Followed by one output for each unique pairing of original-output + original-input.
      *     (For the common case of just one original-output, this amounts to being one output for each original-input.)
      */
-    Module build_gradient_module(const std::string &function_name);
+    Module build_gradient_module(std::string_view function_name);
 
     /**
      * JIT the AbstractGenerator into a Callable (using the currently-set

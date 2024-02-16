@@ -73,7 +73,7 @@ public:
 };
 
 class CanonicalizeGPUVars : public IRMutator {
-    map<string, string> gpu_vars;
+    StringMap<string> gpu_vars;
 
     using IRMutator::visit;
 
@@ -100,7 +100,7 @@ class CanonicalizeGPUVars : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        string name = op->name;
+        std::string name{op->name};
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
         Stmt body = mutate(op->body);
@@ -168,7 +168,7 @@ class CanonicalizeGPUVars : public IRMutator {
     Stmt visit(const IfThenElse *op) override {
         Expr condition = mutate(op->condition);
 
-        map<string, string> old_gpu_vars;
+        StringMap<string> old_gpu_vars;
         old_gpu_vars.swap(gpu_vars);
         Stmt then_case = mutate(op->then_case);
 
@@ -312,7 +312,7 @@ class ValidateGPUSchedule : public IRVisitor {
                 << innermost_threads_loop << ". "
                 << loop_nest_summary_to_node(root, op);
             in_blocks++;
-            ScopedValue<std::string> s(innermost_blocks_loop, op->name);
+            ScopedValue<std::string> s(innermost_blocks_loop, std::string{op->name});
             IRVisitor::visit(op);
             in_blocks--;
         } else if (op->for_type == ForType::GPUThread) {
@@ -328,7 +328,7 @@ class ValidateGPUSchedule : public IRVisitor {
                 << "GPU thread loop over " << op->name << " must be inside a GPU block loop. "
                 << loop_nest_summary_to_node(root, op);
             in_threads++;
-            ScopedValue<std::string> s(innermost_threads_loop, op->name);
+            ScopedValue<std::string> s(innermost_threads_loop, std::string{op->name});
             IRVisitor::visit(op);
             in_threads--;
         } else if (op->for_type == ForType::GPULane) {
@@ -341,7 +341,7 @@ class ValidateGPUSchedule : public IRVisitor {
                 << "may not be nested. "
                 << loop_nest_summary_to_node(root, op);
             in_lanes++;
-            ScopedValue<std::string> s(innermost_threads_loop, op->name);
+            ScopedValue<std::string> s(innermost_threads_loop, std::string{op->name});
             IRVisitor::visit(op);
             in_lanes--;
         } else {

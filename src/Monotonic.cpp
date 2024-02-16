@@ -231,7 +231,7 @@ ConstantInterval divide(const ConstantInterval &a, int64_t b) {
 }
 
 class DerivativeBounds : public IRVisitor {
-    const string &var;
+    std::string_view var;
 
     Scope<ConstantInterval> scope;
     Scope<Interval> bounds;
@@ -641,7 +641,7 @@ class DerivativeBounds : public IRVisitor {
 public:
     ConstantInterval result;
 
-    DerivativeBounds(const std::string &v, const Scope<ConstantInterval> &parent)
+    DerivativeBounds(std::string_view v, const Scope<ConstantInterval> &parent)
         : var(v), result(ConstantInterval::everything()) {
         scope.set_containing_scope(&parent);
     }
@@ -649,7 +649,7 @@ public:
 
 }  // namespace
 
-ConstantInterval derivative_bounds(const Expr &e, const std::string &var, const Scope<ConstantInterval> &scope) {
+ConstantInterval derivative_bounds(const Expr &e, std::string_view var, const Scope<ConstantInterval> &scope) {
     if (!e.defined()) {
         return ConstantInterval::everything();
     }
@@ -658,14 +658,14 @@ ConstantInterval derivative_bounds(const Expr &e, const std::string &var, const 
     return m.result;
 }
 
-Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<ConstantInterval> &scope) {
+Monotonic is_monotonic(const Expr &e, std::string_view var, const Scope<ConstantInterval> &scope) {
     if (!e.defined()) {
         return Monotonic::Unknown;
     }
     return to_monotonic(derivative_bounds(e, var, scope));
 }
 
-Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope) {
+Monotonic is_monotonic(const Expr &e, std::string_view var, const Scope<Monotonic> &scope) {
     if (!e.defined()) {
         return Monotonic::Unknown;
     }

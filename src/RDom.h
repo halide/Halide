@@ -44,7 +44,7 @@ public:
     }
 
     /** Construct an RVar with the given name */
-    explicit RVar(const std::string &n)
+    explicit RVar(std::string_view n)
         : _name(n) {
     }
 
@@ -67,7 +67,7 @@ public:
     }
 
     /** The name of this reduction variable */
-    const std::string &name() const;
+    std::string_view name() const;
 
     /** Reduction variables can be used as expressions. */
     operator Expr() const;
@@ -193,7 +193,7 @@ public:
 class RDom {
     Internal::ReductionDomain dom;
 
-    void init_vars(const std::string &name);
+    void init_vars(std::string_view name);
 
     void validate_min_extent(const Expr &min, const Expr &extent);
     void initialize_from_region(const Region &region, std::string name = "");

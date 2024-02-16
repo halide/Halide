@@ -415,5 +415,22 @@ std::pair<std::vector<Expr>, bool> IRMutator::mutate_with_changes(const std::vec
     return {std::move(new_exprs), changed};
 }
 
+std::pair<std::vector<Expr>, bool> IRMutator::mutate_with_changes(const ExprVector &old_exprs) {
+    vector<Expr> new_exprs(old_exprs.size());
+    bool changed = false;
+
+    // Mutate the args
+    for (size_t i = 0; i < old_exprs.size(); i++) {
+        const Expr &old_e = old_exprs[i];
+        Expr new_e = mutate(old_e);
+        if (!new_e.same_as(old_e)) {
+            changed = true;
+        }
+        new_exprs[i] = std::move(new_e);
+    }
+
+    return {std::move(new_exprs), changed};
+}
+
 }  // namespace Internal
 }  // namespace Halide

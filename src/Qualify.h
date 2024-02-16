@@ -13,7 +13,7 @@ namespace Halide {
 namespace Internal {
 
 /** Prefix all variable names in the given expression with the prefix string. */
-Expr qualify(const std::string &prefix, const Expr &value);
+Expr qualify(std::string_view prefix, const Expr &value);
 
 }  // namespace Internal
 }  // namespace Halide

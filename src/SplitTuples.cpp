@@ -24,7 +24,7 @@ namespace {
 class FindCallValueIndices : public IRVisitor {
 public:
     const string func;
-    map<string, set<int>> func_value_indices;
+    StringMap<set<int>> func_value_indices;
 
     using IRVisitor::visit;
 
@@ -62,15 +62,15 @@ inline bool uses_extern_image(const Stmt &s) {
 class SplitTuples : public IRMutator {
     using IRMutator::visit;
 
-    map<string, set<int>> func_value_indices;
-    map<string, int> hoisted_tuple_count;
+    StringMap<set<int>> func_value_indices;
+    StringMap<int> hoisted_tuple_count;
 
     Stmt visit(const HoistedStorage *op) override {
         hoisted_tuple_count[op->name] = 0;
         Stmt body = mutate(op->body);
         if (hoisted_tuple_count[op->name] > 1) {
             for (int ix = 0; ix < hoisted_tuple_count[op->name]; ix++) {
-                body = HoistedStorage::make(op->name + "." + std::to_string(ix), body);
+                body = HoistedStorage::make(concat(op->name, ".", std::to_string(ix)), body);
             }
             return body;
         } else {
@@ -83,14 +83,15 @@ class SplitTuples : public IRMutator {
         if (op->types.size() > 1) {
             // If there is a corresponding HoistedStorage node record the new number of
             // realizes.
-            if (hoisted_tuple_count.count(op->name)) {
-                hoisted_tuple_count[op->name] = op->types.size();
+            if (auto it = hoisted_tuple_count.find(op->name);
+                it != hoisted_tuple_count.end()) {
+                it->second = op->types.size();
             }
             // Make a nested set of realize nodes for each tuple element
             Stmt body = mutate(op->body);
             Expr condition = mutate(op->condition);
             for (int i = (int)op->types.size() - 1; i >= 0; i--) {
-                body = Realize::make(op->name + "." + std::to_string(i),
+                body = Realize::make(concat(op->name, ".", std::to_string(i)),
                                      {op->types[i]}, op->memory_type,
                                      op->bounds, condition, body);
             }
@@ -104,7 +105,7 @@ class SplitTuples : public IRMutator {
         FindCallValueIndices find;
         op->body.accept(&find);
 
-        ScopedValue<map<string, set<int>>> func_value_indices_v(func_value_indices, find.func_value_indices);
+        ScopedValue<StringMap<set<int>>> func_value_indices_v(func_value_indices, find.func_value_indices);
         return IRMutator::visit(op);
     }
 
@@ -119,7 +120,7 @@ class SplitTuples : public IRMutator {
 
             for (const auto &idx : indices->second) {
                 internal_assert(idx < (int)op->types.size());
-                body = Prefetch::make(op->name + "." + std::to_string(idx), {op->types[(idx)]}, op->bounds, op->prefetch, op->condition, std::move(body));
+                body = Prefetch::make(concat(op->name, ".", std::to_string(idx)), {op->types[(idx)]}, op->bounds, op->prefetch, op->condition, std::move(body));
             }
             return body;
         } else {
@@ -132,11 +133,13 @@ class SplitTuples : public IRMutator {
             auto it = env.find(op->name);
             internal_assert(it != env.end());
             Function f = it->second;
-            string name = op->name;
             bool changed_name = false;
+            string name;
             if (f.outputs() > 1) {
-                name += "." + std::to_string(op->value_index);
+                name = concat(op->name, ".", std::to_string(op->value_index));
                 changed_name = true;
+            } else {
+                name = std::string{op->name};
             }
             auto [args, changed_args] = mutate_with_changes(op->args);
             // It's safe to hook up the pointer to the function
@@ -212,10 +215,10 @@ class SplitTuples : public IRMutator {
 
             public:
                 set<int> &deps;
-                const string &func_name;
+                std::string_view func_name;
                 const vector<Expr> &store_args;
                 Checker(set<int> &deps,
-                        const string &func_name,
+                        std::string_view func_name,
                         const vector<Expr> &store_args)
                     : deps(deps), func_name(func_name), store_args(store_args) {
                 }
@@ -285,14 +288,14 @@ class SplitTuples : public IRMutator {
             if (c.size() == 1) {
                 // Just make a provide node
                 int i = *c.begin();
-                string name = op->name + "." + std::to_string(i);
+                string name = concat(op->name, ".", std::to_string(i));
                 s = Provide::make(name, {mutate(op->values[i])}, args, op->predicate);
             } else {
                 // Make a list of let statements that compute the
                 // values (doing any loads), and then a block of
                 // provide statements that do the stores.
                 for (auto i : c) {
-                    string name = op->name + "." + std::to_string(i);
+                    string name = concat(op->name, ".", std::to_string(i));
                     string var_name = name + ".value";
                     Expr val = mutate(op->values[i]);
                     if (!is_undef(val)) {
@@ -344,11 +347,11 @@ class SplitTuples : public IRMutator {
         }
     }
 
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
     Scope<int> realizations;
 
 public:
-    SplitTuples(const map<string, Function> &e)
+    SplitTuples(const StringMap<Function> &e)
         : env(e) {
     }
 };
@@ -430,7 +433,7 @@ class SplitScatterGather : public IRMutator {
         vector<pair<string, Expr>> lets;
         vector<Expr> vars;
         for (extractor.idx = 0; extractor.idx < size; extractor.idx++) {
-            string name = unique_name(op->name + "." + std::to_string(extractor.idx));
+            string name = unique_name(concat(op->name, ".", std::to_string(extractor.idx)));
             lets.emplace_back(name, extractor.mutate(op->value));
             vars.push_back(Variable::make(op->value.type(), name));
         }
@@ -546,7 +549,7 @@ class SplitScatterGather : public IRMutator {
 
 }  // namespace
 
-Stmt split_tuples(const Stmt &stmt, const map<string, Function> &env) {
+Stmt split_tuples(const Stmt &stmt, const StringMap<Function> &env) {
     Stmt s = SplitTuples(env).mutate(stmt);
     s = SplitScatterGather().mutate(s);
     return s;

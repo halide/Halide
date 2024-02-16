@@ -300,10 +300,10 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
             if (op->name.size() > 1 &&
                 op->name[0] == prefix &&
                 isdigit(op->name[1])) {
-                vars.insert(op->name);
+                vars.emplace(op->name);
             }
         }
-        std::set<string> vars;
+        StringSet vars;
 
     public:
         string make_unique_name() {
@@ -373,12 +373,12 @@ namespace {
 class NormalizeVarNames : public IRMutator {
     int counter = 0;
 
-    map<string, string> new_names;
+    StringMap<string> new_names;
 
     using IRMutator::visit;
 
     Expr visit(const Variable *var) override {
-        map<string, string>::iterator iter = new_names.find(var->name);
+        StringMap<string>::iterator iter = new_names.find(var->name);
         if (iter == new_names.end()) {
             return var;
         } else {
@@ -388,7 +388,7 @@ class NormalizeVarNames : public IRMutator {
 
     Expr visit(const Let *let) override {
         string new_name = "t" + std::to_string(counter++);
-        new_names[let->name] = new_name;
+        new_names.emplace(let->name, new_name);
         Expr value = mutate(let->value);
         Expr body = mutate(let->body);
         return Let::make(new_name, value, body);

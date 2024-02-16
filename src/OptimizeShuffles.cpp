@@ -61,7 +61,7 @@ class OptimizeShuffles : public IRMutator {
         return visit_let<Stmt>(op);
     }
 
-    std::set<std::string> allocations_to_pad;
+    StringSet allocations_to_pad;
     Stmt visit(const Allocate *op) override {
         Stmt s = IRMutator::visit(op);
         if (allocations_to_pad.count(op->name)) {
@@ -114,7 +114,7 @@ class OptimizeShuffles : public IRMutator {
                     // LUT. Note that for clamped ramps, this loads up to 1
                     // vector past the max, so we will add padding to the
                     // allocation accordingly (if we're the one that made it).
-                    allocations_to_pad.insert(op->name);
+                    allocations_to_pad.emplace(op->name);
                     Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
                                           Ramp::make(base, 1, const_extent),
                                           op->image, op->param, const_true(const_extent), alignment);

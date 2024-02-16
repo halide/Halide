@@ -19,7 +19,7 @@ class Function;
 
 /** Try to simplify the RHS/LHS of a function's definition based on its
  * specializations. */
-void simplify_specializations(std::map<std::string, Function> &env);
+void simplify_specializations(StringMap<Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

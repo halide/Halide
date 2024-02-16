@@ -224,7 +224,7 @@ public:
     // If we encounter a reference to a buffer (a Load, Store, Call,
     // or Provide), there's an implicit dependence on some associated
     // symbols.
-    void found_buffer_reference(const std::string &name, size_t dimensions = 0);
+    void found_buffer_reference(std::string_view name, size_t dimensions = 0);
 
     // Wrappers for as_const_foo that are more convenient to use in
     // the large chains of conditions in the visit methods below.

@@ -299,7 +299,7 @@ const wasm32_ptr_t kMagicJitUserContextValue = -1;
 // failures. https://github.com/halide/Halide/issues/3738
 constexpr size_t kExtraMallocSlop = 32;
 
-std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_name) {
+std::vector<char> compile_to_wasm(const Module &module, std::string_view fn_name) {
     static std::mutex link_lock;
     std::lock_guard<std::mutex> lock(link_lock);
 
@@ -474,8 +474,8 @@ struct ExternArgType {
 
 using TrampolineFn = void (*)(void **);
 
-bool build_extern_arg_types(const std::string &fn_name,
-                            const std::map<std::string, Halide::JITExtern> &jit_externs,
+bool build_extern_arg_types(std::string_view fn_name,
+                            const StringMap<Halide::JITExtern> &jit_externs,
                             const JITModule &trampolines,
                             TrampolineFn &trampoline_fn_out,
                             std::vector<ExternArgType> &arg_types_out) {
@@ -627,7 +627,7 @@ JITUserContext *get_jit_user_context(WabtContext &wabt_context, const wabt::inte
     return jit_user_context;
 }
 
-void dump_hostbuf(WabtContext &wabt_context, const halide_buffer_t *buf, const std::string &label) {
+void dump_hostbuf(WabtContext &wabt_context, const halide_buffer_t *buf, std::string_view label) {
 #if WASM_DEBUG_LEVEL >= 2
     const halide_dimension_t *dim = buf->dim;
     const uint8_t *host = buf->host;
@@ -654,7 +654,7 @@ void dump_hostbuf(WabtContext &wabt_context, const halide_buffer_t *buf, const s
 #endif
 }
 
-void dump_wasmbuf(WabtContext &wabt_context, wasm32_ptr_t buf_ptr, const std::string &label) {
+void dump_wasmbuf(WabtContext &wabt_context, wasm32_ptr_t buf_ptr, std::string_view label) {
 #if WASM_DEBUG_LEVEL >= 2
     wassert(buf_ptr);
 
@@ -1269,18 +1269,18 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
     return wabt::Result::Ok;
 }
 
-bool should_skip_extern_symbol(const std::string &name) {
-    static std::set<std::string> symbols = {
+bool should_skip_extern_symbol(std::string_view name) {
+    static StringSet symbols = {
         "halide_print",
         "halide_error"};
     return symbols.count(name) > 0;
 }
 
 wabt::interp::HostFunc::Ptr make_extern_callback(wabt::interp::Store &store,
-                                                 const std::map<std::string, Halide::JITExtern> &jit_externs,
+                                                 const StringMap<Halide::JITExtern> &jit_externs,
                                                  const JITModule &trampolines,
                                                  const wabt::interp::ImportDesc &import) {
-    const std::string &fn_name = import.type.name;
+    std::string_view fn_name = import.type.name;
     if (should_skip_extern_symbol(fn_name)) {
         wdebug(1) << "Skipping extern symbol: " << fn_name << "\n";
         return wabt::interp::HostFunc::Ptr();
@@ -1532,7 +1532,7 @@ uint8_t *get_wasm_memory_base(const Local<Context> &context) {
     return p;
 }
 
-void dump_hostbuf(const Local<Context> &context, const halide_buffer_t *buf, const std::string &label) {
+void dump_hostbuf(const Local<Context> &context, const halide_buffer_t *buf, std::string_view label) {
 #if WASM_DEBUG_LEVEL >= 2
     const halide_dimension_t *dim = buf->dim;
     const uint8_t *host = buf->host;
@@ -1559,7 +1559,7 @@ void dump_hostbuf(const Local<Context> &context, const halide_buffer_t *buf, con
 #endif
 }
 
-void dump_wasmbuf(const Local<Context> &context, wasm32_ptr_t buf_ptr, const std::string &label) {
+void dump_wasmbuf(const Local<Context> &context, wasm32_ptr_t buf_ptr, std::string_view label) {
 #if WASM_DEBUG_LEVEL >= 2
     internal_assert(buf_ptr);
 
@@ -2112,14 +2112,14 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
     }
 }
 
-bool should_skip_extern_symbol(const std::string &name) {
-    static std::set<std::string> symbols = {
+bool should_skip_extern_symbol(std::string_view name) {
+    static StringSet symbols = {
         "halide_print",
         "halide_error"};
     return symbols.count(name) > 0;
 }
 
-using JITExternMap = std::map<std::string, Halide::JITExtern>;
+using JITExternMap = StringMap<Halide::JITExtern>;
 void add_extern_callbacks(const Local<Context> &context,
                           const JITExternMap &jit_externs,
                           const JITModule &trampolines,
@@ -2293,7 +2293,7 @@ struct WasmModuleContents {
     WasmModuleContents(
         const Module &halide_module,
         const std::vector<Argument> &arguments,
-        const std::string &fn_name,
+        std::string_view fn_name,
         const std::map<std::string, Halide::JITExtern> &jit_externs,
         const std::vector<JITModule> &extern_deps);
 
@@ -2306,7 +2306,7 @@ struct WasmModuleContents {
 WasmModuleContents::WasmModuleContents(
     const Module &halide_module,
     const std::vector<Argument> &arguments,
-    const std::string &fn_name,
+    std::string_view fn_name,
     const std::map<std::string, Halide::JITExtern> &jit_externs,
     const std::vector<JITModule> &extern_deps)
     : target(halide_module.target())
@@ -2491,7 +2491,7 @@ WasmModuleContents::WasmModuleContents(
     const HostCallbackMap &host_callback_map = get_host_callback_map();
     Local<Object> imports_dict = Object::New(isolate);
     for (const auto &it : host_callback_map) {
-        const std::string &name = it.first;
+        std::string_view name = it.first;
         FunctionCallback f = it.second;
         Local<v8::String> key = NewLocalString(isolate, name.c_str());
         Local<v8::Function> value = FunctionTemplate::New(isolate, f)->GetFunction(context).ToLocalChecked();
@@ -2730,7 +2730,7 @@ bool WasmModule::can_jit_target(const Target &target) {
 WasmModule WasmModule::compile(
     const Module &module,
     const std::vector<Argument> &arguments,
-    const std::string &fn_name,
+    std::string_view fn_name,
     const std::map<std::string, Halide::JITExtern> &jit_externs,
     const std::vector<JITModule> &extern_deps) {
 #if defined(WITH_WABT) || defined(WITH_V8)

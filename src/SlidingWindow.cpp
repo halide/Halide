@@ -93,7 +93,7 @@ Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
 }
 
 class FindProduce : public IRVisitor {
-    const string &func;
+    std::string_view func;
 
     using IRVisitor::visit;
 
@@ -108,12 +108,12 @@ class FindProduce : public IRVisitor {
 public:
     bool found = false;
 
-    FindProduce(const string &func)
+    FindProduce(std::string_view func)
         : func(func) {
     }
 };
 
-bool find_produce(const Stmt &s, const string &func) {
+bool find_produce(const Stmt &s, std::string_view func) {
     FindProduce finder(func);
     s.accept(&finder);
     return finder.found;
@@ -128,7 +128,7 @@ bool find_produce(const Stmt &s, const string &func) {
 class RollFunc : public IRMutator {
     const Function &func;
     int dim;
-    const string &loop_var;
+    std::string_view loop_var;
     const Interval &old_bounds;
     const Interval &new_bounds;
 
@@ -136,7 +136,7 @@ class RollFunc : public IRMutator {
 
     // It helps simplify the shifted calls/provides to rebase the
     // loops that are subtracted from to have a min of 0.
-    set<string> loops_to_rebase;
+    StringSet loops_to_rebase;
     bool in_produce = false;
 
     using IRMutator::visit;
@@ -173,7 +173,7 @@ class RollFunc : public IRMutator {
         }
         if (const Variable *v = op->args[dim].as<Variable>()) {
             // The subtractions above simplify more easily if the loop is rebased to 0.
-            loops_to_rebase.insert(v->name);
+            loops_to_rebase.emplace(v->name);
         }
         return Provide::make(func.name(), values, args, op->predicate);
     }
@@ -195,7 +195,7 @@ class RollFunc : public IRMutator {
         op = result.as<For>();
         internal_assert(op);
         if (loops_to_rebase.count(op->name)) {
-            string new_name = op->name + ".rebased";
+            string new_name = concat(op->name, ".rebased");
             Stmt body = substitute(op->name, Variable::make(Int(32), new_name) + op->min, op->body);
             // use op->name *before* the re-assignment of result, which will clobber it
             loops_to_rebase.erase(op->name);
@@ -210,7 +210,7 @@ class RollFunc : public IRMutator {
     }
 
 public:
-    RollFunc(const Function &func, int dim, const string &loop_var,
+    RollFunc(const Function &func, int dim, std::string_view loop_var,
              const Interval &old_bounds, const Interval &new_bounds)
         : func(func), dim(dim), loop_var(loop_var), old_bounds(old_bounds), new_bounds(new_bounds) {
     }
@@ -228,13 +228,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     // Loops between the loop being slid over and the produce node
     Scope<> enclosing_loops;
 
-    map<string, Expr> replacements;
+    StringMap<Expr> replacements;
 
     using IRMutator::visit;
 
     // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
     // in the definition (including in its specializations)
-    bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
+    bool is_dim_always_pure(const Definition &def, std::string_view dim, int dim_idx) {
         const Variable *var = def.args()[dim_idx].as<Variable>();
         if ((!var) || (var->name != dim)) {
             return false;
@@ -266,7 +266,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << " along loop variable " << loop_var << "\n"
                      << "Region provided:\n";
 
-            string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
+            string prefix = concat(func.name(), ".s", std::to_string(func.updates().size()), ".");
             const std::vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
@@ -495,7 +495,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             }
 
             for (size_t i = 0; i < func.updates().size(); i++) {
-                string n = func.name() + ".s" + std::to_string(i) + "." + dim;
+                string n = concat(func.name(), ".s", std::to_string(i), ".", dim);
                 replacements[n + ".min"] = Variable::make(Int(32), prefix + dim + ".min");
                 replacements[n + ".max"] = Variable::make(Int(32), prefix + dim + ".max");
             }
@@ -589,7 +589,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
         Expr value = op->value;
 
-        map<string, Expr>::iterator iter = replacements.find(op->name);
+        StringMap<Expr>::iterator iter = replacements.find(op->name);
         if (iter != replacements.end()) {
             value = iter->second;
             replacements.erase(iter);
@@ -653,7 +653,7 @@ public:
 class Dependencies : public IRVisitor {
     using IRVisitor::visit;
 
-    const string &producer;
+    std::string_view producer;
     bool in_producer = false;
 
     void visit(const ProducerConsumer *op) override {
@@ -664,21 +664,21 @@ class Dependencies : public IRVisitor {
     void visit(const Call *op) override {
         if (in_producer && op->call_type == Call::Halide) {
             if (op->name != producer) {
-                dependencies.insert(op->name);
+                dependencies.emplace(op->name);
             }
         }
         IRVisitor::visit(op);
     }
 
 public:
-    set<string> dependencies;
+    StringSet dependencies;
 
-    Dependencies(const string &producer)
+    Dependencies(std::string_view producer)
         : producer(producer) {
     }
 };
 
-bool depends_on(const string &a, const string &b, const Stmt &s, map<string, bool> &cache) {
+bool depends_on(std::string_view a, std::string_view b, const Stmt &s, StringMap<bool> &cache) {
     if (a == b) {
         return true;
     }
@@ -689,25 +689,25 @@ bool depends_on(const string &a, const string &b, const Stmt &s, map<string, boo
     Dependencies deps(b);
     s.accept(&deps);
     // Recursively search for dependencies.
-    for (const string &i : deps.dependencies) {
+    for (const std::string &i : deps.dependencies) {
         if (depends_on(a, i, s, cache)) {
-            cache[b] = true;
+            cache.emplace(b, true);
             return true;
         }
     }
-    cache[b] = false;
+    cache.emplace(b, false);
     return false;
 }
 
-bool depends_on(const string &a, const string &b, const Stmt &s) {
-    map<string, bool> cache;
+bool depends_on(std::string_view a, std::string_view b, const Stmt &s) {
+    StringMap<bool> cache;
     return depends_on(a, b, s, cache);
 }
 
 // Update the loop variable referenced by prefetch directives.
 class SubstitutePrefetchVar : public IRMutator {
-    const string &old_var;
-    const string &new_var;
+    std::string_view old_var;
+    std::string_view new_var;
 
     using IRMutator::visit;
 
@@ -730,17 +730,17 @@ class SubstitutePrefetchVar : public IRMutator {
     }
 
 public:
-    SubstitutePrefetchVar(const string &old_var, const string &new_var)
+    SubstitutePrefetchVar(std::string_view old_var, std::string_view new_var)
         : old_var(old_var), new_var(new_var) {
     }
 };
 
 // Perform sliding window optimization for all functions
 class SlidingWindow : public IRMutator {
-    const map<string, Function> &env;
+    const StringMap<Function> &env;
 
     // A map of which dimensions we've already slid over, by Func name.
-    map<string, set<int>> slid_dimensions;
+    StringMap<set<int>> slid_dimensions;
 
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
@@ -750,7 +750,7 @@ class SlidingWindow : public IRMutator {
 
     Stmt visit(const Realize *op) override {
         // Find the args for this function
-        map<string, Function>::const_iterator iter = env.find(op->name);
+        StringMap<Function>::const_iterator iter = env.find(op->name);
 
         // If it's not in the environment it's some anonymous
         // realization that we should skip (e.g. an inlined reduction)
@@ -791,11 +791,11 @@ class SlidingWindow : public IRMutator {
         }
         debug(3) << "Doing sliding window analysis on loop " << op->name << "\n";
 
-        string name = op->name;
+        string name{op->name};
         Stmt body = op->body;
         Expr loop_min = op->min;
         Expr loop_extent = op->extent;
-        Expr loop_max = Variable::make(Int(32), op->name + ".loop_max");
+        Expr loop_max = Variable::make(Int(32), concat(op->name, ".loop_max"));
 
         list<pair<string, Expr>> prev_loop_mins;
         list<pair<string, Expr>> new_lets;
@@ -863,7 +863,7 @@ class SlidingWindow : public IRMutator {
                 // Let storage folding know there's now a read-after-write hazard here
                 Expr marker = Call::make(Int(32),
                                          Call::sliding_window_marker,
-                                         {func.name(), Variable::make(Int(32), op->name)},
+                                         {Expr(func.name()), Variable::make(Int(32), op->name)},
                                          Call::Intrinsic);
                 body = Block::make(Evaluate::make(marker), body);
             }
@@ -888,7 +888,7 @@ class SlidingWindow : public IRMutator {
     Stmt visit(const IfThenElse *op) override {
         // Don't let specializations corrupt the tracking of which
         // dimensions have been slid.
-        map<string, set<int>> old_slid_dimensions = slid_dimensions;
+        StringMap<set<int>> old_slid_dimensions = slid_dimensions;
         Stmt then_case = mutate(op->then_case);
         slid_dimensions = old_slid_dimensions;
         Stmt else_case = mutate(op->else_case);
@@ -901,7 +901,7 @@ class SlidingWindow : public IRMutator {
     }
 
 public:
-    SlidingWindow(const map<string, Function> &e)
+    SlidingWindow(const StringMap<Function> &e)
         : env(e) {
     }
 };
@@ -922,13 +922,14 @@ class AddLoopMinOrig : public IRMutator {
         } else {
             result = For::make(op->name, min, extent, op->for_type, op->partition_policy, op->device_api, body);
         }
-        return LetStmt::make(op->name + ".loop_min.orig", Variable::make(Int(32), op->name + ".loop_min"), result);
+        return LetStmt::make(concat(op->name, ".loop_min.orig"),
+                             Variable::make(Int(32), concat(op->name, ".loop_min")), result);
     }
 };
 
 }  // namespace
 
-Stmt sliding_window(const Stmt &s, const map<string, Function> &env) {
+Stmt sliding_window(const Stmt &s, const StringMap<Function> &env) {
     return SlidingWindow(env).mutate(AddLoopMinOrig().mutate(s));
 }
 

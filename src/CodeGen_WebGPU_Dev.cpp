@@ -26,7 +26,7 @@ public:
      * with different kernels, which will all be accumulated into a single
      * source module shared by a given Halide pipeline. */
     void add_kernel(Stmt stmt,
-                    const string &name,
+                    std::string_view name,
                     const vector<DeviceArgument> &args) override;
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
@@ -40,7 +40,7 @@ public:
 
     void dump() override;
 
-    string print_gpu_name(const string &name) override;
+    string print_gpu_name(std::string_view name) override;
 
     string api_unique_name() override {
         return "webgpu";
@@ -58,21 +58,21 @@ protected:
             vector_declaration_style = VectorDeclarationStyle::WGSLSyntax;
         }
         void add_kernel(const Stmt &stmt,
-                        const string &name,
+                        std::string_view name,
                         const vector<DeviceArgument> &args);
 
     protected:
         using CodeGen_GPU_C::visit;
 
-        std::string print_name(const std::string &) override;
+        std::string print_name(std::string_view) override;
         std::string print_type(Type type,
                                AppendSpaceIfNeeded append_space =
                                    DoNotAppendSpace) override;
         std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_extern_call(const Call *op) override;
-        std::string print_assignment(Type t, const std::string &rhs) override;
-        std::string print_const(Type t, const std::string &rhs);
-        std::string print_assignment_or_const(Type t, const std::string &rhs,
+        std::string print_assignment(Type t, std::string_view rhs) override;
+        std::string print_const(Type t, std::string_view rhs);
+        std::string print_assignment_or_const(Type t, std::string_view rhs,
                                               bool const_expr);
 
         void visit(const Allocate *op) override;
@@ -97,9 +97,9 @@ protected:
         void visit(const Store *op) override;
 
         string kernel_name;
-        std::unordered_set<string> buffers;
-        std::unordered_set<string> buffers_with_emulated_accesses;
-        std::unordered_map<string, const Allocate *> workgroup_allocations;
+        StringSet buffers;
+        StringSet buffers_with_emulated_accesses;
+        StringMap<const Allocate *> workgroup_allocations;
     };
 
     std::ostringstream src_stream;
@@ -112,7 +112,7 @@ CodeGen_WebGPU_Dev::CodeGen_WebGPU_Dev(const Target &t)
 }
 
 void CodeGen_WebGPU_Dev::add_kernel(Stmt s,
-                                    const string &name,
+                                    std::string_view name,
                                     const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_WebGPU_Dev::add_kernel " << name << "\n";
 
@@ -215,11 +215,11 @@ void CodeGen_WebGPU_Dev::dump() {
     std::cerr << src_stream.str() << "\n";
 }
 
-string CodeGen_WebGPU_Dev::print_gpu_name(const string &name) {
-    return name;
+string CodeGen_WebGPU_Dev::print_gpu_name(std::string_view name) {
+    return std::string{name};
 }
 
-string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_name(const string &name) {
+string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_name(std::string_view name) {
     string new_name = c_print_name(name);
 
     // The double-underscore prefix is reserved in WGSL.
@@ -301,7 +301,7 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_extern_call(const Call *op) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
-    const Stmt &s, const string &name, const vector<DeviceArgument> &args) {
+    const Stmt &s, std::string_view name, const vector<DeviceArgument> &args) {
     debug(2) << "Adding WGSL shader " << name << "\n";
 
     kernel_name = name;
@@ -312,27 +312,27 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 
         void visit(const Load *op) override {
             if (op->type.element_of().bits() < 32) {
-                needs_atomic_accesses.insert(op->name);
+                needs_atomic_accesses.emplace(op->name);
             }
             IRVisitor::visit(op);
         }
 
         void visit(const Store *op) override {
             if (op->value.type().element_of().bits() < 32) {
-                needs_atomic_accesses.insert(op->name);
+                needs_atomic_accesses.emplace(op->name);
             }
             IRVisitor::visit(op);
         }
 
     public:
-        std::unordered_set<string> needs_atomic_accesses;
+        StringSet needs_atomic_accesses;
     };
 
     FindBufferAccessesRequiringEmulation fbare;
     s.accept(&fbare);
 
     // The name of the variable that contains the non-buffer arguments.
-    string args_var = "Args_" + name;
+    string args_var = concat("Args_", name);
 
     std::ostringstream uniforms;
     uint32_t next_binding = 0;
@@ -373,7 +373,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
         }
     }
     if (!uniforms.str().empty()) {
-        string struct_name = "ArgsStruct_" + name;
+        string struct_name = concat("ArgsStruct_", name);
         stream << "struct " << struct_name << " {\n"
                << uniforms.str()
                << "}\n";
@@ -405,7 +405,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     // Generate function body.
     print(s);
 
-    close_scope("shader " + name);
+    close_scope(concat("shader ", name));
 
     for (auto [name, alloc] : workgroup_allocations) {
         std::stringstream length;
@@ -432,7 +432,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
     if (op->memory_type == MemoryType::GPUShared) {
         internal_assert(!workgroup_allocations.count(op->name));
-        workgroup_allocations.insert({op->name, op});
+        workgroup_allocations.emplace(op->name, op);
         op->body.accept(this);
     } else {
         open_scope();
@@ -602,7 +602,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const FloatImm *op) {
 }
 
 namespace {
-string simt_intrinsic(const string &name) {
+const char *simt_intrinsic(std::string_view name) {
     if (ends_with(name, ".__thread_id_x")) {
         return "local_id.x";
     } else if (ends_with(name, ".__thread_id_y")) {
@@ -687,7 +687,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
     if (allocations.contains(op->name)) {
         alloc_type = allocations.get(op->name).type;
     } else if (workgroup_allocations.count(op->name)) {
-        alloc_type = workgroup_allocations.at(op->name)->type;
+        alloc_type = workgroup_allocations.find(op->name)->second->type;
     }
 
     const int bits = result_type.bits();
@@ -829,7 +829,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
     if (allocations.contains(op->name)) {
         alloc_type = allocations.get(op->name).type;
     } else if (workgroup_allocations.count(op->name)) {
-        alloc_type = workgroup_allocations.at(op->name)->type;
+        alloc_type = workgroup_allocations.find(op->name)->second->type;
     }
 
     // Cast a value to the store type if necessary,
@@ -924,23 +924,23 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
 }
 
 string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_assignment(
-    Type t, const std::string &rhs) {
+    Type t, std::string_view rhs) {
     return print_assignment_or_const(t, rhs, false);
 }
 
 string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_const(
-    Type t, const std::string &rhs) {
+    Type t, std::string_view rhs) {
     return print_assignment_or_const(t, rhs, true);
 }
 
 string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_assignment_or_const(
-    Type t, const std::string &rhs, bool const_expr) {
+    Type t, std::string_view rhs, bool const_expr) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
         stream << get_indent() << (const_expr ? "const" : "let") << " " << id
                << " : " << print_type(t) << " = " << rhs << ";\n";
-        cache[rhs] = id;
+        cache.emplace(rhs, id);
     } else {
         id = cached->second;
     }

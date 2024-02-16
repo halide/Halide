@@ -18,7 +18,7 @@ using std::vector;
 
 namespace {
 
-void substitute_value_in_var(const string &var, const Expr &value, vector<Definition> &definitions) {
+void substitute_value_in_var(std::string_view var, const Expr &value, vector<Definition> &definitions) {
     for (Definition &def : definitions) {
         for (auto &def_arg : def.args()) {
             def_arg = simplify(substitute(var, value, def_arg));
@@ -67,7 +67,7 @@ void simplify_using_fact(const Expr &fact, vector<Definition> &definitions) {
     }
 }
 
-vector<Definition> propagate_specialization_in_definition(Definition &def, const string &name) {
+vector<Definition> propagate_specialization_in_definition(Definition &def, std::string_view name) {
     vector<Definition> result;
 
     result.push_back(def);
@@ -155,7 +155,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
 
 }  // namespace
 
-void simplify_specializations(map<string, Function> &env) {
+void simplify_specializations(StringMap<Function> &env) {
     for (auto &iter : env) {
         Function &func = iter.second;
         if (func.definition().defined()) {

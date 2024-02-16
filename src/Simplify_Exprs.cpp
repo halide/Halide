@@ -320,7 +320,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     // true or false. This provides an alternative mechanism to simplify these
     // unreachable loads.
     if (is_const_one(op->predicate)) {
-        string alloc_extent_name = op->name + ".total_extent_bytes";
+        string alloc_extent_name = concat(op->name, ".total_extent_bytes");
         if (bounds_and_alignment_info.contains(alloc_extent_name)) {
             if (index_info.max_defined && index_info.max < 0) {
                 in_unreachable = true;

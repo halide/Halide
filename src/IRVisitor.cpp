@@ -270,7 +270,7 @@ void IRVisitor::visit(const HoistedStorage *op) {
 }
 
 void IRGraphVisitor::include(const Expr &e) {
-    auto r = visited.insert(e.get());
+    auto r = visited.emplace(e.get());
     if (r.second) {
         // Was newly inserted
         e.accept(this);
@@ -278,7 +278,7 @@ void IRGraphVisitor::include(const Expr &e) {
 }
 
 void IRGraphVisitor::include(const Stmt &s) {
-    auto r = visited.insert(s.get());
+    auto r = visited.emplace(s.get());
     if (r.second) {
         // Was newly inserted
         s.accept(this);

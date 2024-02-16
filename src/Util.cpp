@@ -82,7 +82,7 @@ std::string from_utf16(LPCWSTR pStr) {
     return str;
 }
 
-std::wstring from_utf8(const std::string &str) {
+std::wstring from_utf8(std::string_view str) {
     int wlen = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), nullptr, 0);
     internal_assert(wlen) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
 
@@ -193,8 +193,8 @@ string unique_name(char prefix) {
     return prefix + std::to_string(unique_count((size_t)(prefix)));
 }
 
-string unique_name(const std::string &prefix) {
-    string sanitized = prefix;
+string unique_name(std::string_view prefix) {
+    string sanitized{prefix};
 
     // Does the input string look like something returned from unique_name(char)?
     bool matches_char_pattern = true;
@@ -231,14 +231,14 @@ string unique_name(const std::string &prefix) {
         // looking like something unique_name has ever returned in the
         // past or will ever return in the future.
         if (!matches_char_pattern && !matches_string_pattern) {
-            return prefix;
+            return sanitized;
         }
     }
 
     return sanitized + "$" + std::to_string(count);
 }
 
-bool starts_with(const string &str, const string &prefix) {
+bool starts_with(std::string_view str, std::string_view prefix) {
     if (str.size() < prefix.size()) {
         return false;
     }
@@ -250,7 +250,7 @@ bool starts_with(const string &str, const string &prefix) {
     return true;
 }
 
-bool ends_with(const string &str, const string &suffix) {
+bool ends_with(std::string_view str, std::string_view suffix) {
     if (str.size() < suffix.size()) {
         return false;
     }
@@ -263,9 +263,9 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
-string replace_all(const string &str, const string &find, const string &replace) {
+string replace_all(std::string_view str, std::string_view find, std::string_view replace) {
     size_t pos = 0;
-    string result = str;
+    string result{str};
     while ((pos = result.find(find, pos)) != string::npos) {
         result.replace(pos, find.length(), replace);
         pos += replace.length();
@@ -273,8 +273,8 @@ string replace_all(const string &str, const string &find, const string &replace)
     return result;
 }
 
-string make_entity_name(void *stack_ptr, const string &type, char prefix) {
-    string name = Introspection::get_variable_name(stack_ptr, type);
+string make_entity_name(void *stack_ptr, std::string_view type, char prefix) {
+    string name = Introspection::get_variable_name(stack_ptr, std::string{type});
 
     if (name.empty()) {
         return unique_name(prefix);
@@ -289,31 +289,31 @@ string make_entity_name(void *stack_ptr, const string &type, char prefix) {
     }
 }
 
-std::vector<std::string> split_string(const std::string &source, const std::string &delim) {
+std::vector<std::string> split_string(std::string_view source, std::string_view delim) {
     std::vector<std::string> elements;
     size_t start = 0;
     size_t found = 0;
     while ((found = source.find(delim, start)) != std::string::npos) {
-        elements.push_back(source.substr(start, found - start));
+        elements.emplace_back(source.substr(start, found - start));
         start = found + delim.size();
     }
 
     // If start is exactly source.size(), the last thing in source is a
     // delimiter, in which case we want to add an empty string to elements.
     if (start <= source.size()) {
-        elements.push_back(source.substr(start, std::string::npos));
+        elements.emplace_back(source.substr(start, std::string::npos));
     }
     return elements;
 }
 
-std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces) {
+std::string extract_namespaces(std::string_view name, std::vector<std::string> &namespaces) {
     namespaces = split_string(name, "::");
     std::string result = namespaces.back();
     namespaces.pop_back();
     return result;
 }
 
-std::string strip_namespaces(const std::string &name) {
+std::string strip_namespaces(std::string_view name) {
     std::vector<std::string> unused;
     return extract_namespaces(name, unused);
 }
@@ -414,7 +414,7 @@ std::string get_windows_tmp_dir() {
 }  //  namespace
 #endif
 
-std::string file_make_temp(const std::string &prefix, const std::string &suffix) {
+std::string file_make_temp(std::string_view prefix, std::string_view suffix) {
     internal_assert(prefix.find('/') == string::npos &&
                     prefix.find('\\') == string::npos &&
                     suffix.find('/') == string::npos &&
@@ -432,7 +432,7 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     internal_assert(ret != 0) << "GetTempFileNameW() failed; error " << GetLastError() << "\n";
     return from_utf16(tmp_file);
 #else
-    std::string templ = "/tmp/" + prefix + "XXXXXX" + suffix;
+    std::string templ = concat("/tmp/", prefix, "XXXXXX", suffix);
     // Copy into a temporary buffer, since mkstemp modifies the buffer in place.
     std::vector<char> buf(templ.size() + 1);
     strcpy(&buf[0], templ.c_str());
@@ -642,7 +642,7 @@ void halide_toc_impl(const char *file, int line) {
     debug(1) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
 }
 
-std::string c_print_name(const std::string &name,
+std::string c_print_name(std::string_view name,
                          bool prefix_underscore) {
     ostringstream oss;
 

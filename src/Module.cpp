@@ -72,8 +72,8 @@ public:
         debug(1) << "dir_rmdir: " << dir_path << "\n";
         dir_rmdir(dir_path);
     }
-    std::string add_temp_file(const std::string &base_path_name,
-                              const std::string &suffix,
+    std::string add_temp_file(std::string_view base_path_name,
+                              std::string_view suffix,
                               const Target &target,
                               bool in_front = false) {
         size_t slash_idx = base_path_name.rfind('/');
@@ -88,8 +88,8 @@ public:
         } else {
             backslash_idx++;
         }
-        std::string base_name = base_path_name.substr(std::max(slash_idx, backslash_idx));
-        std::string name = dir_path + "/" + base_name + suffix;
+        std::string_view base_name = base_path_name.substr(std::max(slash_idx, backslash_idx));
+        std::string name = concat(dir_path, "/", base_name, suffix);
         debug(1) << "add_temp_object_file: " << name << "\n";
         if (in_front) {
             dir_files.insert(dir_files.begin(), name);
@@ -99,12 +99,12 @@ public:
         return name;
     }
 
-    std::string add_temp_object_file(const std::string &base_path_name,
-                                     const std::string &suffix,
+    std::string add_temp_object_file(std::string_view base_path_name,
+                                     std::string_view suffix,
                                      const Target &target,
                                      bool in_front = false) {
         const char *ext = (target.os == Target::Windows) ? ".obj" : ".o";
-        return add_temp_file(base_path_name, suffix + ext, target, in_front);
+        return add_temp_file(base_path_name, concat(suffix, ext), target, in_front);
     }
 
     const std::vector<std::string> &files() {
@@ -123,16 +123,16 @@ public:
 };
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
-std::string add_suffix(const std::string &path, const std::string &suffix) {
+std::string add_suffix(std::string_view path, std::string_view suffix) {
     size_t last_path = std::min(path.rfind('/'), path.rfind('\\'));
     if (last_path == std::string::npos) {
         last_path = 0;
     }
     size_t dot = path.find('.', last_path);
     if (dot == std::string::npos) {
-        return path + suffix;
+        return concat(path, suffix);
     } else {
-        return path.substr(0, dot) + suffix + path.substr(dot);
+        return concat(path.substr(0, dot), suffix, path.substr(dot));
     }
 }
 
@@ -231,7 +231,7 @@ static Registerer registerer;
     }
 }
 
-std::string indent_string(const std::string &src, const std::string &indent) {
+std::string indent_string(std::string_view src, std::string_view indent) {
     std::ostringstream o;
     bool prev_was_newline = true;
     for (char c : src) {
@@ -245,11 +245,11 @@ std::string indent_string(const std::string &src, const std::string &indent) {
     return o.str();
 }
 
-void emit_schedule_file(const std::string &name,
+void emit_schedule_file(std::string_view name,
                         const std::vector<Target> &targets,
-                        const std::string &scheduler_name,
-                        const std::string &autoscheduler_params_string,
-                        const std::string &body,
+                        std::string_view scheduler_name,
+                        std::string_view autoscheduler_params_string,
+                        std::string_view body,
                         std::ostream &stream) {
     std::string s = R"INLINE_CODE(#ifndef $CLEANNAME$_SCHEDULE_H
 #define $CLEANNAME$_SCHEDULE_H
@@ -347,7 +347,7 @@ void destroy<ModuleContents>(const ModuleContents *t) {
     delete t;
 }
 
-LoweredFunc::LoweredFunc(const std::string &name,
+LoweredFunc::LoweredFunc(std::string_view name,
                          const std::vector<LoweredArgument> &args,
                          Stmt body,
                          LinkageType linkage,
@@ -355,7 +355,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
     : name(name), args(args), body(std::move(body)), linkage(linkage), name_mangling(name_mangling) {
 }
 
-LoweredFunc::LoweredFunc(const std::string &name,
+LoweredFunc::LoweredFunc(std::string_view name,
                          const std::vector<Argument> &args,
                          Stmt body,
                          LinkageType linkage,
@@ -370,7 +370,7 @@ LoweredFunc::LoweredFunc(const std::string &name,
 
 using namespace Halide::Internal;
 
-Module::Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map)
+Module::Module(std::string_view name, const Target &target, const MetadataNameMap &metadata_name_map)
     : contents(new Internal::ModuleContents) {
     contents->name = name;
     contents->target = target;
@@ -390,7 +390,7 @@ const Target &Module::target() const {
     return contents->target;
 }
 
-const std::string &Module::name() const {
+std::string_view Module::name() const {
     return contents->name;
 }
 
@@ -438,7 +438,7 @@ Buffer<> Module::get_device_code_buffer() const {
     return {};
 }
 
-Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
+Internal::LoweredFunc Module::get_function_by_name(std::string_view name) const {
     for (const auto &f : functions()) {
         if (f.name == name) {
             return f;
@@ -460,7 +460,7 @@ void Module::append(const Module &module) {
     contents->submodules.push_back(module);
 }
 
-Module link_modules(const std::string &name, const std::vector<Module> &modules) {
+Module link_modules(std::string_view name, const std::vector<Module> &modules) {
     Module output(name, modules.front().target());
 
     for (const auto &input : modules) {
@@ -539,10 +539,10 @@ Module Module::resolve_submodules() const {
     return lowered_module;
 }
 
-void Module::remap_metadata_name(const std::string &from, const std::string &to) const {
-    internal_assert(contents->metadata_name_map.find(from) == contents->metadata_name_map.end());
-    internal_assert(contents->metadata_name_map.find(to) == contents->metadata_name_map.end());
-    contents->metadata_name_map[from] = to;
+void Module::remap_metadata_name(std::string_view from, std::string_view to) const {
+    internal_assert(contents->metadata_name_map.find(std::string{from}) == contents->metadata_name_map.end());
+    internal_assert(contents->metadata_name_map.find(std::string{to}) == contents->metadata_name_map.end());
+    contents->metadata_name_map.emplace(from, to);
 }
 
 MetadataNameMap Module::get_metadata_name_map() const {
@@ -808,15 +808,15 @@ std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<
     return actual_outputs;
 }
 
-void compile_standalone_runtime(const std::string &object_filename, const Target &t) {
-    compile_standalone_runtime({{OutputFileType::object, object_filename}}, t);
+void compile_standalone_runtime(std::string_view object_filename, const Target &t) {
+    compile_standalone_runtime({{OutputFileType::object, std::string{object_filename}}}, t);
 }
 
 namespace {
 
 class ScopedCompilerLogger {
 public:
-    ScopedCompilerLogger(const CompilerLoggerFactory &compiler_logger_factory, const std::string &fn_name, const Target &target) {
+    ScopedCompilerLogger(const CompilerLoggerFactory &compiler_logger_factory, std::string_view fn_name, const Target &target) {
         internal_assert(!get_compiler_logger());
         if (compiler_logger_factory) {
             set_compiler_logger(compiler_logger_factory(fn_name, target));
@@ -832,7 +832,7 @@ public:
 
 }  // namespace
 
-void compile_multitarget(const std::string &fn_name,
+void compile_multitarget(std::string_view fn_name,
                          const std::map<OutputFileType, std::string> &output_files,
                          const std::vector<Target> &targets,
                          const std::vector<std::string> &suffixes,
@@ -862,7 +862,7 @@ void compile_multitarget(const std::string &fn_name,
         return "-" + (suffixes.empty() ? targets[i].to_string() : suffixes[i]);
     };
 
-    const auto add_suffixes = [&](const std::map<OutputFileType, std::string> &in, const std::string &suffix) -> std::map<OutputFileType, std::string> {
+    const auto add_suffixes = [&](const std::map<OutputFileType, std::string> &in, std::string_view suffix) -> std::map<OutputFileType, std::string> {
         // is_multi doesn't vary by Target, so we can pass an empty target here safely
         auto output_info = get_output_info(Target());
         std::map<OutputFileType, std::string> out = in;
@@ -949,7 +949,7 @@ void compile_multitarget(const std::string &fn_name,
 
         // Each sub-target has a function name that is the 'real' name plus a suffix
         std::string suffix = suffix_for_entry(i);
-        std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
+        std::string sub_fn_name = needs_wrapper ? concat(fn_name, suffix) : std::string{fn_name};
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
@@ -1040,7 +1040,7 @@ void compile_multitarget(const std::string &fn_name,
 
     if (needs_wrapper) {
         Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
-        std::string private_result_name = unique_name(fn_name + "_result");
+        std::string private_result_name = unique_name(concat(fn_name, "_result"));
         Expr private_result_var = Variable::make(Int(32), private_result_name);
         Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
         wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);

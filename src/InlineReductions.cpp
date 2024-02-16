@@ -23,13 +23,13 @@ public:
     vector<Expr> call_args;
     RDom rdom;
 
-    FindFreeVars(const RDom &r, const string &n)
+    FindFreeVars(const RDom &r, std::string_view n)
         : rdom(r), explicit_rdom(r.defined()), name(n) {
     }
 
 private:
     bool explicit_rdom;
-    const string &name;
+    std::string_view name;
 
     Scope<> internal;
 
@@ -49,7 +49,7 @@ private:
     }
 
     Expr visit(const Variable *v) override {
-        string var_name = v->name;
+        string var_name{v->name};
         Expr expr = v;
 
         if (internal.contains(var_name)) {
@@ -108,7 +108,7 @@ private:
 }  // namespace
 }  // namespace Internal
 
-Expr sum(Expr e, const std::string &name) {
+Expr sum(Expr e, std::string_view name) {
     return sum(RDom(), std::move(e), Func(name));
 }
 
@@ -116,7 +116,7 @@ Expr sum(Expr e, const Func &f) {
     return sum(RDom(), std::move(e), f);
 }
 
-Expr sum(const RDom &r, Expr e, const std::string &name) {
+Expr sum(const RDom &r, Expr e, std::string_view name) {
     return sum(r, std::move(e), Func(name));
 }
 
@@ -134,7 +134,7 @@ Expr sum(const RDom &r, Expr e, const Func &f) {
     return f(v.call_args);
 }
 
-Expr saturating_sum(Expr e, const std::string &name) {
+Expr saturating_sum(Expr e, std::string_view name) {
     return saturating_sum(RDom(), std::move(e), Func(name));
 }
 
@@ -142,7 +142,7 @@ Expr saturating_sum(Expr e, const Func &f) {
     return saturating_sum(RDom(), std::move(e), f);
 }
 
-Expr saturating_sum(const RDom &r, Expr e, const std::string &name) {
+Expr saturating_sum(const RDom &r, Expr e, std::string_view name) {
     return saturating_sum(r, std::move(e), Func(name));
 }
 
@@ -161,7 +161,7 @@ Expr saturating_sum(const RDom &r, Expr e, const Func &f) {
     return f(v.call_args);
 }
 
-Expr product(Expr e, const std::string &name) {
+Expr product(Expr e, std::string_view name) {
     return product(RDom(), std::move(e), Func(name));
 }
 
@@ -169,7 +169,7 @@ Expr product(Expr e, const Func &f) {
     return product(RDom(), std::move(e), f);
 }
 
-Expr product(const RDom &r, Expr e, const std::string &name) {
+Expr product(const RDom &r, Expr e, std::string_view name) {
     return product(r, std::move(e), Func(name));
 }
 
@@ -187,7 +187,7 @@ Expr product(const RDom &r, Expr e, const Func &f) {
     return f(v.call_args);
 }
 
-Expr maximum(Expr e, const std::string &name) {
+Expr maximum(Expr e, std::string_view name) {
     return maximum(RDom(), std::move(e), Func(name));
 }
 
@@ -195,7 +195,7 @@ Expr maximum(Expr e, const Func &f) {
     return maximum(RDom(), std::move(e), f);
 }
 
-Expr maximum(const RDom &r, Expr e, const std::string &name) {
+Expr maximum(const RDom &r, Expr e, std::string_view name) {
     return maximum(r, std::move(e), Func(name));
 }
 
@@ -214,7 +214,7 @@ Expr maximum(const RDom &r, Expr e, const Func &f) {
     return f(v.call_args);
 }
 
-Expr minimum(Expr e, const std::string &name) {
+Expr minimum(Expr e, std::string_view name) {
     return minimum(RDom(), std::move(e), Func(name));
 }
 
@@ -222,7 +222,7 @@ Expr minimum(Expr e, const Func &f) {
     return minimum(RDom(), std::move(e), f);
 }
 
-Expr minimum(const RDom &r, Expr e, const std::string &name) {
+Expr minimum(const RDom &r, Expr e, std::string_view name) {
     return minimum(r, std::move(e), Func(name));
 }
 
@@ -241,7 +241,7 @@ Expr minimum(const RDom &r, Expr e, const Func &f) {
     return f(v.call_args);
 }
 
-Tuple argmax(Expr e, const std::string &name) {
+Tuple argmax(Expr e, std::string_view name) {
     return argmax(RDom(), std::move(e), Func(name));
 }
 
@@ -249,7 +249,7 @@ Tuple argmax(Expr e, const Func &f) {
     return argmax(RDom(), std::move(e), f);
 }
 
-Tuple argmax(const RDom &r, Expr e, const std::string &name) {
+Tuple argmax(const RDom &r, Expr e, std::string_view name) {
     return argmax(r, std::move(e), Func(name));
 }
 
@@ -280,7 +280,7 @@ Tuple argmax(const RDom &r, Expr e, const Func &f) {
     return f(v.call_args);
 }
 
-Tuple argmin(Expr e, const std::string &name) {
+Tuple argmin(Expr e, std::string_view name) {
     return argmin(RDom(), std::move(e), Func(name));
 }
 
@@ -288,7 +288,7 @@ Tuple argmin(Expr e, const Func &f) {
     return argmin(RDom(), std::move(e), f);
 }
 
-Tuple argmin(const RDom &r, Expr e, const std::string &name) {
+Tuple argmin(const RDom &r, Expr e, std::string_view name) {
     return argmin(r, std::move(e), Func(name));
 }
 

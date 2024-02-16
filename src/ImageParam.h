@@ -42,7 +42,7 @@ public:
 
     /** Construct an image parameter of the given type and
      * dimensionality, with the given name */
-    ImageParam(Type t, int d, const std::string &n);
+    ImageParam(Type t, int d, std::string_view n);
 
     /** Bind an Image to this ImageParam. Only relevant for jitting */
     // @{
@@ -132,7 +132,7 @@ public:
     void trace_loads();
 
     /** Add a trace tag to this ImageParam's Func. */
-    ImageParam &add_trace_tag(const std::string &trace_tag);
+    ImageParam &add_trace_tag(std::string_view trace_tag);
 };
 
 }  // namespace Halide

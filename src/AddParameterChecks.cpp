@@ -17,13 +17,13 @@ namespace {
 // Find all the externally referenced scalar parameters
 class FindParameters : public IRGraphVisitor {
 public:
-    map<string, Parameter> params;
+    StringMap<Parameter> params;
 
     using IRGraphVisitor::visit;
 
     void visit(const Variable *op) override {
         if (op->param.defined()) {
-            params[op->name] = op->param;
+            params.emplace(op->name, op->param);
         }
     }
 };
@@ -38,13 +38,13 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
     FindParameters finder;
     s.accept(&finder);
 
-    map<string, Expr> replace_with_constrained;
+    StringMap<Expr> replace_with_constrained;
     vector<pair<string, Expr>> lets;
 
     struct ParamAssert {
         Expr condition;
         Expr value, limit_value;
-        string param_name;
+        std::string_view param_name;
     };
 
     vector<ParamAssert> asserts;
@@ -119,7 +119,7 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
         }
 
         Expr error = Call::make(Int(32), error_call_name,
-                                {p.param_name, p.value, p.limit_value},
+                                {Expr(p.param_name), p.value, p.limit_value},
                                 Call::Extern);
 
         s = Block::make(AssertStmt::make(p.condition, error), s);

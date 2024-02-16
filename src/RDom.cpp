@@ -22,10 +22,10 @@ const char *const dom_var_names[] = {"$x", "$y", "$z", "$w"};
 
 // T is an ImageParam, Buffer<>, Input<Buffer<>>
 template<typename T>
-Internal::ReductionDomain make_dom_from_dimensions(const T &t, const std::string &name) {
+Internal::ReductionDomain make_dom_from_dimensions(const T &t, std::string_view name) {
     std::vector<Internal::ReductionVariable> vars;
     for (int i = 0; i < t.dimensions(); i++) {
-        vars.push_back({name + dom_var_names[i],
+        vars.push_back({concat(name, dom_var_names[i]),
                         t.dim(i).min(),
                         t.dim(i).extent()});
     }
@@ -58,7 +58,7 @@ Expr RVar::extent() const {
     }
 }
 
-const std::string &RVar::name() const {
+std::string_view RVar::name() const {
     if (_domain.defined()) {
         return _var().var;
     } else {
@@ -74,7 +74,7 @@ ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
 }
 
 // This just initializes the predefined x, y, z, w members of RDom.
-void RDom::init_vars(const string &name) {
+void RDom::init_vars(std::string_view name) {
     const std::vector<ReductionVariable> &dom_vars = dom.domain();
     std::array<RVar *, 4> vars = {{&x, &y, &z, &w}};
 
@@ -82,7 +82,7 @@ void RDom::init_vars(const string &name) {
         if (i < dom_vars.size()) {
             *(vars[i]) = RVar(dom, i);
         } else {
-            *(vars[i]) = RVar(name + dom_var_names[i]);
+            *(vars[i]) = RVar(concat(name, dom_var_names[i]));
         }
     }
 }
@@ -195,7 +195,7 @@ RDom::RDom(const Buffer<> &b) {
 }
 
 RDom::RDom(const OutputImageParam &p) {
-    const std::string &name = p.name();
+    std::string_view name = p.name();
     dom = make_dom_from_dimensions(p, name);
     init_vars(name);
 }

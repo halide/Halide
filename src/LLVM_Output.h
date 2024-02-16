@@ -31,7 +31,7 @@ typedef llvm::raw_pwrite_stream LLVMOStream;
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context);
 
 /** Construct an llvm output stream for writing to files. */
-std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename);
+std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(std::string_view filename);
 
 /** Compile an LLVM module to native targets (objects, native assembly). */
 // @{
@@ -52,7 +52,7 @@ void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOS
  * all modes (equivalent to the ar -D option).
  */
 void create_static_library(const std::vector<std::string> &src_files, const Target &target,
-                           const std::string &dst_file, bool deterministic = true);
+                           std::string_view dst_file, bool deterministic = true);
 }  // namespace Halide
 
 #endif

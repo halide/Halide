@@ -10,7 +10,7 @@ using std::vector;
 
 namespace {
 
-std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
+std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, std::string_view id) {
 
     llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
 
@@ -1336,9 +1336,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
 #endif
 
 void add_bitcode_to_module(llvm::LLVMContext *context, llvm::Module &module,
-                           const std::vector<uint8_t> &bitcode, const std::string &name) {
+                           const std::vector<uint8_t> &bitcode, std::string_view name) {
     llvm::StringRef sb = llvm::StringRef((const char *)&bitcode[0], bitcode.size());
-    std::unique_ptr<llvm::Module> add_in = parse_bitcode_file(sb, context, name.c_str());
+    std::unique_ptr<llvm::Module> add_in = parse_bitcode_file(sb, context, name);
 
     bool failed = llvm::Linker::linkModules(module, std::move(add_in));
     if (failed) {

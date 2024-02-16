@@ -34,7 +34,7 @@ public:
      * with different kernels, which will all be accumulated into a single
      * source module shared by a given Halide pipeline. */
     void add_kernel(Stmt stmt,
-                    const std::string &name,
+                    std::string_view name,
                     const std::vector<DeviceArgument> &args) override;
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
@@ -48,7 +48,7 @@ public:
 
     void dump() override;
 
-    std::string print_gpu_name(const std::string &name) override;
+    std::string print_gpu_name(std::string_view name) override;
 
     std::string api_unique_name() override {
         return "vulkan";
@@ -112,7 +112,7 @@ protected:
         void reset();
 
         // Top-level function for adding kernels
-        void add_kernel(const Stmt &s, const std::string &name, const std::vector<DeviceArgument> &args);
+        void add_kernel(const Stmt &s, std::string_view name, const std::vector<DeviceArgument> &args);
         void init_module();
         void compile(std::vector<char> &binary);
         void dump() const;
@@ -131,7 +131,7 @@ protected:
 
         void declare_workgroup_size(SpvId kernel_func_id);
         void declare_entry_point(const Stmt &s, SpvId kernel_func_id);
-        void declare_device_args(const Stmt &s, uint32_t entry_point_index, const std::string &kernel_name, const std::vector<DeviceArgument> &args);
+        void declare_device_args(const Stmt &s, uint32_t entry_point_index, std::string_view kernel_name, const std::vector<DeviceArgument> &args);
 
         // Common operator visitors
         void visit_unary_op(SpvOp op_code, Type t, const Expr &a);
@@ -163,7 +163,7 @@ protected:
         SpvId declare_constant_float(Type value_type, float value);
 
         // Map from Halide built-in names to extended GLSL intrinsics for SPIR-V
-        using BuiltinMap = std::unordered_map<std::string, SpvId>;
+        using BuiltinMap = StringMap<SpvId>;
         const BuiltinMap glsl_builtin = {
             {"acos_f16", GLSLstd450Acos},
             {"acos_f32", GLSLstd450Acos},
@@ -410,7 +410,7 @@ struct FindWorkGroupSize : public IRVisitor {
         loop->body.accept(this);
     }
 
-    int thread_loop_workgroup_index(const std::string &name) {
+    int thread_loop_workgroup_index(std::string_view name) {
         std::string ids[] = {".__thread_id_x",
                              ".__thread_id_y",
                              ".__thread_id_z"};
@@ -517,7 +517,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const UIntImm *imm) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const StringImm *imm) {
-    SpvId constant_id = builder.declare_string_constant(imm->value);
+    SpvId constant_id = builder.declare_string_constant(std::string{imm->value});
     builder.update_id(constant_id);
 }
 
@@ -1629,7 +1629,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const AssertStmt *stmt) {
 }
 
 namespace {
-std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
+std::pair<const char *, uint32_t> simt_intrinsic(std::string_view name) {
     if (ends_with(name, ".__thread_id_x")) {
         return {"LocalInvocationId", 0};
     } else if (ends_with(name, ".__thread_id_y")) {
@@ -1832,7 +1832,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
 
         // Allocation of shared memory must be declared at global scope
         storage_class = SpvStorageClassWorkgroup;  // shared across workgroup
-        std::string variable_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + op->name;
+        std::string variable_name =
+            concat("k", std::to_string(kernel_index), "_", op->name);
         uint32_t type_size = op->type.bytes();
         uint32_t constant_id = 0;
 
@@ -1889,7 +1890,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
 
         array_type_id = builder.declare_type(op->type, array_size);
         storage_class = SpvStorageClassFunction;  // function scope
-        std::string variable_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + op->name;
+        std::string variable_name =
+            concat("k", std::to_string(kernel_index), "_", op->name);
         SpvId ptr_type_id = builder.declare_pointer_type(array_type_id, storage_class);
         variable_id = builder.declare_variable(variable_name, ptr_type_id, storage_class);
     }
@@ -2279,7 +2281,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::init_module() {
 
 namespace {
 
-std::vector<char> encode_header_string(const std::string &str) {
+std::vector<char> encode_header_string(std::string_view str) {
     uint32_t padded_word_count = (str.length() / 4) + 1;  // add an extra entry to ensure strings are terminated
     uint32_t padded_str_length = padded_word_count * 4;
     std::vector<char> encoded_string(padded_str_length, '\0');
@@ -2532,12 +2534,12 @@ class FindIntrinsicsUsed : public IRVisitor {
     }
 
 public:
-    std::unordered_set<std::string> intrinsics_used;
+    StringSet intrinsics_used;
     FindIntrinsicsUsed() = default;
 };
 
 // Map the SPIR-V builtin intrinsic name to its corresponding enum value
-SpvBuiltIn map_simt_builtin(const std::string &intrinsic_name) {
+SpvBuiltIn map_simt_builtin(std::string_view intrinsic_name) {
     if (starts_with(intrinsic_name, "Workgroup")) {
         return SpvBuiltInWorkgroupId;
     } else if (starts_with(intrinsic_name, "Local")) {
@@ -2562,7 +2564,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_entry_point(const Stmt &s, SpvId
         SpvStorageClass storage_class = SpvStorageClassInput;
         SpvId intrinsic_type_id = builder.declare_type(Type(Type::UInt, 32, 3));
         SpvId intrinsic_ptr_type_id = builder.declare_pointer_type(intrinsic_type_id, storage_class);
-        const std::string intrinsic_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + intrinsic_name;
+        const std::string intrinsic_var_name =
+            concat("k", std::to_string(kernel_index), "_", intrinsic_name);
         SpvId intrinsic_var_id = builder.declare_global_variable(intrinsic_var_name, intrinsic_ptr_type_id, storage_class);
         SpvId intrinsic_loaded_id = builder.reserve_id();
         builder.append(SpvFactory::load(intrinsic_type_id, intrinsic_loaded_id, intrinsic_var_id));
@@ -2583,7 +2586,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_entry_point(const Stmt &s, SpvId
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint32_t entry_point_index,
-                                                            const std::string &entry_point_name,
+                                                            std::string_view entry_point_name,
                                                             const std::vector<DeviceArgument> &args) {
 
     // Keep track of the descriptor set needed to bind this kernel's inputs / outputs
@@ -2789,7 +2792,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::compile(std::vector<char> &module) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
-                                                   const std::string &kernel_name,
+                                                   std::string_view kernel_name,
                                                    const std::vector<DeviceArgument> &args) {
     debug(2) << "Adding Vulkan kernel " << kernel_name << "\n";
 
@@ -2805,7 +2808,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
 
     // Declare the kernel function
     SpvId void_type_id = builder.declare_void_type();
-    SpvId kernel_func_id = builder.add_function(kernel_name, void_type_id);
+    SpvId kernel_func_id = builder.add_function(std::string{kernel_name}, void_type_id);
     SpvFunction kernel_func = builder.lookup_function(kernel_func_id);
     uint32_t entry_point_index = builder.current_module().entry_point_count();
     builder.enter_function(kernel_func);
@@ -2850,7 +2853,7 @@ void CodeGen_Vulkan_Dev::init_module() {
 }
 
 void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
-                                    const std::string &name,
+                                    std::string_view name,
                                     const std::vector<DeviceArgument> &args) {
 
     debug(2) << "CodeGen_Vulkan_Dev::add_kernel " << name << "\n";
@@ -2881,8 +2884,8 @@ std::string CodeGen_Vulkan_Dev::get_current_kernel_name() {
     return current_kernel_name;
 }
 
-std::string CodeGen_Vulkan_Dev::print_gpu_name(const std::string &name) {
-    return name;
+std::string CodeGen_Vulkan_Dev::print_gpu_name(std::string_view name) {
+    return std::string{name};
 }
 
 void CodeGen_Vulkan_Dev::dump() {

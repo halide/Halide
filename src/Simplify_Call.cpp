@@ -21,7 +21,7 @@ namespace {
 
 // Rewrite name(broadcast(args)) to broadcast(name(args)).
 // Assumes that scalars are implicitly broadcast.
-Expr lift_elementwise_broadcasts(Type type, const std::string &name, std::vector<Expr> args, Call::CallType call_type) {
+Expr lift_elementwise_broadcasts(Type type, std::string_view name, std::vector<Expr> args, Call::CallType call_type) {
     if (type.lanes() == 1) {
         return Expr();
     }
@@ -129,7 +129,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         const Type t = op->type;
 
         // We might swap from a right to left shift or the reverse.
-        std::string result_op = op->name;
+        std::string result_op{op->name};
 
         // If we know the sign of this shift, change it to an unsigned shift.
         if (b_info.min_defined && b_info.min >= 0) {
@@ -386,12 +386,12 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             // to match snprintf.
             char buf[64];  // Large enough to hold the biggest float literal.
             if (last && string_imm) {
-                new_args.back() = last->value + string_imm->value;
+                new_args.back() = Expr(concat(last->value, string_imm->value));
                 changed = true;
             } else if (int_imm) {
                 snprintf(buf, sizeof(buf), "%lld", (long long)int_imm->value);
                 if (last) {
-                    new_args.back() = last->value + buf;
+                    new_args.back() = Expr(concat(last->value, buf));
                 } else {
                     new_args.emplace_back(string(buf));
                 }
@@ -399,7 +399,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             } else if (last && float_imm) {
                 snprintf(buf, sizeof(buf), "%f", float_imm->value);
                 if (last) {
-                    new_args.back() = last->value + buf;
+                    new_args.back() = Expr(concat(last->value, buf));
                 } else {
                     new_args.emplace_back(string(buf));
                 }
@@ -646,7 +646,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             const FnType is_finite = [](double a) -> bool { return std::isfinite(a); };
             const FnType is_inf = [](double a) -> bool { return std::isinf(a); };
             const FnType is_nan = [](double a) -> bool { return std::isnan(a); };
-            static const std::unordered_map<std::string, FnType>
+            static const StringMap<FnType>
                 pure_externs_f1b = {
                     {"is_finite_f16", is_finite},
                     {"is_finite_f32", is_finite},
@@ -679,7 +679,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // TODO: should we handle fast_inverse and/or fast_inverse_sqrt here?
         {
             using FnType = double (*)(double);
-            static const std::unordered_map<std::string, FnType>
+            static const StringMap<FnType>
                 pure_externs_f1 = {
                     {"acos_f32", std::acos},
                     {"acosh_f32", std::acosh},
@@ -715,7 +715,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // Handle all the PureExtern/PureIntrinsic cases of float -> integerized-float
         {
             using FnType = double (*)(double);
-            static const std::unordered_map<std::string, FnType>
+            static const StringMap<FnType>
                 pure_externs_truncation = {
                     {"ceil_f32", std::ceil},
                     {"floor_f32", std::floor},
@@ -752,7 +752,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // Handle all the PureExtern cases of (float, float) -> integerized-float
         {
             using FnType = double (*)(double, double);
-            static const std::unordered_map<std::string, FnType>
+            static const StringMap<FnType>
                 pure_externs_f2 = {
                     {"atan2_f32", std::atan2},
                     {"pow_f32", std::pow},

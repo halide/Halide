@@ -33,15 +33,17 @@ extern "C" unsigned long __udivdi3(unsigned long a, unsigned long b);
 #endif
 
 #ifdef _WIN32
-void *get_symbol_address(const char *s) {
-    return (void *)GetProcAddress(GetModuleHandle(nullptr), s);
+void *get_symbol_address(std::string_view s) {
+    std::string str{s};
+    return (void *)GetProcAddress(GetModuleHandle(nullptr), str.c_str());
 }
 #else
-void *get_symbol_address(const char *s) {
+void *get_symbol_address(std::string_view s) {
     // Mac OS 10.11 fails to return a symbol address if nullptr or RTLD_DEFAULT
     // is passed to dlsym. This seems to work.
+    std::string str{s};
     void *handle = dlopen(nullptr, RTLD_LAZY);
-    void *result = dlsym(handle, s);
+    void *result = dlsym(handle, str.c_str());
     dlclose(handle);
     return result;
 }
@@ -153,7 +155,7 @@ public:
         }
     }
 
-    std::map<std::string, JITModule::Symbol> exports;
+    StringMap<JITModule::Symbol> exports;
     std::unique_ptr<llvm::LLVMContext> context = std::make_unique<llvm::LLVMContext>();
     std::unique_ptr<llvm::orc::LLJIT> JIT = nullptr;
     std::unique_ptr<llvm::orc::CtorDtorRunner> dtorRunner = nullptr;
@@ -177,7 +179,7 @@ void destroy<JITModuleContents>(const JITModuleContents *f) {
 namespace {
 
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
-JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &name) {
+JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, std::string_view name) {
     debug(2) << "JIT Compiling " << name << "\n";
 
     auto addr = JIT.lookup(name);
@@ -207,7 +209,7 @@ public:
 
     uint64_t getSymbolAddress(const std::string &name) override {
         for (const auto &module : modules) {
-            std::map<std::string, JITModule::Symbol>::const_iterator iter = module.exports().find(name);
+            auto iter = module.exports().find(name);
             if (iter == module.exports().end() && starts_with(name, "_")) {
                 iter = module.exports().find(name.substr(1));
             }
@@ -265,7 +267,9 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     llvm::reportAndResetTimings();
 }
 
-void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
+void JITModule::compile_module(std::unique_ptr<llvm::Module> m,
+                               std::string_view function_name,
+                               const Target &target,
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
 
@@ -388,15 +392,15 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     debug(1) << "JIT compiling " << module_name
              << " for " << target.to_string() << "\n";
 
-    std::map<std::string, Symbol> exports;
+    StringMap<Symbol> exports;
 
     Symbol entrypoint;
     Symbol argv_entrypoint;
     if (!function_name.empty()) {
         entrypoint = compile_and_get_function(*JIT, function_name);
-        exports[function_name] = entrypoint;
-        argv_entrypoint = compile_and_get_function(*JIT, function_name + "_argv");
-        exports[function_name + "_argv"] = argv_entrypoint;
+        exports.emplace(function_name, entrypoint);
+        argv_entrypoint = compile_and_get_function(*JIT, concat(function_name, "_argv"));
+        exports.emplace(concat(function_name, "_argv"), argv_entrypoint);
     }
 
     for (const auto &requested_export : requested_exports) {
@@ -419,7 +423,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 /*static*/
 JITModule JITModule::make_trampolines_module(const Target &target_arg,
                                              const std::map<std::string, JITExtern> &externs,
-                                             const std::string &suffix,
+                                             std::string_view suffix,
                                              const std::vector<JITModule> &deps) {
     Target target = target_arg;
     target.set_feature(Target::JIT);
@@ -429,7 +433,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg,
     std::vector<std::string> requested_exports;
     for (const std::pair<const std::string, JITExtern> &e : externs) {
         const std::string &callee_name = e.first;
-        const std::string wrapper_name = callee_name + suffix;
+        const std::string wrapper_name = concat(callee_name, suffix);
         const ExternCFunction &extern_c = e.second.extern_c_function();
         result.add_extern_for_export(callee_name, extern_c);
         requested_exports.push_back(wrapper_name);
@@ -444,12 +448,12 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg,
     return result;
 }
 
-const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
+const StringMap<JITModule::Symbol> &JITModule::exports() const {
     return jit_module->exports;
 }
 
-JITModule::Symbol JITModule::find_symbol_by_name(const std::string &name) const {
-    std::map<std::string, JITModule::Symbol>::iterator it = jit_module->exports.find(name);
+JITModule::Symbol JITModule::find_symbol_by_name(std::string_view name) const {
+    auto it = jit_module->exports.find(name);
     if (it != jit_module->exports.end()) {
         return it->second;
     }
@@ -505,14 +509,14 @@ void JITModule::add_dependency(JITModule &dep) {
     jit_module->dependencies.push_back(dep);
 }
 
-void JITModule::add_symbol_for_export(const std::string &name, const Symbol &extern_symbol) {
-    jit_module->exports[name] = extern_symbol;
+void JITModule::add_symbol_for_export(std::string_view name, const Symbol &extern_symbol) {
+    jit_module->exports.emplace(name, extern_symbol);
 }
 
-void JITModule::add_extern_for_export(const std::string &name,
+void JITModule::add_extern_for_export(std::string_view name,
                                       const ExternCFunction &extern_c_function) {
     Symbol symbol(extern_c_function.address());
-    jit_module->exports[name] = symbol;
+    jit_module->exports.emplace(name, symbol);
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {
@@ -687,7 +691,7 @@ int cuda_get_stream_handler(JITUserContext *context, void *cuda_context, void **
 }
 
 template<typename function_t>
-function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports, const char *hook_name, function_t hook) {
+function_t hook_function(const StringMap<JITModule::Symbol> &exports, const char *hook_name, function_t hook) {
     auto iter = exports.find(hook_name);
     internal_assert(iter != exports.end()) << "Failed to find function " << hook_name << "\n";
     function_t (*hook_setter)(function_t) =
@@ -861,7 +865,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         }
         module->setModuleIdentifier(module_name);
 
-        std::set<std::string> halide_exports_unique;
+        StringSet halide_exports_unique;
 
         // Enumerate the functions.
         for (auto &f : *module) {

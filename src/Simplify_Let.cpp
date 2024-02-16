@@ -10,7 +10,7 @@ using std::vector;
 namespace {
 
 class CountVarUses : public IRVisitor {
-    std::map<std::string, int> &var_uses;
+    StringMap<int> &var_uses;
 
     void visit(const Variable *var) override {
         var_uses[var->name]++;
@@ -29,13 +29,13 @@ class CountVarUses : public IRVisitor {
     using IRVisitor::visit;
 
 public:
-    CountVarUses(std::map<std::string, int> &var_uses)
+    CountVarUses(StringMap<int> &var_uses)
         : var_uses(var_uses) {
     }
 };
 
 template<typename StmtOrExpr>
-void count_var_uses(StmtOrExpr x, std::map<std::string, int> &var_uses) {
+void count_var_uses(StmtOrExpr x, StringMap<int> &var_uses) {
     CountVarUses counter(var_uses);
     x.accept(&counter);
 }
@@ -75,7 +75,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
         // Iteratively peel off certain operations from the let value and push them inside.
         f.new_value = f.value;
-        f.new_name = op->name + ".s";
+        f.new_name = concat(op->name, ".s");
         Expr new_var = Variable::make(f.new_value.type(), f.new_name);
         Expr replacement = new_var;
 
@@ -232,7 +232,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
     //   from different Frame objects.
     // - vars_used avoids dead lets being generated in cases where vars are
     //   seen as used by var_info, and then later removed.
-    std::map<std::string, int> vars_used;
+    StringMap<int> vars_used;
     count_var_uses(result, vars_used);
 
     for (auto it = frames.rbegin(); it != frames.rend(); it++) {

@@ -33,7 +33,7 @@ public:
      * with different kernels, which will all be accumulated into a single
      * source module shared by a given Halide pipeline. */
     void add_kernel(Stmt stmt,
-                    const std::string &name,
+                    std::string_view name,
                     const std::vector<DeviceArgument> &args) override;
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
@@ -47,7 +47,7 @@ public:
 
     void dump() override;
 
-    std::string print_gpu_name(const std::string &name) override;
+    std::string print_gpu_name(std::string_view name) override;
 
     std::string api_unique_name() override {
         return "opencl";
@@ -62,7 +62,7 @@ protected:
             vector_declaration_style = VectorDeclarationStyle::OpenCLSyntax;
         }
         void add_kernel(Stmt stmt,
-                        const std::string &name,
+                        std::string_view name,
                         const std::vector<DeviceArgument> &args);
 
     protected:
@@ -70,12 +70,12 @@ protected:
         std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace) override;
         std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_extern_call(const Call *op) override;
-        std::string print_array_access(const std::string &name,
+        std::string print_array_access(std::string_view name,
                                        const Type &type,
-                                       const std::string &id_index);
+                                       std::string_view id_index);
         void add_vector_typedefs(const std::set<Type> &vector_types) override;
 
-        std::string get_memory_space(const std::string &);
+        std::string get_memory_space(std::string_view);
 
         std::string shared_name;
 
@@ -183,7 +183,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, const 
 }
 
 namespace {
-string simt_intrinsic(const string &name) {
+string simt_intrinsic(std::string_view name) {
     if (ends_with(name, ".__thread_id_x")) {
         return "get_local_id(0)";
     } else if (ends_with(name, ".__thread_id_y")) {
@@ -254,7 +254,7 @@ const char *vector_elements = "0123456789ABCDEF";
 
 }  // namespace
 
-string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf) {
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(std::string_view buf) {
     if (buf == shared_name) {
         return "__local";
     } else {
@@ -480,9 +480,9 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_extern_call(const Call *op) {
     return rhs.str();
 }
 
-string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string &name,
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(std::string_view name,
                                                                 const Type &type,
-                                                                const string &id_index) {
+                                                                std::string_view id_index) {
     ostringstream rhs;
     bool type_cast_needed = !(allocations.contains(name) &&
                               allocations.get(name).type == type);
@@ -532,7 +532,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     // Get the rhs just for the cache.
     string array_indexing = print_array_access(op->name, op->type, id_index);
 
-    std::map<string, string>::iterator cached = cache.find(array_indexing);
+    StringMap<string>::iterator cached = cache.find(array_indexing);
     if (cached != cache.end()) {
         id = cached->second;
         return;
@@ -899,7 +899,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
 }
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
-                                    const string &name,
+                                    std::string_view name,
                                     const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_OpenCL_Dev::compile " << name << "\n";
 
@@ -932,7 +932,7 @@ struct BufferSize {
 }  // namespace
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
-                                                      const string &name,
+                                                      std::string_view name,
                                                       const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding OpenCL kernel " << name << "\n";
@@ -1093,7 +1093,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     }
 
     print(s);
-    close_scope("kernel " + name);
+    close_scope(concat("kernel ", name));
 
     for (const auto &arg : args) {
         // Remove buffer arguments from allocation scope
@@ -1251,8 +1251,8 @@ void CodeGen_OpenCL_Dev::dump() {
     std::cerr << src_stream.str() << "\n";
 }
 
-std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
-    return name;
+std::string CodeGen_OpenCL_Dev::print_gpu_name(std::string_view name) {
+    return std::string{name};
 }
 
 }  // namespace

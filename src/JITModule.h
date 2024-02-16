@@ -165,7 +165,7 @@ struct JITModule {
      */
     static JITModule make_trampolines_module(const Target &target,
                                              const std::map<std::string, JITExtern> &externs,
-                                             const std::string &suffix,
+                                             std::string_view suffix,
                                              const std::vector<JITModule> &deps);
 
     /** The exports map of a JITModule contains all symbols which are
@@ -177,7 +177,7 @@ struct JITModule {
      * contains no code itself but is just an exports maps providing
      * arbitrary pointers to functions or global variables to JITted
      * code. */
-    const std::map<std::string, Symbol> &exports() const;
+    const StringMap<Symbol> &exports() const;
 
     /** A pointer to the raw halide function. Its true type depends
      * on the Argument vector passed to CodeGen_LLVM::compile. Image
@@ -220,21 +220,21 @@ struct JITModule {
      * on this one. The Symbol structure provides both the address and
      * the LLVM type for the function, which allows type safe linkage of
      * extenal routines. */
-    void add_symbol_for_export(const std::string &name, const Symbol &extern_symbol);
+    void add_symbol_for_export(std::string_view name, const Symbol &extern_symbol);
     /** Registers a single function as available to modules which
      * depend on this one. This routine converts the ExternSignature
      * info into an LLVM type, which allows type safe linkage of
      * external routines. */
-    void add_extern_for_export(const std::string &name,
+    void add_extern_for_export(std::string_view name,
                                const ExternCFunction &extern_c_function);
 
     /** Look up a symbol by name in this module or its dependencies. */
-    Symbol find_symbol_by_name(const std::string &) const;
+    Symbol find_symbol_by_name(std::string_view) const;
 
     /** Take an llvm module and compile it. The requested exports will
         be available via the exports method. */
     void compile_module(std::unique_ptr<llvm::Module> mod,
-                        const std::string &function_name, const Target &target,
+                        std::string_view function_name, const Target &target,
                         const std::vector<JITModule> &dependencies = std::vector<JITModule>(),
                         const std::vector<std::string> &requested_exports = std::vector<std::string>());
 
@@ -281,7 +281,7 @@ public:
     static void release_all();
 };
 
-void *get_symbol_address(const char *s);
+void *get_symbol_address(std::string_view s);
 
 struct JITCache {
     Target jit_target;

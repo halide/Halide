@@ -16,14 +16,14 @@ namespace {
 /* Find all the internal halide calls in an expr */
 class FindCalls : public IRVisitor {
 public:
-    map<string, Function> calls;
+    StringMap<Function> calls;
 
     using IRVisitor::visit;
 
     void include_function(const Function &f) {
-        map<string, Function>::iterator iter = calls.find(f.name());
+        StringMap<Function>::iterator iter = calls.find(f.name());
         if (iter == calls.end()) {
-            calls[f.name()] = f;
+            calls.emplace(f.name(), f);
         } else {
             user_assert(iter->second.same_as(f))
                 << "Can't compile a pipeline using multiple functions with same name: "
@@ -41,9 +41,9 @@ public:
     }
 };
 
-void populate_environment_helper(const Function &f, map<string, Function> &env,
+void populate_environment_helper(const Function &f, StringMap<Function> &env,
                                  bool recursive = true, bool include_wrappers = false) {
-    map<string, Function>::const_iterator iter = env.find(f.name());
+    StringMap<Function>::const_iterator iter = env.find(f.name());
     if (iter != env.end()) {
         user_assert(iter->second.same_as(f))
             << "Can't compile a pipeline using multiple functions with same name: "
@@ -57,7 +57,7 @@ void populate_environment_helper(const Function &f, map<string, Function> &env,
         for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
                 Function g(arg.func);
-                calls.calls[g.name()] = g;
+                calls.calls.emplace(g.name(), g);
             }
         }
     }
@@ -65,14 +65,14 @@ void populate_environment_helper(const Function &f, map<string, Function> &env,
     if (include_wrappers) {
         for (const auto &it : f.schedule().wrappers()) {
             Function g(it.second);
-            calls.calls[g.name()] = g;
+            calls.calls.emplace(g.name(), g);
         }
     }
 
     if (!recursive) {
         env.insert(calls.calls.begin(), calls.calls.end());
     } else {
-        env[f.name()] = f;
+        env.emplace(f.name(), f);
 
         for (const auto &i : calls.calls) {
             populate_environment_helper(i.second, env, recursive, include_wrappers);
@@ -82,22 +82,22 @@ void populate_environment_helper(const Function &f, map<string, Function> &env,
 
 }  // namespace
 
-map<string, Function> build_environment(const vector<Function> &funcs) {
-    map<string, Function> env;
+StringMap<Function> build_environment(const vector<Function> &funcs) {
+    StringMap<Function> env;
     for (const Function &f : funcs) {
         populate_environment_helper(f, env, true, true);
     }
     return env;
 }
 
-map<string, Function> find_transitive_calls(const Function &f) {
-    map<string, Function> res;
+StringMap<Function> find_transitive_calls(const Function &f) {
+    StringMap<Function> res;
     populate_environment_helper(f, res, true, false);
     return res;
 }
 
-map<string, Function> find_direct_calls(const Function &f) {
-    map<string, Function> res;
+StringMap<Function> find_direct_calls(const Function &f) {
+    StringMap<Function> res;
     populate_environment_helper(f, res, false, false);
     return res;
 }

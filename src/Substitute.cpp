@@ -12,11 +12,11 @@ using std::string;
 namespace {
 
 class Substitute : public IRMutator {
-    const map<string, Expr> &replace;
+    const StringMap<Expr> &replace;
     Scope<> hidden;
 
-    Expr find_replacement(const string &s) {
-        map<string, Expr>::const_iterator iter = replace.find(s);
+    Expr find_replacement(std::string_view s) {
+        auto iter = replace.find(s);
         if (iter != replace.end() && !hidden.contains(s)) {
             return iter->second;
         } else {
@@ -25,7 +25,7 @@ class Substitute : public IRMutator {
     }
 
 public:
-    Substitute(const map<string, Expr> &m)
+    Substitute(const StringMap<Expr> &m)
         : replace(m) {
     }
 
@@ -100,26 +100,26 @@ public:
 
 }  // namespace
 
-Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
-    map<string, Expr> m;
-    m[name] = replacement;
+Expr substitute(std::string_view name, const Expr &replacement, const Expr &expr) {
+    StringMap<Expr> m;
+    m.emplace(name, replacement);
     Substitute s(m);
     return s.mutate(expr);
 }
 
-Stmt substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
-    map<string, Expr> m;
-    m[name] = replacement;
+Stmt substitute(std::string_view name, const Expr &replacement, const Stmt &stmt) {
+    StringMap<Expr> m;
+    m.emplace(name, replacement);
     Substitute s(m);
     return s.mutate(stmt);
 }
 
-Expr substitute(const map<string, Expr> &m, const Expr &expr) {
+Expr substitute(const StringMap<Expr> &m, const Expr &expr) {
     Substitute s(m);
     return s.mutate(expr);
 }
 
-Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
+Stmt substitute(const StringMap<Expr> &m, const Stmt &stmt) {
     Substitute s(m);
     return s.mutate(stmt);
 }
@@ -184,7 +184,7 @@ class GraphSubstitute : public IRGraphMutator {
     }
 
 public:
-    GraphSubstitute(const string &var, const Expr &value)
+    GraphSubstitute(std::string_view var, const Expr &value)
         : var(var), value(value) {
     }
 };
@@ -212,11 +212,11 @@ public:
 
 }  // namespace
 
-Expr graph_substitute(const string &name, const Expr &replacement, const Expr &expr) {
+Expr graph_substitute(std::string_view name, const Expr &replacement, const Expr &expr) {
     return GraphSubstitute(name, replacement).mutate(expr);
 }
 
-Stmt graph_substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
+Stmt graph_substitute(std::string_view name, const Expr &replacement, const Stmt &stmt) {
     return GraphSubstitute(name, replacement).mutate(stmt);
 }
 

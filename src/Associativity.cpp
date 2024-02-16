@@ -40,7 +40,7 @@ vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
 class ConvertSelfRef : public IRGraphMutator {
     using IRGraphMutator::visit;
 
-    const string &func;
+    std::string_view func;
     const vector<Expr> &args;
     // If that function has multiple values, which value does this
     // call node refer to?
@@ -82,7 +82,7 @@ class ConvertSelfRef : public IRGraphMutator {
     }
 
 public:
-    ConvertSelfRef(const string &f, const vector<Expr> &args, int idx,
+    ConvertSelfRef(std::string_view f, const vector<Expr> &args, int idx,
                    const vector<string> &x_names)
         : func(f), args(args), value_index(idx), op_x_names(x_names) {
     }
@@ -97,11 +97,11 @@ bool associative_op_pattern_match(const Expr &e,
                                   const vector<string> &x_names,
                                   const vector<string> &y_names,
                                   const Scope<> &x_scope,
-                                  map<string, Expr> &match) {
+                                  StringMap<Expr> &match) {
 
     internal_assert(e.type() == op.type())
         << "Expr has type " << e.type() << ", while pattern has type " << op.type() << "\n";
-    map<string, Expr> result;
+    StringMap<Expr> result;
     if (expr_match(op, e, result)) {
         debug(5) << "Found associative ops for " << e << " -> " << op
                  << ", y_part: " << result["y0"] << "\n";
@@ -145,7 +145,8 @@ bool associative_op_pattern_match(const Expr &e,
                 debug(5) << "Adding result: " << iter.first << " -> " << iter.second << "\n";
                 match.emplace(iter.first, iter.second);
             } else {
-                if (!equal(iter.first, match_iter->first) || !equal(iter.second, match_iter->second)) {
+                if (iter.first != match_iter->first ||
+                    !equal(iter.second, match_iter->second)) {
                     return false;
                 }
             }
@@ -172,7 +173,7 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 
     for (const AssociativePattern &pattern : table) {
         internal_assert(pattern.size() == op_x_names.size());
-        map<string, Expr> pattern_match;
+        StringMap<Expr> pattern_match;
         bool matched = true;
         // If any of element in 'pattern' does not match, try the next thing in
         // the table.
@@ -315,7 +316,7 @@ vector<set<int>> compute_subgraphs(vector<set<int>> dependencies) {
 
 }  // anonymous namespace
 
-AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Expr> exprs) {
+AssociativeOp prove_associativity(std::string_view f, vector<Expr> args, vector<Expr> exprs) {
     AssociativeOp assoc_op(exprs.size());
 
     for (Expr &arg : args) {
@@ -487,7 +488,7 @@ void check_associativity(const string &f, const vector<Expr> &args, const vector
         << "  Expect is associative: " << assoc_op.associative() << "\n"
         << "  instead of " << result.associative() << "\n";
     if (assoc_op.associative()) {
-        map<string, Expr> replacement;
+        StringMap<Expr> replacement;
         for (size_t i = 0; i < assoc_op.size(); ++i) {
             internal_assert(equal(result.pattern.identities[i], assoc_op.pattern.identities[i]))
                 << "Checking associativity: " << print_args(f, args, exprs) << "\n"

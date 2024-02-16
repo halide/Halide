@@ -97,7 +97,7 @@ struct Interval {
     static Expr make_min(const Expr &a, const Expr &b);
 
     /** Equivalent to same_as. Exists so that the autoscheduler can
-     * compare two map<string, Interval> for equality in order to
+     * compare two StringMap<Interval> for equality in order to
      * cache computations. */
     bool operator==(const Interval &other) const;
 
@@ -162,7 +162,7 @@ struct ConstantInterval {
     static ConstantInterval make_union(const ConstantInterval &a, const ConstantInterval &b);
 
     /** Equivalent to same_as. Exists so that the autoscheduler can
-     * compare two map<string, Interval> for equality in order to
+     * compare two StringMap<Interval> for equality in order to
      * cache computations. */
     bool operator==(const ConstantInterval &other) const;
 };

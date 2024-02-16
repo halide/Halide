@@ -94,7 +94,7 @@ Tile<1> get_1d_tile_index(const Expr &e) {
             v3 * (v2 + (v1 * stride_var)),
         };
 
-        std::map<std::string, Expr> matches;
+        StringMap<Expr> matches;
         for (const auto &pattern : patterns) {
             if (expr_match(pattern, r1->base, matches)) {
                 auto stride = std::move(matches["stride"]);
@@ -584,8 +584,8 @@ class ExtractTileOperations : public IRMutator {
             }
 
             user_assert(!in_allocate) << "Already in AMX allocation: " << amx_name;
-            ScopedValue<string> old_amx_name(amx_name, op->name + ".amx");
-            ScopedValue<string> old_tile_name(tile_name, op->name);
+            ScopedValue<string> old_amx_name(amx_name, concat(op->name, ".amx"));
+            ScopedValue<string> old_tile_name(tile_name, std::string{op->name});
             ScopedValue<bool> old_in_alloc(in_allocate, true);
             Stmt body = op->body;
 

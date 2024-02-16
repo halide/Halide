@@ -304,7 +304,7 @@ Stmt Simplify::visit(const Store *op) {
     // This should only occur inside branches that make the store unreachable,
     // but perhaps the branch was hard to prove constant true or false. This
     // provides an alternative mechanism to simplify these unreachable stores.
-    string alloc_extent_name = op->name + ".total_extent_bytes";
+    string alloc_extent_name = concat(op->name, ".total_extent_bytes");
     if (is_const_one(op->predicate) &&
         bounds_and_alignment_info.contains(alloc_extent_name)) {
         if (index_info.max_defined && index_info.max < 0) {
@@ -384,7 +384,8 @@ Stmt Simplify::visit(const Allocate *op) {
         total_extent_info.max -= 1;
     }
 
-    ScopedBinding<ExprInfo> b(bounds_and_alignment_info, op->name + ".total_extent_bytes", total_extent_info);
+    ScopedBinding<ExprInfo> b(bounds_and_alignment_info,
+                              concat(op->name, ".total_extent_bytes"), total_extent_info);
 
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition, nullptr);

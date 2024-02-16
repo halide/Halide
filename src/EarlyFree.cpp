@@ -18,8 +18,8 @@ public:
     string func;
     Stmt last_use;
 
-    FindLastUse(string s)
-        : func(std::move(s)) {
+    FindLastUse(std::string_view s)
+        : func(s) {
     }
 
 private:
