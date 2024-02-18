@@ -484,8 +484,8 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string &na
                                                                 const Type &type,
                                                                 const string &id_index) {
     ostringstream rhs;
-    bool type_cast_needed = !(allocations.contains(name) &&
-                              allocations.get(name).type == type);
+    const auto *alloc = allocations.find(name);
+    bool type_cast_needed = !(alloc && alloc->type == type);
 
     if (type_cast_needed) {
         rhs << "((" << get_memory_space(name) << " "
@@ -583,8 +583,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         // For atomicAdd, we check if op->value - store[index] is independent of store.
         // The atomicAdd operations in OpenCL only supports integers so we also check that.
         bool is_atomic_add = t.is_int_or_uint() && !expr_uses_var(delta, op->name);
-        bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name).type == t);
+        const auto *alloc = allocations.find(op->name);
+        bool type_cast_needed = !(alloc && alloc->type == t);
         auto print_store_var = [&]() {
             if (type_cast_needed) {
                 stream << "(("

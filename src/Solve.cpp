@@ -786,17 +786,15 @@ private:
         if (op->name == var) {
             uses_var = true;
             return op;
-        } else if (scope.contains(op->name)) {
-            CacheEntry e = scope.get(op->name);
-            uses_var = uses_var || e.uses_var;
-            failed = failed || e.failed;
-            return e.expr;
-        } else if (external_scope.contains(op->name)) {
-            Expr e = external_scope.get(op->name);
+        } else if (const CacheEntry *e = scope.find(op->name)) {
+            uses_var = uses_var || e->uses_var;
+            failed = failed || e->failed;
+            return e->expr;
+        } else if (const Expr *e = external_scope.find(op->name)) {
             // Expressions in the external scope haven't been solved
             // yet. This will either pull its solution from the cache,
             // or solve it and then put it into the cache.
-            return mutate(e);
+            return mutate(*e);
         } else {
             return op;
         }
@@ -948,13 +946,13 @@ class SolveForInterval : public IRVisitor {
 
     void visit(const Variable *op) override {
         internal_assert(op->type.is_bool());
-        if (scope.contains(op->name)) {
+        if (const Expr *e = scope.find(op->name)) {
             pair<string, bool> key = {op->name, target};
             auto it = solved_vars.find(key);
             if (it != solved_vars.end()) {
                 result = it->second;
             } else {
-                scope.get(op->name).accept(this);
+                e->accept(this);
                 solved_vars[key] = result;
             }
         } else {

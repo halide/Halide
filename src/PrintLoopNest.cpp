@@ -94,12 +94,16 @@ private:
         Expr min_val = op->min, extent_val = op->extent;
         const Variable *min_var = min_val.as<Variable>();
         const Variable *extent_var = extent_val.as<Variable>();
-        if (min_var && constants.contains(min_var->name)) {
-            min_val = constants.get(min_var->name);
+        if (min_var) {
+            if (const Expr *e = constants.find(min_var->name)) {
+                min_val = *e;
+            }
         }
 
-        if (extent_var && constants.contains(extent_var->name)) {
-            extent_val = constants.get(extent_var->name);
+        if (extent_var) {
+            if (const Expr *e = constants.find(extent_var->name)) {
+                extent_val = *e;
+            }
         }
 
         if (extent_val.defined() && is_const(extent_val) &&
@@ -151,9 +155,8 @@ private:
 
     void visit(const LetStmt *op) override {
         if (is_const(op->value)) {
-            constants.push(op->name, op->value);
+            ScopedBinding<Expr> bind(constants, op->name, op->value);
             op->body.accept(this);
-            constants.pop(op->name);
         } else {
             op->body.accept(this);
         }

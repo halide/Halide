@@ -27,8 +27,8 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
         return Expr();
     }
     if (const Variable *v = e.as<Variable>()) {
-        if (linear.contains(v->name)) {
-            return linear.get(v->name);
+        if (const Expr *e = linear.find(v->name)) {
+            return *e;
         } else {
             return make_zero(v->type);
         }
@@ -140,18 +140,17 @@ class StepForwards : public IRGraphMutator {
     using IRGraphMutator::visit;
 
     Expr visit(const Variable *op) override {
-        if (linear.contains(op->name)) {
-            Expr step = linear.get(op->name);
-            if (!step.defined()) {
+        if (const Expr *step = linear.find(op->name)) {
+            if (!step->defined()) {
                 // It's non-linear
                 success = false;
                 return op;
-            } else if (is_const_zero(step)) {
+            } else if (is_const_zero(*step)) {
                 // It's a known inner constant
                 return op;
             } else {
                 // It's linear
-                return Expr(op) + step;
+                return Expr(op) + *step;
             }
         } else {
             // It's some external constant

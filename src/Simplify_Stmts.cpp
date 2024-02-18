@@ -305,18 +305,18 @@ Stmt Simplify::visit(const Store *op) {
     // but perhaps the branch was hard to prove constant true or false. This
     // provides an alternative mechanism to simplify these unreachable stores.
     string alloc_extent_name = op->name + ".total_extent_bytes";
-    if (is_const_one(op->predicate) &&
-        bounds_and_alignment_info.contains(alloc_extent_name)) {
-        if (index_info.max_defined && index_info.max < 0) {
-            in_unreachable = true;
-            return Evaluate::make(unreachable());
-        }
-        const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
-        if (alloc_info.max_defined && index_info.min_defined) {
-            int index_min_bytes = index_info.min * op->value.type().bytes();
-            if (index_min_bytes > alloc_info.max) {
+    if (is_const_one(op->predicate)) {
+        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
+            if (index_info.max_defined && index_info.max < 0) {
                 in_unreachable = true;
                 return Evaluate::make(unreachable());
+            }
+            if (alloc_info->max_defined && index_info.min_defined) {
+                int index_min_bytes = index_info.min * op->value.type().bytes();
+                if (index_min_bytes > alloc_info->max) {
+                    in_unreachable = true;
+                    return Evaluate::make(unreachable());
+                }
             }
         }
     }

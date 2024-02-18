@@ -406,13 +406,12 @@ private:
 
         if (const_bound) {
             bounds_of_type(op->type);
-            if (scope.contains(op->name)) {
-                const Interval &scope_interval = scope.get(op->name);
-                if (scope_interval.has_upper_bound() && is_const(scope_interval.max)) {
-                    interval.max = Interval::make_min(interval.max, scope_interval.max);
+            if (const Interval *scope_interval = scope.find(op->name)) {
+                if (scope_interval->has_upper_bound() && is_const(scope_interval->max)) {
+                    interval.max = Interval::make_min(interval.max, scope_interval->max);
                 }
-                if (scope_interval.has_lower_bound() && is_const(scope_interval.min)) {
-                    interval.min = Interval::make_max(interval.min, scope_interval.min);
+                if (scope_interval->has_lower_bound() && is_const(scope_interval->min)) {
+                    interval.min = Interval::make_max(interval.min, scope_interval->min);
                 }
             }
 
@@ -429,8 +428,8 @@ private:
                 }
             }
         } else {
-            if (scope.contains(op->name)) {
-                interval = scope.get(op->name);
+            if (const Interval *in = scope.find(op->name)) {
+                interval = *in;
             } else if (op->type.is_vector()) {
                 // Uh oh, we need to take the min/max lane of some unknown vector. Treat as unbounded.
                 bounds_of_type(op->type);
@@ -2054,11 +2053,10 @@ private:
     int innermost_depth = -1;
 
     void visit(const Variable *op) override {
-        if (vars_depth.contains(op->name)) {
-            int depth = vars_depth.get(op->name);
-            if (depth > innermost_depth) {
+        if (const int *depth = vars_depth.find(op->name)) {
+            if (*depth > innermost_depth) {
                 innermost_var = op->name;
-                innermost_depth = depth;
+                innermost_depth = *depth;
             }
         }
     }
@@ -2545,16 +2543,17 @@ private:
                 // If this let stmt is a redefinition of a previous one, we should
                 // remove the old let stmt from the 'children' map since it is
                 // no longer valid at this point.
-                if ((f.vi.instance > 0) && let_stmts.contains(op->name)) {
-                    const Expr &val = let_stmts.get(op->name);
-                    CollectVars collect(op->name);
-                    val.accept(&collect);
-                    f.old_let_vars = collect.vars;
+                if (f.vi.instance > 0) {
+                    if (const Expr *val = let_stmts.find(op->name)) {
+                        CollectVars collect(op->name);
+                        val->accept(&collect);
+                        f.old_let_vars = collect.vars;
 
-                    VarInstance old_vi = VarInstance(f.vi.var, f.vi.instance - 1);
-                    for (const auto &v : f.old_let_vars) {
-                        internal_assert(vars_renaming.count(v));
-                        children[get_var_instance(v)].erase(old_vi);
+                        VarInstance old_vi = VarInstance(f.vi.var, f.vi.instance - 1);
+                        for (const auto &v : f.old_let_vars) {
+                            internal_assert(vars_renaming.count(v));
+                            children[get_var_instance(v)].erase(old_vi);
+                        }
                     }
                 }
                 let_stmts.push(op->name, op->value);
@@ -2756,17 +2755,17 @@ private:
                                                       expr_uses_var(box[i].min, l.min_name))) ||
                         (box[i].has_upper_bound() && (expr_uses_var(box[i].max, l.max_name) ||
                                                       expr_uses_var(box[i].max, l.min_name)))) {
-                        internal_assert(let_stmts.contains(l.var));
-                        const Expr &val = let_stmts.get(l.var);
-                        v_bound = bounds_of_expr_in_scope(val, scope, func_bounds);
+                        const Expr *val = let_stmts.find(l.var);
+                        internal_assert(val);
+                        v_bound = bounds_of_expr_in_scope(*val, scope, func_bounds);
                         bool fixed = v_bound.min.same_as(v_bound.max);
                         v_bound.min = simplify(v_bound.min);
                         v_bound.max = fixed ? v_bound.min : simplify(v_bound.max);
 
-                        internal_assert(scope.contains(l.var));
-                        const Interval &old_bound = scope.get(l.var);
-                        v_bound.max = simplify(min(v_bound.max, old_bound.max));
-                        v_bound.min = simplify(max(v_bound.min, old_bound.min));
+                        const Interval *old_bound = scope.find(l.var);
+                        internal_assert(old_bound);
+                        v_bound.max = simplify(min(v_bound.max, old_bound->max));
+                        v_bound.min = simplify(max(v_bound.min, old_bound->min));
                     }
 
                     if (box[i].has_lower_bound()) {
@@ -3017,14 +3016,14 @@ private:
         }
 
         Expr min_val, max_val;
-        if (scope.contains(op->name + ".loop_min")) {
-            min_val = scope.get(op->name + ".loop_min").min;
+        if (const Interval *in = scope.find(op->name + ".loop_min")) {
+            min_val = in->min;
         } else {
             min_val = bounds_of_expr_in_scope(op->min, scope, func_bounds).min;
         }
 
-        if (scope.contains(op->name + ".loop_max")) {
-            max_val = scope.get(op->name + ".loop_max").max;
+        if (const Interval *in = scope.find(op->name + ".loop_max")) {
+            max_val = in->max;
         } else {
             max_val = bounds_of_expr_in_scope(op->extent, scope, func_bounds).max;
             max_val += bounds_of_expr_in_scope(op->min, scope, func_bounds).max;
