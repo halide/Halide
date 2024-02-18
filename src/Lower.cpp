@@ -69,6 +69,7 @@
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "StrictifyFloat.h"
+#include "StripAsserts.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
@@ -429,6 +430,12 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Hoisting prefetches...\n";
     s = hoist_prefetches(s);
     log("Lowering after hoisting prefetches:", s);
+
+    if (t.has_feature(Target::NoAsserts)) {
+        debug(1) << "Stripping asserts...\n";
+        s = strip_asserts(s);
+        log("Lowering after stripping asserts:", s);
+    }
 
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";

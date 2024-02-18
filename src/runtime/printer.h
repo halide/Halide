@@ -184,8 +184,8 @@ namespace {
 template<PrinterType printer_type, uint64_t buffer_length = default_printer_buffer_length>
 class HeapPrinter : public PrinterBase {
 public:
-    NEVER_INLINE explicit HeapPrinter(void *user_context)
-        : PrinterBase(user_context, (char *)malloc(buffer_length), buffer_length) {
+    NEVER_INLINE explicit HeapPrinter(void *user_context_)
+        : PrinterBase(user_context_, (char *)malloc(buffer_length), buffer_length) {
         if (!start) {
             allocation_error();
         }
@@ -247,8 +247,8 @@ class StackPrinter : public PrinterBase {
     char scratch[buffer_length];
 
 public:
-    explicit StackPrinter(void *user_context)
-        : PrinterBase(user_context, scratch, buffer_length) {
+    explicit StackPrinter(void *user_context_)
+        : PrinterBase(user_context_, scratch, buffer_length) {
         static_assert(buffer_length <= 256, "StackPrinter is meant only for small buffer sizes; you are probably making a mistake.");
     }
 };
