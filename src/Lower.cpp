@@ -275,7 +275,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after storage flattening:", s);
 
     debug(1) << "Adding atomic mutex allocation...\n";
-    s = add_atomic_mutex(s, env);
+    s = add_atomic_mutex(s, outputs);
     log("Lowering after adding atomic mutex allocation:", s);
 
     debug(1) << "Unpacking buffer arguments...\n";
