@@ -347,7 +347,7 @@ struct ScopedBinding {
     ScopedBinding(const ScopedBinding &that) = delete;
     ScopedBinding(ScopedBinding &&that) noexcept
         : scope(that.scope),
-          token(std::move(that.token)) {
+          token(that.token) {
         // The move constructor must null out scope, so we don't try to pop it
         that.scope = nullptr;
     }
@@ -377,7 +377,7 @@ struct ScopedBinding<void> {
     ScopedBinding(const ScopedBinding &that) = delete;
     ScopedBinding(ScopedBinding &&that) noexcept
         : scope(that.scope),
-          token(std::move(that.token)) {
+          token(that.token) {
         // The move constructor must null out scope, so we don't try to pop it
         that.scope = nullptr;
     }
