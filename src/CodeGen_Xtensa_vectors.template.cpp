@@ -20,8 +20,6 @@ using common_uint32x32_t __attribute__((ext_vector_type(32))) = uint32_t;
 #error "Unsupported value for XCHAL_VISION_TYPE"
 #endif
 
-using int48_t = xb_int48;
-using float16_t = xb_f16;
 using native_vector_i8 = xb_vec2Nx8;
 using native_vector_u8 = xb_vec2Nx8U;
 using native_mask_i8 = vbool2N;
@@ -308,9 +306,11 @@ using native_vector_i48_x2 = MultipleOfNativeVector<native_vector_i48, 2>;
 
 using native_vector_f16_x2 = MultipleOfNativeVector<native_vector_f16, 2>;
 using native_vector_f16_x4 = MultipleOfNativeVector<native_vector_f16, 4>;
+using native_vector_f16_x8 = MultipleOfNativeVector<native_vector_f16, 8>;
 
 using native_vector_f32_x2 = MultipleOfNativeVector<native_vector_f32, 2>;
 using native_vector_f32_x4 = MultipleOfNativeVector<native_vector_f32, 4>;
+using native_vector_f32_x8 = MultipleOfNativeVector<native_vector_f32, 8>;
 
 using native_vector_i64_x2 = MultipleOfNativeVector<native_vector_i64, 2>;
 
@@ -1381,6 +1381,15 @@ HALIDE_ALWAYS_INLINE native_vector_f16_x4 halide_xtensa_interleave_f16(const nat
                                 IVP_SELNXF16I(b.native_vector[1], a.native_vector[1], IVP_SELI_16B_INTERLEAVE_1_HI));
 }
 
+HALIDE_ALWAYS_INLINE native_vector_f16_x4 halide_xtensa_interleave_f16(const native_vector_f16 &a, const native_vector_f16 &b, const native_vector_f16 &c, const native_vector_f16 &d) {
+    return native_vector_f16_x4(
+        native_vector_f16_x4::from_native_vector,
+        IVP_SELNXF16I(b, a, IVP_SELI_16B_INTERLEAVE_1_LO),
+        IVP_SELNXF16I(b, a, IVP_SELI_16B_INTERLEAVE_1_HI),
+        IVP_SELNXF16I(d, c, IVP_SELI_16B_INTERLEAVE_1_LO),
+        IVP_SELNXF16I(d, c, IVP_SELI_16B_INTERLEAVE_1_HI));
+}
+
 HALIDE_ALWAYS_INLINE native_vector_i32_x2 halide_xtensa_interleave_i32(const native_vector_i32 &a, const native_vector_i32 &b) {
     return native_vector_i32_x2(
         native_vector_i32_x2::from_native_vector,
@@ -1715,6 +1724,21 @@ HALIDE_ALWAYS_INLINE native_vector_f16 halide_xtensa_extract_3_of_4_f16(const na
                              halide_xtensa_deinterleave_odd_f16(native_vector_f16_x2(native_vector_f16_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))));
 }
 
+HALIDE_ALWAYS_INLINE native_vector_f16 halide_xtensa_extract_0_of_8_f16(const native_vector_f16_x8 &a) {
+    return halide_xtensa_deinterleave_even_f16(
+        native_vector_f16_x2(native_vector_f16_x2::from_native_vector,
+                             halide_xtensa_extract_0_of_4_f16(native_vector_f16_x4(native_vector_f16_x4::from_native_vector,
+                                                                                   a.native_vector[0],
+                                                                                   a.native_vector[1],
+                                                                                   a.native_vector[2],
+                                                                                   a.native_vector[3])),
+                             halide_xtensa_extract_0_of_4_f16(native_vector_f16_x4(native_vector_f16_x4::from_native_vector,
+                                                                                   a.native_vector[4],
+                                                                                   a.native_vector[5],
+                                                                                   a.native_vector[6],
+                                                                                   a.native_vector[7]))));
+}
+
 HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_deinterleave_even_f32(const native_vector_f32_x2 &a) {
     return IVP_SELN_2XF32I(a.native_vector[1], a.native_vector[0], IVP_SELI_32B_EXTRACT_1_OF_2_OFF_0);
 }
@@ -1763,6 +1787,21 @@ HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_extract_3_of_4_f32(const na
         native_vector_f32_x2(native_vector_f32_x2::from_native_vector,
                              halide_xtensa_deinterleave_odd_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
                              halide_xtensa_deinterleave_odd_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_extract_0_of_8_f32(const native_vector_f32_x8 &a) {
+    return halide_xtensa_deinterleave_even_f32(
+        native_vector_f32_x2(native_vector_f32_x2::from_native_vector,
+                             halide_xtensa_extract_0_of_4_f32(native_vector_f32_x4(native_vector_f32_x4::from_native_vector,
+                                                                                   a.native_vector[0],
+                                                                                   a.native_vector[1],
+                                                                                   a.native_vector[2],
+                                                                                   a.native_vector[3])),
+                             halide_xtensa_extract_0_of_4_f32(native_vector_f32_x4(native_vector_f32_x4::from_native_vector,
+                                                                                   a.native_vector[4],
+                                                                                   a.native_vector[5],
+                                                                                   a.native_vector[6],
+                                                                                   a.native_vector[7]))));
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_extract_0_of_4_i16(const native_vector_i16_x4 &a) {
