@@ -788,6 +788,17 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
 
+    // Figure out which pure vars were used in this update definition.
+    std::set<string> pure_vars_used;
+    internal_assert(args.size() == dim_vars.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        if (const Internal::Variable *var = args[i].as<Variable>()) {
+            if (var->name == dim_vars[i].name()) {
+                pure_vars_used.insert(var->name);
+            }
+        }
+    }
+
     // Check whether the operator is associative and determine the operator and
     // its identity for each value in the definition if it is a Tuple
     const auto &prover_result = prove_associativity(func_name, args, values);
@@ -1012,16 +1023,20 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 
     // Determine the dims of the new update definition
 
+    // The new update definition needs all the pure vars of the Func, but the
+    // one we're rfactoring may not have used them all. Add any missing ones to
+    // the dims list.
+
     // Add pure Vars from the original init definition to the dims list
     // if they are not already in the list
     for (const Var &v : dim_vars) {
-        const auto &iter = std::find_if(dims.begin(), dims.end(),
-                                        [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
-        if (iter == dims.end()) {
+        if (!pure_vars_used.count(v.name())) {
             Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
+            // Insert it just before Var::outermost
             dims.insert(dims.end() - 1, d);
         }
     }
+
     // Then, we need to remove lifted RVars from the dims list
     for (const string &rv : rvars_removed) {
         remove(rv);
@@ -1887,6 +1902,11 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     }
 
     dims_old.swap(dims);
+
+    // We're not allowed to reorder Var::outermost inwards (rfactor assumes it's
+    // the last one).
+    user_assert(dims.back().var == Var::outermost().name())
+        << "Var::outermost() may not be reordered inside any other var.\n";
 
     return *this;
 }
