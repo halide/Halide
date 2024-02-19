@@ -475,10 +475,11 @@ class LowerWarpShuffles : public IRMutator {
         if ((lt && equal(lt->a, this_lane) && is_const(lt->b)) ||
             (le && equal(le->a, this_lane) && is_const(le->b))) {
             Expr condition = mutate(op->condition);
-            Interval *interval = bounds.shallow_find(this_lane_name);
-            internal_assert(interval);
-            interval->max = lt ? simplify(lt->b - 1) : le->b;
-            ScopedBinding<Interval> bind(bounds, this_lane_name, *interval);
+            const Interval *in = bounds.find(this_lane_name);
+            internal_assert(in);
+            Interval interval = *in;
+            interval.max = lt ? simplify(lt->b - 1) : le->b;
+            ScopedBinding<Interval> bind(bounds, this_lane_name, interval);
             Stmt then_case = mutate(op->then_case);
             Stmt else_case = mutate(op->else_case);
             return IfThenElse::make(condition, then_case, else_case);
