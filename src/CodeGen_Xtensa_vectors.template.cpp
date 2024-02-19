@@ -1382,12 +1382,17 @@ HALIDE_ALWAYS_INLINE native_vector_f16_x4 halide_xtensa_interleave_f16(const nat
 }
 
 HALIDE_ALWAYS_INLINE native_vector_f16_x4 halide_xtensa_interleave_f16(const native_vector_f16 &a, const native_vector_f16 &b, const native_vector_f16 &c, const native_vector_f16 &d) {
+    const native_vector_f16 ab0 = IVP_SELNXF16I(b, a, IVP_SELI_16B_INTERLEAVE_1_LO);
+    const native_vector_f16 ab1 = IVP_SELNXF16I(b, a, IVP_SELI_16B_INTERLEAVE_1_HI);
+    const native_vector_f16 cd0 = IVP_SELNXF16I(d, c, IVP_SELI_16B_INTERLEAVE_1_LO);
+    const native_vector_f16 cd1 = IVP_SELNXF16I(d, c, IVP_SELI_16B_INTERLEAVE_1_HI);
+
     return native_vector_f16_x4(
         native_vector_f16_x4::from_native_vector,
-        IVP_SELNXF16I(b, a, IVP_SELI_16B_INTERLEAVE_1_LO),
-        IVP_SELNXF16I(b, a, IVP_SELI_16B_INTERLEAVE_1_HI),
-        IVP_SELNXF16I(d, c, IVP_SELI_16B_INTERLEAVE_1_LO),
-        IVP_SELNXF16I(d, c, IVP_SELI_16B_INTERLEAVE_1_HI));
+        IVP_SELNXF16I(cd0, ab0, IVP_SELI_16B_INTERLEAVE_2_LO),
+        IVP_SELNXF16I(cd0, ab0, IVP_SELI_16B_INTERLEAVE_2_HI),
+        IVP_SELNXF16I(cd1, ab1, IVP_SELI_16B_INTERLEAVE_2_LO),
+        IVP_SELNXF16I(cd1, ab1, IVP_SELI_16B_INTERLEAVE_2_HI));
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i32_x2 halide_xtensa_interleave_i32(const native_vector_i32 &a, const native_vector_i32 &b) {
