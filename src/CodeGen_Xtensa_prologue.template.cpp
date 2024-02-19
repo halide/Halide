@@ -70,4 +70,7 @@ public:
     }
 };
 
+using int48_t = xb_int48;
+using float16_t = xb_f16;
+
 }  // namespace
