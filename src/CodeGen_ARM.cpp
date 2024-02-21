@@ -1153,8 +1153,6 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
-    // TODO(<issue needed>): Resolve whether this is still needed.
-#if 1
     // LLVM fptoui generates fcvtzs or fcvtzu in inconsistent way
     if (op->value.type().is_float() && op->type.is_int_or_uint()) {
         if (Value *v = call_overloaded_intrin(op->type, "fp_to_int", {op->value})) {
@@ -1162,18 +1160,6 @@ void CodeGen_ARM::visit(const Cast *op) {
             return;
         }
     }
-#else
-    // LLVM fptoui generates fcvtzs if src is fp16 scalar else fcvtzu.
-    // To avoid that, we use neon intrinsic explicitly.
-    if (is_float16_and_has_feature(op->value.type())) {
-        if (op->type.is_int_or_uint() && op->type.bits() == 16) {
-            value = call_overloaded_intrin(op->type, "fp_to_int", {op->value});
-            if (value) {
-                return;
-            }
-        }
-    }
-#endif
 
     CodeGen_Posix::visit(op);
 }

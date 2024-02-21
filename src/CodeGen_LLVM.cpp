@@ -4771,7 +4771,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
             bool formal_is_fixed = isa<FixedVectorType>(formal_param_type);
 
             // Apparently the bitcast in the else branch below can
-            // change the scalar type and vector length togehter so
+            // change the scalar type and vector length together so
             // long as the total bits are the same. E.g. on HVX,
             // <128 x i16> to <64 x i32>.  This is probably a bug, but
             // it seems to be allowed so it is also supported in the
