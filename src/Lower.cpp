@@ -121,7 +121,7 @@ public:
         if (time_lowering_passes) {
             debug(0) << "Lowering pass runtimes:\n";
             std::sort(timings.begin(), timings.end());
-            for (auto p : timings) {
+            for (const auto &p : timings) {
                 debug(0) << " " << p.first << " ms : " << p.second << "\n";
             }
         }
