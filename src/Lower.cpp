@@ -245,7 +245,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after discarding safe promises:", s);
 
     debug(1) << "Dynamically skipping stages...\n";
-    s = skip_stages(s, order);
+    s = skip_stages(s, outputs, order, env);
     log("Lowering after dynamically skipping stages:", s);
 
     debug(1) << "Forking asynchronous producers...\n";
