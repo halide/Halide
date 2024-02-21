@@ -311,7 +311,7 @@ protected:
             const Call *c = last_arg.as<Call>();
             internal_assert(c &&
                             c->is_intrinsic(Call::make_struct) &&
-                            c->args.size() >= 1)
+                            !c->args.empty())
                 << last_arg;
             const Variable *v = c->args[0].as<Variable>();
             internal_assert(v);
@@ -352,8 +352,8 @@ protected:
 
     void merge_func_info(std::map<std::string, FuncInfo> *old,
                          const std::map<std::string, FuncInfo> &new_info,
-                         Expr used = Expr{},
-                         Expr evaluated = Expr{}) {
+                         const Expr &used = Expr{},
+                         const Expr &evaluated = Expr{}) {
         for (const auto &it : new_info) {
             FuncInfo fi = it.second;
             if (used.defined()) {
@@ -416,7 +416,7 @@ protected:
 
             using IRMutator::visit;
 
-            Expr visit(const Call *op) {
+            Expr visit(const Call *op) override {
                 if (op->call_type == Call::Halide && op->name == func) {
                     return cast(op->type, var);
                 }
@@ -745,7 +745,7 @@ class StripSkipStagesMarker : public IRMutator {
 
 }  // namespace
 
-Stmt skip_stages(Stmt stmt,
+Stmt skip_stages(const Stmt &stmt,
                  const std::vector<Function> &outputs,
                  const std::vector<std::string> &order,
                  const std::map<std::string, Function> &env) {

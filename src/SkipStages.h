@@ -21,7 +21,8 @@ class Function;
  * all reads of each buffer allocated, and inferring some condition
  * that tells us if the reads occur. If the condition is non-trivial,
  * inject ifs that guard the production. */
-Stmt skip_stages(Stmt s, const std::vector<Function> &outputs,
+Stmt skip_stages(const Stmt &s,
+                 const std::vector<Function> &outputs,
                  const std::vector<std::string> &order,
                  const std::map<std::string, Function> &env);
 
