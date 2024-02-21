@@ -156,6 +156,7 @@ set(HEADER_FILES
     StorageFlattening.h
     StorageFolding.h
     StrictifyFloat.h
+    StripAsserts.h
     Substitute.h
     Target.h
     Tracing.h
@@ -340,6 +341,7 @@ set(SOURCE_FILES
     StorageFlattening.cpp
     StorageFolding.cpp
     StrictifyFloat.cpp
+    StripAsserts.cpp
     Substitute.cpp
     Target.cpp
     Tracing.cpp

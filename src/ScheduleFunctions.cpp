@@ -1368,11 +1368,7 @@ private:
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
-        if (target.has_feature(Target::NoAsserts)) {
-            return s;
-        } else {
-            return inject_explicit_bounds(s, func);
-        }
+        return inject_explicit_bounds(s, func);
     }
 
     Stmt build_realize_function_from_group(Stmt s, int func_index) {

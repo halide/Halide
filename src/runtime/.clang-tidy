@@ -73,6 +73,8 @@ Checks: >
     bugprone-use-after-move,
     bugprone-virtual-near-miss,
 
+    clang-diagnostic-shadow-field,
+
     misc-confusable-identifiers,
     -misc-const-correctness,
     -misc-definitions-in-headers,
