@@ -313,7 +313,7 @@ Target calculate_host_target() {
                     vector_bits = 512;
                 } else if (info[1] & avx10_256) {
                     vector_bits = 256;
-                } if (info[1] & avx10_128) {  // Not clear it is worth turning on AVX10 for this case.
+                } else if (info[1] & avx10_128) {  // Not clear it is worth turning on AVX10 for this case.
                     vector_bits = 128;
                 }
             }
