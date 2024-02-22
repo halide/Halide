@@ -280,8 +280,8 @@ class DerivativeBounds : public IRVisitor {
     void visit(const Variable *op) override {
         if (op->name == var) {
             result = ConstantInterval::single_point(1);
-        } else if (scope.contains(op->name)) {
-            result = scope.get(op->name);
+        } else if (const auto *r = scope.find(op->name)) {
+            result = *r;
         } else {
             result = ConstantInterval::single_point(0);
         }

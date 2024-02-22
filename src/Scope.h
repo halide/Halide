@@ -150,7 +150,39 @@ public:
         return iter->second.top_ref();
     }
 
-    /** Tests if a name is in scope */
+    /** Returns a const pointer to an entry if it exists in this scope or any
+     * containing scope, or nullptr if it does not. Use this instead of if
+     * (scope.contains(foo)) { ... scope.get(foo) ... } to avoid doing two
+     * lookups. */
+    template<typename T2 = T,
+             typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+    const T2 *find(const std::string &name) const {
+        typename std::map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
+        if (iter == table.end() || iter->second.empty()) {
+            if (containing_scope) {
+                return containing_scope->find(name);
+            } else {
+                return nullptr;
+            }
+        }
+        return &(iter->second.top_ref());
+    }
+
+    /** A version of find that returns a non-const pointer, but ignores
+     * containing scope. */
+    template<typename T2 = T,
+             typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
+    T2 *shallow_find(const std::string &name) {
+        typename std::map<std::string, SmallStack<T>>::iterator iter = table.find(name);
+        if (iter == table.end() || iter->second.empty()) {
+            return nullptr;
+        } else {
+            return &(iter->second.top_ref());
+        }
+    }
+
+    /** Tests if a name is in scope. If you plan to use the value if it is, call
+     * find instead. */
     bool contains(const std::string &name) const {
         typename std::map<std::string, SmallStack<T>>::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
@@ -173,19 +205,28 @@ public:
         }
     }
 
-    /** Add a new (name, value) pair to the current scope. Hide old
-     * values that have this name until we pop this name.
+    struct PushToken {
+        typename std::map<std::string, SmallStack<T>>::iterator iter;
+    };
+
+    /** Add a new (name, value) pair to the current scope. Hide old values that
+     * have this name until we pop this name. Returns a token that can be used
+     * to pop the same value without doing a fresh lookup.
      */
     template<typename T2 = T,
              typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
-    void push(const std::string &name, T2 &&value) {
-        table[name].push(std::forward<T2>(value));
+    PushToken push(const std::string &name, T2 &&value) {
+        auto it = table.try_emplace(name).first;
+        it->second.push(std::forward<T2>(value));
+        return PushToken{it};
     }
 
     template<typename T2 = T,
              typename = typename std::enable_if<std::is_same<T2, void>::value>::type>
-    void push(const std::string &name) {
-        table[name].push();
+    PushToken push(const std::string &name) {
+        auto it = table.try_emplace(name).first;
+        it->second.push();
+        return PushToken{it};
     }
 
     /** A name goes out of scope. Restore whatever its old value
@@ -198,6 +239,14 @@ public:
         iter->second.pop();
         if (iter->second.empty()) {
             table.erase(iter);
+        }
+    }
+
+    /** Pop a name using a token returned by push instead of a string. */
+    void pop(PushToken p) {
+        p.iter->second.pop();
+        if (p.iter->second.empty()) {
+            table.erase(p.iter);
         }
     }
 
@@ -271,20 +320,17 @@ std::ostream &operator<<(std::ostream &stream, const Scope<T> &s) {
 template<typename T = void>
 struct ScopedBinding {
     Scope<T> *scope = nullptr;
-    std::string name;
+    typename Scope<T>::PushToken token;
 
     ScopedBinding() = default;
 
     ScopedBinding(Scope<T> &s, const std::string &n, T value)
-        : scope(&s), name(n) {
-        scope->push(name, std::move(value));
+        : scope(&s), token(scope->push(n, std::move(value))) {
     }
 
     ScopedBinding(bool condition, Scope<T> &s, const std::string &n, const T &value)
-        : scope(condition ? &s : nullptr), name(n) {
-        if (condition) {
-            scope->push(name, value);
-        }
+        : scope(condition ? &s : nullptr),
+          token(condition ? scope->push(n, value) : typename Scope<T>::PushToken{}) {
     }
 
     bool bound() const {
@@ -293,7 +339,7 @@ struct ScopedBinding {
 
     ~ScopedBinding() {
         if (scope) {
-            scope->pop(name);
+            scope->pop(token);
         }
     }
 
@@ -301,7 +347,7 @@ struct ScopedBinding {
     ScopedBinding(const ScopedBinding &that) = delete;
     ScopedBinding(ScopedBinding &&that) noexcept
         : scope(that.scope),
-          name(std::move(that.name)) {
+          token(that.token) {
         // The move constructor must null out scope, so we don't try to pop it
         that.scope = nullptr;
     }
@@ -313,20 +359,17 @@ struct ScopedBinding {
 template<>
 struct ScopedBinding<void> {
     Scope<> *scope;
-    std::string name;
+    Scope<>::PushToken token;
     ScopedBinding(Scope<> &s, const std::string &n)
-        : scope(&s), name(n) {
-        scope->push(name);
+        : scope(&s), token(scope->push(n)) {
     }
     ScopedBinding(bool condition, Scope<> &s, const std::string &n)
-        : scope(condition ? &s : nullptr), name(n) {
-        if (condition) {
-            scope->push(name);
-        }
+        : scope(condition ? &s : nullptr),
+          token(condition ? scope->push(n) : Scope<>::PushToken{}) {
     }
     ~ScopedBinding() {
         if (scope) {
-            scope->pop(name);
+            scope->pop(token);
         }
     }
 
@@ -334,7 +377,7 @@ struct ScopedBinding<void> {
     ScopedBinding(const ScopedBinding &that) = delete;
     ScopedBinding(ScopedBinding &&that) noexcept
         : scope(that.scope),
-          name(std::move(that.name)) {
+          token(that.token) {
         // The move constructor must null out scope, so we don't try to pop it
         that.scope = nullptr;
     }

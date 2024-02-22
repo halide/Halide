@@ -34,8 +34,8 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
             bounds.max = *i_max;
         }
 
-        if (ai->contains(iter.name())) {
-            bounds.alignment = ai->get(iter.name());
+        if (const auto *a = ai->find(iter.name())) {
+            bounds.alignment = *a;
         }
 
         if (bounds.min_defined || bounds.max_defined || bounds.alignment.modulus != 1) {
@@ -74,18 +74,18 @@ std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vect
 void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
     for (size_t i = 0; i < dimensions; i++) {
         string stride = name + ".stride." + std::to_string(i);
-        if (var_info.contains(stride)) {
-            var_info.ref(stride).old_uses++;
+        if (auto *info = var_info.shallow_find(stride)) {
+            info->old_uses++;
         }
 
         string min = name + ".min." + std::to_string(i);
-        if (var_info.contains(min)) {
-            var_info.ref(min).old_uses++;
+        if (auto *info = var_info.shallow_find(min)) {
+            info->old_uses++;
         }
     }
 
-    if (var_info.contains(name)) {
-        var_info.ref(name).old_uses++;
+    if (auto *info = var_info.shallow_find(name)) {
+        info->old_uses++;
     }
 }
 
@@ -187,8 +187,8 @@ void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
     ExprInfo b;
     b.max_defined = true;
     b.max = val;
-    if (simplify->bounds_and_alignment_info.contains(v->name)) {
-        b.intersect(simplify->bounds_and_alignment_info.get(v->name));
+    if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+        b.intersect(*info);
     }
     simplify->bounds_and_alignment_info.push(v->name, b);
     bounds_pop_list.push_back(v);
@@ -198,8 +198,8 @@ void Simplify::ScopedFact::learn_lower_bound(const Variable *v, int64_t val) {
     ExprInfo b;
     b.min_defined = true;
     b.min = val;
-    if (simplify->bounds_and_alignment_info.contains(v->name)) {
-        b.intersect(simplify->bounds_and_alignment_info.get(v->name));
+    if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+        b.intersect(*info);
     }
     simplify->bounds_and_alignment_info.push(v->name, b);
     bounds_pop_list.push_back(v);
@@ -228,10 +228,9 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 // TODO: Visiting it again is inefficient
                 Simplify::ExprInfo expr_info;
                 simplify->mutate(eq->b, &expr_info);
-                if (simplify->bounds_and_alignment_info.contains(v->name)) {
+                if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
                     // We already know something about this variable and don't want to suppress it.
-                    auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
-                    expr_info.intersect(existing_knowledge);
+                    expr_info.intersect(*info);
                 }
                 simplify->bounds_and_alignment_info.push(v->name, expr_info);
                 bounds_pop_list.push_back(v);
@@ -245,10 +244,9 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             // TODO: Visiting it again is inefficient
             Simplify::ExprInfo expr_info;
             simplify->mutate(eq->a, &expr_info);
-            if (simplify->bounds_and_alignment_info.contains(vb->name)) {
+            if (const auto *info = simplify->bounds_and_alignment_info.find(vb->name)) {
                 // We already know something about this variable and don't want to suppress it.
-                auto existing_knowledge = simplify->bounds_and_alignment_info.get(vb->name);
-                expr_info.intersect(existing_knowledge);
+                expr_info.intersect(*info);
             }
             simplify->bounds_and_alignment_info.push(vb->name, expr_info);
             bounds_pop_list.push_back(vb);
@@ -257,10 +255,9 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             Simplify::ExprInfo expr_info;
             expr_info.alignment.modulus = *modulus;
             expr_info.alignment.remainder = *remainder;
-            if (simplify->bounds_and_alignment_info.contains(v->name)) {
+            if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
                 // We already know something about this variable and don't want to suppress it.
-                auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
-                expr_info.intersect(existing_knowledge);
+                expr_info.intersect(*info);
             }
             simplify->bounds_and_alignment_info.push(v->name, expr_info);
             bounds_pop_list.push_back(v);
@@ -417,8 +414,8 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
             Expr visit(const Variable *op) override {
                 auto it = vars.find(op->name);
-                if (lets.contains(op->name)) {
-                    return Variable::make(op->type, lets.get(op->name));
+                if (const std::string *n = lets.find(op->name)) {
+                    return Variable::make(op->type, *n);
                 } else if (it == vars.end()) {
                     std::string name = "v" + std::to_string(count++);
                     vars[op->name] = name;

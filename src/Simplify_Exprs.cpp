@@ -221,35 +221,32 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
 }
 
 Expr Simplify::visit(const Variable *op, ExprInfo *bounds) {
-    if (bounds_and_alignment_info.contains(op->name)) {
-        const ExprInfo &b = bounds_and_alignment_info.get(op->name);
+    if (const ExprInfo *b = bounds_and_alignment_info.find(op->name)) {
         if (bounds) {
-            *bounds = b;
+            *bounds = *b;
         }
-        if (b.min_defined && b.max_defined && b.min == b.max) {
-            return make_const(op->type, b.min);
+        if (b->min_defined && b->max_defined && b->min == b->max) {
+            return make_const(op->type, b->min);
         }
     }
 
-    if (var_info.contains(op->name)) {
-        auto &info = var_info.ref(op->name);
-
+    if (auto *info = var_info.shallow_find(op->name)) {
         // if replacement is defined, we should substitute it in (unless
         // it's a var that has been hidden by a nested scope).
-        if (info.replacement.defined()) {
-            internal_assert(info.replacement.type() == op->type)
+        if (info->replacement.defined()) {
+            internal_assert(info->replacement.type() == op->type)
                 << "Cannot replace variable " << op->name
                 << " of type " << op->type
-                << " with expression of type " << info.replacement.type() << "\n";
-            info.new_uses++;
+                << " with expression of type " << info->replacement.type() << "\n";
+            info->new_uses++;
             // We want to remutate the replacement, because we may be
             // injecting it into a context where it is known to be a
             // constant (e.g. due to an if).
-            return mutate(info.replacement, bounds);
+            return mutate(info->replacement, bounds);
         } else {
             // This expression was not something deemed
             // substitutable - no replacement is defined.
-            info.old_uses++;
+            info->old_uses++;
             return op;
         }
     } else {
@@ -321,15 +318,14 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     // unreachable loads.
     if (is_const_one(op->predicate)) {
         string alloc_extent_name = op->name + ".total_extent_bytes";
-        if (bounds_and_alignment_info.contains(alloc_extent_name)) {
+        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
             if (index_info.max_defined && index_info.max < 0) {
                 in_unreachable = true;
                 return unreachable(op->type);
             }
-            const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
-            if (alloc_info.max_defined && index_info.min_defined) {
+            if (alloc_info->max_defined && index_info.min_defined) {
                 int index_min_bytes = index_info.min * op->type.bytes();
-                if (index_min_bytes > alloc_info.max) {
+                if (index_min_bytes > alloc_info->max) {
                     in_unreachable = true;
                     return unreachable(op->type);
                 }

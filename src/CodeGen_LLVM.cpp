@@ -1272,7 +1272,8 @@ void CodeGen_LLVM::sym_pop(const string &name) {
 
 llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const {
     // look in the symbol table
-    if (!symbol_table.contains(name)) {
+    llvm::Value *const *v = symbol_table.find(name);
+    if (!v) {
         if (must_succeed) {
             std::ostringstream err;
             err << "Symbol not found: " << name << "\n";
@@ -1287,7 +1288,7 @@ llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const 
             return nullptr;
         }
     }
-    return symbol_table.get(name);
+    return *v;
 }
 
 bool CodeGen_LLVM::sym_exists(const string &name) const {
