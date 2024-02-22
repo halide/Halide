@@ -330,7 +330,6 @@ protected:
             size_t id = analysis.func_id.at(op->name);
             if (!analysis.unconditionally_used_funcs.count(id)) {
                 // We're unconditionally used. Clobber any existing info.
-                debug(0) << "Found a call to " << id << "\n";
                 func_info[id] = FuncInfo{const_true(), const_true()};
             }
         } else if (op->is_intrinsic(Call::skip_stages_marker)) {
@@ -486,80 +485,83 @@ protected:
         }
     }
 
-    Expr visit(const Let *op) override {
-        if (!analysis.interesting_vars.count(op->name)) {
-            return IRMutator::visit(op);
+    template<typename T>
+    auto visit_let(const T *op) -> decltype(op->body) {
+        const T *orig = op;
+
+        // Peel off any uninteresting lets without wasting stack frames.
+        std::vector<std::pair<std::string, Expr>> containing_lets;
+        decltype(op->body) body;
+        while (op && !analysis.interesting_vars.count(op->name)) {
+            containing_lets.emplace_back(op->name, op->value);
+            body = op->body;
+            op = body.template as<T>();
         }
 
-        // TODO: worry about stack overflow in the methods below by handling a whole let chain at once
-        std::map<size_t, FuncInfo> old;
-        old.swap(func_info);
-        mutate(op->body);
-        if (may_lift(op->value)) {
-            for (auto &it : func_info) {
-                if (expr_uses_var(it.second.used, op->name)) {
-                    it.second.used = Let::make(op->name, op->value, it.second.used);
+        bool changed = false;
+        if (op) {
+            std::map<size_t, FuncInfo> old;
+            old.swap(func_info);
+            body = mutate(op->body);
+            internal_assert(body.defined());
+            if (may_lift(op->value)) {
+                for (auto &it : func_info) {
+                    if (expr_uses_var(it.second.used, op->name)) {
+                        it.second.used = Let::make(op->name, op->value, it.second.used);
+                    }
+                    if (expr_uses_var(it.second.loaded, op->name)) {
+                        it.second.loaded = Let::make(op->name, op->value, it.second.loaded);
+                    }
                 }
-                if (expr_uses_var(it.second.loaded, op->name)) {
-                    it.second.loaded = Let::make(op->name, op->value, it.second.loaded);
+            } else {
+                // Treat the let value as an unknown
+                for (auto &it : func_info) {
+                    if (expr_uses_var(it.second.used, op->name)) {
+                        it.second.used = relax_over_var(it.second.used, op->name);
+                    }
+                    if (expr_uses_var(it.second.loaded, op->name)) {
+                        it.second.loaded = relax_over_var(it.second.used, op->name);
+                    }
                 }
             }
+            merge_func_info(&old, func_info);
+            old.swap(func_info);
+            mutate(op->value);
+            if (body.same_as(op->body)) {
+                body = op;
+            } else {
+                internal_assert(body.defined());
+                body = T::make(op->name, op->value, std::move(body));
+                changed = true;
+            }
+        } else if (std::is_same<T, LetStmt>::value) {
+            auto new_body = mutate(body);
+            changed = !new_body.same_as(body);
+            body = std::move(new_body);
+        }
+
+        // Rewrap any uninteresting lets
+        for (auto it = containing_lets.rbegin(); it != containing_lets.rend(); it++) {
+            mutate(it->second);  // Visit the value of each let
+            if (changed) {
+                body = T::make(it->first, std::move(it->second), std::move(body));
+            }
+        }
+
+        if (changed) {
+            internal_assert(body.defined());
+            return body;
         } else {
-            // Treat the let value as an unknown
-            for (auto &it : func_info) {
-                if (expr_uses_var(it.second.used, op->name)) {
-                    it.second.used = relax_over_var(it.second.used, op->name);
-                }
-                if (expr_uses_var(it.second.loaded, op->name)) {
-                    it.second.loaded = relax_over_var(it.second.used, op->name);
-                }
-            }
+            return orig;
         }
+    }
 
-        merge_func_info(&old, func_info);
-        old.swap(func_info);
-        mutate(op->value);
-
-        return op;
+    Expr visit(const Let *op) override {
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        if (!analysis.interesting_vars.count(op->name)) {
-            return IRMutator::visit(op);
-        }
-
-        std::map<size_t, FuncInfo> old;
-        old.swap(func_info);
-        Stmt body = mutate(op->body);
-        if (may_lift(op->value)) {
-            for (auto &it : func_info) {
-                if (expr_uses_var(it.second.used, op->name)) {
-                    it.second.used = Let::make(op->name, op->value, it.second.used);
-                }
-                if (expr_uses_var(it.second.loaded, op->name)) {
-                    it.second.loaded = Let::make(op->name, op->value, it.second.loaded);
-                }
-            }
-        } else {
-            // Treat the let value as an unknown
-            for (auto &it : func_info) {
-                if (expr_uses_var(it.second.used, op->name)) {
-                    it.second.used = relax_over_var(it.second.used, op->name);
-                }
-                if (expr_uses_var(it.second.loaded, op->name)) {
-                    it.second.loaded = relax_over_var(it.second.used, op->name);
-                }
-            }
-        }
-        merge_func_info(&old, func_info);
-        old.swap(func_info);
-        mutate(op->value);
-
-        if (body.same_as(op->body)) {
-            return op;
-        } else {
-            return LetStmt::make(op->name, op->value, std::move(body));
-        }
+        return visit_let(op);
     }
 
     std::string used_var_name(size_t id) {
@@ -692,7 +694,6 @@ protected:
         for (auto &p : func_info) {
             if (expr_uses_var(p.second.used, op->name)) {
                 p.second.used = relax_over_var(p.second.used, op->name);
-                // debug(0) << p.second.used << "\n";
                 anything_depended_on_loop_var = true;
             }
             if (expr_uses_var(p.second.loaded, op->name)) {
@@ -745,8 +746,6 @@ Stmt skip_stages(const Stmt &stmt,
                  const std::vector<std::vector<std::string>> &order,
                  const std::map<std::string, Function> &env) {
 
-    debug(0) << stmt << "\n";
-
     // Each thing we might want to skip gets a unique id, sorted by realization
     // order of the corresponding Func.
     std::map<std::string, size_t> func_id;
@@ -755,7 +754,6 @@ Stmt skip_stages(const Stmt &stmt,
         // Funcs in a compute_with group get the same id, because you can either
         // skip them all or skip none of them.
         for (const auto &f : order[i]) {
-            debug(0) << "func_id[" << f << "] = " << i << "\n";
             func_id[f] = i;
         }
         name_for_id[i] = order[i][0];
