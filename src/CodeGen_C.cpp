@@ -1936,8 +1936,9 @@ void CodeGen_C::visit(const Load *op) {
         user_assert(is_const_one(op->predicate)) << "Predicated scalar load is not supported by C backend.\n";
 
         string id_index = print_expr(op->index);
-        bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name).type.element_of() == t.element_of());
+        const auto *alloc = allocations.find(op->name);
+        bool type_cast_needed = !(alloc &&
+                                  alloc->type.element_of() == t.element_of());
         if (type_cast_needed) {
             const char *const_flag = output_kind == CPlusPlusImplementation ? " const" : "";
             rhs << "((" << print_type(t.element_of()) << const_flag << " *)" << name << ")";

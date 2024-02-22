@@ -31,10 +31,9 @@ class ExpandExpr : public IRMutator {
     const Scope<Expr> &scope;
 
     Expr visit(const Variable *var) override {
-        if (scope.contains(var->name)) {
-            Expr expr = scope.get(var->name);
+        if (const Expr *e = scope.find(var->name)) {
             // Mutate the expression, so lets can get replaced recursively.
-            expr = mutate(expr);
+            Expr expr = mutate(*e);
             debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
             return expr;
         } else {

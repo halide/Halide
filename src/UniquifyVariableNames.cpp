@@ -104,10 +104,9 @@ class UniquifyVariableNames : public IRMutator {
     }
 
     Expr visit(const Variable *op) override {
-        if (renaming.contains(op->name)) {
-            string new_name = renaming.get(op->name);
-            if (new_name != op->name) {
-                return Variable::make(op->type, new_name);
+        if (const string *new_name = renaming.find(op->name)) {
+            if (*new_name != op->name) {
+                return Variable::make(op->type, *new_name);
             }
         }
         return op;

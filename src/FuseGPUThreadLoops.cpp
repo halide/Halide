@@ -1140,21 +1140,21 @@ class ExtractRegisterAllocations : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        string new_name = op->name;
-        if (alloc_renaming.contains(op->name)) {
-            new_name = alloc_renaming.get(op->name);
+        const string *new_name = alloc_renaming.find(op->name);
+        if (!new_name) {
+            new_name = &(op->name);
         }
-        return Load::make(op->type, new_name, mutate(op->index),
+        return Load::make(op->type, *new_name, mutate(op->index),
                           op->image, op->param, mutate(op->predicate),
                           op->alignment);
     }
 
     Stmt visit(const Store *op) override {
-        string new_name = op->name;
-        if (alloc_renaming.contains(op->name)) {
-            new_name = alloc_renaming.get(op->name);
+        const string *new_name = alloc_renaming.find(op->name);
+        if (!new_name) {
+            new_name = &(op->name);
         }
-        return Store::make(new_name, mutate(op->value), mutate(op->index),
+        return Store::make(*new_name, mutate(op->value), mutate(op->index),
                            op->param, mutate(op->predicate), op->alignment);
     }
 

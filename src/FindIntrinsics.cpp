@@ -1118,8 +1118,8 @@ class SubstituteInWideningLets : public IRMutator {
 
     Scope<Expr> replacements;
     Expr visit(const Variable *op) override {
-        if (replacements.contains(op->name)) {
-            return replacements.get(op->name);
+        if (const Expr *e = replacements.find(op->name)) {
+            return *e;
         } else {
             return op;
         }
