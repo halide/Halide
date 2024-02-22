@@ -201,8 +201,8 @@ class RemoveLets : public IRGraphMutator {
     Scope<Expr> scope;
 
     Expr visit(const Variable *op) override {
-        if (scope.contains(op->name)) {
-            return scope.get(op->name);
+        if (const Expr *e = scope.find(op->name)) {
+            return *e;
         } else {
             return op;
         }

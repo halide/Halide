@@ -684,8 +684,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
 
     // Get the allocation type, which may be different from the result type.
     Type alloc_type = result_type;
-    if (allocations.contains(op->name)) {
-        alloc_type = allocations.get(op->name).type;
+    if (const auto *alloc = allocations.find(op->name)) {
+        alloc_type = alloc->type;
     } else if (workgroup_allocations.count(op->name)) {
         alloc_type = workgroup_allocations.at(op->name)->type;
     }
@@ -826,8 +826,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
 
     // Get the allocation type, which may be different from the value type.
     Type alloc_type = value_type;
-    if (allocations.contains(op->name)) {
-        alloc_type = allocations.get(op->name).type;
+    if (const auto *alloc = allocations.find(op->name)) {
+        alloc_type = alloc->type;
     } else if (workgroup_allocations.count(op->name)) {
         alloc_type = workgroup_allocations.at(op->name)->type;
     }

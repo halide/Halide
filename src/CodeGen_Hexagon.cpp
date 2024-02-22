@@ -221,8 +221,8 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                 }
             }
         } else if (const Variable *op = e.as<Variable>()) {
-            if (monotonic_vectors.contains(op->name)) {
-                return monotonic_vectors.get(op->name);
+            if (const auto *p = monotonic_vectors.find(op->name)) {
+                return *p;
             }
         } else if (const Let *op = e.as<Let>()) {
             auto v = get_extreme_lanes(op->value);
@@ -2245,10 +2245,9 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         codegen(alloc->body);
 
         // If there was no early free, free it now.
-        if (allocations.contains(alloc->name)) {
-            Allocation alloc_obj = allocations.get(alloc->name);
-            internal_assert(alloc_obj.destructor);
-            trigger_destructor(alloc_obj.destructor_function, alloc_obj.destructor);
+        if (const Allocation *alloc_obj = allocations.find(alloc->name)) {
+            internal_assert(alloc_obj->destructor);
+            trigger_destructor(alloc_obj->destructor_function, alloc_obj->destructor);
 
             allocations.pop(alloc->name);
             sym_pop(alloc->name);

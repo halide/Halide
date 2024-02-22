@@ -110,8 +110,8 @@ void ComputeModulusRemainder::visit(const Reinterpret *) {
 }
 
 void ComputeModulusRemainder::visit(const Variable *op) {
-    if (scope.contains(op->name)) {
-        result = scope.get(op->name);
+    if (const auto *m = scope.find(op->name)) {
+        result = *m;
     } else {
         result = ModulusRemainder{};
     }
