@@ -882,7 +882,7 @@ void CodeGen_X86::visit(const Load *op) {
 
 void CodeGen_X86::visit(const Store *op) {
     if (const auto *mt = mem_type.find(op->name)) {
-        if (mem_type.get(op->name) == MemoryType::AMXTile) {
+        if (*mt == MemoryType::AMXTile) {
             Value *val = codegen(op->value);
             Halide::Type value_type = op->value.type();
             const Ramp *ramp = op->index.as<Ramp>();
