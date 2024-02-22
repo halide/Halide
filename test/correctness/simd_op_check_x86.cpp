@@ -654,6 +654,8 @@ private:
 };
 }  // namespace
 
+#define AVX10_IN_LLVM_IS_READY 0
+
 int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckX86>(
         argc, argv,
@@ -673,7 +675,6 @@ int main(int argc, char **argv) {
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
-#define AVX10_IN_LLVM_IS_READY 0
 #if AVX10_IN_LLVM_IS_READY
             Target("x86-64-linux-avx10_1-vector_bits_256-x86apx"),
 #endif
