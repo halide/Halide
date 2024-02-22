@@ -4791,13 +4791,15 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                     arg_values[i] = builder->CreateBitCast(arg_values[i], formal_param_type);
                 }
             } else {
-                // TODO(issue needed): That this can happen is probably a bug. It will crash in module
-                // validation for anything LLVM doesn't support. Better to regularize the Halide IR by
-                // inserting an intentional cast or to add extra intrinsics patterns. At the very least,
-                // some extra validation should be added here.
+                // TODO(https://github.com/halide/Halide/issues/8117): That this
+                // can happen is probably a bug. It will crash in module
+                // validation for anything LLVM doesn't support. Better to
+                // regularize the Halide IR by inserting an intentional cast or
+                // to add extra intrinsics patterns. At the very least, some
+                // extra validation should be added here.
 
-                // There can be some mismatches in types, such as when passing scalar Halide type T
-                // to LLVM vector type <1 x T>.
+                // There can be some mismatches in types, such as when passing
+                // scalar Halide type T to LLVM vector type <1 x T>.
                 arg_values[i] = builder->CreateBitCast(arg_values[i], formal_param_type);
             }
         }
@@ -4825,8 +4827,9 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
 
     bool is_fixed = isa<FixedVectorType>(vec->getType());
 
-    // TODO(<issue needed>): It is likely worth looking into using llvm.vector.{extract,insert}
-    // for this case too. However that would need to be validated performance wise for all
+    // TODO(https://github.com/halide/Halide/issues/8118): It is likely worth
+    // looking into using llvm.vector.{extract,insert} for this case
+    // too. However that would need to be validated performance wise for all
     // architectures.
     if (is_fixed) {
         vector<int> indices(size);
@@ -5286,17 +5289,18 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
     case VectorTypeConstraint::None:
         if (effective_vscale > 0) {
             bool wide_enough = true;
-            // TODO(<issue needed>): Architecture specific code should not go
-            // here. Ideally part of this can go away via LLVM fixes and
-            // modifying intrinsic selection to handle scalable vs. fixed
-            // vectors. Making this method virtual is possibly expensive.
+            // TODO(https://github.com/halide/Halide/issues/8119): Architecture
+            // specific code should not go here. Ideally part of this can go
+            // away via LLVM fixes and modifying intrinsic selection to handle
+            // scalable vs. fixed vectors. Making this method virtual is
+            // possibly expensive.
             if (target.arch == Target::ARM) {
                 if (!target.has_feature(Target::NoNEON)) {
-                    // force booleans into bytes. TODO(<issue needed>): figure out a better way to do this.
+                    // force booleans into bytes. TODO(https://github.com/halide/Halide/issues/8119): figure out a better way to do this.
                     int bit_size = std::max((int)t->getScalarSizeInBits(), 8);
                     wide_enough = (bit_size * n) > 128;
                 } else {
-                    // TODO(<need issue>): AArch64 SVE2 support is crashy with scalable vectors of min size 1.
+                    // TODO(https://github.com/halide/Halide/issues/8119): AArch64 SVE2 support is crashy with scalable vectors of min size 1.
                     wide_enough = (n / effective_vscale) > 1;
                 }
             }
