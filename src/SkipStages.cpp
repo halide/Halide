@@ -48,7 +48,7 @@ class SkipStagesAnalysis : public IRVisitor {
 
     // What is the nearest enclosing conditional node for the realize node of
     // each func. nullptr for outputs, because they don't have realize nodes.
-    std::map<std::string, const IRNode *> conditional_around_realize_node;
+    std::map<size_t, const IRNode *> conditional_around_realize_node;
 
     // What is the current nearest enclosing conditional node.
     const IRNode *enclosing_conditional = nullptr;
@@ -129,9 +129,11 @@ class SkipStagesAnalysis : public IRVisitor {
 
     Scope<> in_produce;
     void visit(const ProducerConsumer *op) override {
+        size_t id = func_id.at(op->name);
+
         if (op->is_producer &&
-            !unconditionally_used_funcs.count(op->name) &&
-            conditional_around_realize_node.count(op->name)) {
+            !unconditionally_used_funcs.count(id) &&
+            conditional_around_realize_node.count(id)) {
             // This node could have an if statement injected here
             ScopedValue<const IRNode *> s(enclosing_conditional, op);
             ScopedBinding<> bind(in_produce, op->name);
@@ -146,11 +148,13 @@ class SkipStagesAnalysis : public IRVisitor {
 
     Scope<> in_realize;
     void visit(const Realize *op) override {
+        size_t id = func_id.at(op->name);
+
         // There may have already been a Realize node for this Func. We need to
         // analyze this node from scratch.
-        unconditionally_used_funcs.erase(op->name);
+        unconditionally_used_funcs.erase(id);
 
-        conditional_around_realize_node[op->name] = enclosing_conditional;
+        conditional_around_realize_node[id] = enclosing_conditional;
 
         // Don't consider the realization bounds, which can't contain Func uses,
         // or the new or free exprs, which can't access Func data.
@@ -159,13 +163,13 @@ class SkipStagesAnalysis : public IRVisitor {
             op->body.accept(this);
         }
 
-        if (conditionally_used_funcs.count(op->name)) {
+        if (conditionally_used_funcs.count(id)) {
             // Was used conditionally in a different Realize node, and used
             // unconditionally in this one.
-            unconditionally_used_funcs.erase(op->name);
-        } else if (!unconditionally_used_funcs.count(op->name)) {
+            unconditionally_used_funcs.erase(id);
+        } else if (!unconditionally_used_funcs.count(id)) {
             // Was used conditionally in this Realize node.
-            conditionally_used_funcs.insert(op->name);
+            conditionally_used_funcs.insert(id);
         }
     }
 
@@ -175,9 +179,10 @@ class SkipStagesAnalysis : public IRVisitor {
                 interesting_vars.insert(op->name);
                 found_var_used_in_condition = true;
             }
+            size_t id = func_id.at(op->name);
             if (!in_produce.contains(op->name) &&
-                enclosing_conditional == conditional_around_realize_node[op->name]) {
-                unconditionally_used_funcs.insert(op->name);
+                enclosing_conditional == conditional_around_realize_node[id]) {
+                unconditionally_used_funcs.insert(id);
             }
         }
         IRVisitor::visit(op);
@@ -189,8 +194,8 @@ class SkipStagesAnalysis : public IRVisitor {
             found_var_used_in_condition = true;
         }
         if (op->type.is_handle()) {
-            auto it = func_for_buffer.find(op->name);
-            if (it != func_for_buffer.end() &&
+            auto it = func_id.find(op->name);
+            if (it != func_id.end() &&
                 in_realize.contains(op->name) &&
                 !in_produce.contains(op->name) &&
                 enclosing_conditional == conditional_around_realize_node[it->second]) {
@@ -200,11 +205,11 @@ class SkipStagesAnalysis : public IRVisitor {
     }
 
 public:
-    SkipStagesAnalysis(const std::map<std::string, std::string> &func_for_buffer)
-        : func_for_buffer(func_for_buffer) {
+    SkipStagesAnalysis(const std::map<std::string, size_t> &func_id)
+        : func_id(func_id) {
     }
 
-    const std::map<std::string, std::string> &func_for_buffer;
+    const std::map<std::string, size_t> func_id;
 
     // Vars which could conceivably end up in a skip-stages predicate. These are
     // the ones that are used (possibly transitively) in conditions in Select or
@@ -214,25 +219,23 @@ public:
     // All Funcs that are unconditionally called within the scope of at least
     // one of their Realize nodes (and therefore could never be skipped so we
     // don't need to worry about them in the mutator below)
-    std::set<std::string> unconditionally_used_funcs;
+    std::set<size_t> unconditionally_used_funcs;
 
     // All Funcs that are conditionally called within the scope of at least one
     // of their Realize nodes, and therefore must not be added to
     // unconditionally_used_funcs.
-    std::set<std::string> conditionally_used_funcs;
+    std::set<size_t> conditionally_used_funcs;
 };
 
 class SkipStages : public IRMutator {
 public:
-    SkipStages(const SkipStagesAnalysis &analysis,
-               const std::map<std::string, size_t> &func_id)
-        : analysis(analysis),
-          func_id(func_id) {
+    SkipStages(const SkipStagesAnalysis &analysis, const std::vector<std::string> &name_for_id)
+        : analysis(analysis), name_for_id(name_for_id) {
     }
 
 protected:
     const SkipStagesAnalysis &analysis;
-    const std::map<std::string, size_t> &func_id;
+    const std::vector<std::string> &name_for_id;
 
     using IRMutator::visit;
 
@@ -249,7 +252,7 @@ protected:
     // Conditions for each Func that describe how it is used in the Stmt just
     // mutated, and any Stmts that come after it in the same enclosing loop
     // body. (TODO: worry about fork)
-    std::map<std::string, FuncInfo> func_info;
+    std::map<size_t, FuncInfo> func_info;
 
     bool found_marker = false;
 
@@ -257,22 +260,18 @@ protected:
     // stamp down a .used let more than once for the same Func.
     bool need_uniquify = false;
 
-    // Funcs for which we have ever stamped down a .used or .loaded let.
-    std::set<std::string> lets_emitted;
+    // Func ids for which we have ever stamped down a .used or .loaded let.
+    std::set<size_t> lets_emitted;
 
     // Have we made use of .used or .loaded vars that haven't been wrapped in a
     // LetStmt yet (while iterating from inside out)?
     bool inner_unbound_use_of_used_or_loaded_vars = false;
 
     Stmt emit_defs(Stmt stmt) {
-        std::map<size_t, std::pair<std::string, FuncInfo *>> m;
         for (auto &p : func_info) {
-            m.emplace(func_id.at(p.first), std::make_pair(p.first, &p.second));
-        }
-        for (auto &p : m) {
-            stmt = LetStmt::make(used_var_name(p.second.first), p.second.second->used, stmt);
-            stmt = LetStmt::make(loaded_var_name(p.second.first), p.second.second->loaded, stmt);
-            need_uniquify |= !lets_emitted.insert(p.second.first).second;
+            stmt = LetStmt::make(used_var_name(p.first), p.second.used, stmt);
+            stmt = LetStmt::make(loaded_var_name(p.first), p.second.loaded, stmt);
+            need_uniquify |= !lets_emitted.insert(p.first).second;
         }
         return stmt;
     }
@@ -315,9 +314,9 @@ protected:
                 << last_arg;
             const Variable *v = c->args[0].as<Variable>();
             internal_assert(v);
-            auto it = analysis.func_for_buffer.find(v->name);
-            internal_assert(it != analysis.func_for_buffer.end());
-            const std::string &func = it->second;
+            auto it = analysis.func_id.find(v->name);
+            internal_assert(it != analysis.func_id.end());
+            size_t func = it->second;
             if (func_info.find(func) != func_info.end()) {
                 return Call::make(op->type, Call::if_then_else, {loaded_var(func), Expr(op), make_zero(op->type)}, Call::PureIntrinsic);
             } else {
@@ -327,10 +326,13 @@ protected:
         }
 
         Expr e = IRMutator::visit(op);
-        if (op->call_type == Call::Halide &&
-            !analysis.unconditionally_used_funcs.count(op->name)) {
-            // We're unconditionally used. Clobber any existing info.
-            func_info[op->name] = FuncInfo{const_true(), const_true()};
+        if (op->call_type == Call::Halide) {
+            size_t id = analysis.func_id.at(op->name);
+            if (!analysis.unconditionally_used_funcs.count(id)) {
+                // We're unconditionally used. Clobber any existing info.
+                debug(0) << "Found a call to " << id << "\n";
+                func_info[id] = FuncInfo{const_true(), const_true()};
+            }
         } else if (op->is_intrinsic(Call::skip_stages_marker)) {
             found_marker = true;
         }
@@ -339,8 +341,8 @@ protected:
 
     Expr visit(const Variable *op) override {
         if (op->type == halide_type_of<halide_buffer_t *>()) {
-            auto it = analysis.func_for_buffer.find(op->name);
-            if (it != analysis.func_for_buffer.end() &&
+            auto it = analysis.func_id.find(op->name);
+            if (it != analysis.func_id.end() &&
                 !analysis.unconditionally_used_funcs.count(it->second)) {
                 // Conservatively assume any use of a .buffer symbol depends on
                 // the Func being allocated and the values being correct.
@@ -350,8 +352,8 @@ protected:
         return op;
     }
 
-    void merge_func_info(std::map<std::string, FuncInfo> *old,
-                         const std::map<std::string, FuncInfo> &new_info,
+    void merge_func_info(std::map<size_t, FuncInfo> *old,
+                         const std::map<size_t, FuncInfo> &new_info,
                          const Expr &used = Expr{},
                          const Expr &evaluated = Expr{}) {
         for (const auto &it : new_info) {
@@ -442,7 +444,7 @@ protected:
             return IRMutator::visit(op);
         }
 
-        std::map<std::string, FuncInfo> old;
+        std::map<size_t, FuncInfo> old;
         old.swap(func_info);
         mutate(op->true_value);
         merge_func_info(&old, func_info, op->condition);
@@ -451,11 +453,12 @@ protected:
         merge_func_info(&old, func_info, !op->condition);
         old.swap(func_info);
         mutate(op->condition);  // Check for any calls in the condition
+
         return op;
     }
 
     Stmt mutate_conditional_stmt(const Stmt &s, const Expr &condition) {
-        std::map<std::string, FuncInfo> old;
+        std::map<size_t, FuncInfo> old;
         old.swap(func_info);
         Stmt stmt = mutate(s);
         merge_func_info(&old, func_info, condition, condition);
@@ -489,7 +492,7 @@ protected:
         }
 
         // TODO: worry about stack overflow in the methods below by handling a whole let chain at once
-        std::map<std::string, FuncInfo> old;
+        std::map<size_t, FuncInfo> old;
         old.swap(func_info);
         mutate(op->body);
         if (may_lift(op->value)) {
@@ -516,6 +519,7 @@ protected:
         merge_func_info(&old, func_info);
         old.swap(func_info);
         mutate(op->value);
+
         return op;
     }
 
@@ -524,7 +528,7 @@ protected:
             return IRMutator::visit(op);
         }
 
-        std::map<std::string, FuncInfo> old;
+        std::map<size_t, FuncInfo> old;
         old.swap(func_info);
         Stmt body = mutate(op->body);
         if (may_lift(op->value)) {
@@ -550,6 +554,7 @@ protected:
         merge_func_info(&old, func_info);
         old.swap(func_info);
         mutate(op->value);
+
         if (body.same_as(op->body)) {
             return op;
         } else {
@@ -557,59 +562,49 @@ protected:
         }
     }
 
-    std::string used_var_name(const std::string &n) {
-        return n + ".used";
+    std::string used_var_name(size_t id) {
+        return name_for_id[id] + ".used";
     }
 
-    Expr used_var(const std::string &n) {
-        return Variable::make(Bool(), used_var_name(n));
+    Expr used_var(size_t id) {
+        return Variable::make(Bool(), used_var_name(id));
     }
 
-    std::string loaded_var_name(const std::string &n) {
-        return n + ".loaded";
+    std::string loaded_var_name(size_t id) {
+        return name_for_id[id] + ".loaded";
     }
 
-    Expr loaded_var(const std::string &n) {
-        return Variable::make(Bool(), loaded_var_name(n));
+    Expr loaded_var(size_t id) {
+        return Variable::make(Bool(), loaded_var_name(id));
     }
 
     Scope<> in_realize;
     Scope<> in_realize_and_produce_or_consume;
 
     Stmt visit(const ProducerConsumer *op) override {
-        const bool unconditionally_used = analysis.unconditionally_used_funcs.count(op->name);
+        size_t id = analysis.func_id.at(op->name);
+        const bool unconditionally_used = analysis.unconditionally_used_funcs.count(id);
 
         if (op->is_producer && !unconditionally_used) {
             // The body of this is conditional, based on a yet-to-be defined symbolic value.
-            Expr used = used_var(op->name);
+            Expr used = used_var(id);
             Stmt body;
-            bool is_used = false;
-            {
-                auto it = func_info.find(op->name);
-                FuncInfo fi;
-                if (it != func_info.end()) {
-                    // Save the info about how this Func is called. We don't
-                    // care about self-calls in the produce node.
-                    fi = it->second;
-                    is_used = true;
-                }
-                ScopedBinding<> bind_if(in_realize.contains(op->name),
-                                        in_realize_and_produce_or_consume, op->name);
-                if (is_used) {
-                    body = mutate_conditional_stmt(op->body, used);
-                    // Restore the info about how this Func is called.
-                    it->second = fi;
-                } else {
-                    body = mutate(op->body);
-                }
-            }
-            if (!is_used) {
-                // No uses of this Func. Maybe it's an output.  Let's not
-                // conditionalize it.
-            } else {
-                body = IfThenElse::make(used, body);
-                inner_unbound_use_of_used_or_loaded_vars = true;
-            }
+
+            auto it = func_info.try_emplace(id, FuncInfo{const_false(), const_false()}).first;
+
+            // Save the info about how this Func is called. We don't
+            // care about self-calls in the produce node.
+            FuncInfo fi = it->second;
+            ScopedBinding<> bind_if(in_realize.contains(op->name),
+                                    in_realize_and_produce_or_consume, op->name);
+
+            body = mutate_conditional_stmt(op->body, used);
+            // Restore the info about how this Func is called. Calls to
+            // it in its own producer don't count towards skip stages
+            // analysis.
+            it->second = fi;
+            body = IfThenElse::make(used, body);
+            inner_unbound_use_of_used_or_loaded_vars = true;
 
             if (body.same_as(op->body)) {
                 return op;
@@ -624,7 +619,6 @@ protected:
             Stmt s = IRMutator::visit(op);
 
             if (analysis.interesting_vars.count(op->name)) {
-                // debug(0) << "Interesting: " << op->name << "\n";
                 for (auto &p : func_info) {
                     p.second.used = relax_over_calls(p.second.used, op->name);
                     p.second.loaded = relax_over_calls(p.second.loaded, op->name);
@@ -636,7 +630,8 @@ protected:
     }
 
     Stmt visit(const Realize *op) override {
-        if (analysis.unconditionally_used_funcs.count(op->name)) {
+        size_t id = analysis.func_id.at(op->name);
+        if (analysis.unconditionally_used_funcs.count(id)) {
             return IRMutator::visit(op);
         }
 
@@ -646,11 +641,11 @@ protected:
             body = mutate(op->body);
         }
         Expr condition = mutate(op->condition);
-        auto it = func_info.find(op->name);
+        auto it = func_info.find(id);
         if (it != func_info.end()) {
             if (!is_const_one(it->second.loaded)) {
                 inner_unbound_use_of_used_or_loaded_vars = true;
-                condition = condition && loaded_var(op->name);
+                condition = condition && loaded_var(id);
             }
         }
 
@@ -673,7 +668,7 @@ protected:
         bool old_inner_unbound_uses = inner_unbound_use_of_used_or_loaded_vars;
         inner_unbound_use_of_used_or_loaded_vars = false;
 
-        std::map<std::string, FuncInfo> old;
+        std::map<size_t, FuncInfo> old;
         old.swap(func_info);
 
         Stmt body;
@@ -747,18 +742,34 @@ class StripSkipStagesMarker : public IRMutator {
 
 Stmt skip_stages(const Stmt &stmt,
                  const std::vector<Function> &outputs,
-                 const std::vector<std::string> &order,
+                 const std::vector<std::vector<std::string>> &order,
                  const std::map<std::string, Function> &env) {
 
-    // Make a map from any .buffer symbols back to the Func they refer to.
-    std::map<std::string, std::string> func_for_buffer;
+    debug(0) << stmt << "\n";
+
+    // Each thing we might want to skip gets a unique id, sorted by realization
+    // order of the corresponding Func.
+    std::map<std::string, size_t> func_id;
+    std::vector<std::string> name_for_id(order.size());
+    for (size_t i = 0; i < order.size(); i++) {
+        // Funcs in a compute_with group get the same id, because you can either
+        // skip them all or skip none of them.
+        for (const auto &f : order[i]) {
+            debug(0) << "func_id[" << f << "] = " << i << "\n";
+            func_id[f] = i;
+        }
+        name_for_id[i] = order[i][0];
+    }
+
+    // Map any .buffer symbols back to the id of the Func they refer to.
     for (const auto &p : env) {
         for (const auto &buf : p.second.output_buffers()) {
-            func_for_buffer.emplace(buf.name() + ".buffer", p.first);
+            func_id[buf.name() + ".buffer"] = func_id[p.first];
         }
     }
 
-    SkipStagesAnalysis analysis(func_for_buffer);
+    // Make a map from Funcs to the first member of any compute_with group they belong to.
+    SkipStagesAnalysis analysis(func_id);
     stmt.accept(&analysis);
 
     if (analysis.conditionally_used_funcs.empty()) {
@@ -771,17 +782,10 @@ Stmt skip_stages(const Stmt &stmt,
     // neither set. Add them to the unconditionally used set so that the mutator
     // knows to skip them.
     for (const Function &f : outputs) {
-        analysis.unconditionally_used_funcs.insert(f.name());
+        analysis.unconditionally_used_funcs.insert(func_id[f.name()]);
     }
 
-    // Make a map from Func name to where it appears in the realization
-    // order. Used to make sure we stamp down lets in the right order.
-    std::map<std::string, size_t> func_id;
-    for (size_t i = 0; i < order.size(); i++) {
-        func_id[order[i]] = i;
-    }
-
-    return SkipStages(analysis, func_id).mutate(stmt);
+    return SkipStages(analysis, name_for_id).mutate(stmt);
 }
 
 }  // namespace Internal

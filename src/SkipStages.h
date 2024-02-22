@@ -23,7 +23,7 @@ class Function;
  * inject ifs that guard the production. */
 Stmt skip_stages(const Stmt &s,
                  const std::vector<Function> &outputs,
-                 const std::vector<std::string> &order,
+                 const std::vector<std::vector<std::string>> &order,
                  const std::map<std::string, Function> &env);
 
 }  // namespace Internal
