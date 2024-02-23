@@ -60,6 +60,10 @@ public:
         return can_run_the_code;
     }
 
+    bool use_multiple_threads() const override {
+        return false;
+    }
+
     void add_tests() override {
         check_arm_integer();
         check_arm_float();
@@ -70,7 +74,7 @@ public:
 private:
     void check_arm_integer() {
         // clang-format off
-        vector<tuple<int, ImageParam, ImageParam, ImageParam, ImageParam, ImageParam,
+        vector<tuple<int, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy,
                      CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy,
                      CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy>> test_params{
             {8,  in_i8,  in_u8,  in_f16, in_i16, in_u16, i8,  i8_sat,  i16, i8,  i8_sat,  u8,  u8_sat,  u16, u8,  u8_sat},
@@ -542,7 +546,7 @@ private:
     }
 
     void check_arm_float() {
-        vector<tuple<int, ImageParam, ImageParam, ImageParam, CastFuncTy>> test_params{
+        vector<tuple<int, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy>> test_params{
             {16, in_f16, in_u16, in_i16, f16},
             {32, in_f32, in_u32, in_i32, f32},
             {64, in_f64, in_u64, in_i64, f64},
@@ -674,7 +678,7 @@ private:
     }
 
     void check_arm_load_store() {
-        vector<tuple<Type, ImageParam>> test_params = {
+        vector<tuple<Type, CastFuncTy>> test_params = {
             {Int(8), in_i8}, {Int(16), in_i16}, {Int(32), in_i32}, {Int(64), in_i64}, {UInt(8), in_u8}, {UInt(16), in_u16}, {UInt(32), in_u32}, {UInt(64), in_u64}, {Float(16), in_f16}, {Float(32), in_f32}, {Float(64), in_f64}};
 
         for (const auto &[elt, in_im] : test_params) {
@@ -866,7 +870,7 @@ private:
 
         // Tests for integer type
         {
-            vector<tuple<int, ImageParam, ImageParam, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy>> test_params{
+            vector<tuple<int, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy>> test_params{
                 {8, in_i8, in_u8, i16, i32, u16, u32},
                 {16, in_i16, in_u16, i32, i64, u32, u64},
                 {32, in_i32, in_u32, i64, i64, u64, u64},
@@ -974,7 +978,7 @@ private:
         // Tests for Float type
         {
             // clang-format off
-            vector<tuple<int, ImageParam>> test_params{
+            vector<tuple<int, CastFuncTy>> test_params{
                 {16, in_f16},
                 {32, in_f32},
                 {64, in_f64},
@@ -1242,7 +1246,7 @@ private:
         bool is_enabled;
     };
 
-    void compile_and_check(Func error, const string &op, const string &name, int vector_width, ostringstream &error_msg) override {
+    void compile_and_check(Func error, const string &op, const string &name, int vector_width, const std::vector<Argument> &arg_types, ostringstream &error_msg) override {
         // This is necessary as LLVM validation errors, crashes, etc. don't tell which op crashed.
         cout << "Starting op " << op << "\n";
         string fn_name = "test_" + name;
