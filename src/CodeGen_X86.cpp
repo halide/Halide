@@ -28,6 +28,14 @@ namespace {
 // existing flags, so that instruction patterns can just check for the
 // oldest feature flag that supports an instruction.
 Target complete_x86_target(Target t) {
+    if (t.has_feature(Target::AVX10_1)) {
+        if (t.vector_bits >= 256) {
+            t.set_feature(Target::AVX2);
+        }
+        if (t.vector_bits >= 512) {
+            t.set_feature(Target::AVX512_SapphireRapids);
+        }
+    }
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
         t.set_feature(Target::AVX512_Zen4);
     }
@@ -54,9 +62,6 @@ Target complete_x86_target(Target t) {
     if (t.has_feature(Target::AVX)) {
         t.set_feature(Target::SSE41);
     }
-
-    // TODO(resolve before landing): Fill in for AVX10_1.
-    // TODO(resolve before landing): Is there anything to do here for X86APX?
 
     return t;
 }
