@@ -28,6 +28,14 @@ namespace {
 // existing flags, so that instruction patterns can just check for the
 // oldest feature flag that supports an instruction.
 Target complete_x86_target(Target t) {
+    if (t.has_feature(Target::AVX10_1)) {
+        if (t.vector_bits >= 256) {
+            t.set_feature(Target::AVX2);
+        }
+        if (t.vector_bits >= 512) {
+            t.set_feature(Target::AVX512_SapphireRapids);
+        }
+    }
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
         t.set_feature(Target::AVX512_Zen4);
     }
@@ -54,6 +62,7 @@ Target complete_x86_target(Target t) {
     if (t.has_feature(Target::AVX)) {
         t.set_feature(Target::SSE41);
     }
+
     return t;
 }
 
@@ -1035,9 +1044,31 @@ string CodeGen_X86::mattrs() const {
     }
 #if LLVM_VERSION >= 180
     if (gather_might_be_slow(target)) {
-        attrs.push_back("+prefer-no-gather");
+        attrs.emplace_back("+prefer-no-gather");
     }
 #endif
+
+    if (target.has_feature(Target::AVX10_1)) {
+        switch (target.vector_bits) {
+        case 256:
+            attrs.emplace_back("+avx10.1-256");
+            break;
+        case 512:
+            attrs.emplace_back("+avx10.1-512");
+            break;
+        default:
+            user_error << "AVX10 only supports 256 or 512 bit variants at present.\n";
+            break;
+        }
+    }
+
+    if (target.has_feature(Target::X86APX)) {
+        attrs.emplace_back("+egpr");
+        attrs.emplace_back("+push2pop2");
+        attrs.emplace_back("+ppx");
+        attrs.emplace_back("+ndd");
+    }
+
     return join_strings(attrs, ",");
 }
 
@@ -1046,10 +1077,12 @@ bool CodeGen_X86::use_soft_float_abi() const {
 }
 
 int CodeGen_X86::native_vector_bits() const {
-    if (target.has_feature(Target::AVX512) ||
-        target.has_feature(Target::AVX512_Skylake) ||
-        target.has_feature(Target::AVX512_KNL) ||
-        target.has_feature(Target::AVX512_Cannonlake)) {
+    if (target.has_feature(Target::AVX10_1)) {
+        return target.vector_bits;
+    } else if (target.has_feature(Target::AVX512) ||
+               target.has_feature(Target::AVX512_Skylake) ||
+               target.has_feature(Target::AVX512_KNL) ||
+               target.has_feature(Target::AVX512_Cannonlake)) {
         return 512;
     } else if (target.has_feature(Target::AVX) ||
                target.has_feature(Target::AVX2)) {
