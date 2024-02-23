@@ -60,10 +60,6 @@ public:
         return can_run_the_code;
     }
 
-    bool use_multiple_threads() const override {
-        return false;
-    }
-
     void add_tests() override {
         check_arm_integer();
         check_arm_float();
@@ -1233,6 +1229,48 @@ private:
             // unique across different processes and don't depend on filter
             // settings.
             if (!parent.wildcard_match(parent.filter, decorated_op_name)) return;
+
+            // Create a deep copy of the expr and all Funcs referenced by it, so
+            // that no IR is shared between tests. This is required by the base
+            // class, and is why we can parallelize.
+            {
+                using namespace Halide::Internal;
+                class FindOutputs : public IRVisitor {
+                    using IRVisitor::visit;
+                    void visit(const Call *op) override {
+                        if (op->func.defined()) {
+                            outputs.insert(op->func);
+                        }
+                        IRVisitor::visit(op);
+                    }
+
+                public:
+                    std::set<FunctionPtr> outputs;
+                } finder;
+                e.accept(&finder);
+                std::vector<Function> outputs(finder.outputs.begin(), finder.outputs.end());
+                auto env = deep_copy(outputs, build_environment(outputs)).second;
+                class DeepCopy : public IRMutator {
+                    std::map<FunctionPtr, FunctionPtr> copied;
+                    using IRMutator::visit;
+                    Expr visit(const Call *op) override {
+                        if (op->func.defined()) {
+                            auto it = env.find(op->name);
+                            if (it != env.end()) {
+                                return Func(it->second)(mutate(op->args));
+                            }
+                        }
+                        return IRMutator::visit(op);
+                    }
+                    const std::map<std::string, Function> &env;
+
+                public:
+                    DeepCopy(const std::map<std::string, Function> &env)
+                        : env(env) {
+                    }
+                } copier(env);
+                e = copier.mutate(e);
+            }
 
             // Create Task and register
             parent.tasks.emplace_back(Task{decorated_op_name, unique_name, vec_factor, e});
