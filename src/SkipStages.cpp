@@ -520,7 +520,7 @@ protected:
                         it.second.used = relax_over_var(it.second.used, op->name);
                     }
                     if (expr_uses_var(it.second.loaded, op->name)) {
-                        it.second.loaded = relax_over_var(it.second.used, op->name);
+                        it.second.loaded = relax_over_var(it.second.loaded, op->name);
                     }
                 }
             }
