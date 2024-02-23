@@ -538,6 +538,9 @@ protected:
             auto new_body = mutate(body);
             changed = !new_body.same_as(body);
             body = std::move(new_body);
+        } else {
+            // Just visit the body
+            mutate(body);
         }
 
         // Rewrap any uninteresting lets
