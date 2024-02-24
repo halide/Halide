@@ -366,7 +366,6 @@ protected:
             auto [p, inserted] = old->try_emplace(it.first, fi);
             if (!inserted) {
                 // Merge with any existing info
-                // TODO: eager simplification
                 if (!is_const_one(p->second.used)) {
                     p->second.used = p->second.used || fi.used;
                 }
@@ -700,7 +699,7 @@ protected:
                 anything_depended_on_loop_var = true;
             }
             if (expr_uses_var(p.second.loaded, op->name)) {
-                p.second.loaded = relax_over_var(p.second.used, op->name);
+                p.second.loaded = relax_over_var(p.second.loaded, op->name);
                 anything_depended_on_loop_var = true;
             }
         }
