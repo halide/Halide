@@ -205,6 +205,11 @@ public:
         }
     }
 
+    /** How many distinct names exist (does not count nested definitions of the same name) */
+    size_t size() const {
+        return table.size();
+    }
+
     struct PushToken {
         typename std::map<std::string, SmallStack<T>>::iterator iter;
     };

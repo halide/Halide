@@ -270,7 +270,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after discarding safe promises:", s);
 
     debug(1) << "Dynamically skipping stages...\n";
-    s = skip_stages(s, order);
+    s = skip_stages(s, outputs, fused_groups, env);
     log("Lowering after dynamically skipping stages:", s);
 
     debug(1) << "Forking asynchronous producers...\n";
@@ -332,7 +332,7 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
-    log("Lowering after second simplifcation:", s);
+    log("Lowering after second simplification:", s);
 
     debug(1) << "Reduce prefetch dimension...\n";
     s = reduce_prefetch_dimension(s, t);
