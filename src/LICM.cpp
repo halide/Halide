@@ -350,8 +350,8 @@ class GroupLoopInvariants : public IRMutator {
         const Scope<int> &depth;
 
         void visit(const Variable *op) override {
-            if (depth.contains(op->name)) {
-                result = std::max(result, depth.get(op->name));
+            if (const int *d = depth.find(op->name)) {
+                result = std::max(result, *d);
             }
         }
 

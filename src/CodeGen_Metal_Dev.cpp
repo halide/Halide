@@ -390,8 +390,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
     string id_index = print_expr(op->index);
 
     // Get the rhs just for the cache.
-    bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name).type == op->type);
+    const auto *alloc = allocations.find(op->name);
+    bool type_cast_needed = !(alloc &&
+                              alloc->type == op->type);
     ostringstream rhs;
     if (type_cast_needed) {
         rhs << "((" << get_memory_space(op->name) << " "
@@ -467,8 +468,8 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
                    << id_value << "[" << i << "];\n";
         }
     } else {
-        bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name).type == t);
+        const auto *alloc = allocations.find(op->name);
+        bool type_cast_needed = !(alloc && alloc->type == t);
 
         string id_index = print_expr(op->index);
         stream << get_indent();

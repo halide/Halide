@@ -1134,8 +1134,8 @@ private:
 
     std::string variable(const std::string &x, const std::string &tooltip) {
         int id;
-        if (scope.contains(x)) {
-            id = scope.get(x);
+        if (const int *i = scope.find(x)) {
+            id = *i;
         } else {
             id = gen_unique_id();
             scope.push(x, id);

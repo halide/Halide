@@ -92,15 +92,39 @@ namespace {
 
 class LoweringLogger {
     Stmt last_written;
+    std::chrono::time_point<std::chrono::high_resolution_clock> last_time;
+    std::vector<std::pair<double, std::string>> timings;
+    bool time_lowering_passes = false;
 
 public:
+    LoweringLogger() {
+        last_time = std::chrono::high_resolution_clock::now();
+        static bool should_time = !get_env_variable("HL_TIME_LOWERING_PASSES").empty();
+        time_lowering_passes = should_time;
+    }
+
     void operator()(const string &message, const Stmt &s) {
+        auto t = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = t - last_time;
         if (!s.same_as(last_written)) {
             debug(2) << message << "\n"
                      << s << "\n";
             last_written = s;
+            last_time = t;
         } else {
             debug(2) << message << " (unchanged)\n\n";
+            last_time = t;
+        }
+        timings.emplace_back(diff.count() * 1000, message);
+    }
+
+    ~LoweringLogger() {
+        if (time_lowering_passes) {
+            debug(0) << "Lowering pass runtimes:\n";
+            std::sort(timings.begin(), timings.end());
+            for (const auto &p : timings) {
+                debug(0) << " " << p.first << " ms : " << p.second << "\n";
+            }
         }
     }
 };

@@ -592,8 +592,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     string id_index = print_expr(op->index);
 
     // Get the rhs just for the cache.
-    bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name).type == op->type);
+    const auto *alloc = allocations.find(op->name);
+    bool type_cast_needed = !(alloc &&
+                              alloc->type == op->type);
 
     ostringstream rhs;
     if (type_cast_needed) {

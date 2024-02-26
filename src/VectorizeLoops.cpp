@@ -297,8 +297,8 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
             return true;
         }
     } else if (const Variable *var = e.as<Variable>()) {
-        if (scope.contains(var->name)) {
-            return is_interleaved_ramp(scope.get(var->name), scope, result);
+        if (const Expr *e = scope.find(var->name)) {
+            return is_interleaved_ramp(*e, scope, result);
         }
     }
     return false;

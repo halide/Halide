@@ -251,6 +251,8 @@ Target calculate_host_target() {
         // Call cpuid with eax=7, ecx=0
         int info2[4];
         cpuid(info2, 7, 0);
+        int info3[4];
+        cpuid(info3, 7, 1);
         const uint32_t avx2 = 1U << 5;
         const uint32_t avx512f = 1U << 16;
         const uint32_t avx512dq = 1U << 17;
@@ -283,8 +285,6 @@ Target calculate_host_target() {
 
                 const uint32_t avxvnni = 1U << 4;     // avxvnni (note, not avx512vnni) result in eax
                 const uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, with cpuid(eax=7, ecx=1)
-                int info3[4];
-                cpuid(info3, 7, 1);
                 // TODO: port to family/model -based detection.
                 if ((info3[0] & avxvnni) == avxvnni &&
                     (info3[0] & avx512bf16) == avx512bf16) {
@@ -292,7 +292,40 @@ Target calculate_host_target() {
                 }
             }
         }
+
+        // AVX10 converged vector instructions.
+        const uint32_t avx10 = 1U << 19;
+        if (info2[3] & avx10) {
+            int info_avx10[4];
+            cpuid(info_avx10, 0x24, 0x0);
+
+            // This checks that the AVX10 version is greater than zero.
+            // It isn't really needed as for now only one version exists, but
+            // the docs indicate bits 0:7 of EBX should be >= 0 so...
+            if ((info[1] & 0xff) >= 1) {
+                initial_features.push_back(Target::AVX10_1);
+
+                const uint32_t avx10_128 = 1U << 16;
+                const uint32_t avx10_256 = 1U << 17;
+                const uint32_t avx10_512 = 1U << 18;
+                // Choose the maximum one that is available.
+                if (info[1] & avx10_512) {
+                    vector_bits = 512;
+                } else if (info[1] & avx10_256) {
+                    vector_bits = 256;
+                } else if (info[1] & avx10_128) {  // Not clear it is worth turning on AVX10 for this case.
+                    vector_bits = 128;
+                }
+            }
+        }
+
+        // APX register extensions, etc.
+        const uint32_t apx = 1U << 21;
+        if (info3[3] & apx) {
+            initial_features.push_back(Target::X86APX);
+        }
     }
+
 #endif
 #endif
 #endif
@@ -558,6 +591,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"vk_v12", Target::VulkanV12},
     {"vk_v13", Target::VulkanV13},
     {"semihosting", Target::Semihosting},
+    {"avx10_1", Target::AVX10_1},
+    {"x86apx", Target::X86APX},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 

@@ -1426,6 +1426,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_vulkan_version12,       ///< Enable Vulkan v1.2 runtime target support.
     halide_target_feature_vulkan_version13,       ///< Enable Vulkan v1.3 runtime target support.
     halide_target_feature_semihosting,            ///< Used together with Target::NoOS for the baremetal target built with semihosting library and run with semihosting mode where minimum I/O communication with a host PC is available.
+    halide_target_feature_avx10_1,                ///< Intel AVX10 version 1 support. vector_bits is used to indicate width.
+    halide_target_feature_x86_apx,                ///< Intel x86 APX support. Covers initial set of features released as APX: egpr,push2pop2,ppx,ndd .
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 

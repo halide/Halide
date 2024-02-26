@@ -1539,10 +1539,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Load *op) {
     user_assert(is_const_one(op->predicate)) << "Predicated loads not supported by SPIR-V codegen\n";
 
     // Construct the pointer to read from
-    internal_assert(symbol_table.contains(op->name));
-    SymbolIdStorageClassPair id_and_storage_class = symbol_table.get(op->name);
-    SpvId variable_id = id_and_storage_class.first;
-    SpvStorageClass storage_class = id_and_storage_class.second;
+    const SymbolIdStorageClassPair *id_and_storage_class = symbol_table.find(op->name);
+    internal_assert(id_and_storage_class);
+    SpvId variable_id = id_and_storage_class->first;
+    SpvStorageClass storage_class = id_and_storage_class->second;
     internal_assert(variable_id != SpvInvalidId);
     internal_assert(((uint32_t)storage_class) < ((uint32_t)SpvStorageClassMax));
 
@@ -1576,10 +1576,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Store *op) {
     op->value.accept(this);
     SpvId value_id = builder.current_id();
 
-    internal_assert(symbol_table.contains(op->name));
-    SymbolIdStorageClassPair id_and_storage_class = symbol_table.get(op->name);
-    SpvId variable_id = id_and_storage_class.first;
-    SpvStorageClass storage_class = id_and_storage_class.second;
+    const SymbolIdStorageClassPair *id_and_storage_class = symbol_table.find(op->name);
+    internal_assert(id_and_storage_class);
+    SpvId variable_id = id_and_storage_class->first;
+    SpvStorageClass storage_class = id_and_storage_class->second;
     internal_assert(variable_id != SpvInvalidId);
     internal_assert(((uint32_t)storage_class) < ((uint32_t)SpvStorageClassMax));
 
@@ -1665,9 +1665,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         const std::string intrinsic_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + intrinsic.first;
 
         // Intrinsics are inserted when adding the kernel
-        internal_assert(symbol_table.contains(intrinsic_var_name));
-        SpvId intrinsic_id = symbol_table.get(intrinsic_var_name).first;
-        SpvStorageClass storage_class = symbol_table.get(intrinsic_var_name).second;
+        const auto *intrin = symbol_table.find(intrinsic_var_name);
+        internal_assert(intrin);
+        SpvId intrinsic_id = intrin->first;
+        SpvStorageClass storage_class = intrin->second;
 
         // extract and cast to the extent type (which is what's expected by Halide's for loops)
         Type unsigned_type = UInt(32);
@@ -1908,8 +1909,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Free *op) {
     debug(3) << "Vulkan: Popping allocation called " << op->name << " off the symbol table\n";
-    internal_assert(symbol_table.contains(op->name));
-    SpvId variable_id = symbol_table.get(op->name).first;
+    const auto *id = symbol_table.find(op->name);
+    internal_assert(id);
+    SpvId variable_id = id->first;
     storage_access_map.erase(variable_id);
     symbol_table.pop(op->name);
 }
