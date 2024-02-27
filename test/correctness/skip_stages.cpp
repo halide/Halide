@@ -201,6 +201,49 @@ int main(int argc, char **argv) {
         check_counts(11);
     }
 
+    for (int test_case = 0; test_case <= 2; test_case++) {
+        // Test a data-dependent stage skip. Double all values that exist in
+        // rows that do not contain any negative numbers.
+        Func input("input");
+        input(x, y) = select(y % 3 == 0 && x == 37, -1, x);
+
+        Func any_negative("any_negative");
+        const int W = 100, H = 100;
+        RDom r(0, W);
+        any_negative(y) = cast<bool>(false);
+        any_negative(y) = any_negative(y) || (input(r, y) < 0);
+
+        Func doubled("doubled");
+        doubled(x, y) = call_counter(input(x, y) * 2, 0);
+
+        Func output("output");
+        output(x, y) = select(any_negative(y), input(x, y), doubled(x, y));
+
+        input.compute_root();
+
+        if (test_case == 0) {
+            // any_negative(y) is a constant condition over this loop, so 'double' can be skipped.
+            doubled.compute_at(output, y);
+            any_negative.compute_root();
+        } else if (test_case == 1) {
+            // any_negative(y) is not constant here, so 'double' can't be skipped.
+            Var yo, yi;
+            output.split(y, yo, yi, 10);
+            doubled.compute_at(output, yo);
+            any_negative.compute_root();
+        } else {
+            // double is computed outside of the consume node for any_negative,
+            // so the condition can't be lifted because it contains a call that
+            // may change in value.
+            doubled.compute_at(output, y);
+            any_negative.compute_at(output, y);
+        }
+
+        reset_counts();
+        output.realize({W, H});
+        check_counts(test_case == 0 ? 66 * 100 : 100 * 100);
+    }
+
     {
         // Check the interation with storage hoisting
 
