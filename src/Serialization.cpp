@@ -1030,6 +1030,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
         trace_tags_serialized.push_back(serialize_string(builder, tag));
     }
     const bool frozen = function.frozen();
+    const uint64_t definition_order = function.definition_order();
     auto func = Serialize::CreateFunc(builder,
                                       name_serialized,
                                       origin_name_serialized,
@@ -1050,7 +1051,9 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
                                       trace_loads,
                                       trace_stores,
                                       trace_realizations,
-                                      builder.CreateVector(trace_tags_serialized), frozen);
+                                      builder.CreateVector(trace_tags_serialized),
+                                      frozen,
+                                      definition_order);
     return func;
 }
 

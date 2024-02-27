@@ -88,7 +88,8 @@ public:
                                      bool trace_stores,
                                      bool trace_realizations,
                                      const std::vector<std::string> &trace_tags,
-                                     bool frozen);
+                                     bool frozen,
+                                     uint64_t definition_order);
 
     /** Get a handle on the halide function contents that this Function
      * represents. */
@@ -347,6 +348,10 @@ public:
     /** Define the output buffers. If the Function has types specified, this can be called at
      * any time. If not, it can only be called for a Function with a pure definition. */
     void create_output_buffers(const std::vector<Type> &types, int dims) const;
+
+    /** A unique counter which increments each time a Function is given its pure
+     * definition. Used for ordering Funcs in a name-agnostic way. */
+    uint64_t definition_order() const;
 };
 
 /** Deep copy an entire Function DAG. */

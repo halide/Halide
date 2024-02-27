@@ -15,7 +15,7 @@ enum SerializationVersionMinor: int {
     Value = 0
 }
 enum SerializationVersionPatch: int {
-    Value = 0
+    Value = 1
 }
 
 // from src/IR.cpp
@@ -714,6 +714,7 @@ table Func {
     trace_realizations: bool = false;
     trace_tags: [string];
     frozen: bool = false;
+    definition_order: uint64;
 }
 
 table Pipeline {
