@@ -136,6 +136,7 @@ Expr wild_i24x256 = Variable::make(Type(Type::Int, 24, 256), "*");
 Expr wild_i32x = Variable::make(Type(Type::Int, 32, 0), "*");
 Expr wild_i48x = Variable::make(Type(Type::Int, 48, 0), "*");
 Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
+Expr wild_f16x = Variable::make(Type(Type::Float, 16, 0), "*");
 Expr wild_f32x = Variable::make(Type(Type::Float, 32, 0), "*");
 
 inline Expr i24(Expr e) {
@@ -686,6 +687,9 @@ private:
 
                 {"halide_xtensa_widen_add_u24", i24(wild_u8x) + i24(wild_u8x), Pattern::AccumulatorOutput24},
                 {"halide_xtensa_widen_accum_u24", wild_i24x + i24(wild_u8x), Pattern::AccumulatorOutput24},
+
+                {"halide_xtensa_mul_add_f16", wild_f16x + wild_f16x * wild_f16x},
+                {"halide_xtensa_mul_add_f32", wild_f32x + wild_f32x * wild_f32x},
             };
 
             Expr new_expr = apply_commutative_patterns(op, adds, this);
