@@ -27,7 +27,7 @@ void check_counts(int a = 0, int b = 0, int c = 0, int d = 0) {
 }
 
 int main(int argc, char **argv) {
-    Var x;
+    Var x, y;
     Param<bool> toggle1, toggle2;
 
     {
@@ -199,6 +199,30 @@ int main(int argc, char **argv) {
         g.compute_at(h, x);
         h.realize({10});
         check_counts(11);
+    }
+
+    {
+        // Check the interation with storage hoisting
+
+        // This Func may or may not be loaded, depending on y
+        Func maybe_loaded("maybe_loaded");
+        maybe_loaded(x, y) = x + y;
+
+        // This Func may or may not be used, depending on y
+        Func maybe_used("maybe_used");
+        maybe_used(x, y) = maybe_loaded(x, y);
+
+        Func output("output");
+        output(x, y) = select(y % 100 == 37, 0, maybe_used(x, y));
+
+        // The allocation condition depends on y, but the actual allocation
+        // happens at the root level.
+        maybe_loaded.compute_at(output, y).hoist_storage_root();
+        maybe_used.compute_at(output, y).hoist_storage_root();
+
+        // This will fail to compile with an undefined symbol if we haven't
+        // handled the condition correctly.
+        output.realize({100, 100});
     }
 
     printf("Success!\n");
