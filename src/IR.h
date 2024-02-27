@@ -594,6 +594,10 @@ struct Call : public ExprNode<Call> {
         signed_integer_overflow,
         size_of_halide_buffer_t,
 
+        // Marks the point in lowering where the outermost skip stages checks
+        // should be introduced.
+        skip_stages_marker,
+
         // Takes a realization name and a loop variable. Declares that values of
         // the realization that were stored on earlier loop iterations of the
         // given loop are potentially loaded in this loop iteration somewhere
