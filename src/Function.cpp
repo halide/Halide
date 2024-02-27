@@ -117,7 +117,7 @@ struct FunctionContents {
 
     bool frozen = false;
 
-    size_t definition_order = 0;
+    uint64_t definition_order = 0;
 
     void accept(IRVisitor *visitor) const {
         func_schedule.accept(visitor);
@@ -1339,7 +1339,7 @@ pair<vector<Function>, map<string, Function>> deep_copy(
     return {copy_outputs, copy_env};
 }
 
-size_t Function::definition_order() const {
+uint64_t Function::definition_order() const {
     return contents->definition_order;
 }
 
