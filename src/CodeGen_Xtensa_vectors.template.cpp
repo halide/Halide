@@ -2039,16 +2039,16 @@ HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_pred_sat_sub_i16(const nati
     return r;
 }
 
-HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_mul_add_f32(const native_vector_f32& r, const native_vector_f32& a, const native_vector_f32& b) {
-  native_vector_f32 r1 = r;
-  IVP_MULAN_2XF32(r1, a, b);
-  return r1;
+HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_mul_add_f32(const native_vector_f32 &r, const native_vector_f32 &a, const native_vector_f32 &b) {
+    native_vector_f32 r1 = r;
+    IVP_MULAN_2XF32(r1, a, b);
+    return r1;
 }
 
-HALIDE_ALWAYS_INLINE native_vector_f16 halide_xtensa_mul_add_f16(const native_vector_f16& r, const native_vector_f16& a, const native_vector_f16& b) {
-  native_vector_f16 r1 = r;
-  IVP_MULANXF16(r1, a, b);
-  return r1;
+HALIDE_ALWAYS_INLINE native_vector_f16 halide_xtensa_mul_add_f16(const native_vector_f16 &r, const native_vector_f16 &a, const native_vector_f16 &b) {
+    native_vector_f16 r1 = r;
+    IVP_MULANXF16(r1, a, b);
+    return r1;
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i64 halide_xtensa_widen_mul_i64(const native_vector_i32 &a, const native_vector_i32 &b) {
