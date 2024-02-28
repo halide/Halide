@@ -3159,6 +3159,26 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u32 gather_load<native_ve
 }
 
 template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f16 gather_load<native_vector_f16, native_vector_u16, float16_t, uint16_t, VECTOR_WIDTH_F16, true>(const void *base, const native_vector_u16 &offset) {
+    // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+    return IVP_GATHERDNXF16(
+        IVP_GATHERANXF16((const float16_t *)base, offset << 1));
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f16_x2 gather_load<native_vector_f16_x2, native_vector_u16_x2, float16_t, uint16_t, 2 * VECTOR_WIDTH_F16, true>(const void *base, const native_vector_u16_x2 &offset) {
+    // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+    auto gsr0 = IVP_GATHERANXF16((const float16_t *)base,
+                                 offset.native_vector[0] << 1);
+    auto gsr1 = IVP_GATHERANXF16((const float16_t *)base,
+                                 offset.native_vector[1] << 1);
+
+    return native_vector_f16_x2(native_vector_f16_x2::from_native_vector,
+                                IVP_GATHERDNXF16(gsr0),
+                                IVP_GATHERDNXF16(gsr1));
+}
+
+template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 gather_load<native_vector_f32, native_vector_i32, float, int32_t, VECTOR_WIDTH_F32, true>(const void *base, const native_vector_i32 &offset) {
     // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
     return IVP_GATHERDN_2XF32(
