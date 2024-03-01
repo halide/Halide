@@ -55,11 +55,11 @@ public:
 
     // Public interface methods
     MemoryRegion *reserve(void *user_context, const MemoryRequest &request);
-    int conform(void *user_context, MemoryRequest *request) const; //< conform the given request into a suitable allocation
-    int release(void *user_context, MemoryRegion *region);         //< unmark and cache the region for reuse
-    int reclaim(void *user_context, MemoryRegion *region);         //< free the region and consolidate
-    int retain(void *user_context, MemoryRegion *region);          //< retain the region and increase the usage count
-    bool collect(void *user_context);                              //< returns true if any blocks were removed
+    int conform(void *user_context, MemoryRequest *request) const;  //< conform the given request into a suitable allocation
+    int release(void *user_context, MemoryRegion *region);          //< unmark and cache the region for reuse
+    int reclaim(void *user_context, MemoryRegion *region);          //< free the region and consolidate
+    int retain(void *user_context, MemoryRegion *region);           //< retain the region and increase the usage count
+    bool collect(void *user_context);                               //< returns true if any blocks were removed
     int release(void *user_context);
     int destroy(void *user_context);
 
@@ -483,9 +483,9 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryRequest &requ
     MemoryRequest block_request = request;
     conform(user_context, &block_request);
 
-    // Create the block resource itself    
+    // Create the block resource itself
     BlockResource *block = static_cast<BlockResource *>(block_entry->value);
-    block->memory.size = block_request.size; 
+    block->memory.size = block_request.size;
     block->memory.handle = nullptr;
     block->memory.properties = block_request.properties;
     block->memory.dedicated = block_request.dedicated;
@@ -574,21 +574,21 @@ int BlockAllocator::conform(void *user_context, MemoryRequest *request) const {
 
     if (request->properties.nearest_multiple) {
         size_t nm = request->properties.nearest_multiple;
-        request->size = (((request->size + nm - 1) / nm) * nm); // round up to nearest multiple
+        request->size = (((request->size + nm - 1) / nm) * nm);  // round up to nearest multiple
     }
 
     if (config.minimum_block_size) {
         request->size = ((request->size < config.minimum_block_size) ?
-                        config.minimum_block_size :
-                        request->size);
+                             config.minimum_block_size :
+                             request->size);
     }
     if (config.maximum_block_size) {
         request->size = ((request->size > config.maximum_block_size) ?
-                        config.maximum_block_size :
-                        request->size);
+                             config.maximum_block_size :
+                             request->size);
     }
 
-    if(allocators.block.conform) {
+    if (allocators.block.conform) {
         return allocators.block.conform(user_context, request);
     }
 

@@ -46,11 +46,11 @@ public:
 
     // Public interface methods
     MemoryRegion *reserve(void *user_context, const MemoryRequest &request);
-    int conform(void *user_context, MemoryRequest *request) const;   //< conform the given request into a suitable allocation
-    int release(void *user_context, MemoryRegion *memory_region);    //< unmark and cache the region for reuse
-    int reclaim(void *user_context, MemoryRegion *memory_region);    //< free the region and consolidate
-    int retain(void *user_context, MemoryRegion *memory_region);     //< retain the region and increase usage count
-    bool collect(void *user_context);                                //< returns true if any blocks were removed
+    int conform(void *user_context, MemoryRequest *request) const;  //< conform the given request into a suitable allocation
+    int release(void *user_context, MemoryRegion *memory_region);   //< unmark and cache the region for reuse
+    int reclaim(void *user_context, MemoryRegion *memory_region);   //< free the region and consolidate
+    int retain(void *user_context, MemoryRegion *memory_region);    //< retain the region and increase usage count
+    bool collect(void *user_context);                               //< returns true if any blocks were removed
     int release(void *user_context);
     int destroy(void *user_context);
 
@@ -150,7 +150,7 @@ int RegionAllocator::initialize(void *user_context, BlockResource *mb, const Mem
 }
 
 int RegionAllocator::conform(void *user_context, MemoryRequest *request) const {
-    if(allocators.region.conform) {
+    if (allocators.region.conform) {
         return allocators.region.conform(user_context, request);
     } else {
         size_t actual_alignment = conform_alignment(request->alignment, block->memory.properties.alignment);
@@ -169,7 +169,7 @@ MemoryRegion *RegionAllocator::reserve(void *user_context, const MemoryRequest &
     MemoryRequest region_request = request;
 
     int error_code = conform(user_context, &region_request);
-    if(error_code) {
+    if (error_code) {
 #ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "RegionAllocator: Failed to conform region request! Unable to reserve memory ...\n";
 #endif
@@ -265,7 +265,7 @@ bool RegionAllocator::is_block_region_suitable_for_request(void *user_context, c
 
     MemoryRequest region_request = request;
     int error_code = conform(user_context, &region_request);
-    if(error_code) {
+    if (error_code) {
 #ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "RegionAllocator: Failed to conform region request! Unable to reserve memory ...\n";
 #endif
@@ -473,7 +473,7 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
                         << "current region (offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes) "
                         << "to create empty region (offset=" << (int32_t)split_request.offset << " size=" << (int32_t)(split_request.size) << " bytes)";
 #endif
-    BlockRegion *next_region = block_region->next_ptr;    
+    BlockRegion *next_region = block_region->next_ptr;
     BlockRegion *empty_region = create_block_region(user_context, split_request);
     halide_abort_if_false(user_context, empty_region != nullptr);
 
@@ -487,7 +487,7 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
     return empty_region;
 }
 
-BlockRegion *RegionAllocator::create_block_region(void *user_context, const MemoryRequest &request){
+BlockRegion *RegionAllocator::create_block_region(void *user_context, const MemoryRequest &request) {
 #ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "RegionAllocator: Creating block region request ("
                         << "user_context=" << (void *)(user_context) << " "
@@ -502,7 +502,7 @@ BlockRegion *RegionAllocator::create_block_region(void *user_context, const Memo
 
     MemoryRequest region_request = request;
     int error_code = conform(user_context, &region_request);
-    if(error_code) {
+    if (error_code) {
 #ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "RegionAllocator: Failed to conform request for new block region!\n";
 #endif
@@ -715,7 +715,7 @@ bool RegionAllocator::collect(void *user_context) {
                             << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
                             << "block_reserved=" << (uint32_t)block->reserved << " "
                             << ")";
-#endif                            
+#endif
 
         if (can_coalesce(block_region)) {
 #ifdef DEBUG_RUNTIME_INTERNAL

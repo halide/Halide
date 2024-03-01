@@ -59,11 +59,11 @@ public:
 
     // Public interface methods
     MemoryRegion *reserve(void *user_context, const MemoryRequest &request);
-    int conform(void *user_context, MemoryRequest *request); //< conforms the given memory request into one that can be allocated
-    int release(void *user_context, MemoryRegion *region);   //< unmark and cache the region for reuse
-    int reclaim(void *user_context, MemoryRegion *region);   //< free the region and consolidate
-    int retain(void *user_context, MemoryRegion *region);    //< retain the region and increase its use count
-    bool collect(void *user_context);                        //< returns true if any blocks were removed
+    int conform(void *user_context, MemoryRequest *request);  //< conforms the given memory request into one that can be allocated
+    int release(void *user_context, MemoryRegion *region);    //< unmark and cache the region for reuse
+    int reclaim(void *user_context, MemoryRegion *region);    //< free the region and consolidate
+    int retain(void *user_context, MemoryRegion *region);     //< retain the region and increase its use count
+    bool collect(void *user_context);                         //< returns true if any blocks were removed
     int release(void *user_context);
     int destroy(void *user_context);
 
@@ -87,11 +87,11 @@ public:
 
     static int allocate_block(void *instance_ptr, MemoryBlock *block);
     static int deallocate_block(void *instance_ptr, MemoryBlock *block);
-    static int conform_block_request(void *instance_ptr, MemoryRequest *request); 
-    
+    static int conform_block_request(void *instance_ptr, MemoryRequest *request);
+
     static int allocate_region(void *instance_ptr, MemoryRegion *region);
     static int deallocate_region(void *instance_ptr, MemoryRegion *region);
-    static int conform_region_request(void *instance_ptr, MemoryRequest *request);     
+    static int conform_region_request(void *instance_ptr, MemoryRequest *request);
 
     size_t bytes_allocated_for_blocks() const;
     size_t blocks_allocated() const;
@@ -116,8 +116,7 @@ private:
                                 MemoryProperties properties,
                                 uint32_t required_flags) const;
 
-
-    int lookup_requirements(void *user_context, size_t size, uint32_t usage_flags, VkMemoryRequirements *memory_requirements );
+    int lookup_requirements(void *user_context, size_t size, uint32_t usage_flags, VkMemoryRequirements *memory_requirements);
 
     size_t block_byte_count = 0;
     size_t block_count = 0;
@@ -535,10 +534,10 @@ VulkanMemoryAllocator::default_config() {
 }
 
 // --
-int VulkanMemoryAllocator::lookup_requirements(void *user_context, size_t size, uint32_t usage_flags, VkMemoryRequirements *memory_requirements ) {
+int VulkanMemoryAllocator::lookup_requirements(void *user_context, size_t size, uint32_t usage_flags, VkMemoryRequirements *memory_requirements) {
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Looking up requirements ("
-                   << "user_context=" << user_context << " "    
+                   << "user_context=" << user_context << " "
                    << "size=" << (uint32_t)block->size << ", "
                    << "usage_flags=" << usage_flags << ") ... \n";
 #endif
@@ -555,8 +554,10 @@ int VulkanMemoryAllocator::lookup_requirements(void *user_context, size_t size, 
     VkBuffer buffer = {0};
     VkResult result = vkCreateBuffer(this->device, &create_info, this->alloc_callbacks, &buffer);
     if (result != VK_SUCCESS) {
+#if defined(HL_VK_DEBUG_MEM)
         debug(nullptr) << "VulkanMemoryAllocator: Failed to create buffer to find requirements!\n\t"
                        << "vkCreateBuffer returned: " << vk_get_error_name(result) << "\n";
+#endif
         return halide_error_code_device_malloc_failed;
     }
 
@@ -575,7 +576,7 @@ int VulkanMemoryAllocator::conform_block_request(void *instance_ptr, MemoryReque
     void *user_context = instance->owner_context;
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Conforming block request ("
-                   << "user_context=" << user_context << " "    
+                   << "user_context=" << user_context << " "
                    << "request=" << (void *)(request) << ") ... \n";
 #endif
 
@@ -587,7 +588,7 @@ int VulkanMemoryAllocator::conform_block_request(void *instance_ptr, MemoryReque
     VkMemoryRequirements memory_requirements = {0};
     uint32_t usage_flags = instance->select_memory_usage(user_context, request->properties);
     int error_code = instance->lookup_requirements(user_context, request->size, usage_flags, &memory_requirements);
-    if(error_code != halide_error_code_success) {
+    if (error_code != halide_error_code_success) {
         error(user_context) << "VulkanRegionAllocator: Failed to conform block request! Unable to lookup requirements!\n";
         return error_code;
     }
@@ -606,7 +607,6 @@ int VulkanMemoryAllocator::conform_block_request(void *instance_ptr, MemoryReque
     request->properties.alignment = memory_requirements.alignment;
     return halide_error_code_success;
 }
-
 
 int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block) {
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
@@ -857,7 +857,7 @@ int VulkanMemoryAllocator::conform(void *user_context, MemoryRequest *request) {
     VkMemoryRequirements memory_requirements = {0};
     uint32_t usage_flags = select_memory_usage(user_context, request->properties);
     int error_code = lookup_requirements(user_context, request->size, usage_flags, &memory_requirements);
-    if(error_code != halide_error_code_success) {
+    if (error_code != halide_error_code_success) {
         error(user_context) << "VulkanRegionAllocator: Failed to conform block request! Unable to lookup requirements!\n";
         return error_code;
     }
@@ -871,11 +871,11 @@ int VulkanMemoryAllocator::conform(void *user_context, MemoryRequest *request) {
 
     // Enforce any alignment constraints reported by the device limits for each usage type
     if (usage_flags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) {
-        if((request->alignment % this->physical_device_limits.minStorageBufferOffsetAlignment) != 0) {
+        if ((request->alignment % this->physical_device_limits.minStorageBufferOffsetAlignment) != 0) {
             request->alignment = this->physical_device_limits.minStorageBufferOffsetAlignment;
         }
     } else if (usage_flags & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) {
-        if((request->alignment % this->physical_device_limits.minUniformBufferOffsetAlignment) != 0) {
+        if ((request->alignment % this->physical_device_limits.minUniformBufferOffsetAlignment) != 0) {
             request->alignment = this->physical_device_limits.minUniformBufferOffsetAlignment;
         }
     }
@@ -890,8 +890,8 @@ int VulkanMemoryAllocator::conform(void *user_context, MemoryRequest *request) {
     size_t actual_size = conform_size(actual_offset, memory_requirements.size, actual_alignment, request->properties.nearest_multiple);
 
 #if defined(HL_VK_DEBUG_MEM)
-    if((request->size != actual_size) || (request->alignment != actual_alignment) || (request->offset != actual_offset)) {
-        debug(nullptr) << "VulkanMemoryAllocator: Adjusting request to match requirements (\n" 
+    if ((request->size != actual_size) || (request->alignment != actual_alignment) || (request->offset != actual_offset)) {
+        debug(nullptr) << "VulkanMemoryAllocator: Adjusting request to match requirements (\n"
                        << "  size = " << (uint64_t)request->size << " => " << (uint64_t)actual_size << ",\n"
                        << "  alignment = " << (uint64_t)request->alignment << " => " << (uint64_t)actual_alignment << ",\n"
                        << "  offset = " << (uint64_t)request->offset << " => " << (uint64_t)actual_offset << ",\n"
@@ -1014,7 +1014,7 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
     if (memory_requirements.size > region->size) {
         vkDestroyBuffer(instance->device, *buffer, instance->alloc_callbacks);
 #ifdef DEBUG_RUNTIME
-        debug(nullptr) << "VulkanMemoryAllocator: Reallocating buffer to match required size (" 
+        debug(nullptr) << "VulkanMemoryAllocator: Reallocating buffer to match required size ("
                        << (uint64_t)region->size << " => " << (uint64_t)memory_requirements.size << " bytes) ...\n";
 #endif
         create_info.size = memory_requirements.size;
