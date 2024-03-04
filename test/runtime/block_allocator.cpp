@@ -433,8 +433,9 @@ int main(int argc, char **argv) {
 
     // test conform request
     {
+        uint32_t mbs = 1024; // min block size
         BlockAllocator::Config config = {0};
-        config.minimum_block_size = 1024;
+        config.minimum_block_size = mbs;
 
         // Use default conform allocation request callbacks
         MemoryBlockAllocatorFns block_allocator = {allocate_block, deallocate_block, nullptr};
@@ -465,7 +466,7 @@ int main(int argc, char **argv) {
                                     << "request.alignment=(" << a << " => " << int32_t(request.alignment) << ") "
                                     << "...";
 
-                halide_abort_if_false(user_context, request.size == max(1024, (((sz + a - 1) / a) * a)));
+                halide_abort_if_false(user_context, request.size == max(mbs, (((sz + a - 1) / a) * a)));
                 halide_abort_if_false(user_context, request.alignment == a);
             }
         }
