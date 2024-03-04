@@ -454,8 +454,8 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, request.size != 4);
         halide_abort_if_false(user_context, request.alignment != 4);
 
-        for (int sz = 1; sz < 256; ++sz) {
-            for (int a = 2; a < sz; a *= 2) {
+        for (uint32_t sz = 1; sz < 256; ++sz) {
+            for (uint32_t a = 2; a < sz; a *= 2) {
                 request.size = sz;
                 request.alignment = a;
                 instance->conform(user_context, &request);
