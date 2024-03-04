@@ -4,6 +4,7 @@
 #include <unordered_set>
 
 #include "CSE.h"
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Vulkan_Dev.h"
@@ -381,12 +382,10 @@ private:
 struct FindWorkGroupSize : public IRVisitor {
     using IRVisitor::visit;
     void visit(const For *loop) override {
-        if (!CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
-            return loop->body.accept(this);
-        }
+        user_assert(loop->for_type != ForType::GPULane)
+            << "The Vulkan backend does not support the gpu_lanes() scheduling directive.";
 
-        if ((loop->for_type == ForType::GPUBlock) ||
-            (loop->for_type == ForType::GPUThread)) {
+        if (is_gpu(loop->for_type)) {
 
             // This should always be true at this point in codegen
             internal_assert(is_const_zero(loop->min));
@@ -411,11 +410,8 @@ struct FindWorkGroupSize : public IRVisitor {
     }
 
     int thread_loop_workgroup_index(const std::string &name) {
-        std::string ids[] = {".__thread_id_x",
-                             ".__thread_id_y",
-                             ".__thread_id_z"};
-        for (size_t i = 0; i < sizeof(ids) / sizeof(std::string); i++) {
-            if (ends_with(name, ids[i])) {
+        for (size_t i = 0; i < 3; i++) {
+            if (ends_with(name, gpu_thread_name(i))) {
                 return i;
             }
         }
@@ -1630,20 +1626,18 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const AssertStmt *stmt) {
 
 namespace {
 std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
-    if (ends_with(name, ".__thread_id_x")) {
+    if (ends_with(name, gpu_thread_name(0))) {
         return {"LocalInvocationId", 0};
-    } else if (ends_with(name, ".__thread_id_y")) {
+    } else if (ends_with(name, gpu_thread_name(1))) {
         return {"LocalInvocationId", 1};
-    } else if (ends_with(name, ".__thread_id_z")) {
+    } else if (ends_with(name, gpu_thread_name(2))) {
         return {"LocalInvocationId", 2};
-    } else if (ends_with(name, ".__block_id_x")) {
+    } else if (ends_with(name, gpu_block_name(0))) {
         return {"WorkgroupId", 0};
-    } else if (ends_with(name, ".__block_id_y")) {
+    } else if (ends_with(name, gpu_block_name(1))) {
         return {"WorkgroupId", 1};
-    } else if (ends_with(name, ".__block_id_z")) {
+    } else if (ends_with(name, gpu_block_name(2))) {
         return {"WorkgroupId", 2};
-    } else if (ends_with(name, "id_w")) {
-        user_error << "Vulkan only supports <=3 dimensions for gpu blocks";
     }
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return {"", -1};
@@ -1654,11 +1648,7 @@ std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(For): name=" << op->name << " min=" << op->min << " extent=" << op->extent << "\n";
 
-    if (is_gpu_var(op->name)) {
-        internal_assert((op->for_type == ForType::GPUBlock) ||
-                        (op->for_type == ForType::GPUThread))
-            << "kernel loops must be either gpu block or gpu thread\n";
-
+    if (is_gpu(op->for_type)) {
         // This should always be true at this point in codegen
         internal_assert(is_const_zero(op->min));
         auto intrinsic = simt_intrinsic(op->name);
@@ -2477,11 +2467,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_workgroup_size(SpvId kernel_func
             local_size_y_id,
             local_size_z_id};
 
-        const char *local_size_names[3] = {
-            "__thread_id_x",
-            "__thread_id_y",
-            "__thread_id_z"};
-
         debug(1) << "Vulkan: Using dynamic workgroup local size with default of [" << local_size_x << ", " << local_size_y << ", " << local_size_z << "]...\n";
 
         // annotate each local size with a corresponding specialization constant
@@ -2489,8 +2474,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_workgroup_size(SpvId kernel_func
             SpvId constant_id = (uint32_t)(descriptor_set_table.back().specialization_constants.size() + 1);
             SpvBuilder::Literals spec_id = {constant_id};
             builder.add_annotation(local_size_ids[dim], SpvDecorationSpecId, spec_id);
-            builder.add_symbol(local_size_names[dim], local_size_ids[dim], builder.current_module().id());
-            SpecializationBinding spec_binding = {constant_id, (uint32_t)sizeof(uint32_t), local_size_names[dim]};
+            builder.add_symbol(gpu_thread_name(dim), local_size_ids[dim], builder.current_module().id());
+            SpecializationBinding spec_binding = {constant_id, (uint32_t)sizeof(uint32_t), gpu_thread_name(dim)};
             descriptor_set_table.back().specialization_constants.push_back(spec_binding);
             descriptor_set_table.back().workgroup_size_binding.local_size_constant_id[dim] = constant_id;
         }
@@ -2520,17 +2505,11 @@ namespace {
 class FindIntrinsicsUsed : public IRVisitor {
     using IRVisitor::visit;
     void visit(const For *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (is_gpu(op->for_type)) {
             auto intrinsic = simt_intrinsic(op->name);
-            intrinsics_used.insert(intrinsic.first);
+            intrinsics_used.insert(op->name);
         }
         op->body.accept(this);
-    }
-    void visit(const Variable *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            auto intrinsic = simt_intrinsic(op->name);
-            intrinsics_used.insert(intrinsic.first);
-        }
     }
 
 public:

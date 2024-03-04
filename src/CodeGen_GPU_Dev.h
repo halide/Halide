@@ -55,10 +55,6 @@ struct CodeGen_GPU_Dev {
         return false;
     }
 
-    static bool is_gpu_var(const std::string &name);
-    static bool is_gpu_block_var(const std::string &name);
-    static bool is_gpu_thread_var(const std::string &name);
-
     /** Checks if expr is block uniform, i.e. does not depend on a thread
      * var. */
     static bool is_block_uniform(const Expr &expr);

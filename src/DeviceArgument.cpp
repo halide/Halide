@@ -65,7 +65,7 @@ void HostClosure::visit(const Call *op) {
 }
 
 void HostClosure::visit(const For *loop) {
-    if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
+    if (is_gpu(loop->for_type)) {
         // The size of the threads and blocks is not part of the closure
         ScopedBinding<> p(ignore, loop->name);
         loop->body.accept(this);
