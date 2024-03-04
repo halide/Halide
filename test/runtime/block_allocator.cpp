@@ -43,6 +43,7 @@ int deallocate_block(void *user_context, MemoryBlock *block) {
     return halide_error_code_success;
 }
 
+
 int conform_block(void *user_context, MemoryRequest *request) {
 
     debug(user_context) << "Test : conform_block ("
@@ -53,6 +54,7 @@ int conform_block(void *user_context, MemoryRequest *request) {
 
     return halide_error_code_success;
 }
+
 
 int allocate_region(void *user_context, MemoryRegion *region) {
     region->handle = (void *)1;
@@ -93,6 +95,7 @@ int conform_region(void *user_context, MemoryRequest *request) {
                         << "actual_offset=" << int32_t(actual_offset) << "\n  "
                         << "actual_alignment=" << int32_t(actual_alignment) << "\n"
                         << ") ...";
+
 
     request->alignment = actual_alignment;
     request->offset = actual_offset;
@@ -229,7 +232,7 @@ int main(int argc, char **argv) {
 
         halide_abort_if_false(user_context, request.size == size_t(0));
 
-        // test round up size to alignment
+        // test round up size to alignment 
         request.size = 1;
         request.alignment = 0;
         request.properties.alignment = 4;
@@ -238,8 +241,8 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, request.alignment != 4);
 
         size_t nm = padded_size;
-        for (int sz = 1; sz < 256; ++sz) {
-            for (int a = 2; a < sz; a *= 2) {
+        for(uint32_t sz = 1; sz < 256; ++sz) {
+            for(uint32_t a = 2; a < sz; a *= 2) {
                 request.size = sz;
                 request.alignment = a;
                 instance->conform(user_context, &request);
@@ -254,7 +257,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        // test round up size and offset to alignment
+        // test round up size and offset to alignment 
         request.size = 1;
         request.offset = 1;
         request.alignment = 32;
@@ -263,9 +266,9 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, request.offset == 32);
         halide_abort_if_false(user_context, request.alignment == 32);
 
-        for (int sz = 1; sz < 256; ++sz) {
-            for (int os = 1; os < sz; ++os) {
-                for (int a = 2; a < sz; a *= 2) {
+        for(uint32_t sz = 1; sz < 256; ++sz) {
+            for(uint32_t os = 1; os < sz; ++os) {
+                for(uint32_t a = 2; a < sz; a *= 2) {
                     request.size = sz;
                     request.offset = os;
                     request.alignment = a;
@@ -431,7 +434,7 @@ int main(int argc, char **argv) {
         HALIDE_CHECK(user_context, get_allocated_system_memory() == 0);
     }
 
-    // test conform request
+    // test conform request 
     {
         BlockAllocator::Config config = {0};
         config.minimum_block_size = 1024;
@@ -446,7 +449,7 @@ int main(int argc, char **argv) {
         instance->conform(user_context, &request);
         halide_abort_if_false(user_context, request.size != 0);
 
-        // test round up size to alignment
+        // test round up size to alignment 
         request.size = 1;
         request.alignment = 0;
         request.properties.alignment = 4;
@@ -454,8 +457,8 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, request.size != 4);
         halide_abort_if_false(user_context, request.alignment != 4);
 
-        for (int sz = 1; sz < 256; ++sz) {
-            for (int a = 2; a < sz; a *= 2) {
+        for(int sz = 1; sz < 256; ++sz) {
+            for(int a = 2; a < sz; a *= 2) {
                 request.size = sz;
                 request.alignment = a;
                 instance->conform(user_context, &request);
