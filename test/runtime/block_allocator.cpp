@@ -433,7 +433,7 @@ int main(int argc, char **argv) {
 
     // test conform request
     {
-        uint32_t mbs = 1024; // min block size
+        uint32_t mbs = 1024;  // min block size
         BlockAllocator::Config config = {0};
         config.minimum_block_size = mbs;
 
