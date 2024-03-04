@@ -505,12 +505,11 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
         deserialize_vector<flatbuffers::String, std::string>(function->trace_tags(),
                                                              &Deserializer::deserialize_string);
     const bool frozen = function->frozen();
-    const uint64_t definition_order = function->definition_order();
     hl_function.update_with_deserialization(name, origin_name, output_types, required_types,
                                             required_dim, args, func_schedule, init_def, updates,
                                             debug_file, output_buffers, extern_arguments, extern_function_name,
                                             name_mangling, extern_function_device_api, extern_proxy_expr,
-                                            trace_loads, trace_stores, trace_realizations, trace_tags, frozen, definition_order);
+                                            trace_loads, trace_stores, trace_realizations, trace_tags, frozen);
 }
 
 Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt) {

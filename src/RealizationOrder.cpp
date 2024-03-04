@@ -242,26 +242,20 @@ void check_fused_stages_are_scheduled_in_order(const Function &f) {
 // topological order) and less likely to be invalidated by things that have
 // happened in the same process earlier.
 //
-// To do this, we break each name into a prefix, the definition order counter of
+// To do this, we break each name into a prefix, the visitation order counter of
 // the Func, and then finally the full original name. The prefix is what you get
 // after stripping off anything after a $ (to handle suffixes introduced by
 // multi-character unique_name calls), and then stripping off any digits (to
-// handle suffixes introduced by single-character unique_name calls).
+// handle suffixes introduced by single-character unique_name calls). The
+// visitation order is when the Func is first encountered in an IRVisitor
+// traversal of the entire Pipeline.
 //
-// This is gross. The reason we don't just break ties by definition order alone
-// is two-fold. First, it's more likely to be consistent with the realization
-// order before this sorting was done. Second, consider a multi-target
-// compilation scenario in which the same pipeline is compiled for many targets
-// in the same process. Now say there is a Func that is shared by all targets,
-// but only defined the first time it is used, halfway through the definition of
-// the first Pipeline (e.g. because it's a static local in some helper
-// function). Its definition order in that first target is midway through the
-// pipeline, but its definition order for every every subsequent target is
-// before the start of the pipeline, so if we sort by definition order alone it
-// won't show up in a consistent place. If we use a name prefix as the primary
-// key, then as long as it has a unique name, it will still show up in a
-// consistent place.
-void sort_funcs_by_name_and_counter(vector<string> *funcs, const map<string, Function> &env) {
+// This is gross. The reason we don't just break ties by visitation order alone
+// is because that way it's likely to be consistent with the realization
+// order before this sorting was done.
+void sort_funcs_by_name_and_counter(vector<string> *funcs,
+                                    const map<string, Function> &env,
+                                    const map<string, uint64_t> &visitation_order) {
     vector<std::tuple<string, uint64_t, string>> items;
     items.reserve(funcs->size());
     for (size_t i = 0; i < funcs->size(); i++) {
@@ -270,8 +264,16 @@ void sort_funcs_by_name_and_counter(vector<string> *funcs, const map<string, Fun
         while (!prefix.empty() && std::isdigit(prefix.back())) {
             prefix.pop_back();
         }
-        auto it = env.find(full_name);
-        uint64_t counter = (it != env.end()) ? it->second.definition_order() : 0;
+        auto env_it = env.find(full_name);
+        uint64_t counter = 0;
+        if (env_it != env.end()) {
+            auto v_it = visitation_order.find(full_name);
+            internal_assert(v_it != visitation_order.end())
+                << "Func " << full_name
+                << " is somehow in the visitation order but not the environment.";
+            counter = v_it->second;
+        }
+
         items.emplace_back(prefix, counter, full_name);
     }
     std::sort(items.begin(), items.end());
@@ -281,6 +283,15 @@ void sort_funcs_by_name_and_counter(vector<string> *funcs, const map<string, Fun
 }
 
 }  // anonymous namespace
+
+map<string, uint64_t> compute_visitation_order(const vector<Function> &outputs) {
+    vector<Function> funcs = called_funcs_in_order_found(outputs);
+    map<string, uint64_t> result;
+    for (uint64_t i = 0; i < funcs.size(); i++) {
+        result[funcs[i].name()] = i;
+    }
+    return result;
+}
 
 pair<vector<string>, vector<vector<string>>> realization_order(
     const vector<Function> &outputs, map<string, Function> &env) {
@@ -363,8 +374,9 @@ pair<vector<string>, vector<vector<string>>> realization_order(
             }
         }
     }
+    auto visitation_order = compute_visitation_order(outputs);
     for (auto &p : graph) {
-        sort_funcs_by_name_and_counter(&p.second, env);
+        sort_funcs_by_name_and_counter(&p.second, env, visitation_order);
     }
 
     // Compute the realization order of the fused groups (i.e. the dummy nodes)
@@ -426,8 +438,10 @@ vector<string> topological_order(const vector<Function> &outputs,
         }
         graph.emplace(caller.first, std::move(s));
     }
+
+    auto visitation_order = compute_visitation_order(outputs);
     for (auto &p : graph) {
-        sort_funcs_by_name_and_counter(&p.second, env);
+        sort_funcs_by_name_and_counter(&p.second, env, visitation_order);
     }
 
     vector<string> order;

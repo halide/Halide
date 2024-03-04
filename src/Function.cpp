@@ -60,11 +60,6 @@ public:
     }
 };
 
-uint64_t definition_order_counter() {
-    static std::atomic<uint64_t> counter{};
-    return counter++;
-}
-
 }  // namespace
 
 struct FunctionContents {
@@ -116,8 +111,6 @@ struct FunctionContents {
     std::vector<string> trace_tags;
 
     bool frozen = false;
-
-    uint64_t definition_order = 0;
 
     void accept(IRVisitor *visitor) const {
         func_schedule.accept(visitor);
@@ -359,8 +352,7 @@ void Function::update_with_deserialization(const std::string &name,
                                            bool trace_stores,
                                            bool trace_realizations,
                                            const std::vector<std::string> &trace_tags,
-                                           bool frozen,
-                                           uint64_t definition_order) {
+                                           bool frozen) {
     contents->name = name;
     contents->origin_name = origin_name;
     contents->output_types = output_types;
@@ -382,7 +374,6 @@ void Function::update_with_deserialization(const std::string &name,
     contents->trace_realizations = trace_realizations;
     contents->trace_tags = trace_tags;
     contents->frozen = frozen;
-    contents->definition_order = definition_order;
 }
 
 namespace {
@@ -521,7 +512,6 @@ void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const
     copy->frozen = contents->frozen;
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
-    copy->definition_order = contents->definition_order;
 
     // Copy the pure definition
     if (contents->init_def.defined()) {
@@ -625,8 +615,6 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     check_types(values);
     check_dims((int)args.size());
     contents->args = args;
-
-    contents->definition_order = definition_order_counter();
 
     std::vector<Expr> init_def_args;
     init_def_args.resize(args.size());
@@ -914,7 +902,6 @@ void Function::define_extern(const std::string &function_name,
     contents->output_types = types;
     contents->extern_mangling = mangling;
     contents->extern_function_device_api = device_api;
-    contents->definition_order = definition_order_counter();
 
     std::vector<Expr> values;
     contents->output_buffers.clear();
@@ -1337,10 +1324,6 @@ pair<vector<Function>, map<string, Function>> deep_copy(
     }
 
     return {copy_outputs, copy_env};
-}
-
-uint64_t Function::definition_order() const {
-    return contents->definition_order;
 }
 
 }  // namespace Internal
