@@ -2,6 +2,7 @@
 #include <utility>
 
 #include "CSE.h"
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
@@ -566,8 +567,7 @@ class PartitionLoops : public IRMutator {
             }
         } mutation_checker{op, op->partition_policy == Partition::Always};
 
-        ScopedValue<bool> old_in_gpu_loop(in_gpu_loop, in_gpu_loop ||
-                                                           CodeGen_GPU_Dev::is_gpu_var(op->name));
+        ScopedValue<bool> old_in_gpu_loop(in_gpu_loop, in_gpu_loop || is_gpu(op->for_type));
 
         // If we're inside GPU kernel, and the body contains thread
         // barriers or warp shuffles, it's not safe to partition loops.
@@ -877,12 +877,12 @@ class RenormalizeGPULoops : public IRMutator {
         bool old_in_gpu_loop = in_gpu_loop;
         Stmt stmt;
 
-        if (in_gpu_loop || CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (in_gpu_loop || is_gpu(op->for_type)) {
             gpu_vars.push(op->name);
             in_gpu_loop = true;
         }
 
-        if (ends_with(op->name, "__thread_id_x")) {
+        if (ends_with(op->name, gpu_thread_name(0))) {
             internal_assert(!in_thread_loop);
             in_thread_loop = true;
             stmt = IRMutator::visit(op);
