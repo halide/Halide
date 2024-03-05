@@ -296,6 +296,7 @@ tests(GROUPS correctness
       split_fuse_rvar.cpp
       split_reuse_inner_name_bug.cpp
       split_store_compute.cpp
+      stable_realization_order.cpp
       stack_allocations.cpp
       stage_strided_loads.cpp
       stencil_chain_in_update_definitions.cpp

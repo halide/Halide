@@ -1,5 +1,7 @@
 #include "CodeGen_GPU_Dev.h"
+#include "CanonicalizeGPUVars.h"
 #include "Deinterleave.h"
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
@@ -8,50 +10,6 @@ namespace Halide {
 namespace Internal {
 
 CodeGen_GPU_Dev::~CodeGen_GPU_Dev() = default;
-
-bool CodeGen_GPU_Dev::is_gpu_var(const std::string &name) {
-    return is_gpu_block_var(name) || is_gpu_thread_var(name);
-}
-
-bool CodeGen_GPU_Dev::is_gpu_block_var(const std::string &name) {
-    return (ends_with(name, ".__block_id_x") ||
-            ends_with(name, ".__block_id_y") ||
-            ends_with(name, ".__block_id_z") ||
-            ends_with(name, ".__block_id_w"));
-}
-
-bool CodeGen_GPU_Dev::is_gpu_thread_var(const std::string &name) {
-    return (ends_with(name, ".__thread_id_x") ||
-            ends_with(name, ".__thread_id_y") ||
-            ends_with(name, ".__thread_id_z") ||
-            ends_with(name, ".__thread_id_w"));
-}
-
-namespace {
-// Check to see if an expression is uniform within a block.
-// This is done by checking to see if the expression depends on any GPU
-// thread indices.
-class IsBlockUniform : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Variable *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
-            result = false;
-        }
-    }
-
-public:
-    bool result = true;
-
-    IsBlockUniform() = default;
-};
-}  // namespace
-
-bool CodeGen_GPU_Dev::is_block_uniform(const Expr &expr) {
-    IsBlockUniform v;
-    expr.accept(&v);
-    return v.result;
-}
 
 namespace {
 // Check to see if a buffer is a candidate for constant memory storage.
@@ -71,13 +29,39 @@ class IsBufferConstant : public IRVisitor {
 
     void visit(const Load *op) override {
         if (op->name == buffer &&
-            !CodeGen_GPU_Dev::is_block_uniform(op->index)) {
+            expr_uses_vars(op->index, depends_on_thread_var)) {
             result = false;
         }
         if (result) {
             IRVisitor::visit(op);
         }
     }
+
+    void visit(const LetStmt *op) override {
+        op->value.accept(this);
+        ScopedBinding<> bind_if(expr_uses_vars(op->value, depends_on_thread_var),
+                                depends_on_thread_var,
+                                op->name);
+        op->body.accept(this);
+    }
+
+    void visit(const Let *op) override {
+        op->value.accept(this);
+        ScopedBinding<> bind_if(expr_uses_vars(op->value, depends_on_thread_var),
+                                depends_on_thread_var,
+                                op->name);
+        op->body.accept(this);
+    }
+
+    void visit(const For *op) override {
+        ScopedBinding<> bind_if(op->for_type == ForType::GPUThread ||
+                                    op->for_type == ForType::GPULane,
+                                depends_on_thread_var,
+                                op->name);
+        IRVisitor::visit(op);
+    }
+
+    Scope<> depends_on_thread_var;
 
 public:
     bool result = true;
