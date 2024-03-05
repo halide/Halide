@@ -535,13 +535,9 @@ private:
             Interval loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
             it->loop_vars.push(op->name, loop_bounds);
         }
-        bool old_in_gpu = in_gpu;
-        if (op->for_type == ForType::GPUBlock ||
-            op->for_type == ForType::GPUThread) {
-            in_gpu = true;
-        }
+
+        ScopedValue<bool> old_in_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
         Stmt stmt = IRMutator::visit(op);
-        in_gpu = old_in_gpu;
 
         for (auto &p : hoisted_storages) {
             p.loop_vars.pop(op->name);
