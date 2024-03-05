@@ -689,7 +689,8 @@ private:
                 {"halide_xtensa_widen_accum_u24", wild_i24x + i24(wild_u8x), Pattern::AccumulatorOutput24},
 
                 {"halide_xtensa_mul_add_f16", wild_f16x + wild_f16x * wild_f16x},
-                {"halide_xtensa_mul_add_f32", wild_f32x + wild_f32x * wild_f32x},
+                // TODO(vksnk): disabled temporarily.
+                // {"halide_xtensa_mul_add_f32", wild_f32x + wild_f32x * wild_f32x},
             };
 
             Expr new_expr = apply_commutative_patterns(op, adds, this);
