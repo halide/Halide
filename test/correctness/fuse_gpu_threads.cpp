@@ -6,8 +6,7 @@ using namespace Halide::Internal;
 class CheckThreadExtent : public IRVisitor {
     using IRVisitor::visit;
     void visit(const For *op) override {
-        if ((op->name == ".__thread_id_x") || (op->name == ".__thread_id_y")) {
-            assert(op->for_type == ForType::GPUThread);
+        if (op->for_type == ForType::GPUThread) {
             // Assert the min and extent to be 0 and 16 for this particular test case
             const int64_t *min = as_const_int(op->min);
             const int64_t *extent = as_const_int(op->extent);
@@ -19,6 +18,11 @@ class CheckThreadExtent : public IRVisitor {
 };
 
 int main(int argc, char **argv) {
+    // Canonical GPU for loop names are uniqued to make sure they don't collide
+    // with user-provided names. We'll test that works by trying for a collision:
+    unique_name("thread_id_x");
+    unique_name("block_id_x");
+
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
@@ -51,7 +55,7 @@ int main(int argc, char **argv) {
         .vectorize(x, 4, TailStrategy::RoundUp)
         .gpu_threads(x, y);
 
-    // Lower it and inspect the IR to verify the min/extent of GPU ".__thread_id_x"
+    // Lower it and inspect the IR to verify the min/extent of GPU thread loops
     Module m = consumer.compile_to_module({consumer.infer_arguments()}, "fuse_gpu_threads", target);
     CheckThreadExtent c;
     m.functions().front().body.accept(&c);
