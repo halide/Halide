@@ -293,23 +293,37 @@ private:
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
         if (hoisted_storages_map.count(op->name) > 0) {
             HoistedStorageData &hoisted_storage_data = hoisted_storages[hoisted_storages_map[op->name]];
-            vector<Expr> bounded_extents;
-            for (const auto &e : allocation_extents) {
-                Expr expanded_extent = e;
+
+            auto expand_and_bound = [&](Expr e) {
                 // Iterate from innermost outwards
                 for (auto it = hoisted_storages.rbegin(); it != hoisted_storages.rend(); it++) {
-                    expanded_extent = expand_expr(expanded_extent, it->scope);
+                    e = expand_expr(e, it->scope);
                     if (it->name == op->name) {
                         break;
                     }
                 }
-                expanded_extent = simplify(common_subexpression_elimination(expanded_extent));
-                Interval bounds = bounds_of_expr_in_scope(expanded_extent, hoisted_storage_data.loop_vars);
-                user_assert(bounds.max.defined()) << "Couldn't infer the upper bound for the storage size of " << op->name << ", consider using bound_storage.\n";
-                bounded_extents.push_back(bounds.max);
+
+                e = simplify(common_subexpression_elimination(e));
+                Interval bounds = bounds_of_expr_in_scope(e, hoisted_storage_data.loop_vars);
+                return bounds.max;
+            };
+
+            vector<Expr> bounded_extents;
+            for (const auto &e : allocation_extents) {
+                Expr expanded_extent = expand_and_bound(e);
+                user_assert(expanded_extent.defined() &&
+                            !expanded_extent.same_as(Interval::pos_inf()))
+                    << "Couldn't infer the upper bound for the storage size of " << op->name << ", consider using bound_storage.\n";
+                bounded_extents.push_back(expanded_extent);
             }
 
-            HoistedAllocationInfo hoisted_alloc(op->name, op->types[0], op->memory_type, bounded_extents, condition);
+            Expr expanded_condition = expand_and_bound(condition);
+            if (!expanded_condition.defined() ||
+                expanded_condition.same_as(Interval::pos_inf())) {
+                expanded_condition = const_true();
+            }
+
+            HoistedAllocationInfo hoisted_alloc(op->name, op->types[0], op->memory_type, bounded_extents, expanded_condition);
 
             hoisted_storage_data.hoisted_allocations.push_back(hoisted_alloc);
         } else {

@@ -142,8 +142,8 @@ struct AllInts<float, Args...> : std::false_type {};
 template<typename... Args>
 struct AllInts<double, Args...> : std::false_type {};
 
-// A helper to detect if there are any zeros in a container
 namespace Internal {
+// A helper to detect if there are any zeros in a container
 template<typename Container>
 bool any_zero(const Container &c) {
     for (int i : c) {
@@ -153,6 +153,11 @@ bool any_zero(const Container &c) {
     }
     return false;
 }
+
+struct DefaultAllocatorFns {
+    static inline void *(*default_allocate_fn)(size_t) = nullptr;
+    static inline void (*default_deallocate_fn)(void *) = nullptr;
+};
 }  // namespace Internal
 
 /** A struct acting as a header for allocations owned by the Buffer
@@ -711,6 +716,13 @@ private:
     }
 
 public:
+    static void set_default_allocate_fn(void *(*allocate_fn)(size_t)) {
+        Internal::DefaultAllocatorFns::default_allocate_fn = allocate_fn;
+    }
+    static void set_default_deallocate_fn(void (*deallocate_fn)(void *)) {
+        Internal::DefaultAllocatorFns::default_deallocate_fn = deallocate_fn;
+    }
+
     /** Determine if a Buffer<T, Dims, InClassDimStorage> can be constructed from some other Buffer type.
      * If this can be determined at compile time, fail with a static assert; otherwise
      * return a boolean based on runtime typing. */
@@ -893,7 +905,7 @@ public:
 
 #if HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
         // Only use aligned_alloc() if no custom allocators are specified.
-        if (!allocate_fn && !deallocate_fn) {
+        if (!allocate_fn && !deallocate_fn && !Internal::DefaultAllocatorFns::default_allocate_fn && !Internal::DefaultAllocatorFns::default_deallocate_fn) {
             // As a practical matter, sizeof(AllocationHeader) is going to be no more than 16 bytes
             // on any supported platform, so we will just overallocate by 'alignment'
             // so that the user storage also starts at an aligned point. This is a bit
@@ -908,10 +920,16 @@ public:
         // else fall thru
 #endif
         if (!allocate_fn) {
-            allocate_fn = malloc;
+            allocate_fn = Internal::DefaultAllocatorFns::default_allocate_fn;
+            if (!allocate_fn) {
+                allocate_fn = malloc;
+            }
         }
         if (!deallocate_fn) {
-            deallocate_fn = free;
+            deallocate_fn = Internal::DefaultAllocatorFns::default_deallocate_fn;
+            if (!deallocate_fn) {
+                deallocate_fn = free;
+            }
         }
 
         static_assert(sizeof(AllocationHeader) <= alignment);

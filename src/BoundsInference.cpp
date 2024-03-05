@@ -1383,9 +1383,14 @@ Stmt bounds_inference(Stmt s,
         fused_pairs_in_groups.push_back(pairs);
     }
 
+    // Add a note in the IR for where the outermost dynamic-stage skipping
+    // checks should go. These are injected in a later pass.
+    Expr marker = Call::make(Int(32), Call::skip_stages_marker, {}, Call::Intrinsic);
+    s = Block::make(Evaluate::make(marker), s);
+
     // Add a note in the IR for where assertions on input images
     // should go. Those are handled by a later lowering pass.
-    Expr marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);
+    marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);
     s = Block::make(Evaluate::make(marker), s);
 
     // Add a synthetic outermost loop to act as 'root'.
