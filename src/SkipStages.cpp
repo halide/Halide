@@ -613,7 +613,7 @@ protected:
             if (body.same_as(op->body)) {
                 return op;
             } else {
-                return ProducerConsumer::make(op->name, op->is_producer, std::move(body));
+                return ProducerConsumer::make(op->name, op->is_producer, std::move(body), op->no_profiling);
             }
         } else {
             ScopedBinding<> bind_if(!unconditionally_used &&

@@ -391,7 +391,7 @@ protected:
         }
         Stmt body = mutate(op->body);
         body = allocate_mutex(finder.mutex_name, extent, body);
-        return ProducerConsumer::make(op->name, op->is_producer, std::move(body));
+        return ProducerConsumer::make(op->name, op->is_producer, std::move(body), op->no_profiling);
     }
 
     Stmt visit(const Atomic *op) override {

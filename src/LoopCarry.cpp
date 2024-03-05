@@ -547,7 +547,7 @@ class LoopCarry : public IRMutator {
         } else {
             ScopedBinding<> bind(in_consume, op->name);
             Stmt body = mutate(op->body);
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return ProducerConsumer::make(op->name, op->is_producer, body, op->no_profiling);
         }
     }
 

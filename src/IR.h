@@ -316,11 +316,17 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     std::string name;
     bool is_producer;
     Stmt body;
+    // This boolean is useful to set on very tiny Funcs, where
+    // the profiling would become a significant overhead of the
+    // runtime of that Func. Setting this on true will simply
+    // not inject the profiling, and sample attribution will go
+    // to the enclosing ProducerConsumer.
+    bool no_profiling;
 
-    static Stmt make(const std::string &name, bool is_producer, Stmt body);
+    static Stmt make(const std::string &name, bool is_producer, Stmt body, bool no_profiling);
 
-    static Stmt make_produce(const std::string &name, Stmt body);
-    static Stmt make_consume(const std::string &name, Stmt body);
+    static Stmt make_produce(const std::string &name, Stmt body, bool no_profiling);
+    static Stmt make_consume(const std::string &name, Stmt body, bool no_profiling);
 
     static const IRNodeType _node_type = IRNodeType::ProducerConsumer;
 };

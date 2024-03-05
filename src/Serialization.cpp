@@ -439,7 +439,8 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         return std::make_pair(Serialize::Stmt::ProducerConsumer,
                               Serialize::CreateProducerConsumer(builder, name_serialized,
                                                                 producer_consumer->is_producer,
-                                                                body_serialized.first, body_serialized.second)
+                                                                body_serialized.first, body_serialized.second,
+                                                                producer_consumer->no_profiling)
                                   .Union());
     }
     case IRNodeType::For: {
@@ -1029,6 +1030,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
     for (const auto &tag : function.get_trace_tags()) {
         trace_tags_serialized.push_back(serialize_string(builder, tag));
     }
+    const bool no_profiling = function.should_not_profile();
     const bool frozen = function.frozen();
     auto func = Serialize::CreateFunc(builder,
                                       name_serialized,
@@ -1050,7 +1052,9 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
                                       trace_loads,
                                       trace_stores,
                                       trace_realizations,
-                                      builder.CreateVector(trace_tags_serialized), frozen);
+                                      builder.CreateVector(trace_tags_serialized),
+                                      no_profiling,
+                                      frozen);
     return func;
 }
 

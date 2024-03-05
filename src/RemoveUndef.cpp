@@ -314,7 +314,7 @@ private:
         if (body.same_as(op->body)) {
             return op;
         } else {
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return ProducerConsumer::make(op->name, op->is_producer, body, op->no_profiling);
         }
     }
 

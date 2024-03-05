@@ -116,11 +116,11 @@ Stmt Simplify::visit(const IfThenElse *op) {
                then_pc->name == else_pc->name &&
                then_pc->is_producer == else_pc->is_producer) {
         return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
-                                      mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)));
+                                      mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)), then_pc->no_profiling);
     } else if (then_pc &&
                is_no_op(else_case)) {
         return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
-                                      mutate(IfThenElse::make(condition, then_pc->body)));
+                                      mutate(IfThenElse::make(condition, then_pc->body)), then_pc->no_profiling);
     } else if (then_block &&
                else_block &&
                equal(then_block->first, else_block->first)) {
@@ -445,7 +445,7 @@ Stmt Simplify::visit(const ProducerConsumer *op) {
     } else if (body.same_as(op->body)) {
         return op;
     } else {
-        return ProducerConsumer::make(op->name, op->is_producer, body);
+        return ProducerConsumer::make(op->name, op->is_producer, body, op->no_profiling);
     }
 }
 

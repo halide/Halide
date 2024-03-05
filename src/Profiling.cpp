@@ -282,20 +282,27 @@ private:
     Stmt visit(const ProducerConsumer *op) override {
         int idx;
         Stmt body;
-        if (op->is_producer) {
-            idx = get_func_id(op->name);
-            stack.push_back(idx);
-            Stmt set_current = set_current_func(idx);
-            body = Block::make(set_current, mutate(op->body));
-            stack.pop_back();
+        if (op->no_profiling) {
+            body = mutate(op->body);
+            if (body.same_as(op->body)) {
+                return op;
+            }
         } else {
-            // At the beginning of the consume step, set the current task
-            // back to the outer one.
-            Stmt set_current = set_current_func(stack.back());
-            body = Block::make(set_current, mutate(op->body));
+            if (op->is_producer) {
+                idx = get_func_id(op->name);
+                stack.push_back(idx);
+                Stmt set_current = set_current_func(idx);
+                body = Block::make(set_current, mutate(op->body));
+                stack.pop_back();
+            } else {
+                // At the beginning of the consume step, set the current task
+                // back to the outer one.
+                Stmt set_current = set_current_func(stack.back());
+                body = Block::make(set_current, mutate(op->body));
+            }
         }
 
-        return ProducerConsumer::make(op->name, op->is_producer, body);
+        return ProducerConsumer::make(op->name, op->is_producer, body, op->no_profiling);
     }
 
     Stmt visit_parallel_task(Stmt s) {

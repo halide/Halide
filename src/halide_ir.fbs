@@ -138,6 +138,7 @@ table ProducerConsumer {
     name: string;
     is_producer: bool;
     body: Stmt;
+    no_profiling: bool;
 }
 
 table For {
@@ -713,6 +714,7 @@ table Func {
     trace_stores: bool = false;
     trace_realizations: bool = false;
     trace_tags: [string];
+    no_profiling: bool = false;
     frozen: bool = false;
 }
 

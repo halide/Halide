@@ -618,7 +618,7 @@ class ExtractTileOperations : public IRMutator {
         }
 
         auto body = mutate(op->body);
-        return ProducerConsumer::make(amx_name, op->is_producer, std::move(body));
+        return ProducerConsumer::make(amx_name, op->is_producer, std::move(body), op->no_profiling);
     }
 
     Expr visit(const Load *op) override {

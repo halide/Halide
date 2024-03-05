@@ -581,14 +581,14 @@ class HoistIfStatements : public IRMutator {
         if (const IfThenElse *i = body.as<IfThenElse>()) {
             if (!i->else_case.defined() &&
                 is_pure(i->condition)) {
-                Stmt s = ProducerConsumer::make(op->name, op->is_producer, i->then_case);
+                Stmt s = ProducerConsumer::make(op->name, op->is_producer, i->then_case, op->no_profiling);
                 return IfThenElse::make(i->condition, s);
             }
         }
         if (body.same_as(op->body)) {
             return op;
         } else {
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return ProducerConsumer::make(op->name, op->is_producer, body, op->no_profiling);
         }
     }
 

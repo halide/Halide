@@ -1770,7 +1770,7 @@ private:
 
         // Rewrap the loop in the containing lets.
         for (size_t i = add_lets.size(); i > 0; --i) {
-            const auto &b = add_lets[i - 1];
+            const pair<string, Expr> &b = add_lets[i - 1];
             producer = LetStmt::make(b.first, b.second, producer);
         }
 
@@ -1782,7 +1782,7 @@ private:
         // loop bounds should remain unchanged.
         map<string, Expr> shifts;
         for (auto i = funcs.size(); i-- > 0;) {
-            const auto &func = funcs[i];
+            const Function &func = funcs[i];
             compute_shift_factor(func, func.name() + ".s0.", func.definition(), bounds, shifts);
             for (size_t j = 0; j < func.updates().size(); ++j) {
                 string prefix = func.name() + ".s" + std::to_string(j + 1) + ".";
@@ -1802,14 +1802,14 @@ private:
         producer = replace_parent_bound_with_union_bound(funcs.back(), producer, bounds);
 
         // Add the producer nodes.
-        for (const auto &i : funcs) {
-            producer = ProducerConsumer::make_produce(i.name(), producer);
+        for (const Function &func : funcs) {
+            producer = ProducerConsumer::make_produce(func.name(), producer, func.should_not_profile());
         }
 
         // Add the consumer nodes.
         for (size_t i = 0; i < funcs.size(); i++) {
             if (!is_output_list[i]) {
-                consumer = ProducerConsumer::make_consume(funcs[i].name(), consumer);
+                consumer = ProducerConsumer::make_consume(funcs[i].name(), consumer, funcs[i].should_not_profile());
             }
         }
 

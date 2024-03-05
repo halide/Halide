@@ -172,7 +172,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
                 body = Block::make(body, Evaluate::make(release));
                 sema.pop_back();
             }
-            return ProducerConsumer::make_produce(op->name, body);
+            return ProducerConsumer::make_produce(op->name, body, op->no_profiling);
         } else {
             if (op->is_producer) {
                 producers_dropped.insert(op->name);
@@ -189,7 +189,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             if (is_no_op(body) || op->is_producer) {
                 return body;
             } else {
-                return ProducerConsumer::make(op->name, op->is_producer, body);
+                return ProducerConsumer::make(op->name, op->is_producer, body, op->no_profiling);
             }
         }
     }
@@ -629,7 +629,7 @@ public:
 class TightenProducerConsumerNodes : public IRMutator {
     using IRMutator::visit;
 
-    Stmt make_producer_consumer(const string &name, bool is_producer, Stmt body, const Scope<> &scope, CachingStmtUsesVars &uses_vars) {
+    Stmt make_producer_consumer(const string &name, bool is_producer, Stmt body, const Scope<> &scope, CachingStmtUsesVars &uses_vars, bool no_profiling) {
         if (const LetStmt *let = body.as<LetStmt>()) {
             Stmt orig = body;
             // 'orig' is only used to keep a reference to the let
@@ -648,10 +648,10 @@ class TightenProducerConsumerNodes : public IRMutator {
 
             if (let) {
                 // That's as far as we can go
-                body = ProducerConsumer::make(name, is_producer, body);
+                body = ProducerConsumer::make(name, is_producer, body, no_profiling);
             } else {
                 // Recurse onto a non-let-node
-                body = make_producer_consumer(name, is_producer, body, scope, uses_vars);
+                body = make_producer_consumer(name, is_producer, body, scope, uses_vars, no_profiling);
             }
 
             for (auto it = containing_lets.rbegin(); it != containing_lets.rend(); it++) {
@@ -662,7 +662,7 @@ class TightenProducerConsumerNodes : public IRMutator {
         } else if (const Block *block = body.as<Block>()) {
             if (is_producer) {
                 // We don't push produce nodes into blocks
-                return ProducerConsumer::make(name, is_producer, body);
+                return ProducerConsumer::make(name, is_producer, body, no_profiling);
             }
             vector<Stmt> sub_stmts;
             Stmt rest;
@@ -675,19 +675,19 @@ class TightenProducerConsumerNodes : public IRMutator {
 
             for (Stmt &s : sub_stmts) {
                 if (uses_vars.check_stmt(s)) {
-                    s = make_producer_consumer(name, is_producer, s, scope, uses_vars);
+                    s = make_producer_consumer(name, is_producer, s, scope, uses_vars, no_profiling);
                 }
             }
 
             return Block::make(sub_stmts);
         } else if (const ProducerConsumer *pc = body.as<ProducerConsumer>()) {
-            return ProducerConsumer::make(pc->name, pc->is_producer, make_producer_consumer(name, is_producer, pc->body, scope, uses_vars));
+            return ProducerConsumer::make(pc->name, pc->is_producer, make_producer_consumer(name, is_producer, pc->body, scope, uses_vars, no_profiling), no_profiling);
         } else if (const Realize *r = body.as<Realize>()) {
             return Realize::make(r->name, r->types, r->memory_type,
                                  r->bounds, r->condition,
-                                 make_producer_consumer(name, is_producer, r->body, scope, uses_vars));
+                                 make_producer_consumer(name, is_producer, r->body, scope, uses_vars, no_profiling));
         } else {
-            return ProducerConsumer::make(name, is_producer, body);
+            return ProducerConsumer::make(name, is_producer, body, no_profiling);
         }
     }
 
@@ -704,7 +704,7 @@ class TightenProducerConsumerNodes : public IRMutator {
             }
         }
         CachingStmtUsesVars uses_vars{scope};
-        return make_producer_consumer(op->name, op->is_producer, body, scope, uses_vars);
+        return make_producer_consumer(op->name, op->is_producer, body, scope, uses_vars, op->no_profiling);
     }
 
     const map<string, Function> &env;
@@ -927,9 +927,9 @@ class ExpandAcquireNodes : public IRMutator {
         Stmt body = mutate(op->body);
         if (const Acquire *a = body.as<Acquire>()) {
             return Acquire::make(a->semaphore, a->count,
-                                 mutate(ProducerConsumer::make(op->name, op->is_producer, a->body)));
+                                 mutate(ProducerConsumer::make(op->name, op->is_producer, a->body, op->no_profiling)));
         } else {
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return ProducerConsumer::make(op->name, op->is_producer, body, op->no_profiling);
         }
     }
 };

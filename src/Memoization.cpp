@@ -447,7 +447,7 @@ private:
                 body = Block::make(body, cache_store_back);
                 body = IfThenElse::make(cache_miss, body);
             }
-            return ProducerConsumer::make(op->name, op->is_producer, body);
+            return ProducerConsumer::make(op->name, op->is_producer, body, op->no_profiling);
         } else {
             return IRMutator::visit(op);
         }

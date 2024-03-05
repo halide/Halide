@@ -550,7 +550,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             if (body.same_as(op->body)) {
                 return op;
             } else {
-                return ProducerConsumer::make_consume(op->name, body);
+                return ProducerConsumer::make_consume(op->name, body, op->no_profiling);
             }
         } else {
             return IRMutator::visit(op);

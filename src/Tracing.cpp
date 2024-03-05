@@ -309,7 +309,7 @@ private:
             Stmt new_body = Block::make(op->body, Evaluate::make(end_op_call));
 
             stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call,
-                                 ProducerConsumer::make(op->name, op->is_producer, new_body));
+                                 ProducerConsumer::make(op->name, op->is_producer, new_body, op->no_profiling));
         }
         return stmt;
     }

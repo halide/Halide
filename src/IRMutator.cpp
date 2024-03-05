@@ -197,7 +197,7 @@ Stmt IRMutator::visit(const ProducerConsumer *op) {
     if (body.same_as(op->body)) {
         return op;
     }
-    return ProducerConsumer::make(op->name, op->is_producer, std::move(body));
+    return ProducerConsumer::make(op->name, op->is_producer, std::move(body), op->no_profiling);
 }
 
 Stmt IRMutator::visit(const For *op) {

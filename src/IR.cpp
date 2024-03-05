@@ -324,22 +324,23 @@ Stmt AssertStmt::make(Expr condition, Expr message) {
     return node;
 }
 
-Stmt ProducerConsumer::make(const std::string &name, bool is_producer, Stmt body) {
+Stmt ProducerConsumer::make(const std::string &name, bool is_producer, Stmt body, bool no_profiling) {
     internal_assert(body.defined()) << "ProducerConsumer of undefined\n";
 
     ProducerConsumer *node = new ProducerConsumer;
     node->name = name;
     node->is_producer = is_producer;
     node->body = std::move(body);
+    node->no_profiling = no_profiling;
     return node;
 }
 
-Stmt ProducerConsumer::make_produce(const std::string &name, Stmt body) {
-    return ProducerConsumer::make(name, true, std::move(body));
+Stmt ProducerConsumer::make_produce(const std::string &name, Stmt body, bool no_profiling) {
+    return ProducerConsumer::make(name, true, std::move(body), no_profiling);
 }
 
-Stmt ProducerConsumer::make_consume(const std::string &name, Stmt body) {
-    return ProducerConsumer::make(name, false, std::move(body));
+Stmt ProducerConsumer::make_consume(const std::string &name, Stmt body, bool no_profiling) {
+    return ProducerConsumer::make(name, false, std::move(body), no_profiling);
 }
 
 Stmt For::make(const std::string &name,
