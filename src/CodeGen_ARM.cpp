@@ -105,17 +105,30 @@ public:
     CodeGen_ARM(const Target &);
 
 protected:
+    using codegen_func_t = std::function<Value *(int lanes, const std::vector<Value *> &)>;
     using CodeGen_Posix::visit;
 
-    /** Assuming 'inner' is a function that takes two vector arguments, define a wrapper that
-     * takes one vector argument and splits it into two to call inner. */
-    llvm::Function *define_concat_args_wrapper(llvm::Function *inner, const string &name);
+    /** Similar to llvm_type_of, but allows providing a VectorTypeConstraint to
+     * force Fixed or VScale vector results. */
+    llvm::Type *llvm_type_with_constraint(const Type &t, bool scalars_are_vectors, VectorTypeConstraint constraint);
+
+    /** Define a wrapper LLVM func that takes some arguments which Halide defines
+     * and call inner LLVM intrinsic with an additional argument which LLVM requires. */
+    llvm::Function *define_intrin_wrapper(const std::string &inner_name,
+                                          const Type &ret_type,
+                                          const std::string &mangled_name,
+                                          const std::vector<Type> &arg_types,
+                                          int intrinsic_flags,
+                                          bool sve_intrinsic);
 
     void init_module() override;
     void compile_func(const LoweredFunc &f,
                       const std::string &simple_name, const std::string &extern_name) override;
 
-    /** Nodes for which we want to emit specific neon intrinsics */
+    void begin_func(LinkageType linkage, const std::string &simple_name,
+                    const std::string &extern_name, const std::vector<LoweredArgument> &args) override;
+
+    /** Nodes for which we want to emit specific ARM vector intrinsics */
     // @{
     void visit(const Cast *) override;
     void visit(const Add *) override;
@@ -125,14 +138,24 @@ protected:
     void visit(const Store *) override;
     void visit(const Load *) override;
     void visit(const Shuffle *) override;
+    void visit(const Ramp *) override;
     void visit(const Call *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
+    bool codegen_dot_product_vector_reduce(const VectorReduce *, const Expr &);
+    bool codegen_pairwise_vector_reduce(const VectorReduce *, const Expr &);
+    bool codegen_across_vector_reduce(const VectorReduce *, const Expr &);
     // @}
     Type upgrade_type_for_arithmetic(const Type &t) const override;
     Type upgrade_type_for_argument_passing(const Type &t) const override;
     Type upgrade_type_for_storage(const Type &t) const override;
+
+    /** Helper function to perform codegen of vector operation in a way that
+     * total_lanes are divided into slices, codegen is performed for each slice
+     * and results are concatenated into total_lanes.
+     */
+    Value *codegen_with_lanes(int slice_lanes, int total_lanes, const std::vector<Expr> &args, codegen_func_t &cg_func);
 
     /** Various patterns to peephole match against */
     struct Pattern {
@@ -150,10 +173,12 @@ protected:
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
+    int target_vscale() const override;
 
     // NEON can be disabled for older processors.
-    bool neon_intrinsics_disabled() {
-        return target.has_feature(Target::NoNEON);
+    bool simd_intrinsics_disabled() {
+        return target.has_feature(Target::NoNEON) &&
+               !target.has_feature(Target::SVE2);
     }
 
     bool is_float16_and_has_feature(const Type &t) const {
@@ -161,10 +186,27 @@ protected:
         return t.code() == Type::Float && t.bits() == 16 && target.has_feature(Target::ARMFp16);
     }
     bool supports_call_as_float16(const Call *op) const override;
+
+    /** Make predicate vector which starts with consecutive true followed by consecutive false */
+    Expr make_vector_predicate_1s_0s(int true_lanes, int false_lanes) {
+        internal_assert((true_lanes + false_lanes) != 0) << "CodeGen_ARM::make_vector_predicate_1s_0s called with total of 0 lanes.\n";
+        if (true_lanes == 0) {
+            return const_false(false_lanes);
+        } else if (false_lanes == 0) {
+            return const_true(true_lanes);
+        } else {
+            return Shuffle::make_concat({const_true(true_lanes), const_false(false_lanes)});
+        }
+    }
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
     : CodeGen_Posix(target) {
+
+    // TODO(https://github.com/halide/Halide/issues/8088): See if
+    // use_llvm_vp_intrinsics can replace architecture specific code in this
+    // file, specifically in Load and Store visitors.  Depends on quality of
+    // LLVM aarch64 backend lowering for these intrinsics on SVE2.
 
     // RADDHN - Add and narrow with rounding
     // These must come before other narrowing rounding shift patterns
@@ -299,26 +341,66 @@ struct ArmIntrinsic {
         SplitArg0 = 1 << 6,          // This intrinsic requires splitting the argument into the low and high halves.
         NoPrefix = 1 << 7,           // Don't prefix the intrinsic with llvm.*
         RequireFp16 = 1 << 8,        // Available only if Target has ARMFp16 feature
+        Neon64Unavailable = 1 << 9,  // Unavailable for 64 bit NEON
+        SveUnavailable = 1 << 10,    // Unavailable for SVE
+        SveNoPredicate = 1 << 11,    // In SVE intrinsics, additional predicate argument is required as default, unless this flag is set.
+        SveInactiveArg = 1 << 12,    // This intrinsic needs the additional argument for fallback value for the lanes inactivated by predicate.
+        SveRequired = 1 << 13,       // This intrinsic requires SVE.
     };
 };
 
 // clang-format off
 const ArmIntrinsic intrinsic_defs[] = {
-    {"vabs", "abs", UInt(8, 8), "abs", {Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"vabs", "abs", UInt(16, 4), "abs", {Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vabs", "abs", UInt(32, 2), "abs", {Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.fabs", "llvm.fabs", Float(32, 2), "abs", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.fabs", "llvm.fabs", Float(16, 4), "abs", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
+    // TODO(https://github.com/halide/Halide/issues/8093):
+    // Some of the Arm intrinsic have the same name between Neon and SVE2 but with different behavior. For example,
+    // widening, narrowing and pair-wise operations which are performed in even (top) and odd (bottom) lanes basis in SVE,
+    // while in high and low lanes in Neon. Therefore, peep-hole code-gen with those SVE2 intrinsic is not enabled for now,
+    // because additional interleaving/deinterleaveing would be required to restore the element order in a vector.
 
-    {"llvm.sqrt", "llvm.sqrt", Float(32, 2), "sqrt_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.sqrt", "llvm.sqrt", Float(64, 2), "sqrt_f64", {Float(64, 2)}},
+    {"vabs", "abs", UInt(8, 8), "abs", {Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
+    {"vabs", "abs", UInt(16, 4), "abs", {Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
+    {"vabs", "abs", UInt(32, 2), "abs", {Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
+    {"llvm.fabs", "llvm.fabs", Float(16, 4), "abs", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs", "llvm.fabs", Float(32, 2), "abs", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs", "llvm.fabs", Float(64, 2), "abs", {Float(64, 2)},  ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs.f16", "llvm.fabs.f16", Float(16), "abs", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs.f32", "llvm.fabs.f32", Float(32), "abs", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs.f64", "llvm.fabs.f64", Float(64), "abs", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
 
-    {"llvm.roundeven", "llvm.roundeven", Float(16, 8), "round", {Float(16, 8)}, ArmIntrinsic::RequireFp16},
-    {"llvm.roundeven", "llvm.roundeven", Float(32, 4), "round", {Float(32, 4)}},
-    {"llvm.roundeven", "llvm.roundeven", Float(64, 2), "round", {Float(64, 2)}},
-    {"llvm.roundeven.f16", "llvm.roundeven.f16", Float(16), "round", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
-    {"llvm.roundeven.f32", "llvm.roundeven.f32", Float(32), "round", {Float(32)}, ArmIntrinsic::NoMangle},
-    {"llvm.roundeven.f64", "llvm.roundeven.f64", Float(64), "round", {Float(64)}, ArmIntrinsic::NoMangle},
+    {"llvm.sqrt", "llvm.sqrt", Float(16, 4), "sqrt_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.sqrt", "llvm.sqrt", Float(32, 2), "sqrt_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.sqrt", "llvm.sqrt", Float(64, 2), "sqrt_f64", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.sqrt.f16", "llvm.sqrt.f16", Float(16), "sqrt_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.sqrt.f32", "llvm.sqrt.f32", Float(32), "sqrt_f32", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.sqrt.f64", "llvm.sqrt.f64", Float(64), "sqrt_f64", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+
+    {"llvm.floor", "llvm.floor", Float(16, 4), "floor_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.floor", "llvm.floor", Float(32, 2), "floor_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.floor", "llvm.floor", Float(64, 2), "floor_f64", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.floor.f16", "llvm.floor.f16", Float(16), "floor_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.floor.f32", "llvm.floor.f32", Float(32), "floor_f32", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.floor.f64", "llvm.floor.f64", Float(64), "floor_f64", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+
+    {"llvm.ceil", "llvm.ceil", Float(16, 4), "ceil_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.ceil", "llvm.ceil", Float(32, 2), "ceil_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.ceil", "llvm.ceil", Float(64, 2), "ceil_f64", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.ceil.f16", "llvm.ceil.f16", Float(16), "ceil_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.ceil.f32", "llvm.ceil.f32", Float(32), "ceil_f32", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.ceil.f64", "llvm.ceil.f64", Float(64), "ceil_f64", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+
+    {"llvm.trunc", "llvm.trunc", Float(16, 4), "trunc_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.trunc", "llvm.trunc", Float(32, 2), "trunc_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.trunc", "llvm.trunc", Float(64, 2), "trunc_f64", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.trunc.f16", "llvm.trunc.f16", Float(16), "trunc_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.trunc.f32", "llvm.trunc.f32", Float(32), "trunc_f32", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.trunc.f64", "llvm.trunc.f64", Float(64), "trunc_f64", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+
+    {"llvm.roundeven", "llvm.roundeven", Float(16, 4), "round", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.roundeven", "llvm.roundeven", Float(32, 2), "round", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.roundeven", "llvm.roundeven", Float(64, 2), "round", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.roundeven.f16", "llvm.roundeven.f16", Float(16), "round", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.roundeven.f32", "llvm.roundeven.f32", Float(32), "round", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.roundeven.f64", "llvm.roundeven.f64", Float(64), "round", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
 
     // SABD, UABD - Absolute difference
     {"vabds", "sabd", UInt(8, 8), "absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -329,12 +411,12 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabdu", "uabd", UInt(32, 2), "absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
 
     // SMULL, UMULL - Widening multiply
-    {"vmulls", "smull", Int(16, 8), "widening_mul", {Int(8, 8), Int(8, 8)}},
-    {"vmullu", "umull", UInt(16, 8), "widening_mul", {UInt(8, 8), UInt(8, 8)}},
-    {"vmulls", "smull", Int(32, 4), "widening_mul", {Int(16, 4), Int(16, 4)}},
-    {"vmullu", "umull", UInt(32, 4), "widening_mul", {UInt(16, 4), UInt(16, 4)}},
-    {"vmulls", "smull", Int(64, 2), "widening_mul", {Int(32, 2), Int(32, 2)}},
-    {"vmullu", "umull", UInt(64, 2), "widening_mul", {UInt(32, 2), UInt(32, 2)}},
+    {"vmulls", "smull", Int(16, 8), "widening_mul", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vmullu", "umull", UInt(16, 8), "widening_mul", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vmulls", "smull", Int(32, 4), "widening_mul", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vmullu", "umull", UInt(32, 4), "widening_mul", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vmulls", "smull", Int(64, 2), "widening_mul", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vmullu", "umull", UInt(64, 2), "widening_mul", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::SveUnavailable},
 
     // SQADD, UQADD - Saturating add
     // On arm32, the ARM version of this seems to be missing on some configurations.
@@ -385,12 +467,19 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vminu", "umin", UInt(16, 4), "min", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
     {"vmins", "smin", Int(32, 2), "min", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vminu", "umin", UInt(32, 2), "min", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"vmins", "fmin", Float(32, 2), "min", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "smin", Int(64, 2), "min", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::Neon64Unavailable},
+    {nullptr, "umin", UInt(64, 2), "min", {UInt(64, 2), UInt(64, 2)}, ArmIntrinsic::Neon64Unavailable},
     {"vmins", "fmin", Float(16, 4), "min", {Float(16, 4), Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
+    {"vmins", "fmin", Float(32, 2), "min", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "fmin", Float(64, 2), "min", {Float(64, 2), Float(64, 2)}},
 
     // FCVTZS, FCVTZU
-    {nullptr, "fcvtzs", Int(16, 4), "fp_to_int", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::RequireFp16},
-    {nullptr, "fcvtzu", UInt(16, 4), "fp_to_int", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::RequireFp16},
+    {nullptr, "fcvtzs", Int(16, 4), "fp_to_int", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveInactiveArg},
+    {nullptr, "fcvtzu", UInt(16, 4), "fp_to_int", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveInactiveArg},
+    {nullptr, "fcvtzs", Int(32, 2), "fp_to_int", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveInactiveArg},
+    {nullptr, "fcvtzu", UInt(32, 2), "fp_to_int", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveInactiveArg},
+    {nullptr, "fcvtzs", Int(64, 2), "fp_to_int", {Float(64, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveInactiveArg},
+    {nullptr, "fcvtzu", UInt(64, 2), "fp_to_int", {Float(64, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveInactiveArg},
 
     // SMAX, UMAX, FMAX - Max
     {"vmaxs", "smax", Int(8, 8), "max", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -399,25 +488,34 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vmaxu", "umax", UInt(16, 4), "max", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
     {"vmaxs", "smax", Int(32, 2), "max", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vmaxu", "umax", UInt(32, 2), "max", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"vmaxs", "fmax", Float(32, 2), "max", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "smax", Int(64, 2), "max", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::Neon64Unavailable},
+    {nullptr, "umax", UInt(64, 2), "max", {UInt(64, 2), UInt(64, 2)}, ArmIntrinsic::Neon64Unavailable},
     {"vmaxs", "fmax", Float(16, 4), "max", {Float(16, 4), Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
+    {"vmaxs", "fmax", Float(32, 2), "max", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
+    {nullptr, "fmax", Float(64, 2), "max", {Float(64, 2), Float(64, 2)}},
+
+    // NEG, FNEG
+    {nullptr, "neg", Int(8, 16), "negate", {Int(8, 16)}, ArmIntrinsic::SveInactiveArg | ArmIntrinsic::Neon64Unavailable},
+    {nullptr, "neg", Int(16, 8), "negate", {Int(16, 8)}, ArmIntrinsic::SveInactiveArg | ArmIntrinsic::Neon64Unavailable},
+    {nullptr, "neg", Int(32, 4), "negate", {Int(32, 4)}, ArmIntrinsic::SveInactiveArg | ArmIntrinsic::Neon64Unavailable},
+    {nullptr, "neg", Int(64, 2), "negate", {Int(64, 2)}, ArmIntrinsic::SveInactiveArg | ArmIntrinsic::Neon64Unavailable},
 
     // SQNEG, UQNEG - Saturating negation
-    {"vqneg", "sqneg", Int(8, 8), "saturating_negate", {Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"vqneg", "sqneg", Int(16, 4), "saturating_negate", {Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vqneg", "sqneg", Int(32, 2), "saturating_negate", {Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"vqneg", "sqneg", Int(64, 2), "saturating_negate", {Int(64, 2)}},
+    {"vqneg", "sqneg", Int(8, 8), "saturating_negate", {Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
+    {"vqneg", "sqneg", Int(16, 4), "saturating_negate", {Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
+    {"vqneg", "sqneg", Int(32, 2), "saturating_negate", {Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
+    {"vqneg", "sqneg", Int(64, 2), "saturating_negate", {Int(64, 2)}, ArmIntrinsic::SveInactiveArg},
 
     // SQXTN, UQXTN, SQXTUN - Saturating narrowing
-    {"vqmovns", "sqxtn", Int(8, 8), "saturating_narrow", {Int(16, 8)}},
-    {"vqmovnu", "uqxtn", UInt(8, 8), "saturating_narrow", {UInt(16, 8)}},
-    {"vqmovnsu", "sqxtun", UInt(8, 8), "saturating_narrow", {Int(16, 8)}},
-    {"vqmovns", "sqxtn", Int(16, 4), "saturating_narrow", {Int(32, 4)}},
-    {"vqmovnu", "uqxtn", UInt(16, 4), "saturating_narrow", {UInt(32, 4)}},
-    {"vqmovnsu", "sqxtun", UInt(16, 4), "saturating_narrow", {Int(32, 4)}},
-    {"vqmovns", "sqxtn", Int(32, 2), "saturating_narrow", {Int(64, 2)}},
-    {"vqmovnu", "uqxtn", UInt(32, 2), "saturating_narrow", {UInt(64, 2)}},
-    {"vqmovnsu", "sqxtun", UInt(32, 2), "saturating_narrow", {Int(64, 2)}},
+    {"vqmovns", "sqxtn", Int(8, 8), "saturating_narrow", {Int(16, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vqmovnu", "uqxtn", UInt(8, 8), "saturating_narrow", {UInt(16, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vqmovnsu", "sqxtun", UInt(8, 8), "saturating_narrow", {Int(16, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vqmovns", "sqxtn", Int(16, 4), "saturating_narrow", {Int(32, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vqmovnu", "uqxtn", UInt(16, 4), "saturating_narrow", {UInt(32, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vqmovnsu", "sqxtun", UInt(16, 4), "saturating_narrow", {Int(32, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vqmovns", "sqxtn", Int(32, 2), "saturating_narrow", {Int(64, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vqmovnu", "uqxtn", UInt(32, 2), "saturating_narrow", {UInt(64, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vqmovnsu", "sqxtun", UInt(32, 2), "saturating_narrow", {Int(64, 2)}, ArmIntrinsic::SveUnavailable},
 
     // RSHRN - Rounding shift right narrow (by immediate in [1, output bits])
     // arm32 expects a vector RHS of the same type as the LHS except signed.
@@ -440,52 +538,52 @@ const ArmIntrinsic intrinsic_defs[] = {
     // LLVM pattern matches these.
 
     // SQRSHL, UQRSHL - Saturating rounding shift left (by signed vector)
-    {"vqrshifts", "sqrshl", Int(8, 8), "saturating_rounding_shift_left", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"vqrshiftu", "uqrshl", UInt(8, 8), "saturating_rounding_shift_left", {UInt(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"vqrshifts", "sqrshl", Int(16, 4), "saturating_rounding_shift_left", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vqrshiftu", "uqrshl", UInt(16, 4), "saturating_rounding_shift_left", {UInt(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vqrshifts", "sqrshl", Int(32, 2), "saturating_rounding_shift_left", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"vqrshiftu", "uqrshl", UInt(32, 2), "saturating_rounding_shift_left", {UInt(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"vqrshifts", "sqrshl", Int(64, 2), "saturating_rounding_shift_left", {Int(64, 2), Int(64, 2)}},
-    {"vqrshiftu", "uqrshl", UInt(64, 2), "saturating_rounding_shift_left", {UInt(64, 2), Int(64, 2)}},
+    {"vqrshifts", "sqrshl", Int(8, 8), "saturating_rounding_shift_left", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftu", "uqrshl", UInt(8, 8), "saturating_rounding_shift_left", {UInt(8, 8), Int(8, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshifts", "sqrshl", Int(16, 4), "saturating_rounding_shift_left", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftu", "uqrshl", UInt(16, 4), "saturating_rounding_shift_left", {UInt(16, 4), Int(16, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshifts", "sqrshl", Int(32, 2), "saturating_rounding_shift_left", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftu", "uqrshl", UInt(32, 2), "saturating_rounding_shift_left", {UInt(32, 2), Int(32, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshifts", "sqrshl", Int(64, 2), "saturating_rounding_shift_left", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftu", "uqrshl", UInt(64, 2), "saturating_rounding_shift_left", {UInt(64, 2), Int(64, 2)}, ArmIntrinsic::SveUnavailable},
 
     // SQRSHRN, UQRSHRN, SQRSHRUN - Saturating rounding narrowing shift right (by immediate in [1, output bits])
     // arm32 expects a vector RHS of the same type as the LHS except signed.
-    {"vqrshiftns", nullptr, Int(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
-    {"vqrshiftnu", nullptr, UInt(8, 8), "saturating_rounding_shift_right_narrow", {UInt(16, 8), Int(16, 8)}},
-    {"vqrshiftnsu", nullptr, UInt(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}},
-    {"vqrshiftns", nullptr, Int(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
-    {"vqrshiftnu", nullptr, UInt(16, 4), "saturating_rounding_shift_right_narrow", {UInt(32, 4), Int(32, 4)}},
-    {"vqrshiftnsu", nullptr, UInt(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), Int(32, 4)}},
-    {"vqrshiftns", nullptr, Int(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
-    {"vqrshiftnu", nullptr, UInt(32, 2), "saturating_rounding_shift_right_narrow", {UInt(64, 2), Int(64, 2)}},
-    {"vqrshiftnsu", nullptr, UInt(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
+    {"vqrshiftns", nullptr, Int(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftnu", nullptr, UInt(8, 8), "saturating_rounding_shift_right_narrow", {UInt(16, 8), Int(16, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftnsu", nullptr, UInt(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), Int(16, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftns", nullptr, Int(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), Int(32, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftnu", nullptr, UInt(16, 4), "saturating_rounding_shift_right_narrow", {UInt(32, 4), Int(32, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftnsu", nullptr, UInt(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), Int(32, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftns", nullptr, Int(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftnu", nullptr, UInt(32, 2), "saturating_rounding_shift_right_narrow", {UInt(64, 2), Int(64, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vqrshiftnsu", nullptr, UInt(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::SveUnavailable},
 
     // arm64 expects a 32-bit constant.
-    {nullptr, "sqrshrn", Int(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), UInt(32)}},
-    {nullptr, "uqrshrn", UInt(8, 8), "saturating_rounding_shift_right_narrow", {UInt(16, 8), UInt(32)}},
-    {nullptr, "sqrshrun", UInt(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), UInt(32)}},
-    {nullptr, "sqrshrn", Int(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), UInt(32)}},
-    {nullptr, "uqrshrn", UInt(16, 4), "saturating_rounding_shift_right_narrow", {UInt(32, 4), UInt(32)}},
-    {nullptr, "sqrshrun", UInt(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), UInt(32)}},
-    {nullptr, "sqrshrn", Int(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), UInt(32)}},
-    {nullptr, "uqrshrn", UInt(32, 2), "saturating_rounding_shift_right_narrow", {UInt(64, 2), UInt(32)}},
-    {nullptr, "sqrshrun", UInt(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), UInt(32)}},
+    {nullptr, "sqrshrn", Int(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "uqrshrn", UInt(8, 8), "saturating_rounding_shift_right_narrow", {UInt(16, 8), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "sqrshrun", UInt(8, 8), "saturating_rounding_shift_right_narrow", {Int(16, 8), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "sqrshrn", Int(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "uqrshrn", UInt(16, 4), "saturating_rounding_shift_right_narrow", {UInt(32, 4), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "sqrshrun", UInt(16, 4), "saturating_rounding_shift_right_narrow", {Int(32, 4), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "sqrshrn", Int(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "uqrshrn", UInt(32, 2), "saturating_rounding_shift_right_narrow", {UInt(64, 2), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "sqrshrun", UInt(32, 2), "saturating_rounding_shift_right_narrow", {Int(64, 2), UInt(32)}, ArmIntrinsic::SveUnavailable},
 
     // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
     // There is also an immediate version of this - hopefully LLVM does this matching when appropriate.
     {"vqshifts", "sqshl", Int(8, 8), "saturating_shift_left", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth},
     {"vqshiftu", "uqshl", UInt(8, 8), "saturating_shift_left", {UInt(8, 8), Int(8, 8)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth},
-    {"vqshiftsu", "sqshlu", UInt(8, 8), "saturating_shift_left", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth},
+    {"vqshiftsu", "sqshlu", UInt(8, 8), "saturating_shift_left", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
     {"vqshifts", "sqshl", Int(16, 4), "saturating_shift_left", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth},
     {"vqshiftu", "uqshl", UInt(16, 4), "saturating_shift_left", {UInt(16, 4), Int(16, 4)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth},
-    {"vqshiftsu", "sqshlu", UInt(16, 4), "saturating_shift_left", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth},
+    {"vqshiftsu", "sqshlu", UInt(16, 4), "saturating_shift_left", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
     {"vqshifts", "sqshl", Int(32, 2), "saturating_shift_left", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth},
     {"vqshiftu", "uqshl", UInt(32, 2), "saturating_shift_left", {UInt(32, 2), Int(32, 2)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth},
-    {"vqshiftsu", "sqshlu", UInt(32, 2), "saturating_shift_left", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth},
+    {"vqshiftsu", "sqshlu", UInt(32, 2), "saturating_shift_left", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
     {"vqshifts", "sqshl", Int(64, 2), "saturating_shift_left", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::AllowUnsignedOp1},
     {"vqshiftu", "uqshl", UInt(64, 2), "saturating_shift_left", {UInt(64, 2), Int(64, 2)}, ArmIntrinsic::AllowUnsignedOp1},
-    {"vqshiftsu", "sqshlu", UInt(64, 2), "saturating_shift_left", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::AllowUnsignedOp1},
+    {"vqshiftsu", "sqshlu", UInt(64, 2), "saturating_shift_left", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::AllowUnsignedOp1 | ArmIntrinsic::SveUnavailable},
 
     // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
     // arm32 expects a vector RHS of the same type as the LHS.
@@ -500,15 +598,15 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vqshiftnsu", nullptr, UInt(32, 2), "saturating_shift_right_narrow", {Int(64, 2), Int(64, 2)}},
 
     // arm64 expects a 32-bit constant.
-    {nullptr, "sqshrn", Int(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(32)}},
-    {nullptr, "uqshrn", UInt(8, 8), "saturating_shift_right_narrow", {UInt(16, 8), UInt(32)}},
-    {nullptr, "sqshrn", Int(16, 4), "saturating_shift_right_narrow", {Int(32, 4), UInt(32)}},
-    {nullptr, "uqshrn", UInt(16, 4), "saturating_shift_right_narrow", {UInt(32, 4), UInt(32)}},
-    {nullptr, "sqshrn", Int(32, 2), "saturating_shift_right_narrow", {Int(64, 2), UInt(32)}},
-    {nullptr, "uqshrn", UInt(32, 2), "saturating_shift_right_narrow", {UInt(64, 2), UInt(32)}},
-    {nullptr, "sqshrun", UInt(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(32)}},
-    {nullptr, "sqshrun", UInt(16, 4), "saturating_shift_right_narrow", {Int(32, 4), UInt(32)}},
-    {nullptr, "sqshrun", UInt(32, 2), "saturating_shift_right_narrow", {Int(64, 2), UInt(32)}},
+    {nullptr, "sqshrn", Int(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "uqshrn", UInt(8, 8), "saturating_shift_right_narrow", {UInt(16, 8), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "sqshrn", Int(16, 4), "saturating_shift_right_narrow", {Int(32, 4), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "uqshrn", UInt(16, 4), "saturating_shift_right_narrow", {UInt(32, 4), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "sqshrn", Int(32, 2), "saturating_shift_right_narrow", {Int(64, 2), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "uqshrn", UInt(32, 2), "saturating_shift_right_narrow", {UInt(64, 2), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "sqshrun", UInt(8, 8), "saturating_shift_right_narrow", {Int(16, 8), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "sqshrun", UInt(16, 4), "saturating_shift_right_narrow", {Int(32, 4), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "sqshrun", UInt(32, 2), "saturating_shift_right_narrow", {Int(64, 2), UInt(32)}, ArmIntrinsic::SveUnavailable},
 
     // SRSHL, URSHL - Rounding shift left (by signed vector)
     {"vrshifts", "srshl", Int(8, 8), "rounding_shift_left", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -521,14 +619,15 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vrshiftu", "urshl", UInt(64, 2), "rounding_shift_left", {UInt(64, 2), Int(64, 2)}},
 
     // SSHL, USHL - Shift left (by signed vector)
-    {"vshifts", "sshl", Int(8, 8), "shift_left", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"vshiftu", "ushl", UInt(8, 8), "shift_left", {UInt(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"vshifts", "sshl", Int(16, 4), "shift_left", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vshiftu", "ushl", UInt(16, 4), "shift_left", {UInt(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vshifts", "sshl", Int(32, 2), "shift_left", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"vshiftu", "ushl", UInt(32, 2), "shift_left", {UInt(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"vshifts", "sshl", Int(64, 2), "shift_left", {Int(64, 2), Int(64, 2)}},
-    {"vshiftu", "ushl", UInt(64, 2), "shift_left", {UInt(64, 2), Int(64, 2)}},
+    // In SVE, no equivalent is found, though there are rounding, saturating, or widening versions.
+    {"vshifts", "sshl", Int(8, 8), "shift_left", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {"vshiftu", "ushl", UInt(8, 8), "shift_left", {UInt(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {"vshifts", "sshl", Int(16, 4), "shift_left", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {"vshiftu", "ushl", UInt(16, 4), "shift_left", {UInt(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {"vshifts", "sshl", Int(32, 2), "shift_left", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {"vshiftu", "ushl", UInt(32, 2), "shift_left", {UInt(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {"vshifts", "sshl", Int(64, 2), "shift_left", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vshiftu", "ushl", UInt(64, 2), "shift_left", {UInt(64, 2), Int(64, 2)}, ArmIntrinsic::SveUnavailable},
 
     // SRSHR, URSHR - Rounding shift right (by immediate in [1, output bits])
     // LLVM wants these expressed as SRSHL by negative amounts.
@@ -537,28 +636,28 @@ const ArmIntrinsic intrinsic_defs[] = {
     // LLVM pattern matches these for us.
 
     // RADDHN - Add and narrow with rounding.
-    {"vraddhn", "raddhn", Int(8, 8), "rounding_add_narrow", {Int(16, 8), Int(16, 8)}},
-    {"vraddhn", "raddhn", UInt(8, 8), "rounding_add_narrow", {UInt(16, 8), UInt(16, 8)}},
-    {"vraddhn", "raddhn", Int(16, 4), "rounding_add_narrow", {Int(32, 4), Int(32, 4)}},
-    {"vraddhn", "raddhn", UInt(16, 4), "rounding_add_narrow", {UInt(32, 4), UInt(32, 4)}},
-    {"vraddhn", "raddhn", Int(32, 2), "rounding_add_narrow", {Int(64, 2), Int(64, 2)}},
-    {"vraddhn", "raddhn", UInt(32, 2), "rounding_add_narrow", {UInt(64, 2), UInt(64, 2)}},
+    {"vraddhn", "raddhn", Int(8, 8), "rounding_add_narrow", {Int(16, 8), Int(16, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vraddhn", "raddhn", UInt(8, 8), "rounding_add_narrow", {UInt(16, 8), UInt(16, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vraddhn", "raddhn", Int(16, 4), "rounding_add_narrow", {Int(32, 4), Int(32, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vraddhn", "raddhn", UInt(16, 4), "rounding_add_narrow", {UInt(32, 4), UInt(32, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vraddhn", "raddhn", Int(32, 2), "rounding_add_narrow", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vraddhn", "raddhn", UInt(32, 2), "rounding_add_narrow", {UInt(64, 2), UInt(64, 2)}, ArmIntrinsic::SveUnavailable},
 
     // RSUBHN - Sub and narrow with rounding.
-    {"vrsubhn", "rsubhn", Int(8, 8), "rounding_sub_narrow", {Int(16, 8), Int(16, 8)}},
-    {"vrsubhn", "rsubhn", UInt(8, 8), "rounding_sub_narrow", {UInt(16, 8), UInt(16, 8)}},
-    {"vrsubhn", "rsubhn", Int(16, 4), "rounding_sub_narrow", {Int(32, 4), Int(32, 4)}},
-    {"vrsubhn", "rsubhn", UInt(16, 4), "rounding_sub_narrow", {UInt(32, 4), UInt(32, 4)}},
-    {"vrsubhn", "rsubhn", Int(32, 2), "rounding_sub_narrow", {Int(64, 2), Int(64, 2)}},
-    {"vrsubhn", "rsubhn", UInt(32, 2), "rounding_sub_narrow", {UInt(64, 2), UInt(64, 2)}},
+    {"vrsubhn", "rsubhn", Int(8, 8), "rounding_sub_narrow", {Int(16, 8), Int(16, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vrsubhn", "rsubhn", UInt(8, 8), "rounding_sub_narrow", {UInt(16, 8), UInt(16, 8)}, ArmIntrinsic::SveUnavailable},
+    {"vrsubhn", "rsubhn", Int(16, 4), "rounding_sub_narrow", {Int(32, 4), Int(32, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vrsubhn", "rsubhn", UInt(16, 4), "rounding_sub_narrow", {UInt(32, 4), UInt(32, 4)}, ArmIntrinsic::SveUnavailable},
+    {"vrsubhn", "rsubhn", Int(32, 2), "rounding_sub_narrow", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::SveUnavailable},
+    {"vrsubhn", "rsubhn", UInt(32, 2), "rounding_sub_narrow", {UInt(64, 2), UInt(64, 2)}, ArmIntrinsic::SveUnavailable},
 
     // SQDMULH - Saturating doubling multiply keep high half.
-    {"vqdmulh", "sqdmulh", Int(16, 4), "qdmulh", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vqdmulh", "sqdmulh", Int(32, 2), "qdmulh", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"vqdmulh", "sqdmulh", Int(16, 4), "qdmulh", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"vqdmulh", "sqdmulh", Int(32, 2), "qdmulh", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
 
     // SQRDMULH - Saturating doubling multiply keep high half with rounding.
-    {"vqrdmulh", "sqrdmulh", Int(16, 4), "qrdmulh", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vqrdmulh", "sqrdmulh", Int(32, 2), "qrdmulh", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"vqrdmulh", "sqrdmulh", Int(16, 4), "qrdmulh", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"vqrdmulh", "sqrdmulh", Int(32, 2), "qrdmulh", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
 
     // PADD - Pairwise add.
     // 32-bit only has half-width versions.
@@ -571,47 +670,49 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vpadd", nullptr, Float(32, 2), "pairwise_add", {Float(32, 4)}, ArmIntrinsic::SplitArg0},
     {"vpadd", nullptr, Float(16, 4), "pairwise_add", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::RequireFp16},
 
-    {nullptr, "addp", Int(8, 8), "pairwise_add", {Int(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "addp", UInt(8, 8), "pairwise_add", {UInt(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "addp", Int(16, 4), "pairwise_add", {Int(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "addp", UInt(16, 4), "pairwise_add", {UInt(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "addp", Int(32, 2), "pairwise_add", {Int(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "addp", UInt(32, 2), "pairwise_add", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "faddp", Float(32, 2), "pairwise_add", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "faddp", Float(64, 2), "pairwise_add", {Float(64, 4)}, ArmIntrinsic::SplitArg0},
-    {nullptr, "faddp", Float(16, 4), "pairwise_add", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
+    {nullptr, "addp", Int(8, 8), "pairwise_add", {Int(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "addp", UInt(8, 8), "pairwise_add", {UInt(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "addp", Int(16, 4), "pairwise_add", {Int(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "addp", UInt(16, 4), "pairwise_add", {UInt(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "addp", Int(32, 2), "pairwise_add", {Int(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "addp", UInt(32, 2), "pairwise_add", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "addp", Int(64, 2), "pairwise_add", {Int(64, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::SveUnavailable},
+    {nullptr, "addp", UInt(64, 2), "pairwise_add", {UInt(64, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::SveUnavailable},
+    {nullptr, "faddp", Float(32, 2), "pairwise_add", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "faddp", Float(64, 2), "pairwise_add", {Float(64, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::SveUnavailable},
+    {nullptr, "faddp", Float(16, 4), "pairwise_add", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveUnavailable},
 
     // SADDLP, UADDLP - Pairwise add long.
-    {"vpaddls", "saddlp", Int(16, 4), "pairwise_widening_add", {Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
-    {"vpaddlu", "uaddlp", UInt(16, 4), "pairwise_widening_add", {UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
-    {"vpaddlu", "uaddlp", Int(16, 4), "pairwise_widening_add", {UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
-    {"vpaddls", "saddlp", Int(32, 2), "pairwise_widening_add", {Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
-    {"vpaddlu", "uaddlp", UInt(32, 2), "pairwise_widening_add", {UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
-    {"vpaddlu", "uaddlp", Int(32, 2), "pairwise_widening_add", {UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
-    {"vpaddls", "saddlp", Int(64, 1), "pairwise_widening_add", {Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::ScalarsAreVectors},
-    {"vpaddlu", "uaddlp", UInt(64, 1), "pairwise_widening_add", {UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::ScalarsAreVectors},
-    {"vpaddlu", "uaddlp", Int(64, 1), "pairwise_widening_add", {UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::ScalarsAreVectors},
+    {"vpaddls", "saddlp", Int(16, 4), "pairwise_widening_add", {Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {"vpaddlu", "uaddlp", UInt(16, 4), "pairwise_widening_add", {UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {"vpaddlu", "uaddlp", Int(16, 4), "pairwise_widening_add", {UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {"vpaddls", "saddlp", Int(32, 2), "pairwise_widening_add", {Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {"vpaddlu", "uaddlp", UInt(32, 2), "pairwise_widening_add", {UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {"vpaddlu", "uaddlp", Int(32, 2), "pairwise_widening_add", {UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {"vpaddls", "saddlp", Int(64, 1), "pairwise_widening_add", {Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::ScalarsAreVectors | ArmIntrinsic::SveUnavailable},
+    {"vpaddlu", "uaddlp", UInt(64, 1), "pairwise_widening_add", {UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::ScalarsAreVectors | ArmIntrinsic::SveUnavailable},
+    {"vpaddlu", "uaddlp", Int(64, 1), "pairwise_widening_add", {UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::ScalarsAreVectors | ArmIntrinsic::SveUnavailable},
 
     // SPADAL, UPADAL - Pairwise add and accumulate long.
-    {"vpadals", nullptr, Int(16, 4), "pairwise_widening_add_accumulate", {Int(16, 4), Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
-    {"vpadalu", nullptr, UInt(16, 4), "pairwise_widening_add_accumulate", {UInt(16, 4), UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
-    {"vpadalu", nullptr, Int(16, 4), "pairwise_widening_add_accumulate", {Int(16, 4), UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
-    {"vpadals", nullptr, Int(32, 2), "pairwise_widening_add_accumulate", {Int(32, 2), Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
-    {"vpadalu", nullptr, UInt(32, 2), "pairwise_widening_add_accumulate", {UInt(32, 2), UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
-    {"vpadalu", nullptr, Int(32, 2), "pairwise_widening_add_accumulate", {Int(32, 2), UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs},
-    {"vpadals", nullptr, Int(64, 1), "pairwise_widening_add_accumulate", {Int(64, 1), Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::ScalarsAreVectors},
-    {"vpadalu", nullptr, UInt(64, 1), "pairwise_widening_add_accumulate", {UInt(64, 1), UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::ScalarsAreVectors},
-    {"vpadalu", nullptr, Int(64, 1), "pairwise_widening_add_accumulate", {Int(64, 1), UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::ScalarsAreVectors},
+    {"vpadals", "sadalp", Int(16, 4), "pairwise_widening_add_accumulate", {Int(16, 4), Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::Neon64Unavailable},
+    {"vpadalu", "uadalp", UInt(16, 4), "pairwise_widening_add_accumulate", {UInt(16, 4), UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::Neon64Unavailable},
+    {"vpadalu", "uadalp", Int(16, 4), "pairwise_widening_add_accumulate", {Int(16, 4), UInt(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::Neon64Unavailable},
+    {"vpadals", "sadalp", Int(32, 2), "pairwise_widening_add_accumulate", {Int(32, 2), Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::Neon64Unavailable},
+    {"vpadalu", "uadalp", UInt(32, 2), "pairwise_widening_add_accumulate", {UInt(32, 2), UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::Neon64Unavailable},
+    {"vpadalu", "uadalp", Int(32, 2), "pairwise_widening_add_accumulate", {Int(32, 2), UInt(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::Neon64Unavailable},
+    {"vpadals", "sadalp", Int(64, 1), "pairwise_widening_add_accumulate", {Int(64, 1), Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::ScalarsAreVectors | ArmIntrinsic::Neon64Unavailable},
+    {"vpadalu", "uadalp", UInt(64, 1), "pairwise_widening_add_accumulate", {UInt(64, 1), UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::ScalarsAreVectors | ArmIntrinsic::Neon64Unavailable},
+    {"vpadalu", "uadalp", Int(64, 1), "pairwise_widening_add_accumulate", {Int(64, 1), UInt(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleArgs | ArmIntrinsic::ScalarsAreVectors | ArmIntrinsic::Neon64Unavailable},
 
     // SMAXP, UMAXP, FMAXP - Pairwise max.
-    {nullptr, "smaxp", Int(8, 8), "pairwise_max", {Int(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "umaxp", UInt(8, 8), "pairwise_max", {UInt(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "smaxp", Int(16, 4), "pairwise_max", {Int(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "umaxp", UInt(16, 4), "pairwise_max", {UInt(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "smaxp", Int(32, 2), "pairwise_max", {Int(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "umaxp", UInt(32, 2), "pairwise_max", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "fmaxp", Float(32, 2), "pairwise_max", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "fmaxp", Float(16, 4), "pairwise_max", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
+    {nullptr, "smaxp", Int(8, 8), "pairwise_max", {Int(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "umaxp", UInt(8, 8), "pairwise_max", {UInt(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "smaxp", Int(16, 4), "pairwise_max", {Int(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "umaxp", UInt(16, 4), "pairwise_max", {UInt(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "smaxp", Int(32, 2), "pairwise_max", {Int(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "umaxp", UInt(32, 2), "pairwise_max", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fmaxp", Float(32, 2), "pairwise_max", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fmaxp", Float(16, 4), "pairwise_max", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveUnavailable},
 
     // On arm32, we only have half-width versions of these.
     {"vpmaxs", nullptr, Int(8, 8), "pairwise_max", {Int(8, 16)}, ArmIntrinsic::SplitArg0},
@@ -624,14 +725,14 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vpmaxs", nullptr, Float(16, 4), "pairwise_max", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::RequireFp16},
 
     // SMINP, UMINP, FMINP - Pairwise min.
-    {nullptr, "sminp", Int(8, 8), "pairwise_min", {Int(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "uminp", UInt(8, 8), "pairwise_min", {UInt(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "sminp", Int(16, 4), "pairwise_min", {Int(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "uminp", UInt(16, 4), "pairwise_min", {UInt(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "sminp", Int(32, 2), "pairwise_min", {Int(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "uminp", UInt(32, 2), "pairwise_min", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "fminp", Float(32, 2), "pairwise_min", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
-    {nullptr, "fminp", Float(16, 4), "pairwise_min", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
+    {nullptr, "sminp", Int(8, 8), "pairwise_min", {Int(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "uminp", UInt(8, 8), "pairwise_min", {UInt(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "sminp", Int(16, 4), "pairwise_min", {Int(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "uminp", UInt(16, 4), "pairwise_min", {UInt(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "sminp", Int(32, 2), "pairwise_min", {Int(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "uminp", UInt(32, 2), "pairwise_min", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fminp", Float(32, 2), "pairwise_min", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fminp", Float(16, 4), "pairwise_min", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveUnavailable},
 
     // On arm32, we only have half-width versions of these.
     {"vpmins", nullptr, Int(8, 8), "pairwise_min", {Int(8, 16)}, ArmIntrinsic::SplitArg0},
@@ -645,28 +746,35 @@ const ArmIntrinsic intrinsic_defs[] = {
 
     // SDOT, UDOT - Dot products.
     // Mangle this one manually, there aren't that many and it is a special case.
-    {nullptr, "sdot.v2i32.v8i8", Int(32, 2), "dot_product", {Int(32, 2), Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle},
-    {nullptr, "udot.v2i32.v8i8", Int(32, 2), "dot_product", {Int(32, 2), UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle},
-    {nullptr, "udot.v2i32.v8i8", UInt(32, 2), "dot_product", {UInt(32, 2), UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle},
-    {nullptr, "sdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle},
-    {nullptr, "udot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
-    {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
+    {nullptr, "sdot.v2i32.v8i8", Int(32, 2), "dot_product", {Int(32, 2), Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "udot.v2i32.v8i8", Int(32, 2), "dot_product", {Int(32, 2), UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "udot.v2i32.v8i8", UInt(32, 2), "dot_product", {UInt(32, 2), UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "sdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "udot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
+    // SVE versions.
+    {nullptr, "sdot.nxv4i32", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
+    {nullptr, "udot.nxv4i32", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
+    {nullptr, "udot.nxv4i32", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
+    {nullptr, "sdot.nxv2i64", Int(64, 2), "dot_product", {Int(64, 2), Int(16, 8), Int(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::Neon64Unavailable | ArmIntrinsic::SveRequired},
+    {nullptr, "udot.nxv2i64", Int(64, 2), "dot_product", {Int(64, 2), UInt(16, 8), UInt(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::Neon64Unavailable | ArmIntrinsic::SveRequired},
+    {nullptr, "udot.nxv2i64", UInt(64, 2), "dot_product", {UInt(64, 2), UInt(16, 8), UInt(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::Neon64Unavailable | ArmIntrinsic::SveRequired},
 
     // ABDL - Widening absolute difference
     // The ARM backend folds both signed and unsigned widening casts of absd to a widening_absd, so we need to handle both signed and
     // unsigned input and return types.
-    {"vabdl_i8x8", "vabdl_i8x8", Int(16, 8), "widening_absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_i8x8", "vabdl_i8x8", UInt(16, 8), "widening_absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_u8x8", "vabdl_u8x8", Int(16, 8), "widening_absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_u8x8", "vabdl_u8x8", UInt(16, 8), "widening_absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_i16x4", "vabdl_i16x4", Int(32, 4), "widening_absd", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_i16x4", "vabdl_i16x4", UInt(32, 4), "widening_absd", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_u16x4", "vabdl_u16x4", Int(32, 4), "widening_absd", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_u16x4", "vabdl_u16x4", UInt(32, 4), "widening_absd", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_i32x2", "vabdl_i32x2", Int(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_u32x2", "vabdl_u32x2", Int(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i8x8", "vabdl_i8x8", Int(16, 8), "widening_absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_i8x8", "vabdl_i8x8", UInt(16, 8), "widening_absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_u8x8", "vabdl_u8x8", Int(16, 8), "widening_absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_u8x8", "vabdl_u8x8", UInt(16, 8), "widening_absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_i16x4", "vabdl_i16x4", Int(32, 4), "widening_absd", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_i16x4", "vabdl_i16x4", UInt(32, 4), "widening_absd", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_u16x4", "vabdl_u16x4", Int(32, 4), "widening_absd", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_u16x4", "vabdl_u16x4", UInt(32, 4), "widening_absd", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_i32x2", "vabdl_i32x2", Int(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_u32x2", "vabdl_u32x2", Int(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+    {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
 };
 
 // List of fp16 math functions which we can avoid "emulated" equivalent code generation.
@@ -706,32 +814,103 @@ const std::map<string, string> float16_transcendental_remapping = {
 };
 // clang-format on
 
-llvm::Function *CodeGen_ARM::define_concat_args_wrapper(llvm::Function *inner, const string &name) {
+llvm::Type *CodeGen_ARM::llvm_type_with_constraint(const Type &t, bool scalars_are_vectors,
+                                                   VectorTypeConstraint constraint) {
+    llvm::Type *ret = llvm_type_of(t.element_of());
+    if (!t.is_scalar() || scalars_are_vectors) {
+        int lanes = t.lanes();
+        if (constraint == VectorTypeConstraint::VScale) {
+            lanes /= target_vscale();
+        }
+        ret = get_vector_type(ret, lanes, constraint);
+    }
+    return ret;
+}
+
+llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name,
+                                                   const Type &ret_type,
+                                                   const std::string &mangled_name,
+                                                   const std::vector<Type> &arg_types,
+                                                   int intrinsic_flags,
+                                                   bool sve_intrinsic) {
+
+    auto to_llvm_type = [&](const Type &t) {
+        return llvm_type_with_constraint(t, (intrinsic_flags & ArmIntrinsic::ScalarsAreVectors),
+                                         !sve_intrinsic ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
+    };
+
+    llvm::Type *llvm_ret_type = to_llvm_type(ret_type);
+    std::vector<llvm::Type *> llvm_arg_types;
+    std::transform(arg_types.begin(), arg_types.end(), std::back_inserter(llvm_arg_types), to_llvm_type);
+
+    const bool add_predicate = sve_intrinsic && !(intrinsic_flags & ArmIntrinsic::SveNoPredicate);
+    bool add_inactive_arg = sve_intrinsic && (intrinsic_flags & ArmIntrinsic::SveInactiveArg);
+    bool split_arg0 = intrinsic_flags & ArmIntrinsic::SplitArg0;
+
+    if (!(add_inactive_arg || add_predicate || split_arg0)) {
+        // No need to wrap
+        return get_llvm_intrin(llvm_ret_type, mangled_name, llvm_arg_types);
+    }
+
+    std::vector<llvm::Type *> inner_llvm_arg_types;
+    std::vector<Value *> inner_args;
+    internal_assert(!arg_types.empty());
+    const int inner_lanes = split_arg0 ? arg_types[0].lanes() / 2 : arg_types[0].lanes();
+
+    if (add_inactive_arg) {
+        // The fallback value has the same type as ret value.
+        // We don't use this, so just pad it with 0.
+        inner_llvm_arg_types.push_back(llvm_ret_type);
+
+        Value *zero = Constant::getNullValue(llvm_ret_type);
+        inner_args.push_back(zero);
+    }
+    if (add_predicate) {
+        llvm::Type *pred_type = to_llvm_type(Int(1, inner_lanes));
+        inner_llvm_arg_types.push_back(pred_type);
+        // Halide does not have general support for predication so use
+        // constant true for all lanes.
+        Value *ptrue = Constant::getAllOnesValue(pred_type);
+        inner_args.push_back(ptrue);
+    }
+    if (split_arg0) {
+        llvm::Type *split_arg_type = to_llvm_type(arg_types[0].with_lanes(inner_lanes));
+        inner_llvm_arg_types.push_back(split_arg_type);
+        inner_llvm_arg_types.push_back(split_arg_type);
+        internal_assert(arg_types.size() == 1);
+    } else {
+        // Push back all argument typs which Halide defines
+        std::copy(llvm_arg_types.begin(), llvm_arg_types.end(), std::back_inserter(inner_llvm_arg_types));
+    }
+
+    llvm::Function *inner = get_llvm_intrin(llvm_ret_type, mangled_name, inner_llvm_arg_types);
     llvm::FunctionType *inner_ty = inner->getFunctionType();
 
-    internal_assert(inner_ty->getNumParams() == 2);
-    llvm::Type *inner_arg0_ty = inner_ty->getParamType(0);
-    llvm::Type *inner_arg1_ty = inner_ty->getParamType(1);
-    int inner_arg0_lanes = get_vector_num_elements(inner_arg0_ty);
-    int inner_arg1_lanes = get_vector_num_elements(inner_arg1_ty);
+    llvm::FunctionType *wrapper_ty = llvm::FunctionType::get(inner_ty->getReturnType(), llvm_arg_types, false);
 
-    llvm::Type *concat_arg_ty =
-        get_vector_type(inner_arg0_ty->getScalarType(), inner_arg0_lanes + inner_arg1_lanes);
-
-    // Make a wrapper.
-    llvm::FunctionType *wrapper_ty =
-        llvm::FunctionType::get(inner_ty->getReturnType(), {concat_arg_ty}, false);
+    string wrapper_name = inner_name + unique_name("_wrapper");
     llvm::Function *wrapper =
-        llvm::Function::Create(wrapper_ty, llvm::GlobalValue::InternalLinkage, name, module.get());
+        llvm::Function::Create(wrapper_ty, llvm::GlobalValue::InternalLinkage, wrapper_name, module.get());
     llvm::BasicBlock *block =
         llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
     IRBuilderBase::InsertPoint here = builder->saveIP();
     builder->SetInsertPoint(block);
 
+    if (split_arg0) {
+        // Call the real intrinsic.
+        Value *low = slice_vector(wrapper->getArg(0), 0, inner_lanes);
+        Value *high = slice_vector(wrapper->getArg(0), inner_lanes, inner_lanes);
+        inner_args.push_back(low);
+        inner_args.push_back(high);
+        internal_assert(inner_llvm_arg_types.size() == 2);
+    } else {
+        for (auto *itr = wrapper->arg_begin(); itr != wrapper->arg_end(); ++itr) {
+            inner_args.push_back(itr);
+        }
+    }
+
     // Call the real intrinsic.
-    Value *low = slice_vector(wrapper->getArg(0), 0, inner_arg0_lanes);
-    Value *high = slice_vector(wrapper->getArg(0), inner_arg0_lanes, inner_arg1_lanes);
-    Value *ret = builder->CreateCall(inner, {low, high});
+    Value *ret = builder->CreateCall(inner, inner_args);
     builder->CreateRet(ret);
 
     // Always inline these wrappers.
@@ -746,15 +925,32 @@ llvm::Function *CodeGen_ARM::define_concat_args_wrapper(llvm::Function *inner, c
 void CodeGen_ARM::init_module() {
     CodeGen_Posix::init_module();
 
-    if (neon_intrinsics_disabled()) {
+    const bool has_neon = !target.has_feature(Target::NoNEON);
+    const bool has_sve = target.has_feature(Target::SVE2);
+    if (!(has_neon || has_sve)) {
         return;
     }
 
-    string prefix = target.bits == 32 ? "llvm.arm.neon." : "llvm.aarch64.neon.";
+    enum class SIMDFlavors {
+        NeonWidthX1,
+        NeonWidthX2,
+        SVE,
+    };
+
+    std::vector<SIMDFlavors> flavors;
+    if (has_neon) {
+        flavors.push_back(SIMDFlavors::NeonWidthX1);
+        flavors.push_back(SIMDFlavors::NeonWidthX2);
+    }
+    if (has_sve) {
+        flavors.push_back(SIMDFlavors::SVE);
+    }
+
     for (const ArmIntrinsic &intrin : intrinsic_defs) {
         if (intrin.flags & ArmIntrinsic::RequireFp16 && !target.has_feature(Target::ARMFp16)) {
             continue;
         }
+
         // Get the name of the intrinsic with the appropriate prefix.
         const char *intrin_name = nullptr;
         if (target.bits == 32) {
@@ -765,21 +961,66 @@ void CodeGen_ARM::init_module() {
         if (!intrin_name) {
             continue;
         }
-        string full_name = intrin_name;
-        if (!starts_with(full_name, "llvm.") && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
-            full_name = prefix + full_name;
-        }
 
-        // We might have to generate versions of this intrinsic with multiple widths.
-        vector<int> width_factors = {1};
-        if (intrin.flags & ArmIntrinsic::HalfWidth) {
-            width_factors.push_back(2);
-        }
+        // This makes up to three passes defining intrinsics for 64-bit,
+        // 128-bit, and, if SVE is avaailable, whatever the SVE target width
+        // is. Some variants will not result in a definition getting added based
+        // on the target and the intrinsic flags. The intrinsic width may be
+        // scaled and one of two opcodes may be selected by different
+        // interations of this loop.
+        for (const auto flavor : flavors) {
+            const bool is_sve = (flavor == SIMDFlavors::SVE);
 
-        for (int width_factor : width_factors) {
+            // Skip intrinsics that are NEON or SVE only depending on whether compiling for SVE.
+            if (is_sve) {
+                if (intrin.flags & ArmIntrinsic::SveUnavailable) {
+                    continue;
+                }
+            } else {
+                if (intrin.flags & ArmIntrinsic::SveRequired) {
+                    continue;
+                }
+            }
+            if ((target.bits == 64) &&
+                (intrin.flags & ArmIntrinsic::Neon64Unavailable) &&
+                !is_sve) {
+                continue;
+            }
+            // Already declared in the x1 pass.
+            if ((flavor == SIMDFlavors::NeonWidthX2) &&
+                !(intrin.flags & ArmIntrinsic::HalfWidth)) {
+                continue;
+            }
+
+            string full_name = intrin_name;
+            const bool is_vanilla_intrinsic = starts_with(full_name, "llvm.");
+            if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
+                if (target.bits == 32) {
+                    full_name = "llvm.arm.neon." + full_name;
+                } else {
+                    full_name = (is_sve ? "llvm.aarch64.sve." : "llvm.aarch64.neon.") + full_name;
+                }
+            }
+
+            int width_factor = 1;
+            if (!((intrin.ret_type.lanes <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
+                switch (flavor) {
+                case SIMDFlavors::NeonWidthX1:
+                    width_factor = 1;
+                    break;
+                case SIMDFlavors::NeonWidthX2:
+                    width_factor = 2;
+                    break;
+                case SIMDFlavors::SVE:
+                    width_factor = (intrin.flags & ArmIntrinsic::HalfWidth) ? 2 : 1;
+                    width_factor *= target_vscale();
+                    break;
+                }
+            }
+
             Type ret_type = intrin.ret_type;
             ret_type = ret_type.with_lanes(ret_type.lanes() * width_factor);
-            internal_assert(ret_type.bits() * ret_type.lanes() <= 128) << full_name << "\n";
+            internal_assert(ret_type.bits() * ret_type.lanes() <= 128 * width_factor) << full_name << "\n";
             vector<Type> arg_types;
             arg_types.reserve(4);
             for (halide_type_t i : intrin.arg_types) {
@@ -787,9 +1028,7 @@ void CodeGen_ARM::init_module() {
                     break;
                 }
                 Type arg_type = i;
-                if (arg_type.is_vector()) {
-                    arg_type = arg_type.with_lanes(arg_type.lanes() * width_factor);
-                }
+                arg_type = arg_type.with_lanes(arg_type.lanes() * width_factor);
                 arg_types.emplace_back(arg_type);
             }
 
@@ -799,7 +1038,7 @@ void CodeGen_ARM::init_module() {
             if (starts_with(full_name, "llvm.") && (intrin.flags & ArmIntrinsic::NoMangle) == 0) {
                 // Append LLVM name mangling for either the return type or the arguments, or both.
                 vector<Type> types;
-                if (intrin.flags & ArmIntrinsic::MangleArgs) {
+                if (intrin.flags & ArmIntrinsic::MangleArgs && !is_sve) {
                     types = arg_types;
                 } else if (intrin.flags & ArmIntrinsic::MangleRetArgs) {
                     types = {ret_type};
@@ -808,7 +1047,9 @@ void CodeGen_ARM::init_module() {
                     types = {ret_type};
                 }
                 for (const Type &t : types) {
-                    mangled_name_builder << ".v" << t.lanes();
+                    std::string llvm_vector_prefix = is_sve ? ".nxv" : ".v";
+                    int mangle_lanes = t.lanes() / (is_sve ? target_vscale() : 1);
+                    mangled_name_builder << llvm_vector_prefix << mangle_lanes;
                     if (t.is_int() || t.is_uint()) {
                         mangled_name_builder << "i";
                     } else if (t.is_float()) {
@@ -819,17 +1060,9 @@ void CodeGen_ARM::init_module() {
             }
             string mangled_name = mangled_name_builder.str();
 
-            llvm::Function *intrin_impl = nullptr;
-            if (intrin.flags & ArmIntrinsic::SplitArg0) {
-                // This intrinsic needs a wrapper to split the argument.
-                string wrapper_name = intrin.name + unique_name("_wrapper");
-                Type split_arg_type = arg_types[0].with_lanes(arg_types[0].lanes() / 2);
-                llvm::Function *to_wrap = get_llvm_intrin(ret_type, mangled_name, {split_arg_type, split_arg_type});
-                intrin_impl = define_concat_args_wrapper(to_wrap, wrapper_name);
-            } else {
-                bool scalars_are_vectors = intrin.flags & ArmIntrinsic::ScalarsAreVectors;
-                intrin_impl = get_llvm_intrin(ret_type, mangled_name, arg_types, scalars_are_vectors);
-            }
+            llvm::Function *intrin_impl = define_intrin_wrapper(
+                intrin.name, ret_type, mangled_name, arg_types,
+                intrin.flags, is_sve);
 
             function_does_not_access_memory(intrin_impl);
             intrin_impl->addFnAttr(llvm::Attribute::NoUnwind);
@@ -862,8 +1095,31 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     CodeGen_Posix::compile_func(func, simple_name, extern_name);
 }
 
+void CodeGen_ARM::begin_func(LinkageType linkage, const std::string &simple_name,
+                             const std::string &extern_name, const std::vector<LoweredArgument> &args) {
+    CodeGen_Posix::begin_func(linkage, simple_name, extern_name, args);
+
+    // TODO(https://github.com/halide/Halide/issues/8092): There is likely a
+    // better way to ensure this is only generated for the outermost function
+    // that is being compiled. Avoiding the assert on inner functions is both an
+    // efficiency and a correctness issue as the assertion code may not compile
+    // in all contexts.
+    if (linkage != LinkageType::Internal) {
+        int effective_vscale = target_vscale();
+        if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
+            // Make sure run-time vscale is equal to compile-time vscale
+            Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_vscale, {}, Call::PureIntrinsic);
+            Value *val_runtime_vscale = codegen(runtime_vscale);
+            Value *val_compiletime_vscale = ConstantInt::get(i32_t, effective_vscale);
+            Value *cond = builder->CreateICmpEQ(val_runtime_vscale, val_compiletime_vscale);
+            create_assertion(cond, Call::make(Int(32), "halide_error_vscale_invalid",
+                                              {simple_name, runtime_vscale, Expr(effective_vscale)}, Call::Extern));
+        }
+    }
+}
+
 void CodeGen_ARM::visit(const Cast *op) {
-    if (!neon_intrinsics_disabled() && op->type.is_vector()) {
+    if (!simd_intrinsics_disabled() && op->type.is_vector()) {
         vector<Expr> matches;
         for (const Pattern &pattern : casts) {
             if (expr_match(pattern.pattern, op, matches)) {
@@ -898,14 +1154,11 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
-    // LLVM fptoui generates fcvtzs if src is fp16 scalar else fcvtzu.
-    // To avoid that, we use neon intrinsic explicitly.
-    if (is_float16_and_has_feature(op->value.type())) {
-        if (op->type.is_int_or_uint() && op->type.bits() == 16) {
-            value = call_overloaded_intrin(op->type, "fp_to_int", {op->value});
-            if (value) {
-                return;
-            }
+    // LLVM fptoui generates fcvtzs or fcvtzu in inconsistent way
+    if (op->value.type().is_float() && op->type.is_int_or_uint()) {
+        if (Value *v = call_overloaded_intrin(op->type, "fp_to_int", {op->value})) {
+            value = v;
+            return;
         }
     }
 
@@ -913,7 +1166,7 @@ void CodeGen_ARM::visit(const Cast *op) {
 }
 
 void CodeGen_ARM::visit(const Add *op) {
-    if (neon_intrinsics_disabled() ||
+    if (simd_intrinsics_disabled() ||
         !op->type.is_vector() ||
         !target.has_feature(Target::ARMDotProd) ||
         !op->type.is_int_or_uint() ||
@@ -997,7 +1250,7 @@ void CodeGen_ARM::visit(const Add *op) {
 }
 
 void CodeGen_ARM::visit(const Sub *op) {
-    if (neon_intrinsics_disabled()) {
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1007,6 +1260,46 @@ void CodeGen_ARM::visit(const Sub *op) {
         for (const auto &i : negations) {
             if (expr_match(i.pattern, op, matches)) {
                 value = call_overloaded_intrin(op->type, i.intrin, matches);
+                return;
+            }
+        }
+    }
+
+    // Peep-hole (0 - b) pattern to generate "negate" instruction
+    if (is_const_zero(op->a)) {
+        if (target_vscale() != 0) {
+            if ((op->type.bits() >= 8 && op->type.is_int())) {
+                if (Value *v = call_overloaded_intrin(op->type, "negate", {op->b})) {
+                    value = v;
+                    return;
+                }
+            } else if (op->type.bits() >= 16 && op->type.is_float()) {
+                value = builder->CreateFNeg(codegen(op->b));
+                return;
+            }
+        } else {
+            // llvm.neon.neg/fneg intrinsic doesn't seem to exist. Instead,
+            // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
+            if (op->type.is_float() &&
+                (op->type.bits() >= 32 || is_float16_and_has_feature(op->type))) {
+                Constant *a;
+                if (op->type.bits() == 16) {
+                    a = ConstantFP::getNegativeZero(f16_t);
+                } else if (op->type.bits() == 32) {
+                    a = ConstantFP::getNegativeZero(f32_t);
+                } else if (op->type.bits() == 64) {
+                    a = ConstantFP::getNegativeZero(f64_t);
+                } else {
+                    a = nullptr;
+                    internal_error << "Unknown bit width for floating point type: " << op->type << "\n";
+                }
+
+                Value *b = codegen(op->b);
+
+                if (op->type.lanes() > 1) {
+                    a = get_splat(op->type.lanes(), a);
+                }
+                value = builder->CreateFSub(a, b);
                 return;
             }
         }
@@ -1042,7 +1335,7 @@ void CodeGen_ARM::visit(const Sub *op) {
 
 void CodeGen_ARM::visit(const Min *op) {
     // Use a 2-wide vector for scalar floats.
-    if (!neon_intrinsics_disabled() && (op->type == Float(32) || op->type.is_vector())) {
+    if (!simd_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
         value = call_overloaded_intrin(op->type, "min", {op->a, op->b});
         if (value) {
             return;
@@ -1054,7 +1347,7 @@ void CodeGen_ARM::visit(const Min *op) {
 
 void CodeGen_ARM::visit(const Max *op) {
     // Use a 2-wide vector for scalar floats.
-    if (!neon_intrinsics_disabled() && (op->type == Float(32) || op->type.is_vector())) {
+    if (!simd_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
         value = call_overloaded_intrin(op->type, "max", {op->a, op->b});
         if (value) {
             return;
@@ -1066,12 +1359,13 @@ void CodeGen_ARM::visit(const Max *op) {
 
 void CodeGen_ARM::visit(const Store *op) {
     // Predicated store
-    if (!is_const_one(op->predicate)) {
+    const bool is_predicated_store = !is_const_one(op->predicate);
+    if (is_predicated_store && !target.has_feature(Target::SVE2)) {
         CodeGen_Posix::visit(op);
         return;
     }
 
-    if (neon_intrinsics_disabled()) {
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1079,8 +1373,8 @@ void CodeGen_ARM::visit(const Store *op) {
     // A dense store of an interleaving can be done using a vst2 intrinsic
     const Ramp *ramp = op->index.as<Ramp>();
 
-    // We only deal with ramps here
-    if (!ramp) {
+    // We only deal with ramps here except for SVE2
+    if (!ramp && !target.has_feature(Target::SVE2)) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1102,21 +1396,27 @@ void CodeGen_ARM::visit(const Store *op) {
         intrin_type = t;
         Type elt = t.element_of();
         int vec_bits = t.bits() * t.lanes();
-        if (elt == Float(32) ||
+        if (elt == Float(32) || elt == Float(64) ||
             is_float16_and_has_feature(elt) ||
-            elt == Int(8) || elt == Int(16) || elt == Int(32) ||
-            elt == UInt(8) || elt == UInt(16) || elt == UInt(32)) {
+            elt == Int(8) || elt == Int(16) || elt == Int(32) || elt == Int(64) ||
+            elt == UInt(8) || elt == UInt(16) || elt == UInt(32) || elt == UInt(64)) {
+            // TODO(zvookin): Handle vector_bits_*.
             if (vec_bits % 128 == 0) {
                 type_ok_for_vst = true;
-                intrin_type = intrin_type.with_lanes(128 / t.bits());
+                int target_vector_bits = target.vector_bits;
+                if (target_vector_bits == 0) {
+                    target_vector_bits = 128;
+                }
+                intrin_type = intrin_type.with_lanes(target_vector_bits / t.bits());
             } else if (vec_bits % 64 == 0) {
                 type_ok_for_vst = true;
-                intrin_type = intrin_type.with_lanes(64 / t.bits());
+                auto intrin_bits = (vec_bits % 128 == 0 || target.has_feature(Target::SVE2)) ? 128 : 64;
+                intrin_type = intrin_type.with_lanes(intrin_bits / t.bits());
             }
         }
     }
 
-    if (is_const_one(ramp->stride) &&
+    if (ramp && is_const_one(ramp->stride) &&
         shuffle && shuffle->is_interleave() &&
         type_ok_for_vst &&
         2 <= shuffle->vectors.size() && shuffle->vectors.size() <= 4) {
@@ -1138,11 +1438,14 @@ void CodeGen_ARM::visit(const Store *op) {
         for (int i = 0; i < num_vecs; ++i) {
             args[i] = codegen(shuffle->vectors[i]);
         }
+        Value *store_pred_val = codegen(op->predicate);
+
+        bool is_sve = target.has_feature(Target::SVE2);
 
         // Declare the function
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
-        llvm::Type *intrin_llvm_type = llvm_type_of(intrin_type);
+        llvm::Type *intrin_llvm_type = llvm_type_with_constraint(intrin_type, false, is_sve ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
 #if LLVM_VERSION >= 170
         const bool is_opaque = true;
 #else
@@ -1160,27 +1463,38 @@ void CodeGen_ARM::visit(const Store *op) {
             arg_types.front() = i8_t->getPointerTo();
             arg_types.back() = i32_t;
         } else {
-            instr << "llvm.aarch64.neon.st"
-                  << num_vecs
-                  << ".v"
-                  << intrin_type.lanes()
-                  << (t.is_float() ? 'f' : 'i')
-                  << t.bits()
-                  << ".p0";
-            if (!is_opaque) {
-                instr << (t.is_float() ? 'f' : 'i') << t.bits();
+            if (is_sve) {
+                instr << "llvm.aarch64.sve.st"
+                      << num_vecs
+                      << ".nxv"
+                      << (intrin_type.lanes() / target_vscale())
+                      << (t.is_float() ? 'f' : 'i')
+                      << t.bits();
+                arg_types = vector<llvm::Type *>(num_vecs, intrin_llvm_type);
+                arg_types.emplace_back(get_vector_type(i1_t, intrin_type.lanes() / target_vscale(), VectorTypeConstraint::VScale));  // predicate
+                arg_types.emplace_back(llvm_type_of(intrin_type.element_of())->getPointerTo());
+            } else {
+                instr << "llvm.aarch64.neon.st"
+                      << num_vecs
+                      << ".v"
+                      << intrin_type.lanes()
+                      << (t.is_float() ? 'f' : 'i')
+                      << t.bits()
+                      << ".p0";
+                if (!is_opaque) {
+                    instr << (t.is_float() ? 'f' : 'i') << t.bits();
+                }
+                arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
+                arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
             }
-            arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
-            arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
         }
         llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
         llvm::FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
         internal_assert(fn);
 
-        // How many vst instructions do we need to generate?
-        int slices = t.lanes() / intrin_type.lanes();
+        // SVE2 supports predication for smaller than whole vector size.
+        internal_assert(target.has_feature(Target::SVE2) || (t.lanes() >= intrin_type.lanes()));
 
-        internal_assert(slices >= 1);
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.lanes() * num_vecs);
@@ -1190,6 +1504,7 @@ void CodeGen_ARM::visit(const Store *op) {
             // Take a slice of each arg
             for (int j = 0; j < num_vecs; j++) {
                 slice_args[j] = slice_vector(slice_args[j], i, intrin_type.lanes());
+                slice_args[j] = convert_fixed_or_scalable_vector_type(slice_args[j], get_vector_type(slice_args[j]->getType()->getScalarType(), intrin_type.lanes()));
             }
 
             if (target.bits == 32) {
@@ -1200,8 +1515,28 @@ void CodeGen_ARM::visit(const Store *op) {
                 // Set the alignment argument
                 slice_args.push_back(ConstantInt::get(i32_t, alignment));
             } else {
+                if (is_sve) {
+                    // Set the predicate argument
+                    auto active_lanes = std::min(t.lanes() - i, intrin_type.lanes());
+                    Value *vpred_val;
+                    if (is_predicated_store) {
+                        vpred_val = slice_vector(store_pred_val, i, intrin_type.lanes());
+                    } else {
+                        Expr vpred = make_vector_predicate_1s_0s(active_lanes, intrin_type.lanes() - active_lanes);
+                        vpred_val = codegen(vpred);
+                    }
+                    slice_args.push_back(vpred_val);
+                }
                 // Set the pointer argument
                 slice_args.push_back(ptr);
+            }
+
+            if (is_sve) {
+                for (auto &arg : slice_args) {
+                    if (arg->getType()->isVectorTy()) {
+                        arg = match_vector_type_scalable(arg, VectorTypeConstraint::VScale);
+                    }
+                }
             }
 
             CallInst *store = builder->CreateCall(fn, slice_args);
@@ -1216,8 +1551,95 @@ void CodeGen_ARM::visit(const Store *op) {
         return;
     }
 
+    if (target.has_feature(Target::SVE2)) {
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
+        if (stride && stride->value == 1) {
+            // Basically we can deal with vanilla codegen,
+            // but to avoid LLVM error, process with the multiple of natural_lanes
+            const int natural_lanes = target.natural_vector_size(op->value.type());
+            if (ramp->lanes % natural_lanes) {
+                int aligned_lanes = align_up(ramp->lanes, natural_lanes);
+                // Use predicate to prevent overrun
+                Expr vpred;
+                if (is_predicated_store) {
+                    vpred = Shuffle::make_concat({op->predicate, const_false(aligned_lanes - ramp->lanes)});
+                } else {
+                    vpred = make_vector_predicate_1s_0s(ramp->lanes, aligned_lanes - ramp->lanes);
+                }
+                auto aligned_index = Ramp::make(ramp->base, stride, aligned_lanes);
+                Expr padding = make_zero(op->value.type().with_lanes(aligned_lanes - ramp->lanes));
+                Expr aligned_value = Shuffle::make_concat({op->value, padding});
+                codegen(Store::make(op->name, aligned_value, aligned_index, op->param, vpred, op->alignment));
+                return;
+            }
+        } else if (op->index.type().is_vector()) {
+            // Scatter
+            Type elt = op->value.type().element_of();
+
+            // Rewrite float16 case into reinterpret and Store in uint16, as it is unsupported in LLVM
+            if (is_float16_and_has_feature(elt)) {
+                Type u16_type = op->value.type().with_code(halide_type_uint);
+                Expr v = reinterpret(u16_type, op->value);
+                codegen(Store::make(op->name, v, op->index, op->param, op->predicate, op->alignment));
+                return;
+            }
+
+            const int store_lanes = op->value.type().lanes();
+            const int index_bits = 32;
+            Type type_with_max_bits = Int(std::max(elt.bits(), index_bits));
+            // The number of lanes is constrained by index vector type
+            const int natural_lanes = target.natural_vector_size(type_with_max_bits);
+            const int vscale_natural_lanes = natural_lanes / target_vscale();
+
+            Expr base = 0;
+            Value *elt_ptr = codegen_buffer_pointer(op->name, elt, base);
+            Value *val = codegen(op->value);
+            Value *index = codegen(op->index);
+            Value *store_pred_val = codegen(op->predicate);
+
+            llvm::Type *slice_type = get_vector_type(llvm_type_of(elt), vscale_natural_lanes, VectorTypeConstraint::VScale);
+            llvm::Type *slice_index_type = get_vector_type(llvm_type_of(op->index.type().element_of()), vscale_natural_lanes, VectorTypeConstraint::VScale);
+            llvm::Type *pred_type = get_vector_type(llvm_type_of(op->predicate.type().element_of()), vscale_natural_lanes, VectorTypeConstraint::VScale);
+
+            std::ostringstream instr;
+            instr << "llvm.aarch64.sve.st1.scatter.uxtw."
+                  << (elt.bits() != 8 ? "index." : "")  // index is scaled into bytes
+                  << "nxv"
+                  << vscale_natural_lanes
+                  << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
+                  << elt.bits();
+
+            vector<llvm::Type *> arg_types{slice_type, pred_type, elt_ptr->getType(), slice_index_type};
+            llvm::FunctionType *fn_type = FunctionType::get(void_t, arg_types, false);
+            FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+
+            // We need to slice the result into native vector lanes to use intrinsic
+            for (int i = 0; i < store_lanes; i += natural_lanes) {
+                Value *slice_value = slice_vector(val, i, natural_lanes);
+                Value *slice_index = slice_vector(index, i, natural_lanes);
+                const int active_lanes = std::min(store_lanes - i, natural_lanes);
+
+                Expr vpred = make_vector_predicate_1s_0s(active_lanes, natural_lanes - active_lanes);
+                Value *vpred_val = codegen(vpred);
+                vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, pred_type);
+                if (is_predicated_store) {
+                    Value *sliced_store_vpred_val = slice_vector(store_pred_val, i, natural_lanes);
+                    vpred_val = builder->CreateAnd(vpred_val, sliced_store_vpred_val);
+                }
+
+                slice_value = match_vector_type_scalable(slice_value, VectorTypeConstraint::VScale);
+                vpred_val = match_vector_type_scalable(vpred_val, VectorTypeConstraint::VScale);
+                slice_index = match_vector_type_scalable(slice_index, VectorTypeConstraint::VScale);
+                CallInst *store = builder->CreateCall(fn, {slice_value, vpred_val, elt_ptr, slice_index});
+                add_tbaa_metadata(store, op->name, op->index);
+            }
+
+            return;
+        }
+    }
+
     // If the stride is one or minus one, we can deal with that using vanilla codegen
-    const IntImm *stride = ramp->stride.as<IntImm>();
+    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
     if (stride && (stride->value == 1 || stride->value == -1)) {
         CodeGen_Posix::visit(op);
         return;
@@ -1250,12 +1672,13 @@ void CodeGen_ARM::visit(const Store *op) {
 
 void CodeGen_ARM::visit(const Load *op) {
     // Predicated load
-    if (!is_const_one(op->predicate)) {
+    const bool is_predicated_load = !is_const_one(op->predicate);
+    if (is_predicated_load && !target.has_feature(Target::SVE2)) {
         CodeGen_Posix::visit(op);
         return;
     }
 
-    if (neon_intrinsics_disabled()) {
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1263,14 +1686,15 @@ void CodeGen_ARM::visit(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
 
     // We only deal with ramps here
-    if (!ramp) {
+    if (!ramp && !target.has_feature(Target::SVE2)) {
         CodeGen_Posix::visit(op);
         return;
     }
 
     // If the stride is in [-1, 1], we can deal with that using vanilla codegen
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-    if (stride && (-1 <= stride->value && stride->value <= 1)) {
+    if (stride && (-1 <= stride->value && stride->value <= 1) &&
+        !target.has_feature(Target::SVE2)) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1292,6 +1716,168 @@ void CodeGen_ARM::visit(const Load *op) {
             Instruction *load = builder->CreateCall(fn, args, builtin.str());
             add_tbaa_metadata(load, op->name, op->index);
             value = load;
+            return;
+        }
+    }
+
+    if (target.has_feature(Target::SVE2)) {
+        if (stride && stride->value < 1) {
+            CodeGen_Posix::visit(op);
+            return;
+        } else if (stride && stride->value == 1) {
+            const int natural_lanes = target.natural_vector_size(op->type);
+            if (ramp->lanes % natural_lanes) {
+                // Load with lanes multiple of natural_lanes
+                int aligned_lanes = align_up(ramp->lanes, natural_lanes);
+                // Use predicate to prevent from overrun
+                Expr vpred;
+                if (is_predicated_load) {
+                    vpred = Shuffle::make_concat({op->predicate, const_false(aligned_lanes - ramp->lanes)});
+                } else {
+                    vpred = make_vector_predicate_1s_0s(ramp->lanes, aligned_lanes - ramp->lanes);
+                }
+                auto aligned_index = Ramp::make(ramp->base, stride, aligned_lanes);
+                auto aligned_type = op->type.with_lanes(aligned_lanes);
+                value = codegen(Load::make(aligned_type, op->name, aligned_index, op->image, op->param, vpred, op->alignment));
+                value = slice_vector(value, 0, ramp->lanes);
+                return;
+            } else {
+                CodeGen_Posix::visit(op);
+                return;
+            }
+        } else if (stride && (2 <= stride->value && stride->value <= 4)) {
+            // Structured load ST2/ST3/ST4 of SVE
+
+            Expr base = ramp->base;
+            ModulusRemainder align = op->alignment;
+
+            int aligned_stride = gcd(stride->value, align.modulus);
+            int offset = 0;
+            if (aligned_stride == stride->value) {
+                offset = mod_imp((int)align.remainder, aligned_stride);
+            } else {
+                const Add *add = base.as<Add>();
+                if (const IntImm *add_c = add ? add->b.as<IntImm>() : base.as<IntImm>()) {
+                    offset = mod_imp(add_c->value, stride->value);
+                }
+            }
+
+            if (offset) {
+                base = simplify(base - offset);
+            }
+
+            Value *load_pred_val = codegen(op->predicate);
+
+            // We need to slice the result in to native vector lanes to use sve intrin.
+            // LLVM will optimize redundant ld instructions afterwards
+            const int slice_lanes = target.natural_vector_size(op->type);
+            vector<Value *> results;
+            for (int i = 0; i < op->type.lanes(); i += slice_lanes) {
+                int load_base_i = i * stride->value;
+                Expr slice_base = simplify(base + load_base_i);
+                Expr slice_index = Ramp::make(slice_base, stride, slice_lanes);
+                std::ostringstream instr;
+                instr << "llvm.aarch64.sve.ld"
+                      << stride->value
+                      << ".sret.nxv"
+                      << slice_lanes
+                      << (op->type.is_float() ? 'f' : 'i')
+                      << op->type.bits();
+                llvm::Type *elt = llvm_type_of(op->type.element_of());
+                llvm::Type *slice_type = get_vector_type(elt, slice_lanes);
+                StructType *sret_type = StructType::get(module->getContext(), std::vector(stride->value, slice_type));
+                std::vector<llvm::Type *> arg_types{get_vector_type(i1_t, slice_lanes), PointerType::get(elt, 0)};
+                llvm::FunctionType *fn_type = FunctionType::get(sret_type, arg_types, false);
+                FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+
+                // Set the predicate argument
+                int active_lanes = std::min(op->type.lanes() - i, slice_lanes);
+
+                Expr vpred = make_vector_predicate_1s_0s(active_lanes, slice_lanes - active_lanes);
+                Value *vpred_val = codegen(vpred);
+                vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, get_vector_type(vpred_val->getType()->getScalarType(), slice_lanes));
+                if (is_predicated_load) {
+                    Value *sliced_load_vpred_val = slice_vector(load_pred_val, i, slice_lanes);
+                    vpred_val = builder->CreateAnd(vpred_val, sliced_load_vpred_val);
+                }
+
+                Value *elt_ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
+                CallInst *load_i = builder->CreateCall(fn, {vpred_val, elt_ptr});
+                add_tbaa_metadata(load_i, op->name, slice_index);
+                // extract one element out of returned struct
+                Value *extracted = builder->CreateExtractValue(load_i, offset);
+                results.push_back(extracted);
+            }
+
+            // Retrieve original lanes
+            value = concat_vectors(results);
+            value = slice_vector(value, 0, op->type.lanes());
+            return;
+        } else if (op->index.type().is_vector()) {
+            // General Gather Load
+
+            // Rewrite float16 case into load in uint16 and reinterpret, as it is unsupported in LLVM
+            if (is_float16_and_has_feature(op->type)) {
+                Type u16_type = op->type.with_code(halide_type_uint);
+                Expr equiv = Load::make(u16_type, op->name, op->index, op->image, op->param, op->predicate, op->alignment);
+                equiv = reinterpret(op->type, equiv);
+                equiv = common_subexpression_elimination(equiv);
+                value = codegen(equiv);
+                return;
+            }
+
+            Type elt = op->type.element_of();
+            const int load_lanes = op->type.lanes();
+            const int index_bits = 32;
+            Type type_with_max_bits = Int(std::max(elt.bits(), index_bits));
+            // The number of lanes is constrained by index vector type
+            const int natural_lanes = target.natural_vector_size(type_with_max_bits);
+            const int vscale_natural_lanes = natural_lanes / target_vscale();
+
+            Expr base = 0;
+            Value *elt_ptr = codegen_buffer_pointer(op->name, elt, base);
+            Value *index = codegen(op->index);
+            Value *load_pred_val = codegen(op->predicate);
+
+            llvm::Type *slice_type = get_vector_type(llvm_type_of(elt), vscale_natural_lanes, VectorTypeConstraint::VScale);
+            llvm::Type *slice_index_type = get_vector_type(llvm_type_of(op->index.type().element_of()), vscale_natural_lanes, VectorTypeConstraint::VScale);
+            llvm::Type *pred_type = get_vector_type(llvm_type_of(op->predicate.type().element_of()), vscale_natural_lanes, VectorTypeConstraint::VScale);
+
+            std::ostringstream instr;
+            instr << "llvm.aarch64.sve.ld1.gather.uxtw."
+                  << (elt.bits() != 8 ? "index." : "")  // index is scaled into bytes
+                  << "nxv"
+                  << vscale_natural_lanes
+                  << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
+                  << elt.bits();
+
+            llvm::FunctionType *fn_type = FunctionType::get(slice_type, {pred_type, elt_ptr->getType(), slice_index_type}, false);
+            FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+
+            // We need to slice the result in to native vector lanes to use intrinsic
+            vector<Value *> results;
+            for (int i = 0; i < load_lanes; i += natural_lanes) {
+                Value *slice_index = slice_vector(index, i, natural_lanes);
+
+                const int active_lanes = std::min(load_lanes - i, natural_lanes);
+
+                Expr vpred = make_vector_predicate_1s_0s(active_lanes, natural_lanes - active_lanes);
+                Value *vpred_val = codegen(vpred);
+                if (is_predicated_load) {
+                    Value *sliced_load_vpred_val = slice_vector(load_pred_val, i, natural_lanes);
+                    vpred_val = builder->CreateAnd(vpred_val, sliced_load_vpred_val);
+                }
+
+                vpred_val = match_vector_type_scalable(vpred_val, VectorTypeConstraint::VScale);
+                slice_index = match_vector_type_scalable(slice_index, VectorTypeConstraint::VScale);
+                CallInst *gather = builder->CreateCall(fn, {vpred_val, elt_ptr, slice_index});
+                add_tbaa_metadata(gather, op->name, op->index);
+                results.push_back(gather);
+            }
+
+            // Retrieve original lanes
+            value = concat_vectors(results);
+            value = slice_vector(value, 0, load_lanes);
             return;
         }
     }
@@ -1320,6 +1906,33 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     } else {
         CodeGen_Posix::visit(op);
     }
+}
+
+void CodeGen_ARM::visit(const Ramp *op) {
+    if (target_vscale() != 0 && op->type.is_int_or_uint()) {
+        if (is_const_zero(op->base) && is_const_one(op->stride)) {
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.empty());
+                // Generate stepvector intrinsic for ScalableVector
+                return builder->CreateStepVector(llvm_type_of(op->type.with_lanes(lanes)));
+            };
+
+            // codgen with next-power-of-two lanes, because if we sliced into natural_lanes(e.g. 4),
+            // it would produce {0,1,2,3,0,1,..} instead of {0,1,2,3,4,5,..}
+            const int ret_lanes = op->type.lanes();
+            const int aligned_lanes = next_power_of_two(ret_lanes);
+            value = codegen_with_lanes(aligned_lanes, ret_lanes, {}, cg_func);
+            return;
+        } else {
+            Expr broadcast_base = Broadcast::make(op->base, op->lanes);
+            Expr broadcast_stride = Broadcast::make(op->stride, op->lanes);
+            Expr step_ramp = Ramp::make(make_zero(op->base.type()), make_one(op->base.type()), op->lanes);
+            value = codegen(broadcast_base + broadcast_stride * step_ramp);
+            return;
+        }
+    }
+
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const Call *op) {
@@ -1464,12 +2077,26 @@ void CodeGen_ARM::visit(const LE *op) {
 }
 
 void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
-    if (neon_intrinsics_disabled() ||
-        op->op == VectorReduce::Or ||
-        op->op == VectorReduce::And ||
-        op->op == VectorReduce::Mul) {
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::codegen_vector_reduce(op, init);
         return;
+    }
+
+    if (codegen_dot_product_vector_reduce(op, init)) {
+        return;
+    }
+    if (codegen_pairwise_vector_reduce(op, init)) {
+        return;
+    }
+    if (codegen_across_vector_reduce(op, init)) {
+        return;
+    }
+    CodeGen_Posix::codegen_vector_reduce(op, init);
+}
+
+bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (op->op != VectorReduce::Add) {
+        return false;
     }
 
     struct Pattern {
@@ -1485,11 +2112,23 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, i64(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, i64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, u64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
         // A sum is the same as a dot product with a vector of ones, and this appears to
         // be a bit faster.
         {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::ARMDotProd, {1}},
         {VectorReduce::Add, 4, i32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
         {VectorReduce::Add, 4, u32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
+        {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, i32(wild_u8x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, u32(wild_u8x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, i64(wild_i16x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, i64(wild_u16x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, u64(wild_u16x_), "dot_product", Target::SVE2, {1}},
     };
     // clang-format on
 
@@ -1507,7 +2146,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / p.factor);
                 equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
                 codegen_vector_reduce(equiv.as<VectorReduce>(), init);
-                return;
+                return true;
             }
 
             for (int i : p.extra_operands) {
@@ -1518,6 +2157,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             if (!i.defined()) {
                 i = make_zero(op->type);
             }
+
             if (const Shuffle *s = matches[0].as<Shuffle>()) {
                 if (s->is_broadcast()) {
                     // LLVM wants the broadcast as the second operand for the broadcasting
@@ -1525,15 +2165,27 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                     std::swap(matches[0], matches[1]);
                 }
             }
-            value = call_overloaded_intrin(op->type, p.intrin, {i, matches[0], matches[1]});
-            if (value) {
-                return;
+
+            if (Value *v = call_overloaded_intrin(op->type, p.intrin, {i, matches[0], matches[1]})) {
+                value = v;
+                return true;
             }
         }
     }
 
+    return false;
+}
+
+bool CodeGen_ARM::codegen_pairwise_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (op->op != VectorReduce::Add &&
+        op->op != VectorReduce::Max &&
+        op->op != VectorReduce::Min) {
+        return false;
+    }
+
     // TODO: Move this to be patterns? The patterns are pretty trivial, but some
     // of the other logic is tricky.
+    int factor = op->value.type().lanes() / op->type.lanes();
     const char *intrin = nullptr;
     vector<Expr> intrin_args;
     Expr accumulator = init;
@@ -1547,11 +2199,15 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
         }
         if (narrow.defined()) {
-            if (init.defined() && target.bits == 32) {
-                // On 32-bit, we have an intrinsic for widening add-accumulate.
+            if (init.defined() && (target.bits == 32 || target.has_feature(Target::SVE2))) {
+                // On 32-bit or SVE2, we have an intrinsic for widening add-accumulate.
                 // TODO: this could be written as a pattern with widen_right_add (#6951).
                 intrin = "pairwise_widening_add_accumulate";
                 intrin_args = {accumulator, narrow};
+                accumulator = Expr();
+            } else if (target.has_feature(Target::SVE2)) {
+                intrin = "pairwise_widening_add_accumulate";
+                intrin_args = {Expr(0), narrow};
                 accumulator = Expr();
             } else {
                 // On 64-bit, LLVM pattern matches widening add-accumulate if
@@ -1559,21 +2215,22 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 intrin = "pairwise_widening_add";
                 intrin_args = {narrow};
             }
-        } else {
+        } else if (!target.has_feature(Target::SVE2)) {
+            // Exclude SVE, as it process lanes in different order (even/odd wise) than NEON
             intrin = "pairwise_add";
             intrin_args = {op->value};
         }
-    } else if (op->op == VectorReduce::Min && factor == 2) {
+    } else if (op->op == VectorReduce::Min && factor == 2 && !target.has_feature(Target::SVE2)) {
         intrin = "pairwise_min";
         intrin_args = {op->value};
-    } else if (op->op == VectorReduce::Max && factor == 2) {
+    } else if (op->op == VectorReduce::Max && factor == 2 && !target.has_feature(Target::SVE2)) {
         intrin = "pairwise_max";
         intrin_args = {op->value};
     }
 
     if (intrin) {
-        value = call_overloaded_intrin(op->type, intrin, intrin_args);
-        if (value) {
+        if (Value *v = call_overloaded_intrin(op->type, intrin, intrin_args)) {
+            value = v;
             if (accumulator.defined()) {
                 // We still have an initial value to take care of
                 string n = unique_name('t');
@@ -1595,11 +2252,126 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 codegen(accumulator);
                 sym_pop(n);
             }
-            return;
+            return true;
         }
     }
 
-    CodeGen_Posix::codegen_vector_reduce(op, init);
+    return false;
+}
+
+bool CodeGen_ARM::codegen_across_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (target_vscale() == 0) {
+        // Leave this to vanilla codegen to emit "llvm.vector.reduce." intrinsic,
+        // which doesn't support scalable vector in LLVM 14
+        return false;
+    }
+
+    if (op->op != VectorReduce::Add &&
+        op->op != VectorReduce::Max &&
+        op->op != VectorReduce::Min) {
+        return false;
+    }
+
+    Expr val = op->value;
+    const int output_lanes = op->type.lanes();
+    const int native_lanes = target.natural_vector_size(op->type);
+    const int input_lanes = val.type().lanes();
+    const int input_bits = op->type.bits();
+    Type elt = op->type.element_of();
+
+    if (output_lanes != 1 || input_lanes < 2) {
+        return false;
+    }
+
+    Expr (*binop)(Expr, Expr) = nullptr;
+    std::string op_name;
+    switch (op->op) {
+    case VectorReduce::Add:
+        binop = Add::make;
+        op_name = "add";
+        break;
+    case VectorReduce::Min:
+        binop = Min::make;
+        op_name = "min";
+        break;
+    case VectorReduce::Max:
+        binop = Max::make;
+        op_name = "max";
+        break;
+    default:
+        internal_error << "unreachable";
+    }
+
+    if (input_lanes == native_lanes) {
+        std::stringstream name;  // e.g. llvm.aarch64.sve.sminv.nxv4i32
+        name << "llvm.aarch64.sve."
+             << (op->type.is_float() ? "f" : op->type.is_int() ? "s" :
+                                                                 "u")
+             << op_name << "v"
+             << ".nxv" << (native_lanes / target_vscale()) << (op->type.is_float() ? "f" : "i") << input_bits;
+
+        // Integer add accumulation output is 64 bit only
+        const bool type_upgraded = op->op == VectorReduce::Add && op->type.is_int_or_uint();
+        const int output_bits = type_upgraded ? 64 : input_bits;
+        Type intrin_ret_type = op->type.with_bits(output_bits);
+
+        const string intrin_name = name.str();
+
+        Expr pred = const_true(native_lanes);
+        vector<Expr> args{pred, op->value};
+
+        // Make sure the declaration exists, or the codegen for
+        // call will assume that the args should scalarize.
+        if (!module->getFunction(intrin_name)) {
+            vector<llvm::Type *> arg_types;
+            for (const Expr &e : args) {
+                arg_types.push_back(llvm_type_with_constraint(e.type(), false, VectorTypeConstraint::VScale));
+            }
+            FunctionType *func_t = FunctionType::get(llvm_type_with_constraint(intrin_ret_type, false, VectorTypeConstraint::VScale),
+                                                     arg_types, false);
+            llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
+        }
+
+        Expr equiv = Call::make(intrin_ret_type, intrin_name, args, Call::PureExtern);
+        if (type_upgraded) {
+            equiv = Cast::make(op->type, equiv);
+        }
+        if (init.defined()) {
+            equiv = binop(init, equiv);
+        }
+        equiv = common_subexpression_elimination(equiv);
+        equiv.accept(this);
+        return true;
+
+    } else if (input_lanes < native_lanes) {
+        // Create equivalent where lanes==native_lanes by padding data which doesn't affect the result
+        Expr padding;
+        const int inactive_lanes = native_lanes - input_lanes;
+
+        switch (op->op) {
+        case VectorReduce::Add:
+            padding = make_zero(elt.with_lanes(inactive_lanes));
+            break;
+        case VectorReduce::Min:
+            padding = elt.with_lanes(inactive_lanes).min();
+            break;
+        case VectorReduce::Max:
+            padding = elt.with_lanes(inactive_lanes).max();
+            break;
+        default:
+            internal_error << "unreachable";
+        }
+
+        Expr equiv = VectorReduce::make(op->op, Shuffle::make_concat({val, padding}), 1);
+        if (init.defined()) {
+            equiv = binop(equiv, init);
+        }
+        equiv = common_subexpression_elimination(equiv);
+        equiv.accept(this);
+        return true;
+    }
+
+    return false;
 }
 
 Type CodeGen_ARM::upgrade_type_for_arithmetic(const Type &t) const {
@@ -1623,6 +2395,39 @@ Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
     return CodeGen_Posix::upgrade_type_for_storage(t);
 }
 
+Value *CodeGen_ARM::codegen_with_lanes(int slice_lanes, int total_lanes,
+                                       const std::vector<Expr> &args, codegen_func_t &cg_func) {
+    std::vector<Value *> llvm_args;
+    // codegen args
+    for (const auto &arg : args) {
+        llvm_args.push_back(codegen(arg));
+    }
+
+    if (slice_lanes == total_lanes) {
+        // codegen op
+        return cg_func(slice_lanes, llvm_args);
+    }
+
+    std::vector<Value *> results;
+    for (int start = 0; start < total_lanes; start += slice_lanes) {
+        std::vector<Value *> sliced_args;
+        for (auto &llvm_arg : llvm_args) {
+            Value *v = llvm_arg;
+            if (get_vector_num_elements(llvm_arg->getType()) == total_lanes) {
+                // Except for scalar argument which some ops have, arguments are sliced
+                v = slice_vector(llvm_arg, start, slice_lanes);
+            }
+            sliced_args.push_back(v);
+        }
+        // codegen op
+        value = cg_func(slice_lanes, sliced_args);
+        results.push_back(value);
+    }
+    // Restore the results into vector with total_lanes
+    value = concat_vectors(results);
+    return slice_vector(value, 0, total_lanes);
+}
+
 string CodeGen_ARM::mcpu_target() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
@@ -1635,6 +2440,8 @@ string CodeGen_ARM::mcpu_target() const {
             return "cyclone";
         } else if (target.os == Target::OSX) {
             return "apple-a12";
+        } else if (target.has_feature(Target::SVE2)) {
+            return "cortex-x1";
         } else {
             return "generic";
         }
@@ -1667,6 +2474,7 @@ string CodeGen_ARM::mattrs() const {
         }
     } else {
         // TODO: Should Halide's SVE flags be 64-bit only?
+        // TODO: Sound we ass "-neon" if NoNEON is set? Does this make any sense?
         if (target.has_feature(Target::SVE2)) {
             attrs.emplace_back("+sve2");
         } else if (target.has_feature(Target::SVE)) {
@@ -1689,7 +2497,21 @@ bool CodeGen_ARM::use_soft_float_abi() const {
 }
 
 int CodeGen_ARM::native_vector_bits() const {
-    return 128;
+    if (target.has_feature(Target::SVE) || target.has_feature(Target::SVE2)) {
+        return std::max(target.vector_bits, 128);
+    } else {
+        return 128;
+    }
+}
+
+int CodeGen_ARM::target_vscale() const {
+    if (target.features_any_of({Target::SVE, Target::SVE2})) {
+        user_assert(target.vector_bits != 0) << "For SVE/SVE2 support, target_vector_bits=<size> must be set in target.\n";
+        user_assert((target.vector_bits % 128) == 0) << "For SVE/SVE2 support, target_vector_bits must be a multiple of 128.\n";
+        return target.vector_bits / 128;
+    }
+
+    return 0;
 }
 
 bool CodeGen_ARM::supports_call_as_float16(const Call *op) const {
