@@ -1297,13 +1297,8 @@ private:
             {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
             {OutputFileType::assembly, file_name + ".s"},
         };
-        try {
-            error.compile_to(outputs, arg_types, fn_name, target);
-        } catch (const std::runtime_error &re) {
-            cerr << "Error: compilation failed in " << name << ", msg: " << endl;
-            cerr << re.what() << endl;
-            return;
-        }
+
+        error.compile_to(outputs, arg_types, fn_name, target);
 
         std::ifstream asm_file;
         asm_file.open(file_name + ".s");
