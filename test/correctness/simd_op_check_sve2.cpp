@@ -36,7 +36,7 @@ public:
         cout << "HL_JIT_TARGET is: " << jit_target.to_string() << endl;
 
         auto is_same_triple = [](const Target &t1, const Target &t2) -> bool {
-            return t1.arch == t2.arch && t1.bits == t2.bits && t1.os == t2.os;
+            return t1.arch == t2.arch && t1.bits == t2.bits && t1.os == t2.os && t1.vector_bits == t2.vector_bits;
         };
 
         can_run_the_code = is_same_triple(host, target) && is_same_triple(jit_target, target);
