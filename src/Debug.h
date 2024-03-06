@@ -77,6 +77,9 @@ struct PrintSpan {
         : span(span) {
     }
 };
+// Class template argument deduction (CTAD) guide to prevent warnings.
+template<typename T>
+PrintSpan(const T &) -> PrintSpan<T>;
 
 template<typename StreamT, typename T>
 inline StreamT &operator<<(StreamT &stream, const PrintSpan<T> &wrapper) {
@@ -108,6 +111,9 @@ struct PrintSpanLn {
         : span(span) {
     }
 };
+// Class template argument deduction (CTAD) guide to prevent warnings.
+template<typename T>
+PrintSpanLn(const T &) -> PrintSpanLn<T>;
 
 template<typename StreamT, typename T>
 inline StreamT &operator<<(StreamT &stream, const PrintSpanLn<T> &wrapper) {

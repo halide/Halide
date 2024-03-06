@@ -11,22 +11,25 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::string;
 using std::vector;
 
+const std::string &gpu_thread_name(int index) {
+    static std::string gpu_thread_names[3] = {"." + unique_name("thread_id_x"),
+                                              "." + unique_name("thread_id_y"),
+                                              "." + unique_name("thread_id_z")};
+    internal_assert(index >= 0 && index < 3);
+    return gpu_thread_names[index];
+}
+
+const std::string &gpu_block_name(int index) {
+    static std::string gpu_block_names[3] = {"." + unique_name("block_id_x"),
+                                             "." + unique_name("block_id_y"),
+                                             "." + unique_name("block_id_z")};
+    internal_assert(index >= 0 && index < 3);
+    return gpu_block_names[index];
+}
+
 namespace {
-string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z"};
-string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z"};
-
-string get_thread_name(int index) {
-    internal_assert(index >= 0 && index < 3);
-    return thread_names[index];
-}
-
-string get_block_name(int index) {
-    internal_assert(index >= 0 && index < 3);
-    return block_names[index];
-}
 
 class CountGPUBlocksThreads : public IRVisitor {
     using IRVisitor::visit;
@@ -73,12 +76,12 @@ public:
 };
 
 class CanonicalizeGPUVars : public IRMutator {
-    map<string, string> gpu_vars;
+    map<std::string, std::string> gpu_vars;
 
     using IRMutator::visit;
 
-    string find_replacement(const string &suffix, const string &name) {
-        vector<string> v = split_string(name, suffix);
+    std::string find_replacement(const std::string &suffix, const std::string &name) {
+        vector<std::string> v = split_string(name, suffix);
         internal_assert(v.size() == 2);
         const auto &iter = gpu_vars.find(v[0]);
         if (iter != gpu_vars.end()) {
@@ -87,7 +90,7 @@ class CanonicalizeGPUVars : public IRMutator {
         return name;
     }
 
-    string canonicalize_let(const string &name) {
+    std::string canonicalize_let(const std::string &name) {
         if (ends_with(name, ".loop_max")) {
             return find_replacement(".loop_max", name);
         } else if (ends_with(name, ".loop_min")) {
@@ -100,7 +103,7 @@ class CanonicalizeGPUVars : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        string name = op->name;
+        std::string name = op->name;
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
         Stmt body = mutate(op->body);
@@ -113,13 +116,13 @@ class CanonicalizeGPUVars : public IRMutator {
             op->body.accept(&counter);
 
             if (op->for_type == ForType::GPUBlock) {
-                name += "." + get_block_name(counter.nblocks);
+                name += gpu_block_name(counter.nblocks);
                 debug(5) << "Replacing " << op->name << " with GPU block name " << name << "\n";
             } else if (op->for_type == ForType::GPUThread) {
-                name += "." + get_thread_name(counter.nthreads);
+                name += gpu_thread_name(counter.nthreads);
                 debug(5) << "Replacing " << op->name << " with GPU thread name " << name << "\n";
             } else if (op->for_type == ForType::GPULane) {
-                name += "." + get_thread_name(0);
+                name += gpu_thread_name(0);
             }
 
             if (name != op->name) {
@@ -143,7 +146,7 @@ class CanonicalizeGPUVars : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        vector<std::pair<string, Expr>> lets;
+        vector<std::pair<std::string, Expr>> lets;
         Stmt result;
 
         do {
@@ -154,7 +157,7 @@ class CanonicalizeGPUVars : public IRMutator {
         result = mutate(result);
 
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-            string name = canonicalize_let(it->first);
+            std::string name = canonicalize_let(it->first);
             if (name != it->first) {
                 Expr new_var = Variable::make(Int(32), name);
                 result = substitute(it->first, new_var, result);
@@ -168,7 +171,7 @@ class CanonicalizeGPUVars : public IRMutator {
     Stmt visit(const IfThenElse *op) override {
         Expr condition = mutate(op->condition);
 
-        map<string, string> old_gpu_vars;
+        map<std::string, std::string> old_gpu_vars;
         old_gpu_vars.swap(gpu_vars);
         Stmt then_case = mutate(op->then_case);
 

@@ -87,6 +87,13 @@ bool is_parallel(ForType for_type) {
             for_type == ForType::GPULane);
 }
 
+/** Returns true if for_type is GPUBlock, GPUThread, or GPULane. */
+bool is_gpu(ForType for_type) {
+    return (for_type == ForType::GPUBlock ||
+            for_type == ForType::GPUThread ||
+            for_type == ForType::GPULane);
+}
+
 }  // namespace Internal
 
 Range::Range(const Expr &min_in, const Expr &extent_in)

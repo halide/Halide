@@ -415,6 +415,9 @@ bool is_unordered_parallel(ForType for_type);
 /** Returns true if for_type executes for loop iterations in parallel. */
 bool is_parallel(ForType for_type);
 
+/** Returns true if for_type is GPUBlock, GPUThread, or GPULane. */
+bool is_gpu(ForType for_type);
+
 /** A reference-counted handle to a statement node. */
 struct Stmt : public IRHandle {
     Stmt() = default;

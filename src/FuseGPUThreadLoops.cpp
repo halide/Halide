@@ -4,6 +4,7 @@
 
 #include "Bounds.h"
 #include "CSE.h"
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CompilerLogger.h"
 #include "ExprUsesVar.h"
@@ -29,17 +30,14 @@ using std::vector;
 
 namespace {
 
-string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
-string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
-
 class ExtractBlockSize : public IRVisitor {
-    Expr block_extent[4], block_count[4];
-    string block_var_name[4];
+    Expr block_extent[3], block_count[3];
+    string block_var_name[3];
 
     using IRVisitor::visit;
 
     void found_thread_for(int dim, const string &name, const Expr &extent) {
-        internal_assert(dim >= 0 && dim < 4);
+        internal_assert(dim >= 0 && dim < 3);
         if (!block_extent[dim].defined()) {
             block_extent[dim] = extent;
         } else {
@@ -48,17 +46,17 @@ class ExtractBlockSize : public IRVisitor {
     }
 
     void found_block_for(int dim, const string &name, Expr extent) {
-        internal_assert(dim >= 0 && dim < 4);
+        internal_assert(dim >= 0 && dim < 3);
         internal_assert(!block_count[dim].defined());
         block_count[dim] = std::move(extent);
         block_var_name[dim] = name;
     }
 
     void visit(const For *op) override {
-        for (int i = 0; i < 4; i++) {
-            if (ends_with(op->name, thread_names[i])) {
+        for (int i = 0; i < 3; i++) {
+            if (ends_with(op->name, gpu_thread_name(i))) {
                 found_thread_for(i, op->name, op->extent);
-            } else if (ends_with(op->name, block_names[i])) {
+            } else if (ends_with(op->name, gpu_block_name(i))) {
                 found_block_for(i, op->name, op->extent);
             }
         }
@@ -88,21 +86,21 @@ class ExtractBlockSize : public IRVisitor {
 
 public:
     int blocks_dimensions() const {
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 3; i++) {
             if (!block_count[i].defined()) {
                 return i;
             }
         }
-        return 4;
+        return 3;
     }
 
     int threads_dimensions() const {
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 3; i++) {
             if (!block_extent[i].defined()) {
                 return i;
             }
         }
-        return 4;
+        return 3;
     }
 
     Expr num_threads(int d) const {
@@ -114,12 +112,13 @@ public:
     }
 
     Expr block_var(int d) const {
+        // The name of the actual for loop
         return Variable::make(Int(32), block_var_name[d]);
     }
 
     Expr thread_var(int d) const {
         // Thread variables get canonical names
-        return Variable::make(Int(32), "." + thread_names[d]);
+        return Variable::make(Int(32), gpu_thread_name(d));
     }
 };
 
@@ -142,8 +141,8 @@ class NormalizeDimensionality : public IRMutator {
             return s;
         }
         while (max_depth < block_size.threads_dimensions()) {
-            string name = thread_names[max_depth];
-            s = For::make("." + name, 0, 1, ForType::GPUThread, Partition::Never, device_api, s);
+            s = For::make(gpu_thread_name(max_depth), 0, 1, ForType::GPUThread,
+                          Partition::Never, device_api, s);
             max_depth++;
         }
         return s;
@@ -166,7 +165,8 @@ class NormalizeDimensionality : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
+        if (op->for_type == ForType::GPUThread ||
+            op->for_type == ForType::GPULane) {
             depth++;
             if (depth > max_depth) {
                 max_depth = depth;
@@ -191,10 +191,11 @@ class ReplaceForWithIf : public IRMutator {
     const ExtractBlockSize &block_size;
 
     Stmt visit(const For *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
+        if (op->for_type == ForType::GPUThread ||
+            op->for_type == ForType::GPULane) {
             int dim;
-            for (dim = 0; dim < 4; dim++) {
-                if (ends_with(op->name, thread_names[dim])) {
+            for (dim = 0; dim < 3; dim++) {
+                if (ends_with(op->name, gpu_thread_name(dim))) {
                     break;
                 }
             }
@@ -203,7 +204,7 @@ class ReplaceForWithIf : public IRMutator {
 
             Stmt body = mutate(op->body);
 
-            Expr var = Variable::make(Int(32), "." + thread_names[dim]);
+            Expr var = Variable::make(Int(32), gpu_thread_name(dim));
             body = substitute(op->name, var + op->min, body);
 
             if (equal(op->extent, block_size.num_threads(dim))) {
@@ -322,7 +323,7 @@ private:
     }
 
     Stmt visit(const For *op) override {
-        bool is_thread_loop = CodeGen_GPU_Dev::is_gpu_thread_var(op->name);
+        bool is_thread_loop = op->for_type == ForType::GPUThread || op->for_type == ForType::GPULane;
         ScopedValue<bool> old_in_threads(in_threads, in_threads || is_thread_loop);
 
         // Set aside the allocations we've found so far.
@@ -1366,7 +1367,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
     ExtractSharedAndHeapAllocations &block_allocations;
 
     Stmt visit(const For *op) override {
-        if (ends_with(op->name, ".__block_id_x")) {
+        if (ends_with(op->name, gpu_block_name(0))) {
             Stmt body = op->body;
 
             // This is the innermost loop over blocks.
@@ -1407,17 +1408,17 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             debug(3) << "Replaced for with if:\n"
                      << body << "\n\n";
 
-            // There is always a loop over thread_id_x
-            string thread_id = "." + thread_names[0];
+            // There is always a loop over the innermost thread dimension
+            string thread_id = gpu_thread_name(0);
             // Add back in any register-level allocations
             body = register_allocs.rewrap(body, thread_id);
             body = For::make(thread_id, 0, block_size_x, innermost_loop_type, op->partition_policy, op->device_api, body);
 
             // Rewrap the whole thing in other loops over threads
             for (int i = 1; i < block_size.threads_dimensions(); i++) {
-                thread_id = "." + thread_names[i];
+                thread_id = gpu_thread_name(i);
                 body = register_allocs.rewrap(body, thread_id);
-                body = For::make("." + thread_names[i], 0, block_size.num_threads(i),
+                body = For::make(thread_id, 0, block_size.num_threads(i),
                                  ForType::GPUThread, op->partition_policy, op->device_api, body);
             }
             thread_id.clear();
@@ -1452,14 +1453,15 @@ class FuseGPUThreadLoops : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
-        user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
+        user_assert(!(op->for_type == ForType::GPUThread ||
+                      op->for_type == ForType::GPULane))
             << "Loops over GPU thread variable: \"" << op->name
             << "\" is outside of any loop over a GPU block variable. "
             << "This schedule is malformed. There must be a GPU block "
             << "variable, and it must reordered to be outside all GPU "
             << "thread variables.\n";
 
-        if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
+        if (op->for_type == ForType::GPUBlock) {
             // Do the analysis of thread block size and shared memory
             // usage.
             ExtractBlockSize block_size;
@@ -1498,7 +1500,7 @@ class ZeroGPULoopMins : public IRMutator {
                           (op->device_api == DeviceAPI::Vulkan);
 
         Stmt stmt = IRMutator::visit(op);
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_const_zero(op->min)) {
+        if (is_gpu(op->for_type) && !is_const_zero(op->min)) {
             op = stmt.as<For>();
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
@@ -1526,7 +1528,7 @@ class FindInnermostGPUBlock : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const For *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
+        if (op->for_type == ForType::GPUBlock) {
             // Set the last found GPU block to found_gpu_block.
             found_gpu_block = op;
         }
@@ -1567,7 +1569,7 @@ class NormalizeIfStatements : public IRMutator {
     bool inside_gpu_blocks = false;
 
     Stmt visit(const For *op) override {
-        if (!CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
+        if (op->for_type != ForType::GPUBlock) {
             return IRMutator::visit(op);
         }
         ScopedValue<bool> old_inside_gpu_blocks(inside_gpu_blocks, true);

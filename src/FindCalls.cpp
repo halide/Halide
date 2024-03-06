@@ -8,24 +8,22 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
-using std::string;
-using std::vector;
-
 namespace {
+
 /* Find all the internal halide calls in an expr */
 class FindCalls : public IRVisitor {
 public:
-    map<string, Function> calls;
+    std::map<std::string, Function> calls;
+    std::vector<Function> order;
 
     using IRVisitor::visit;
 
     void include_function(const Function &f) {
-        map<string, Function>::iterator iter = calls.find(f.name());
-        if (iter == calls.end()) {
-            calls[f.name()] = f;
+        auto [it, inserted] = calls.emplace(f.name(), f);
+        if (inserted) {
+            order.push_back(f);
         } else {
-            user_assert(iter->second.same_as(f))
+            user_assert(it->second.same_as(f))
                 << "Can't compile a pipeline using multiple functions with same name: "
                 << f.name() << "\n";
         }
@@ -41,64 +39,87 @@ public:
     }
 };
 
-void populate_environment_helper(const Function &f, map<string, Function> &env,
-                                 bool recursive = true, bool include_wrappers = false) {
-    map<string, Function>::const_iterator iter = env.find(f.name());
-    if (iter != env.end()) {
+void populate_environment_helper(const Function &f,
+                                 std::map<std::string, Function> *env,
+                                 std::vector<Function> *order,
+                                 bool recursive = true,
+                                 bool include_wrappers = false) {
+    std::map<std::string, Function>::const_iterator iter = env->find(f.name());
+    if (iter != env->end()) {
         user_assert(iter->second.same_as(f))
             << "Can't compile a pipeline using multiple functions with same name: "
             << f.name() << "\n";
         return;
     }
 
+    auto insert_func = [](const Function &f,
+                          std::map<std::string, Function> *env,
+                          std::vector<Function> *order) {
+        auto [it, inserted] = env->emplace(f.name(), f);
+        if (inserted) {
+            order->push_back(f);
+        }
+    };
+
     FindCalls calls;
     f.accept(&calls);
     if (f.has_extern_definition()) {
         for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
-                Function g(arg.func);
-                calls.calls[g.name()] = g;
+                insert_func(Function{arg.func}, &calls.calls, &calls.order);
             }
         }
     }
 
     if (include_wrappers) {
         for (const auto &it : f.schedule().wrappers()) {
-            Function g(it.second);
-            calls.calls[g.name()] = g;
+            insert_func(Function{it.second}, &calls.calls, &calls.order);
         }
     }
 
     if (!recursive) {
-        env.insert(calls.calls.begin(), calls.calls.end());
+        for (const Function &g : calls.order) {
+            insert_func(g, env, order);
+        }
     } else {
-        env[f.name()] = f;
-
-        for (const auto &i : calls.calls) {
-            populate_environment_helper(i.second, env, recursive, include_wrappers);
+        insert_func(f, env, order);
+        for (const Function &g : calls.order) {
+            populate_environment_helper(g, env, order, recursive, include_wrappers);
         }
     }
 }
 
 }  // namespace
 
-map<string, Function> build_environment(const vector<Function> &funcs) {
-    map<string, Function> env;
+std::map<std::string, Function> build_environment(const std::vector<Function> &funcs) {
+    std::map<std::string, Function> env;
+    std::vector<Function> order;
     for (const Function &f : funcs) {
-        populate_environment_helper(f, env, true, true);
+        populate_environment_helper(f, &env, &order, true, true);
     }
     return env;
 }
 
-map<string, Function> find_transitive_calls(const Function &f) {
-    map<string, Function> res;
-    populate_environment_helper(f, res, true, false);
+std::vector<Function> called_funcs_in_order_found(const std::vector<Function> &funcs) {
+    std::map<std::string, Function> env;
+    std::vector<Function> order;
+    for (const Function &f : funcs) {
+        populate_environment_helper(f, &env, &order, true, true);
+    }
+    return order;
+}
+
+std::map<std::string, Function> find_transitive_calls(const Function &f) {
+    std::map<std::string, Function> res;
+    std::vector<Function> order;
+    populate_environment_helper(f, &res, &order, true, false);
     return res;
 }
 
-map<string, Function> find_direct_calls(const Function &f) {
-    map<string, Function> res;
-    populate_environment_helper(f, res, false, false);
+std::map<std::string, Function> find_direct_calls(const Function &f) {
+    std::map<std::string, Function> res;
+    std::vector<Function> order;
+    populate_environment_helper(f, &res, &order, false, false);
     return res;
 }
 
