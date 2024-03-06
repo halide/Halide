@@ -1185,7 +1185,7 @@ private:
 
         // Constructs multiple Instruction with default parameters
         void operator()(const vector<string> &opcodes, Expr e) {
-            assert(opcodes.size());
+            assert(!opcodes.empty());
             (*this)(opcodes[0], opcodes, e);
         }
 
@@ -1201,7 +1201,7 @@ private:
         // Set single or multiple Instructions of custom parameters
         void operator()(const vector<Instruction> &instructions, int vec_factor, Expr e) {
             // Use the 1st opcode for name
-            assert(instructions.size());
+            assert(!instructions.empty());
             string op_name = instructions[0].opcode;
             (*this)(op_name, instructions, vec_factor, e);
         }
@@ -1297,13 +1297,8 @@ private:
             {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
             {OutputFileType::assembly, file_name + ".s"},
         };
-        try {
-            error.compile_to(outputs, arg_types, fn_name, target);
-        } catch (const std::runtime_error &re) {
-            cerr << "Error: compilation failed in " << name << ", msg: " << endl;
-            cerr << re.what() << endl;
-            return;
-        }
+
+        error.compile_to(outputs, arg_types, fn_name, target);
 
         std::ifstream asm_file;
         asm_file.open(file_name + ".s");

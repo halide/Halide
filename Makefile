@@ -230,9 +230,6 @@ CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 # On ubuntu, this requires packages flatbuffers-compiler and libflatbuffers-dev
 ifneq (,$(shell which flatc))
 CXX_FLAGS += -DWITH_SERIALIZATION -I $(BUILD_DIR) -I $(shell which flatc | sed 's/bin.flatc/include/')
-# Note: if updating here, be sure to update in CMakeLists.txt as well
-HALIDE_SERIALIZATION_VERSION_MINOR ?= 1
-HALIDE_SERIALIZATION_VERSION_PATCH ?= 0
 endif
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
