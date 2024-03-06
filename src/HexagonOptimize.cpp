@@ -1746,7 +1746,8 @@ class EliminateInterleaves : public IRMutator {
                                    op->func, op->value_index, op->image, op->param);
             // Add the interleave back to the result of the call.
             return native_interleave(expr);
-        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() && hvx_target == deinterleaving_alts[op->name].first &&
+        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() && hvx_target >= deinterleaving_alts[op->name].first &&
+
                    yields_removable_interleave(args)) {
             // This call has a deinterleaving alternative, and the
             // arguments are interleaved, so we should use the
@@ -1755,7 +1756,7 @@ class EliminateInterleaves : public IRMutator {
                 i = remove_interleave(i);
             }
             return Call::make(op->type, deinterleaving_alts[op->name].second, args, op->call_type);
-        } else if (interleaving_alts.count(op->name) && hvx_target == interleaving_alts[op->name].first && is_native_deinterleave(args[0])) {
+        } else if (interleaving_alts.count(op->name) && hvx_target >= interleaving_alts[op->name].first && is_native_deinterleave(args[0])) {
             // This is an interleaving alternative with a
             // deinterleave, which can be generated when we
             // deinterleave storage. Revert back to the interleaving
