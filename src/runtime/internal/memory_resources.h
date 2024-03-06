@@ -202,18 +202,22 @@ struct HalideSystemAllocatorFns {
 
 typedef int (*AllocateBlockFn)(void *, MemoryBlock *);
 typedef int (*DeallocateBlockFn)(void *, MemoryBlock *);
+typedef int (*ConformBlockRequestFn)(void *, MemoryRequest *);
 
 struct MemoryBlockAllocatorFns {
     AllocateBlockFn allocate = nullptr;
     DeallocateBlockFn deallocate = nullptr;
+    ConformBlockRequestFn conform = nullptr;
 };
 
 typedef int (*AllocateRegionFn)(void *, MemoryRegion *);
 typedef int (*DeallocateRegionFn)(void *, MemoryRegion *);
+typedef int (*ConformBlockRegionFn)(void *, MemoryRequest *);
 
 struct MemoryRegionAllocatorFns {
     AllocateRegionFn allocate = nullptr;
     DeallocateRegionFn deallocate = nullptr;
+    ConformBlockRegionFn conform = nullptr;
 };
 
 // --
