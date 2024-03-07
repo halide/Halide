@@ -1167,7 +1167,6 @@ void Function::lock_loop_levels() {
     }
 }
 
-
 void Function::do_not_profile() {
     contents->no_profiling = true;
 }

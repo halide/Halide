@@ -220,7 +220,7 @@ private:
             int idx;
             const Function *func = lookup_function(op->name);
             if (func->should_not_profile()) {
-                idx = stack.back(); // Attribute the stack size contribution to the deepest _profiled_ func.
+                idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
             } else {
                 idx = get_func_id(op->name);
             }
@@ -299,7 +299,7 @@ private:
                 int idx;
                 const Function *func = lookup_function(op->name);
                 if (func->should_not_profile()) {
-                    idx = stack.back(); // Attribute the stack size contribution to the deepest _profiled_ func.
+                    idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
                 } else {
                     idx = get_func_id(op->name);
                 }
