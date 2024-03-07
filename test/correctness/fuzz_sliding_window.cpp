@@ -5,22 +5,22 @@ using namespace Halide;
 // Configuration settings. If you find a failure, you can progressively simplify
 // the IR by turning things on and off.
 
+constexpr int num_trials = 100;  // Use -1 for infinite
+constexpr bool stop_on_first_failure = true;
+
 // We want large pipelines to get into complex situations, but small
 // pipelines so that we can test lots of them and so that the
 // failures are understandable by humans.
 constexpr int num_stages = 5;
 
+// None of these configuration options should change the number of calls to the
+// rng, or else you can't progressively simplify a repro.
 constexpr int size = 15;
 constexpr int split_factor = 4;
 constexpr TailStrategy output_tail_strategies[] =
     {TailStrategy::ShiftInwards,
      TailStrategy::GuardWithIf,
      TailStrategy::RoundUp};
-constexpr int num_trials = 100;  // Use -1 for infinite
-constexpr bool stop_on_first_failure = true;
-
-// None of these configuration options should change the number of calls to the
-// rng, or else you can't progressively simplify a repro.
 constexpr bool enable_sliding = true;
 constexpr bool enable_hoisting = false;  // Turned off due to https://github.com/halide/Halide/issues/8141
 constexpr bool use_var_outermost = true;
