@@ -120,7 +120,7 @@ private:
     bool profiling_memory = true;
 
     // Strip down the tuple name, e.g. f.0 into f
-    string normalize_name(const string &name) {
+    string normalize_name(const string &name) const {
         vector<string> v = split_string(name, ".");
         internal_assert(!v.empty());
         return v[0];
@@ -131,14 +131,10 @@ private:
         if (it != env.end()) {
             return &it->second;
         }
-        for (const auto &entry : env) {
-            const std::string &cand_name = entry.first;
-            // Names sometimes get deduplicated by appending '.<somenumber>'.
-            if (cand_name.size() < name.size() && name[cand_name.size()] == '.') {
-                if (name.substr(0, cand_name.size()) == cand_name) {
-                    return &entry.second;
-                }
-            }
+        string norm_name = normalize_name(name);
+        it = env.find(norm_name);
+        if (it != env.end()) {
+            return &it->second;
         }
         internal_error << "No function in the environment found for name '" << name << "'.\n";
         return nullptr;
