@@ -121,9 +121,13 @@ private:
 
     // Strip down the tuple name, e.g. f.0 into f
     string normalize_name(const string &name) const {
-        vector<string> v = split_string(name, ".");
-        internal_assert(!v.empty());
-        return v[0];
+        size_t idx = name.find('.');
+        if (idx != std::string::npos) {
+            internal_assert(idx != 0);
+            return name.substr(0, idx);
+        } else {
+            return name;
+        }
     }
 
     const Function *lookup_function(const string &name) const {
