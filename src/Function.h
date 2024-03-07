@@ -88,6 +88,7 @@ public:
                                      bool trace_stores,
                                      bool trace_realizations,
                                      const std::vector<std::string> &trace_tags,
+                                     bool no_profiling,
                                      bool frozen);
 
     /** Get a handle on the halide function contents that this Function
@@ -289,6 +290,12 @@ public:
     /** Replace this Function's LoopLevels with locked copies that
      * cannot be mutated further. */
     void lock_loop_levels();
+
+    /** Mark the function as too small for meaningful profiling. */
+    void do_not_profile();
+
+    /** Check if the function is marked as one that should not be profiled. */
+    bool should_not_profile() const;
 
     /** Mark function as frozen, which means it cannot accept new
      * definitions. */

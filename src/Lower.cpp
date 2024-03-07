@@ -408,7 +408,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
         debug(1) << "Injecting profiling...\n";
-        s = inject_profiling(s, pipeline_name);
+        s = inject_profiling(s, pipeline_name, env);
         log("Lowering after injecting profiling:", s);
     }
 
