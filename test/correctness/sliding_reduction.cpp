@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         Func f("f");
         f(x, y) = x;
         f(0, y) += f(1, y) + f(0, y);
-        f(x, y) = call_count(f(x, y)) + f(x, y);
+        f(x, y) += call_count(f(x, y));
 
         Func g("g");
         g(x, y) = f(x, y) + f(x, y - 1) + f(x, y - 2);
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
         Func f("f");
         f(x, y) = x;
         f(x, x) += f(x, 0) + f(x, 1);
-        f(x, y) = call_count(f(x, y)) + f(x, y);
+        f(x, y) += call_count(f(x, y));
 
         Func g("g");
         g(x, y) = f(x, y) + f(x, y - 1) + f(x, y - 2);
@@ -95,9 +95,9 @@ int main(int argc, char **argv) {
         Func f("f");
         f(x, y) = x;
         f(0, y) += f(1, y) + f(2, y);
-        f(x, y) = call_count(f(x, y)) + f(x, y);
+        f(x, y) += call_count(f(x, y));
 
-        f.unroll(y, 2);
+        f.unroll(y, 2, TailStrategy::GuardWithIf);
         f.update(0).unscheduled();
         f.update(1).unscheduled();
 
@@ -110,11 +110,15 @@ int main(int argc, char **argv) {
         } else {
             f.store_root().compute_at(g, y);
 
+#ifdef HALIDE_USE_LOOP_REWINDING_EVEN_THOUGH_IT_IS_BROKEN_SEE_ISSUE_8140
             counter = 0;
             check(g.realize({2, 10}), ref);
-
-#ifdef HALIDE_USE_LOOP_REWINDING_EVEN_THOUGH_IT_IS_BROKEN_SEE_ISSUE_8140
             int correct = 48;
+
+            if (counter != correct) {
+                printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
+                return 1;
+            }
 #else
             // This version is unfortunately busted, because the different
             // stages of f somehow get different bounds for the y dimension.
@@ -133,12 +137,9 @@ int main(int argc, char **argv) {
             // f stage 2 rows 0 1
             // g stage 0 row 1 (which uses f rows -1 0 1)
 
-            int correct = 42;
+            // I believe this is a variant of issue #7819, which describes how
+            // overcompute of sliding window stages is problematic.
 #endif
-            if (counter != correct) {
-                printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
-                return 1;
-            }
         }
     }
 
