@@ -1685,6 +1685,14 @@ class EliminateInterleaves : public IRMutator {
         return true;
     }
 
+    // Indicates the minimum Hexagon Vector Extension (HVX) target version required for using these instructions.
+    enum class HvxTarget {
+        v62orLater,  // Use for Hexagon v62 target or later
+        v65orLater,  // Use for Hexagon v65 target or later
+        v66orLater,  // Use for Hexagon v66 target or later
+    };
+    HvxTarget hvx_target;
+
     Expr visit(const Call *op) override {
         vector<Expr> args(op->args);
 
@@ -1702,27 +1710,27 @@ class EliminateInterleaves : public IRMutator {
         // does not deinterleave, and then opportunistically select
         // the interleaving alternative when we can cancel out to the
         // interleave.
-        static std::map<string, string> deinterleaving_alts = {
-            {"halide.hexagon.pack.vh", "halide.hexagon.trunc.vh"},
-            {"halide.hexagon.pack.vw", "halide.hexagon.trunc.vw"},
-            {"halide.hexagon.packhi.vh", "halide.hexagon.trunclo.vh"},
-            {"halide.hexagon.packhi.vw", "halide.hexagon.trunclo.vw"},
-            {"halide.hexagon.pack_satub.vh", "halide.hexagon.trunc_satub.vh"},
-            {"halide.hexagon.pack_satub.vuh", "halide.hexagon.trunc_satub.vuh"},
-            {"halide.hexagon.pack_sath.vw", "halide.hexagon.trunc_sath.vw"},
-            {"halide.hexagon.pack_satuh.vw", "halide.hexagon.trunc_satuh.vw"},
-            {"halide.hexagon.pack_satuh.vuw", "halide.hexagon.trunc_satuh.vuw"},
+        static std::map<string, std::pair<HvxTarget, std::string>> deinterleaving_alts = {
+            {"halide.hexagon.pack.vh", {HvxTarget::v62orLater, "halide.hexagon.trunc.vh"}},
+            {"halide.hexagon.pack.vw", {HvxTarget::v62orLater, "halide.hexagon.trunc.vw"}},
+            {"halide.hexagon.packhi.vh", {HvxTarget::v62orLater, "halide.hexagon.trunclo.vh"}},
+            {"halide.hexagon.packhi.vw", {HvxTarget::v62orLater, "halide.hexagon.trunclo.vw"}},
+            {"halide.hexagon.pack_satub.vh", {HvxTarget::v62orLater, "halide.hexagon.trunc_satub.vh"}},
+            {"halide.hexagon.pack_satub.vuh", {HvxTarget::v65orLater, "halide.hexagon.trunc_satub.vuh"}},
+            {"halide.hexagon.pack_sath.vw", {HvxTarget::v62orLater, "halide.hexagon.trunc_sath.vw"}},
+            {"halide.hexagon.pack_satuh.vw", {HvxTarget::v62orLater, "halide.hexagon.trunc_satuh.vw"}},
+            {"halide.hexagon.pack_satuh.vuw", {HvxTarget::v62orLater, "halide.hexagon.trunc_satuh.vuw"}},
         };
 
         // The reverse mapping of the above.
-        static std::map<string, string> interleaving_alts = {
-            {"halide.hexagon.trunc.vh", "halide.hexagon.pack.vh"},
-            {"halide.hexagon.trunc.vw", "halide.hexagon.pack.vw"},
-            {"halide.hexagon.trunclo.vh", "halide.hexagon.packhi.vh"},
-            {"halide.hexagon.trunclo.vw", "halide.hexagon.packhi.vw"},
-            {"halide.hexagon.trunc_satub.vh", "halide.hexagon.pack_satub.vh"},
-            {"halide.hexagon.trunc_sath.vw", "halide.hexagon.pack_sath.vw"},
-            {"halide.hexagon.trunc_satuh.vw", "halide.hexagon.pack_satuh.vw"},
+        static std::map<string, std::pair<HvxTarget, std::string>> interleaving_alts = {
+            {"halide.hexagon.trunc.vh", {HvxTarget::v62orLater, "halide.hexagon.pack.vh"}},
+            {"halide.hexagon.trunc.vw", {HvxTarget::v62orLater, "halide.hexagon.pack.vw"}},
+            {"halide.hexagon.trunclo.vh", {HvxTarget::v62orLater, "halide.hexagon.packhi.vh"}},
+            {"halide.hexagon.trunclo.vw", {HvxTarget::v62orLater, "halide.hexagon.packhi.vw"}},
+            {"halide.hexagon.trunc_satub.vh", {HvxTarget::v62orLater, "halide.hexagon.pack_satub.vh"}},
+            {"halide.hexagon.trunc_sath.vw", {HvxTarget::v62orLater, "halide.hexagon.pack_sath.vw"}},
+            {"halide.hexagon.trunc_satuh.vw", {HvxTarget::v62orLater, "halide.hexagon.pack_satuh.vw"}},
         };
 
         if (is_native_deinterleave(op) && yields_interleave(args[0])) {
@@ -1738,7 +1746,8 @@ class EliminateInterleaves : public IRMutator {
                                    op->func, op->value_index, op->image, op->param);
             // Add the interleave back to the result of the call.
             return native_interleave(expr);
-        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() &&
+        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() && hvx_target >= deinterleaving_alts[op->name].first &&
+
                    yields_removable_interleave(args)) {
             // This call has a deinterleaving alternative, and the
             // arguments are interleaved, so we should use the
@@ -1746,14 +1755,14 @@ class EliminateInterleaves : public IRMutator {
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            return Call::make(op->type, deinterleaving_alts[op->name], args, op->call_type);
-        } else if (interleaving_alts.count(op->name) && is_native_deinterleave(args[0])) {
+            return Call::make(op->type, deinterleaving_alts[op->name].second, args, op->call_type);
+        } else if (interleaving_alts.count(op->name) && hvx_target >= interleaving_alts[op->name].first && is_native_deinterleave(args[0])) {
             // This is an interleaving alternative with a
             // deinterleave, which can be generated when we
             // deinterleave storage. Revert back to the interleaving
             // op so we can remove the deinterleave.
             Expr arg = args[0].as<Call>()->args[0];
-            return Call::make(op->type, interleaving_alts[op->name], {arg}, op->call_type,
+            return Call::make(op->type, interleaving_alts[op->name].second, {arg}, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (changed) {
             return Call::make(op->type, op->name, args, op->call_type,
@@ -1896,8 +1905,15 @@ class EliminateInterleaves : public IRMutator {
     using IRMutator::visit;
 
 public:
-    EliminateInterleaves(int native_vector_bytes)
+    EliminateInterleaves(const Target &t, int native_vector_bytes)
         : native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes) {
+        if (t.features_any_of({Target::HVX_v65})) {
+            hvx_target = HvxTarget::v65orLater;
+        } else if (t.features_any_of({Target::HVX_v66})) {
+            hvx_target = HvxTarget::v66orLater;
+        } else {
+            hvx_target = HvxTarget::v62orLater;
+        }
     }
 };
 
@@ -2233,7 +2249,7 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
              << s << "\n";
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(t.natural_vector_size(Int(8))).mutate(s);
+    s = EliminateInterleaves(t, t.natural_vector_size(Int(8))).mutate(s);
     debug(4) << "Hexagon: Lowering after EliminateInterleaves\n"
              << s << "\n";
 
