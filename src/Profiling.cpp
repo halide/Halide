@@ -130,18 +130,18 @@ private:
         }
     }
 
-    const Function *lookup_function(const string &name) const {
+    Function lookup_function(const string &name) const {
         auto it = env.find(name);
         if (it != env.end()) {
-            return &it->second;
+            return it->second;
         }
         string norm_name = normalize_name(name);
         it = env.find(norm_name);
         if (it != env.end()) {
-            return &it->second;
+            return it->second;
         }
         internal_error << "No function in the environment found for name '" << name << "'.\n";
-        return nullptr;
+        return {};
     }
 
     int get_func_id(const string &name) {
@@ -218,8 +218,8 @@ private:
         // inject_profiling() so this is a possible scenario.
         if (!is_const_zero(size) && on_stack) {
             int idx;
-            const Function *func = lookup_function(op->name);
-            if (func->should_not_profile()) {
+            Function func = lookup_function(op->name);
+            if (func.should_not_profile()) {
                 idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
             } else {
                 idx = get_func_id(op->name);
@@ -297,8 +297,8 @@ private:
                 internal_assert(int_size != nullptr);
 
                 int idx;
-                const Function *func = lookup_function(op->name);
-                if (func->should_not_profile()) {
+                Function func = lookup_function(op->name);
+                if (func.should_not_profile()) {
                     idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
                 } else {
                     idx = get_func_id(op->name);
@@ -315,8 +315,8 @@ private:
         int idx;
         Stmt body;
         if (op->is_producer) {
-            const Function *func = lookup_function(op->name);
-            if (func->should_not_profile()) {
+            Function func = lookup_function(op->name);
+            if (func.should_not_profile()) {
                 body = mutate(op->body);
                 if (body.same_as(op->body)) {
                     return op;

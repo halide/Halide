@@ -15,7 +15,7 @@ enum SerializationVersionMinor: int {
     Value = 0
 }
 enum SerializationVersionPatch: int {
-    Value = 0
+    Value = 1
 }
 
 // from src/IR.cpp
