@@ -22,19 +22,20 @@ endmacro()
 add_generator_and_library(dilate3x3)
 add_generator_and_library(gaussian5x5)
 add_generator_and_library(median3x3)
+add_generator_and_library(sobel)
 
 # Main executable
 add_executable(process process.cpp)
 target_compile_options(process PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2>)
 if (Halide_TARGET MATCHES "hvx")
-  target_compile_definitions(process PRIVATE DILATE3X3 GAUSSIAN5X5 MEDIAN3X3 TARGET_HAS_HVX)
+  target_compile_definitions(process PRIVATE DILATE3X3 GAUSSIAN5X5 MEDIAN3X3 SOBEL TARGET_HAS_HVX)
 else()
-  target_compile_definitions(process PRIVATE DILATE3X3 GAUSSIAN5X5 MEDIAN3X3)
+  target_compile_definitions(process PRIVATE DILATE3X3 GAUSSIAN5X5 MEDIAN3X3 SOBEL)
 endif()
 target_link_libraries(process
                       PRIVATE
                       Halide::Tools
-                      dilate3x3 gaussian5x5 median3x3)
+                      dilate3x3 gaussian5x5 median3x3 sobel)
 
 # Test that the app actually works!
 add_test(NAME hexagon_benchmarks COMMAND process -n 1)

@@ -610,7 +610,11 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UseInitArray = true;
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
+#if LLVM_VERSION >= 190
+    options.MCOptions.X86RelaxRelocations = false;
+#else
     options.RelaxELFRelocations = false;
+#endif
     options.MCOptions.ABIName = mabi;
 }
 
