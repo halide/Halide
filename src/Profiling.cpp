@@ -23,14 +23,14 @@ using std::vector;
 
 namespace {
 
-Stmt incr_active_threads(const Expr &profiler_state) {
+Stmt incr_active_threads(const Expr &profiler_instance) {
     return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
-                                     {profiler_state}, Call::Extern));
+                                     {profiler_instance}, Call::Extern));
 }
 
-Stmt decr_active_threads(const Expr &profiler_state) {
+Stmt decr_active_threads(const Expr &profiler_instance) {
     return Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
-                                     {profiler_state}, Call::Extern));
+                                     {profiler_instance}, Call::Extern));
 }
 
 Stmt acquire_sampling_token(const Expr &shared_token, const Expr &local_token) {
@@ -41,18 +41,6 @@ Stmt acquire_sampling_token(const Expr &shared_token, const Expr &local_token) {
 Stmt release_sampling_token(const Expr &shared_token, const Expr &local_token) {
     return Evaluate::make(Call::make(Int(32), "halide_profiler_release_sampling_token",
                                      {shared_token, local_token}, Call::Extern));
-}
-
-Stmt activate_thread(const Stmt &s, const Expr &profiler_state) {
-    return Block::make({incr_active_threads(profiler_state),
-                        s,
-                        decr_active_threads(profiler_state)});
-}
-
-Stmt suspend_thread(const Stmt &s, const Expr &profiler_state) {
-    return Block::make({decr_active_threads(profiler_state),
-                        s,
-                        incr_active_threads(profiler_state)});
 }
 
 Stmt claim_sampling_token(const Stmt &s, const Expr &shared_token, const Expr &local_token) {
@@ -82,11 +70,11 @@ public:
         // ID 0 is treated specially in the runtime as overhead
         internal_assert(stack.back() == 0);
 
+        thread_pool_id = get_func_id("waiting on task queue");
         malloc_id = get_func_id("halide_malloc");
         free_id = get_func_id("halide_free");
-        profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
-        profiler_state = Variable::make(Handle(), "profiler_state");
-        profiler_token = Variable::make(Int(32), "profiler_token");
+
+        profiler_instance = Variable::make(Handle(), "profiler_instance");
         profiler_local_sampling_token = Variable::make(Handle(), "profiler_local_sampling_token");
         profiler_shared_sampling_token = Variable::make(Handle(), "profiler_shared_sampling_token");
     }
@@ -94,13 +82,27 @@ public:
     map<int, uint64_t> func_stack_current;  // map from func id -> current stack allocation
     map<int, uint64_t> func_stack_peak;     // map from func id -> peak stack allocation
 
+    Stmt activate_thread(const Stmt &s) {
+        return Block::make({incr_active_threads(profiler_instance),
+                            unconditionally_set_current_func(stack.back()),
+                            s,
+                            decr_active_threads(profiler_instance),
+                            unconditionally_set_current_func(thread_pool_id)});
+    }
+
+    Stmt suspend_thread(const Stmt &s) {
+        return Block::make({decr_active_threads(profiler_instance),
+                            unconditionally_set_current_func(thread_pool_id),
+                            s,
+                            incr_active_threads(profiler_instance),
+                            unconditionally_set_current_func(stack.back())});
+    }
+
 private:
     using IRMutator::visit;
 
-    int malloc_id, free_id;
-    Expr profiler_pipeline_state;
-    Expr profiler_state;
-    Expr profiler_token;
+    int malloc_id, free_id, thread_pool_id;
+    Expr profiler_instance;
     Expr profiler_local_sampling_token;
     Expr profiler_shared_sampling_token;
 
@@ -138,6 +140,12 @@ private:
         return idx;
     }
 
+    Stmt unconditionally_set_current_func(int id) {
+        Stmt s = Evaluate::make(Call::make(Int(32), "halide_profiler_set_current_func",
+                                           {profiler_instance, id, reinterpret(Handle(), cast<uint64_t>(0))}, Call::Extern));
+        return s;
+    }
+
     Stmt set_current_func(int id) {
         if (most_recently_set_func == id) {
             return Evaluate::make(0);
@@ -146,7 +154,7 @@ private:
         Expr last_arg = in_leaf_task ? profiler_local_sampling_token : reinterpret(Handle(), cast<uint64_t>(0));
         // This call gets inlined and becomes a single store instruction.
         Stmt s = Evaluate::make(Call::make(Int(32), "halide_profiler_set_current_func",
-                                           {profiler_state, profiler_token, id, last_arg}, Call::Extern));
+                                           {profiler_instance, id, last_arg}, Call::Extern));
 
         return s;
     }
@@ -218,7 +226,7 @@ private:
 
             tasks.push_back(set_current_func(malloc_id));
             tasks.push_back(Evaluate::make(Call::make(Int(32), "halide_profiler_memory_allocate",
-                                                      {profiler_pipeline_state, idx, size}, Call::Extern)));
+                                                      {profiler_instance, idx, size}, Call::Extern)));
         }
 
         Stmt body = mutate(op->body);
@@ -261,7 +269,7 @@ private:
                     vector<Stmt> tasks{
                         set_current_func(free_id),
                         Evaluate::make(Call::make(Int(32), "halide_profiler_memory_free",
-                                                  {profiler_pipeline_state, idx, alloc.size}, Call::Extern)),
+                                                  {profiler_instance, idx, alloc.size}, Call::Extern)),
                         stmt,
                         set_current_func(stack.back())};
 
@@ -305,7 +313,7 @@ private:
         } else if (const Acquire *a = s.as<Acquire>()) {
             s = Acquire::make(a->semaphore, a->count, visit_parallel_task(a->body));
         } else {
-            s = activate_thread(mutate(s), profiler_state);
+            s = activate_thread(mutate(s));
         }
         if (most_recently_set_func != old) {
             most_recently_set_func = -1;
@@ -315,13 +323,13 @@ private:
 
     Stmt visit(const Acquire *op) override {
         Stmt s = visit_parallel_task(op);
-        return suspend_thread(s, profiler_state);
+        return suspend_thread(s);
     }
 
     Stmt visit(const Fork *op) override {
         ScopedValue<bool> bind(in_fork, true);
         Stmt s = visit_parallel_task(op);
-        return suspend_thread(s, profiler_state);
+        return suspend_thread(s);
     }
 
     Stmt visit(const For *op) override {
@@ -338,7 +346,6 @@ private:
 
         bool leaf_task = false;
         if (update_active_threads) {
-            body = activate_thread(body, profiler_state);
 
             class ContainsParallelOrBlockingNode : public IRVisitor {
                 using IRVisitor::visit;
@@ -364,6 +371,8 @@ private:
             if (leaf_task) {
                 body = claim_sampling_token(body, profiler_shared_sampling_token, profiler_local_sampling_token);
             }
+
+            body = activate_thread(body);
         }
         ScopedValue<bool> bind_leaf_task(in_leaf_task, in_leaf_task || leaf_task);
 
@@ -384,8 +393,8 @@ private:
             // kernel. There will be a separate copy of the state on
             // the DSP that the host side will periodically query.
             Expr get_state = Call::make(Handle(), "halide_profiler_get_state", {}, Call::Extern);
-            body = substitute("profiler_state", Variable::make(Handle(), "hvx_profiler_state"), body);
-            body = LetStmt::make("hvx_profiler_state", get_state, body);
+            body = substitute("profiler_instance", Variable::make(Handle(), "hvx_profiler_instance"), body);
+            body = LetStmt::make("hvx_profiler_instance", get_state, body);
         } else if (op->device_api == DeviceAPI::None ||
                    op->device_api == DeviceAPI::Host) {
             body = mutate(body);
@@ -400,7 +409,7 @@ private:
         Stmt stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
 
         if (update_active_threads) {
-            stmt = suspend_thread(stmt, profiler_state);
+            stmt = suspend_thread(stmt);
         }
 
         return stmt;
@@ -504,33 +513,30 @@ Stmt inject_profiling(Stmt s, const string &pipeline_name) {
 
     int num_funcs = (int)(profiling.indices.size());
 
-    Expr func_names_buf = Variable::make(Handle(), "profiling_func_names");
+    // TODO: unique_name all these strings
 
-    Expr start_profiler = Call::make(Int(32), "halide_profiler_pipeline_start",
-                                     {pipeline_name, num_funcs, func_names_buf}, Call::Extern);
+    Expr instance = Variable::make(Handle(), "profiler_instance");
 
-    Expr get_state = Call::make(Handle(), "halide_profiler_get_state", {}, Call::Extern);
+    Expr func_names_buf = Variable::make(Handle(), "profiler_func_names");
 
-    Expr get_pipeline_state = Call::make(Handle(), "halide_profiler_get_pipeline_state", {pipeline_name}, Call::Extern);
+    Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
+                                     {pipeline_name, num_funcs, func_names_buf, instance}, Call::Extern);
 
-    Expr profiler_token = Variable::make(Int(32), "profiler_token");
+    Expr profiler_start_error_code = Variable::make(Int(32), "profiler_start_error_code");
 
     Expr stop_profiler = Call::make(Handle(), Call::register_destructor,
-                                    {Expr("halide_profiler_pipeline_end"), get_state}, Call::Intrinsic);
+                                    {Expr("halide_profiler_instance_end"), instance}, Call::Intrinsic);
 
     bool no_stack_alloc = profiling.func_stack_peak.empty();
     if (!no_stack_alloc) {
-        Expr func_stack_peak_buf = Variable::make(Handle(), "profiling_func_stack_peak_buf");
+        Expr func_stack_peak_buf = Variable::make(Handle(), "profiler_func_stack_peak_buf");
 
-        Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
         Stmt update_stack = Evaluate::make(Call::make(Int(32), "halide_profiler_stack_peak_update",
-                                                      {profiler_pipeline_state, func_stack_peak_buf}, Call::Extern));
+                                                      {instance, func_stack_peak_buf}, Call::Extern));
         s = Block::make(update_stack, s);
     }
 
-    Expr profiler_state = Variable::make(Handle(), "profiler_state");
-
-    s = activate_thread(s, profiler_state);
+    s = profiling.activate_thread(s);
 
     // Initialize the shared sampling token
     Expr shared_sampling_token_var = Variable::make(Handle(), "profiler_shared_sampling_token");
@@ -540,34 +546,41 @@ Stmt inject_profiling(Stmt s, const string &pipeline_name) {
     s = LetStmt::make("profiler_shared_sampling_token",
                       Call::make(Handle(), Call::alloca, {Int(32).bytes()}, Call::Intrinsic), s);
 
-    s = LetStmt::make("profiler_pipeline_state", get_pipeline_state, s);
-    s = LetStmt::make("profiler_state", get_state, s);
     // If there was a problem starting the profiler, it will call an
     // appropriate halide error function and then return the
     // (negative) error code as the token.
-    s = Block::make(AssertStmt::make(profiler_token >= 0, profiler_token), s);
-    s = LetStmt::make("profiler_token", start_profiler, s);
+    s = Block::make(AssertStmt::make(profiler_start_error_code == 0, profiler_start_error_code), s);
+    s = LetStmt::make("profiler_start_error_code", start_profiler, s);
 
     if (!no_stack_alloc) {
         for (int i = num_funcs - 1; i >= 0; --i) {
-            s = Block::make(Store::make("profiling_func_stack_peak_buf",
+            s = Block::make(Store::make("profiler_func_stack_peak_buf",
                                         make_const(UInt(64), profiling.func_stack_peak[i]),
                                         i, Parameter(), const_true(), ModulusRemainder()),
                             s);
         }
-        s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
-        s = Allocate::make("profiling_func_stack_peak_buf", UInt(64),
+        s = Block::make(s, Free::make("profiler_func_stack_peak_buf"));
+        s = Allocate::make("profiler_func_stack_peak_buf", UInt(64),
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
     for (const auto &p : profiling.indices) {
-        s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
+        s = Block::make(Store::make("profiler_func_names", p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
     }
 
-    s = Block::make(s, Free::make("profiling_func_names"));
-    s = Allocate::make("profiling_func_names", Handle(),
+    s = Block::make(s, Free::make("profiler_func_names"));
+    s = Allocate::make("profiler_func_names", Handle(),
                        MemoryType::Auto, {num_funcs}, const_true(), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
+
+    // Allocate memory for the profiler instance state
+    halide_profiler_instance_state dummy_instance_state;
+    halide_profiler_instance_state *instance_mem_start = &dummy_instance_state;
+    halide_profiler_func_stats *instance_mem_end = ((halide_profiler_func_stats *)(instance_mem_start + 1)) + num_funcs;
+    const int instance_size_bytes = (uint8_t *)instance_mem_end - (uint8_t *)instance_mem_start;
+
+    s = Allocate::make("profiler_instance", UInt(64), MemoryType::Auto,
+                       {(instance_size_bytes + 7) / 8}, const_true(), s);
 
     // We have nested definitions of the sampling token
     s = uniquify_variable_names(s);

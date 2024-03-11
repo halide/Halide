@@ -3,15 +3,15 @@
 
 extern "C" {
 
-WEAK_INLINE int halide_profiler_set_current_func(halide_profiler_state *state, int pipeline, int func, int *sampling_token) {
+WEAK_INLINE int halide_profiler_set_current_func(halide_profiler_instance_state *instance, int func, int *sampling_token) {
     if (sampling_token == nullptr || *sampling_token == 0) {
 
         // Use empty volatile asm blocks to prevent code motion. Otherwise
         // llvm reorders or elides the stores.
-        volatile int *ptr = &(state->current_func);
+        volatile int *ptr = &(instance->current_func);
         // clang-format off
         asm volatile ("":::);
-        *ptr = pipeline + func;
+        *ptr = func;
         asm volatile ("":::);
         // clang-format on
     }
@@ -42,15 +42,15 @@ WEAK_INLINE int halide_profiler_init_sampling_token(int32_t *sampling_token, int
     return 0;
 }
 
-WEAK_INLINE int halide_profiler_incr_active_threads(halide_profiler_state *state) {
+WEAK_INLINE int halide_profiler_incr_active_threads(halide_profiler_instance_state *instance) {
     using namespace Halide::Runtime::Internal::Synchronization;
 
-    return atomic_fetch_add_sequentially_consistent(&(state->active_threads), 1);
+    return atomic_fetch_add_sequentially_consistent(&(instance->active_threads), 1);
 }
 
-WEAK_INLINE int halide_profiler_decr_active_threads(halide_profiler_state *state) {
+WEAK_INLINE int halide_profiler_decr_active_threads(halide_profiler_instance_state *instance) {
     using namespace Halide::Runtime::Internal::Synchronization;
 
-    return atomic_fetch_sub_sequentially_consistent(&(state->active_threads), 1);
+    return atomic_fetch_sub_sequentially_consistent(&(instance->active_threads), 1);
 }
 }

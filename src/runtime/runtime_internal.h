@@ -158,23 +158,25 @@ WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *obj);
 WEAK void halide_device_host_nop_free(void *user_context, void *obj);
 
-// The pipeline_state is declared as void* type since halide_profiler_pipeline_stats
-// is defined inside HalideRuntime.h which includes this header file.
+struct halide_profiler_instance_state;
 WEAK void halide_profiler_stack_peak_update(void *user_context,
-                                            void *pipeline_state,
+                                            halide_profiler_instance_state *instance,
                                             uint64_t *f_values);
 WEAK void halide_profiler_memory_allocate(void *user_context,
-                                          void *pipeline_state,
+                                          halide_profiler_instance_state *instance,
                                           int func_id,
                                           uint64_t incr);
 WEAK void halide_profiler_memory_free(void *user_context,
-                                      void *pipeline_state,
+                                      halide_profiler_instance_state *instance,
                                       int func_id,
                                       uint64_t decr);
-WEAK int halide_profiler_pipeline_start(void *user_context,
+WEAK int halide_profiler_instance_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
-                                        const uint64_t *func_names);
+                                        const uint64_t *func_names,
+                                        halide_profiler_instance_state *instance);
+WEAK int halide_profiler_instance_end(void *user_context,
+                                      halide_profiler_instance_state *instance);
 WEAK int halide_host_cpu_count();
 
 WEAK int halide_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf,
