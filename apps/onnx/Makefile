@@ -90,6 +90,11 @@ ifeq ($(UNAME), Darwin)
     # Keep OS X builds from complaining about missing libpython symbols
     PYBIND11_CFLAGS += -undefined dynamic_lookup
 endif
+# Get the python extension module suffix from python itself. You can
+# also do this with python-config, but that's not resistant to version
+# mismatches between python and python-config. This can happen when
+# using a virtualenv, because virtualenvs override python, but not
+# python-config.
 PY_EXT = $(shell $(PYTHON) -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')
 PY_MODEL_EXT = model_cpp$(PY_EXT)
 PYCXXFLAGS = $(PYBIND11_CFLAGS) $(CXXFLAGS) -Wno-deprecated-register
