@@ -110,6 +110,8 @@ struct FunctionContents {
     bool trace_loads = false, trace_stores = false, trace_realizations = false;
     std::vector<string> trace_tags;
 
+    bool no_profiling = false;
+
     bool frozen = false;
 
     void accept(IRVisitor *visitor) const {
@@ -352,6 +354,7 @@ void Function::update_with_deserialization(const std::string &name,
                                            bool trace_stores,
                                            bool trace_realizations,
                                            const std::vector<std::string> &trace_tags,
+                                           bool no_profiling,
                                            bool frozen) {
     contents->name = name;
     contents->origin_name = origin_name;
@@ -373,6 +376,7 @@ void Function::update_with_deserialization(const std::string &name,
     contents->trace_stores = trace_stores;
     contents->trace_realizations = trace_realizations;
     contents->trace_tags = trace_tags;
+    contents->no_profiling = no_profiling;
     contents->frozen = frozen;
 }
 
@@ -509,6 +513,7 @@ void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const
     copy->trace_stores = contents->trace_stores;
     copy->trace_realizations = contents->trace_realizations;
     copy->trace_tags = contents->trace_tags;
+    copy->no_profiling = contents->no_profiling;
     copy->frozen = contents->frozen;
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
@@ -1139,10 +1144,6 @@ const std::vector<std::string> &Function::get_trace_tags() const {
     return contents->trace_tags;
 }
 
-void Function::freeze() {
-    contents->frozen = true;
-}
-
 void Function::lock_loop_levels() {
     auto &schedule = contents->func_schedule;
     schedule.compute_level().lock();
@@ -1166,6 +1167,16 @@ void Function::lock_loop_levels() {
     }
 }
 
+void Function::do_not_profile() {
+    contents->no_profiling = true;
+}
+bool Function::should_not_profile() const {
+    return contents->no_profiling;
+}
+
+void Function::freeze() {
+    contents->frozen = true;
+}
 bool Function::frozen() const {
     return contents->frozen;
 }
