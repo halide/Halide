@@ -253,6 +253,12 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     casts.emplace_back("shift_right_narrow", i32(wild_i64x_ >> wild_u64_));
     casts.emplace_back("shift_right_narrow", u32(wild_u64x_ >> wild_u64_));
 
+    // VCVTP/M
+    casts.emplace_back("fp_to_int_floor", i32(floor(wild_f32x_)));
+    casts.emplace_back("fp_to_int_floor", u32(floor(wild_f32x_)));
+    casts.emplace_back("fp_to_int_ceil", i32(ceil(wild_f32x_)));
+    casts.emplace_back("fp_to_int_ceil", u32(ceil(wild_f32x_)));
+
     // SQRSHL, UQRSHL - Saturating rounding shift left (by signed vector)
     // TODO: We need to match rounding shift right, and negate the RHS.
 
@@ -480,6 +486,17 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "fcvtzu", UInt(32, 2), "fp_to_int", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveInactiveArg},
     {nullptr, "fcvtzs", Int(64, 2), "fp_to_int", {Float(64, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveInactiveArg},
     {nullptr, "fcvtzu", UInt(64, 2), "fp_to_int", {Float(64, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveInactiveArg},
+
+    // FCVTP/M. These only exist in armv8 and onwards, so we just skip them for
+    // arm-32. LLVM doesn't seem to have intrinsics for them for SVE.
+    {nullptr, "fcvtpu", UInt(32, 4), "fp_to_int_ceil", {Float(32, 4)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtmu", UInt(32, 4), "fp_to_int_floor", {Float(32, 4)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtps", Int(32, 4), "fp_to_int_ceil", {Float(32, 4)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtms", Int(32, 4), "fp_to_int_floor", {Float(32, 4)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtpu", UInt(32, 2), "fp_to_int_ceil", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtmu", UInt(32, 2), "fp_to_int_floor", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtps", Int(32, 2), "fp_to_int_ceil", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
+    {nullptr, "fcvtms", Int(32, 2), "fp_to_int_floor", {Float(32, 2)}, ArmIntrinsic::MangleRetArgs | ArmIntrinsic::SveUnavailable},
 
     // SMAX, UMAX, FMAX - Max
     {"vmaxs", "smax", Int(8, 8), "max", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -1119,7 +1136,9 @@ void CodeGen_ARM::begin_func(LinkageType linkage, const std::string &simple_name
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
-    if (!simd_intrinsics_disabled() && op->type.is_vector()) {
+    if (!simd_intrinsics_disabled()) {
+        // Note we don't guard this with op->type.is_vector(), because some of
+        // the cast patterns are also the right way to handle scalars.
         vector<Expr> matches;
         for (const Pattern &pattern : casts) {
             if (expr_match(pattern.pattern, op, matches)) {
@@ -1972,58 +1991,55 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     }
 
-    if (op->type.is_vector()) {
-        vector<Expr> matches;
-        for (const Pattern &pattern : calls) {
-            if (expr_match(pattern.pattern, op, matches)) {
-                if (pattern.intrin.find("shift_right_narrow") != string::npos) {
-                    // The shift_right_narrow patterns need the shift to be constant in [1, output_bits].
-                    const uint64_t *const_b = as_const_uint(matches[1]);
-                    if (!const_b || *const_b == 0 || (int)*const_b > op->type.bits()) {
-                        continue;
-                    }
-                }
-                if (target.bits == 32 && pattern.intrin.find("shift_right") != string::npos) {
-                    // The 32-bit ARM backend wants right shifts as negative values.
-                    matches[1] = simplify(-cast(matches[1].type().with_code(halide_type_int), matches[1]));
-                }
-                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
-                if (value) {
-                    return;
+    vector<Expr> matches;
+    for (const Pattern &pattern : calls) {
+        if (expr_match(pattern.pattern, op, matches)) {
+            if (pattern.intrin.find("shift_right_narrow") != string::npos) {
+                // The shift_right_narrow patterns need the shift to be constant in [1, output_bits].
+                const uint64_t *const_b = as_const_uint(matches[1]);
+                if (!const_b || *const_b == 0 || (int)*const_b > op->type.bits()) {
+                    continue;
                 }
             }
-        }
-
-        // If we didn't find a pattern, try rewriting any saturating casts.
-        static const vector<pair<Expr, Expr>> cast_rewrites = {
-            // Double or triple narrowing saturating casts are better expressed as
-            // combinations of single narrowing saturating casts.
-            {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
-            {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
-            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
-            {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
-            {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
-            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
-            {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
-            {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
-            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
-            {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
-            {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
-            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
-            {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
-            {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
-            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
-            {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
-            {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
-            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
-        };
-        for (const auto &i : cast_rewrites) {
-            if (expr_match(i.first, op, matches)) {
-                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
-                debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
-                value = codegen(replacement);
+            if (target.bits == 32 && pattern.intrin.find("shift_right") != string::npos) {
+                // The 32-bit ARM backend wants right shifts as negative values.
+                matches[1] = simplify(-cast(matches[1].type().with_code(halide_type_int), matches[1]));
+            }
+            value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+            if (value) {
                 return;
             }
+        }
+    }
+
+    // If we didn't find a pattern, try rewriting any saturating casts.
+    static const vector<pair<Expr, Expr>> cast_rewrites = {
+        // Double or triple narrowing saturating casts are better expressed as
+        // combinations of single narrowing saturating casts.
+        {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
+        {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+        {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
+        {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
+        {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+        {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
+        {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
+        {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
+        {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
+        {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
+        {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
+        {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
+        {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
+        {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
+        {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
+        {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
+        {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
+        {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
+    };
+    for (const auto &i : cast_rewrites) {
+        if (expr_match(i.first, op, matches)) {
+            Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
+            value = codegen(replacement);
+            return;
         }
     }
 
