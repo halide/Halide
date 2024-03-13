@@ -23,6 +23,30 @@ using std::vector;
 
 namespace {
 
+// All names that need to be unique, just in case someone does something
+// perverse like naming a func "profiler_instance".
+struct Names {
+    const std::string &pipeline_name;
+    std::string profiler_instance;
+    std::string profiler_local_sampling_token;
+    std::string profiler_shared_sampling_token;
+    std::string hvx_profiler_instance;
+    std::string profiler_func_names;
+    std::string profiler_func_stack_peak_buf;
+    std::string profiler_start_error_code;
+
+    Names(const std::string &pipeline_name)
+        : pipeline_name(pipeline_name),
+          profiler_instance(unique_name("profiler_instance")),
+          profiler_local_sampling_token(unique_name("profiler_local_sampling_token")),
+          profiler_shared_sampling_token(unique_name("profiler_shared_sampling_token")),
+          hvx_profiler_instance(unique_name("hvx_profiler_instance")),
+          profiler_func_names(unique_name("profiler_func_names")),
+          profiler_func_stack_peak_buf(unique_name("profiler_func_stack_peak_buf")),
+          profiler_start_error_code(unique_name("profiler_start_error_code")) {
+    }
+};
+
 Stmt incr_active_threads(const Expr &profiler_instance) {
     return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
                                      {profiler_instance}, Call::Extern));
@@ -58,14 +82,14 @@ public:
 
     vector<int> stack;  // What produce nodes are we currently inside of.
 
-    string pipeline_name;
+    const Names &names;
 
     bool in_fork = false;
     bool in_parallel = false;
     bool in_leaf_task = false;
 
-    InjectProfiling(const string &pipeline_name)
-        : pipeline_name(pipeline_name) {
+    InjectProfiling(const Names &names)
+        : names(names) {
         stack.push_back(get_func_id("overhead"));
         // ID 0 is treated specially in the runtime as overhead
         internal_assert(stack.back() == 0);
@@ -74,9 +98,9 @@ public:
         malloc_id = get_func_id("halide_malloc");
         free_id = get_func_id("halide_free");
 
-        profiler_instance = Variable::make(Handle(), "profiler_instance");
-        profiler_local_sampling_token = Variable::make(Handle(), "profiler_local_sampling_token");
-        profiler_shared_sampling_token = Variable::make(Handle(), "profiler_shared_sampling_token");
+        profiler_instance = Variable::make(Handle(), names.profiler_instance);
+        profiler_local_sampling_token = Variable::make(Handle(), names.profiler_local_sampling_token);
+        profiler_shared_sampling_token = Variable::make(Handle(), names.profiler_shared_sampling_token);
     }
 
     map<int, uint64_t> func_stack_current;  // map from func id -> current stack allocation
@@ -233,7 +257,7 @@ private:
             func_stack_current[idx] += *int_size;
             func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
             debug(3) << "  Allocation on stack: " << op->name
-                     << "(" << size << ") in pipeline " << pipeline_name
+                     << "(" << size << ") in pipeline " << names.pipeline_name
                      << "; current: " << func_stack_current[idx]
                      << "; peak: " << func_stack_peak[idx] << "\n";
         }
@@ -243,7 +267,7 @@ private:
         if (track_heap_allocation) {
             debug(3) << "  Allocation on heap: " << op->name
                      << "(" << size << ") in pipeline "
-                     << pipeline_name << "\n";
+                     << names.pipeline_name << "\n";
 
             tasks.push_back(set_current_func(malloc_id));
             tasks.push_back(Evaluate::make(Call::make(Int(32), "halide_profiler_memory_allocate",
@@ -283,26 +307,27 @@ private:
         Stmt stmt = IRMutator::visit(op);
 
         if (!is_const_zero(alloc.size)) {
-            if (!alloc.on_stack) {
-                if (profiling_memory) {
-                    debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
+            if (!alloc.on_stack && profiling_memory) {
+                debug(3) << "  Free on heap: " << op->name
+                         << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
 
-                    vector<Stmt> tasks{
-                        set_current_func(free_id),
-                        Evaluate::make(Call::make(Int(32), "halide_profiler_memory_free",
-                                                  {profiler_instance, idx, alloc.size}, Call::Extern)),
-                        stmt,
-                        set_current_func(stack.back())};
+                vector<Stmt> tasks{
+                    set_current_func(free_id),
+                    Evaluate::make(Call::make(Int(32), "halide_profiler_memory_free",
+                                              {profiler_instance, idx, alloc.size}, Call::Extern)),
+                    stmt,
+                    set_current_func(stack.back())};
 
-                    stmt = Block::make(tasks);
-                }
+                stmt = Block::make(tasks);
             } else {
                 const uint64_t *int_size = as_const_uint(alloc.size);
                 internal_assert(int_size != nullptr);
 
                 func_stack_current[idx] -= *int_size;
-                debug(3) << "  Free on stack: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name
-                         << "; current: " << func_stack_current[idx] << "; peak: " << func_stack_peak[idx] << "\n";
+                debug(3) << "  Free on stack: " << op->name
+                         << "(" << alloc.size << ") in pipeline " << names.pipeline_name
+                         << "; current: " << func_stack_current[idx]
+                         << "; peak: " << func_stack_peak[idx] << "\n";
             }
         }
         return stmt;
@@ -414,8 +439,8 @@ private:
             // kernel. There will be a separate copy of the state on
             // the DSP that the host side will periodically query.
             Expr get_state = Call::make(Handle(), "halide_profiler_get_state", {}, Call::Extern);
-            body = substitute("profiler_instance", Variable::make(Handle(), "hvx_profiler_instance"), body);
-            body = LetStmt::make("hvx_profiler_instance", get_state, body);
+            body = substitute(names.profiler_instance, Variable::make(Handle(), names.hvx_profiler_instance), body);
+            body = LetStmt::make(names.hvx_profiler_instance, get_state, body);
         } else if (op->device_api == DeviceAPI::None ||
                    op->device_api == DeviceAPI::Host) {
             body = mutate(body);
@@ -529,28 +554,30 @@ private:
 }  // namespace
 
 Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name) {
-    InjectProfiling profiling(pipeline_name);
+    Names names(pipeline_name);
+
+    InjectProfiling profiling(names);
     Stmt s = profiling.mutate(stmt);
 
     int num_funcs = (int)(profiling.indices.size());
 
     // TODO: unique_name all these strings
 
-    Expr instance = Variable::make(Handle(), "profiler_instance");
+    Expr instance = Variable::make(Handle(), names.profiler_instance);
 
-    Expr func_names_buf = Variable::make(Handle(), "profiler_func_names");
+    Expr func_names_buf = Variable::make(Handle(), names.profiler_func_names);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_instance_start",
                                      {pipeline_name, num_funcs, func_names_buf, instance}, Call::Extern);
 
-    Expr profiler_start_error_code = Variable::make(Int(32), "profiler_start_error_code");
+    Expr profiler_start_error_code = Variable::make(Int(32), names.profiler_start_error_code);
 
     Expr stop_profiler = Call::make(Handle(), Call::register_destructor,
                                     {Expr("halide_profiler_instance_end"), instance}, Call::Intrinsic);
 
     bool no_stack_alloc = profiling.func_stack_peak.empty();
     if (!no_stack_alloc) {
-        Expr func_stack_peak_buf = Variable::make(Handle(), "profiler_func_stack_peak_buf");
+        Expr func_stack_peak_buf = Variable::make(Handle(), names.profiler_func_stack_peak_buf);
 
         Stmt update_stack = Evaluate::make(Call::make(Int(32), "halide_profiler_stack_peak_update",
                                                       {instance, func_stack_peak_buf}, Call::Extern));
@@ -560,37 +587,37 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name) {
     s = profiling.activate_main_thread(s);
 
     // Initialize the shared sampling token
-    Expr shared_sampling_token_var = Variable::make(Handle(), "profiler_shared_sampling_token");
+    Expr shared_sampling_token_var = Variable::make(Handle(), names.profiler_shared_sampling_token);
     Expr init_sampling_token =
         Call::make(Int(32), "halide_profiler_init_sampling_token", {shared_sampling_token_var, 0}, Call::Extern);
     s = Block::make({Evaluate::make(init_sampling_token), s});
-    s = LetStmt::make("profiler_shared_sampling_token",
+    s = LetStmt::make(names.profiler_shared_sampling_token,
                       Call::make(Handle(), Call::alloca, {Int(32).bytes()}, Call::Intrinsic), s);
 
     // If there was a problem starting the profiler, it will call an
     // appropriate halide error function and then return the
     // (negative) error code as the token.
     s = Block::make(AssertStmt::make(profiler_start_error_code == 0, profiler_start_error_code), s);
-    s = LetStmt::make("profiler_start_error_code", start_profiler, s);
+    s = LetStmt::make(names.profiler_start_error_code, start_profiler, s);
 
     if (!no_stack_alloc) {
         for (int i = num_funcs - 1; i >= 0; --i) {
-            s = Block::make(Store::make("profiler_func_stack_peak_buf",
+            s = Block::make(Store::make(names.profiler_func_stack_peak_buf,
                                         make_const(UInt(64), profiling.func_stack_peak[i]),
                                         i, Parameter(), const_true(), ModulusRemainder()),
                             s);
         }
-        s = Block::make(s, Free::make("profiler_func_stack_peak_buf"));
-        s = Allocate::make("profiler_func_stack_peak_buf", UInt(64),
+        s = Block::make(s, Free::make(names.profiler_func_stack_peak_buf));
+        s = Allocate::make(names.profiler_func_stack_peak_buf, UInt(64),
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
     for (const auto &p : profiling.indices) {
-        s = Block::make(Store::make("profiler_func_names", p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
+        s = Block::make(Store::make(names.profiler_func_names, p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
     }
 
-    s = Block::make(s, Free::make("profiler_func_names"));
-    s = Allocate::make("profiler_func_names", Handle(),
+    s = Block::make(s, Free::make(names.profiler_func_names));
+    s = Allocate::make(names.profiler_func_names, Handle(),
                        MemoryType::Auto, {num_funcs}, const_true(), s);
     s = Block::make(Evaluate::make(stop_profiler), s);
 
@@ -601,7 +628,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name) {
 
     const int instance_size_bytes = sizeof(halide_profiler_instance_state) + num_funcs * sizeof(halide_profiler_func_stats);
 
-    s = Allocate::make("profiler_instance", UInt(64), MemoryType::Auto,
+    s = Allocate::make(names.profiler_instance, UInt(64), MemoryType::Auto,
                        {instance_size_bytes / 8}, const_true(), s);
 
     // We have nested definitions of the sampling token
