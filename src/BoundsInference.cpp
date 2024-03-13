@@ -1152,7 +1152,7 @@ public:
         map<string, Function> stage_name_to_func;
 
         if (producing >= 0) {
-            fused_group.insert(make_pair(f.name(), stage_index));
+            fused_group.emplace(f.name(), stage_index);
         }
 
         if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
@@ -1164,12 +1164,12 @@ public:
                 if (!((pair.func_1 == stages[producing].name) && ((int)pair.stage_1 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
                                                                                                                              f, stage_index,
                                                                                                                              pair.func_1, pair.stage_1, var)) {
-                    fused_group.insert(make_pair(pair.func_1, pair.stage_1));
+                    fused_group.emplace(pair.func_1, pair.stage_1);
                 }
                 if (!((pair.func_2 == stages[producing].name) && ((int)pair.stage_2 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
                                                                                                                              f, stage_index,
                                                                                                                              pair.func_2, pair.stage_2, var)) {
-                    fused_group.insert(make_pair(pair.func_2, pair.stage_2));
+                    fused_group.emplace(pair.func_2, pair.stage_2);
                 }
             }
 

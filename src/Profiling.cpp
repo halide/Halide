@@ -3,7 +3,7 @@
 #include <string>
 
 #include "CodeGen_Internal.h"
-#include "ExprUsesVar.h"
+#include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "InjectHostDevBufferCopies.h"
@@ -83,13 +83,14 @@ public:
     vector<int> stack;  // What produce nodes are we currently inside of.
 
     const Names &names;
+    const map<string, Function> &env;
 
     bool in_fork = false;
     bool in_parallel = false;
     bool in_leaf_task = false;
 
-    InjectProfiling(const Names &names)
-        : names(names) {
+    InjectProfiling(const Names &names, const map<std::string, Function> &env)
+        : names(names), env(env) {
         stack.push_back(get_func_id("overhead"));
         // ID 0 is treated specially in the runtime as overhead
         internal_assert(stack.back() == 0);
@@ -155,10 +156,28 @@ private:
     bool profiling_memory = true;
 
     // Strip down the tuple name, e.g. f.0 into f
-    string normalize_name(const string &name) {
-        vector<string> v = split_string(name, ".");
-        internal_assert(!v.empty());
-        return v[0];
+    string normalize_name(const string &name) const {
+        size_t idx = name.find('.');
+        if (idx != std::string::npos) {
+            internal_assert(idx != 0);
+            return name.substr(0, idx);
+        } else {
+            return name;
+        }
+    }
+
+    Function lookup_function(const string &name) const {
+        auto it = env.find(name);
+        if (it != env.end()) {
+            return it->second;
+        }
+        string norm_name = normalize_name(name);
+        it = env.find(norm_name);
+        if (it != env.end()) {
+            return it->second;
+        }
+        internal_error << "No function in the environment found for name '" << name << "'.\n";
+        return {};
     }
 
     int get_func_id(const string &name) {
@@ -238,7 +257,6 @@ private:
     }
 
     Stmt visit(const Allocate *op) override {
-        int idx = get_func_id(op->name);
 
         auto [new_extents, changed] = mutate_with_changes(op->extents);
         Expr condition = mutate(op->condition);
@@ -252,6 +270,13 @@ private:
         // always conditionally false. remove_dead_allocations() is called after
         // inject_profiling() so this is a possible scenario.
         if (!is_const_zero(size) && on_stack) {
+            int idx;
+            Function func = lookup_function(op->name);
+            if (func.should_not_profile()) {
+                idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
+            } else {
+                idx = get_func_id(op->name);
+            }
             const uint64_t *int_size = as_const_uint(size);
             internal_assert(int_size != nullptr);  // Stack size is always a const int
             func_stack_current[idx] += *int_size;
@@ -265,6 +290,7 @@ private:
         vector<Stmt> tasks;
         bool track_heap_allocation = !is_const_zero(size) && !on_stack && profiling_memory;
         if (track_heap_allocation) {
+            int idx = get_func_id(op->name);
             debug(3) << "  Allocation on heap: " << op->name
                      << "(" << size << ") in pipeline "
                      << names.pipeline_name << "\n";
@@ -298,8 +324,6 @@ private:
     }
 
     Stmt visit(const Free *op) override {
-        int idx = get_func_id(op->name);
-
         AllocSize alloc = func_alloc_sizes.get(op->name);
         internal_assert(alloc.size.type() == UInt(64));
         func_alloc_sizes.pop(op->name);
@@ -308,8 +332,8 @@ private:
 
         if (!is_const_zero(alloc.size)) {
             if (!alloc.on_stack && profiling_memory) {
-                debug(3) << "  Free on heap: " << op->name
-                         << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
+                int idx = get_func_id(op->name);
+                debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
 
                 vector<Stmt> tasks{
                     set_current_func(free_id),
@@ -323,6 +347,13 @@ private:
                 const uint64_t *int_size = as_const_uint(alloc.size);
                 internal_assert(int_size != nullptr);
 
+                int idx;
+                Function func = lookup_function(op->name);
+                if (func.should_not_profile()) {
+                    idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
+                } else {
+                    idx = get_func_id(op->name);
+                }
                 func_stack_current[idx] -= *int_size;
                 debug(3) << "  Free on stack: " << op->name
                          << "(" << alloc.size << ") in pipeline " << names.pipeline_name
@@ -337,11 +368,19 @@ private:
         int idx;
         Stmt body;
         if (op->is_producer) {
-            idx = get_func_id(op->name);
-            stack.push_back(idx);
-            Stmt set_current = set_current_func(idx);
-            body = Block::make(set_current, mutate(op->body));
-            stack.pop_back();
+            Function func = lookup_function(op->name);
+            if (func.should_not_profile()) {
+                body = mutate(op->body);
+                if (body.same_as(op->body)) {
+                    return op;
+                }
+            } else {
+                idx = get_func_id(op->name);
+                stack.push_back(idx);
+                Stmt set_current = set_current_func(idx);
+                body = Block::make(set_current, mutate(op->body));
+                stack.pop_back();
+            }
         } else {
             // At the beginning of the consume step, set the current task
             // back to the outer one.
@@ -553,10 +592,10 @@ private:
 
 }  // namespace
 
-Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name) {
+Stmt inject_profiling(Stmt s, const string &pipeline_name, const std::map<string, Function> &env) {
     Names names(pipeline_name);
 
-    InjectProfiling profiling(names);
+    InjectProfiling profiling(names, env);
     Stmt s = profiling.mutate(stmt);
 
     int num_funcs = (int)(profiling.indices.size());

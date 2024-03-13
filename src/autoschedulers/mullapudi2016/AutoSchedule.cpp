@@ -1359,7 +1359,7 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
         for (int s = 0; s < num_stages; s++) {
             FStage stg(f.second, s);
             Group g(stg, {stg});
-            groups.insert(make_pair(stg, g));
+            groups.emplace(stg, g);
         }
     }
 
