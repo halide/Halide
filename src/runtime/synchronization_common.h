@@ -908,7 +908,7 @@ struct halide_mutex_array {
     struct halide_mutex *array;
 };
 
-WEAK halide_mutex_array *halide_mutex_array_create(int sz) {
+WEAK halide_mutex_array *halide_mutex_array_create(uint64_t sz) {
     // TODO: If sz is huge, we should probably hash it down to something smaller
     // in the accessors below. Check for deadlocks before doing so.
     halide_mutex_array *array = (halide_mutex_array *)halide_malloc(

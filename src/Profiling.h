@@ -23,12 +23,15 @@
  *   mandelbrot:  0.006444ms (10%)   peak: 505344   num: 104000   avg: 5376
  *   argmin:      0.027715ms (46%)   stack: 20
  */
+#include <map>
 #include <string>
 
 #include "Expr.h"
 
 namespace Halide {
 namespace Internal {
+
+class Function;
 
 /** Take a statement representing a halide pipeline insert
  * high-resolution timing into the generated code (via spawning a
@@ -37,7 +40,7 @@ namespace Internal {
  * storage flattening, but after all bounds inference.
  *
  */
-Stmt inject_profiling(Stmt, const std::string &);
+Stmt inject_profiling(Stmt, const std::string &, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide
