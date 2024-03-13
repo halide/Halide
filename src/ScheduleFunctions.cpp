@@ -1601,7 +1601,7 @@ private:
 
     // Replace the bounds of the parent fused loop (i.e. the first one to be
     // realized in the group) with union of the bounds of the fused group.
-    Stmt replace_parent_bound_with_union_bound(string func, int stage,
+    Stmt replace_parent_bound_with_union_bound(const string &func, int stage,
                                                const Definition &def, Stmt produce,
                                                const map<string, Expr> &bounds,
                                                map<string, Expr> &replacements) {
@@ -1669,7 +1669,7 @@ private:
 
         // Now, replace the bounds of the parent fused loops with the union
         // bounds.
-        for (auto &spec : def.specializations()) {
+        for (const auto &spec : def.specializations()) {
             produce = replace_parent_bound_with_union_bound(func, stage, spec.definition, produce, bounds, replacements);
         }
 
