@@ -213,6 +213,10 @@ WEAK int halide_profiler_instance_start(void *user_context,
 
     // Tell the instance where we stashed the per-func state - just after the
     // instance itself.
+
+    // First check that the layout agrees with the amount of stack space
+    // allocated in the pipeline
+    static_assert((sizeof(halide_profiler_func_stats) & 7) == 0);
     halide_profiler_func_stats *funcs = (halide_profiler_func_stats *)(instance + 1);
 
     // Zero initialize the instance and func state
@@ -257,29 +261,31 @@ WEAK int halide_profiler_instance_start(void *user_context,
 }
 
 WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instance_state *instance) {
-    halide_profiler_pipeline_stats *p = instance->pipeline_stats;
     halide_profiler_state *s = halide_profiler_get_state();
     LockProfiler lock(s);
 
-    // Retire the instance, accumulating statistics onto the statistics for this
-    // pipeline. Fields related to memory usages are tracked in the pipeline stats
+    if (instance->should_collect_statistics) {
+        halide_profiler_pipeline_stats *p = instance->pipeline_stats;
 
-    p->samples += instance->samples;
-    p->time += instance->time;
-    p->active_threads_numerator += instance->active_threads_numerator;
-    p->active_threads_denominator += instance->active_threads_denominator;
-    p->runs++;
+        // Retire the instance, accumulating statistics onto the statistics for this
+        // pipeline. Fields related to memory usages are tracked in the pipeline stats
+        p->samples += instance->samples;
+        p->time += instance->time;
+        p->active_threads_numerator += instance->active_threads_numerator;
+        p->active_threads_denominator += instance->active_threads_denominator;
+        p->runs++;
 
-    for (int f = 0; f < p->num_funcs; f++) {
-        halide_profiler_func_stats *func = p->funcs + f;
-        const halide_profiler_func_stats *instance_func = instance->funcs + f;
-        func->time += instance_func->time;
-        func->active_threads_numerator += instance_func->active_threads_numerator;
-        func->active_threads_denominator += instance_func->active_threads_denominator;
-        func->num_allocs += instance_func->num_allocs;
-        func->stack_peak = max(func->stack_peak, instance_func->stack_peak);
-        func->memory_peak = max(func->memory_peak, instance_func->memory_peak);
-        func->memory_total = max(func->memory_total, instance_func->memory_total);
+        for (int f = 0; f < p->num_funcs; f++) {
+            halide_profiler_func_stats *func = p->funcs + f;
+            const halide_profiler_func_stats *instance_func = instance->funcs + f;
+            func->time += instance_func->time;
+            func->active_threads_numerator += instance_func->active_threads_numerator;
+            func->active_threads_denominator += instance_func->active_threads_denominator;
+            func->num_allocs += instance_func->num_allocs;
+            func->stack_peak = max(func->stack_peak, instance_func->stack_peak);
+            func->memory_peak = max(func->memory_peak, instance_func->memory_peak);
+            func->memory_total = max(func->memory_total, instance_func->memory_total);
+        }
     }
 
     // Remove myself from the doubly-linked list

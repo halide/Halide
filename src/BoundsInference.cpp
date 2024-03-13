@@ -1388,6 +1388,13 @@ Stmt bounds_inference(Stmt s,
     Expr marker = Call::make(Int(32), Call::skip_stages_marker, {}, Call::Intrinsic);
     s = Block::make(Evaluate::make(marker), s);
 
+    if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
+        // Add a note in the IR for what profiling should cover, so that it doesn't
+        // include bounds queries as pipeline executions.
+        marker = Call::make(Int(32), Call::profiling_marker, {}, Call::Intrinsic);
+        s = Block::make(Evaluate::make(marker), s);
+    }
+
     // Add a note in the IR for where assertions on input images
     // should go. Those are handled by a later lowering pass.
     marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);

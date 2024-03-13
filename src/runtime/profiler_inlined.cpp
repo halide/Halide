@@ -18,6 +18,12 @@ WEAK_INLINE int halide_profiler_set_current_func(halide_profiler_instance_state 
     return 0;
 }
 
+// Called once we're sure we're not in bounds query code
+WEAK_INLINE int halide_profiler_enable_instance(halide_profiler_instance_state *instance) {
+    instance->should_collect_statistics = 1;
+    return 0;
+}
+
 // Invariant: shared xor local, and both are either 0 or 1. 0 means acquired.
 WEAK_INLINE int halide_profiler_acquire_sampling_token(int32_t *shared, int32_t *local) {
     using namespace Halide::Runtime::Internal::Synchronization;

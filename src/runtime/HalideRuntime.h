@@ -1916,6 +1916,13 @@ struct halide_profiler_instance_state {
 
     /** The total number of memory allocation of funcs in this instance. */
     int num_allocs;
+
+    /** Whether or not this instance should count towards pipeline
+     * statistics. */
+    int should_collect_statistics;
+
+    /** Make the size of the struct a multiple of 8 */
+    int padding;
 };
 
 /** The global state of the profiler. */

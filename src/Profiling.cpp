@@ -70,7 +70,7 @@ public:
         // ID 0 is treated specially in the runtime as overhead
         internal_assert(stack.back() == 0);
 
-        thread_pool_id = get_func_id("waiting on task queue");
+        waiting_on_tasks_id = get_func_id("waiting for parallel tasks to finish");
         malloc_id = get_func_id("halide_malloc");
         free_id = get_func_id("halide_free");
 
@@ -83,16 +83,26 @@ public:
     map<int, uint64_t> func_stack_peak;     // map from func id -> peak stack allocation
 
     Stmt activate_thread(const Stmt &s) {
+        return activate_thread_helper(s, waiting_on_tasks_id);
+    }
+
+    Stmt activate_main_thread(const Stmt &s) {
+        // The same as a child task, except when we finish (but before the
+        // instances get popped), bill anything as overhead.
+        return activate_thread_helper(s, 0);
+    }
+
+    Stmt activate_thread_helper(const Stmt &s, int final_id) {
         return Block::make({incr_active_threads(profiler_instance),
                             unconditionally_set_current_func(stack.back()),
                             s,
                             decr_active_threads(profiler_instance),
-                            unconditionally_set_current_func(thread_pool_id)});
+                            unconditionally_set_current_func(final_id)});
     }
 
     Stmt suspend_thread(const Stmt &s) {
         return Block::make({decr_active_threads(profiler_instance),
-                            unconditionally_set_current_func(thread_pool_id),
+                            unconditionally_set_current_func(waiting_on_tasks_id),
                             s,
                             incr_active_threads(profiler_instance),
                             unconditionally_set_current_func(stack.back())});
@@ -101,7 +111,7 @@ public:
 private:
     using IRMutator::visit;
 
-    int malloc_id, free_id, thread_pool_id;
+    int malloc_id, free_id, waiting_on_tasks_id;
     Expr profiler_instance;
     Expr profiler_local_sampling_token;
     Expr profiler_shared_sampling_token;
@@ -190,6 +200,17 @@ private:
         }
         size = simplify(Select::make(condition, size * type.bytes(), make_zero(UInt(64))));
         return size;
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::profiling_marker)) {
+            // We're out of the bounds query code. This instance should be
+            // tracked (including any samples taken before this point.
+            return Call::make(Int(32), "halide_profiler_enable_instance",
+                              {profiler_instance}, Call::Extern);
+        } else {
+            return IRMutator::visit(op);
+        }
     }
 
     Stmt visit(const Allocate *op) override {
@@ -507,9 +528,9 @@ private:
 
 }  // namespace
 
-Stmt inject_profiling(Stmt s, const string &pipeline_name) {
+Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name) {
     InjectProfiling profiling(pipeline_name);
-    s = profiling.mutate(s);
+    Stmt s = profiling.mutate(stmt);
 
     int num_funcs = (int)(profiling.indices.size());
 
@@ -536,7 +557,7 @@ Stmt inject_profiling(Stmt s, const string &pipeline_name) {
         s = Block::make(update_stack, s);
     }
 
-    s = profiling.activate_thread(s);
+    s = profiling.activate_main_thread(s);
 
     // Initialize the shared sampling token
     Expr shared_sampling_token_var = Variable::make(Handle(), "profiler_shared_sampling_token");
@@ -574,13 +595,14 @@ Stmt inject_profiling(Stmt s, const string &pipeline_name) {
     s = Block::make(Evaluate::make(stop_profiler), s);
 
     // Allocate memory for the profiler instance state
-    halide_profiler_instance_state dummy_instance_state;
-    halide_profiler_instance_state *instance_mem_start = &dummy_instance_state;
-    halide_profiler_func_stats *instance_mem_end = ((halide_profiler_func_stats *)(instance_mem_start + 1)) + num_funcs;
-    const int instance_size_bytes = (uint8_t *)instance_mem_end - (uint8_t *)instance_mem_start;
+
+    // Check there isn't going to be end-of-struct padding to worry about.
+    static_assert((sizeof(halide_profiler_func_stats) & 7) == 0);
+
+    const int instance_size_bytes = sizeof(halide_profiler_instance_state) + num_funcs * sizeof(halide_profiler_func_stats);
 
     s = Allocate::make("profiler_instance", UInt(64), MemoryType::Auto,
-                       {(instance_size_bytes + 7) / 8}, const_true(), s);
+                       {instance_size_bytes / 8}, const_true(), s);
 
     // We have nested definitions of the sampling token
     s = uniquify_variable_names(s);
