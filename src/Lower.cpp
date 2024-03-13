@@ -280,10 +280,7 @@ void lower_impl(const vector<Function> &output_funcs,
     s = split_tuples(s, env);
     log("Lowering after destructuring tuple-valued realizations:", s);
 
-    // Vulkan relies on GPU var canonicalization occurring before
-    // storage flattening.
-    if (t.has_gpu_feature() ||
-        t.has_feature(Target::Vulkan)) {
+    if (t.has_gpu_feature()) {
         debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
         log("Lowering after canonicalizing GPU var names:", s);
@@ -408,7 +405,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
         debug(1) << "Injecting profiling...\n";
-        s = inject_profiling(s, pipeline_name);
+        s = inject_profiling(s, pipeline_name, env);
         log("Lowering after injecting profiling:", s);
     }
 
