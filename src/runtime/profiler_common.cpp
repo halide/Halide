@@ -273,6 +273,9 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
         p->time += instance->time;
         p->active_threads_numerator += instance->active_threads_numerator;
         p->active_threads_denominator += instance->active_threads_denominator;
+        p->memory_total += instance->memory_total;
+        p->memory_peak = max(p->memory_peak, instance->memory_peak);
+        p->num_allocs += instance->num_allocs;
         p->runs++;
 
         for (int f = 0; f < p->num_funcs; f++) {
@@ -284,7 +287,7 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
             func->num_allocs += instance_func->num_allocs;
             func->stack_peak = max(func->stack_peak, instance_func->stack_peak);
             func->memory_peak = max(func->memory_peak, instance_func->memory_peak);
-            func->memory_total = max(func->memory_total, instance_func->memory_total);
+            func->memory_total += instance_func->memory_total;
         }
     }
 
@@ -332,10 +335,11 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     halide_profiler_func_stats *func = &instance->funcs[func_id];
 
     // Note: Update to the counter is done without grabbing the state's lock to
-    // reduce lock contention. One potential issue is that other call that frees the
-    // pipeline and function stats structs may be running in parallel. However, the
-    // current desctructor (called on profiler shutdown) does not free the structs
-    // unless user specifically calls halide_profiler_reset().
+    // reduce lock contention. One potential issue is that another call that
+    // frees the pipeline and function stats structs may be running in
+    // parallel. However, the current destructor (called on profiler shutdown)
+    // does not free the structs unless user specifically calls
+    // halide_profiler_reset().
 
     // Update per-instance memory stats
     atomic_add_fetch_sequentially_consistent(&instance->num_allocs, 1);
