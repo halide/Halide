@@ -542,7 +542,7 @@ private:
             expanded_min = simplify(expand_expr(expanded_min, it->scope));
             expanded_extent = expand_expr(expanded_extent, it->scope);
             Interval loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
-            it->loop_vars.push_back({op->name, loop_bounds});
+            it->loop_vars.emplace_back(op->name, loop_bounds);
         }
 
         ScopedValue<bool> old_in_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
