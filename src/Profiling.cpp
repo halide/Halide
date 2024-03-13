@@ -592,7 +592,7 @@ private:
 
 }  // namespace
 
-Stmt inject_profiling(Stmt s, const string &pipeline_name, const std::map<string, Function> &env) {
+Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::map<string, Function> &env) {
     Names names(pipeline_name);
 
     InjectProfiling profiling(names, env);
