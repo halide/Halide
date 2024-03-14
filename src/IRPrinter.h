@@ -59,6 +59,9 @@ struct AssociativePattern;
 struct AssociativeOp;
 class Closure;
 
+/** Emit a name object in its string form */
+std::ostream &operator<<(std::ostream &stream, const Name &n);
+
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */
 std::ostream &operator<<(std::ostream &stream, const AssociativePattern &);

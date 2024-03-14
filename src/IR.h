@@ -13,6 +13,7 @@
 #include "FunctionPtr.h"
 #include "LoopPartitioningDirective.h"
 #include "ModulusRemainder.h"
+#include "Name.h"
 #include "Parameter.h"
 #include "PrefetchDirective.h"
 #include "Reduction.h"
@@ -230,7 +231,7 @@ struct Load : public ExprNode<Load> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
-    static Expr make(Type type, const std::string &name,
+    static Expr make(Type type, const Name &name,
                      Expr index, Buffer<> image,
                      Parameter param,
                      Expr predicate,
@@ -272,7 +273,7 @@ struct Let : public ExprNode<Let> {
     std::string name;
     Expr value, body;
 
-    static Expr make(const std::string &name, Expr value, Expr body);
+    static Expr make(const Name &name, Expr value, Expr body);
 
     static const IRNodeType _node_type = IRNodeType::Let;
 };
@@ -284,7 +285,7 @@ struct LetStmt : public StmtNode<LetStmt> {
     Expr value;
     Stmt body;
 
-    static Stmt make(const std::string &name, Expr value, Stmt body);
+    static Stmt make(const Name &name, Expr value, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::LetStmt;
 };
@@ -317,10 +318,10 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     bool is_producer;
     Stmt body;
 
-    static Stmt make(const std::string &name, bool is_producer, Stmt body);
+    static Stmt make(const Name &name, bool is_producer, Stmt body);
 
-    static Stmt make_produce(const std::string &name, Stmt body);
-    static Stmt make_consume(const std::string &name, Stmt body);
+    static Stmt make_produce(const Name &name, Stmt body);
+    static Stmt make_consume(const Name &name, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::ProducerConsumer;
 };
@@ -340,7 +341,7 @@ struct Store : public StmtNode<Store> {
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
-    static Stmt make(const std::string &name, Expr value, Expr index,
+    static Stmt make(const Name &name, Expr value, Expr index,
                      Parameter param, Expr predicate, ModulusRemainder alignment);
 
     static const IRNodeType _node_type = IRNodeType::Store;
@@ -357,7 +358,7 @@ struct Provide : public StmtNode<Provide> {
     std::vector<Expr> args;
     Expr predicate;
 
-    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate);
+    static Stmt make(const Name &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate);
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };
@@ -393,17 +394,17 @@ struct Allocate : public StmtNode<Allocate> {
 
     Stmt body;
 
-    static Stmt make(const std::string &name, Type type, MemoryType memory_type,
+    static Stmt make(const Name &name, Type type, MemoryType memory_type,
                      const std::vector<Expr> &extents,
                      Expr condition, Stmt body,
-                     Expr new_expr = Expr(), const std::string &free_function = std::string(), int padding = 0);
+                     Expr new_expr = Expr(), const Name &free_function = std::string(), int padding = 0);
 
     /** A routine to check if the extents are all constants, and if so verify
      * the total size is less than 2^31 - 1. If the result is constant, but
      * overflows, this routine asserts. This returns 0 if the extents are
      * not all constants; otherwise, it returns the total constant allocation
      * size. Does not include any padding bytes. */
-    static int32_t constant_allocation_size(const std::vector<Expr> &extents, const std::string &name);
+    static int32_t constant_allocation_size(const std::vector<Expr> &extents, const Name &name);
     int32_t constant_allocation_size() const;
 
     static const IRNodeType _node_type = IRNodeType::Allocate;
@@ -413,7 +414,7 @@ struct Allocate : public StmtNode<Allocate> {
 struct Free : public StmtNode<Free> {
     std::string name;
 
-    static Stmt make(const std::string &name);
+    static Stmt make(const Name &name);
 
     static const IRNodeType _node_type = IRNodeType::Free;
 };
@@ -432,7 +433,7 @@ struct Realize : public StmtNode<Realize> {
     Expr condition;
     Stmt body;
 
-    static Stmt make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
+    static Stmt make(const Name &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Realize;
 };
@@ -679,7 +680,7 @@ struct Call : public ExprNode<Call> {
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
                      const Buffer<> &image = Buffer<>(), Parameter param = Parameter());
 
-    static Expr make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
+    static Expr make(Type type, const Name &name, const std::vector<Expr> &args, CallType call_type,
                      FunctionPtr func = FunctionPtr(), int value_index = 0,
                      Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
@@ -772,23 +773,23 @@ struct Variable : public ExprNode<Variable> {
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
-    static Expr make(Type type, const std::string &name) {
+    static Expr make(Type type, const Name &name) {
         return make(type, name, Buffer<>(), Parameter(), ReductionDomain());
     }
 
-    static Expr make(Type type, const std::string &name, Parameter param) {
+    static Expr make(Type type, const Name &name, Parameter param) {
         return make(type, name, Buffer<>(), std::move(param), ReductionDomain());
     }
 
-    static Expr make(Type type, const std::string &name, const Buffer<> &image) {
+    static Expr make(Type type, const Name &name, const Buffer<> &image) {
         return make(type, name, image, Parameter(), ReductionDomain());
     }
 
-    static Expr make(Type type, const std::string &name, ReductionDomain reduction_domain) {
+    static Expr make(Type type, const Name &name, ReductionDomain reduction_domain) {
         return make(type, name, Buffer<>(), Parameter(), std::move(reduction_domain));
     }
 
-    static Expr make(Type type, const std::string &name, Buffer<> image,
+    static Expr make(Type type, const Name &name, Buffer<> image,
                      Parameter param, ReductionDomain reduction_domain);
 
     static const IRNodeType _node_type = IRNodeType::Variable;
@@ -814,7 +815,7 @@ struct For : public StmtNode<For> {
     Stmt body;
     Partition partition_policy;
 
-    static Stmt make(const std::string &name,
+    static Stmt make(const Name &name,
                      Expr min, Expr extent,
                      ForType for_type, Partition partition_policy,
                      DeviceAPI device_api,
@@ -920,7 +921,7 @@ struct Prefetch : public StmtNode<Prefetch> {
 
     Stmt body;
 
-    static Stmt make(const std::string &name, const std::vector<Type> &types,
+    static Stmt make(const Name &name, const std::vector<Type> &types,
                      const Region &bounds,
                      const PrefetchDirective &prefetch,
                      Expr condition, Stmt body);
@@ -937,7 +938,7 @@ struct HoistedStorage : public StmtNode<HoistedStorage> {
     std::string name;
     Stmt body;
 
-    static Stmt make(const std::string &name,
+    static Stmt make(const Name &name,
                      Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::HoistedStorage;
@@ -954,8 +955,8 @@ struct Atomic : public StmtNode<Atomic> {
     std::string mutex_name;  // empty string if not using mutex
     Stmt body;
 
-    static Stmt make(const std::string &producer_name,
-                     const std::string &mutex_name,
+    static Stmt make(const Name &producer_name,
+                     const Name &mutex_name,
                      Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Atomic;

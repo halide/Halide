@@ -10,6 +10,7 @@
 
 #include "Debug.h"
 #include "Error.h"
+#include "Name.h"
 
 /** \file
  * Defines the Scope class, which is used for keeping track of names in a scope while traversing IR
@@ -193,6 +194,10 @@ public:
             }
         }
         return true;
+    }
+
+    bool contains(const Name &name) const {
+        return contains(name.str());
     }
 
     /** How many nested definitions of a single name exist? */

@@ -113,6 +113,7 @@ set(HEADER_FILES
     Module.h
     ModulusRemainder.h
     Monotonic.h
+    Name.h
     ObjectInstanceRegistry.h
     OffloadGPULoops.h
     OptimizeShuffles.h
@@ -280,6 +281,7 @@ set(SOURCE_FILES
     Module.cpp
     ModulusRemainder.cpp
     Monotonic.cpp
+    Name.cpp
     ObjectInstanceRegistry.cpp
     OffloadGPULoops.cpp
     OptimizeShuffles.cpp

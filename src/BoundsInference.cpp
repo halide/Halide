@@ -7,6 +7,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Inline.h"
 #include "Qualify.h"
 #include "Scope.h"
@@ -26,19 +27,19 @@ using std::vector;
 
 namespace {
 
-bool var_name_match(const string &candidate, const string &var) {
-    internal_assert(var.find('.') == string::npos)
+bool var_name_match(const Name &candidate, const Name &var) {
+    internal_assert(var == var.unqualified())
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
-    return (candidate == var) || Internal::ends_with(candidate, "." + var);
+    return candidate.unqualified() == var;
 }
 
 class DependsOnBoundsInference : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Variable *var) override {
-        if (ends_with(var->name, ".max") ||
-            ends_with(var->name, ".min")) {
+        if (Name(var->name).unqualified() == "max" ||
+            Name(var->name).unqualified() == "min") {
             result = true;
         }
     }
@@ -76,12 +77,12 @@ bool depends_on_bounds_inference(const Expr &e) {
 class BoundsOfInnerVar : public IRVisitor {
 public:
     Interval result;
-    BoundsOfInnerVar(const string &v)
+    BoundsOfInnerVar(const Name &v)
         : var(v) {
     }
 
 private:
-    string var;
+    Name var;
     bool found = false;
 
     using IRVisitor::visit;
@@ -115,8 +116,8 @@ private:
     void visit(const For *op) override {
         // At this stage of lowering, loop_min and loop_max
         // conveniently exist in scope.
-        Interval in(Variable::make(Int(32), op->name + ".loop_min"),
-                    Variable::make(Int(32), op->name + ".loop_max"));
+        Interval in(Variable::make(Int(32), Name(op->name).loop_min()),
+                    Variable::make(Int(32), Name(op->name).loop_max()));
 
         if (op->name == var) {
             result = in;
@@ -137,7 +138,7 @@ private:
     }
 };
 
-Interval bounds_of_inner_var(const string &var, const Stmt &s) {
+Interval bounds_of_inner_var(const Name &var, const Stmt &s) {
     BoundsOfInnerVar b(var);
     s.accept(&b);
     return b.result;
@@ -161,8 +162,8 @@ size_t find_fused_group_index(const Function &producing_func,
 bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
                           const vector<set<FusedPair>> &fused_pairs_in_groups,
                           const Function &producing_func, int producing_stage_index,
-                          const string &consumer_name, int consumer_stage,
-                          string var) {
+                          const Name &consumer_name, int consumer_stage,
+                          const Name &var) {
     if (producing_func.has_extern_definition()) {
         return false;
     }
@@ -222,7 +223,7 @@ protected:
                 return it2->second;
             }
         }
-        Expr e = qualify(f.name() + ".", f.values()[idx]);
+        Expr e = Name(f.name()).qualify(f.values()[idx]);
         e = do_inlining(e);
         qualified_bodies[f][idx] = e;
         return e;
@@ -236,7 +237,7 @@ protected:
                 Expr body = get_qualified_body(f, op->value_index);
                 const vector<string> &func_args = f.args();
                 for (size_t i = 0; i < args.size(); i++) {
-                    body = Let::make(f.name() + "." + func_args[i], args[i], body);
+                    body = Let::make(Name(f.name()).qualify(func_args[i]), args[i], body);
                 }
                 return body;
             }
@@ -257,7 +258,7 @@ public:
     // The fused group is indexed in the same way as 'fused_groups'.
     const vector<set<FusedPair>> &fused_pairs_in_groups;
     const FuncValueBounds &func_bounds;
-    set<string> in_pipeline, inner_productions, has_extern_consumer;
+    set<Name> in_pipeline, inner_productions, has_extern_consumer;
     const Target target;
 
     Inliner inliner;
@@ -274,12 +275,12 @@ public:
     struct Stage {
         Function func;
         size_t stage;  // 0 is the pure definition, 1 is the first update
-        string name;
+        Name name;
         vector<int> consumers;
-        map<pair<string, int>, Box> bounds;
+        map<pair<Name, int>, Box> bounds;
         vector<CondValue> exprs;
         set<ReductionVariable, ReductionVariable::Compare> rvars;
-        string stage_prefix;
+        Name stage_prefix;
         size_t fused_group_index;
         Inliner *inliner;
 
@@ -448,14 +449,14 @@ public:
         // Wrap a statement in let stmts defining the box
         Stmt define_bounds(Stmt s,
                            const Function &producing_func,
-                           const string &producing_stage_index,
+                           const Name &producing_stage_index,
                            int producing_stage_index_index,
                            const string &loop_level,
                            const vector<vector<Function>> &fused_groups,
                            const vector<set<FusedPair>> &fused_pairs_in_groups,
-                           const set<string> &in_pipeline,
-                           const set<string> &inner_productions,
-                           const set<string> &has_extern_consumer,
+                           const set<Name> &in_pipeline,
+                           const set<Name> &inner_productions,
+                           const set<Name> &has_extern_consumer,
                            const Target &target) {
 
             // Merge all the relevant boxes.
@@ -463,13 +464,12 @@ public:
 
             const vector<string> func_args = func.args();
 
-            size_t last_dot = loop_level.rfind('.');
-            string var = loop_level.substr(last_dot + 1);
+            Name var = Name(loop_level).unqualified();
 
-            for (const pair<const pair<string, int>, Box> &i : bounds) {
-                string func_name = i.first.first;
+            for (const pair<const pair<Name, int>, Box> &i : bounds) {
+                Name func_name{i.first.first};
                 int func_stage_index = i.first.second;
-                string stage_name = func_name + ".s" + std::to_string(func_stage_index);
+                Name stage_name = func_name.stage(func_stage_index);
                 if (stage_name == producing_stage_index ||
                     inner_productions.count(func_name) ||
                     is_fused_with_others(fused_groups, fused_pairs_in_groups,
@@ -499,12 +499,12 @@ public:
 
                 if (stage < func.updates().size()) {
                     size_t stages = func.updates().size();
-                    string last_stage = func.name() + ".s" + std::to_string(stages) + ".";
+                    Name last_stage = Name(func.name()).stage(stages);
                     for (size_t i = 0; i < always_pure_dims.size(); i++) {
                         if (always_pure_dims[i]) {
                             const string &dim = func_args[i];
-                            Expr min = Variable::make(Int(32), last_stage + dim + ".min");
-                            Expr max = Variable::make(Int(32), last_stage + dim + ".max");
+                            Expr min = Variable::make(Int(32), last_stage.qualify(dim).min());
+                            Expr max = Variable::make(Int(32), last_stage.qualify(dim).max());
                             b[i] = Interval(min, max);
                         }
                     }
@@ -535,9 +535,9 @@ public:
 
                 if (!in_pipeline.empty()) {
                     // 3)
-                    string outer_query_name = func.name() + ".outer_bounds_query";
+                    Name outer_query_name = Name(func.name()).outer_bounds_query();
                     Expr outer_query = Variable::make(type_of<struct halide_buffer_t *>(), outer_query_name);
-                    string inner_query_name = func.name() + ".o0.bounds_query";
+                    Name inner_query_name = Name(func.name()).output(0).bounds_query();
                     Expr inner_query = Variable::make(type_of<struct halide_buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::buffer_get_min,
@@ -556,16 +556,19 @@ public:
                         Expr new_max = inner_max + shift;
 
                         // Modify the region to be computed accordingly
-                        s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".max", new_max, s);
-                        s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".min", new_min, s);
+                        auto var = Name(func.name()).stage(0).qualify(func_args[i]);
+                        s = LetStmt::make(var.max(), new_max, s);
+                        s = LetStmt::make(var.min(), new_min, s);
                     }
 
                     // 2)
                     s = do_bounds_query(s, in_pipeline, target);
 
                     // 1)
-                    s = LetStmt::make(func.name() + ".outer_bounds_query",
-                                      Variable::make(type_of<struct halide_buffer_t *>(), func.name() + ".o0.bounds_query"), s);
+                    s = LetStmt::make(Name(func.name()).outer_bounds_query(),
+                                      Variable::make(type_of<struct halide_buffer_t *>(),
+                                                     Name(func.name()).output(0).bounds_query()),
+                                      s);
                 } else {
                     // If we're at the outermost loop, there is no
                     // bounds query result from one level up, but we
@@ -575,7 +578,7 @@ public:
                     // input size given that.
 
                     // 2)
-                    string inner_query_name = func.name() + ".o0.bounds_query";
+                    Name inner_query_name = Name(func.name()).output(0).bounds_query();
                     Expr inner_query = Variable::make(type_of<struct halide_buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr new_min = Call::make(Int(32), Call::buffer_get_min,
@@ -583,8 +586,9 @@ public:
                         Expr new_max = Call::make(Int(32), Call::buffer_get_max,
                                                   {inner_query, i}, Call::Extern);
 
-                        s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".max", new_max, s);
-                        s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".min", new_min, s);
+                        Name var = Name(func.name()).stage(0).qualify(func_args[i]);
+                        s = LetStmt::make(var.max(), new_max, s);
+                        s = LetStmt::make(var.min(), new_min, s);
                     }
 
                     s = do_bounds_query(s, in_pipeline, target);
@@ -593,14 +597,14 @@ public:
 
             if (in_pipeline.count(name) == 0) {
                 // Inject any explicit bounds
-                string prefix = name + ".s" + std::to_string(stage) + ".";
+                Name prefix = name.stage(stage);
 
                 LoopLevel compute_at = func.schedule().compute_level();
                 LoopLevel store_at = func.schedule().store_level();
 
                 for (auto bound : func.schedule().bounds()) {
-                    string min_var = prefix + bound.var + ".min";
-                    string max_var = prefix + bound.var + ".max";
+                    Name min_var = prefix.qualify(bound.var).min();
+                    Name max_var = prefix.qualify(bound.var).max();
                     Expr min_required = Variable::make(Int(32), min_var);
                     Expr max_required = Variable::make(Int(32), max_var);
 
@@ -623,8 +627,8 @@ public:
                         }
 
                         // Save the unbounded values to use in bounds-checking assertions
-                        s = LetStmt::make(min_var + "_unbounded", min_required, s);
-                        s = LetStmt::make(max_var + "_unbounded", max_required, s);
+                        s = LetStmt::make(min_var.unbounded(), min_required, s);
+                        s = LetStmt::make(max_var.unbounded(), max_required, s);
                     }
 
                     if (bound.modulus.defined()) {
@@ -649,7 +653,7 @@ public:
             }
 
             for (size_t d = 0; d < b.size(); d++) {
-                string arg = name + ".s" + std::to_string(stage) + "." + func_args[d];
+                Name arg = name.stage(stage).qualify(func_args[d]);
 
                 const bool clamp_to_outer_bounds =
                     !in_pipeline.empty() && has_extern_consumer.count(name);
@@ -659,44 +663,44 @@ public:
                     // queries outwards. Help it out by insisting that
                     // the bounds are clamped to lie within the bounds
                     // one loop level up.
-                    Expr outer_min = Variable::make(Int(32), arg + ".outer_min");
-                    Expr outer_max = Variable::make(Int(32), arg + ".outer_max");
+                    Expr outer_min = Variable::make(Int(32), arg.outer_min());
+                    Expr outer_max = Variable::make(Int(32), arg.outer_max());
                     b[d].min = clamp(b[d].min, outer_min, outer_max);
                     b[d].max = clamp(b[d].max, outer_min, outer_max);
                 }
 
                 if (b[d].is_single_point()) {
-                    s = LetStmt::make(arg + ".min", Variable::make(Int(32), arg + ".max"), s);
+                    s = LetStmt::make(arg.min(), Variable::make(Int(32), arg.max()), s);
                 } else {
-                    s = LetStmt::make(arg + ".min", b[d].min, s);
+                    s = LetStmt::make(arg.min(), b[d].min, s);
                 }
-                s = LetStmt::make(arg + ".max", b[d].max, s);
+                s = LetStmt::make(arg.max(), b[d].max, s);
 
                 if (clamp_to_outer_bounds) {
-                    s = LetStmt::make(arg + ".outer_min", Variable::make(Int(32), arg + ".min"), s);
-                    s = LetStmt::make(arg + ".outer_max", Variable::make(Int(32), arg + ".max"), s);
+                    s = LetStmt::make(arg.outer_min(), Variable::make(Int(32), arg.min()), s);
+                    s = LetStmt::make(arg.outer_max(), Variable::make(Int(32), arg.max()), s);
                 }
             }
 
             if (stage > 0) {
                 for (const ReductionVariable &rvar : rvars) {
-                    string arg = name + ".s" + std::to_string(stage) + "." + rvar.var;
-                    s = LetStmt::make(arg + ".min", rvar.min, s);
-                    s = LetStmt::make(arg + ".max", rvar.extent + rvar.min - 1, s);
+                    Name arg = name.stage(stage).qualify(rvar.var);
+                    s = LetStmt::make(arg.min(), rvar.min, s);
+                    s = LetStmt::make(arg.max(), rvar.extent + rvar.min - 1, s);
                 }
             }
 
             return s;
         }
 
-        Stmt do_bounds_query(Stmt s, const set<string> &in_pipeline, const Target &target) {
+        Stmt do_bounds_query(Stmt s, const set<Name> &in_pipeline, const Target &target) {
 
             const string &extern_name = func.extern_function_name();
             const vector<ExternFuncArgument> &args = func.extern_arguments();
 
             vector<Expr> bounds_inference_args;
 
-            vector<pair<string, Expr>> lets;
+            vector<pair<Name, Expr>> lets;
 
             // Iterate through all of the input args to the extern
             // function building a suitable argument list for the
@@ -712,7 +716,7 @@ public:
                 } else if (arg.is_func()) {
                     Function input(arg.func);
                     for (int k = 0; k < input.outputs(); k++) {
-                        string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
+                        Name name = Name{input.name()}.output(k).bounds_query(func.name());
 
                         BufferBuilder builder;
                         builder.type = input.output_types()[k];
@@ -726,13 +730,13 @@ public:
                 } else if (arg.is_image_param() || arg.is_buffer()) {
                     Parameter p = arg.image_param;
                     Buffer<> b = arg.buffer;
-                    string name = arg.is_image_param() ? p.name() : b.name();
+                    Name name{arg.is_image_param() ? p.name() : b.name()};
                     int dims = arg.is_image_param() ? p.dimensions() : b.dimensions();
 
-                    Expr in_buf = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
+                    Expr in_buf = Variable::make(type_of<struct halide_buffer_t *>(), name.buffer());
 
                     // Copy the input buffer into a query buffer to mutate.
-                    string query_name = name + ".bounds_query." + func.name();
+                    Name query_name = name.bounds_query(func.name());
 
                     Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
                     Expr query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
@@ -760,16 +764,16 @@ public:
                 builder.type = func.output_types()[j];
                 builder.dimensions = func.dimensions();
                 for (const string &arg : func.args()) {
-                    string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;
-                    Expr min = Variable::make(Int(32), prefix + ".min");
-                    Expr max = Variable::make(Int(32), prefix + ".max");
+                    Name prefix = Name(func.name()).stage(stage).qualify(arg);
+                    Expr min = Variable::make(Int(32), prefix.min());
+                    Expr max = Variable::make(Int(32), prefix.max());
                     builder.mins.push_back(min);
                     builder.extents.push_back(max + 1 - min);
                     builder.strides.emplace_back(0);
                 }
                 Expr output_buffer_t = builder.build();
 
-                string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
+                Name buf_name = Name(func.name()).output(j).bounds_query();
                 bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                 // Since this is a temporary, internal-only buffer used for bounds inference,
                 // we need to mark it
@@ -838,16 +842,16 @@ public:
         // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
             for (const string &farg : func.args()) {
-                string arg = name + ".s" + std::to_string(stage) + "." + farg;
+                Name arg = name.stage(stage).qualify(farg);
                 result.push(farg,
-                            Interval(Variable::make(Int(32), arg + ".min"),
-                                     Variable::make(Int(32), arg + ".max")));
+                            Interval(Variable::make(Int(32), arg.min()),
+                                     Variable::make(Int(32), arg.max())));
             }
             if (stage > 0) {
                 for (const ReductionVariable &rv : rvars) {
-                    string arg = name + ".s" + std::to_string(stage) + "." + rv.var;
-                    result.push(rv.var, Interval(Variable::make(Int(32), arg + ".min"),
-                                                 Variable::make(Int(32), arg + ".max")));
+                    Name arg = name.stage(stage).qualify(rv.var);
+                    result.push(rv.var, Interval(Variable::make(Int(32), arg.min()),
+                                                 Variable::make(Int(32), arg.max())));
                 }
             }
 
@@ -899,13 +903,13 @@ public:
             s.name = s.func.name();
             s.fused_group_index = find_fused_group_index(s.func, fused_groups);
             s.compute_exprs();
-            s.stage_prefix = s.name + ".s0.";
+            s.stage_prefix = s.name.stage(0);
             s.inliner = &inliner;
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
                 s.stage = (int)(j + 1);
-                s.stage_prefix = s.name + ".s" + std::to_string(s.stage) + ".";
+                s.stage_prefix = s.name.stage(s.stage);
                 s.compute_exprs();
                 stages.push_back(s);
             }
@@ -961,10 +965,10 @@ public:
                     if (arg.is_func()) {
                         Function f(arg.func);
                         has_extern_consumer.insert(f.name());
-                        string stage_name = f.name() + ".s" + std::to_string(f.updates().size());
+                        Name stage_name = Name(f.name()).stage(f.updates().size());
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
-                            string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
+                            Name buf_name = Name(f.name()).output(0).bounds_query(consumer.name);
                             Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                             Expr min = Call::make(Int(32), Call::buffer_get_min,
                                                   {buf, d}, Call::Extern);
@@ -1033,15 +1037,15 @@ public:
         // The region required of the each output is expanded to include the size of the output buffer.
         for (const Function &output : outputs) {
             Box output_box;
-            string buffer_name = output.name();
+            Name buffer_name{output.name()};
             if (output.outputs() > 1) {
                 // Use the output size of the first output buffer
-                buffer_name += ".0";
+                buffer_name = buffer_name.tuple_component(0);
             }
             for (int d = 0; d < output.dimensions(); d++) {
                 Parameter buf = output.output_buffers()[0];
-                Expr min = Variable::make(Int(32), buffer_name + ".min." + std::to_string(d), buf);
-                Expr extent = Variable::make(Int(32), buffer_name + ".extent." + std::to_string(d), buf);
+                Expr min = Variable::make(Int(32), buffer_name.min(d), buf);
+                Expr extent = Variable::make(Int(32), buffer_name.extent(d), buf);
 
                 // Respect any output min and extent constraints
                 Expr min_constraint = buf.min_constraint(d);
@@ -1074,7 +1078,7 @@ public:
             return op;
         }
 
-        set<string> old_inner_productions;
+        set<Name> old_inner_productions;
         inner_productions.swap(old_inner_productions);
 
         Stmt body = op->body;
@@ -1117,13 +1121,13 @@ public:
         int producing = -1;
         Function f;
         int stage_index = -1;
-        string stage_name;
+        Name stage_name;
         for (size_t i = 0; i < stages.size(); i++) {
-            if (starts_with(op->name, stages[i].stage_prefix)) {
+            if (Name(op->name).belongs_to_func(stages[i].stage_prefix)) {
                 producing = i;
                 f = stages[i].func;
                 stage_index = (int)stages[i].stage;
-                stage_name = stages[i].name + ".s" + std::to_string(stages[i].stage);
+                stage_name = stages[i].name.stage(stages[i].stage);
                 break;
             }
         }
@@ -1148,8 +1152,8 @@ public:
         // because e.g. B could be double-resolution (as happens when fusing yuv computations), so this
         // is not just a matter of giving A's box B's name as an alias.
         set<pair<string, int>> fused_group;
-        map<string, Box> boxes_for_fused_group;
-        map<string, Function> stage_name_to_func;
+        map<Name, Box> boxes_for_fused_group;
+        map<Name, Function> stage_name_to_func;
 
         if (producing >= 0) {
             fused_group.emplace(f.name(), stage_index);
@@ -1161,26 +1165,31 @@ public:
             string var = op->name.substr(last_dot + 1);
 
             for (const auto &pair : fused_pairs_in_groups[stages[producing].fused_group_index]) {
-                if (!((pair.func_1 == stages[producing].name) && ((int)pair.stage_1 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
-                                                                                                                             f, stage_index,
-                                                                                                                             pair.func_1, pair.stage_1, var)) {
+                if (!((pair.func_1 == stages[producing].name) &&
+                      ((int)pair.stage_1 == stage_index)) &&
+                    is_fused_with_others(fused_groups, fused_pairs_in_groups,
+                                         f, stage_index,
+                                         pair.func_1, pair.stage_1, var)) {
                     fused_group.emplace(pair.func_1, pair.stage_1);
                 }
-                if (!((pair.func_2 == stages[producing].name) && ((int)pair.stage_2 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
-                                                                                                                             f, stage_index,
-                                                                                                                             pair.func_2, pair.stage_2, var)) {
+                if (!((pair.func_2 == stages[producing].name) &&
+                      ((int)pair.stage_2 == stage_index)) &&
+                    is_fused_with_others(fused_groups, fused_pairs_in_groups,
+                                         f, stage_index,
+                                         pair.func_2, pair.stage_2, var)) {
                     fused_group.emplace(pair.func_2, pair.stage_2);
                 }
             }
 
             if (fused_group.size() == 1) {
-                boxes_for_fused_group[stage_name] = box_provided(body, stages[producing].name, empty_scope, func_bounds);
+                boxes_for_fused_group[stage_name] =
+                    box_provided(body, stages[producing].name.str(), empty_scope, func_bounds);
                 stage_name_to_func[stage_name] = f;
                 internal_assert((int)boxes_for_fused_group[stage_name].size() == f.dimensions());
             } else {
                 auto boxes = boxes_provided(body, empty_scope, func_bounds);
                 for (const auto &fused : fused_group) {
-                    string fused_stage_name = fused.first + ".s" + std::to_string(fused.second);
+                    Name fused_stage_name = Name(fused.first).stage(fused.second);
                     auto it = boxes.find(fused.first);
                     if (it != boxes.end()) {
                         boxes_for_fused_group[fused_stage_name] = it->second;
@@ -1217,10 +1226,10 @@ public:
                     for (int consumer : stages[i].consumers) {
                         bounds_needed[consumer] = true;
                     }
-                    body = stages[i].define_bounds(
-                        body, f, stage_name, stage_index, op->name, fused_groups,
-                        fused_pairs_in_groups, in_pipeline, inner_productions,
-                        has_extern_consumer, target);
+                    body = stages[i].define_bounds(body, f, stage_name, stage_index,
+                                                   op->name, fused_groups,
+                                                   fused_pairs_in_groups, in_pipeline, inner_productions,
+                                                   has_extern_consumer, target);
                 }
             }
 
@@ -1233,15 +1242,15 @@ public:
                     internal_assert(f_args.size() == box.size());
                     for (size_t i = 0; i < box.size(); i++) {
                         internal_assert(box[i].is_bounded());
-                        string var = b.first + "." + f_args[i];
+                        Name var = Name(b.first).qualify(f_args[i]);
 
                         if (box[i].is_single_point()) {
-                            body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
+                            body = LetStmt::make(var.max(), Variable::make(Int(32), var.min()), body);
                         } else {
-                            body = LetStmt::make(var + ".max", box[i].max, body);
+                            body = LetStmt::make(var.max(), box[i].max, body);
                         }
 
-                        body = LetStmt::make(var + ".min", box[i].min, body);
+                        body = LetStmt::make(var.min(), box[i].min, body);
                     }
                 }
             }
@@ -1256,7 +1265,8 @@ public:
                     size_t si = 0;
                     // Find a Stage structure corresponding to a current fused stage.
                     for (si = 0; si < stages.size(); si++) {
-                        if ((fused.first == stages[si].name) && fused.second == (int)stages[si].stage) {
+                        if ((fused.first == stages[si].name) &&
+                            fused.second == (int)stages[si].stage) {
                             break;
                         }
                     }
@@ -1273,7 +1283,7 @@ public:
                         }
                     }
                     for (const string &i : vars) {
-                        string var = s.stage_prefix + i;
+                        Name var = s.stage_prefix.qualify(i);
                         Interval in = bounds_of_inner_var(var, body);
                         if (in.is_bounded()) {
                             // bounds_of_inner_var doesn't understand
@@ -1281,24 +1291,24 @@ public:
                             // have inner bounds that exceed the outer
                             // ones.
                             if (!s.rvars.empty()) {
-                                in.min = max(in.min, Variable::make(Int(32), var + ".min"));
-                                in.max = min(in.max, Variable::make(Int(32), var + ".max"));
+                                in.min = max(in.min, Variable::make(Int(32), var.min()));
+                                in.max = min(in.max, Variable::make(Int(32), var.max()));
                             }
-                            body = LetStmt::make(var + ".min", in.min, body);
-                            body = LetStmt::make(var + ".max", in.max, body);
+                            body = LetStmt::make(var.min(), in.min, body);
+                            body = LetStmt::make(var.max(), in.max, body);
                         } else {
                             // If it's not found, we're already in the
                             // scope of the injected let. The let was
                             // probably lifted to an outer level.
                             Expr val;
-                            if (let_vars_in_scope.contains(var + ".guarded")) {
+                            if (let_vars_in_scope.contains(var.guarded())) {
                                 // Use a guarded version if it exists, for tighter bounds inference.
-                                val = Variable::make(Int(32), var + ".guarded");
+                                val = Variable::make(Int(32), var.guarded());
                             } else {
                                 val = Variable::make(Int(32), var);
                             }
-                            body = LetStmt::make(var + ".min", val, body);
-                            body = LetStmt::make(var + ".max", val, body);
+                            body = LetStmt::make(var.min(), val, body);
+                            body = LetStmt::make(var.max(), val, body);
                         }
                     }
                 }
@@ -1394,7 +1404,7 @@ Stmt bounds_inference(Stmt s,
     s = Block::make(Evaluate::make(marker), s);
 
     // Add a synthetic outermost loop to act as 'root'.
-    s = For::make("<outermost>", 0, 1, ForType::Serial, Partition::Never, DeviceAPI::None, s);
+    s = For::make(unique_name('l'), 0, 1, ForType::Serial, Partition::Never, DeviceAPI::None, s);
 
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
                         outputs, func_bounds, target)

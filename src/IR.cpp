@@ -248,7 +248,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Expr Load::make(Type type, const Name &name, Expr index, Buffer<> image, Parameter param, Expr predicate, ModulusRemainder alignment) {
     internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
@@ -257,7 +257,7 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
 
     Load *node = new Load;
     node->type = type;
-    node->name = name;
+    node->name = name.str();
     node->predicate = std::move(predicate);
     node->index = std::move(index);
     node->image = std::move(image);
@@ -291,24 +291,24 @@ Expr Broadcast::make(Expr value, int lanes) {
     return node;
 }
 
-Expr Let::make(const std::string &name, Expr value, Expr body) {
+Expr Let::make(const Name &name, Expr value, Expr body) {
     internal_assert(value.defined()) << "Let of undefined\n";
     internal_assert(body.defined()) << "Let of undefined\n";
 
     Let *node = new Let;
     node->type = body.type();
-    node->name = name;
+    node->name = name.str();
     node->value = std::move(value);
     node->body = std::move(body);
     return node;
 }
 
-Stmt LetStmt::make(const std::string &name, Expr value, Stmt body) {
+Stmt LetStmt::make(const Name &name, Expr value, Stmt body) {
     internal_assert(value.defined()) << "Let of undefined\n";
     internal_assert(body.defined()) << "Let of undefined\n";
 
     LetStmt *node = new LetStmt;
-    node->name = name;
+    node->name = name.str();
     node->value = std::move(value);
     node->body = std::move(body);
     return node;
@@ -324,25 +324,25 @@ Stmt AssertStmt::make(Expr condition, Expr message) {
     return node;
 }
 
-Stmt ProducerConsumer::make(const std::string &name, bool is_producer, Stmt body) {
+Stmt ProducerConsumer::make(const Name &name, bool is_producer, Stmt body) {
     internal_assert(body.defined()) << "ProducerConsumer of undefined\n";
 
     ProducerConsumer *node = new ProducerConsumer;
-    node->name = name;
+    node->name = name.str();
     node->is_producer = is_producer;
     node->body = std::move(body);
     return node;
 }
 
-Stmt ProducerConsumer::make_produce(const std::string &name, Stmt body) {
+Stmt ProducerConsumer::make_produce(const Name &name, Stmt body) {
     return ProducerConsumer::make(name, true, std::move(body));
 }
 
-Stmt ProducerConsumer::make_consume(const std::string &name, Stmt body) {
+Stmt ProducerConsumer::make_consume(const Name &name, Stmt body) {
     return ProducerConsumer::make(name, false, std::move(body));
 }
 
-Stmt For::make(const std::string &name,
+Stmt For::make(const Name &name,
                Expr min, Expr extent,
                ForType for_type, Partition partition_policy,
                DeviceAPI device_api,
@@ -354,7 +354,7 @@ Stmt For::make(const std::string &name,
     internal_assert(body.defined()) << "For of undefined\n";
 
     For *node = new For;
-    node->name = name;
+    node->name = name.str();
     node->min = std::move(min);
     node->extent = std::move(extent);
     node->for_type = for_type;
@@ -375,7 +375,7 @@ Stmt Acquire::make(Expr semaphore, Expr count, Stmt body) {
     return node;
 }
 
-Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment) {
+Stmt Store::make(const Name &name, Expr value, Expr index, Parameter param, Expr predicate, ModulusRemainder alignment) {
     internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
@@ -384,7 +384,7 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
         << "Vector lanes of Store must match vector lanes of predicate\n";
 
     Store *node = new Store;
-    node->name = name;
+    node->name = name.str();
     node->predicate = std::move(predicate);
     node->value = std::move(value);
     node->index = std::move(index);
@@ -393,7 +393,7 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     return node;
 }
 
-Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
+Stmt Provide::make(const Name &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
     internal_assert(predicate.defined()) << "Provide with undefined predicate\n";
     internal_assert(!values.empty()) << "Provide of no values\n";
     for (const auto &value : values) {
@@ -404,17 +404,17 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
     }
 
     Provide *node = new Provide;
-    node->name = name;
+    node->name = name.str();
     node->values = values;
     node->args = args;
     node->predicate = predicate;
     return node;
 }
 
-Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
+Stmt Allocate::make(const Name &name, Type type, MemoryType memory_type,
                     const std::vector<Expr> &extents,
                     Expr condition, Stmt body,
-                    Expr new_expr, const std::string &free_function, int padding) {
+                    Expr new_expr, const Name &free_function, int padding) {
     for (const auto &extent : extents) {
         internal_assert(extent.defined()) << "Allocate of undefined extent\n";
         internal_assert(extent.type().is_scalar() == 1) << "Allocate of vector extent\n";
@@ -426,19 +426,19 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
         << "Allocate nodes with custom new expressions may not have padding\n";
 
     Allocate *node = new Allocate;
-    node->name = name;
+    node->name = name.str();
     node->type = type;
     node->memory_type = memory_type;
     node->extents = extents;
     node->new_expr = std::move(new_expr);
-    node->free_function = free_function;
+    node->free_function = free_function.str();
     node->condition = std::move(condition);
     node->padding = padding;
     node->body = std::move(body);
     return node;
 }
 
-int32_t Allocate::constant_allocation_size(const std::vector<Expr> &extents, const std::string &name) {
+int32_t Allocate::constant_allocation_size(const std::vector<Expr> &extents, const Name &name) {
     int64_t result = 1;
 
     for (const auto &extent : extents) {
@@ -473,13 +473,13 @@ int32_t Allocate::constant_allocation_size() const {
     return Allocate::constant_allocation_size(extents, name);
 }
 
-Stmt Free::make(const std::string &name) {
+Stmt Free::make(const Name &name) {
     Free *node = new Free;
-    node->name = name;
+    node->name = name.str();
     return node;
 }
 
-Stmt Realize::make(const std::string &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body) {
+Stmt Realize::make(const Name &name, const std::vector<Type> &types, MemoryType memory_type, const Region &bounds, Expr condition, Stmt body) {
     for (const auto &bound : bounds) {
         internal_assert(bound.min.defined()) << "Realize of undefined\n";
         internal_assert(bound.extent.defined()) << "Realize of undefined\n";
@@ -492,7 +492,7 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, Memo
     internal_assert(condition.type().is_bool()) << "Realize condition is not boolean\n";
 
     Realize *node = new Realize;
-    node->name = name;
+    node->name = name.str();
     node->types = types;
     node->memory_type = memory_type;
     node->bounds = bounds;
@@ -501,7 +501,7 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, Memo
     return node;
 }
 
-Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
+Stmt Prefetch::make(const Name &name, const std::vector<Type> &types,
                     const Region &bounds,
                     const PrefetchDirective &prefetch,
                     Expr condition, Stmt body) {
@@ -519,7 +519,7 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     user_assert(is_pure(prefetch.offset)) << "The offset to the prefetch directive must be pure.";
 
     Prefetch *node = new Prefetch;
-    node->name = name;
+    node->name = name.str();
     node->types = types;
     node->bounds = bounds;
     node->prefetch = prefetch;
@@ -708,7 +708,7 @@ Expr Call::make(Type type, Call::IntrinsicOp op, const std::vector<Expr> &args, 
     return Call::make(type, intrinsic_op_names[op], args, call_type, std::move(func), value_index, image, std::move(param));
 }
 
-Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
+Expr Call::make(Type type, const Name &name, const std::vector<Expr> &args, CallType call_type,
                 FunctionPtr func, int value_index,
                 Buffer<> image, Parameter param) {
     if (name == intrinsic_op_names[Call::prefetch] && call_type == Call::Intrinsic) {
@@ -734,7 +734,7 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
 
     Call *node = new Call;
     node->type = type;
-    node->name = name;
+    node->name = name.str();
     node->args = args;
     node->call_type = call_type;
     node->func = std::move(func);
@@ -744,11 +744,11 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
     return node;
 }
 
-Expr Variable::make(Type type, const std::string &name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {
+Expr Variable::make(Type type, const Name &name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {
     internal_assert(!name.empty());
     Variable *node = new Variable;
     node->type = type;
-    node->name = name;
+    node->name = name.str();
     node->image = std::move(image);
     node->param = std::move(param);
     node->reduction_domain = std::move(reduction_domain);
@@ -909,22 +909,22 @@ bool Shuffle::is_interleave() const {
     return true;
 }
 
-Stmt Atomic::make(const std::string &producer_name,
-                  const std::string &mutex_name,
+Stmt Atomic::make(const Name &producer_name,
+                  const Name &mutex_name,
                   Stmt body) {
     Atomic *node = new Atomic;
-    node->producer_name = producer_name;
-    node->mutex_name = mutex_name;
+    node->producer_name = producer_name.str();
+    node->mutex_name = mutex_name.str();
     internal_assert(body.defined()) << "Atomic must have a body statement.\n";
     node->body = std::move(body);
     return node;
 }
 
-Stmt HoistedStorage::make(const std::string &name,
+Stmt HoistedStorage::make(const Name &name,
                           Stmt body) {
     internal_assert(body.defined()) << "HoistedStorage must have a body statement.\n";
     HoistedStorage *node = new HoistedStorage;
-    node->name = name;
+    node->name = name.str();
     node->body = std::move(body);
     return node;
 }

@@ -327,7 +327,7 @@ public:
  * the function (if any). It is rare that this function is necessary
  * (e.g. to pass the user context to an extern function written in C). */
 inline Expr user_context_value() {
-    return Internal::Variable::make(Handle(), "__user_context",
+    return Internal::Variable::make(Handle(), Halide::Internal::Name("__user_context"),
                                     Parameter(Handle(), false, 0, "__user_context"));
 }
 

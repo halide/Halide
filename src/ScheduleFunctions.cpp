@@ -857,9 +857,9 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
     const FuncSchedule &s = func.schedule();
     for (size_t stage = 0; stage <= func.updates().size(); stage++) {
         for (auto b : s.bounds()) {
-            string prefix = func.name() + ".s" + std::to_string(stage) + "." + b.var;
-            string min_name = prefix + ".min_unbounded";
-            string max_name = prefix + ".max_unbounded";
+            Name prefix = Name(func.name()).stage(stage).qualify(b.var);
+            Name min_name = prefix.min().unbounded();
+            Name max_name = prefix.max().unbounded();
             Expr min_var = Variable::make(Int(32), min_name);
             Expr max_var = Variable::make(Int(32), max_name);
             if (!b.min.defined()) {

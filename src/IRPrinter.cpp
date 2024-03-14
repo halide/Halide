@@ -267,6 +267,10 @@ void IRPrinter::test() {
     std::cout << "IRPrinter test passed\n";
 }
 
+std::ostream &operator<<(std::ostream &stream, const Name &n) {
+    return stream << n.str();
+}
+
 ostream &operator<<(ostream &stream, const AssociativePattern &p) {
     stream << "{\n";
     for (size_t i = 0; i < p.ops.size(); ++i) {
