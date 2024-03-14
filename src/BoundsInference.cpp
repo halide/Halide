@@ -28,18 +28,18 @@ using std::vector;
 namespace {
 
 bool var_name_match(const Name &candidate, const Name &var) {
-    internal_assert(var == var.unqualified())
+    internal_assert(!var.is_compound())
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
-    return candidate.unqualified() == var;
+    return candidate.ends_with(var);
 }
 
 class DependsOnBoundsInference : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Variable *var) override {
-        if (Name(var->name).unqualified() == "max" ||
-            Name(var->name).unqualified() == "min") {
+        if (Name(var->name).ends_with("max") ||
+            Name(var->name).ends_with("min")) {
             result = true;
         }
     }
@@ -237,7 +237,7 @@ protected:
                 Expr body = get_qualified_body(f, op->value_index);
                 const vector<string> &func_args = f.args();
                 for (size_t i = 0; i < args.size(); i++) {
-                    body = Let::make(Name(f.name()).qualify(func_args[i]), args[i], body);
+                    body = Let::make(Name(f.name()).append(func_args[i]), args[i], body);
                 }
                 return body;
             }
@@ -464,7 +464,7 @@ public:
 
             const vector<string> func_args = func.args();
 
-            Name var = Name(loop_level).unqualified();
+            Name var = Name(loop_level).suffix();
 
             for (const pair<const pair<Name, int>, Box> &i : bounds) {
                 Name func_name{i.first.first};
@@ -503,8 +503,8 @@ public:
                     for (size_t i = 0; i < always_pure_dims.size(); i++) {
                         if (always_pure_dims[i]) {
                             const string &dim = func_args[i];
-                            Expr min = Variable::make(Int(32), last_stage.qualify(dim).min());
-                            Expr max = Variable::make(Int(32), last_stage.qualify(dim).max());
+                            Expr min = Variable::make(Int(32), last_stage.append(dim).min());
+                            Expr max = Variable::make(Int(32), last_stage.append(dim).max());
                             b[i] = Interval(min, max);
                         }
                     }
@@ -556,7 +556,7 @@ public:
                         Expr new_max = inner_max + shift;
 
                         // Modify the region to be computed accordingly
-                        auto var = Name(func.name()).stage(0).qualify(func_args[i]);
+                        auto var = Name(func.name()).stage(0).append(func_args[i]);
                         s = LetStmt::make(var.max(), new_max, s);
                         s = LetStmt::make(var.min(), new_min, s);
                     }
@@ -586,7 +586,7 @@ public:
                         Expr new_max = Call::make(Int(32), Call::buffer_get_max,
                                                   {inner_query, i}, Call::Extern);
 
-                        Name var = Name(func.name()).stage(0).qualify(func_args[i]);
+                        Name var = Name(func.name()).stage(0).append(func_args[i]);
                         s = LetStmt::make(var.max(), new_max, s);
                         s = LetStmt::make(var.min(), new_min, s);
                     }
@@ -603,8 +603,8 @@ public:
                 LoopLevel store_at = func.schedule().store_level();
 
                 for (auto bound : func.schedule().bounds()) {
-                    Name min_var = prefix.qualify(bound.var).min();
-                    Name max_var = prefix.qualify(bound.var).max();
+                    Name min_var = prefix.append(bound.var).min();
+                    Name max_var = prefix.append(bound.var).max();
                     Expr min_required = Variable::make(Int(32), min_var);
                     Expr max_required = Variable::make(Int(32), max_var);
 
@@ -653,7 +653,7 @@ public:
             }
 
             for (size_t d = 0; d < b.size(); d++) {
-                Name arg = name.stage(stage).qualify(func_args[d]);
+                Name arg = name.stage(stage).append(func_args[d]);
 
                 const bool clamp_to_outer_bounds =
                     !in_pipeline.empty() && has_extern_consumer.count(name);
@@ -684,7 +684,7 @@ public:
 
             if (stage > 0) {
                 for (const ReductionVariable &rvar : rvars) {
-                    Name arg = name.stage(stage).qualify(rvar.var);
+                    Name arg = name.stage(stage).append(rvar.var);
                     s = LetStmt::make(arg.min(), rvar.min, s);
                     s = LetStmt::make(arg.max(), rvar.extent + rvar.min - 1, s);
                 }
@@ -764,7 +764,7 @@ public:
                 builder.type = func.output_types()[j];
                 builder.dimensions = func.dimensions();
                 for (const string &arg : func.args()) {
-                    Name prefix = Name(func.name()).stage(stage).qualify(arg);
+                    Name prefix = Name(func.name()).stage(stage).append(arg);
                     Expr min = Variable::make(Int(32), prefix.min());
                     Expr max = Variable::make(Int(32), prefix.max());
                     builder.mins.push_back(min);
@@ -842,14 +842,14 @@ public:
         // different reduction variables as well.
         void populate_scope(Scope<Interval> &result) {
             for (const string &farg : func.args()) {
-                Name arg = name.stage(stage).qualify(farg);
+                Name arg = name.stage(stage).append(farg);
                 result.push(farg,
                             Interval(Variable::make(Int(32), arg.min()),
                                      Variable::make(Int(32), arg.max())));
             }
             if (stage > 0) {
                 for (const ReductionVariable &rv : rvars) {
-                    Name arg = name.stage(stage).qualify(rv.var);
+                    Name arg = name.stage(stage).append(rv.var);
                     result.push(rv.var, Interval(Variable::make(Int(32), arg.min()),
                                                  Variable::make(Int(32), arg.max())));
                 }
@@ -1123,7 +1123,7 @@ public:
         int stage_index = -1;
         Name stage_name;
         for (size_t i = 0; i < stages.size(); i++) {
-            if (Name(op->name).belongs_to_func(stages[i].stage_prefix)) {
+            if (Name(op->name).starts_with(stages[i].stage_prefix)) {
                 producing = i;
                 f = stages[i].func;
                 stage_index = (int)stages[i].stage;
@@ -1242,7 +1242,7 @@ public:
                     internal_assert(f_args.size() == box.size());
                     for (size_t i = 0; i < box.size(); i++) {
                         internal_assert(box[i].is_bounded());
-                        Name var = Name(b.first).qualify(f_args[i]);
+                        Name var = Name(b.first).append(f_args[i]);
 
                         if (box[i].is_single_point()) {
                             body = LetStmt::make(var.max(), Variable::make(Int(32), var.min()), body);
@@ -1283,7 +1283,7 @@ public:
                         }
                     }
                     for (const string &i : vars) {
-                        Name var = s.stage_prefix.qualify(i);
+                        Name var = s.stage_prefix.append(i);
                         Interval in = bounds_of_inner_var(var, body);
                         if (in.is_bounded()) {
                             // bounds_of_inner_var doesn't understand

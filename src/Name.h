@@ -29,10 +29,10 @@ public:
     Name &operator=(const Name &) = default;
     Name &operator=(Name &&) = default;
 
-    Name qualify(const Name &suffix) const;
-    Name qualify(const std::string &suffix) const;
-    Name qualify(const char *suffix) const;
-    Name qualify(int i) const;
+    Name append(const Name &suffix) const;
+    Name append(const std::string &suffix) const;
+    Name append(const char *suffix) const;
+    Name append(int i) const;
     Expr qualify(const Expr &expr) const;
     Name min() const;
     Name max() const;
@@ -52,14 +52,15 @@ public:
     Name tuple_component(int tuple_index) const;
     Name buffer() const;
     Name stage(int stage) const;
-    bool belongs_to_func(const Name &func) const;
-    bool matches_var(const Name &var) const;
+    bool starts_with(const Name &prefix) const;
+    bool ends_with(const Name &var) const;
     Name bounds_query() const;
     Name bounds_query(const Name &func) const;
     Name outer_bounds_query() const;
     Name output(int i) const;
     Name unbounded() const;
-    Name unqualified() const;
+    Name suffix() const;
+    bool is_compound() const;
     Name guarded() const;
 
     bool empty() const {

@@ -4,16 +4,16 @@
 namespace Halide {
 namespace Internal {
 
-Name Name::qualify(const Name &suffix) const {
+Name Name::append(const Name &suffix) const {
     return s + "." + suffix.s;
 }
-Name Name::qualify(const std::string &suffix) const {
+Name Name::append(const std::string &suffix) const {
     return s + "." + suffix;
 }
-Name Name::qualify(const char *suffix) const {
+Name Name::append(const char *suffix) const {
     return s + "." + std::string(suffix);
 }
-Name Name::qualify(int i) const {
+Name Name::append(int i) const {
     return s + "." + std::to_string(i);
 }
 Expr Name::qualify(const Expr &e) const {
@@ -73,11 +73,11 @@ Name Name::buffer() const {
 Name Name::stage(int stage) const {
     return s + ".s" + std::to_string(stage);
 }
-bool Name::belongs_to_func(const Name &func) const {
-    return starts_with(s, func.s + ".");
+bool Name::starts_with(const Name &func) const {
+    return Halide::Internal::starts_with(s, func.s + ".");
 }
-bool Name::matches_var(const Name &var) const {
-    return ends_with(s, "." + var.s);
+bool Name::ends_with(const Name &var) const {
+    return Halide::Internal::ends_with(s, "." + var.s);
 }
 Name Name::bounds_query() const {
     return s + ".bounds_query";
@@ -97,13 +97,16 @@ Name Name::unbounded() const {
 Name Name::guarded() const {
     return s + ".guarded";
 }
-Name Name::unqualified() const {
+Name Name::suffix() const {
     size_t last_dot = s.rfind('.');
     if (last_dot == std::string::npos) {
         return *this;
     } else {
         return s.substr(last_dot + 1);
     }
+}
+bool Name::is_compound() const {
+    return s.find('.') != std::string::npos;
 }
 }  // namespace Internal
 }  // namespace Halide

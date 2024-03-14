@@ -857,7 +857,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
     const FuncSchedule &s = func.schedule();
     for (size_t stage = 0; stage <= func.updates().size(); stage++) {
         for (auto b : s.bounds()) {
-            Name prefix = Name(func.name()).stage(stage).qualify(b.var);
+            Name prefix = Name(func.name()).stage(stage).append(b.var);
             Name min_name = prefix.min().unbounded();
             Name max_name = prefix.max().unbounded();
             Expr min_var = Variable::make(Int(32), min_name);
