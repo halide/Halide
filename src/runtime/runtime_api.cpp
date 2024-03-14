@@ -195,7 +195,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_set_trace_file,
     (void *)&halide_shutdown_thread_pool,
     (void *)&halide_shutdown_trace,
-    (void *)&halide_sleep_ms,
+    (void *)&halide_sleep_us,
     (void *)&halide_spawn_thread,
     (void *)&halide_start_clock,
     (void *)&halide_start_timer_chain,

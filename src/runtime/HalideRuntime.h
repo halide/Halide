@@ -1246,6 +1246,9 @@ enum halide_error_code_t {
     /** A factor used to split a loop was discovered to be zero or negative at
      * runtime. */
     halide_error_code_split_factor_not_positive = -46,
+
+    /** Profiling failed for a pipeline invocation. */
+    halide_error_code_cannot_profile_pipeline = -47,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1829,7 +1832,7 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
 /** Per-pipeline state tracked by the sampling profiler. These exist
  * in a linked list. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
-    /** Total time spent inside this pipeline (in nanoseconds) */
+    /** Total time spent in this pipeline (in nanoseconds) */
     uint64_t time;
 
     /** The current memory allocation of funcs in this pipeline. */
@@ -1871,9 +1874,12 @@ struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
 /** Per-invocation-of-a-pipeline state. Lives on the stack of the Halide
  * code. Exists in a doubly-linked list to that it can be cleanly
  * removed. */
-struct halide_profiler_instance_state {
-    /** Time spent in this instance. */
-    uint64_t time;
+struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_instance_state {
+    /** Time billed to funcs in this instance by the sampling thread. */
+    uint64_t billed_time;
+
+    /** Wall clock time of the start of the instance. */
+    uint64_t start_time;
 
     /** The current memory allocation of funcs in this instance. */
     uint64_t memory_current;
@@ -1920,9 +1926,6 @@ struct halide_profiler_instance_state {
     /** Whether or not this instance should count towards pipeline
      * statistics. */
     int should_collect_statistics;
-
-    /** Make the size of the struct a multiple of 8 */
-    int padding;
 };
 
 /** The global state of the profiler. */
@@ -1952,8 +1955,9 @@ struct halide_profiler_state {
      * elsewhere (e.g. on an accelerator). */
     void (*get_remote_profiler_state)(int *func, int *active_workers);
 
-    /** The amount of time the profiler thread sleeps between samples
-     * in milliseconds. Defaults to 1 */
+    /** The amount of time the profiler thread sleeps between samples in
+     * microseconds. Defaults to 1000. To change it call
+     * halide_profiler_get_state and mutate this field. */
     int sleep_time;
 
     /** Set to 1 when you want the profiler to wait for all running instances to
@@ -1983,21 +1987,17 @@ extern void halide_profiler_reset(void);
 
 /** Reset all profiler state. Blocks until all running profiled Halide
  * pipelines exit. */
-void halide_profiler_shutdown(void);
+extern void halide_profiler_shutdown(void);
 
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
 
-/** For timer based profiling, this routine starts the timer chain running.
- * halide_get_profiler_state can be called to get the current timer interval.
- */
-extern void halide_start_timer_chain(void);
 /** These routines are called to temporarily disable and then reenable
- * timer interuppts for profiling */
+ * the profiler. */
 //@{
-extern void halide_disable_timer_interrupt(void);
-extern void halide_enable_timer_interrupt(void);
+extern void halide_profiler_lock(struct halide_profiler_state *);
+extern void halide_profiler_unlock(struct halide_profiler_state *);
 //@}
 
 /// \name "Float16" functions

@@ -1391,7 +1391,7 @@ Stmt bounds_inference(Stmt s,
     if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
         // Add a note in the IR for what profiling should cover, so that it doesn't
         // include bounds queries as pipeline executions.
-        marker = Call::make(Int(32), Call::profiling_marker, {}, Call::Intrinsic);
+        marker = Call::make(Int(32), Call::profiling_enable_instance_marker, {}, Call::Intrinsic);
         s = Block::make(Evaluate::make(marker), s);
     }
 

@@ -153,7 +153,7 @@ WEAK void *halide_get_library_symbol(void *lib, const char *name);
 
 WEAK int halide_start_clock(void *user_context);
 WEAK int64_t halide_current_time_ns(void *user_context);
-WEAK void halide_sleep_ms(void *user_context, int ms);
+WEAK void halide_sleep_us(void *user_context, int us);
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj);
 WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *obj);
 WEAK void halide_device_host_nop_free(void *user_context, void *obj);
@@ -177,6 +177,11 @@ WEAK int halide_profiler_instance_start(void *user_context,
                                         halide_profiler_instance_state *instance);
 WEAK int halide_profiler_instance_end(void *user_context,
                                       halide_profiler_instance_state *instance);
+
+WEAK void halide_start_timer_chain();
+WEAK void halide_disable_timer_interrupt();
+WEAK void halide_enable_timer_interrupt();
+
 WEAK int halide_host_cpu_count();
 
 WEAK int halide_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf,

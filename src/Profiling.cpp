@@ -246,7 +246,7 @@ private:
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::profiling_marker)) {
+        if (op->is_intrinsic(Call::profiling_enable_instance_marker)) {
             // We're out of the bounds query code. This instance should be
             // tracked (including any samples taken before this point.
             return Call::make(Int(32), "halide_profiler_enable_instance",
@@ -477,7 +477,7 @@ private:
             // Get the profiler state pointer from scratch inside the
             // kernel. There will be a separate copy of the state on
             // the DSP that the host side will periodically query.
-            Expr get_state = Call::make(Handle(), "halide_profiler_get_state", {}, Call::Extern);
+            Expr get_state = Call::make(Handle(), "halide_hexagon_remote_profiler_get_global_instance", {}, Call::Extern);
             body = substitute(names.profiler_instance, Variable::make(Handle(), names.hvx_profiler_instance), body);
             body = LetStmt::make(names.hvx_profiler_instance, get_state, body);
         } else if (op->device_api == DeviceAPI::None ||
@@ -668,7 +668,7 @@ Stmt inject_profiling(const Stmt &stmt, const string &pipeline_name, const std::
     const int instance_size_bytes = sizeof(halide_profiler_instance_state) + num_funcs * sizeof(halide_profiler_func_stats);
 
     s = Allocate::make(names.profiler_instance, UInt(64), MemoryType::Auto,
-                       {instance_size_bytes / 8}, const_true(), s);
+                       {(instance_size_bytes + 7) / 8}, const_true(), s);
 
     // We have nested definitions of the sampling token
     s = uniquify_variable_names(s);

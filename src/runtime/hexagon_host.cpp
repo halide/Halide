@@ -478,18 +478,22 @@ WEAK int halide_hexagon_run(void *user_context,
     // get_remote_profiler_func to retrieve the current
     // func. Otherwise leave it alone - the cost of remote running
     // will be billed to the calling Func.
+    halide_profiler_state *s = halide_profiler_get_state();
     if (remote_poll_profiler_state) {
-        halide_profiler_get_state()->get_remote_profiler_state = get_remote_profiler_state;
+        halide_profiler_lock(s);
+        const halide_profiler_instance_state *instance = s->instances;
+        // The instance that called this runtime function should be registered.
+        halide_abort_if_false(user_context, instance);
+        if (instance->next) {
+            halide_profiler_unlock(s);
+            error(user_context) << "Hexagon: multiple simultaneous profiled pipelines is unsupported.";
+            return halide_error_code_cannot_profile_pipeline;
+        }
+        s->get_remote_profiler_state = get_remote_profiler_state;
         if (remote_profiler_set_current_func) {
-            const halide_profiler_instance_state *instance = halide_profiler_get_state()->instances;
-            // The instance that called this runtime function should be registered.
-            halide_abort_if_false(user_context, instance);
-            if (instance->next) {
-                error(user_context) << "Hexagon: multiple simultaneous profiled pipelines is unsupported.";
-                return halide_error_code_generic_error;
-            }
             remote_profiler_set_current_func(instance->current_func);
         }
+        halide_profiler_unlock(s);
     }
 
     // Call the pipeline on the device side.
@@ -505,7 +509,9 @@ WEAK int halide_hexagon_run(void *user_context,
         return halide_error_code_generic_error;
     }
 
-    halide_profiler_get_state()->get_remote_profiler_state = nullptr;
+    halide_profiler_lock(s);
+    s->get_remote_profiler_state = nullptr;
+    halide_profiler_unlock(s);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);

@@ -569,7 +569,7 @@ struct Call : public ExprNode<Call> {
         mux,
         popcount,
         prefetch,
-        profiling_marker,
+        profiling_enable_instance_marker,
         promise_clamped,
         random,
         register_destructor,
