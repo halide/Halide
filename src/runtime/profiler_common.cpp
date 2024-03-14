@@ -317,7 +317,10 @@ WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instan
         for (int f = 0; f < p->num_funcs; f++) {
             halide_profiler_func_stats *func = p->funcs + f;
             const halide_profiler_func_stats *instance_func = instance->funcs + f;
-            func->time += (uint64_t)(instance_func->time * adjustment + 0.5);
+            // clang-tidy wants me to use a c standard library function to do
+            // the rounding below, but those aren't guaranteed to be available
+            // when compiling the runtime.
+            func->time += (uint64_t)(instance_func->time * adjustment + 0.5);  // NOLINT
             func->active_threads_numerator += instance_func->active_threads_numerator;
             func->active_threads_denominator += instance_func->active_threads_denominator;
             func->num_allocs += instance_func->num_allocs;
