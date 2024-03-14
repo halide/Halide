@@ -88,7 +88,7 @@ private:
     struct HoistedStorageData {
         string name;
         vector<HoistedAllocationInfo> hoisted_allocations;
-        Scope<Interval> loop_vars;
+        vector<pair<string, Interval>> loop_vars;
         Scope<Expr> scope;
 
         HoistedStorageData(const string &n)
@@ -304,8 +304,17 @@ private:
                 }
 
                 e = simplify(common_subexpression_elimination(e));
-                Interval bounds = bounds_of_expr_in_scope(e, hoisted_storage_data.loop_vars);
-                return bounds.max;
+                // Find bounds of expression using the intervals of the loop variables. The loop variables may depend on
+                // the other loop variables, so we just call bounds_of_expr_in_scope for each loop variable separately
+                // in a reverse order.
+                for (auto it = hoisted_storage_data.loop_vars.rbegin(); it != hoisted_storage_data.loop_vars.rend(); ++it) {
+                    Scope<Interval> one_loop_var;
+                    one_loop_var.push(it->first, it->second);
+                    Interval bounds = bounds_of_expr_in_scope(e, one_loop_var);
+                    e = bounds.max;
+                }
+
+                return e;
             };
 
             vector<Expr> bounded_extents;
@@ -533,14 +542,14 @@ private:
             expanded_min = simplify(expand_expr(expanded_min, it->scope));
             expanded_extent = expand_expr(expanded_extent, it->scope);
             Interval loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
-            it->loop_vars.push(op->name, loop_bounds);
+            it->loop_vars.emplace_back(op->name, loop_bounds);
         }
 
         ScopedValue<bool> old_in_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
         Stmt stmt = IRMutator::visit(op);
 
         for (auto &p : hoisted_storages) {
-            p.loop_vars.pop(op->name);
+            p.loop_vars.pop_back();
         }
 
         return stmt;
