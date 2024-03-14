@@ -40,7 +40,7 @@ class Function;
  * storage flattening, but after all bounds inference.
  *
  */
-Stmt inject_profiling(Stmt, const std::string &, const std::map<std::string, Function> &env);
+Stmt inject_profiling(const Stmt &, const std::string &, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

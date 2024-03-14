@@ -50,7 +50,7 @@ WEAK extern "C" void halide_start_timer_chain() {
         halide_profiler_state *s = halide_profiler_get_state();
         itimerval timer_state;
         timer_state.it_interval.tv_sec = 0;
-        timer_state.it_interval.tv_usec = s->sleep_time * 1000.0;
+        timer_state.it_interval.tv_usec = s->sleep_time;
         timer_state.it_value = timer_state.it_interval;
 
         signal(SIGPROF, &profiler_handler);
