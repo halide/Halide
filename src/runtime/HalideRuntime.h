@@ -195,7 +195,7 @@ extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mute
 /** Functions for constructing/destroying/locking/unlocking arrays of mutexes. */
 struct halide_mutex_array;
 //@{
-extern struct halide_mutex_array *halide_mutex_array_create(int sz);
+extern struct halide_mutex_array *halide_mutex_array_create(uint64_t sz);
 extern void halide_mutex_array_destroy(void *user_context, void *array);
 extern int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
 extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
@@ -1246,6 +1246,10 @@ enum halide_error_code_t {
     /** A factor used to split a loop was discovered to be zero or negative at
      * runtime. */
     halide_error_code_split_factor_not_positive = -46,
+
+    /** "vscale" value of Scalable Vector detected in runtime does not match
+     * the vscale value used in compilation. */
+    halide_error_code_vscale_invalid = -47,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1321,7 +1325,7 @@ extern int halide_error_storage_bound_too_small(void *user_context, const char *
                                                 int provided_size, int required_size);
 extern int halide_error_device_crop_failed(void *user_context);
 extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
-
+extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
 // @}
 
 /** Optional features a compilation Target can have.

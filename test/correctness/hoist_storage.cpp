@@ -604,6 +604,20 @@ int main(int argc, char **argv) {
         });
     }
 
+    {
+        ImageParam input(UInt(8), 2);
+        Var x{"x"}, y{"y"}, yo{"yo"}, yi{"yi"};
+        Func f[3];
+        f[0] = BoundaryConditions::repeat_edge(input);
+        f[1](x, y) = ((f[0]((x / 2) + 2, (y / 2) + 2)) + (f[0](x + 1, y)));
+        f[2](x, y) = ((f[1](x * 2, (y * 2) + -2)) + (f[1](x + -1, y + -1)));
+        f[2].split(y, yo, yi, 16);
+        f[0].hoist_storage(f[2], yo).compute_at(f[1], x);
+        f[1].hoist_storage_root().compute_at(f[2], yi);
+
+        f[2].compile_jit();
+    }
+
     printf("Success!\n");
     return 0;
 }

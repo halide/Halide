@@ -2562,6 +2562,15 @@ public:
      */
     Func &add_trace_tag(const std::string &trace_tag);
 
+    /** Marks this function as a function that should not be profiled
+     * when using the target feature Profile or ProfileByTimer.
+     * This is useful when this function is does too little work at once
+     * such that the overhead of setting the profiling token might
+     * become significant, or that the measured time is not representative
+     * due to modern processors (instruction level parallelism, out-of-order
+     * execution). */
+    Func &no_profiling();
+
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide
      * functions */

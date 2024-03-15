@@ -1112,11 +1112,12 @@ void IRPrinter::visit(const VectorReduce *op) {
 
 void IRPrinter::visit(const Atomic *op) {
     if (op->mutex_name.empty()) {
-        stream << get_indent() << "atomic {\n";
+        stream << get_indent() << "atomic ("
+               << op->producer_name << ") {\n";
     } else {
-        stream << get_indent() << "atomic (";
-        stream << op->mutex_name;
-        stream << ") {\n";
+        stream << get_indent() << "atomic ("
+               << op->producer_name << ", "
+               << op->mutex_name << ") {\n";
     }
     indent += 2;
     print(op->body);
