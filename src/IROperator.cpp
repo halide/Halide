@@ -502,7 +502,7 @@ Expr lossless_cast(Type t, Expr e) {
             Expr a = lossless_cast(t.narrow(), sub->a);
             Expr b = lossless_cast(t.narrow(), sub->b);
             if (a.defined() && b.defined()) {
-                return cast(t, a) - cast(t, b);
+                return cast(t, a) + cast(t, b);
             } else {
                 return Expr();
             }
