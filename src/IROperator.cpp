@@ -12,6 +12,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Interval.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -434,125 +435,175 @@ Expr const_false(int w) {
     return make_zero(UInt(1, w));
 }
 
+namespace {
+
+ConstantInterval constant_integer_bounds(const Expr &e) {
+    auto ret = [&]() {
+        // Compute the bounds of each IR node from the bounds of its args. Math
+        // on ConstantInterval is in terms of infinite integers, so any op that
+        // can overflow needs to cast the resulting interval back to the output
+        // type.
+        if (const UIntImm *op = e.as<UIntImm>()) {
+            if (Int(64).can_represent(op->value)) {
+                return ConstantInterval::single_point((int64_t)(op->value));
+            } else {
+                return ConstantInterval::everything();
+            }
+        } else if (const IntImm *op = e.as<IntImm>()) {
+            return ConstantInterval::single_point(op->value);
+        } else if (const Add *op = e.as<Add>()) {
+            return cast(op->type, constant_integer_bounds(op->a) + constant_integer_bounds(op->b));
+        } else if (const Sub *op = e.as<Sub>()) {
+            return cast(op->type, constant_integer_bounds(op->a) - constant_integer_bounds(op->b));
+        } else if (const Mul *op = e.as<Mul>()) {
+            return cast(op->type, constant_integer_bounds(op->a) * constant_integer_bounds(op->b));
+        } else if (const Div *op = e.as<Div>()) {
+            // Can overflow when dividing type.min() by -1
+            return cast(op->type, constant_integer_bounds(op->a) / constant_integer_bounds(op->b));
+        } else if (const Min *op = e.as<Min>()) {
+            return min(constant_integer_bounds(op->a), constant_integer_bounds(op->b));
+        } else if (const Max *op = e.as<Max>()) {
+            return max(constant_integer_bounds(op->a), constant_integer_bounds(op->b));
+        } else if (const Cast *op = e.as<Cast>()) {
+            return cast(op->type, constant_integer_bounds(op->value));
+        } else if (const Broadcast *op = e.as<Broadcast>()) {
+            return constant_integer_bounds(op->value);
+        } else if (const VectorReduce *op = e.as<VectorReduce>()) {
+            int f = op->value.type().lanes() / op->type.lanes();
+            ConstantInterval factor(f, f);
+            ConstantInterval arg_bounds = constant_integer_bounds(op->value);
+            switch (op->op) {
+            case VectorReduce::Add:
+                return cast(op->type, arg_bounds * factor);
+            case VectorReduce::SaturatingAdd:
+                return saturating_cast(op->type, arg_bounds * factor);
+            case VectorReduce::Min:
+            case VectorReduce::Max:
+            case VectorReduce::And:
+            case VectorReduce::Or:
+                return arg_bounds;
+            default:;
+            }
+        } else if (const Shuffle *op = e.as<Shuffle>()) {
+            ConstantInterval arg_bounds = constant_integer_bounds(op->vectors[0]);
+            for (size_t i = 1; i < op->vectors.size(); i++) {
+                arg_bounds.include(constant_integer_bounds(op->vectors[i]));
+            }
+            return arg_bounds;
+        } else if (const Call *op = e.as<Call>()) {
+            // For all intrinsics that can't possibly overflow, we don't need the
+            // final cast.
+            if (op->is_intrinsic(Call::abs)) {
+                return abs(constant_integer_bounds(op->args[0]));
+            } else if (op->is_intrinsic(Call::absd)) {
+                return abs(constant_integer_bounds(op->args[0]) -
+                           constant_integer_bounds(op->args[1]));
+            } else if (op->is_intrinsic(Call::count_leading_zeros) ||
+                       op->is_intrinsic(Call::count_trailing_zeros)) {
+                // Conservatively just say it's the potential number of zeros in the type.
+                return ConstantInterval(0, op->args[0].type().bits());
+            } else if (op->is_intrinsic(Call::halving_add)) {
+                return (constant_integer_bounds(op->args[0]) +
+                        constant_integer_bounds(op->args[1])) /
+                       ConstantInterval(2, 2);
+            } else if (op->is_intrinsic(Call::halving_sub)) {
+                return cast(op->type, (constant_integer_bounds(op->args[0]) -
+                                       constant_integer_bounds(op->args[1])) /
+                                          ConstantInterval(2, 2));
+            } else if (op->is_intrinsic(Call::rounding_halving_add)) {
+                return (constant_integer_bounds(op->args[0]) +
+                        constant_integer_bounds(op->args[1]) +
+                        ConstantInterval(1, 1)) /
+                       ConstantInterval(2, 2);
+            } else if (op->is_intrinsic(Call::saturating_add)) {
+                return saturating_cast(op->type,
+                                       (constant_integer_bounds(op->args[0]) +
+                                        constant_integer_bounds(op->args[1])));
+            } else if (op->is_intrinsic(Call::saturating_sub)) {
+                return saturating_cast(op->type,
+                                       (constant_integer_bounds(op->args[0]) -
+                                        constant_integer_bounds(op->args[1])));
+            } else if (op->is_intrinsic(Call::widening_add)) {
+                return constant_integer_bounds(op->args[0]) +
+                       constant_integer_bounds(op->args[1]);
+            } else if (op->is_intrinsic(Call::widening_sub)) {
+                // widening ops can't overflow ...
+                return constant_integer_bounds(op->args[0]) -
+                       constant_integer_bounds(op->args[1]);
+            } else if (op->is_intrinsic(Call::widening_mul)) {
+                return constant_integer_bounds(op->args[0]) *
+                       constant_integer_bounds(op->args[1]);
+            } else if (op->is_intrinsic(Call::widen_right_add)) {
+                // but the widen_right versions can overflow
+                return cast(op->type, (constant_integer_bounds(op->args[0]) +
+                                       constant_integer_bounds(op->args[1])));
+            } else if (op->is_intrinsic(Call::widen_right_sub)) {
+                return cast(op->type, (constant_integer_bounds(op->args[0]) -
+                                       constant_integer_bounds(op->args[1])));
+            } else if (op->is_intrinsic(Call::widen_right_mul)) {
+                return cast(op->type, (constant_integer_bounds(op->args[0]) *
+                                       constant_integer_bounds(op->args[1])));
+            }
+            // We could include the various shifting intrinsics here too, but we'd
+            // have to check for the sign on the second argument.
+        }
+
+        return ConstantInterval::bounds_of_type(e.type());
+    }();
+
+    // debug(0) << e << " -> " << ret.min_defined << " " << ret.min << " " << ret.max_defined << " " << ret.max << "\n";
+
+    if (ret.min_defined) {
+        internal_assert((!ret.min_defined || e.type().can_represent(ret.min)) &&
+                        (!ret.max_defined || e.type().can_represent(ret.max)))
+            << "Expr: " << e << "\n"
+            << " min_defined = " << ret.min_defined << "\n"
+            << " max_defined = " << ret.max_defined << "\n"
+            << " min = " << ret.min << "\n"
+            << " max = " << ret.max << "\n";
+    }
+
+    return ret;
+}
+}  // namespace
+
 Expr lossless_cast(Type t, Expr e) {
     if (!e.defined() || t == e.type()) {
         return e;
     } else if (t.can_represent(e.type())) {
         return cast(t, std::move(e));
-    }
-
-    if (const Cast *c = e.as<Cast>()) {
+    } else if (const Cast *c = e.as<Cast>()) {
         if (c->type.can_represent(c->value.type())) {
-            // We can recurse into widening casts.
             return lossless_cast(t, c->value);
         } else {
             return Expr();
         }
-    }
-
-    if (const Broadcast *b = e.as<Broadcast>()) {
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
         Expr v = lossless_cast(t.element_of(), b->value);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
         } else {
             return Expr();
         }
-    }
-
-    if (const IntImm *i = e.as<IntImm>()) {
+    } else if (const IntImm *i = e.as<IntImm>()) {
         if (t.can_represent(i->value)) {
             return make_const(t, i->value);
         } else {
             return Expr();
         }
-    }
-
-    if (const UIntImm *i = e.as<UIntImm>()) {
+    } else if (const UIntImm *i = e.as<UIntImm>()) {
         if (t.can_represent(i->value)) {
             return make_const(t, i->value);
         } else {
             return Expr();
         }
-    }
-
-    if (const FloatImm *f = e.as<FloatImm>()) {
+    } else if (const FloatImm *f = e.as<FloatImm>()) {
         if (t.can_represent(f->value)) {
             return make_const(t, f->value);
         } else {
             return Expr();
         }
-    }
-
-    if (t.is_int_or_uint() && t.bits() >= 16) {
-        if (const Add *add = e.as<Add>()) {
-            // If we can losslessly narrow the args even more
-            // aggressively, we're good.
-            // E.g. lossless_cast(uint16, (uint32)(some_u8) + 37)
-            // = (uint16)(some_u8) + 37
-            Expr a = lossless_cast(t.narrow(), add->a);
-            Expr b = lossless_cast(t.narrow(), add->b);
-            if (a.defined() && b.defined()) {
-                return cast(t, a) + cast(t, b);
-            } else {
-                return Expr();
-            }
-        }
-
-        if (const Sub *sub = e.as<Sub>()) {
-            Expr a = lossless_cast(t.narrow(), sub->a);
-            Expr b = lossless_cast(t.narrow(), sub->b);
-            if (a.defined() && b.defined()) {
-                return cast(t, a) - cast(t, b);
-            } else {
-                return Expr();
-            }
-        }
-
-        if (const Mul *mul = e.as<Mul>()) {
-            Expr a = lossless_cast(t.narrow(), mul->a);
-            Expr b = lossless_cast(t.narrow(), mul->b);
-            if (a.defined() && b.defined()) {
-                return cast(t, a) * cast(t, b);
-            } else {
-                return Expr();
-            }
-        }
-
-        if (const VectorReduce *reduce = e.as<VectorReduce>()) {
-            const int factor = reduce->value.type().lanes() / reduce->type.lanes();
-            switch (reduce->op) {
-            case VectorReduce::Add:
-                // A horizontal add requires one extra bit per factor
-                // of two in the reduction factor. E.g. a reduction of
-                // 8 vector lanes down to 2 requires 2 extra bits in
-                // the output. We only deal with power-of-two types
-                // though, so just make sure the reduction factor
-                // isn't so large that it will more than double the
-                // number of bits required.
-                if (factor < (1 << (t.bits() / 2))) {
-                    Type narrower = reduce->value.type().with_bits(t.bits() / 2);
-                    Expr val = lossless_cast(narrower, reduce->value);
-                    if (val.defined()) {
-                        val = cast(narrower.with_bits(t.bits()), val);
-                        return VectorReduce::make(reduce->op, val, reduce->type.lanes());
-                    }
-                }
-                break;
-            case VectorReduce::Max:
-            case VectorReduce::Min: {
-                Expr val = lossless_cast(t, reduce->value);
-                if (val.defined()) {
-                    return VectorReduce::make(reduce->op, val, reduce->type.lanes());
-                }
-                break;
-            }
-            default:
-                break;
-            }
-        }
-    }
-
-    if (const Shuffle *shuf = e.as<Shuffle>()) {
+    } else if (const Shuffle *shuf = e.as<Shuffle>()) {
         std::vector<Expr> vecs;
         for (const auto &vec : shuf->vectors) {
             vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec));
@@ -561,6 +612,48 @@ Expr lossless_cast(Type t, Expr e) {
             }
         }
         return Shuffle::make(vecs, shuf->indices);
+    } else if (t.is_int_or_uint()) {
+        // We'll just throw a cast around something, if the bounds are small
+        // enough.
+        ConstantInterval ci = constant_integer_bounds(e);
+        if (ci.is_bounded() &&
+            t.can_represent(ci.max) &&
+            t.can_represent(ci.min)) {
+
+            // There are certain IR nodes where if the result is expressible
+            // using some type, and the args are expressible using that type,
+            // then the operation can just be done in that type.
+            if (const Add *op = e.as<Add>()) {
+                Expr a = lossless_cast(t, op->a);
+                Expr b = lossless_cast(t, op->b);
+                if (a.defined() && b.defined()) {
+                    return a + b;
+                }
+            } else if (const Sub *op = e.as<Sub>()) {
+                Expr a = lossless_cast(t, op->a);
+                Expr b = lossless_cast(t, op->b);
+                if (a.defined() && b.defined()) {
+                    return a - b;
+                }
+            } else if (const Mul *op = e.as<Mul>()) {
+                Expr a = lossless_cast(t, op->a);
+                Expr b = lossless_cast(t, op->b);
+                if (a.defined() && b.defined()) {
+                    return a * b;
+                }
+            } else if (const VectorReduce *op = e.as<VectorReduce>()) {
+                if (op->op == VectorReduce::Add ||
+                    op->op == VectorReduce::Min ||
+                    op->op == VectorReduce::Max) {
+                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value);
+                    if (v.defined()) {
+                        return VectorReduce::make(op->op, v, op->type.lanes());
+                    }
+                }
+            }
+
+            return cast(t, e);
+        }
     }
 
     return Expr();

@@ -3,6 +3,8 @@
 #include "IRMatch.h"
 #include "IROperator.h"
 
+using namespace Halide::Internal;
+
 namespace Halide {
 namespace Internal {
 
@@ -237,11 +239,336 @@ void ConstantInterval::include(int64_t x) {
     }
 }
 
+bool ConstantInterval::contains(int64_t x) const {
+    return !((min_defined && x < min) ||
+             (max_defined && x > max));
+}
+
 ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const ConstantInterval &b) {
     ConstantInterval result = a;
     result.include(b);
     return result;
 }
 
+// TODO: These were taken directly from the simplifier, so change the simplifier
+// to use these instead of duplicating the code.
+void ConstantInterval::operator+=(const ConstantInterval &other) {
+    min_defined = min_defined &&
+                  other.min_defined &&
+                  add_with_overflow(64, min, other.min, &min);
+    max_defined = max_defined &&
+                  other.max_defined &&
+                  add_with_overflow(64, max, other.max, &max);
+}
+
+void ConstantInterval::operator-=(const ConstantInterval &other) {
+    min_defined = min_defined &&
+                  other.max_defined &&
+                  sub_with_overflow(64, min, other.max, &min);
+    max_defined = max_defined &&
+                  other.min_defined &&
+                  sub_with_overflow(64, max, other.min, &max);
+}
+
+void ConstantInterval::operator*=(const ConstantInterval &other) {
+    ConstantInterval result;
+
+    // Compute a possible extreme value of the product, setting the min/max
+    // defined flags if it's unbounded.
+    auto saturating_mul = [&](int64_t a, int64_t b) -> int64_t {
+        int64_t c;
+        if (mul_with_overflow(64, a, b, &c)) {
+            return c;
+        } else if ((a > 0) == (b > 0)) {
+            result.max_defined = false;
+            return INT64_MAX;
+        } else {
+            result.min_defined = false;
+            return INT64_MIN;
+        }
+    };
+
+    bool positive = min_defined && min > 0;
+    bool other_positive = other.min_defined && other.min > 0;
+    bool bounded = min_defined && max_defined;
+    bool other_bounded = other.min_defined && other.max_defined;
+
+    if (bounded && other_bounded) {
+        // Both are bounded
+        result.min_defined = result.max_defined = true;
+        int64_t v1 = saturating_mul(min, other.min);
+        int64_t v2 = saturating_mul(min, other.max);
+        int64_t v3 = saturating_mul(max, other.min);
+        int64_t v4 = saturating_mul(max, other.max);
+        if (result.min_defined) {
+            result.min = std::min(std::min(v1, v2), std::min(v3, v4));
+        } else {
+            result.min = 0;
+        }
+        if (result.max_defined) {
+            result.max = std::max(std::max(v1, v2), std::max(v3, v4));
+        } else {
+            result.max = 0;
+        }
+    } else if ((max_defined && other_bounded && other_positive) ||
+               (other.max_defined && bounded && positive)) {
+        // One side has a max, and the other side is bounded and positive
+        // (e.g. a constant).
+        result.max = saturating_mul(max, other.max);
+        if (!result.max_defined) {
+            result.max = 0;
+        }
+    } else if ((min_defined && other_bounded && other_positive) ||
+               (other.min_defined && bounded && positive)) {
+        // One side has a min, and the other side is bounded and positive
+        // (e.g. a constant).
+        min = saturating_mul(min, other.min);
+        if (!result.min_defined) {
+            result.min = 0;
+        }
+    }
+    // TODO: what about the above two cases, but for multiplication by bounded
+    // and negative intervals?
+
+    *this = result;
+}
+
+void ConstantInterval::operator/=(const ConstantInterval &other) {
+    ConstantInterval result;
+
+    result.min = INT64_MAX;
+    result.max = INT64_MIN;
+
+    // Enumerate all possible values for the min and max and take the extreme values.
+    if (min_defined && other.min_defined && other.min != 0) {
+        int64_t v = div_imp(min, other.min);
+        result.min = std::min(result.min, v);
+        result.max = std::max(result.max, v);
+    }
+
+    if (min_defined && other.max_defined && other.max != 0) {
+        int64_t v = div_imp(min, other.max);
+        result.min = std::min(result.min, v);
+        result.max = std::max(result.max, v);
+    }
+
+    if (max_defined && other.max_defined && other.max != 0) {
+        int64_t v = div_imp(max, other.max);
+        result.min = std::min(result.min, v);
+        result.max = std::max(result.max, v);
+    }
+
+    if (max_defined && other.min_defined && other.min != 0) {
+        int64_t v = div_imp(max, other.min);
+        result.min = std::min(result.min, v);
+        result.max = std::max(result.max, v);
+    }
+
+    // Define an int64_t zero just to pacify std::min and std::max
+    constexpr int64_t zero = 0;
+
+    const bool other_positive = other.min_defined && other.min > 0;
+    const bool other_negative = other.max_defined && other.max < 0;
+    if ((other_positive && !other.max_defined) ||
+        (other_negative && !other.min_defined)) {
+        // Take limit as other -> +/- infinity
+        result.min = std::min(result.min, zero);
+        result.max = std::max(result.max, zero);
+    }
+
+    bool bounded_numerator = min_defined && max_defined;
+
+    result.min_defined = ((min_defined && other_positive) ||
+                          (max_defined && other_negative));
+    result.max_defined = ((max_defined && other_positive) ||
+                          (min_defined && other_negative));
+
+    // That's as far as we can get knowing the sign of the
+    // denominator. For bounded numerators, we additionally know
+    // that div can't make anything larger in magnitude, so we can
+    // take the intersection with that.
+    if (bounded_numerator && min != INT64_MIN) {
+        int64_t magnitude = std::max(max, -min);
+        if (result.min_defined) {
+            result.min = std::max(result.min, -magnitude);
+        } else {
+            result.min = -magnitude;
+        }
+        if (result.max_defined) {
+            result.max = std::min(result.max, magnitude);
+        } else {
+            result.max = magnitude;
+        }
+        result.min_defined = result.max_defined = true;
+    }
+
+    // Finally we can provide a bound if the numerator and denominator are
+    // non-positive or non-negative.
+    bool numerator_non_negative = min_defined && min >= 0;
+    bool denominator_non_negative = other.min_defined && other.min >= 0;
+    bool numerator_non_positive = max_defined && max <= 0;
+    bool denominator_non_positive = other.max_defined && other.max <= 0;
+    if ((numerator_non_negative && denominator_non_negative) ||
+        (numerator_non_positive && denominator_non_positive)) {
+        if (result.min_defined) {
+            result.min = std::max(result.min, zero);
+        } else {
+            result.min_defined = true;
+            result.min = 0;
+        }
+    }
+    if ((numerator_non_negative && denominator_non_positive) ||
+        (numerator_non_positive && denominator_non_negative)) {
+        if (result.max_defined) {
+            result.max = std::min(result.max, zero);
+        } else {
+            result.max_defined = true;
+            result.max = 0;
+        }
+    }
+
+    // Normalize the values if it's undefined
+    if (!result.min_defined) {
+        result.min = 0;
+    }
+    if (!result.max_defined) {
+        result.max = 0;
+    }
+
+    *this = result;
+}
+
+void ConstantInterval::cast_to(Type t) {
+    if (!(max_defined && t.can_represent(max) &&
+          min_defined && t.can_represent(min))) {
+        // We have potential overflow or underflow, return the entire bounds of
+        // the type.
+        ConstantInterval type_bounds;
+        if (t.is_int()) {
+            if (t.bits() <= 64) {
+                type_bounds.min_defined = type_bounds.max_defined = true;
+                type_bounds.min = ((int64_t)(-1)) << (t.bits() - 1);
+                type_bounds.max = ~type_bounds.min;
+            }
+        } else if (t.is_uint()) {
+            type_bounds.min_defined = true;
+            type_bounds.min = 0;
+            if (t.bits() < 64) {
+                type_bounds.max_defined = true;
+                type_bounds.max = (((int64_t)(1)) << t.bits()) - 1;
+            }
+        }
+        // If it's not int or uint, we're setting this to a default-constructed
+        // ConstantInterval, which is everything.
+        *this = type_bounds;
+    }
+}
+
+ConstantInterval ConstantInterval::bounds_of_type(Type t) {
+    return cast(t, ConstantInterval::everything());
+}
+
+ConstantInterval operator+(const ConstantInterval &a, const ConstantInterval &b) {
+    ConstantInterval result = a;
+    result += b;
+    return result;
+}
+
+ConstantInterval operator-(const ConstantInterval &a, const ConstantInterval &b) {
+    ConstantInterval result = a;
+    result -= b;
+    return result;
+}
+
+ConstantInterval operator/(const ConstantInterval &a, const ConstantInterval &b) {
+    ConstantInterval result = a;
+    result /= b;
+    return result;
+}
+
+ConstantInterval operator*(const ConstantInterval &a, const ConstantInterval &b) {
+    ConstantInterval result = a;
+    result *= b;
+    return result;
+}
+
+ConstantInterval min(const ConstantInterval &a, const ConstantInterval &b) {
+    ConstantInterval result = a;
+    if (a.min_defined && b.min_defined && b.min < a.min) {
+        result.min = b.min;
+    }
+    if (a.max_defined && b.max_defined && b.max < a.max) {
+        result.max = b.max;
+    }
+    return result;
+}
+
+ConstantInterval max(const ConstantInterval &a, const ConstantInterval &b) {
+    ConstantInterval result = a;
+    if (a.min_defined && b.min_defined && b.min > a.min) {
+        result.min = b.min;
+    }
+    if (a.max_defined && b.max_defined && b.max > a.max) {
+        result.max = b.max;
+    }
+    return result;
+}
+
+ConstantInterval abs(const ConstantInterval &a) {
+    ConstantInterval result;
+    if (a.min_defined && a.max_defined && a.min != INT64_MIN) {
+        result.max_defined = true;
+        result.max = std::max(-a.min, a.max);
+    }
+    result.min_defined = true;
+    if (a.min_defined && a.min > 0) {
+        result.min = a.min;
+    } else {
+        result.min = 0;
+    }
+
+    return result;
+}
+
 }  // namespace Internal
+
+ConstantInterval cast(Type t, const ConstantInterval &a) {
+    ConstantInterval result = a;
+    result.cast_to(t);
+    return result;
+}
+
+ConstantInterval saturating_cast(Type t, const ConstantInterval &a) {
+    ConstantInterval b = ConstantInterval::bounds_of_type(t);
+
+    if (b.max_defined && a.min_defined && a.min > b.max) {
+        return ConstantInterval(b.max, b.max);
+    } else if (b.min_defined && a.max_defined && a.max < b.min) {
+        return ConstantInterval(b.min, b.min);
+    }
+
+    ConstantInterval result = a;
+    result.max_defined = a.max_defined || b.max_defined;
+    if (a.max_defined) {
+        if (b.max_defined) {
+            result.max = std::min(a.max, b.max);
+        } else {
+            result.max = a.max;
+        }
+    } else if (b.max_defined) {
+        result.max = b.max;
+    }
+    result.min_defined = a.min_defined || b.min_defined;
+    if (a.min_defined) {
+        if (b.min_defined) {
+            result.min = std::max(a.min, b.min);
+        } else {
+            result.min = a.min;
+        }
+    } else if (b.min_defined) {
+        result.min = b.min;
+    }
+    return result;
+}
+
 }  // namespace Halide

@@ -87,7 +87,7 @@ struct Interval {
     /** Construct the smallest interval containing two intervals. */
     static Interval make_union(const Interval &a, const Interval &b);
 
-    /** Construct the largest interval contained within two intervals. */
+    /** Construct the largest interval contained within two other intervals. */
     static Interval make_intersection(const Interval &a, const Interval &b);
 
     /** An eagerly-simplifying max of two Exprs that respects infinities. */
@@ -110,8 +110,8 @@ private:
     static Expr neg_inf_noinline();
 };
 
-/** A class to represent ranges of integers. Can be unbounded above or below, but
- * they cannot be empty. */
+/** A class to represent ranges of integers. Can be unbounded above or below,
+ * but they cannot be empty. */
 struct ConstantInterval {
     /** The lower and upper bound of the interval. They are included
      * in the interval. */
@@ -158,6 +158,9 @@ struct ConstantInterval {
     /** Expand the interval to include a point */
     void include(int64_t x);
 
+    /** Test if the interval contains a particular value */
+    bool contains(int64_t x) const;
+
     /** Construct the smallest interval containing two intervals. */
     static ConstantInterval make_union(const ConstantInterval &a, const ConstantInterval &b);
 
@@ -165,9 +168,48 @@ struct ConstantInterval {
      * compare two map<string, Interval> for equality in order to
      * cache computations. */
     bool operator==(const ConstantInterval &other) const;
+
+    /** In-place versions of the arithmetic operators below. */
+    // @{
+    void operator+=(const ConstantInterval &other);
+    void operator-=(const ConstantInterval &other);
+    void operator*=(const ConstantInterval &other);
+    void operator/=(const ConstantInterval &other);
+    // @}
+
+    /** Track what happens if a constant integer interval is forced to fit into
+     * a concrete integer type. */
+    void cast_to(Type t);
+
+    /** Get constant integer bounds on a type. */
+    static ConstantInterval bounds_of_type(Type);
 };
 
+/** Arithmetic operators on ConstantIntervals. The resulting interval contains
+ * all possible values of the operator applied to any two elements of the
+ * argument intervals. Note that these operator on unbounded integers. If you
+ * are applying this to concrete small integer types, you will need to manually
+ * cast the constant interval back to the desired type to model the effect of
+ * overflow. */
+// @{
+ConstantInterval operator+(const ConstantInterval &a, const ConstantInterval &b);
+ConstantInterval operator-(const ConstantInterval &a, const ConstantInterval &b);
+ConstantInterval operator/(const ConstantInterval &a, const ConstantInterval &b);
+ConstantInterval operator*(const ConstantInterval &a, const ConstantInterval &b);
+ConstantInterval min(const ConstantInterval &a, const ConstantInterval &b);
+ConstantInterval max(const ConstantInterval &a, const ConstantInterval &b);
+ConstantInterval abs(const ConstantInterval &a);
+// @}
 }  // namespace Internal
+
+/** Cast operators for ConstantIntervals. These ones have to live out in
+ * Halide::, to avoid C++ name lookup confusion with the Halide::cast variants
+ * that take Exprs. */
+// @{
+Internal::ConstantInterval cast(Type t, const Internal::ConstantInterval &a);
+Internal::ConstantInterval saturating_cast(Type t, const Internal::ConstantInterval &a);
+// @}
+
 }  // namespace Halide
 
 #endif
