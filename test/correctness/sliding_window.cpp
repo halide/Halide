@@ -64,6 +64,7 @@ int main(int argc, char **argv) {
     }
 
     // Try a sequence of two sliding windows.
+    Buffer<int> ref;
     for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
         count = 0;
         Func f, g, h;
@@ -76,7 +77,23 @@ int main(int argc, char **argv) {
         g.store_root().compute_at(h, x).store_in(store_in);
 
         Buffer<int> im = h.realize({100});
+#ifdef HALIDE_USE_LOOP_REWINDING_EVEN_THOUGH_IT_IS_BROKEN_SEE_ISSUE_8140
         int correct = store_in == MemoryType::Register ? 103 : 102;
+#else
+        int correct = 102;
+#endif
+        if (!ref.defined()) {
+            ref = im;
+        } else {
+            // Check that changing to register-based sliding window doesn't affect the output.
+            for (int x = 0; x < 100; x++) {
+                if (ref(x) != im(x)) {
+                    printf("ref(%d) == %d but im(%d) == %d\n", x, ref(x), x, im(x));
+                    return 1;
+                }
+            }
+        }
+
         if (count != correct) {
             printf("f was called %d times instead of %d times\n", count, correct);
             return 1;

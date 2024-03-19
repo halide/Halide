@@ -435,7 +435,14 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             new_loop_min_eq = simplify(new_loop_min_eq);
             Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
             internal_assert(!new_loop_min.defined());
-            if (solve_result.has_upper_bound() &&
+
+#ifdef HALIDE_USE_LOOP_REWINDING_EVEN_THOUGH_IT_IS_BROKEN_SEE_ISSUE_8140
+            constexpr bool use_loop_rewinding = true;
+#else
+            constexpr bool use_loop_rewinding = false;
+#endif
+            if (use_loop_rewinding &&
+                solve_result.has_upper_bound() &&
                 !equal(solve_result.max, loop_min) &&
                 !expr_uses_vars(solve_result.max, enclosing_loops)) {
                 new_loop_min = simplify(solve_result.max);
@@ -454,6 +461,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     new_max = min(new_max, max_required_at_loop_min);
                 }
             } else {
+
                 // We couldn't find a suitable new loop min, we can't assume
                 // every iteration has a previous iteration. The first iteration
                 // will warm up the loop.
@@ -844,6 +852,9 @@ class SlidingWindow : public IRMutator {
                 loop_extent = Variable::make(Int(32), new_name + ".loop_extent");
                 body = substitute({
                                       {name, Variable::make(Int(32), new_name)},
+                                      // Note for whoever tries to fix issue 8140:
+                                      // Commenting out the next two lines fixes
+                                      // most but not all failures.
                                       {name + ".loop_min", loop_min},
                                       {name + ".loop_extent", loop_extent},
                                   },
