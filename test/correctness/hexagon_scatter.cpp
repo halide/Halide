@@ -76,9 +76,7 @@ int test() {
             .parallel(y)
             .vectorize(x, vector_size / 2);
 
-        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
-            f.store_in(MemoryType::VTCM);
-        }
+        f.store_in(MemoryType::VTCM);
     }
 
     Buffer<DTYPE> buf = g.realize({W, H});

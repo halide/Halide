@@ -10,7 +10,7 @@ bool test() {
     const int W_img = 128;
     const int H_img = 8;
     const int W_lut = 256;
-    const int H_lut = (target.has_feature(Target::HVX_v65)) ? 32 : 1;
+    const int H_lut = (target.has_feature(Target::HVX)) ? 32 : 1;
 
     srand(time(0));
 
@@ -49,17 +49,15 @@ bool test() {
             .parallel(y)
             .vectorize(x, vector_size);
 
-        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
-            lut_vtcm
-                .store_in(MemoryType::VTCM)
-                .compute_at(output, Var::outermost())
-                .vectorize(x, vector_size);
+        lut_vtcm
+            .store_in(MemoryType::VTCM)
+            .compute_at(output, Var::outermost())
+            .vectorize(x, vector_size);
 
-            output_vtcm
-                .store_in(MemoryType::VTCM)
-                .compute_at(output, y)
-                .vectorize(x, vector_size);
-        }
+        output_vtcm
+            .store_in(MemoryType::VTCM)
+            .compute_at(output, y)
+            .vectorize(x, vector_size);
     }
 
     Buffer<ITYPE> output_buf = output.realize({W_img, H_img});
@@ -80,10 +78,7 @@ bool test() {
 }
 
 int main() {
-    // With hexagon targets >=v65 with hvx, we expect to see gathers for
-    // uint16_t, int16_t, uint32_t, int32_t
-    // For targets <v65 with hvx, we should generate dynamic_shuffle which are
-    // compiled to vlut instructions.
+    // We expect to see vgathers with HVX.
     if (!test<uint8_t>() ||
         !test<int8_t>() ||
         !test<uint16_t>() ||
