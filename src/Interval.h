@@ -161,6 +161,9 @@ struct ConstantInterval {
     /** Test if the interval contains a particular value */
     bool contains(int64_t x) const;
 
+    /** Test if the interval lies with a particular type. */
+    bool within(Type t) const;
+
     /** Construct the smallest interval containing two intervals. */
     static ConstantInterval make_union(const ConstantInterval &a, const ConstantInterval &b);
 

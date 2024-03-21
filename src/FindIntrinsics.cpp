@@ -77,6 +77,8 @@ bool no_overflow(Type t) {
     return t.is_float() || no_overflow_int(t);
 }
 
+// TODO: Can I delete this now and just rely on lossless cast?
+
 // If there's a widening add or subtract in the first e.type().bits() / 2 - 1
 // levels down a tree of adds or subtracts, we know there's enough headroom for
 // another add without overflow. For example, it is safe to add to
@@ -810,6 +812,12 @@ protected:
                     // We only care about integers, this should be trivially true.
                     is_x_same_int_or_uint) ||
 
+            // widening_add(x + widen(y), widen(z)) -> widening_add(x, widening_add(y, z))
+            rewrite(widening_add(widen_right_add(x, y), widen(z)),
+                    widening_add(x, widening_add(y, z))) ||
+            rewrite(widening_add(widen(z), widen_right_add(x, y)),
+                    widening_add(x, widening_add(y, z))) ||
+
             // Saturating patterns.
             rewrite(saturating_cast(op->type, widening_add(x, y)),
                     saturating_add(x, y),
@@ -908,13 +916,16 @@ protected:
         }
         // TODO: do we want versions of widen_right_add here?
 
-        if (op->is_intrinsic(Call::shift_right) || op->is_intrinsic(Call::shift_left)) {
+        if (op->is_intrinsic(Call::shift_right) ||
+            op->is_intrinsic(Call::shift_left)) {
             // Try to turn this into a widening shift.
             internal_assert(op->args.size() == 2);
             Expr a_narrow = lossless_narrow(op->args[0]);
             Expr b_narrow = lossless_narrow(op->args[1]);
             if (a_narrow.defined() && b_narrow.defined()) {
-                Expr result = op->is_intrinsic(Call::shift_left) ? widening_shift_left(a_narrow, b_narrow) : widening_shift_right(a_narrow, b_narrow);
+                Expr result = op->is_intrinsic(Call::shift_left) ?
+                                  widening_shift_left(a_narrow, b_narrow) :
+                                  widening_shift_right(a_narrow, b_narrow);
                 if (result.type() != op->type) {
                     result = Cast::make(op->type, result);
                 }
@@ -928,7 +939,8 @@ protected:
             }
         }
 
-        if (op->is_intrinsic(Call::rounding_shift_left) || op->is_intrinsic(Call::rounding_shift_right)) {
+        if (op->is_intrinsic(Call::rounding_shift_left) ||
+            op->is_intrinsic(Call::rounding_shift_right)) {
             // Try to turn this into a widening shift.
             internal_assert(op->args.size() == 2);
             Expr a_narrow = lossless_narrow(op->args[0]);

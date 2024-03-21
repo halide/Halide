@@ -2080,6 +2080,52 @@ HALIDE_ALWAYS_INLINE auto cast(halide_type_t t, A &&a) noexcept -> CastOp<declty
     return {t, pattern_arg(a)};
 }
 
+template<typename A>
+struct WidenOp {
+    struct pattern_tag {};
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Cast;
+    constexpr static IRNodeType max_node_type = IRNodeType::Cast;
+    constexpr static bool canonical = A::canonical;
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+        if (e.node_type != Cast::_node_type) {
+            return false;
+        }
+        const Cast &op = (const Cast &)e;
+        return (e.type == op.value.type().widen() &&
+                a.template match<bound>(*op.value.get(), state));
+    }
+    template<uint32_t bound, typename A2>
+    HALIDE_ALWAYS_INLINE bool match(const WidenOp<A2> &op, MatcherState &state) const noexcept {
+        return a.template match<bound>(unwrap(op.a), state);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        Expr e = a.make(state, {});
+        return cast(e.type().widen(), std::move(e));
+    }
+
+    constexpr static bool foldable = false;
+};
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const WidenOp<A> &op) {
+    s << "widen(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto widen(A &&a) noexcept -> WidenOp<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a)};
+}
+
 template<typename Vec, typename Base, typename Stride, typename Lanes>
 struct SliceOp {
     struct pattern_tag {};

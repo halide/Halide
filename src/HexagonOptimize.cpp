@@ -375,23 +375,24 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
 // expressions where we pretend the op to be multiplied by 1.
 int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
                  vector<MulExpr> &mpys, Expr &rest) {
+
     if ((int)mpys.size() >= max_mpy_count) {
         rest = rest.defined() ? Add::make(rest, op) : op;
         return 0;
     }
 
     // If the add is also widening, remove the cast.
+    Expr stripped = op;
     int mpy_bits = std::max(a_ty.bits(), b_ty.bits()) * 2;
-    Expr maybe_mul = op;
     if (op.type().bits() == mpy_bits * 2) {
         if (const Cast *cast = op.as<Cast>()) {
             if (cast->value.type().bits() == mpy_bits) {
-                maybe_mul = cast->value;
+                stripped = cast->value;
             }
         }
     }
-    maybe_mul = as_mul(maybe_mul);
 
+    Expr maybe_mul = as_mul(stripped);
     if (maybe_mul.defined()) {
         const Mul *mul = maybe_mul.as<Mul>();
         Expr a = unbroadcast_lossless_cast(a_ty, mul->a);
@@ -408,17 +409,17 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
                 return 1;
             }
         }
-    } else if (const Add *add = op.as<Add>()) {
+    } else if (const Add *add = stripped.as<Add>()) {
         int mpy_count = 0;
         mpy_count += find_mpy_ops(add->a, a_ty, b_ty, max_mpy_count, mpys, rest);
         mpy_count += find_mpy_ops(add->b, a_ty, b_ty, max_mpy_count, mpys, rest);
         return mpy_count;
-    } else if (const Call *add = Call::as_intrinsic(op, {Call::widening_add})) {
+    } else if (const Call *add = Call::as_intrinsic(stripped, {Call::widening_add})) {
         int mpy_count = 0;
         mpy_count += find_mpy_ops(cast(op.type(), add->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
         mpy_count += find_mpy_ops(cast(op.type(), add->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
         return mpy_count;
-    } else if (const Call *wadd = Call::as_intrinsic(op, {Call::widen_right_add})) {
+    } else if (const Call *wadd = Call::as_intrinsic(stripped, {Call::widen_right_add})) {
         int mpy_count = 0;
         mpy_count += find_mpy_ops(wadd->args[0], a_ty, b_ty, max_mpy_count, mpys, rest);
         mpy_count += find_mpy_ops(cast(op.type(), wadd->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);

@@ -244,6 +244,13 @@ bool ConstantInterval::contains(int64_t x) const {
              (max_defined && x > max));
 }
 
+bool ConstantInterval::within(Type t) const {
+    return min_defined &&
+           max_defined &&
+           t.can_represent(min) &&
+           t.can_represent(max);
+}
+
 ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const ConstantInterval &b) {
     ConstantInterval result = a;
     result.include(b);
@@ -439,8 +446,7 @@ void ConstantInterval::operator/=(const ConstantInterval &other) {
 }
 
 void ConstantInterval::cast_to(Type t) {
-    if (!(max_defined && t.can_represent(max) &&
-          min_defined && t.can_represent(min))) {
+    if (!within(t)) {
         // We have potential overflow or underflow, return the entire bounds of
         // the type.
         ConstantInterval type_bounds;
