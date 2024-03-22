@@ -1,3 +1,4 @@
+#include "Bounds.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
@@ -700,7 +701,12 @@ void CodeGen_X86::visit(const Call *op) {
         // Handle edge case of possible overflow.
         // See https://github.com/halide/Halide/pull/7129/files#r1008331426
         // On AVX512 (and with enough lanes) we can use a mask register.
-        if (target.has_feature(Target::AVX512) && op->type.lanes() >= 32) {
+        ConstantInterval ca = constant_integer_bounds(a);
+        ConstantInterval cb = constant_integer_bounds(b);
+        if (!ca.contains(-32768) || !cb.contains(-32768)) {
+            // Overflow isn't possible
+            pmulhrs.accept(this);
+        } else if (target.has_feature(Target::AVX512) && op->type.lanes() >= 32) {
             Expr expr = select((a == i16_min) && (b == i16_min), i16_max, pmulhrs);
             expr.accept(this);
         } else {

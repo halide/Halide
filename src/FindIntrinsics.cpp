@@ -1,4 +1,5 @@
 #include "FindIntrinsics.h"
+#include "Bounds.h"
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
@@ -550,6 +551,12 @@ protected:
             }
         }
 
+        // Do we need to worry about this cast overflowing?
+        ConstantInterval value_bounds = constant_integer_bounds(value);
+        debug(0) << "Bounds of " << Expr(op) << " are " << value_bounds.min << " " << value_bounds.min_defined << " " << value_bounds.max << " " << value_bounds.max_defined << "\n";
+        bool no_overflow = (op->type.can_represent(op->value.type()) ||
+                            value_bounds.within(op->type));
+
         if (op->type.is_int() || op->type.is_uint()) {
             Expr lower = cast(value.type(), op->type.min());
             Expr upper = cast(value.type(), op->type.max());
@@ -567,7 +574,7 @@ protected:
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
             auto x_y_same_sign = (is_int(x) && is_int(y)) || (is_uint(x) && is_uint(y));
-            auto is_y_narrow_uint = op->type.is_uint() && is_uint(y, bits / 2);
+            // auto is_y_narrow_uint = op->type.is_uint() && is_uint(y, bits / 2);
             if (
                 // Saturating patterns
                 rewrite(max(min(widening_add(x, y), upper), lower),
@@ -669,32 +676,16 @@ protected:
                         rounding_mul_shift_right(x, y, cast(unsigned_type, c0)),
                         is_x_same_int && x_y_same_sign && c0 >= bits - 1) ||
 
-                rewrite(shift_right(widening_mul(x, y), c0),
-                        mul_shift_right(x, y, cast(unsigned_type, c0)),
-                        is_x_same_int_or_uint && x_y_same_sign && c0 >= bits) ||
+                // We can also match whenever the cast can't overflow, so
+                // questions of saturation are irrelevant.
+                (no_overflow &&
+                 (rewrite(shift_right(widening_mul(x, y), c0),
+                          mul_shift_right(x, y, cast(unsigned_type, c0)),
+                          is_x_same_int_or_uint && x_y_same_sign && c0 >= 0) ||
 
-                rewrite(rounding_shift_right(widening_mul(x, y), c0),
-                        rounding_mul_shift_right(x, y, cast(unsigned_type, c0)),
-                        is_x_same_int_or_uint && x_y_same_sign && c0 >= bits) ||
-
-                // We can also match on smaller shifts if one of the args is
-                // narrow. We don't do this for signed (yet), because the
-                // saturation issue is tricky.
-                rewrite(shift_right(widening_mul(x, cast(op->type, y)), c0),
-                        mul_shift_right(x, cast(op->type, y), cast(unsigned_type, c0)),
-                        is_x_same_int_or_uint && is_y_narrow_uint && c0 >= bits / 2) ||
-
-                rewrite(rounding_shift_right(widening_mul(x, cast(op->type, y)), c0),
-                        rounding_mul_shift_right(x, cast(op->type, y), cast(unsigned_type, c0)),
-                        is_x_same_int_or_uint && is_y_narrow_uint && c0 >= bits / 2) ||
-
-                rewrite(shift_right(widening_mul(cast(op->type, y), x), c0),
-                        mul_shift_right(cast(op->type, y), x, cast(unsigned_type, c0)),
-                        is_x_same_int_or_uint && is_y_narrow_uint && c0 >= bits / 2) ||
-
-                rewrite(rounding_shift_right(widening_mul(cast(op->type, y), x), c0),
-                        rounding_mul_shift_right(cast(op->type, y), x, cast(unsigned_type, c0)),
-                        is_x_same_int_or_uint && is_y_narrow_uint && c0 >= bits / 2) ||
+                  rewrite(rounding_shift_right(widening_mul(x, y), c0),
+                          rounding_mul_shift_right(x, y, cast(unsigned_type, c0)),
+                          is_x_same_int_or_uint && x_y_same_sign && c0 >= 0))) ||
 
                 // Halving subtract patterns
                 rewrite(shift_right(cast(op_type_wide, widening_sub(x, y)), 1),
@@ -1497,27 +1488,50 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
     // one of the operands and the denominator by a constant. We only do this
     // if it isn't already full precision. This avoids infinite loops despite
     // "lowering" this to another mul_shift_right operation.
-    if (can_prove(q < full_q)) {
-        Expr missing_q = full_q - q;
-        internal_assert(missing_q.type().bits() == b.type().bits());
-        Expr new_b = simplify(b << missing_q);
-        if (is_const(new_b) && can_prove(new_b >> missing_q == b)) {
-            return rounding_mul_shift_right(a, new_b, full_q);
-        }
-        Expr new_a = simplify(a << missing_q);
-        if (is_const(new_a) && can_prove(new_a >> missing_q == a)) {
-            return rounding_mul_shift_right(new_a, b, full_q);
+    ConstantInterval cq = constant_integer_bounds(q);
+    debug(0) << " cq = " << cq.min << " " << cq.min_defined << " " << cq.max << " " << cq.max_defined << "\n";
+    if (cq.is_single_point() && cq.max >= 0 && cq.max < full_q) {
+        int missing_q = full_q - (int)cq.max;
+
+        // Try to scale up the args by factors of two without overflowing
+        int a_shift = 0, b_shift = 0;
+        ConstantInterval ca = constant_integer_bounds(a);
+        debug(0) << " ca = " << ca.min << " " << ca.min_defined << " " << ca.max << " " << ca.max_defined << "\n";
+        do {
+            ConstantInterval bigger = ca * ConstantInterval::single_point(2);
+            if (bigger.within(a.type()) && a_shift + b_shift < missing_q) {
+                ca = bigger;
+                a_shift++;
+                continue;
+            }
+        } while (false);
+        ConstantInterval cb = constant_integer_bounds(b);
+        debug(0) << " cb = " << cb.min << " " << cb.min_defined << " " << cb.max << " " << cb.max_defined << "\n";
+        do {
+            ConstantInterval bigger = cb * ConstantInterval::single_point(2);
+            if (bigger.within(b.type()) && b_shift + b_shift < missing_q) {
+                cb = bigger;
+                b_shift++;
+                continue;
+            }
+        } while (false);
+
+        debug(0) << "a_shift = " << a_shift << " b_shift = " << b_shift << " full_q = " << full_q << "\n";
+        if (a_shift + b_shift == missing_q) {
+            return rounding_mul_shift_right(simplify(a << a_shift), simplify(b << b_shift), full_q);
         }
     }
 
     // If all else fails, just widen, shift, and narrow.
-    Expr result = rounding_shift_right(widening_mul(a, b), q);
-    if (!can_prove(q >= a.type().bits())) {
-        result = saturating_narrow(result);
+    Expr wide_result = rounding_shift_right(widening_mul(a, b), q);
+    Expr narrowed = lossless_cast(a.type(), wide_result);
+    if (narrowed.defined()) {
+        debug(0) << " losslessly narrowed to " << narrowed << "\n";
+        return narrowed;
     } else {
-        result = narrow(result);
+        debug(0) << " returning saturating_narrow(" << wide_result << ")\n";
+        return saturating_narrow(wide_result);
     }
-    return result;
 }
 
 Expr lower_intrinsic(const Call *op) {

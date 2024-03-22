@@ -470,6 +470,19 @@ void ConstantInterval::cast_to(Type t) {
     }
 }
 
+ConstantInterval ConstantInterval::operator-() const {
+    ConstantInterval result;
+    if (min_defined && min != INT64_MIN) {
+        result.max_defined = true;
+        result.max = -min;
+    }
+    if (max_defined) {
+        result.min_defined = true;
+        result.min = -max;
+    }
+    return result;
+}
+
 ConstantInterval ConstantInterval::bounds_of_type(Type t) {
     return cast(t, ConstantInterval::everything());
 }
@@ -534,6 +547,43 @@ ConstantInterval abs(const ConstantInterval &a) {
     }
 
     return result;
+}
+
+ConstantInterval operator<<(const ConstantInterval &a, const ConstantInterval &b) {
+    // Try to map this to a multiplication and a division
+    ConstantInterval mul, div;
+    constexpr int64_t one = 1;
+    if (b.min_defined) {
+        if (b.min >= 0 && b.min < 63) {
+            mul.min = one << b.min;
+            mul.min_defined = true;
+            div.max = one;
+            div.max_defined = true;
+        } else if (b.min > -63 && b.min <= 0) {
+            mul.min = one;
+            mul.min_defined = true;
+            div.max = one << (-b.min);
+            div.max_defined = true;
+        }
+    }
+    if (b.max_defined) {
+        if (b.max >= 0 && b.max < 63) {
+            mul.max = one << b.max;
+            mul.max_defined = true;
+            div.min = one;
+            div.min_defined = true;
+        } else if (b.max > -63 && b.max <= 0) {
+            mul.max = one;
+            mul.max_defined = true;
+            div.min = one << (-b.max);
+            div.min_defined = true;
+        }
+    }
+    return (a * mul) / div;
+}
+
+ConstantInterval operator>>(const ConstantInterval &a, const ConstantInterval &b) {
+    return a << (-b);
 }
 
 }  // namespace Internal

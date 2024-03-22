@@ -180,6 +180,9 @@ struct ConstantInterval {
     void operator/=(const ConstantInterval &other);
     // @}
 
+    /** Negate an interval. */
+    ConstantInterval operator-() const;
+
     /** Track what happens if a constant integer interval is forced to fit into
      * a concrete integer type. */
     void cast_to(Type t);
@@ -202,6 +205,8 @@ ConstantInterval operator*(const ConstantInterval &a, const ConstantInterval &b)
 ConstantInterval min(const ConstantInterval &a, const ConstantInterval &b);
 ConstantInterval max(const ConstantInterval &a, const ConstantInterval &b);
 ConstantInterval abs(const ConstantInterval &a);
+ConstantInterval operator<<(const ConstantInterval &a, const ConstantInterval &b);
+ConstantInterval operator>>(const ConstantInterval &a, const ConstantInterval &b);
 // @}
 }  // namespace Internal
 

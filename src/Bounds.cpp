@@ -1963,18 +1963,37 @@ ConstantInterval constant_integer_bounds(const Expr &e) {
             } else if (op->is_intrinsic(Call::widen_right_mul)) {
                 return cast(op->type, (constant_integer_bounds(op->args[0]) *
                                        constant_integer_bounds(op->args[1])));
+            } else if (op->is_intrinsic(Call::shift_right)) {
+                return cast(op->type, constant_integer_bounds(op->args[0]) >> constant_integer_bounds(op->args[1]));
+            } else if (op->is_intrinsic(Call::shift_left)) {
+                return cast(op->type, constant_integer_bounds(op->args[0]) << constant_integer_bounds(op->args[1]));
+            } else if (op->is_intrinsic(Call::rounding_shift_right)) {
+                ConstantInterval ca = constant_integer_bounds(op->args[0]);
+                ConstantInterval cb = constant_integer_bounds(op->args[1]);
+                ConstantInterval rounding_term;
+                if (cb.min_defined && cb.min > 0) {
+                    auto rounding_term = ConstantInterval(1, 1) << (cb - ConstantInterval(1, 1));
+                    // rounding shift right with a positive RHS can't overflow,
+                    // so no cast required.
+                    return (ca + rounding_term) >> cb;
+                } else if (cb.max_defined && cb.max <= 0) {
+                    return cast(op->type, ca << (-cb));
+                } else {
+                    auto rounding_term = ConstantInterval(0, 1) << max(cb - ConstantInterval(1, 1), ConstantInterval(0, 0));
+                    return cast(op->type, (ca + rounding_term) >> cb);
+                }
             }
-            // We could include the various shifting intrinsics here too, but we'd
-            // have to check for the sign on the second argument.
+            // TODO: more intrinsics
             // TODO: widening_shift_left is important
         }
 
         return ConstantInterval::bounds_of_type(e.type());
     }();
 
-    // debug(0) << e << " -> " << ret.min_defined << " " << ret.min << " " << ret.max_defined << " " << ret.max << "\n";
+    debug(0) << "constant_integer_bounds(" << e << ") =\n  "
+             << ret.min_defined << " " << ret.min << " " << ret.max_defined << " " << ret.max << "\n";
 
-    if (ret.min_defined) {
+    if (true) {
         internal_assert((!ret.min_defined || e.type().can_represent(ret.min)) &&
                         (!ret.max_defined || e.type().can_represent(ret.max)))
             << "Expr: " << e << "\n"
