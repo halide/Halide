@@ -1316,6 +1316,13 @@ void check_bounds() {
     check(max(x * 4 + 63, y) - max(y - 3, x * 4), clamp(x * 4 - y, -63, -3) + 66);
     check(max(x * 4, y - 3) - max(x * 4 + 63, y), clamp(y - x * 4, 3, 63) + -66);
     check(max(y - 3, x * 4) - max(x * 4 + 63, y), clamp(y - x * 4, 3, 63) + -66);
+
+    // Check we can track bounds correctly through various operations
+    check(ramp(cast<uint8_t>(x) / 2 + 3, cast<uint8_t>(1), 16) < broadcast(200, 16), const_true(16));
+    check(cast<int16_t>(cast<uint8_t>(x)) * 3 >= cast<int16_t>(0), const_true());
+    check(cast<int16_t>(cast<uint8_t>(x)) * 3 < cast<int16_t>(768), const_true());
+    check(cast<int16_t>(abs(cast<int8_t>(x))) >= cast<int16_t>(0), const_true());
+    check(cast<int16_t>(abs(cast<int8_t>(x))) - cast<int16_t>(128) <= cast<int16_t>(0), const_true());
 }
 
 void check_boolean() {
@@ -2214,7 +2221,7 @@ int main(int argc, char **argv) {
 
     // This expression used to cause infinite recursion.
     check(Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2)),
-          Broadcast::make(-15, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2)));
+          const_true(2));
 
     {
         // Verify that integer types passed to min() and max() are coerced to match

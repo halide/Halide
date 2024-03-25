@@ -8,13 +8,14 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
-    if (info && no_overflow_int(op->type)) {
+    if (info) {
         // Doesn't account for correlated a, b, so any
         // cancellation rule that exploits that should always
         // remutate to recalculate the bounds.
         info->bounds = a_info.bounds - b_info.bounds;
         info->alignment = a_info.alignment - b_info.alignment;
         info->trim_bounds_using_alignment();
+        info->cast_to(op->type);
     }
 
     if (may_simplify(op->type)) {

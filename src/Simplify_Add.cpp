@@ -8,10 +8,11 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
-    if (info && no_overflow_int(op->type)) {
+    if (info) {
         info->bounds = a_info.bounds + b_info.bounds;
         info->alignment = a_info.alignment + b_info.alignment;
         info->trim_bounds_using_alignment();
+        info->cast_to(op->type);
     }
 
     if (may_simplify(op->type)) {

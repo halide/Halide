@@ -8,10 +8,11 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
-    if (info && no_overflow_int(op->type)) {
+    if (info) {
         info->bounds = a_info.bounds / b_info.bounds;
         info->alignment = a_info.alignment / b_info.alignment;
         info->trim_bounds_using_alignment();
+        info->cast_to(op->type);
 
         // TODO: add test case which resolves to a scalar, but only after
         // trimming using the alignment.
@@ -37,8 +38,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
 
     bool denominator_non_zero =
         (no_overflow_int(op->type) &&
-         (b_info.bounds < 0 ||
-          b_info.bounds > 0 ||
+         (!b_info.bounds.contains(0) ||
           b_info.alignment.remainder != 0));
 
     if (may_simplify(op->type)) {

@@ -294,6 +294,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return mutate(unbroadcast, info);
         }
 
+        if (info) {
+            info->bounds = abs(a_info.bounds);
+            info->cast_to(op->type);
+        }
+
         Type ta = a.type();
         int64_t ia = 0;
         double fa = 0;

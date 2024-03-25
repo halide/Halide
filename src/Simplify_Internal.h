@@ -75,6 +75,36 @@ public:
             }
         }
 
+        void cast_to(Type t) {
+            if ((!t.is_int() && !t.is_uint()) || (t.is_int() && t.bits() >= 32)) {
+                return;
+            }
+
+            // We've just done some infinite-integer operation on a bounded
+            // integer type, and we need to project the bounds and alignment
+            // back in-range.
+
+            // Bounds:
+            bounds.cast_to(t);
+
+            if (t.bits() >= 64) {
+                // Just preserve any power-of-two factor in the modulus. When
+                // alignment.modulus == 0, the value is some positive constant
+                // representable as any 64-bit integer type, so there's no
+                // wraparound.
+                if (alignment.modulus > 0) {
+                    // This masks off all bits except for the lowest set one,
+                    // giving the largest power-of-two factor of a number.
+                    alignment.modulus &= -alignment.modulus;
+                    alignment.remainder = mod_imp(alignment.remainder, alignment.modulus);
+                }
+            } else {
+                // A narrowing integer cast adds some unknown multiple of 2^bits
+                // TODO: Add += for ModulusRemainder
+                alignment = alignment + ModulusRemainder(((int64_t)1 << t.bits()), 0);
+            }
+        }
+
         // Mix in existing knowledge about this Expr
         void intersect(const ExprInfo &other) {
             bounds = ConstantInterval::make_intersection(bounds, other.bounds);

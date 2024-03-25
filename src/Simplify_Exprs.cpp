@@ -8,9 +8,10 @@ namespace Internal {
 // Miscellaneous expression visitors that are too small to bother putting in their own files
 
 Expr Simplify::visit(const IntImm *op, ExprInfo *info) {
-    if (info && no_overflow_int(op->type)) {
+    if (info) {
         info->bounds = ConstantInterval::single_point(op->value);
         info->alignment = ModulusRemainder(0, op->value);
+        info->cast_to(op->type);
     } else {
         clear_bounds_info(info);
     }
@@ -22,6 +23,7 @@ Expr Simplify::visit(const UIntImm *op, ExprInfo *info) {
         int64_t v = (int64_t)(op->value);
         info->bounds = ConstantInterval::single_point(v);
         info->alignment = ModulusRemainder(0, v);
+        info->cast_to(op->type);
     } else {
         clear_bounds_info(info);
     }
@@ -258,7 +260,7 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
     Expr stride = mutate(op->stride, &stride_info);
     const int lanes = op->lanes;
 
-    if (info && no_overflow_int(op->type)) {
+    if (info) {
         info->bounds = base_info.bounds + stride_info.bounds * ConstantInterval(0, lanes - 1);
         // A ramp lane is b + l * s. Expanding b into mb * x + rb and s into ms * y + rs, we get:
         //   mb * x + rb + l * (ms * y + rs)
@@ -272,6 +274,8 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
             r = mod_imp(base_info.alignment.remainder, m);
         }
         info->alignment = {m, r};
+        info->trim_bounds_using_alignment();
+        info->cast_to(op->type);
     }
 
     // A somewhat torturous way to check if the stride is zero,
