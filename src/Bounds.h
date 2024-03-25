@@ -48,9 +48,6 @@ Expr find_constant_bound(const Expr &e, Direction d,
  * +/-inf. */
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope);
 
-// TODO: comment
-ConstantInterval constant_integer_bounds(const Expr &e);
-
 /** Represents the bounds of a region of arbitrary dimension. Zero
  * dimensions corresponds to a scalar region. */
 struct Box {

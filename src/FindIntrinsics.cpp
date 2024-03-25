@@ -1,8 +1,8 @@
 #include "FindIntrinsics.h"
-#include "Bounds.h"
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "Simplify.h"
@@ -554,8 +554,9 @@ protected:
         // Do we need to worry about this cast overflowing?
         ConstantInterval value_bounds = constant_integer_bounds(value);
         debug(0) << "Bounds of " << Expr(op) << " are " << value_bounds.min << " " << value_bounds.min_defined << " " << value_bounds.max << " " << value_bounds.max_defined << "\n";
+
         bool no_overflow = (op->type.can_represent(op->value.type()) ||
-                            value_bounds.within(op->type));
+                            op->type.can_represent(value_bounds));
 
         if (op->type.is_int() || op->type.is_uint()) {
             Expr lower = cast(value.type(), op->type.min());
@@ -1499,7 +1500,7 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
         debug(0) << " ca = " << ca.min << " " << ca.min_defined << " " << ca.max << " " << ca.max_defined << "\n";
         do {
             ConstantInterval bigger = ca * ConstantInterval::single_point(2);
-            if (bigger.within(a.type()) && a_shift + b_shift < missing_q) {
+            if (a.type().can_represent(bigger) && a_shift + b_shift < missing_q) {
                 ca = bigger;
                 a_shift++;
                 continue;
@@ -1509,7 +1510,7 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
         debug(0) << " cb = " << cb.min << " " << cb.min_defined << " " << cb.max << " " << cb.max_defined << "\n";
         do {
             ConstantInterval bigger = cb * ConstantInterval::single_point(2);
-            if (bigger.within(b.type()) && b_shift + b_shift < missing_q) {
+            if (b.type().can_represent(bigger) && b_shift + b_shift < missing_q) {
                 cb = bigger;
                 b_shift++;
                 continue;

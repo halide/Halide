@@ -6,7 +6,9 @@
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
 #include "Closure.h"
+#include "ConstantInterval.h"
 #include "IROperator.h"
+#include "Interval.h"
 #include "Module.h"
 #include "Target.h"
 #include "Util.h"
@@ -443,6 +445,35 @@ std::ostream &operator<<(std::ostream &out, const Closure &c) {
         out << " dims=" << (int)b.second.dimensions;
         out << "\n";
     }
+    return out;
+}
+
+namespace {
+template<typename T>
+void emit_interval(std::ostream &out, const T &in) {
+    out << "[";
+    if (in.has_lower_bound()) {
+        out << in.min;
+    } else {
+        out << "-inf";
+    }
+    out << ", ";
+    if (in.has_upper_bound()) {
+        out << in.max;
+    } else {
+        out << "inf";
+    }
+    out << "]";
+}
+}  // namespace
+
+std::ostream &operator<<(std::ostream &out, const Interval &c) {
+    emit_interval(out, c);
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ConstantInterval &c) {
+    emit_interval(out, c);
     return out;
 }
 

@@ -5,8 +5,8 @@
 #include <sstream>
 #include <utility>
 
-#include "Bounds.h"
 #include "CSE.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "Func.h"
 #include "IREquality.h"
@@ -485,7 +485,7 @@ Expr lossless_cast(Type t, Expr e) {
         // We'll just throw a cast around something, if the bounds are small
         // enough.
         ConstantInterval ci = constant_integer_bounds(e);
-        if (ci.within(t)) {
+        if (t.can_represent(ci)) {
             // There are certain IR nodes where if the result is expressible
             // using some type, and the args are expressible using that type,
             // then the operation can just be done in that type.

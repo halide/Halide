@@ -1,7 +1,7 @@
-#include "Bounds.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -539,7 +539,7 @@ void CodeGen_X86::visit(const Cast *op) {
 
     // clang-format off
     static Pattern patterns[] = {
-        // This isn't rounding_multiply_quantzied(i16, i16, 15) because it doesn't
+        // This isn't rounding_mul_shift_right(i16, i16, 15) because it doesn't
         // saturate the result.
         {"pmulhrs", i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), 15))},
 
