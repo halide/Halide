@@ -7,9 +7,12 @@
  * exported in Halide.h. */
 
 #include "Bounds.h"
+#include "ConstantInterval.h"
 #include "IRMatch.h"
 #include "IRVisitor.h"
 #include "Scope.h"
+
+#include "IRPrinter.h"
 
 // Because this file is only included by the simplify methods and
 // doesn't go into Halide.h, we're free to use any old names for our
@@ -28,17 +31,6 @@
 namespace Halide {
 namespace Internal {
 
-inline int64_t saturating_mul(int64_t a, int64_t b) {
-    int64_t result;
-    if (mul_with_overflow(64, a, b, &result)) {
-        return result;
-    } else if ((a > 0) == (b > 0)) {
-        return INT64_MAX;
-    } else {
-        return INT64_MIN;
-    }
-}
-
 class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
     using Super = VariadicVisitor<Simplify, Expr, Stmt>;
 
@@ -47,63 +39,46 @@ public:
 
     struct ExprInfo {
         // We track constant integer bounds when they exist
-        // TODO: Use ConstantInterval?
-        int64_t min = 0, max = 0;
-        bool min_defined = false, max_defined = false;
+        ConstantInterval bounds;
         // And the alignment of integer variables
         ModulusRemainder alignment;
 
         void trim_bounds_using_alignment() {
             if (alignment.modulus == 0) {
-                min_defined = max_defined = true;
-                min = max = alignment.remainder;
+                bounds = ConstantInterval::single_point(alignment.remainder);
             } else if (alignment.modulus > 1) {
-                if (min_defined) {
+                if (bounds.has_lower_bound()) {
                     int64_t adjustment;
-                    bool no_overflow = sub_with_overflow(64, alignment.remainder, mod_imp(min, alignment.modulus), &adjustment);
+                    bool no_overflow = sub_with_overflow(64, alignment.remainder, mod_imp(bounds.min, alignment.modulus), &adjustment);
                     adjustment = mod_imp(adjustment, alignment.modulus);
                     int64_t new_min;
-                    no_overflow &= add_with_overflow(64, min, adjustment, &new_min);
+                    no_overflow &= add_with_overflow(64, bounds.min, adjustment, &new_min);
                     if (no_overflow) {
-                        min = new_min;
+                        bounds.min = new_min;
                     }
                 }
-                if (max_defined) {
+                if (bounds.has_upper_bound()) {
                     int64_t adjustment;
-                    bool no_overflow = sub_with_overflow(64, mod_imp(max, alignment.modulus), alignment.remainder, &adjustment);
+                    bool no_overflow = sub_with_overflow(64, mod_imp(bounds.max, alignment.modulus), alignment.remainder, &adjustment);
                     adjustment = mod_imp(adjustment, alignment.modulus);
                     int64_t new_max;
-                    no_overflow &= sub_with_overflow(64, max, adjustment, &new_max);
+                    no_overflow &= sub_with_overflow(64, bounds.max, adjustment, &new_max);
                     if (no_overflow) {
-                        max = new_max;
+                        bounds.max = new_max;
                     }
                 }
             }
 
-            if (min_defined && max_defined && min == max) {
+            if (bounds.is_single_point()) {
                 alignment.modulus = 0;
-                alignment.remainder = min;
+                alignment.remainder = bounds.min;
             }
         }
 
         // Mix in existing knowledge about this Expr
         void intersect(const ExprInfo &other) {
-            if (min_defined && other.min_defined) {
-                min = std::max(min, other.min);
-            } else if (other.min_defined) {
-                min_defined = true;
-                min = other.min;
-            }
-
-            if (max_defined && other.max_defined) {
-                max = std::min(max, other.max);
-            } else if (other.max_defined) {
-                max_defined = true;
-                max = other.max;
-            }
-
+            bounds = ConstantInterval::make_intersection(bounds, other.bounds);
             alignment = ModulusRemainder::intersect(alignment, other.alignment);
-
             trim_bounds_using_alignment();
         }
     };
@@ -298,45 +273,45 @@ public:
     Stmt mutate_let_body(const Stmt &s, ExprInfo *) {
         return mutate(s);
     }
-    Expr mutate_let_body(const Expr &e, ExprInfo *bounds) {
-        return mutate(e, bounds);
+    Expr mutate_let_body(const Expr &e, ExprInfo *info) {
+        return mutate(e, info);
     }
 
     template<typename T, typename Body>
-    Body simplify_let(const T *op, ExprInfo *bounds);
+    Body simplify_let(const T *op, ExprInfo *info);
 
-    Expr visit(const IntImm *op, ExprInfo *bounds);
-    Expr visit(const UIntImm *op, ExprInfo *bounds);
-    Expr visit(const FloatImm *op, ExprInfo *bounds);
-    Expr visit(const StringImm *op, ExprInfo *bounds);
-    Expr visit(const Broadcast *op, ExprInfo *bounds);
-    Expr visit(const Cast *op, ExprInfo *bounds);
-    Expr visit(const Reinterpret *op, ExprInfo *bounds);
-    Expr visit(const Variable *op, ExprInfo *bounds);
-    Expr visit(const Add *op, ExprInfo *bounds);
-    Expr visit(const Sub *op, ExprInfo *bounds);
-    Expr visit(const Mul *op, ExprInfo *bounds);
-    Expr visit(const Div *op, ExprInfo *bounds);
-    Expr visit(const Mod *op, ExprInfo *bounds);
-    Expr visit(const Min *op, ExprInfo *bounds);
-    Expr visit(const Max *op, ExprInfo *bounds);
-    Expr visit(const EQ *op, ExprInfo *bounds);
-    Expr visit(const NE *op, ExprInfo *bounds);
-    Expr visit(const LT *op, ExprInfo *bounds);
-    Expr visit(const LE *op, ExprInfo *bounds);
-    Expr visit(const GT *op, ExprInfo *bounds);
-    Expr visit(const GE *op, ExprInfo *bounds);
-    Expr visit(const And *op, ExprInfo *bounds);
-    Expr visit(const Or *op, ExprInfo *bounds);
-    Expr visit(const Not *op, ExprInfo *bounds);
-    Expr visit(const Select *op, ExprInfo *bounds);
-    Expr visit(const Ramp *op, ExprInfo *bounds);
+    Expr visit(const IntImm *op, ExprInfo *info);
+    Expr visit(const UIntImm *op, ExprInfo *info);
+    Expr visit(const FloatImm *op, ExprInfo *info);
+    Expr visit(const StringImm *op, ExprInfo *info);
+    Expr visit(const Broadcast *op, ExprInfo *info);
+    Expr visit(const Cast *op, ExprInfo *info);
+    Expr visit(const Reinterpret *op, ExprInfo *info);
+    Expr visit(const Variable *op, ExprInfo *info);
+    Expr visit(const Add *op, ExprInfo *info);
+    Expr visit(const Sub *op, ExprInfo *info);
+    Expr visit(const Mul *op, ExprInfo *info);
+    Expr visit(const Div *op, ExprInfo *info);
+    Expr visit(const Mod *op, ExprInfo *info);
+    Expr visit(const Min *op, ExprInfo *info);
+    Expr visit(const Max *op, ExprInfo *info);
+    Expr visit(const EQ *op, ExprInfo *info);
+    Expr visit(const NE *op, ExprInfo *info);
+    Expr visit(const LT *op, ExprInfo *info);
+    Expr visit(const LE *op, ExprInfo *info);
+    Expr visit(const GT *op, ExprInfo *info);
+    Expr visit(const GE *op, ExprInfo *info);
+    Expr visit(const And *op, ExprInfo *info);
+    Expr visit(const Or *op, ExprInfo *info);
+    Expr visit(const Not *op, ExprInfo *info);
+    Expr visit(const Select *op, ExprInfo *info);
+    Expr visit(const Ramp *op, ExprInfo *info);
     Stmt visit(const IfThenElse *op);
-    Expr visit(const Load *op, ExprInfo *bounds);
-    Expr visit(const Call *op, ExprInfo *bounds);
-    Expr visit(const Shuffle *op, ExprInfo *bounds);
-    Expr visit(const VectorReduce *op, ExprInfo *bounds);
-    Expr visit(const Let *op, ExprInfo *bounds);
+    Expr visit(const Load *op, ExprInfo *info);
+    Expr visit(const Call *op, ExprInfo *info);
+    Expr visit(const Shuffle *op, ExprInfo *info);
+    Expr visit(const VectorReduce *op, ExprInfo *info);
+    Expr visit(const Let *op, ExprInfo *info);
     Stmt visit(const LetStmt *op);
     Stmt visit(const AssertStmt *op);
     Stmt visit(const For *op);
@@ -354,7 +329,7 @@ public:
     Stmt visit(const Atomic *op);
     Stmt visit(const HoistedStorage *op);
 
-    std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &old_exprs, ExprInfo *bounds);
+    std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &old_exprs);
 };
 
 }  // namespace Internal

@@ -24,22 +24,24 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
 
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
-        ExprInfo bounds;
+        ExprInfo info;
         if (const int64_t *i_min = as_const_int(iter.value().min)) {
-            bounds.min_defined = true;
-            bounds.min = *i_min;
+            info.bounds.min_defined = true;
+            info.bounds.min = *i_min;
         }
         if (const int64_t *i_max = as_const_int(iter.value().max)) {
-            bounds.max_defined = true;
-            bounds.max = *i_max;
+            info.bounds.max_defined = true;
+            info.bounds.max = *i_max;
         }
 
         if (const auto *a = ai->find(iter.name())) {
-            bounds.alignment = *a;
+            info.alignment = *a;
         }
 
-        if (bounds.min_defined || bounds.max_defined || bounds.alignment.modulus != 1) {
-            bounds_and_alignment_info.push(iter.name(), bounds);
+        if (info.bounds.has_lower_bound() ||
+            info.bounds.has_upper_bound() ||
+            info.alignment.modulus != 1) {
+            bounds_and_alignment_info.push(iter.name(), info);
         }
     }
 
@@ -48,20 +50,20 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
             // Already handled
             continue;
         }
-        ExprInfo bounds;
-        bounds.alignment = iter.value();
-        bounds_and_alignment_info.push(iter.name(), bounds);
+        ExprInfo info;
+        info.alignment = iter.value();
+        bounds_and_alignment_info.push(iter.name(), info);
     }
 }
 
-std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vector<Expr> &old_exprs, ExprInfo *bounds) {
+std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vector<Expr> &old_exprs) {
     vector<Expr> new_exprs(old_exprs.size());
     bool changed = false;
 
     // Mutate the args
     for (size_t i = 0; i < old_exprs.size(); i++) {
         const Expr &old_e = old_exprs[i];
-        Expr new_e = mutate(old_e, bounds);
+        Expr new_e = mutate(old_e, nullptr);
         if (!new_e.same_as(old_e)) {
             changed = true;
         }
@@ -135,17 +137,17 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
         Simplify::ExprInfo i;
         if (v) {
             simplify->mutate(lt->b, &i);
-            if (i.min_defined) {
+            if (i.bounds.has_lower_bound()) {
                 // !(v < i)
-                learn_lower_bound(v, i.min);
+                learn_lower_bound(v, i.bounds.min);
             }
         }
         v = lt->b.as<Variable>();
         if (v) {
             simplify->mutate(lt->a, &i);
-            if (i.max_defined) {
+            if (i.bounds.has_upper_bound()) {
                 // !(i < v)
-                learn_upper_bound(v, i.max);
+                learn_upper_bound(v, i.bounds.max);
             }
         }
     } else if (const LE *le = fact.as<LE>()) {
@@ -153,17 +155,17 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
         Simplify::ExprInfo i;
         if (v && v->type.is_int() && v->type.bits() >= 32) {
             simplify->mutate(le->b, &i);
-            if (i.min_defined) {
+            if (i.bounds.has_lower_bound()) {
                 // !(v <= i)
-                learn_lower_bound(v, i.min + 1);
+                learn_lower_bound(v, i.bounds.min + 1);
             }
         }
         v = le->b.as<Variable>();
         if (v && v->type.is_int() && v->type.bits() >= 32) {
             simplify->mutate(le->a, &i);
-            if (i.max_defined) {
+            if (i.bounds.has_upper_bound()) {
                 // !(i <= v)
-                learn_upper_bound(v, i.max - 1);
+                learn_upper_bound(v, i.bounds.max - 1);
             }
         }
     } else if (const Call *c = Call::as_tag(fact)) {
@@ -185,8 +187,7 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
 
 void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
     ExprInfo b;
-    b.max_defined = true;
-    b.max = val;
+    b.bounds = ConstantInterval::bounded_above(val);
     if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
         b.intersect(*info);
     }
@@ -196,8 +197,7 @@ void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
 
 void Simplify::ScopedFact::learn_lower_bound(const Variable *v, int64_t val) {
     ExprInfo b;
-    b.min_defined = true;
-    b.min = val;
+    b.bounds = ConstantInterval::bounded_below(val);
     if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
         b.intersect(*info);
     }
@@ -267,17 +267,17 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         Simplify::ExprInfo i;
         if (v && v->type.is_int() && v->type.bits() >= 32) {
             simplify->mutate(lt->b, &i);
-            if (i.max_defined) {
+            if (i.bounds.has_upper_bound()) {
                 // v < i
-                learn_upper_bound(v, i.max - 1);
+                learn_upper_bound(v, i.bounds.max - 1);
             }
         }
         v = lt->b.as<Variable>();
         if (v && v->type.is_int() && v->type.bits() >= 32) {
             simplify->mutate(lt->a, &i);
-            if (i.min_defined) {
+            if (i.bounds.has_lower_bound()) {
                 // i < v
-                learn_lower_bound(v, i.min + 1);
+                learn_lower_bound(v, i.bounds.min + 1);
             }
         }
     } else if (const LE *le = fact.as<LE>()) {
@@ -285,17 +285,17 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         Simplify::ExprInfo i;
         if (v) {
             simplify->mutate(le->b, &i);
-            if (i.max_defined) {
+            if (i.bounds.has_upper_bound()) {
                 // v <= i
-                learn_upper_bound(v, i.max);
+                learn_upper_bound(v, i.bounds.max);
             }
         }
         v = le->b.as<Variable>();
         if (v) {
             simplify->mutate(le->a, &i);
-            if (i.min_defined) {
+            if (i.bounds.has_lower_bound()) {
                 // i <= v
-                learn_lower_bound(v, i.min);
+                learn_lower_bound(v, i.bounds.min);
             }
         }
     } else if (const Call *c = Call::as_tag(fact)) {

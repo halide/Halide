@@ -43,7 +43,7 @@ void count_var_uses(StmtOrExpr x, std::map<std::string, int> &var_uses) {
 }  // namespace
 
 template<typename LetOrLetStmt, typename Body>
-Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
+Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
 
     // Lets are often deeply nested. Get the intermediate state off
     // the call stack where it could overflow onto an explicit stack.
@@ -70,8 +70,8 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
-        ExprInfo value_bounds;
-        f.value = mutate(op->value, &value_bounds);
+        ExprInfo value_info;
+        f.value = mutate(op->value, &value_info);
 
         // Iteratively peel off certain operations from the let value and push them inside.
         f.new_value = f.value;
@@ -201,21 +201,24 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         var_info.push(op->name, info);
 
         // Before we enter the body, track the alignment info
-
         if (f.new_value.defined() && no_overflow_scalar_int(f.new_value.type())) {
             // Remutate new_value to get updated bounds
-            ExprInfo new_value_bounds;
-            f.new_value = mutate(f.new_value, &new_value_bounds);
-            if (new_value_bounds.min_defined || new_value_bounds.max_defined || new_value_bounds.alignment.modulus != 1) {
+            ExprInfo new_value_info;
+            f.new_value = mutate(f.new_value, &new_value_info);
+            if (new_value_info.bounds.has_lower_bound() ||
+                new_value_info.bounds.has_upper_bound() ||
+                new_value_info.alignment.modulus != 1) {
                 // There is some useful information
-                bounds_and_alignment_info.push(f.new_name, new_value_bounds);
+                bounds_and_alignment_info.push(f.new_name, new_value_info);
                 f.new_value_bounds_tracked = true;
             }
         }
 
         if (no_overflow_scalar_int(f.value.type())) {
-            if (value_bounds.min_defined || value_bounds.max_defined || value_bounds.alignment.modulus != 1) {
-                bounds_and_alignment_info.push(op->name, value_bounds);
+            if (value_info.bounds.has_lower_bound() ||
+                value_info.bounds.has_upper_bound() ||
+                value_info.alignment.modulus != 1) {
+                bounds_and_alignment_info.push(op->name, value_info);
                 f.value_bounds_tracked = true;
             }
         }
@@ -224,7 +227,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         op = result.template as<LetOrLetStmt>();
     }
 
-    result = mutate_let_body(result, bounds);
+    result = mutate_let_body(result, info);
 
     // TODO: var_info and vars_used are pretty redundant; however, at the time
     // of writing, both cover cases that the other does not:
@@ -271,8 +274,8 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
     return result;
 }
 
-Expr Simplify::visit(const Let *op, ExprInfo *bounds) {
-    return simplify_let<Let, Expr>(op, bounds);
+Expr Simplify::visit(const Let *op, ExprInfo *info) {
+    return simplify_let<Let, Expr>(op, info);
 }
 
 Stmt Simplify::visit(const LetStmt *op) {

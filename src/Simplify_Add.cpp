@@ -3,20 +3,15 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
-    ExprInfo a_bounds, b_bounds;
-    Expr a = mutate(op->a, &a_bounds);
-    Expr b = mutate(op->b, &b_bounds);
+Expr Simplify::visit(const Add *op, ExprInfo *info) {
+    ExprInfo a_info, b_info;
+    Expr a = mutate(op->a, &a_info);
+    Expr b = mutate(op->b, &b_info);
 
-    if (bounds && no_overflow_int(op->type)) {
-        bounds->min_defined = a_bounds.min_defined &&
-                              b_bounds.min_defined &&
-                              add_with_overflow(64, a_bounds.min, b_bounds.min, &(bounds->min));
-        bounds->max_defined = a_bounds.max_defined &&
-                              b_bounds.max_defined &&
-                              add_with_overflow(64, a_bounds.max, b_bounds.max, &(bounds->max));
-        bounds->alignment = a_bounds.alignment + b_bounds.alignment;
-        bounds->trim_bounds_using_alignment();
+    if (info && no_overflow_int(op->type)) {
+        info->bounds = a_info.bounds + b_info.bounds;
+        info->alignment = a_info.alignment + b_info.alignment;
+        info->trim_bounds_using_alignment();
     }
 
     if (may_simplify(op->type)) {
@@ -24,7 +19,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
         // Order commutative operations by node type
         if (should_commute(a, b)) {
             std::swap(a, b);
-            std::swap(a_bounds, b_bounds);
+            std::swap(a_info, b_info);
         }
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
@@ -194,7 +189,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
 
                false)))) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         // clang-format on
     }

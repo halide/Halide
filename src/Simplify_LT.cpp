@@ -3,10 +3,10 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
-    ExprInfo a_bounds, b_bounds;
-    Expr a = mutate(op->a, &a_bounds);
-    Expr b = mutate(op->b, &b_bounds);
+Expr Simplify::visit(const LT *op, ExprInfo *info) {
+    ExprInfo a_info, b_info;
+    Expr a = mutate(op->a, &a_info);
+    Expr b = mutate(op->b, &b_info);
 
     const int lanes = op->type.lanes();
     Type ty = a.type();
@@ -20,11 +20,12 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
     if (may_simplify(ty)) {
 
         // Prove or disprove using bounds analysis
-        if (a_bounds.max_defined && b_bounds.min_defined && a_bounds.max < b_bounds.min) {
+        debug(0) << "ELEPHANT: " << Expr(op) << ": " << a_info.bounds << ", " << b_info.bounds << "\n";
+        if (a_info.bounds < b_info.bounds) {
+            debug(0) << "... true\n";
             return const_true(lanes);
-        }
-
-        if (a_bounds.min_defined && b_bounds.max_defined && a_bounds.min >= b_bounds.max) {
+        } else if (a_info.bounds >= b_info.bounds) {
+            debug(0) << "... false\n";
             return const_false(lanes);
         }
 
@@ -499,7 +500,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
                       c1 * (lanes - 1) < c0 &&
                       c1 * (lanes - 1) >= 0)
               ))) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         // clang-format on
     }
@@ -512,7 +513,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 }
 
 // The other comparison operators redirect to the less-than operator
-Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
+Expr Simplify::visit(const LE *op, ExprInfo *info) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -523,7 +524,7 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
         }
     }
 
-    Expr mutated = mutate(!(op->b < op->a), bounds);
+    Expr mutated = mutate(!(op->b < op->a), info);
     if (const LE *le = mutated.as<LE>()) {
         if (le->a.same_as(op->a) && le->b.same_as(op->b)) {
             return op;
@@ -532,7 +533,7 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
     return mutated;
 }
 
-Expr Simplify::visit(const GT *op, ExprInfo *bounds) {
+Expr Simplify::visit(const GT *op, ExprInfo *info) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -543,10 +544,10 @@ Expr Simplify::visit(const GT *op, ExprInfo *bounds) {
         }
     }
 
-    return mutate(op->b < op->a, bounds);
+    return mutate(op->b < op->a, info);
 }
 
-Expr Simplify::visit(const GE *op, ExprInfo *bounds) {
+Expr Simplify::visit(const GE *op, ExprInfo *info) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -557,7 +558,7 @@ Expr Simplify::visit(const GE *op, ExprInfo *bounds) {
         }
     }
 
-    return mutate(!(op->a < op->b), bounds);
+    return mutate(!(op->a < op->b), info);
 }
 
 }  // namespace Internal

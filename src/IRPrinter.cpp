@@ -10,6 +10,7 @@
 #include "IROperator.h"
 #include "Interval.h"
 #include "Module.h"
+#include "ModulusRemainder.h"
 #include "Target.h"
 #include "Util.h"
 
@@ -474,6 +475,11 @@ std::ostream &operator<<(std::ostream &out, const Interval &c) {
 
 std::ostream &operator<<(std::ostream &out, const ConstantInterval &c) {
     emit_interval(out, c);
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
+    out << "(mod: " << c.modulus << " rem: " << c.remainder << ")";
     return out;
 }
 

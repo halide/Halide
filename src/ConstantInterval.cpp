@@ -97,6 +97,36 @@ ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const C
     return result;
 }
 
+ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a,
+                                                     const ConstantInterval &b) {
+    ConstantInterval result;
+    if (a.min_defined) {
+        if (b.min_defined) {
+            result.min = std::max(a.min, b.min);
+        } else {
+            result.min = a.min;
+        }
+        result.min_defined = true;
+    } else {
+        result.min_defined = b.min_defined;
+        result.min = b.min;
+    }
+    if (a.max_defined) {
+        if (b.max_defined) {
+            result.max = std::min(a.max, b.max);
+        } else {
+            result.max = a.max;
+        }
+        result.max_defined = true;
+    } else {
+        result.max_defined = b.max_defined;
+        result.max = b.max;
+    }
+    internal_assert(!result.is_bounded() || result.min <= result.max)
+        << "Empty ConstantInterval constructed in make_intersection";
+    return result;
+}
+
 // TODO: These were taken directly from the simplifier, so change the simplifier
 // to use these instead of duplicating the code.
 void ConstantInterval::operator+=(const ConstantInterval &other) {
@@ -305,6 +335,27 @@ void ConstantInterval::operator/=(int64_t x) {
     *this /= ConstantInterval(x, x);
 }
 
+bool operator<=(const ConstantInterval &a, const ConstantInterval &b) {
+    return a.max_defined && b.min_defined && a.max <= b.min;
+}
+bool operator<(const ConstantInterval &a, const ConstantInterval &b) {
+    return a.max_defined && b.min_defined && a.max < b.min;
+}
+
+bool operator<=(const ConstantInterval &a, int64_t b) {
+    return a.max_defined && a.max <= b;
+}
+bool operator<(const ConstantInterval &a, int64_t b) {
+    return a.max_defined && a.max < b;
+}
+
+bool operator<=(int64_t a, const ConstantInterval &b) {
+    return b.min_defined && a <= b.min;
+}
+bool operator<(int64_t a, const ConstantInterval &b) {
+    return b.min_defined && a < b.min;
+}
+
 void ConstantInterval::cast_to(const Type &t) {
     if (!t.can_represent(*this)) {
         // We have potential overflow or underflow, return the entire bounds of
@@ -371,6 +422,42 @@ ConstantInterval operator*(const ConstantInterval &a, const ConstantInterval &b)
     return result;
 }
 
+ConstantInterval operator%(const ConstantInterval &a, const ConstantInterval &b) {
+    ConstantInterval result;
+
+    // Maybe the mod won't actually do anything
+    if (a >= 0 && a < b) {
+        return a;
+    }
+
+    // The result is at least zero.
+    result.min_defined = true;
+    result.min = 0;
+
+    // Mod by produces a result between 0
+    // and max(0, abs(modulus) - 1). However, if b is unbounded in
+    // either direction, abs(modulus) could be arbitrarily
+    // large.
+    if (b.is_bounded()) {
+        result.max_defined = true;
+        result.max = 0;                                 // When b == 0
+        result.max = std::max(result.max, b.max - 1);   // When b > 0
+        result.max = std::max(result.max, -1 - b.min);  // When b < 0
+    }
+
+    // If a is positive, mod can't make it larger
+    if (a.is_bounded() && a.min >= 0) {
+        if (result.max_defined) {
+            result.max = std::min(result.max, a.max);
+        } else {
+            result.max_defined = true;
+            result.max = a.max;
+        }
+    }
+
+    return result;
+}
+
 ConstantInterval operator+(const ConstantInterval &a, int64_t b) {
     return a + ConstantInterval(b, b);
 }
@@ -387,24 +474,40 @@ ConstantInterval operator*(const ConstantInterval &a, int64_t b) {
     return a * ConstantInterval(b, b);
 }
 
+ConstantInterval operator%(const ConstantInterval &a, int64_t b) {
+    return a * ConstantInterval(b, b);
+}
+
 ConstantInterval min(const ConstantInterval &a, const ConstantInterval &b) {
-    ConstantInterval result = a;
-    if (a.min_defined && b.min_defined && b.min < a.min) {
-        result.min = b.min;
-    }
-    if (a.max_defined && b.max_defined && b.max < a.max) {
+    ConstantInterval result;
+    result.max_defined = a.max_defined || b.max_defined;
+    result.min_defined = a.min_defined && b.min_defined;
+    if (a.max_defined && b.max_defined) {
+        result.max = std::min(a.max, b.max);
+    } else if (a.max_defined) {
+        result.max = a.max;
+    } else if (b.max_defined) {
         result.max = b.max;
+    }
+    if (a.min_defined && b.min_defined) {
+        result.min = std::min(a.min, b.min);
     }
     return result;
 }
 
 ConstantInterval max(const ConstantInterval &a, const ConstantInterval &b) {
-    ConstantInterval result = a;
-    if (a.min_defined && b.min_defined && b.min > a.min) {
+    ConstantInterval result;
+    result.min_defined = a.min_defined || b.min_defined;
+    result.max_defined = a.max_defined && b.max_defined;
+    if (a.min_defined && b.min_defined) {
+        result.min = std::max(a.min, b.min);
+    } else if (a.min_defined) {
+        result.min = a.min;
+    } else if (b.min_defined) {
         result.min = b.min;
     }
-    if (a.max_defined && b.max_defined && b.max > a.max) {
-        result.max = b.max;
+    if (a.max_defined && b.max_defined) {
+        result.max = std::max(a.max, b.max);
     }
     return result;
 }
