@@ -15,6 +15,8 @@
 #include "Util.h"
 #include "Var.h"
 
+#define FLT_LOG2 0.69314718055994530941723212145818f
+
 using namespace Halide::Internal;
 
 namespace Halide {
@@ -795,7 +797,7 @@ Expr halide_log(const Expr &x_full) {
     Expr x1 = reduced - 1.0f;
     Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff) / sizeof(coeff[0]));
 
-    result += cast(type, exponent) * logf(2.0);
+    result += cast(type, exponent) * FLT_LOG2;
 
     result = select(exceptional, select(use_nan, nan, neg_inf), result);
 
@@ -811,7 +813,7 @@ Expr halide_exp(const Expr &x_full) {
 
     float ln2_part1 = 0.6931457519f;
     float ln2_part2 = 1.4286067653e-6f;
-    float one_over_ln2 = 1.0f / logf(2.0f);
+    float one_over_ln2 = 1.0f / FLT_LOG2;
 
     Expr scaled = x_full * one_over_ln2;
     Expr k_real = floor(scaled);
@@ -1351,7 +1353,7 @@ Expr fast_log(const Expr &x) {
         0.0f};
 
     Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff) / sizeof(coeff[0]));
-    result = result + cast<float>(exponent) * logf(2);
+    result = result + cast<float>(exponent) * FLT_LOG2;
     result = common_subexpression_elimination(result);
     return result;
 }
@@ -1410,10 +1412,10 @@ Expr fast_cos(const Expr &x_full) {
 Expr fast_exp(const Expr &x_full) {
     user_assert(x_full.type() == Float(32)) << "fast_exp only works for Float(32)";
 
-    Expr scaled = x_full / logf(2.0);
+    Expr scaled = x_full / FLT_LOG2;
     Expr k_real = floor(scaled);
     Expr k = cast<int>(k_real);
-    Expr x = x_full - k_real * logf(2.0);
+    Expr x = x_full - k_real * FLT_LOG2;
 
     float coeff[] = {
         0.01314350012789660196f,
