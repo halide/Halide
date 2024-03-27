@@ -21,10 +21,9 @@ include(HalideGeneratorHelpers)
 # Build Halide as a shared lib by default, but still honor command-line settings.
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
-# Warn if the user did not set a build type and is using a single-configuration generator.
-get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if (NOT IS_MULTI_CONFIG AND NOT DEFINED CMAKE_BUILD_TYPE)
-    message(WARNING "Single-configuration generators require CMAKE_BUILD_TYPE to be set.")
+# Warn if the user did not set a build type.
+if (NOT DEFINED CMAKE_BUILD_TYPE)
+    message(SEND_ERROR "CMAKE_BUILD_TYPE should be set.")
 endif ()
 
 # Windows has file name length restrictions and lacks an RPATH mechanism.
