@@ -6,10 +6,12 @@
 namespace Halide {
 namespace Internal {
 
-ConstantInterval constant_integer_bounds(const Expr &e, const Scope<ConstantInterval> &scope) {
+ConstantInterval constant_integer_bounds(const Expr &e,
+                                         const Scope<ConstantInterval> &scope,
+                                         std::map<Expr, ConstantInterval, ExprCompare> *cache) {
     internal_assert(e.defined());
 
-    auto ret = [&]() {
+    auto get_bounds = [&]() {
         // Compute the bounds of each IR node from the bounds of its args. Math
         // on ConstantInterval is in terms of infinite integers, so any op that
         // can overflow needs to cast the resulting interval back to the output
@@ -145,9 +147,18 @@ ConstantInterval constant_integer_bounds(const Expr &e, const Scope<ConstantInte
         }
 
         return ConstantInterval::bounds_of_type(e.type());
-    }();
+    };
 
-    debug(0) << "constant_integer_bounds(" << e << ") =\n  " << ret << "\n";
+    ConstantInterval ret;
+    if (cache) {
+        auto [it, cache_miss] = cache->try_emplace(e);
+        if (cache_miss) {
+            it->second = get_bounds();
+        }
+        ret = it->second;
+    } else {
+        ret = get_bounds();
+    }
 
     if (true) {
         internal_assert((!ret.has_lower_bound() || e.type().can_represent(ret.min)) &&

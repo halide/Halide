@@ -215,17 +215,10 @@ Expr Simplify::visit(const Variable *op, ExprInfo *info) {
             *info = *b;
         }
         if (b->bounds.is_single_point()) {
-            if (info) {
-                debug(0) << "Var is single point: " << op->name << ": " << info->bounds << "\n";
-            }
             return make_const(op->type, b->bounds.min);
         }
     } else if (info && !no_overflow_int(op->type)) {
         info->bounds = ConstantInterval::bounds_of_type(op->type);
-    }
-
-    if (info) {
-        debug(0) << "Bounds of var: " << op->name << ": " << info->bounds << "\n";
     }
 
     if (auto *v_info = var_info.shallow_find(op->name)) {

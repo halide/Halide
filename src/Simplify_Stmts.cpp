@@ -219,8 +219,15 @@ Stmt Simplify::visit(const For *op) {
 
     bool bounds_tracked = false;
     ExprInfo loop_var_info;
-    loop_var_info.bounds = ConstantInterval::make_union(min_info.bounds,
-                                                        min_info.bounds + extent_info.bounds - 1);
+    // Deduce bounds for the loop var that are true for any code than runs
+    // inside the loop body. Code in the inner loop only runs if the extent is
+    // at least one, so we can throw a max around the extent bounds.
+
+    loop_var_info.bounds =
+        ConstantInterval::make_union(min_info.bounds,
+                                     min_info.bounds + max(extent_info.bounds, 1) - 1);
+
+
     if (loop_var_info.bounds.has_upper_bound() ||
         loop_var_info.bounds.has_lower_bound()) {
         bounds_tracked = true;

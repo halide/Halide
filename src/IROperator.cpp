@@ -436,19 +436,19 @@ Expr const_false(int w) {
     return make_zero(UInt(1, w));
 }
 
-Expr lossless_cast(Type t, Expr e) {
+Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare> *cache) {
     if (!e.defined() || t == e.type()) {
         return e;
     } else if (t.can_represent(e.type())) {
         return cast(t, std::move(e));
     } else if (const Cast *c = e.as<Cast>()) {
         if (c->type.can_represent(c->value.type())) {
-            return lossless_cast(t, c->value);
+            return lossless_cast(t, c->value, cache);
         } else {
             return Expr();
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.element_of(), b->value);
+        Expr v = lossless_cast(t.element_of(), b->value, cache);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
         } else {
@@ -475,41 +475,51 @@ Expr lossless_cast(Type t, Expr e) {
     } else if (const Shuffle *shuf = e.as<Shuffle>()) {
         std::vector<Expr> vecs;
         for (const auto &vec : shuf->vectors) {
-            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec));
+            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec, cache));
             if (!vecs.back().defined()) {
                 return Expr();
             }
         }
         return Shuffle::make(vecs, shuf->indices);
     } else if (t.is_int_or_uint()) {
-        // We'll just throw a cast around something, if the bounds are small
-        // enough.
-        ConstantInterval ci = constant_integer_bounds(e);
+        // Check the bounds. If they're small enough, we can throw narrowing
+        // casts around e, or subterms.
+        ConstantInterval ci;
+        if (cache) {
+            auto [it, cache_miss] = cache->try_emplace(e);
+            if (cache_miss) {
+                it->second = constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), cache);
+            }
+            ci = it->second;
+        } else {
+            ci = constant_integer_bounds(e);
+        }
+
         if (t.can_represent(ci)) {
             // There are certain IR nodes where if the result is expressible
             // using some type, and the args are expressible using that type,
             // then the operation can just be done in that type.
             if (const Add *op = e.as<Add>()) {
-                Expr a = lossless_cast(t, op->a);
-                Expr b = lossless_cast(t, op->b);
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
                 if (a.defined() && b.defined()) {
                     return a + b;
                 }
             } else if (const Sub *op = e.as<Sub>()) {
-                Expr a = lossless_cast(t, op->a);
-                Expr b = lossless_cast(t, op->b);
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
                 if (a.defined() && b.defined()) {
                     return a - b;
                 }
             } else if (const Mul *op = e.as<Mul>()) {
-                Expr a = lossless_cast(t, op->a);
-                Expr b = lossless_cast(t, op->b);
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
                 if (a.defined() && b.defined()) {
                     return a * b;
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_add})) {
-                Expr a = lossless_cast(t, op->args[0]);
-                Expr b = lossless_cast(t, op->args[1]);
+                Expr a = lossless_cast(t, op->args[0], cache);
+                Expr b = lossless_cast(t, op->args[1], cache);
                 if (a.defined() && b.defined()) {
                     return a + b;
                 }
@@ -517,7 +527,7 @@ Expr lossless_cast(Type t, Expr e) {
                 if (op->op == VectorReduce::Add ||
                     op->op == VectorReduce::Min ||
                     op->op == VectorReduce::Max) {
-                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value);
+                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, cache);
                     if (v.defined()) {
                         return VectorReduce::make(op->op, v, op->type.lanes());
                     }

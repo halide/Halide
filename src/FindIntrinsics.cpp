@@ -46,23 +46,6 @@ bool can_narrow(const Type &t) {
            t.bits() >= 8;
 }
 
-Expr lossless_narrow(const Expr &x) {
-    return can_narrow(x.type()) ? lossless_cast(x.type().narrow(), x) : Expr();
-}
-
-// Remove a widening cast even if it changes the sign of the result.
-Expr strip_widening_cast(const Expr &x) {
-    if (can_narrow(x.type())) {
-        Expr narrow = lossless_narrow(x);
-        if (narrow.defined()) {
-            return narrow;
-        }
-        return lossless_cast(x.type().narrow().with_code(halide_type_uint), x);
-    } else {
-        return Expr();
-    }
-}
-
 Expr saturating_narrow(const Expr &a) {
     Type narrow = a.type().narrow();
     return saturating_cast(narrow, a);
@@ -76,36 +59,6 @@ bool no_overflow_int(Type t) {
 // Returns true iff t does not have a well defined overflow behavior.
 bool no_overflow(Type t) {
     return t.is_float() || no_overflow_int(t);
-}
-
-// TODO: Can I delete this now and just rely on lossless cast?
-
-// If there's a widening add or subtract in the first e.type().bits() / 2 - 1
-// levels down a tree of adds or subtracts, we know there's enough headroom for
-// another add without overflow. For example, it is safe to add to
-// (widening_add(x, y) - z) without overflow.
-bool is_safe_for_add(const Expr &e, int max_depth) {
-    if (max_depth-- <= 0) {
-        return false;
-    }
-    if (const Add *add = e.as<Add>()) {
-        return is_safe_for_add(add->a, max_depth) || is_safe_for_add(add->b, max_depth);
-    } else if (const Sub *sub = e.as<Sub>()) {
-        return is_safe_for_add(sub->a, max_depth) || is_safe_for_add(sub->b, max_depth);
-    } else if (const Cast *cast = e.as<Cast>()) {
-        if (cast->type.bits() > cast->value.type().bits()) {
-            return true;
-        } else if (cast->type.bits() == cast->value.type().bits()) {
-            return is_safe_for_add(cast->value, max_depth);
-        }
-    } else if (Call::as_intrinsic(e, {Call::widening_add, Call::widening_sub, Call::widen_right_add, Call::widen_right_sub})) {
-        return true;
-    }
-    return false;
-}
-
-bool is_safe_for_add(const Expr &e) {
-    return is_safe_for_add(e, e.type().bits() / 2 - 1);
 }
 
 // We want to find and remove an add of 'round' from e. This is not
@@ -133,93 +86,6 @@ Expr find_and_subtract(const Expr &e, const Expr &round) {
     return Expr();
 }
 
-Expr to_rounding_shift(const Call *c) {
-    if (c->is_intrinsic(Call::shift_left) || c->is_intrinsic(Call::shift_right)) {
-        internal_assert(c->args.size() == 2);
-        Expr a = c->args[0];
-        Expr b = c->args[1];
-
-        // Helper to make the appropriate shift.
-        auto rounding_shift = [&](const Expr &a, const Expr &b) {
-            if (c->is_intrinsic(Call::shift_right)) {
-                return rounding_shift_right(a, b);
-            } else {
-                return rounding_shift_left(a, b);
-            }
-        };
-
-        // The rounding offset for the shift we have.
-        Type round_type = a.type().with_lanes(1);
-        if (Call::as_intrinsic(a, {Call::widening_add})) {
-            round_type = round_type.narrow();
-        }
-        Expr round;
-        if (c->is_intrinsic(Call::shift_right)) {
-            round = (make_one(round_type) << max(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2;
-        } else {
-            round = (make_one(round_type) >> min(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2;
-        }
-        // Input expressions are simplified before running find_intrinsics, but b
-        // has been lifted here so we need to lower_intrinsics before simplifying
-        // and re-lifting. Should we move this code into the FindIntrinsics class
-        // to make it easier to lift round?
-        round = lower_intrinsics(round);
-        round = simplify(round);
-        round = find_intrinsics(round);
-
-        // We can always handle widening adds.
-        if (const Call *add = Call::as_intrinsic(a, {Call::widening_add})) {
-            if (can_prove(lower_intrinsics(add->args[0] == round))) {
-                return rounding_shift(cast(add->type, add->args[1]), b);
-            } else if (can_prove(lower_intrinsics(add->args[1] == round))) {
-                return rounding_shift(cast(add->type, add->args[0]), b);
-            }
-        }
-
-        if (const Call *add = Call::as_intrinsic(a, {Call::widen_right_add})) {
-            if (can_prove(lower_intrinsics(add->args[1] == round))) {
-                return rounding_shift(cast(add->type, add->args[0]), b);
-            }
-        }
-
-        // Also need to handle the annoying case of a reinterpret cast wrapping a widen_right_add
-        // TODO: this pattern makes me want to change the semantics of this op.
-        if (const Cast *cast = a.as<Cast>()) {
-            if (cast->is_reinterpret()) {
-                if (const Call *add = Call::as_intrinsic(cast->value, {Call::widen_right_add})) {
-                    if (can_prove(lower_intrinsics(add->args[1] == round))) {
-                        // We expect the first operand to be a reinterpet cast.
-                        if (const Cast *cast_a = add->args[0].as<Cast>()) {
-                            if (cast_a->is_reinterpret()) {
-                                return rounding_shift(cast_a->value, b);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // If it wasn't a widening or saturating add, we might still
-        // be able to safely accept the rounding.
-        Expr a_less_round = find_and_subtract(a, round);
-        if (a_less_round.defined()) {
-            // We found and removed the rounding. However, we may have just changed
-            // behavior due to overflow. This is still safe if the type is not
-            // overflowing, or we can find a widening add or subtract in the tree
-            // of adds/subtracts. This is a common pattern, e.g.
-            // rounding_halving_add(a, b) = shift_round(widening_add(a, b) + 1, 1).
-            // TODO: This could be done with bounds inference instead of this hack
-            // if it supported intrinsics like widening_add and tracked bounds for
-            // types other than int32.
-            if (no_overflow(a.type()) || is_safe_for_add(a_less_round)) {
-                return rounding_shift(simplify(a_less_round), b);
-            }
-        }
-    }
-
-    return Expr();
-}
-
 class FindIntrinsics : public IRMutator {
 protected:
     using IRMutator::visit;
@@ -230,6 +96,120 @@ protected:
     IRMatcher::Wild<3> w;
     IRMatcher::WildConst<0> c0;
     IRMatcher::WildConst<1> c1;
+
+    std::map<Expr, ConstantInterval, ExprCompare> bounds_cache;
+    Scope<ConstantInterval> let_var_bounds;
+
+    Expr lossless_cast(Type t, const Expr &e) {
+        return Halide::Internal::lossless_cast(t, e, &bounds_cache);
+    }
+
+    ConstantInterval constant_integer_bounds(const Expr &e) {
+        // TODO: Use the scope - add let visitors
+        return Halide::Internal::constant_integer_bounds(e, let_var_bounds, &bounds_cache);
+    }
+
+    Expr lossless_narrow(const Expr &x) {
+        return can_narrow(x.type()) ? lossless_cast(x.type().narrow(), x) : Expr();
+    }
+
+    // Remove a widening cast even if it changes the sign of the result.
+    Expr strip_widening_cast(const Expr &x) {
+        if (can_narrow(x.type())) {
+            Expr narrow = lossless_narrow(x);
+            if (narrow.defined()) {
+                return narrow;
+            }
+            return lossless_cast(x.type().narrow().with_code(halide_type_uint), x);
+        } else {
+            return Expr();
+        }
+    }
+
+    Expr to_rounding_shift(const Call *c) {
+        if (c->is_intrinsic(Call::shift_left) || c->is_intrinsic(Call::shift_right)) {
+            internal_assert(c->args.size() == 2);
+            Expr a = c->args[0];
+            Expr b = c->args[1];
+
+            // Helper to make the appropriate shift.
+            auto rounding_shift = [&](const Expr &a, const Expr &b) {
+                if (c->is_intrinsic(Call::shift_right)) {
+                    return rounding_shift_right(a, b);
+                } else {
+                    return rounding_shift_left(a, b);
+                }
+            };
+
+            // The rounding offset for the shift we have.
+            Type round_type = a.type().with_lanes(1);
+            if (Call::as_intrinsic(a, {Call::widening_add})) {
+                round_type = round_type.narrow();
+            }
+            Expr round;
+            if (c->is_intrinsic(Call::shift_right)) {
+                round = (make_one(round_type) << max(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2;
+            } else {
+                round = (make_one(round_type) >> min(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2;
+            }
+            // Input expressions are simplified before running find_intrinsics, but b
+            // has been lifted here so we need to lower_intrinsics before simplifying
+            // and re-lifting. Should we move this code into the FindIntrinsics class
+            // to make it easier to lift round?
+            round = lower_intrinsics(round);
+            round = simplify(round);
+            round = find_intrinsics(round);
+
+            // We can always handle widening adds.
+            if (const Call *add = Call::as_intrinsic(a, {Call::widening_add})) {
+                if (can_prove(lower_intrinsics(add->args[0] == round))) {
+                    return rounding_shift(cast(add->type, add->args[1]), b);
+                } else if (can_prove(lower_intrinsics(add->args[1] == round))) {
+                    return rounding_shift(cast(add->type, add->args[0]), b);
+                }
+            }
+
+            if (const Call *add = Call::as_intrinsic(a, {Call::widen_right_add})) {
+                if (can_prove(lower_intrinsics(add->args[1] == round))) {
+                    return rounding_shift(cast(add->type, add->args[0]), b);
+                }
+            }
+
+            // Also need to handle the annoying case of a reinterpret cast wrapping a widen_right_add
+            // TODO: this pattern makes me want to change the semantics of this op.
+            if (const Cast *cast = a.as<Cast>()) {
+                if (cast->is_reinterpret()) {
+                    if (const Call *add = Call::as_intrinsic(cast->value, {Call::widen_right_add})) {
+                        if (can_prove(lower_intrinsics(add->args[1] == round))) {
+                            // We expect the first operand to be a reinterpet cast.
+                            if (const Cast *cast_a = add->args[0].as<Cast>()) {
+                                if (cast_a->is_reinterpret()) {
+                                    return rounding_shift(cast_a->value, b);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If it wasn't a widening or saturating add, we might still
+            // be able to safely accept the rounding.
+            Expr a_less_round = find_and_subtract(a, round);
+            if (a_less_round.defined()) {
+                // We found and removed the rounding. Verify it didn't change
+                // overflow behavior.
+                if (no_overflow(a.type()) ||
+                    a.type().can_represent(constant_integer_bounds(a_less_round) +
+                                           constant_integer_bounds(round))) {
+                    // If we can add the rounding term back on without causing
+                    // overflow, then it must not have overflowed originally.
+                    return rounding_shift(simplify(a_less_round), b);
+                }
+            }
+        }
+
+        return Expr();
+    }
 
     Expr visit(const Add *op) override {
         if (!find_intrinsics_for_type(op->type)) {
@@ -553,8 +533,6 @@ protected:
 
         // Do we need to worry about this cast overflowing?
         ConstantInterval value_bounds = constant_integer_bounds(value);
-        debug(0) << "Bounds of " << Expr(op) << " are " << value_bounds.min << " " << value_bounds.min_defined << " " << value_bounds.max << " " << value_bounds.max_defined << "\n";
-
         bool no_overflow = (op->type.can_represent(op->value.type()) ||
                             op->type.can_represent(value_bounds));
 
@@ -1490,14 +1468,12 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
     // if it isn't already full precision. This avoids infinite loops despite
     // "lowering" this to another mul_shift_right operation.
     ConstantInterval cq = constant_integer_bounds(q);
-    debug(0) << " cq = " << cq.min << " " << cq.min_defined << " " << cq.max << " " << cq.max_defined << "\n";
     if (cq.is_single_point() && cq.max >= 0 && cq.max < full_q) {
         int missing_q = full_q - (int)cq.max;
 
         // Try to scale up the args by factors of two without overflowing
         int a_shift = 0, b_shift = 0;
         ConstantInterval ca = constant_integer_bounds(a);
-        debug(0) << " ca = " << ca.min << " " << ca.min_defined << " " << ca.max << " " << ca.max_defined << "\n";
         do {
             ConstantInterval bigger = ca * ConstantInterval::single_point(2);
             if (a.type().can_represent(bigger) && a_shift + b_shift < missing_q) {
@@ -1507,7 +1483,6 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
             }
         } while (false);
         ConstantInterval cb = constant_integer_bounds(b);
-        debug(0) << " cb = " << cb.min << " " << cb.min_defined << " " << cb.max << " " << cb.max_defined << "\n";
         do {
             ConstantInterval bigger = cb * ConstantInterval::single_point(2);
             if (b.type().can_represent(bigger) && b_shift + b_shift < missing_q) {
@@ -1516,8 +1491,6 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
                 continue;
             }
         } while (false);
-
-        debug(0) << "a_shift = " << a_shift << " b_shift = " << b_shift << " full_q = " << full_q << "\n";
         if (a_shift + b_shift == missing_q) {
             return rounding_mul_shift_right(simplify(a << a_shift), simplify(b << b_shift), full_q);
         }
@@ -1527,10 +1500,8 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
     Expr wide_result = rounding_shift_right(widening_mul(a, b), q);
     Expr narrowed = lossless_cast(a.type(), wide_result);
     if (narrowed.defined()) {
-        debug(0) << " losslessly narrowed to " << narrowed << "\n";
         return narrowed;
     } else {
-        debug(0) << " returning saturating_narrow(" << wide_result << ")\n";
         return saturating_narrow(wide_result);
     }
 }

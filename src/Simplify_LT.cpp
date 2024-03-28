@@ -20,12 +20,9 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
     if (may_simplify(ty)) {
 
         // Prove or disprove using bounds analysis
-        debug(0) << "ELEPHANT: " << Expr(op) << ": " << a_info.bounds << ", " << b_info.bounds << "\n";
         if (a_info.bounds < b_info.bounds) {
-            debug(0) << "... true\n";
             return const_true(lanes);
         } else if (a_info.bounds >= b_info.bounds) {
-            debug(0) << "... false\n";
             return const_false(lanes);
         }
 

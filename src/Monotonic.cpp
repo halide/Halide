@@ -528,7 +528,6 @@ ConstantInterval derivative_bounds(const Expr &e, const std::string &var, const 
     }
     DerivativeBounds m(var, scope);
     remove_likelies(remove_promises(e)).accept(&m);
-    debug(0) << "Derivative bounds of " << e << " w.r.t. " << var << ": " << m.result << "\n";
     return m.result;
 }
 

@@ -24,10 +24,6 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
         return e;
     };
 
-    if (info) {
-        debug(0) << "Bounds of max: " << Expr(op) << ": " << a_info.bounds << ", " << b_info.bounds << ", " << info->bounds << "\n";
-    }
-
     // Early out when the bounds tells us one side or the other is smaller
     if (a_info.bounds <= b_info.bounds) {
         return strip_likely(b);
