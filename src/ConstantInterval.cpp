@@ -127,8 +127,6 @@ ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a,
     return result;
 }
 
-// TODO: These were taken directly from the simplifier, so change the simplifier
-// to use these instead of duplicating the code.
 void ConstantInterval::operator+=(const ConstantInterval &other) {
     min_defined = min_defined &&
                   other.min_defined &&
@@ -191,6 +189,7 @@ void ConstantInterval::operator*=(const ConstantInterval &other) {
                (other.max_defined && bounded && positive)) {
         // One side has a max, and the other side is bounded and positive
         // (e.g. a constant).
+        result.max_defined = true;
         result.max = saturating_mul(max, other.max);
         if (!result.max_defined) {
             result.max = 0;
@@ -199,6 +198,7 @@ void ConstantInterval::operator*=(const ConstantInterval &other) {
                (other.min_defined && bounded && positive)) {
         // One side has a min, and the other side is bounded and positive
         // (e.g. a constant).
+        result.min_defined = true;
         min = saturating_mul(min, other.min);
         if (!result.min_defined) {
             result.min = 0;
@@ -495,6 +495,20 @@ ConstantInterval min(const ConstantInterval &a, const ConstantInterval &b) {
     return result;
 }
 
+ConstantInterval min(const ConstantInterval &a, int64_t b) {
+    ConstantInterval result = a;
+    if (result.max_defined) {
+        result.max = std::min(a.max, b);
+    } else {
+        result.max = b;
+        result.max_defined = true;
+    }
+    if (result.min_defined) {
+        result.min = std::min(a.min, b);
+    }
+    return result;
+}
+
 ConstantInterval max(const ConstantInterval &a, const ConstantInterval &b) {
     ConstantInterval result;
     result.min_defined = a.min_defined || b.min_defined;
@@ -508,6 +522,20 @@ ConstantInterval max(const ConstantInterval &a, const ConstantInterval &b) {
     }
     if (a.max_defined && b.max_defined) {
         result.max = std::max(a.max, b.max);
+    }
+    return result;
+}
+
+ConstantInterval max(const ConstantInterval &a, int64_t b) {
+    ConstantInterval result = a;
+    if (result.min_defined) {
+        result.min = std::max(a.min, b);
+    } else {
+        result.min = b;
+        result.min_defined = true;
+    }
+    if (result.max_defined) {
+        result.max = std::max(a.max, b);
     }
     return result;
 }

@@ -35,6 +35,8 @@ ConstantInterval constant_integer_bounds(const Expr &e, const Scope<ConstantInte
         } else if (const Div *op = e.as<Div>()) {
             // Can overflow when dividing type.min() by -1
             return cast(op->type, constant_integer_bounds(op->a) / constant_integer_bounds(op->b));
+        } else if (const Mod *op = e.as<Mod>()) {
+            return cast(op->type, constant_integer_bounds(op->a) % constant_integer_bounds(op->b));
         } else if (const Min *op = e.as<Min>()) {
             return min(constant_integer_bounds(op->a), constant_integer_bounds(op->b));
         } else if (const Max *op = e.as<Max>()) {
