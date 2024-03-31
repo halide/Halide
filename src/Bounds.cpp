@@ -1242,7 +1242,7 @@ private:
                 if (equal(a.min, a.max)) {
                     interval = Interval::single_point(Call::make(t, Call::abs, {a.max}, Call::PureIntrinsic));
                 } else if (op->args[0].type().is_int() && op->args[0].type().bits() >= 32) {
-                    interval.min = Cast::make(t, Max::make(make_zero(a.min.type()), Max::make(a.min, -a.max)));
+                    interval.min = Cast::make(t, Max::make(a.min, -Min::make(make_zero(a.min.type()), a.max)));
                     interval.max = Cast::make(t, Max::make(-a.min, a.max));
                 } else {
                     interval.min = Cast::make(t, Max::make(a.min, -Min::make(make_zero(a.min.type()), a.max)));
