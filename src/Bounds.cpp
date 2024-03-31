@@ -1237,12 +1237,19 @@ private:
 
         if (op->is_intrinsic(Call::abs)) {
             Interval a = arg_bounds.get(0);
-            interval.min = make_zero(t);
+
+            if (a.has_lower_bound()) {
+                interval.min = cast(t, Max::make(make_zero(a.min.type()), a.min));
+            } else {
+                interval.min = make_zero(t);
+            }
+
             if (a.is_bounded()) {
                 if (equal(a.min, a.max)) {
                     interval = Interval::single_point(Call::make(t, Call::abs, {a.max}, Call::PureIntrinsic));
                 } else if (op->args[0].type().is_int() && op->args[0].type().bits() >= 32) {
-                    interval.max = Max::make(Cast::make(t, -a.min), Cast::make(t, a.max));
+                    interval.min = Cast::make(t, Max::make(make_zero(a.min.type()), Max::make(a.min, -a.max)));
+                    interval.max = Cast::make(t, Max::make(-a.min, a.max));
                 } else {
                     a.min = Call::make(t, Call::abs, {a.min}, Call::PureIntrinsic);
                     a.max = Call::make(t, Call::abs, {a.max}, Call::PureIntrinsic);
@@ -3651,6 +3658,11 @@ void bounds_test() {
     check(scope, cast<float>(x), 0.0f, 10.0f);
 
     check(scope, cast<int32_t>(abs(cast<float>(x))), 0, 10);
+    check(scope, abs(2 + x), u32(2), u32(12));
+    check(scope, abs(x - 11), u32(1), u32(11));
+    check(scope, abs(x - 5), u32(0), u32(5));
+    check(scope, abs(2 + cast<float>(x)), 2.f, 12.f);
+    check(scope, abs(cast<float>(x) - 5), 0.f, 5.f);
 
     // Check some vectors
     check(scope, Ramp::make(x * 2, 5, 5), 0, 40);
