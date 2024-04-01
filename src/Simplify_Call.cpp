@@ -145,7 +145,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             // LLVM shl and shr instructions produce poison for
             // shifts >= typesize, so we will follow suit in our simplifier.
             if (ub >= (uint64_t)(t.bits())) {
-                clear_bounds_info(info);
+                clear_expr_info(info);
                 return make_signed_integer_overflow(t);
             }
             if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
@@ -778,7 +778,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         // just fall thru and take the general case.
         debug(2) << "Simplifier: unhandled PureExtern: " << op->name << "\n";
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
-        clear_bounds_info(info);
+        clear_expr_info(info);
     } else if (op->is_intrinsic(Call::concat_bits) && op->args.size() == 1) {
         return mutate(op->args[0], info);
     }

@@ -13,7 +13,7 @@ Expr Simplify::visit(const IntImm *op, ExprInfo *info) {
         info->alignment = ModulusRemainder(0, op->value);
         info->cast_to(op->type);
     } else {
-        clear_bounds_info(info);
+        clear_expr_info(info);
     }
     return op;
 }
@@ -25,18 +25,18 @@ Expr Simplify::visit(const UIntImm *op, ExprInfo *info) {
         info->alignment = ModulusRemainder(0, v);
         info->cast_to(op->type);
     } else {
-        clear_bounds_info(info);
+        clear_expr_info(info);
     }
     return op;
 }
 
 Expr Simplify::visit(const FloatImm *op, ExprInfo *info) {
-    clear_bounds_info(info);
+    clear_expr_info(info);
     return op;
 }
 
 Expr Simplify::visit(const StringImm *op, ExprInfo *info) {
-    clear_bounds_info(info);
+    clear_expr_info(info);
     return op;
 }
 

@@ -114,7 +114,7 @@ public:
     };
 
     HALIDE_ALWAYS_INLINE
-    void clear_bounds_info(ExprInfo *b) {
+    void clear_expr_info(ExprInfo *b) {
         if (b) {
             *b = ExprInfo{};
         }
