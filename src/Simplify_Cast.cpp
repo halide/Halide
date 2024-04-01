@@ -108,6 +108,17 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
             // eliminated.
             return mutate(Cast::make(op->type, cast->value), info);
         } else if (cast &&
+                   op->type.is_int_or_uint() &&
+                   cast->type.is_int() &&
+                   cast->value.type().is_int() &&
+                   op->type.bits() >= cast->type.bits() &&
+                   cast->type.bits() >= cast->value.type().bits()) {
+            // Casting from a signed type always sign-extends, so widening
+            // partway to a signed type and the rest of the way to some other
+            // integer type is the same as just widening to that integer type
+            // directly.
+            return mutate(Cast::make(op->type, cast->value), info);
+        } else if (cast &&
                    (op->type.is_int() || op->type.is_uint()) &&
                    (cast->type.is_int() || cast->type.is_uint()) &&
                    op->type.bits() <= cast->type.bits() &&
