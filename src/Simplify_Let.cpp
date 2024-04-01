@@ -205,8 +205,8 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
             // Remutate new_value to get updated bounds
             ExprInfo new_value_info;
             f.new_value = mutate(f.new_value, &new_value_info);
-            if (new_value_info.bounds.has_lower_bound() ||
-                new_value_info.bounds.has_upper_bound() ||
+            if (new_value_info.bounds.min_defined ||
+                new_value_info.bounds.max_defined ||
                 new_value_info.alignment.modulus != 1) {
                 // There is some useful information
                 bounds_and_alignment_info.push(f.new_name, new_value_info);
@@ -215,8 +215,8 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
         }
 
         if (no_overflow_scalar_int(f.value.type())) {
-            if (value_info.bounds.has_lower_bound() ||
-                value_info.bounds.has_upper_bound() ||
+            if (value_info.bounds.min_defined ||
+                value_info.bounds.max_defined ||
                 value_info.alignment.modulus != 1) {
                 bounds_and_alignment_info.push(op->name, value_info);
                 f.value_bounds_tracked = true;

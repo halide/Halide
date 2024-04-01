@@ -11,11 +11,11 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
             // If there's overflow in a no-overflow type (e.g. due to casting
             // from a UInt(64) to an Int(32), then set the corresponding bound
             // to infinity.
-            if (info->bounds.has_upper_bound() && !op->type.can_represent(info->bounds.max)) {
+            if (info->bounds.max_defined && !op->type.can_represent(info->bounds.max)) {
                 info->bounds.max_defined = false;
                 info->bounds.max = 0;
             }
-            if (info->bounds.has_lower_bound() && !op->type.can_represent(info->bounds.min)) {
+            if (info->bounds.min_defined && !op->type.can_represent(info->bounds.min)) {
                 info->bounds.min_defined = false;
                 info->bounds.min = 0;
             }

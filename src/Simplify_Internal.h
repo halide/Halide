@@ -47,7 +47,7 @@ public:
             if (alignment.modulus == 0) {
                 bounds = ConstantInterval::single_point(alignment.remainder);
             } else if (alignment.modulus > 1) {
-                if (bounds.has_lower_bound()) {
+                if (bounds.min_defined) {
                     int64_t adjustment;
                     bool no_overflow = sub_with_overflow(64, alignment.remainder, mod_imp(bounds.min, alignment.modulus), &adjustment);
                     adjustment = mod_imp(adjustment, alignment.modulus);
@@ -57,7 +57,7 @@ public:
                         bounds.min = new_min;
                     }
                 }
-                if (bounds.has_upper_bound()) {
+                if (bounds.max_defined) {
                     int64_t adjustment;
                     bool no_overflow = sub_with_overflow(64, mod_imp(bounds.max, alignment.modulus), alignment.remainder, &adjustment);
                     adjustment = mod_imp(adjustment, alignment.modulus);

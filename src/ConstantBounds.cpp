@@ -162,12 +162,10 @@ ConstantInterval constant_integer_bounds(const Expr &e,
         ret = get_bounds();
     }
 
-    if (true) {
-        internal_assert((!ret.has_lower_bound() || e.type().can_represent(ret.min)) &&
-                        (!ret.has_upper_bound() || e.type().can_represent(ret.max)))
-            << "constant_bounds returned defined bounds that are not representable in "
-            << "the type of the Expr passed in.\n Expr: " << e << "\n Bounds: " << ret;
-    }
+    internal_assert((!ret.min_defined || e.type().can_represent(ret.min)) &&
+                    (!ret.max_defined || e.type().can_represent(ret.max)))
+        << "constant_bounds returned defined bounds that are not representable in "
+        << "the type of the Expr passed in.\n Expr: " << e << "\n Bounds: " << ret;
 
     return ret;
 }

@@ -48,14 +48,6 @@ bool ConstantInterval::is_single_point(int64_t x) const {
     return min_defined && max_defined && min == x && max == x;
 }
 
-bool ConstantInterval::has_upper_bound() const {
-    return max_defined;
-}
-
-bool ConstantInterval::has_lower_bound() const {
-    return min_defined;
-}
-
 bool ConstantInterval::is_bounded() const {
     return max_defined && min_defined;
 }

@@ -227,9 +227,8 @@ Stmt Simplify::visit(const For *op) {
         ConstantInterval::make_union(min_info.bounds,
                                      min_info.bounds + max(extent_info.bounds, 1) - 1);
 
-
-    if (loop_var_info.bounds.has_upper_bound() ||
-        loop_var_info.bounds.has_lower_bound()) {
+    if (loop_var_info.bounds.max_defined ||
+        loop_var_info.bounds.min_defined) {
         bounds_tracked = true;
         bounds_and_alignment_info.push(op->name, loop_var_info);
     }

@@ -449,9 +449,7 @@ std::ostream &operator<<(std::ostream &out, const Closure &c) {
     return out;
 }
 
-namespace {
-template<typename T>
-void emit_interval(std::ostream &out, const T &in) {
+std::ostream &operator<<(std::ostream &out, const Interval &in) {
     out << "[";
     if (in.has_lower_bound()) {
         out << in.min;
@@ -465,16 +463,23 @@ void emit_interval(std::ostream &out, const T &in) {
         out << "inf";
     }
     out << "]";
-}
-}  // namespace
-
-std::ostream &operator<<(std::ostream &out, const Interval &c) {
-    emit_interval(out, c);
     return out;
 }
 
-std::ostream &operator<<(std::ostream &out, const ConstantInterval &c) {
-    emit_interval(out, c);
+std::ostream &operator<<(std::ostream &out, const ConstantInterval &in) {
+    out << "[";
+    if (in.min_defined) {
+        out << in.min;
+    } else {
+        out << "-inf";
+    }
+    out << ", ";
+    if (in.max_defined) {
+        out << in.max;
+    } else {
+        out << "inf";
+    }
+    out << "]";
     return out;
 }
 

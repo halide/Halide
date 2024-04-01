@@ -43,16 +43,8 @@ const int64_t *as_const_int_or_uint(const Expr &e) {
     return nullptr;
 }
 
-bool is_constant(const ConstantInterval &a) {
-    return a.is_single_point(0);
-}
-
-bool is_monotonic_increasing(const ConstantInterval &a) {
-    return a.has_lower_bound() && a.min >= 0;
-}
-
-bool is_monotonic_decreasing(const ConstantInterval &a) {
-    return a.has_upper_bound() && a.max <= 0;
+bool is_constant(const ConstantInterval &x) {
+    return x.is_single_point(0);
 }
 
 ConstantInterval to_interval(Monotonic m) {
@@ -72,23 +64,13 @@ ConstantInterval to_interval(Monotonic m) {
 Monotonic to_monotonic(const ConstantInterval &x) {
     if (is_constant(x)) {
         return Monotonic::Constant;
-    } else if (is_monotonic_increasing(x)) {
+    } else if (x >= 0) {
         return Monotonic::Increasing;
-    } else if (is_monotonic_decreasing(x)) {
+    } else if (x <= 0) {
         return Monotonic::Decreasing;
     } else {
         return Monotonic::Unknown;
     }
-}
-
-ConstantInterval unify(const ConstantInterval &a, const ConstantInterval &b) {
-    return ConstantInterval::make_union(a, b);
-}
-
-ConstantInterval unify(const ConstantInterval &a, int64_t b) {
-    ConstantInterval result;
-    result.include(b);
-    return result;
 }
 
 class DerivativeBounds : public IRVisitor {
@@ -193,10 +175,10 @@ class DerivativeBounds : public IRVisitor {
                 if (*b == 0) {
                     result = ConstantInterval(0, 0);
                 } else {
-                    if (result.has_lower_bound()) {
+                    if (result.min_defined) {
                         result.min = div_imp(result.min, *b);
                     }
-                    if (result.has_upper_bound()) {
+                    if (result.max_defined) {
                         if (result.max != INT64_MIN) {
                             result.max = div_imp(result.max - 1, *b) + 1;
                         } else {
@@ -223,16 +205,14 @@ class DerivativeBounds : public IRVisitor {
         op->a.accept(this);
         ConstantInterval ra = result;
         op->b.accept(this);
-        ConstantInterval rb = result;
-        result = unify(ra, rb);
+        result.include(ra);
     }
 
     void visit(const Max *op) override {
         op->a.accept(this);
         ConstantInterval ra = result;
         op->b.accept(this);
-        ConstantInterval rb = result;
-        result = unify(ra, rb);
+        result.include(ra);
     }
 
     void visit_eq(const Expr &a, const Expr &b) {
@@ -262,17 +242,12 @@ class DerivativeBounds : public IRVisitor {
         a.accept(this);
         ConstantInterval ra = result;
         b.accept(this);
-        ConstantInterval rb = result;
-        result = unify(-ra, rb);
+        result.include(-ra);
         // If the result is bounded, limit it to [-1, 1]. The largest
         // difference possible is flipping from true to false or false
         // to true.
-        if (result.has_lower_bound()) {
-            result.min = std::min<int64_t>(std::max<int64_t>(result.min, -1), 1);
-        }
-        if (result.has_upper_bound()) {
-            result.max = std::min<int64_t>(std::max<int64_t>(result.max, -1), 1);
-        }
+        result.min = std::min<int64_t>(std::max<int64_t>(result.min, -1), 1);
+        result.max = std::min<int64_t>(std::max<int64_t>(result.max, -1), 1);
     }
 
     void visit(const LT *op) override {
@@ -295,16 +270,14 @@ class DerivativeBounds : public IRVisitor {
         op->a.accept(this);
         ConstantInterval ra = result;
         op->b.accept(this);
-        ConstantInterval rb = result;
-        result = unify(ra, rb);
+        result.include(ra);
     }
 
     void visit(const Or *op) override {
         op->a.accept(this);
         ConstantInterval ra = result;
         op->b.accept(this);
-        ConstantInterval rb = result;
-        result = unify(ra, rb);
+        result.include(ra);
     }
 
     void visit(const Not *op) override {
@@ -327,8 +300,7 @@ class DerivativeBounds : public IRVisitor {
             op->true_value.accept(this);
             ConstantInterval ra = result;
             op->false_value.accept(this);
-            ConstantInterval rb = result;
-            result = unify(ra, rb);
+            result.include(ra);
 
             // If the condition is not constant, we hit a "bump" when the condition changes value.
             if (!is_constant(rcond)) {
