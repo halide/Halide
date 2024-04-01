@@ -14,9 +14,6 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
         info->trim_bounds_using_alignment();
         info->cast_to(op->type);
 
-        // TODO: add test case which resolves to a scalar, but only after
-        // trimming using the alignment.
-
         // Bounded numerator divided by constantish
         // denominator can sometimes collapse things to a
         // constant at this point
