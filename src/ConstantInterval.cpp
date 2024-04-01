@@ -2,6 +2,7 @@
 
 #include "Error.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 
 namespace Halide {
 namespace Internal {
@@ -24,12 +25,14 @@ ConstantInterval ConstantInterval::single_point(int64_t x) {
 ConstantInterval ConstantInterval::bounded_below(int64_t min) {
     ConstantInterval result(min, min);
     result.max_defined = false;
+    result.max = 0;
     return result;
 }
 
 ConstantInterval ConstantInterval::bounded_above(int64_t max) {
     ConstantInterval result(max, max);
     result.min_defined = false;
+    result.min = 0;
     return result;
 }
 
@@ -54,7 +57,7 @@ bool ConstantInterval::has_lower_bound() const {
 }
 
 bool ConstantInterval::is_bounded() const {
-    return has_upper_bound() && has_lower_bound();
+    return max_defined && min_defined;
 }
 
 bool ConstantInterval::operator==(const ConstantInterval &other) const {
@@ -128,21 +131,11 @@ ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a,
 }
 
 void ConstantInterval::operator+=(const ConstantInterval &other) {
-    min_defined = min_defined &&
-                  other.min_defined &&
-                  add_with_overflow(64, min, other.min, &min);
-    max_defined = max_defined &&
-                  other.max_defined &&
-                  add_with_overflow(64, max, other.max, &max);
+    (*this) = (*this) + other;
 }
 
 void ConstantInterval::operator-=(const ConstantInterval &other) {
-    min_defined = min_defined &&
-                  other.max_defined &&
-                  sub_with_overflow(64, min, other.max, &min);
-    max_defined = max_defined &&
-                  other.min_defined &&
-                  sub_with_overflow(64, max, other.min, &max);
+    (*this) = (*this) - other;
 }
 
 void ConstantInterval::operator*=(const ConstantInterval &other) {
@@ -150,128 +143,31 @@ void ConstantInterval::operator*=(const ConstantInterval &other) {
 }
 
 void ConstantInterval::operator/=(const ConstantInterval &other) {
-    ConstantInterval result;
+    (*this) = (*this) / other;
+}
 
-    result.min = INT64_MAX;
-    result.max = INT64_MIN;
-
-    // Enumerate all possible values for the min and max and take the extreme values.
-    if (min_defined && other.min_defined && other.min != 0) {
-        int64_t v = div_imp(min, other.min);
-        result.min = std::min(result.min, v);
-        result.max = std::max(result.max, v);
-    }
-
-    if (min_defined && other.max_defined && other.max != 0) {
-        int64_t v = div_imp(min, other.max);
-        result.min = std::min(result.min, v);
-        result.max = std::max(result.max, v);
-    }
-
-    if (max_defined && other.max_defined && other.max != 0) {
-        int64_t v = div_imp(max, other.max);
-        result.min = std::min(result.min, v);
-        result.max = std::max(result.max, v);
-    }
-
-    if (max_defined && other.min_defined && other.min != 0) {
-        int64_t v = div_imp(max, other.min);
-        result.min = std::min(result.min, v);
-        result.max = std::max(result.max, v);
-    }
-
-    // Define an int64_t zero just to pacify std::min and std::max
-    constexpr int64_t zero = 0;
-
-    const bool other_positive = other.min_defined && other.min > 0;
-    const bool other_negative = other.max_defined && other.max < 0;
-    if ((other_positive && !other.max_defined) ||
-        (other_negative && !other.min_defined)) {
-        // Take limit as other -> +/- infinity
-        result.min = std::min(result.min, zero);
-        result.max = std::max(result.max, zero);
-    }
-
-    bool bounded_numerator = min_defined && max_defined;
-
-    result.min_defined = ((min_defined && other_positive) ||
-                          (max_defined && other_negative));
-    result.max_defined = ((max_defined && other_positive) ||
-                          (min_defined && other_negative));
-
-    // That's as far as we can get knowing the sign of the
-    // denominator. For bounded numerators, we additionally know
-    // that div can't make anything larger in magnitude, so we can
-    // take the intersection with that.
-    if (bounded_numerator && min != INT64_MIN) {
-        int64_t magnitude = std::max(max, -min);
-        if (result.min_defined) {
-            result.min = std::max(result.min, -magnitude);
-        } else {
-            result.min = -magnitude;
-        }
-        if (result.max_defined) {
-            result.max = std::min(result.max, magnitude);
-        } else {
-            result.max = magnitude;
-        }
-        result.min_defined = result.max_defined = true;
-    }
-
-    // Finally we can provide a bound if the numerator and denominator are
-    // non-positive or non-negative.
-    bool numerator_non_negative = min_defined && min >= 0;
-    bool denominator_non_negative = other.min_defined && other.min >= 0;
-    bool numerator_non_positive = max_defined && max <= 0;
-    bool denominator_non_positive = other.max_defined && other.max <= 0;
-    if ((numerator_non_negative && denominator_non_negative) ||
-        (numerator_non_positive && denominator_non_positive)) {
-        if (result.min_defined) {
-            result.min = std::max(result.min, zero);
-        } else {
-            result.min_defined = true;
-            result.min = 0;
-        }
-    }
-    if ((numerator_non_negative && denominator_non_positive) ||
-        (numerator_non_positive && denominator_non_negative)) {
-        if (result.max_defined) {
-            result.max = std::min(result.max, zero);
-        } else {
-            result.max_defined = true;
-            result.max = 0;
-        }
-    }
-
-    // Normalize the values if it's undefined
-    if (!result.min_defined) {
-        result.min = 0;
-    }
-    if (!result.max_defined) {
-        result.max = 0;
-    }
-
-    *this = result;
+void ConstantInterval::operator%=(const ConstantInterval &other) {
+    (*this) = (*this) % other;
 }
 
 void ConstantInterval::operator+=(int64_t x) {
-    // TODO: Optimize this
-    *this += ConstantInterval(x, x);
+    (*this) = (*this) + x;
 }
 
 void ConstantInterval::operator-=(int64_t x) {
-    // TODO: Optimize this
-    *this -= ConstantInterval(x, x);
+    (*this) = (*this) - x;
 }
 
 void ConstantInterval::operator*=(int64_t x) {
-    // TODO: Optimize this
-    *this *= ConstantInterval(x, x);
+    (*this) = (*this) * x;
 }
 
 void ConstantInterval::operator/=(int64_t x) {
-    // TODO: Optimize this
-    *this /= ConstantInterval(x, x);
+    (*this) = (*this) / x;
+}
+
+void ConstantInterval::operator%=(int64_t x) {
+    (*this) = (*this) % x;
 }
 
 bool operator<=(const ConstantInterval &a, const ConstantInterval &b) {
@@ -338,20 +234,125 @@ ConstantInterval ConstantInterval::bounds_of_type(Type t) {
 }
 
 ConstantInterval operator+(const ConstantInterval &a, const ConstantInterval &b) {
-    ConstantInterval result = a;
-    result += b;
+    ConstantInterval result;
+    result.min_defined = a.min_defined &&
+                         b.min_defined &&
+                         add_with_overflow(64, a.min, b.min, &result.min);
+
+    result.max_defined = a.max_defined &&
+                         b.max_defined &&
+                         add_with_overflow(64, a.max, b.max, &result.max);
     return result;
 }
 
 ConstantInterval operator-(const ConstantInterval &a, const ConstantInterval &b) {
-    ConstantInterval result = a;
-    result -= b;
+    ConstantInterval result;
+    result.min_defined = a.min_defined &&
+                         b.max_defined &&
+                         sub_with_overflow(64, a.min, b.max, &result.min);
+    result.max_defined = a.max_defined &&
+                         b.min_defined &&
+                         sub_with_overflow(64, a.max, b.min, &result.max);
     return result;
 }
 
 ConstantInterval operator/(const ConstantInterval &a, const ConstantInterval &b) {
-    ConstantInterval result = a;
-    result /= b;
+    ConstantInterval result;
+
+    result.min = INT64_MAX;
+    result.max = INT64_MIN;
+
+    auto consider_case = [&](int64_t a, int64_t b) {
+        int64_t v = div_imp(a, b);
+        result.min = std::min(result.min, v);
+        result.max = std::max(result.max, v);
+    };
+
+    // Enumerate all possible values for the min and max and take the extreme values.
+    if (a.min_defined && b.min_defined && b.min != 0) {
+        consider_case(a.min, b.min);
+    }
+
+    if (a.min_defined && b.max_defined && b.max != 0) {
+        consider_case(a.min, b.max);
+    }
+
+    if (a.max_defined && b.max_defined && b.max != 0) {
+        consider_case(a.max, b.max);
+    }
+
+    if (a.max_defined && b.min_defined && b.min != 0) {
+        consider_case(a.max, b.min);
+    }
+
+    // Define an int64_t zero just to pacify std::min and std::max
+    constexpr int64_t zero = 0;
+
+    const bool b_positive = b > 0;
+    const bool b_negative = b < 0;
+    if ((b_positive && !b.max_defined) ||
+        (b_negative && !b.min_defined)) {
+        // Take limit as other -> +/- infinity
+        result.min = std::min(result.min, zero);
+        result.max = std::max(result.max, zero);
+    }
+
+    result.min_defined = ((a.min_defined && b_positive) ||
+                          (a.max_defined && b_negative));
+    result.max_defined = ((a.max_defined && b_positive) ||
+                          (a.min_defined && b_negative));
+
+    // That's as far as we can get knowing the sign of the
+    // denominator. For bounded numerators, we additionally know
+    // that div can't make anything larger in magnitude, so we can
+    // take the intersection with that.
+    if (a.is_bounded() && a.min != INT64_MIN) {
+        int64_t magnitude = std::max(a.max, -a.min);
+        if (result.min_defined) {
+            result.min = std::max(result.min, -magnitude);
+        } else {
+            result.min = -magnitude;
+        }
+        if (result.max_defined) {
+            result.max = std::min(result.max, magnitude);
+        } else {
+            result.max = magnitude;
+        }
+        result.min_defined = result.max_defined = true;
+    }
+
+    // Finally we can deduce the sign if the numerator and denominator are
+    // non-positive or non-negative.
+    bool a_non_negative = a >= 0;
+    bool b_non_negative = b >= 0;
+    bool a_non_positive = a <= 0;
+    bool b_non_positive = b <= 0;
+    if ((a_non_negative && b_non_negative) ||
+        (a_non_positive && b_non_positive)) {
+        if (result.min_defined) {
+            result.min = std::max(result.min, zero);
+        } else {
+            result.min_defined = true;
+            result.min = 0;
+        }
+    } else if ((a_non_negative && b_non_positive) ||
+               (a_non_positive && b_non_negative)) {
+        if (result.max_defined) {
+            result.max = std::min(result.max, zero);
+        } else {
+            result.max_defined = true;
+            result.max = 0;
+        }
+    }
+
+    // Normalize the values if it's undefined
+    if (!result.min_defined) {
+        result.min = 0;
+    }
+    if (!result.max_defined) {
+        result.max = 0;
+    }
+
     return result;
 }
 
@@ -464,23 +465,23 @@ ConstantInterval operator%(const ConstantInterval &a, const ConstantInterval &b)
 }
 
 ConstantInterval operator+(const ConstantInterval &a, int64_t b) {
-    return a + ConstantInterval(b, b);
+    return a + ConstantInterval::single_point(b);
 }
 
 ConstantInterval operator-(const ConstantInterval &a, int64_t b) {
-    return a - ConstantInterval(b, b);
+    return a - ConstantInterval::single_point(b);
 }
 
 ConstantInterval operator/(const ConstantInterval &a, int64_t b) {
-    return a / ConstantInterval(b, b);
+    return a / ConstantInterval::single_point(b);
 }
 
 ConstantInterval operator*(const ConstantInterval &a, int64_t b) {
-    return a * ConstantInterval(b, b);
+    return a * ConstantInterval::single_point(b);
 }
 
 ConstantInterval operator%(const ConstantInterval &a, int64_t b) {
-    return a % ConstantInterval(b, b);
+    return a % ConstantInterval::single_point(b);
 }
 
 ConstantInterval min(const ConstantInterval &a, const ConstantInterval &b) {

@@ -84,16 +84,16 @@ ConstantInterval constant_integer_bounds(const Expr &e,
             } else if (op->is_intrinsic(Call::halving_add)) {
                 return (constant_integer_bounds(op->args[0]) +
                         constant_integer_bounds(op->args[1])) /
-                       ConstantInterval(2, 2);
+                       2;
             } else if (op->is_intrinsic(Call::halving_sub)) {
                 return cast(op->type, (constant_integer_bounds(op->args[0]) -
                                        constant_integer_bounds(op->args[1])) /
-                                          ConstantInterval(2, 2));
+                                          2);
             } else if (op->is_intrinsic(Call::rounding_halving_add)) {
                 return (constant_integer_bounds(op->args[0]) +
                         constant_integer_bounds(op->args[1]) +
-                        ConstantInterval(1, 1)) /
-                       ConstantInterval(2, 2);
+                        1) /
+                       2;
             } else if (op->is_intrinsic(Call::saturating_add)) {
                 return saturating_cast(op->type,
                                        (constant_integer_bounds(op->args[0]) +
@@ -138,12 +138,14 @@ ConstantInterval constant_integer_bounds(const Expr &e,
                 } else if (cb.max_defined && cb.max <= 0) {
                     return cast(op->type, ca << (-cb));
                 } else {
-                    auto rounding_term = ConstantInterval(0, 1) << max(cb - ConstantInterval(1, 1), ConstantInterval(0, 0));
+                    auto rounding_term = ConstantInterval(0, 1) << max(cb - 1, 0);
                     return cast(op->type, (ca + rounding_term) >> cb);
                 }
             }
-            // TODO: more intrinsics
-            // TODO: widening_shift_left is important
+            // If you add a new intrinsic here, also add it to the expression
+            // generator in test/correctness/lossless_cast.cpp
+
+            // TODO: mul_shift_right, rounding_mul_shift_right, widening_shift_left/right, rounding_shift_left
         }
 
         return ConstantInterval::bounds_of_type(e.type());

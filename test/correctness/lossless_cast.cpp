@@ -6,9 +6,11 @@ using namespace Halide::Internal;
 int check_lossless_cast(const Type &t, const Expr &in, const Expr &correct) {
     Expr result = lossless_cast(t, in);
     if (!equal(result, correct)) {
-        std::cout << "Incorrect lossless_cast result:\nlossless_cast("
-                  << t << ", " << in << ") gave:\n " << result
-                  << " but expected was:\n " << correct << "\n";
+        std::cout << "Incorrect lossless_cast result:\n"
+                  << "lossless_cast(" << t << ", " << in << ") gave:\n"
+                  << " " << result
+                  << " but expected was:\n"
+                  << " " << correct << "\n";
         return 1;
     }
     return 0;
@@ -104,10 +106,14 @@ Expr random_expr(std::mt19937 &rng) {
         Expr e;
         int i1 = rng() % exprs.size();
         int i2 = rng() % exprs.size();
+        int i3 = rng() % exprs.size();
         int op = rng() % 7;
         Expr e1 = exprs[i1];
         Expr e2 = cast(e1.type(), exprs[i2]);
+        Expr e3 = exprs[i3];
         bool may_widen = e1.type().bits() < 64;
+        Expr e2_narrow = exprs[i2];
+        bool may_widen_right = e2_narrow.type() == e1.type().narrow();
         switch (op) {
         case 0:
             if (may_widen) {
@@ -132,7 +138,7 @@ Expr random_expr(std::mt19937 &rng) {
             e = e1 / e2;
             break;
         case 6:
-            switch (rng() % 10) {
+            switch (rng() % 14) {
             case 0:
                 if (may_widen) {
                     e = widening_add(e1, e2);
@@ -169,6 +175,26 @@ Expr random_expr(std::mt19937 &rng) {
             case 9:
                 e = count_trailing_zeros(e1);
                 break;
+            case 10:
+                if (e3.type().is_uint()) {
+                    e = rounding_mul_shift_right(e1, e2, e3);
+                }
+                break;
+            case 11:
+                if (may_widen_right) {
+                    e = widen_right_add(e1, e2_narrow);
+                }
+                break;
+            case 12:
+                if (may_widen_right) {
+                    e = widen_right_sub(e1, e2_narrow);
+                }
+                break;
+            case 13:
+                if (may_widen_right) {
+                    e = widen_right_mul(e1, e2_narrow);
+                }
+                break;
             }
         }
 
@@ -176,9 +202,9 @@ Expr random_expr(std::mt19937 &rng) {
             continue;
         }
 
-        // Stop when we get to 64 bits, but probably don't stop on a widening
-        // cast, because that'll just get trivially stripped.
-        if (e.type().bits() == 64 && (op > 1 || ((rng() & 7) == 0))) {
+        // Stop when we get to 64 bits, but probably don't stop on a cast,
+        // because that'll just get trivially stripped.
+        if (e.type().bits() == 64 && (e.as<Cast>() == nullptr || ((rng() & 7) == 0))) {
             return e;
         }
 
@@ -211,10 +237,15 @@ int test_one(uint32_t seed) {
     buf_i8.fill(rng);
 
     Expr e1 = random_expr(rng);
+
+    // We're also going to test constant_integer_bounds here.
+    ConstantInterval bounds = constant_integer_bounds(e1);
+
     Type target;
     std::vector<Type> target_types = {UInt(32), Int(32), UInt(16), Int(16)};
     target = target_types[rng() % target_types.size()];
     Expr e2 = lossless_cast(target, e1);
+
     if (!e2.defined()) {
         return 0;
     }
@@ -223,14 +254,18 @@ int test_one(uint32_t seed) {
     f(x) = {cast<int64_t>(e1), cast<int64_t>(e2)};
     f.vectorize(x, 4, TailStrategy::RoundUp);
 
-    // std::cout << e1 << " to " << target << "\n  -> " << e2 << "\n  -> " << simplify(e2) << "\n";
-    // std::cout << "\n\n\n--------------------\n\n\n";
     Buffer<int64_t> out1(size), out2(size);
     Pipeline p(f);
     CheckForIntOverflow checker;
+    // We don't have constant-folding rules for all intrinsics, so we also need
+    // to feed the checker the lowered form.
+    checker.mutate(simplify(lower_intrinsics(e1)));
+    checker.mutate(simplify(lower_intrinsics(e2)));
+    if (checker.found_overflow) {
+        return 0;
+    }
     p.add_custom_lowering_pass(&checker, nullptr);
     p.realize({out1, out2});
-
     if (checker.found_overflow) {
         // We don't do anything in the expression generator to avoid signed
         // integer overflow, so just skip anything with signed integer overflow.
@@ -240,6 +275,7 @@ int test_one(uint32_t seed) {
     for (int x = 0; x < size; x++) {
         if (out1(x) != out2(x)) {
             std::cout
+                << "lossless_cast failure\n"
                 << "seed = " << seed << "\n"
                 << "x = " << x << "\n"
                 << "buf_u8 = " << (int)buf_u8(x) << "\n"
@@ -249,6 +285,18 @@ int test_one(uint32_t seed) {
                 << "Original: " << e1 << "\n"
                 << "Lossless cast: " << e2 << "\n";
             return 1;
+        }
+
+        if (!bounds.contains(out1(x))) {
+            std::cout
+                << "constant_integer_bounds failure\n"
+                << "seed = " << seed << "\n"
+                << "x = " << x << "\n"
+                << "buf_u8 = " << (int)buf_u8(x) << "\n"
+                << "buf_i8 = " << (int)buf_i8(x) << "\n"
+                << "out1 = " << out1(x) << "\n"
+                << "Expression: " << e1 << "\n"
+                << "Bounds: " << bounds << "\n";
         }
     }
 
