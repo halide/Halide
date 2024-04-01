@@ -176,7 +176,6 @@ protected:
             }
 
             // Also need to handle the annoying case of a reinterpret cast wrapping a widen_right_add
-            // TODO: this pattern makes me want to change the semantics of this op.
             if (const Cast *cast = a.as<Cast>()) {
                 if (cast->is_reinterpret()) {
                     if (const Call *add = Call::as_intrinsic(cast->value, {Call::widen_right_add})) {
