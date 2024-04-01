@@ -146,68 +146,7 @@ void ConstantInterval::operator-=(const ConstantInterval &other) {
 }
 
 void ConstantInterval::operator*=(const ConstantInterval &other) {
-    ConstantInterval result;
-
-    // Compute a possible extreme value of the product, setting the min/max
-    // defined flags if it's unbounded.
-    auto saturating_mul = [&](int64_t a, int64_t b) -> int64_t {
-        int64_t c;
-        if (mul_with_overflow(64, a, b, &c)) {
-            return c;
-        } else if ((a > 0) == (b > 0)) {
-            result.max_defined = false;
-            return INT64_MAX;
-        } else {
-            result.min_defined = false;
-            return INT64_MIN;
-        }
-    };
-
-    bool positive = min_defined && min > 0;
-    bool other_positive = other.min_defined && other.min > 0;
-    bool bounded = min_defined && max_defined;
-    bool other_bounded = other.min_defined && other.max_defined;
-
-    if (bounded && other_bounded) {
-        // Both are bounded
-        result.min_defined = result.max_defined = true;
-        int64_t v1 = saturating_mul(min, other.min);
-        int64_t v2 = saturating_mul(min, other.max);
-        int64_t v3 = saturating_mul(max, other.min);
-        int64_t v4 = saturating_mul(max, other.max);
-        if (result.min_defined) {
-            result.min = std::min(std::min(v1, v2), std::min(v3, v4));
-        } else {
-            result.min = 0;
-        }
-        if (result.max_defined) {
-            result.max = std::max(std::max(v1, v2), std::max(v3, v4));
-        } else {
-            result.max = 0;
-        }
-    } else if ((max_defined && other_bounded && other_positive) ||
-               (other.max_defined && bounded && positive)) {
-        // One side has a max, and the other side is bounded and positive
-        // (e.g. a constant).
-        result.max_defined = true;
-        result.max = saturating_mul(max, other.max);
-        if (!result.max_defined) {
-            result.max = 0;
-        }
-    } else if ((min_defined && other_bounded && other_positive) ||
-               (other.min_defined && bounded && positive)) {
-        // One side has a min, and the other side is bounded and positive
-        // (e.g. a constant).
-        result.min_defined = true;
-        min = saturating_mul(min, other.min);
-        if (!result.min_defined) {
-            result.min = 0;
-        }
-    }
-    // TODO: what about the above two cases, but for multiplication by bounded
-    // and negative intervals?
-
-    *this = result;
+    (*this) = (*this) * other;
 }
 
 void ConstantInterval::operator/=(const ConstantInterval &other) {
@@ -417,8 +356,74 @@ ConstantInterval operator/(const ConstantInterval &a, const ConstantInterval &b)
 }
 
 ConstantInterval operator*(const ConstantInterval &a, const ConstantInterval &b) {
-    ConstantInterval result = a;
-    result *= b;
+    ConstantInterval result;
+
+    // Compute a possible extreme value of the product, either incorporating it
+    // into result.min / result.max, or setting the min/max defined flags if it
+    // overflows.
+    auto consider_case = [&](int64_t a, int64_t b) {
+        int64_t c;
+        if (mul_with_overflow(64, a, b, &c)) {
+            result.min = std::min(result.min, c);
+            result.max = std::max(result.max, c);
+        } else if ((a > 0) == (b > 0)) {
+            result.max_defined = false;
+        } else {
+            result.min_defined = false;
+        }
+    };
+
+    result.min_defined = result.max_defined = true;
+    result.min = INT64_MAX;
+    result.max = INT64_MIN;
+    if (a.min_defined && b.min_defined) {
+        consider_case(a.min, b.min);
+    }
+    if (a.min_defined && b.max_defined) {
+        consider_case(a.min, b.max);
+    }
+    if (a.max_defined && b.min_defined) {
+        consider_case(a.max, b.min);
+    }
+    if (a.max_defined && b.max_defined) {
+        consider_case(a.max, b.max);
+    }
+
+    bool a_bounded_negative = a.min_defined && a <= 0;
+    bool a_bounded_positive = a.max_defined && a >= 0;
+    bool b_bounded_negative = b.min_defined && b <= 0;
+    bool b_bounded_positive = b.max_defined && b >= 0;
+
+    if (result.min_defined) {
+        result.min_defined =
+            ((a.is_bounded() && b.is_bounded()) ||
+             (a >= 0 && b >= 0) ||
+             (a <= 0 && b <= 0) ||
+             (a.min_defined && b_bounded_positive) ||
+             (b.min_defined && a_bounded_positive) ||
+             (a.max_defined && b_bounded_negative) ||
+             (b.max_defined && a_bounded_negative));
+    }
+
+    if (result.max_defined) {
+        result.max_defined =
+            ((a.is_bounded() && b.is_bounded()) ||
+             (a >= 0 && b <= 0) ||
+             (a <= 0 && b >= 0) ||
+             (a.max_defined && b_bounded_positive) ||
+             (b.max_defined && a_bounded_positive) ||
+             (a.min_defined && b_bounded_negative) ||
+             (b.min_defined && a_bounded_negative));
+    }
+
+    if (!result.min_defined) {
+        result.min = 0;
+    }
+
+    if (!result.max_defined) {
+        result.max = 0;
+    }
+
     return result;
 }
 
@@ -475,7 +480,7 @@ ConstantInterval operator*(const ConstantInterval &a, int64_t b) {
 }
 
 ConstantInterval operator%(const ConstantInterval &a, int64_t b) {
-    return a * ConstantInterval(b, b);
+    return a % ConstantInterval(b, b);
 }
 
 ConstantInterval min(const ConstantInterval &a, const ConstantInterval &b) {
