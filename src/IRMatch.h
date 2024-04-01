@@ -2108,7 +2108,8 @@ struct WidenOp {
     HALIDE_ALWAYS_INLINE
     Expr make(MatcherState &state, halide_type_t type_hint) const {
         Expr e = a.make(state, {});
-        return cast(e.type().widen(), std::move(e));
+        Type w = e.type().widen();
+        return cast(w, std::move(e));
     }
 
     constexpr static bool foldable = false;
