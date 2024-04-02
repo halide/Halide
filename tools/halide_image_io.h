@@ -1220,34 +1220,34 @@ bool save_csv(ImageType &im, const std::string &filename) {
     bool success = true;
     switch (im_type.as_u32()) {
     case halide_type_t(halide_type_float, 32).as_u32():
-        im.template as<const float>().for_each_value([&](float v) { success &= !f.write_to_comma(v); });
+        im.template as<const float>().for_each_value([&](float v) { success &= f.write_to_comma(v); });
         break;
     case halide_type_t(halide_type_float, 64).as_u32():
-        im.template as<const double>().for_each_value([&](double v) { success &= !f.write_to_comma(v); });
+        im.template as<const double>().for_each_value([&](double v) { success &= f.write_to_comma(v); });
         break;
     case halide_type_t(halide_type_int, 8).as_u32():
-        im.template as<const int8_t>().for_each_value([&](int8_t v) { success &= !f.write_to_comma(v); });
+        im.template as<const int8_t>().for_each_value([&](int8_t v) { success &= f.write_to_comma(v); });
         break;
     case halide_type_t(halide_type_int, 16).as_u32():
-        im.template as<const int16_t>().for_each_value([&](int16_t v) { success &= !f.write_to_comma(v); });
+        im.template as<const int16_t>().for_each_value([&](int16_t v) { success &= f.write_to_comma(v); });
         break;
     case halide_type_t(halide_type_int, 32).as_u32():
-        im.template as<const int32_t>().for_each_value([&](int32_t v) { success &= !f.write_to_comma(v); });
+        im.template as<const int32_t>().for_each_value([&](int32_t v) { success &= f.write_to_comma(v); });
         break;
     case halide_type_t(halide_type_int, 64).as_u32():
-        im.template as<const int64_t>().for_each_value([&](int64_t v) { success &= !f.write_to_comma(v); });
+        im.template as<const int64_t>().for_each_value([&](int64_t v) { success &= f.write_to_comma(v); });
         break;
     case halide_type_t(halide_type_uint, 8).as_u32():
-        im.template as<const uint8_t>().for_each_value([&](uint8_t v) { success &= !f.write_to_comma(v); });
+        im.template as<const uint8_t>().for_each_value([&](uint8_t v) { success &= f.write_to_comma(v); });
         break;
     case halide_type_t(halide_type_uint, 16).as_u32():
-        im.template as<const uint16_t>().for_each_value([&](uint16_t v) { success &= !f.write_to_comma(v); });
+        im.template as<const uint16_t>().for_each_value([&](uint16_t v) { success &= f.write_to_comma(v); });
         break;
     case halide_type_t(halide_type_uint, 32).as_u32():
-        im.template as<const uint32_t>().for_each_value([&](uint32_t v) { success &= !f.write_to_comma(v); });
+        im.template as<const uint32_t>().for_each_value([&](uint32_t v) { success &= f.write_to_comma(v); });
         break;
     case halide_type_t(halide_type_uint, 64).as_u32():
-        im.template as<const uint64_t>().for_each_value([&](uint64_t v) { success &= !f.write_to_comma(v); });
+        im.template as<const uint64_t>().for_each_value([&](uint64_t v) { success &= f.write_to_comma(v); });
         break;
     }
     if (!check(success, "CSV Write Error")) {
