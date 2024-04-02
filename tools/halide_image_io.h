@@ -1090,7 +1090,7 @@ inline static const std::array<std::pair<halide_type_t, npy_dtype_info_t>, 10> n
 inline static const std::array<char, 6> npy_magic_string = {'\x93', 'N', 'U', 'M', 'P', 'Y'};
 inline static const std::array<char, 2> npy_v1_bytes = {'\x01', '\x00'};
 
-inline std::string trim_whitespace(std::string s) {
+inline std::string trim_whitespace(const std::string &s) {
     const size_t first = s.find_first_not_of(" \t\n");
     if (first == std::string::npos) {
         return "";
@@ -1100,7 +1100,7 @@ inline std::string trim_whitespace(std::string s) {
 }
 
 inline bool parse_python_dict(std::string dict_str, std::map<std::string, std::string> &m) {
-    dict_str = trim_whitespace(std::move(dict_str));
+    dict_str = trim_whitespace(dict_str);
 
     if (dict_str.front() != '{' || dict_str.back() != '}') {
         return false;  // not a python dict
@@ -1140,7 +1140,7 @@ inline bool parse_python_dict(std::string dict_str, std::map<std::string, std::s
             value.pop_back();
         }
 
-        size_t colon = value.find_first_of(":");
+        size_t colon = value.find_first_of(':');
         if (colon == std::string::npos) {
             return false;  // malformed!
         }
