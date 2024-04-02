@@ -1048,6 +1048,369 @@ bool save_ppm(ImageType &im, const std::string &filename) {
     return Internal::save_pnm<ImageType, check>(im, 3, filename);
 }
 
+// -------------- .npy file format
+// Based on documentation at https://numpy.org/devdocs/reference/generated/numpy.lib.format.html
+// and elsewhere
+
+#if (defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN) || defined(HALIDE_FORCE_BIG_ENDIAN)
+constexpr bool host_is_big_endian = true;
+#else
+constexpr bool host_is_big_endian = false;
+#endif
+
+constexpr char little_endian_char = '<';
+constexpr char big_endian_char = '>';
+constexpr char no_endian_char = '|';
+constexpr char host_endian_char = (host_is_big_endian ? big_endian_char : little_endian_char);
+
+struct npy_dtype_info_t {
+    char byte_order;
+    char kind;
+    size_t item_size;
+
+    std::string descr() const {
+        return std::string(1, byte_order) + std::string(1, kind) + std::to_string(item_size);
+    }
+};
+
+inline static const std::array<std::pair<halide_type_t, npy_dtype_info_t>, 10> npy_dtypes = {{
+    // TODO: float16
+    {halide_type_of<float>(), {host_endian_char, 'f', sizeof(float)}},
+    {halide_type_of<double>(), {host_endian_char, 'f', sizeof(double)}},
+    {halide_type_of<int8_t>(), {no_endian_char, 'i', sizeof(int8_t)}},
+    {halide_type_of<int16_t>(), {host_endian_char, 'i', sizeof(int16_t)}},
+    {halide_type_of<int32_t>(), {host_endian_char, 'i', sizeof(int32_t)}},
+    {halide_type_of<int64_t>(), {host_endian_char, 'i', sizeof(int64_t)}},
+    {halide_type_of<uint8_t>(), {no_endian_char, 'u', sizeof(uint8_t)}},
+    {halide_type_of<uint16_t>(), {host_endian_char, 'u', sizeof(uint16_t)}},
+    {halide_type_of<uint32_t>(), {host_endian_char, 'u', sizeof(uint32_t)}},
+    {halide_type_of<uint64_t>(), {host_endian_char, 'u', sizeof(uint64_t)}},
+}};
+
+inline static const std::array<char, 6> npy_magic_string = {'\x93', 'N', 'U', 'M', 'P', 'Y'};
+inline static const std::array<char, 2> npy_v1_bytes = {'\x01', '\x00'};
+
+inline std::string trim_whitespace(std::string s) {
+    const size_t first = s.find_first_not_of(" \t\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+    const size_t last = s.find_last_not_of(" \t\n");
+    return s.substr(first, (last - first + 1));
+}
+
+inline bool parse_python_dict(std::string dict_str, std::map<std::string, std::string> &m) {
+    dict_str = trim_whitespace(std::move(dict_str));
+
+    if (dict_str.front() != '{' || dict_str.back() != '}') {
+        return false;  // not a python dict
+    }
+    dict_str = dict_str.substr(1, dict_str.length() - 2);
+
+    std::vector<std::pair<size_t, std::string>> pos;
+
+    std::vector<std::pair<size_t, std::string>> positions;
+
+    constexpr int kKeyCount = 3;
+    std::string keys[kKeyCount] = {"descr", "fortran_order", "shape"};
+    for (std::string k : keys) {
+        size_t pos = dict_str.find("'" + k + "'");
+        if (pos == std::string::npos) {
+            return false;  // missing a required key
+        }
+        positions.emplace_back(pos, k);
+    }
+
+    // The keys aren't guaranteed to be sorted, but our loop below
+    // needs them to be low-to-high
+    std::sort(positions.begin(), positions.end());
+
+    // Here we are going to slurp everything from the start of a key
+    // to just before the start of the next key (or end of input),
+    // then split on : with everything to the right as the presumed value.
+    for (size_t i = 0; i < positions.size(); ++i) {
+        size_t pos = positions[i].first;
+        std::string key = positions[i].second;
+
+        size_t begin = pos;
+        size_t end = (i + 1 < positions.size()) ? positions[i + 1].first : std::string::npos;
+
+        std::string value = trim_whitespace(dict_str.substr(begin, end - begin));
+        if (value.back() == ',') {
+            value.pop_back();
+        }
+
+        size_t colon = value.find_first_of(":");
+        if (colon == std::string::npos) {
+            return false;  // malformed!
+        }
+        m[key] = trim_whitespace(value.substr(colon + 1));
+    }
+
+    return true;
+}
+
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool load_npy(const std::string &filename, ImageType *im) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    FileOpener f(filename, "rb");
+    if (!check(f.f != nullptr, "File could not be opened for reading")) {
+        return false;
+    }
+
+    char magic_and_version[8];
+    if (!check(f.read_bytes(magic_and_version, 8), "Could not read .npy header")) {
+        return false;
+    }
+    if (memcmp(magic_and_version, npy_magic_string.data(), npy_magic_string.size()) != 0) {
+        return check(false, "Bad .npy magic string");
+    }
+    if ((magic_and_version[6] != 1 && magic_and_version[6] != 2 && magic_and_version[6] != 3) || magic_and_version[7] != 0) {
+        return check(false, "Bad .npy version");
+    }
+    size_t header_len;
+    uint8_t header_len_le[4];
+    if (magic_and_version[6] == 1) {
+        if (!check(f.read_bytes(header_len_le, 2), "Could not read .npy header")) {
+            return false;
+        }
+        header_len = (header_len_le[0] << 0) | (header_len_le[1] << 8);
+        if (!check((6 + 2 + 2 + header_len) % 64 == 0, ".npy header is not aligned properly")) {
+            return false;
+        }
+    } else {
+        if (!check(f.read_bytes(header_len_le, 4), "Could not read .npy header")) {
+            return false;
+        }
+        header_len = (header_len_le[0] << 0) | (header_len_le[1] << 8) | (header_len_le[2] << 16) | (header_len_le[3] << 24);
+        if (!check((6 + 2 + 4 + header_len) % 64 == 0, ".npy header is not aligned properly")) {
+            return false;
+        }
+    }
+
+    std::string header(header_len + 1, ' ');
+    if (!check(f.read_bytes(header.data(), header_len), "Could not read .npy header string")) {
+        return false;
+    }
+
+    std::map<std::string, std::string> m;
+    if (!check(parse_python_dict(header, m), "Could not parse .npy header dict")) {
+        return false;
+    }
+
+    // TODO: should/can we support fortran_order=True?
+    if (!check(m["fortran_order"] == "False", "Only .npy files with fortran_order = False are supported")) {
+        return false;
+    }
+
+    std::string descr = m["descr"];
+    if (!check(descr.front() == '\'' && descr.back() == '\'', "Malformed descr")) {
+        return false;
+    }
+    descr = trim_whitespace(descr.substr(1, descr.size() - 2));
+
+    halide_type_t im_type((halide_type_code_t)0, 0, 0);
+    for (const auto &d : npy_dtypes) {
+        if (descr == d.second.descr()) {
+            im_type = d.first;
+            break;
+        }
+    }
+    if (!check(im_type.bits != 0, "Unsupported type in load_npy")) {
+        return false;
+    }
+
+    std::string shape = m["shape"];
+    if (!check(shape.front() == '(' && shape.back() == ')', "Malformed shape")) {
+        return false;
+    }
+    shape = trim_whitespace(shape.substr(1, shape.size() - 2));
+
+    std::vector<int> im_extents;
+    size_t start = 0;
+    size_t found = 0;
+    while ((found = shape.find(',', start)) != std::string::npos) {
+        im_extents.push_back(std::stoi(shape.substr(start, found - start)));
+        start = found + 1;
+    }
+    if (start <= shape.size()) {
+        im_extents.push_back(std::stoi(shape.substr(start, std::string::npos)));
+    }
+
+    *im = ImageType(im_type, im_extents);
+    bool success = true;
+    std::string element;
+    switch (im_type.as_u32()) {
+    // TODO: float16
+    case halide_type_t(halide_type_float, 32).as_u32():
+        im->template as<float>().for_each_value([&](float &v) { success &= f.read_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_float, 64).as_u32():
+        im->template as<double>().for_each_value([&](double &v) { success &= f.read_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_int, 8).as_u32():
+        im->template as<int8_t>().for_each_value([&](int8_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_int, 16).as_u32():
+        im->template as<int16_t>().for_each_value([&](int16_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_int, 32).as_u32():
+        im->template as<int32_t>().for_each_value([&](int32_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_int, 64).as_u32():
+        im->template as<int64_t>().for_each_value([&](int64_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_uint, 8).as_u32():
+        im->template as<uint8_t>().for_each_value([&](uint8_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_uint, 16).as_u32():
+        im->template as<uint16_t>().for_each_value([&](uint16_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_uint, 32).as_u32():
+        im->template as<uint32_t>().for_each_value([&](uint32_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_uint, 64).as_u32():
+        im->template as<uint64_t>().for_each_value([&](uint64_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
+        break;
+    default:
+        return check(false, "Unsupported type in load_npy");
+    }
+    if (!check(success, "npy Read Error")) {
+        return false;
+    }
+
+    im->set_host_dirty();
+    return true;
+}
+
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool save_npy(ImageType &im, const std::string &filename) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    if (!check(im.copy_to_host() == halide_error_code_success, "copy_to_host() failed.")) {
+        return false;
+    }
+
+    const halide_type_t im_type = im.type();
+    npy_dtype_info_t di = {0, 0, 0};
+    for (const auto &d : npy_dtypes) {
+        if (d.first == im_type) {
+            di = d.second;
+            break;
+        }
+    }
+    if (!check(di.byte_order != 0, "Unsupported type in save_npy")) {
+        return false;
+    }
+
+    std::string shape = "(";
+    for (int d = 0; d < im.dimensions(); ++d) {
+        if (d > 0) {
+            shape += ",";
+        }
+        shape += std::to_string(im.dim(d).extent());
+        if (im.dimensions() == 1) {
+            shape += ",";  // special-case for single-element tuples
+        }
+    }
+    shape += ")";
+
+    // TODO: is it safe to assume that Halide will never write in fortran_order?
+    std::string header_dict_str = "{'descr': '" + di.descr() + "', 'fortran_order': False, 'shape': " + shape + "}\n";
+
+    const size_t unpadded_length = npy_magic_string.size() + npy_v1_bytes.size() + 2 + header_dict_str.size();
+    const size_t padded_length = (unpadded_length + 64 - 1) & ~(64 - 1);
+    const size_t padding = padded_length - unpadded_length;
+    header_dict_str += std::string(padding, ' ');
+
+    if (!check(header_dict_str.size() <= 65535, "Header is too large for v1 .npy file")) {
+        return false;
+    }
+    const uint16_t header_len = (uint16_t)(header_dict_str.size());
+    const uint8_t header_len_le[2] = {
+        (uint8_t)((header_len >> 0) & 0xff),
+        (uint8_t)((header_len >> 8) & 0xff)};
+
+    FileOpener f(filename, "wb");
+    if (!check(f.write_bytes(npy_magic_string.data(), npy_magic_string.size()), ".npy write failed")) {
+        return false;
+    }
+    if (!check(f.write_bytes(npy_v1_bytes.data(), npy_v1_bytes.size()), ".npy write failed")) {
+        return false;
+    }
+    if (!check(f.write_bytes(header_len_le, 2), ".npy write failed")) {
+        return false;
+    }
+    if (!check(f.write_bytes(header_dict_str.data(), header_dict_str.size()), ".npy write failed")) {
+        return false;
+    }
+
+    bool success = true;
+    switch (im_type.as_u32()) {
+    // TODO: float16
+    case halide_type_t(halide_type_float, 32).as_u32():
+        im.template as<const float>().for_each_value([&](float v) { success &= f.write_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_float, 64).as_u32():
+        im.template as<const double>().for_each_value([&](double v) { success &= f.write_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_int, 8).as_u32():
+        im.template as<const int8_t>().for_each_value([&](int8_t v) { success &= f.write_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_int, 16).as_u32():
+        im.template as<const int16_t>().for_each_value([&](int16_t v) { success &= f.write_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_int, 32).as_u32():
+        im.template as<const int32_t>().for_each_value([&](int32_t v) { success &= f.write_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_int, 64).as_u32():
+        im.template as<const int64_t>().for_each_value([&](int64_t v) { success &= f.write_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_uint, 8).as_u32():
+        im.template as<const uint8_t>().for_each_value([&](uint8_t v) { success &= f.write_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_uint, 16).as_u32():
+        im.template as<const uint16_t>().for_each_value([&](uint16_t v) { success &= f.write_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_uint, 32).as_u32():
+        im.template as<const uint32_t>().for_each_value([&](uint32_t v) { success &= f.write_bytes(&v, sizeof(v)); });
+        break;
+    case halide_type_t(halide_type_uint, 64).as_u32():
+        im.template as<const uint64_t>().for_each_value([&](uint64_t v) { success &= f.write_bytes(&v, sizeof(v)); });
+        break;
+    default:
+        return check(false, "Unsupported type in save_npy");
+    }
+    if (!check(success, ".npy write faile")) {
+        return false;
+    }
+
+    return true;
+}
+
+inline const std::set<FormatInfo> &query_npy() {
+    auto build_set = []() -> std::set<FormatInfo> {
+        // TODO: bfloat16
+        std::set<FormatInfo> s;
+        for (halide_type_code_t code : {halide_type_int, halide_type_uint, halide_type_float}) {
+            for (int bits : {8, 16, 32, 64}) {
+                for (int dims : {1, 2, 3, 4}) {
+                    // TODO: float16
+                    if (code == halide_type_float && bits < 32) {
+                        continue;
+                    }
+                    s.insert({halide_type_t(code, bits), dims});
+                }
+            }
+        }
+        return s;
+    };
+
+    static std::set<FormatInfo> info = build_set();
+    return info;
+}
+
 #ifndef HALIDE_NO_JPEG
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
@@ -2003,6 +2366,7 @@ bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result
         {"jpeg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
         {"jpg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
 #endif
+        {"npy", {load_npy<ImageType, check>, save_npy<ConstImageType, check>, query_npy}},
         {"pgm", {load_pgm<ImageType, check>, save_pgm<ConstImageType, check>, query_pgm}},
 #ifndef HALIDE_NO_PNG
         {"png", {load_png<ImageType, check>, save_png<ConstImageType, check>, query_png}},
@@ -2315,7 +2679,7 @@ public:
     operator ImageType() {
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_d;
-        (void)load<DynamicImageType, Internal::CheckFail>(filename, &im_d);
+        Internal::CheckFail(load<DynamicImageType, Internal::CheckFail>(filename, &im_d), "load() failed");
         Internal::CheckFail(ImageType::can_convert_from(im_d),
                             "Type mismatch assigning the result of load_image. "
                             "Did you mean to use load_and_convert_image?");
@@ -2338,7 +2702,7 @@ public:
     inline operator ImageType() {
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_d;
-        (void)load<DynamicImageType, Internal::CheckFail>(filename, &im_d);
+        Internal::CheckFail(load<DynamicImageType, Internal::CheckFail>(filename, &im_d), "load() failed");
         const halide_type_t expected_type = ImageType::static_halide_type();
         if (im_d.type() == expected_type) {
             return im_d.template as<typename ImageType::ElemType, Internal::AnyDims>();
