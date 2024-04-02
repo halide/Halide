@@ -9,6 +9,28 @@
 
 using namespace Halide;
 
+// clang had _Float16 added as a reserved name in clang 8, but
+// doesn't actually support it on most platforms until clang 15.
+// Ideally there would be a better way to detect if the type
+// is supported, even in a compiler independent fashion, but
+// coming up with one has proven elusive.
+#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__)
+#if defined(__is_identifier)
+#if !__is_identifier(_Float16)
+#error "clang says we have f16"
+#endif
+#endif
+#endif
+
+// Similarly, detecting _Float16 for gcc is problematic.
+// For now, we say that if >= v12, and compiling on x86 or arm,
+// we assume support. This may need revision.
+#if defined(__GNUC__) && (__GNUC__ >= 12)
+#if defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__)
+#error "gcc says we have f16"
+#endif
+#endif
+
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
         printf("[SKIP] WebAssembly JIT does not support debug_to_file() yet.\n");
