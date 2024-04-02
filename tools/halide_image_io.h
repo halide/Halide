@@ -1144,6 +1144,11 @@ bool load_csv(const std::string &filename, ImageType *im) {
     bool success = true;
     std::string element;
     switch (im_type.as_u32()) {
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    case halide_type_t(halide_type_float, 16).as_u32():
+        im->template as<_Float16>().for_each_value([&](_Float16 &v) { success &= f.read_to_comma(element); v = std::stof(element); });
+        break;
+#endif
     case halide_type_t(halide_type_float, 32).as_u32():
         im->template as<float>().for_each_value([&](float &v) { success &= f.read_to_comma(element); v = std::stof(element); });
         break;
@@ -1174,6 +1179,9 @@ bool load_csv(const std::string &filename, ImageType *im) {
     case halide_type_t(halide_type_uint, 64).as_u32():
         im->template as<uint64_t>().for_each_value([&](uint64_t &v) { success &= f.read_to_comma(element); v = std::stoull(element); });
         break;
+    default:
+        check(false, "Unsupported image type");
+        return false;
     }
     if (!check(success, "CSV Read Error")) {
         return false;
@@ -1219,6 +1227,11 @@ bool save_csv(ImageType &im, const std::string &filename) {
     }
     bool success = true;
     switch (im_type.as_u32()) {
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    case halide_type_t(halide_type_float, 16).as_u32():
+        im.template as<const _Float16>().for_each_value([&](_Float16 v) { success &= f.write_to_comma((float)v); });
+        break;
+#endif
     case halide_type_t(halide_type_float, 32).as_u32():
         im.template as<const float>().for_each_value([&](float v) { success &= f.write_to_comma(v); });
         break;
@@ -1249,6 +1262,9 @@ bool save_csv(ImageType &im, const std::string &filename) {
     case halide_type_t(halide_type_uint, 64).as_u32():
         im.template as<const uint64_t>().for_each_value([&](uint64_t v) { success &= f.write_to_comma(v); });
         break;
+    default:
+        check(false, "Unsupported image type");
+        return false;
     }
     if (!check(success, "CSV Write Error")) {
         return false;
@@ -1261,14 +1277,20 @@ bool save_csv(ImageType &im, const std::string &filename) {
 
 inline const std::set<FormatInfo> &query_csv() {
     auto build_set = []() -> std::set<FormatInfo> {
+        // TODO: bfloat16
         std::set<FormatInfo> s;
         for (halide_type_code_t code : {halide_type_int, halide_type_uint, halide_type_float}) {
             for (int bits : {8, 16, 32, 64}) {
                 for (int dims : {1, 2, 3, 4}) {
-                    // TODO: fp16
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+                    if (code == halide_type_float && bits < 16) {
+                        continue;
+                    }
+#else
                     if (code == halide_type_float && bits < 32) {
                         continue;
                     }
+#endif
                     s.insert({halide_type_t(code, bits), dims});
                 }
             }

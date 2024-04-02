@@ -199,6 +199,10 @@ void do_test() {
     formats.push_back("png");
 #endif
     for (std::string format : formats) {
+        // CSV is the only format here that can handle f16 at present
+        if (ht == halide_type_t(halide_type_float, 16) && format != "csv") {
+            continue;
+        }
         if ((format == "jpg" || format == "pgm" || format == "ppm") && ht != halide_type_t(halide_type_uint, 8)) {
             continue;
         }
@@ -273,6 +277,9 @@ int main(int argc, char **argv) {
     do_test<uint16_t>();
     do_test<uint32_t>();
     do_test<uint64_t>();
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    do_test<_Float16>();
+#endif
     do_test<float>();
     do_test<double>();
     test_mat_header();
