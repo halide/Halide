@@ -1469,7 +1469,7 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
         int a_shift = 0, b_shift = 0;
         ConstantInterval ca = constant_integer_bounds(a);
         do {
-            ConstantInterval bigger = ca * ConstantInterval::single_point(2);
+            ConstantInterval bigger = ca * 2;
             if (a.type().can_represent(bigger) && a_shift + b_shift < missing_q) {
                 ca = bigger;
                 a_shift++;
@@ -1478,8 +1478,8 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
         } while (false);
         ConstantInterval cb = constant_integer_bounds(b);
         do {
-            ConstantInterval bigger = cb * ConstantInterval::single_point(2);
-            if (b.type().can_represent(bigger) && b_shift + b_shift < missing_q) {
+            ConstantInterval bigger = cb * 2;
+            if (b.type().can_represent(bigger) && a_shift + b_shift < missing_q) {
                 cb = bigger;
                 b_shift++;
                 continue;
