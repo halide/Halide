@@ -691,6 +691,52 @@ struct FileOpener {
         return write_bytes(&data[0], sizeof(T) * N);
     }
 
+    // Read up to the next comma and return in data.
+    // The next comma will be skipped, so calling this repeatedly
+    // can be used to read csv files. Note that a return value of
+    // false is an error; end-of-file should be denoted by two consecutive
+    // commas (this means that an empty string is never valid data in this
+    // variant of CSV).
+    bool read_to_comma(std::string &out) {
+        std::string s;
+        for (;;) {
+            char data;
+            if (fread(&data, 1, 1, f) != 1) {
+                return false;
+            }
+            if (data == ',') {
+                break;
+            }
+            s += data;
+        }
+        // Trim whitespace, if any
+        size_t first = s.find_first_not_of(" \t\n");
+        if (first == std::string::npos) {
+            out = "";
+        } else {
+            size_t last = s.find_last_not_of(" \t\n");
+            assert(last != std::string::npos);
+            out = s.substr(first, (last - first + 1));
+        }
+        return true;
+    }
+
+    // Write the payload, followed by a comma
+    bool write_to_comma(std::string v) {
+        v += ",";
+        return write_bytes(v.data(), v.size());
+    }
+
+    bool write_to_comma(const char *v) {
+        return write_to_comma(std::string(v));
+    }
+
+    template<typename T>
+    bool write_to_comma(const T &t) {
+        std::string v = std::to_string(t) + ",";
+        return write_bytes(v.data(), v.size());
+    }
+
     FILE *const f;
 };
 
@@ -1046,6 +1092,192 @@ inline const std::set<FormatInfo> &query_ppm() {
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_ppm(ImageType &im, const std::string &filename) {
     return Internal::save_pnm<ImageType, check>(im, 3, filename);
+}
+
+// ".csv" is a file format used by RunGen for (usually) very small data sets;
+// it is intended to be a plaintext format that can contain ~any format of data
+// supported by Halide. The format is:
+//
+// csv,<typecode>,<typebits>,<dimensions>,<dim-extent0>,...<dim-extent-n>,data0,data1,...dataN,,
+//
+// TODO: add support for fp16/bf16
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool load_csv(const std::string &filename, ImageType *im) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    FileOpener f(filename, "rb");
+    if (!check(f.f != nullptr, "File could not be opened for reading")) {
+        return false;
+    }
+
+    std::string header, type_str, bits_str, dims_str;
+    if (!check(f.read_to_comma(header), "Count not read .csv header")) {
+        return false;
+    }
+    if (!check(f.read_to_comma(type_str), "Count not read .csv type")) {
+        return false;
+    }
+    if (!check(f.read_to_comma(bits_str), "Count not read .csv bits")) {
+        return false;
+    }
+    if (!check(f.read_to_comma(dims_str), "Count not read .csv dimensions")) {
+        return false;
+    }
+    if (!check(header == "csv", "Bad csv header")) {
+        return false;
+    }
+    const halide_type_code_t tc = (halide_type_code_t)std::stoi(type_str);
+    const int bits = std::stoi(bits_str);
+    const halide_type_t im_type{tc, (uint8_t)bits};
+
+    int dimensions = std::stoi(dims_str);
+    std::vector<int> im_dimensions;
+    for (int d = 0; d < dimensions; d++) {
+        std::string extent_str;
+        if (!check(f.read_to_comma(extent_str), "Count not read dimension extent")) {
+            return false;
+        }
+        im_dimensions.push_back(std::stoi(extent_str));
+    }
+
+    *im = ImageType(im_type, im_dimensions);
+    bool success = true;
+    std::string element;
+    switch (im_type.as_u32()) {
+    case halide_type_t(halide_type_float, 32).as_u32():
+        im->template as<float>().for_each_value([&](float &v) { if (!f.read_to_comma(element)) success = false; v = std::stof(element); });
+        break;
+    case halide_type_t(halide_type_float, 64).as_u32():
+        im->template as<double>().for_each_value([&](double &v) { if (!f.read_to_comma(element)) success = false; v = std::stod(element); });
+        break;
+    case halide_type_t(halide_type_int, 8).as_u32():
+        im->template as<int8_t>().for_each_value([&](int8_t &v) { if (!f.read_to_comma(element)) success = false; v = std::stoi(element); });
+        break;
+    case halide_type_t(halide_type_int, 16).as_u32():
+        im->template as<int16_t>().for_each_value([&](int16_t &v) { if (!f.read_to_comma(element)) success = false; v = std::stoi(element); });
+        break;
+    case halide_type_t(halide_type_int, 32).as_u32():
+        im->template as<int32_t>().for_each_value([&](int32_t &v) { if (!f.read_to_comma(element)) success = false; v = std::stoi(element); });
+        break;
+    case halide_type_t(halide_type_int, 64).as_u32():
+        im->template as<int64_t>().for_each_value([&](int64_t &v) { if (!f.read_to_comma(element)) success = false; v = std::stoll(element); });
+        break;
+    case halide_type_t(halide_type_uint, 8).as_u32():
+        im->template as<uint8_t>().for_each_value([&](uint8_t &v) { if (!f.read_to_comma(element)) success = false; v = std::stoul(element); });
+        break;
+    case halide_type_t(halide_type_uint, 16).as_u32():
+        im->template as<uint16_t>().for_each_value([&](uint16_t &v) { if (!f.read_to_comma(element)) success = false; v = std::stoul(element); });
+        break;
+    case halide_type_t(halide_type_uint, 32).as_u32():
+        im->template as<uint32_t>().for_each_value([&](uint32_t &v) { if (!f.read_to_comma(element)) success = false; v = std::stoul(element); });
+        break;
+    case halide_type_t(halide_type_uint, 64).as_u32():
+        im->template as<uint64_t>().for_each_value([&](uint64_t &v) { if (!f.read_to_comma(element)) success = false; v = std::stoull(element); });
+        break;
+    }
+    if (!check(success, "CSV Read Error")) {
+        return false;
+    }
+    if (!check(f.read_to_comma(element), "Too few elements")) {
+        return false;
+    }
+    if (!check(element.empty(), "Expected final empty element")) {
+        return false;
+    }
+
+    im->set_host_dirty();
+    return true;
+}
+
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool save_csv(ImageType &im, const std::string &filename) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    if (!check(im.copy_to_host() == halide_error_code_success, "copy_to_host() failed.")) {
+        return false;
+    }
+
+    FileOpener f(filename, "wb");
+
+    const halide_type_t im_type = im.type();
+    if (!check(f.write_to_comma("csv"), "CSV Write Error")) {
+        return false;
+    }
+    if (!check(f.write_to_comma((int)im_type.code), "CSV Write Error")) {
+        return false;
+    }
+    if (!check(f.write_to_comma(im_type.bits), "CSV Write Error")) {
+        return false;
+    }
+    if (!check(f.write_to_comma(im.dimensions()), "CSV Write Error")) {
+        return false;
+    }
+    for (int i = 0; i < im.dimensions(); ++i) {
+        if (!check(f.write_to_comma(im.dim(i).extent()), "CSV Write Error")) {
+            return false;
+        }
+    }
+    bool success = true;
+    switch (im_type.as_u32()) {
+    case halide_type_t(halide_type_float, 32).as_u32():
+        im.template as<const float>().for_each_value([&](float v) { if (!f.write_to_comma(v)) success = false; });
+        break;
+    case halide_type_t(halide_type_float, 64).as_u32():
+        im.template as<const double>().for_each_value([&](double v) { if (!f.write_to_comma(v)) success = false; });
+        break;
+    case halide_type_t(halide_type_int, 8).as_u32():
+        im.template as<const int8_t>().for_each_value([&](int8_t v) { if (!f.write_to_comma(v)) success = false; });
+        break;
+    case halide_type_t(halide_type_int, 16).as_u32():
+        im.template as<const int16_t>().for_each_value([&](int16_t v) { if (!f.write_to_comma(v)) success = false; });
+        break;
+    case halide_type_t(halide_type_int, 32).as_u32():
+        im.template as<const int32_t>().for_each_value([&](int32_t v) { if (!f.write_to_comma(v)) success = false; });
+        break;
+    case halide_type_t(halide_type_int, 64).as_u32():
+        im.template as<const int64_t>().for_each_value([&](int64_t v) { if (!f.write_to_comma(v)) success = false; });
+        break;
+    case halide_type_t(halide_type_uint, 8).as_u32():
+        im.template as<const uint8_t>().for_each_value([&](uint8_t v) { if (!f.write_to_comma(v)) success = false; });
+        break;
+    case halide_type_t(halide_type_uint, 16).as_u32():
+        im.template as<const uint16_t>().for_each_value([&](uint16_t v) { if (!f.write_to_comma(v)) success = false; });
+        break;
+    case halide_type_t(halide_type_uint, 32).as_u32():
+        im.template as<const uint32_t>().for_each_value([&](uint32_t v) { if (!f.write_to_comma(v)) success = false; });
+        break;
+    case halide_type_t(halide_type_uint, 64).as_u32():
+        im.template as<const uint64_t>().for_each_value([&](uint64_t v) { if (!f.write_to_comma(v)) success = false; });
+        break;
+    }
+    if (!check(success, "CSV Write Error")) {
+        return false;
+    }
+    if (!check(f.write_to_comma(""), "CSV Write Error")) {
+        return false;
+    }
+    return true;
+}
+
+inline const std::set<FormatInfo> &query_csv() {
+    auto build_set = []() -> std::set<FormatInfo> {
+        std::set<FormatInfo> s;
+        for (halide_type_code_t code : {halide_type_int, halide_type_uint, halide_type_float}) {
+            for (int bits : {8, 16, 32, 64}) {
+                for (int dims : {1, 2, 3, 4}) {
+                    // TODO: fp16
+                    if (code == halide_type_float && bits < 32) {
+                        continue;
+                    }
+                    s.insert({halide_type_t(code, bits), dims});
+                }
+            }
+        }
+        return s;
+    };
+
+    static std::set<FormatInfo> info = build_set();
+    return info;
 }
 
 #ifndef HALIDE_NO_JPEG
@@ -1999,6 +2231,7 @@ bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result
     using ConstImageType = typename ImageTypeWithConstElemType<ImageType, typename ImageType::ElemType>::type;
 
     const std::map<std::string, ImageIO<ImageType, check>> m = {
+        {"csv", {load_csv<ImageType, check>, save_csv<ConstImageType, check>, query_csv}},
 #ifndef HALIDE_NO_JPEG
         {"jpeg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
         {"jpg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
