@@ -781,7 +781,6 @@ protected:
                     // We only care about integers, this should be trivially true.
                     is_x_same_int_or_uint) ||
 
-
             // Saturating patterns.
             rewrite(saturating_cast(op->type, widening_add(x, y)),
                     saturating_add(x, y),
@@ -1250,10 +1249,11 @@ Expr lower_widening_shift_right(const Expr &a, const Expr &b) {
 }
 
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
-    // Shift left, then add one to the result if bits were dropped
-    // (because b < 0) and the most significant dropped bit was a one.
+    // Shift left, then add one to the result if bits were dropped (because b < 0)
+    // and the most significant dropped bit was a one. We must take care not
+    // to introduce UB in the shifts, even if the result would be masked off.
     Expr b_negative = select(b < 0, make_one(a.type()), make_zero(a.type()));
-    return simplify((a << b) + (b_negative & (a << (b + 1))));
+    return simplify((a << b) + (b_negative & (a << saturating_add(b, make_one(b.type())))));
 }
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
@@ -1265,10 +1265,11 @@ Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
         Expr round = simplify(cast(a.type(), (1 << shift) - 1));
         return rounding_halving_add(a, round) >> shift;
     }
-    // Shift right, then add one to the result if bits were dropped
-    // (because b > 0) and the most significant dropped bit was a one.
+    // Shift right, then add one to the result if bits were dropped (because b > 0)
+    // and the most significant dropped bit was a one.  We must take care not to
+    // introduce UB in the shifts, even if the result would be masked off.
     Expr b_positive = select(b > 0, make_one(a.type()), make_zero(a.type()));
-    return simplify((a >> b) + (b_positive & (a >> (b - 1))));
+    return simplify((a >> b) + (b_positive & (a >> saturating_sub(b, make_one(b.type())))));
 }
 
 Expr lower_saturating_add(const Expr &a, const Expr &b) {
