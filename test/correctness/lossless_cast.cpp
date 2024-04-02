@@ -110,7 +110,7 @@ Expr random_expr(std::mt19937 &rng) {
         int op = rng() % 7;
         Expr e1 = exprs[i1];
         Expr e2 = cast(e1.type(), exprs[i2]);
-        Expr e3 = exprs[i3];
+        Expr e3 = cast(e1.type().with_code(halide_type_uint), exprs[i3]);
         bool may_widen = e1.type().bits() < 64;
         Expr e2_narrow = exprs[i2];
         bool may_widen_right = e2_narrow.type() == e1.type().narrow();
@@ -138,7 +138,7 @@ Expr random_expr(std::mt19937 &rng) {
             e = e1 / e2;
             break;
         case 6:
-            switch (rng() % 14) {
+            switch (rng() % 15) {
             case 0:
                 if (may_widen) {
                     e = widening_add(e1, e2);
@@ -176,21 +176,26 @@ Expr random_expr(std::mt19937 &rng) {
                 e = count_trailing_zeros(e1);
                 break;
             case 10:
-                if (e3.type().is_uint()) {
+                if (may_widen) {
                     e = rounding_mul_shift_right(e1, e2, e3);
                 }
                 break;
             case 11:
-                if (may_widen_right) {
-                    e = widen_right_add(e1, e2_narrow);
+                if (may_widen) {
+                    e = mul_shift_right(e1, e2, e3);
                 }
                 break;
             case 12:
                 if (may_widen_right) {
-                    e = widen_right_sub(e1, e2_narrow);
+                    e = widen_right_add(e1, e2_narrow);
                 }
                 break;
             case 13:
+                if (may_widen_right) {
+                    e = widen_right_sub(e1, e2_narrow);
+                }
+                break;
+            case 14:
                 if (may_widen_right) {
                     e = widen_right_mul(e1, e2_narrow);
                 }
@@ -212,21 +217,92 @@ Expr random_expr(std::mt19937 &rng) {
     }
 }
 
-class CheckForIntOverflow : public IRMutator {
-    using IRMutator::visit;
+bool might_have_ub(Expr e) {
+    class MightOverflow : public IRVisitor {
+        std::map<Expr, ConstantInterval, ExprCompare> cache;
 
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::signed_integer_overflow)) {
-            found_overflow = true;
-            return make_zero(op->type);
-        } else {
-            return IRMutator::visit(op);
+        using IRVisitor::visit;
+
+        bool no_overflow_int(const Type &t) {
+            return t.is_int() && t.bits() >= 32;
         }
-    }
 
-public:
-    bool found_overflow = false;
-};
+        ConstantInterval bounds(const Expr &e) {
+            return constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), &cache);
+        }
+
+        void visit(const Add *op) override {
+            if (no_overflow_int(op->type) &&
+                !op->type.can_represent(bounds(op->a) + bounds(op->b))) {
+                found = true;
+            } else {
+                IRVisitor::visit(op);
+            }
+        }
+
+        void visit(const Sub *op) override {
+            if (no_overflow_int(op->type) &&
+                !op->type.can_represent(bounds(op->a) - bounds(op->b))) {
+                found = true;
+            } else {
+                IRVisitor::visit(op);
+            }
+        }
+
+        void visit(const Mul *op) override {
+            if (no_overflow_int(op->type) &&
+                !op->type.can_represent(bounds(op->a) * bounds(op->b))) {
+                found = true;
+            } else {
+                IRVisitor::visit(op);
+            }
+        }
+
+        void visit(const Div *op) override {
+            if (no_overflow_int(op->type) &&
+                (bounds(op->a) / bounds(op->b)).contains(-1)) {
+                found = true;
+            } else {
+                IRVisitor::visit(op);
+            }
+        }
+
+        void visit(const Cast *op) override {
+            if (no_overflow_int(op->type) &&
+                !op->type.can_represent(bounds(op->value))) {
+                found = true;
+            } else {
+                IRVisitor::visit(op);
+            }
+        }
+
+        void visit(const Call *op) override {
+            if (op->is_intrinsic({Call::shift_left,
+                                  Call::shift_right,
+                                  Call::rounding_shift_left,
+                                  Call::rounding_shift_right,
+                                  Call::widening_shift_left,
+                                  Call::widening_shift_right,
+                                  Call::mul_shift_right,
+                                  Call::rounding_mul_shift_right})) {
+                auto shift_bounds = bounds(op->args.back());
+                if (!(shift_bounds > -op->type.bits() && shift_bounds < op->type.bits())) {
+                    found = true;
+                }
+            } else if (op->is_intrinsic({Call::signed_integer_overflow})) {
+                found = true;
+            }
+            IRVisitor::visit(op);
+        }
+
+    public:
+        bool found = false;
+    } checker;
+
+    e.accept(&checker);
+
+    return checker.found;
+}
 
 bool found_error = false;
 
@@ -237,6 +313,10 @@ int test_one(uint32_t seed) {
     buf_i8.fill(rng);
 
     Expr e1 = random_expr(rng);
+
+    if (might_have_ub(e1)) {
+        return 0;
+    }
 
     // We're also going to test constant_integer_bounds here.
     ConstantInterval bounds = constant_integer_bounds(e1);
@@ -256,21 +336,7 @@ int test_one(uint32_t seed) {
 
     Buffer<int64_t> out1(size), out2(size);
     Pipeline p(f);
-    CheckForIntOverflow checker;
-    // We don't have constant-folding rules for all intrinsics, so we also need
-    // to feed the checker the lowered form.
-    checker.mutate(simplify(lower_intrinsics(e1)));
-    checker.mutate(simplify(lower_intrinsics(e2)));
-    if (checker.found_overflow) {
-        return 0;
-    }
-    p.add_custom_lowering_pass(&checker, nullptr);
     p.realize({out1, out2});
-    if (checker.found_overflow) {
-        // We don't do anything in the expression generator to avoid signed
-        // integer overflow, so just skip anything with signed integer overflow.
-        return 0;
-    }
 
     for (int x = 0; x < size; x++) {
         if (out1(x) != out2(x)) {
@@ -297,6 +363,7 @@ int test_one(uint32_t seed) {
                 << "out1 = " << out1(x) << "\n"
                 << "Expression: " << e1 << "\n"
                 << "Bounds: " << bounds << "\n";
+            return 1;
         }
     }
 
