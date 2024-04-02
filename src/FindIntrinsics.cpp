@@ -781,11 +781,6 @@ protected:
                     // We only care about integers, this should be trivially true.
                     is_x_same_int_or_uint) ||
 
-            // widening_add(x + widen(y), widen(z)) -> widening_add(x, widening_add(y, z))
-            rewrite(widening_add(widen_right_add(x, y), widen(z)),
-                    widening_add(x, widening_add(y, z))) ||
-            rewrite(widening_add(widen(z), widen_right_add(x, y)),
-                    widening_add(x, widening_add(y, z))) ||
 
             // Saturating patterns.
             rewrite(saturating_cast(op->type, widening_add(x, y)),
