@@ -6,8 +6,11 @@
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
 #include "Closure.h"
+#include "ConstantInterval.h"
 #include "IROperator.h"
+#include "Interval.h"
 #include "Module.h"
+#include "ModulusRemainder.h"
 #include "Target.h"
 #include "Util.h"
 
@@ -443,6 +446,45 @@ std::ostream &operator<<(std::ostream &out, const Closure &c) {
         out << " dims=" << (int)b.second.dimensions;
         out << "\n";
     }
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const Interval &in) {
+    out << "[";
+    if (in.has_lower_bound()) {
+        out << in.min;
+    } else {
+        out << "-inf";
+    }
+    out << ", ";
+    if (in.has_upper_bound()) {
+        out << in.max;
+    } else {
+        out << "inf";
+    }
+    out << "]";
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ConstantInterval &in) {
+    out << "[";
+    if (in.min_defined) {
+        out << in.min;
+    } else {
+        out << "-inf";
+    }
+    out << ", ";
+    if (in.max_defined) {
+        out << in.max;
+    } else {
+        out << "inf";
+    }
+    out << "]";
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
+    out << "(mod: " << c.modulus << " rem: " << c.remainder << ")";
     return out;
 }
 

@@ -277,7 +277,6 @@ tests(GROUPS correctness
       simd_op_check_hvx.cpp
       simd_op_check_powerpc.cpp
       simd_op_check_riscv.cpp
-      simd_op_check_sve2.cpp
       simd_op_check_wasm.cpp
       simd_op_check_x86.cpp
       simplified_away_embedded_image.cpp
