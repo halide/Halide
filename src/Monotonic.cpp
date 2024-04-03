@@ -198,7 +198,7 @@ class DerivativeBounds : public IRVisitor {
     }
 
     void visit(const Mod *op) override {
-        // TODO
+        // TODO: It's possible to get tighter bounds here. What if neither arg uses the var!
         result = ConstantInterval::everything();
     }
 
