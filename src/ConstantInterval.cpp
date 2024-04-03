@@ -86,6 +86,18 @@ bool ConstantInterval::contains(int64_t x) const {
              (max_defined && x > max));
 }
 
+bool ConstantInterval::contains(int32_t x) const {
+    return contains((int64_t)x);
+}
+
+bool ConstantInterval::contains(uint64_t x) const {
+    if (x <= (uint64_t)std::numeric_limits<int64_t>::max()) {
+        return contains((int64_t)x);
+    } else {
+        return !max_defined;
+    }
+}
+
 ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const ConstantInterval &b) {
     ConstantInterval result = a;
     result.include(b);
@@ -587,8 +599,24 @@ ConstantInterval operator<<(const ConstantInterval &a, const ConstantInterval &b
     return (a * mul) / div;
 }
 
+ConstantInterval operator<<(const ConstantInterval &a, int64_t b) {
+    return a << ConstantInterval::single_point(b);
+}
+
+ConstantInterval operator<<(int64_t a, const ConstantInterval &b) {
+    return ConstantInterval::single_point(a) << b;
+}
+
 ConstantInterval operator>>(const ConstantInterval &a, const ConstantInterval &b) {
     return a << (-b);
+}
+
+ConstantInterval operator>>(const ConstantInterval &a, int64_t b) {
+    return a >> ConstantInterval::single_point(b);
+}
+
+ConstantInterval operator>>(int64_t a, const ConstantInterval &b) {
+    return ConstantInterval::single_point(a) >> b;
 }
 
 }  // namespace Internal

@@ -174,7 +174,7 @@ class DerivativeBounds : public IRVisitor {
                 // take floor division, and for the max we want to use ceil
                 // division.
                 if (*b == 0) {
-                    result = ConstantInterval(0, 0);
+                    result = ConstantInterval::single_point(0);
                 } else {
                     if (result.min_defined) {
                         result.min = div_imp(result.min, *b);

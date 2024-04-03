@@ -81,8 +81,10 @@ int lossless_cast_test() {
     e = cast(i64, 1024) * cast(i64, 1024) * cast(i64, 1024);
     res |= check_lossless_cast(i32, e, (cast(i32, 1024) * 1024) * 1024);
 
+    if (res) {
+        std::cout << "Ignoring bugs in lossless_cast for now. Will be fixed in #8155\n";
+    }
     return 0;
-
     // return res;
 }
 
@@ -138,7 +140,7 @@ Expr random_expr(std::mt19937 &rng) {
             e = e1 / e2;
             break;
         case 6:
-            switch (rng() % 15) {
+            switch (rng() % 19) {
             case 0:
                 if (may_widen) {
                     e = widening_add(e1, e2);
@@ -199,6 +201,18 @@ Expr random_expr(std::mt19937 &rng) {
                 if (may_widen_right) {
                     e = widen_right_mul(e1, e2_narrow);
                 }
+                break;
+            case 15:
+                e = e1 << e2;
+                break;
+            case 16:
+                e = e1 >> e2;
+                break;
+            case 17:
+                e = rounding_shift_right(e1, e2);
+                break;
+            case 18:
+                e = rounding_shift_left(e1, e2);
                 break;
             }
         }
@@ -338,8 +352,9 @@ int test_one(uint32_t seed) {
     Pipeline p(f);
     p.realize({out1, out2});
 
+    bool ignore_lossless_cast_bug = false;
     for (int x = 0; x < size; x++) {
-        if (out1(x) != out2(x)) {
+        if (!ignore_lossless_cast_bug && out1(x) != out2(x)) {
             std::cout
                 << "lossless_cast failure\n"
                 << "seed = " << seed << "\n"
@@ -351,10 +366,12 @@ int test_one(uint32_t seed) {
                 << "Original: " << e1 << "\n"
                 << "Lossless cast: " << e2 << "\n"
                 << "Ignoring bug for now. Will be fixed in #8155\n";
+            ignore_lossless_cast_bug = true;
             // return 1;
         }
 
-        if (!bounds.contains(out1(x))) {
+        if ((e1.type().is_int() && !bounds.contains(out1(x))) ||
+            (e1.type().is_uint() && !bounds.contains((uint64_t)out1(x)))) {
             std::cout
                 << "constant_integer_bounds failure\n"
                 << "seed = " << seed << "\n"
@@ -375,7 +392,7 @@ int fuzz_test(uint32_t root_seed) {
     std::mt19937 seed_generator(root_seed);
 
     std::cout << "Fuzz testing with root seed " << root_seed << "\n";
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 1000000; i++) {
         if (test_one(seed_generator())) {
             return 1;
         }

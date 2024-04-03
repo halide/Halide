@@ -122,30 +122,36 @@ ConstantInterval constant_integer_bounds(const Expr &e,
             } else if (op->is_intrinsic(Call::widen_right_mul)) {
                 return cast(op->type, (constant_integer_bounds(op->args[0]) *
                                        constant_integer_bounds(op->args[1])));
-            } else if (op->is_intrinsic(Call::shift_right)) {
+            } else if (op->is_intrinsic(Call::shift_right) ||
+                       op->is_intrinsic(Call::widening_shift_right)) {
                 return cast(op->type, constant_integer_bounds(op->args[0]) >> constant_integer_bounds(op->args[1]));
-            } else if (op->is_intrinsic(Call::shift_left)) {
+            } else if (op->is_intrinsic(Call::shift_left) ||
+                       op->is_intrinsic(Call::widening_shift_left)) {
                 return cast(op->type, constant_integer_bounds(op->args[0]) << constant_integer_bounds(op->args[1]));
-            } else if (op->is_intrinsic(Call::rounding_shift_right)) {
+            } else if (op->is_intrinsic(Call::rounding_shift_right) ||
+                       op->is_intrinsic(Call::rounding_shift_left)) {
                 ConstantInterval ca = constant_integer_bounds(op->args[0]);
                 ConstantInterval cb = constant_integer_bounds(op->args[1]);
-                ConstantInterval rounding_term;
-                if (cb.min_defined && cb.min > 0) {
-                    auto rounding_term = ConstantInterval(1, 1) << (cb - ConstantInterval(1, 1));
-                    // rounding shift right with a positive RHS can't overflow,
-                    // so no cast required.
-                    return (ca + rounding_term) >> cb;
-                } else if (cb.max_defined && cb.max <= 0) {
-                    return cast(op->type, ca << (-cb));
-                } else {
-                    auto rounding_term = ConstantInterval(0, 1) << max(cb - 1, 0);
-                    return cast(op->type, (ca + rounding_term) >> cb);
+                if (op->is_intrinsic(Call::rounding_shift_left)) {
+                    cb = -cb;
                 }
+                ConstantInterval rounding_term = 1 << (cb - 1);
+                // Note if cb is <= 0, rounding_term is zero.
+                return cast(op->type, (ca + rounding_term) >> cb);
+            } else if (op->is_intrinsic(Call::mul_shift_right)) {
+                ConstantInterval ca = constant_integer_bounds(op->args[0]);
+                ConstantInterval cb = constant_integer_bounds(op->args[1]);
+                ConstantInterval cq = constant_integer_bounds(op->args[2]);
+                return cast(op->type, (ca * cb) >> cq);
+            } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
+                ConstantInterval ca = constant_integer_bounds(op->args[0]);
+                ConstantInterval cb = constant_integer_bounds(op->args[1]);
+                ConstantInterval cq = constant_integer_bounds(op->args[2]);
+                ConstantInterval rounding_term = 1 << (cq - 1);
+                return cast(op->type, (ca * cb + rounding_term) >> cq);
             }
             // If you add a new intrinsic here, also add it to the expression
             // generator in test/correctness/lossless_cast.cpp
-
-            // TODO: mul_shift_right, rounding_mul_shift_right, widening_shift_left/right, rounding_shift_left
         }
 
         return ConstantInterval::bounds_of_type(e.type());

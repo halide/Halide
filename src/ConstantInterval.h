@@ -56,7 +56,13 @@ struct ConstantInterval {
     void include(int64_t x);
 
     /** Test if the interval contains a particular value */
+    bool contains(int32_t x) const;
+
+    /** Test if the interval contains a particular value */
     bool contains(int64_t x) const;
+
+    /** Test if the interval contains a particular unsigned value */
+    bool contains(uint64_t x) const;
 
     /** Construct the smallest interval containing two intervals. */
     static ConstantInterval make_union(const ConstantInterval &a, const ConstantInterval &b);
@@ -119,8 +125,10 @@ ConstantInterval max(const ConstantInterval &a, int64_t b);
 ConstantInterval abs(const ConstantInterval &a);
 ConstantInterval operator<<(const ConstantInterval &a, const ConstantInterval &b);
 ConstantInterval operator<<(const ConstantInterval &a, int64_t b);
+ConstantInterval operator<<(int64_t a, const ConstantInterval &b);
 ConstantInterval operator>>(const ConstantInterval &a, const ConstantInterval &b);
 ConstantInterval operator>>(const ConstantInterval &a, int64_t b);
+ConstantInterval operator>>(int64_t a, const ConstantInterval &b);
 // @}
 
 /** Comparison operators on ConstantIntervals. Returns whether the comparison is
