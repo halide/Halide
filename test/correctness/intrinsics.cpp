@@ -361,6 +361,22 @@ int main(int argc, char **argv) {
         g.compile_jit();
     }
 
+    // Rounding shifts by extreme values, when lowered, used to have the
+    // potential to overflow and turn into out-of-range shifts. The simplifier
+    // detected this and injected a signed_integer_overflow intrinsic, which
+    // then threw an error in codegen, even though the rounding shift calls are
+    // well-defined.
+    {
+        Func f, g;
+
+        f(x) = cast<uint8_t>(x);
+        f.compute_root();
+
+        g(x) = rounding_shift_right(x, 0) + rounding_shift_left(x, 8);
+
+        g.compile_jit();
+    }
+
     printf("Success!\n");
     return 0;
 }
