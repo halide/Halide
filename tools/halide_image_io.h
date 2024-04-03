@@ -1114,7 +1114,10 @@ inline bool parse_python_dict(std::string dict_str, std::map<std::string, std::s
     for (const auto &k : keys) {
         size_t pos = dict_str.find("'" + k + "'");
         if (pos == std::string::npos) {
-            return false;  // missing a required key
+            pos = dict_str.find("\"" + k + "\"");
+            if (pos == std::string::npos) {
+                return false;  // missing a required key
+            }
         }
         positions.emplace_back(pos, k);
     }
