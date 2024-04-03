@@ -436,7 +436,7 @@ ConstantInterval operator%(const ConstantInterval &a, const ConstantInterval &b)
     ConstantInterval result;
 
     // Maybe the mod won't actually do anything
-    if (a >= 0 && a < b) {
+    if (a >= 0 && a < abs(b)) {
         return a;
     }
 
@@ -631,35 +631,13 @@ ConstantInterval cast(Type t, const ConstantInterval &a) {
 
 ConstantInterval saturating_cast(Type t, const ConstantInterval &a) {
     ConstantInterval b = ConstantInterval::bounds_of_type(t);
-
-    if (b.max_defined && a.min_defined && a.min > b.max) {
-        return ConstantInterval(b.max, b.max);
-    } else if (b.min_defined && a.max_defined && a.max < b.min) {
-        return ConstantInterval(b.min, b.min);
+    if (a >= b) {
+        return ConstantInterval::single_point(b.max);
+    } else if (a <= b) {
+        return ConstantInterval::single_point(b.min);
+    } else {
+        return ConstantInterval::make_intersection(a, b);
     }
-
-    ConstantInterval result = a;
-    result.max_defined = a.max_defined || b.max_defined;
-    if (a.max_defined) {
-        if (b.max_defined) {
-            result.max = std::min(a.max, b.max);
-        } else {
-            result.max = a.max;
-        }
-    } else if (b.max_defined) {
-        result.max = b.max;
-    }
-    result.min_defined = a.min_defined || b.min_defined;
-    if (a.min_defined) {
-        if (b.min_defined) {
-            result.min = std::max(a.min, b.min);
-        } else {
-            result.min = a.min;
-        }
-    } else if (b.min_defined) {
-        result.min = b.min;
-    }
-    return result;
 }
 
 }  // namespace Halide
