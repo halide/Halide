@@ -5,6 +5,7 @@
 #include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "SimplifyCorrelatedDifferences.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -307,6 +308,12 @@ class DerivativeBounds : public IRVisitor {
                 // It's very important to have stripped likelies here, or the
                 // simplification might not cancel things that it should.
                 Expr bump = simplify(op->true_value - op->false_value);
+
+                // This is of dubious value, because
+                // bound_correlated_differences really assumes you've solved for
+                // a variable that you're trying to cancel first. TODO: try
+                // removing this.
+                bump = bound_correlated_differences(bump);
                 ConstantInterval bump_bounds = constant_integer_bounds(bump, value_bounds);
                 result += rcond * bump_bounds;
             }
@@ -371,8 +378,10 @@ class DerivativeBounds : public IRVisitor {
     void visit(const Let *op) override {
         op->value.accept(this);
 
+        // As above, this is of dubious value. TODO: Try removing it.
+        Expr v = bound_correlated_differences(op->value);
         ScopedBinding<ConstantInterval> vb_binding(value_bounds, op->name,
-                                                   constant_integer_bounds(op->value, value_bounds));
+                                                   constant_integer_bounds(v, value_bounds));
         if (is_constant(result)) {
             // No point pushing it if it's constant w.r.t the var,
             // because unknown variables are treated as constant.
