@@ -306,7 +306,8 @@ class DerivativeBounds : public IRVisitor {
             // If the condition is not constant, we hit a "bump" when the condition changes value.
             if (!is_constant(rcond)) {
                 // It's very important to have stripped likelies here, or the
-                // simplification might not cancel things that it should.
+                // simplification might not cancel things that it should. This
+                // happens below in the top-level derivative_bounds call.
                 Expr bump = simplify(op->true_value - op->false_value);
 
                 // This is of dubious value, because
