@@ -1107,8 +1107,6 @@ inline bool parse_python_dict(std::string dict_str, std::map<std::string, std::s
     }
     dict_str = dict_str.substr(1, dict_str.length() - 2);
 
-    std::vector<std::pair<size_t, std::string>> pos;
-
     std::vector<std::pair<size_t, std::string>> positions;
 
     constexpr int kKeyCount = 3;
@@ -1147,6 +1145,29 @@ inline bool parse_python_dict(std::string dict_str, std::map<std::string, std::s
         m[key] = trim_whitespace(value.substr(colon + 1));
     }
 
+    return true;
+}
+
+// return true iff the buffer storage has no padding between
+// any elements, and is in strictly planar order.
+template<typename ImageType>
+bool buffer_is_compact_planar(ImageType &im) {
+    const halide_type_t im_type = im.type();
+    const size_t elem_size = (im_type.bits / 8);
+    if (((const uint8_t *)im.begin() + (im.number_of_elements() * elem_size)) != (const uint8_t *)im.end()) {
+        return false;
+    }
+    for (int d = 1; d < im.dimensions(); ++d) {
+        if (im.dim(d - 1).stride() > im.dim(d).stride()) {
+            return false;
+        }
+        // Strides can only match if the previous dimension has extent 1
+        // (this can happen when artificially adding dimension(s), e.g.
+        // to write a .tmp file)
+        if (im.dim(d - 1).stride() == im.dim(d).stride() && im.dim(d - 1).extent() != 1) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -1239,48 +1260,37 @@ bool load_npy(const std::string &filename, ImageType *im) {
     }
 
     *im = ImageType(im_type, im_extents);
-    bool success = true;
-    std::string element;
-    switch (im_type.as_u32()) {
-    // TODO: float16
-    case halide_type_t(halide_type_float, 32).as_u32():
-        im->template as<float>().for_each_value([&](float &v) { success &= f.read_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_float, 64).as_u32():
-        im->template as<double>().for_each_value([&](double &v) { success &= f.read_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_int, 8).as_u32():
-        im->template as<int8_t>().for_each_value([&](int8_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_int, 16).as_u32():
-        im->template as<int16_t>().for_each_value([&](int16_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_int, 32).as_u32():
-        im->template as<int32_t>().for_each_value([&](int32_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_int, 64).as_u32():
-        im->template as<int64_t>().for_each_value([&](int64_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_uint, 8).as_u32():
-        im->template as<uint8_t>().for_each_value([&](uint8_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_uint, 16).as_u32():
-        im->template as<uint16_t>().for_each_value([&](uint16_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_uint, 32).as_u32():
-        im->template as<uint32_t>().for_each_value([&](uint32_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_uint, 64).as_u32():
-        im->template as<uint64_t>().for_each_value([&](uint64_t &v) { success &= f.read_bytes(&v, sizeof(v)); });
-        break;
-    default:
-        return check(false, "Unsupported type in load_npy");
+
+    // This should never fail unless the default Buffer<> constructor behavior changes.
+    if (!check(buffer_is_compact_planar(*im), "load_npy() requires compact planar images")) {
+        return false;
     }
-    if (!check(success, "npy Read Error")) {
+
+    if (!check(f.read_bytes(im->begin(), im->size_in_bytes()), "Count not read .npy payload")) {
         return false;
     }
 
     im->set_host_dirty();
+    return true;
+}
+
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool write_planar_payload(ImageType &im, FileOpener &f) {
+    if (im.dimensions() == 0 || buffer_is_compact_planar(im)) {
+        // Contiguous buffer! Write it all in one swell foop.
+        if (!check(f.write_bytes(im.begin(), im.size_in_bytes()), "Count not write planar payload")) {
+            return false;
+        }
+    } else {
+        // We have to do this the hard way.
+        int d = im.dimensions() - 1;
+        for (int i = im.dim(d).min(); i <= im.dim(d).max(); i++) {
+            auto slice = im.sliced(d, i);
+            if (!write_planar_payload(slice, f)) {
+                return false;
+            }
+        }
+    }
     return true;
 }
 
@@ -1346,43 +1356,7 @@ bool save_npy(ImageType &im, const std::string &filename) {
         return false;
     }
 
-    bool success = true;
-    switch (im_type.as_u32()) {
-    // TODO: float16
-    case halide_type_t(halide_type_float, 32).as_u32():
-        im.template as<const float>().for_each_value([&](float v) { success &= f.write_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_float, 64).as_u32():
-        im.template as<const double>().for_each_value([&](double v) { success &= f.write_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_int, 8).as_u32():
-        im.template as<const int8_t>().for_each_value([&](int8_t v) { success &= f.write_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_int, 16).as_u32():
-        im.template as<const int16_t>().for_each_value([&](int16_t v) { success &= f.write_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_int, 32).as_u32():
-        im.template as<const int32_t>().for_each_value([&](int32_t v) { success &= f.write_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_int, 64).as_u32():
-        im.template as<const int64_t>().for_each_value([&](int64_t v) { success &= f.write_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_uint, 8).as_u32():
-        im.template as<const uint8_t>().for_each_value([&](uint8_t v) { success &= f.write_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_uint, 16).as_u32():
-        im.template as<const uint16_t>().for_each_value([&](uint16_t v) { success &= f.write_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_uint, 32).as_u32():
-        im.template as<const uint32_t>().for_each_value([&](uint32_t v) { success &= f.write_bytes(&v, sizeof(v)); });
-        break;
-    case halide_type_t(halide_type_uint, 64).as_u32():
-        im.template as<const uint64_t>().for_each_value([&](uint64_t v) { success &= f.write_bytes(&v, sizeof(v)); });
-        break;
-    default:
-        return check(false, "Unsupported type in save_npy");
-    }
-    if (!check(success, ".npy write faile")) {
+    if (!write_planar_payload<ImageType, check>(im, f)) {
         return false;
     }
 
@@ -1538,29 +1512,6 @@ inline const halide_type_t *tmp_code_to_halide_type() {
     return tmp_code_to_halide_type_;
 }
 
-// return true iff the buffer storage has no padding between
-// any elements, and is in strictly planar order.
-template<typename ImageType>
-bool buffer_is_compact_planar(ImageType &im) {
-    const halide_type_t im_type = im.type();
-    const size_t elem_size = (im_type.bits / 8);
-    if (((const uint8_t *)im.begin() + (im.number_of_elements() * elem_size)) != (const uint8_t *)im.end()) {
-        return false;
-    }
-    for (int d = 1; d < im.dimensions(); ++d) {
-        if (im.dim(d - 1).stride() > im.dim(d).stride()) {
-            return false;
-        }
-        // Strides can only match if the previous dimension has extent 1
-        // (this can happen when artificially adding dimension(s), e.g.
-        // to write a .tmp file)
-        if (im.dim(d - 1).stride() == im.dim(d).stride() && im.dim(d - 1).extent() != 1) {
-            return false;
-        }
-    }
-    return true;
-}
-
 // ".tmp" is a file format used by the ImageStack tool (see https://github.com/abadams/ImageStack)
 template<typename ImageType, CheckFunc check = CheckReturn>
 bool load_tmp(const std::string &filename, ImageType *im) {
@@ -1614,26 +1565,6 @@ inline const std::set<FormatInfo> &query_tmp() {
         {halide_type_t(halide_type_int, 64), 4},
     };
     return info;
-}
-
-template<typename ImageType, CheckFunc check = CheckReturn>
-bool write_planar_payload(ImageType &im, FileOpener &f) {
-    if (im.dimensions() == 0 || buffer_is_compact_planar(im)) {
-        // Contiguous buffer! Write it all in one swell foop.
-        if (!check(f.write_bytes(im.begin(), im.size_in_bytes()), "Count not write .tmp payload")) {
-            return false;
-        }
-    } else {
-        // We have to do this the hard way.
-        int d = im.dimensions() - 1;
-        for (int i = im.dim(d).min(); i <= im.dim(d).max(); i++) {
-            auto slice = im.sliced(d, i);
-            if (!write_planar_payload(slice, f)) {
-                return false;
-            }
-        }
-    }
-    return true;
 }
 
 // ".tmp" is a file format used by the ImageStack tool (see https://github.com/abadams/ImageStack)
