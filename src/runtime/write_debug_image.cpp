@@ -181,7 +181,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
     }
 
     if (auto result = halide_copy_to_host(user_context, buf); result != halide_error_code_success) {
-        halide_error(user_context, "debug_to_file(): halide_copy_to_host failed\n");
+        // halide_error() has already been called
         return result;
     }
 
