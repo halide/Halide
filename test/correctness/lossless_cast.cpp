@@ -352,9 +352,8 @@ int test_one(uint32_t seed) {
     Pipeline p(f);
     p.realize({out1, out2});
 
-    bool ignore_lossless_cast_bug = false;
     for (int x = 0; x < size; x++) {
-        if (!ignore_lossless_cast_bug && out1(x) != out2(x)) {
+        if (out1(x) != out2(x)) {
             std::cout
                 << "lossless_cast failure\n"
                 << "seed = " << seed << "\n"
@@ -366,12 +365,17 @@ int test_one(uint32_t seed) {
                 << "Original: " << e1 << "\n"
                 << "Lossless cast: " << e2 << "\n"
                 << "Ignoring bug for now. Will be fixed in #8155\n";
-            ignore_lossless_cast_bug = true;
+            // If lossless_cast has failed on this Expr, it's possible the test
+            // below will fail as well.
+            return 0;
             // return 1;
         }
+    }
 
+    for (int x = 0; x < size; x++) {
         if ((e1.type().is_int() && !bounds.contains(out1(x))) ||
             (e1.type().is_uint() && !bounds.contains((uint64_t)out1(x)))) {
+            Expr simplified = simplify(e1);
             std::cout
                 << "constant_integer_bounds failure\n"
                 << "seed = " << seed << "\n"
@@ -380,7 +384,11 @@ int test_one(uint32_t seed) {
                 << "buf_i8 = " << (int)buf_i8(x) << "\n"
                 << "out1 = " << out1(x) << "\n"
                 << "Expression: " << e1 << "\n"
-                << "Bounds: " << bounds << "\n";
+                << "Bounds: " << bounds << "\n"
+                << "Simplified: " << simplified << "\n"
+                // If it's still out-of-bounds when the expression is
+                // simplified, that'll be easier to debug.
+                << "Bounds: " << constant_integer_bounds(simplified) << "\n";
             return 1;
         }
     }
