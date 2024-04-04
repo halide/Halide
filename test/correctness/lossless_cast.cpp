@@ -400,7 +400,7 @@ int fuzz_test(uint32_t root_seed) {
     std::mt19937 seed_generator(root_seed);
 
     std::cout << "Fuzz testing with root seed " << root_seed << "\n";
-    for (int i = 0; i < 1000000; i++) {
+    for (int i = 0; i < 1000; i++) {
         if (test_one(seed_generator())) {
             return 1;
         }

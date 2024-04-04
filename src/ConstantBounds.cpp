@@ -19,8 +19,6 @@ ConstantInterval constant_integer_bounds(const Expr &e,
         if (const UIntImm *op = e.as<UIntImm>()) {
             if (Int(64).can_represent(op->value)) {
                 return ConstantInterval::single_point((int64_t)(op->value));
-            } else {
-                return ConstantInterval::everything();
             }
         } else if (const IntImm *op = e.as<IntImm>()) {
             return ConstantInterval::single_point(op->value);
