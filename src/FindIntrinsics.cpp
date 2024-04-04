@@ -939,6 +939,7 @@ protected:
                     can_prove(b_narrow > 0 && b_narrow < a_narrow.type().bits())) {
                     result = rounding_shift_right(a_narrow, b_narrow);
                 } else if (op->is_intrinsic(Call::rounding_shift_left) &&
+                           b_narrow.type().is_int() &&
                            can_prove(b_narrow < 0 && b_narrow > -a_narrow.type().bits())) {
                     result = rounding_shift_left(a_narrow, b_narrow);
                 } else {
