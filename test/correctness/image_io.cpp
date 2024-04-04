@@ -199,6 +199,10 @@ void do_test() {
     formats.push_back("png");
 #endif
     for (std::string format : formats) {
+        // .npy is the only format here that supports float16
+        if (halide_type_of<T>() == halide_type_t(halide_type_float, 16) && format != "npy") {
+            continue;
+        }
         if ((format == "jpg" || format == "pgm" || format == "ppm") && ht != halide_type_t(halide_type_uint, 8)) {
             continue;
         }
@@ -265,7 +269,6 @@ void test_mat_header() {
 }
 
 int main(int argc, char **argv) {
-    // TODO: float16
     do_test<int8_t>();
     do_test<int16_t>();
     do_test<int32_t>();
@@ -275,6 +278,9 @@ int main(int argc, char **argv) {
     do_test<uint32_t>();
     do_test<uint64_t>();
     do_test<float>();
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    do_test<_Float16>();
+#endif
     do_test<double>();
     test_mat_header();
     printf("Success!\n");

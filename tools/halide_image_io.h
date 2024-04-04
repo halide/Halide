@@ -1191,8 +1191,8 @@ struct npy_dtype_info_t {
     }
 };
 
-inline static const std::array<std::pair<halide_type_t, npy_dtype_info_t>, 10> npy_dtypes = {{
-    // TODO: float16
+inline static const std::array<std::pair<halide_type_t, npy_dtype_info_t>, 11> npy_dtypes = {{
+    {halide_type_t(halide_type_float, 16), {host_endian_char, 'f', 2}},
     {halide_type_of<float>(), {host_endian_char, 'f', sizeof(float)}},
     {halide_type_of<double>(), {host_endian_char, 'f', sizeof(double)}},
     {halide_type_of<int8_t>(), {no_endian_char, 'i', sizeof(int8_t)}},
@@ -1486,15 +1486,15 @@ bool save_npy(ImageType &im, const std::string &filename) {
 
 inline const std::set<FormatInfo> &query_npy() {
     auto build_set = []() -> std::set<FormatInfo> {
-        // TODO: bfloat16
+        // NumPy doesn't support bfloat16, not sure if they plan to,
+        // so we don't attempt to support it here
         std::set<FormatInfo> s;
         for (halide_type_code_t code : {halide_type_int, halide_type_uint, halide_type_float}) {
             for (int bits : {8, 16, 32, 64}) {
+                if (code == halide_type_float && bits < 16) {
+                    continue;
+                }
                 for (int dims : {1, 2, 3, 4}) {
-                    // TODO: float16
-                    if (code == halide_type_float && bits < 32) {
-                        continue;
-                    }
                     s.insert({halide_type_t(code, bits), dims});
                 }
             }
