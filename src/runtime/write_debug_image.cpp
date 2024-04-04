@@ -1,13 +1,16 @@
 #include "HalideRuntime.h"
 
-// We support three formats, tiff, mat, and tmp.
+// We support four formats, npy, tiff, mat, and tmp.
 //
 // All formats support arbitrary types, and are easy to write in a
 // small amount of code.
 //
+// npy:
+// - Arbitrary dimensionality, type
+// - Readable by NumPy and other Python tools
 // TIFF:
 // - 2/3-D only
-// - Readable by the most tools
+// - Readable by a lot of tools
 // mat:
 // - Arbitrary dimensionality, type
 // - Readable by matlab, ImageStack, and many other tools
@@ -125,6 +128,42 @@ struct ScopedFile {
     }
 };
 
+#if (defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN) || defined(HALIDE_FORCE_BIG_ENDIAN)
+constexpr bool host_is_big_endian = true;
+#else
+constexpr bool host_is_big_endian = false;
+#endif
+
+constexpr char little_endian_char = '<';
+constexpr char big_endian_char = '>';
+constexpr char no_endian_char = '|';
+constexpr char host_endian_char = (host_is_big_endian ? big_endian_char : little_endian_char);
+
+struct npy_dtype_info_t {
+    char byte_order;
+    char kind;
+    size_t item_size;
+};
+
+struct htype_to_dtype {
+    halide_type_t htype;
+    npy_dtype_info_t dtype;
+};
+
+WEAK htype_to_dtype npy_dtypes[] = {
+    // TODO: float16
+    {halide_type_of<float>(), {host_endian_char, 'f', sizeof(float)}},
+    {halide_type_of<double>(), {host_endian_char, 'f', sizeof(double)}},
+    {halide_type_of<int8_t>(), {no_endian_char, 'i', sizeof(int8_t)}},
+    {halide_type_of<int16_t>(), {host_endian_char, 'i', sizeof(int16_t)}},
+    {halide_type_of<int32_t>(), {host_endian_char, 'i', sizeof(int32_t)}},
+    {halide_type_of<int64_t>(), {host_endian_char, 'i', sizeof(int64_t)}},
+    {halide_type_of<uint8_t>(), {no_endian_char, 'u', sizeof(uint8_t)}},
+    {halide_type_of<uint16_t>(), {host_endian_char, 'u', sizeof(uint16_t)}},
+    {halide_type_of<uint32_t>(), {host_endian_char, 'u', sizeof(uint32_t)}},
+    {halide_type_of<uint64_t>(), {host_endian_char, 'u', sizeof(uint64_t)}},
+};
+
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
@@ -142,13 +181,14 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         return halide_error_code_bad_dimensions;
     }
 
-    if (auto result = halide_copy_to_host(user_context, buf);
-        result != halide_error_code_success) {
+    if (auto result = halide_copy_to_host(user_context, buf); result != halide_error_code_success) {
+        halide_error(user_context, "debug_to_file(): halide_copy_to_host failed\n");
         return result;
     }
 
     ScopedFile f(filename, "wb");
     if (!f.open()) {
+        halide_error(user_context, "debug_to_file(): file could not be opened\n");
         return halide_error_code_debug_to_file_failed;
     }
 
@@ -167,7 +207,75 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
 
     uint32_t final_padding_bytes = 0;
 
-    if (ends_with(filename, ".tiff") || ends_with(filename, ".tif")) {
+    if (ends_with(filename, ".npy")) {
+        npy_dtype_info_t di = {0, 0, 0};
+        for (const auto &d : npy_dtypes) {
+            if (d.htype == buf->type) {
+                di = d.dtype;
+                break;
+            }
+        }
+        if (di.byte_order == 0) {
+            halide_error(user_context, "Unsupported element type for .npy in debug_to_file()\n");
+            return halide_error_code_debug_to_file_failed;
+        }
+
+        constexpr int kMaxDictStringSize = 1024;
+        char dict_string_buf[kMaxDictStringSize];
+        char *dst = dict_string_buf;
+        char *end = dict_string_buf + kMaxDictStringSize - 1;
+
+        dst = halide_string_to_string(dst, end, "{'descr': '");
+        *dst++ = di.byte_order;
+        *dst++ = di.kind;
+        dst = halide_int64_to_string(dst, end, di.item_size, 1);
+        dst = halide_string_to_string(dst, end, "', 'fortran_order': False, 'shape': (");
+        for (int d = 0; d < buf->dimensions; ++d) {
+            if (d > 0) {
+                dst = halide_string_to_string(dst, end, ",");
+            }
+            dst = halide_int64_to_string(dst, end, buf->dim[d].extent, 1);
+            if (buf->dimensions == 1) {
+                dst = halide_string_to_string(dst, end, ",");  // special-case for single-element tuples
+            }
+        }
+        dst = halide_string_to_string(dst, end, ")}\n");
+        if (dst >= end) {
+            // bloody unlikely, but just in case
+            halide_error(user_context, "debug_to_file(): internal error");
+            return halide_error_code_debug_to_file_failed;
+        }
+
+        const char *kNpyMagicStringAndVersion = "\x93NUMPY\x01\x00";
+
+        const size_t unpadded_length = 8 + 2 + (dst - dict_string_buf);
+        const size_t padded_length = (unpadded_length + 64 - 1) & ~(64 - 1);
+        const size_t padding = padded_length - unpadded_length;
+        memset(dst, ' ', padding);
+        dst += padding;
+
+        const size_t header_len = dst - dict_string_buf;
+        if (header_len > 65535) {
+            halide_error(user_context, "debug_to_file(): Header is too large for v1 .npy file");
+            return halide_error_code_debug_to_file_failed;
+        }
+        const uint8_t header_len_le[2] = {
+            (uint8_t)((header_len >> 0) & 0xff),
+            (uint8_t)((header_len >> 8) & 0xff)};
+
+        if (!f.write(kNpyMagicStringAndVersion, 8)) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
+            return halide_error_code_debug_to_file_failed;
+        }
+        if (!f.write(header_len_le, 2)) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
+            return halide_error_code_debug_to_file_failed;
+        }
+        if (!f.write(dict_string_buf, dst - dict_string_buf)) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
+            return halide_error_code_debug_to_file_failed;
+        }
+    } else if (ends_with(filename, ".tiff") || ends_with(filename, ".tif")) {
         int32_t channels;
         int32_t width = shape[0].extent;
         int32_t height = shape[1].extent;
@@ -223,6 +331,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         header.height_resolution[1] = 1;
 
         if (!f.write((void *)(&header), sizeof(header))) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
             return halide_error_code_debug_to_file_failed;
         }
 
@@ -231,6 +340,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
 
             for (int32_t i = 0; i < channels; i++) {
                 if (!f.write((void *)(&offset), 4)) {
+                    halide_error(user_context, "debug_to_file(): write failed\n");
                     return halide_error_code_debug_to_file_failed;
                 }
                 offset += shape[0].extent * shape[1].extent * depth * bytes_per_element;
@@ -238,6 +348,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             int32_t count = shape[0].extent * shape[1].extent * depth * bytes_per_element;
             for (int32_t i = 0; i < channels; i++) {
                 if (!f.write((void *)(&count), 4)) {
+                    halide_error(user_context, "debug_to_file(): write failed\n");
                     return halide_error_code_debug_to_file_failed;
                 }
             }
@@ -300,21 +411,25 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             5, (uint32_t)(dims * 4)};
 
         if (!f.write(&tags, sizeof(tags))) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
             return halide_error_code_debug_to_file_failed;
         }
 
         int extents[] = {shape[0].extent, shape[1].extent, shape[2].extent, shape[3].extent};
         if (!f.write(&extents, padded_dimensions * 4)) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
             return halide_error_code_debug_to_file_failed;
         }
 
         // The name
         uint32_t name_header[2] = {1, name_size};
         if (!f.write(&name_header, sizeof(name_header))) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
             return halide_error_code_debug_to_file_failed;
         }
 
         if (!f.write(array_name, padded_name_size)) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
             return halide_error_code_debug_to_file_failed;
         }
 
@@ -322,6 +437,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         uint32_t payload_header[2] = {
             pixel_type_to_matlab_type_code[type_code], (uint32_t)payload_bytes};
         if (!f.write(payload_header, sizeof(payload_header))) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
             return halide_error_code_debug_to_file_failed;
         }
     } else {
@@ -331,6 +447,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
                             shape[3].extent,
                             type_code};
         if (!f.write((void *)(&header[0]), sizeof(header))) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
             return halide_error_code_debug_to_file_failed;
         }
     }
@@ -354,6 +471,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
                     if (counter == max_elts) {
                         counter = 0;
                         if (!f.write((void *)temp, max_elts * bytes_per_element)) {
+                            halide_error(user_context, "debug_to_file(): write failed\n");
                             return halide_error_code_debug_to_file_failed;
                         }
                     }
@@ -363,6 +481,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
     }
     if (counter > 0) {
         if (!f.write((void *)temp, counter * bytes_per_element)) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
             return halide_error_code_debug_to_file_failed;
         }
     }
@@ -374,6 +493,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             return halide_error_code_debug_to_file_failed;
         }
         if (!f.write(&zero, final_padding_bytes)) {
+            halide_error(user_context, "debug_to_file(): write failed\n");
             return halide_error_code_debug_to_file_failed;
         }
     }

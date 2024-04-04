@@ -15,13 +15,13 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    std::string f_mat = Internal::get_test_tmp_dir() + "f.mat";
-    std::string g_mat = Internal::get_test_tmp_dir() + "g.mat";
-    std::string h_mat = Internal::get_test_tmp_dir() + "h.mat";
+    std::string f_npy = Internal::get_test_tmp_dir() + "f.npy";
+    std::string g_npy = Internal::get_test_tmp_dir() + "g.npy";
+    std::string h_npy = Internal::get_test_tmp_dir() + "h.npy";
 
-    Internal::ensure_no_file_exists(f_mat);
-    Internal::ensure_no_file_exists(g_mat);
-    Internal::ensure_no_file_exists(h_mat);
+    Internal::ensure_no_file_exists(f_npy);
+    Internal::ensure_no_file_exists(g_npy);
+    Internal::ensure_no_file_exists(h_npy);
 
     {
         Func f, g, h, j;
@@ -33,24 +33,24 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             Var xi, yi;
-            f.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file(f_mat);
-            g.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file(g_mat);
-            h.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file(h_mat);
+            f.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file(f_npy);
+            g.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file(g_npy);
+            h.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file(h_npy);
         } else {
-            f.compute_root().debug_to_file(f_mat);
-            g.compute_root().debug_to_file(g_mat);
-            h.compute_root().debug_to_file(h_mat);
+            f.compute_root().debug_to_file(f_npy);
+            g.compute_root().debug_to_file(g_npy);
+            h.compute_root().debug_to_file(h_npy);
         }
 
         Buffer<int32_t> im = h.realize({10, 10}, target);
     }
 
     {
-        Internal::assert_file_exists(f_mat);
-        Internal::assert_file_exists(g_mat);
-        Internal::assert_file_exists(h_mat);
+        Internal::assert_file_exists(f_npy);
+        Internal::assert_file_exists(g_npy);
+        Internal::assert_file_exists(h_npy);
 
-        Buffer<int32_t> f = Tools::load_image(f_mat);
+        Buffer<int32_t> f = Tools::load_image(f_npy);
         assert(f.dimensions() == 3 &&
                f.dim(0).extent() == 11 &&
                f.dim(1).extent() == 10 &&
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        Buffer<float> g = Tools::load_image(g_mat);
+        Buffer<float> g = Tools::load_image(g_npy);
         assert(g.dimensions() == 2 &&
                g.dim(0).extent() == 10 &&
                g.dim(1).extent() == 10);
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        Buffer<int32_t> h = Tools::load_image(h_mat);
+        Buffer<int32_t> h = Tools::load_image(h_npy);
         assert(h.dimensions() == 2 &&
                h.dim(0).extent() == 10 &&
                h.dim(1).extent() == 10);
