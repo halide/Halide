@@ -93,7 +93,6 @@ extern "C" {
 #define HALIDE_RUNTIME_ASAN_DETECTED
 #endif
 #endif
-#endif
 
 #if defined(__SANITIZE_ADDRESS__) && !defined(HALIDE_RUNTIME_ASAN_DETECTED)
 #define HALIDE_RUNTIME_ASAN_DETECTED
