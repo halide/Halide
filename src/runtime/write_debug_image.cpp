@@ -245,7 +245,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             return halide_error_code_debug_to_file_failed;
         }
 
-        const char *kNpyMagicStringAndVersion = "\x93NUMPY\x01\x00";
+        const char *npy_magic_string_and_version = "\x93NUMPY\x01\x00";
 
         const size_t unpadded_length = 8 + 2 + (dst - dict_string_buf);
         const size_t padded_length = (unpadded_length + 64 - 1) & ~(64 - 1);
@@ -262,7 +262,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             (uint8_t)((header_len >> 0) & 0xff),
             (uint8_t)((header_len >> 8) & 0xff)};
 
-        if (!f.write(kNpyMagicStringAndVersion, 8)) {
+        if (!f.write(npy_magic_string_and_version, 8)) {
             halide_error(user_context, "debug_to_file(): write failed\n");
             return halide_error_code_debug_to_file_failed;
         }
