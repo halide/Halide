@@ -130,12 +130,9 @@ struct ScopedFile {
     }
 };
 
-#if (defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN) || defined(HALIDE_FORCE_BIG_ENDIAN)
-constexpr bool host_is_big_endian = true;
-#else
+// Halide runtime has lots of assumptions that we are always little-endian,
+// so we'll hardcode this here; leaving in the logic to make it clear.
 constexpr bool host_is_big_endian = false;
-#endif
-
 constexpr char little_endian_char = '<';
 constexpr char big_endian_char = '>';
 constexpr char no_endian_char = '|';
