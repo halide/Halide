@@ -219,10 +219,10 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             return halide_error_code_debug_to_file_failed;
         }
 
-        constexpr int kMaxDictStringSize = 1024;
-        char dict_string_buf[kMaxDictStringSize];
+        constexpr int max_dict_string_size = 1024;
+        char dict_string_buf[max_dict_string_size];
         char *dst = dict_string_buf;
-        char *end = dict_string_buf + kMaxDictStringSize - 1;
+        char *end = dict_string_buf + max_dict_string_size - 1;
 
         dst = halide_string_to_string(dst, end, "{'descr': '");
         *dst++ = di.byte_order;
