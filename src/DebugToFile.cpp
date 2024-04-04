@@ -42,6 +42,8 @@ class DebugToFile : public IRMutator {
                 num_elements *= bound.extent;
             }
 
+            // TODO: why do we bother with this? halide_debug_to_file()
+            // can infer the type-and-size it needs from the buffer's type field.
             int type_code = 0;
             Type t = op->types[0];
             if (t == Float(32)) {
@@ -64,6 +66,8 @@ class DebugToFile : public IRMutator {
                 type_code = 8;
             } else if (t == Int(64)) {
                 type_code = 9;
+            } else if (t == Float(16)) {
+                type_code = 10;
             } else {
                 user_error << "Type " << t << " not supported for debug_to_file\n";
             }

@@ -29,20 +29,22 @@ namespace Internal {
 // Mappings from the type_code passed in to the type codes of the
 // formats. See "type_code" in DebugToFile.cpp
 
+constexpr int kNumTypeCodes = 11;
+
 // TIFF sample type values are:
 //     1 => Unsigned int
 //     2 => Signed int
 //     3 => Floating-point
-WEAK int16_t pixel_type_to_tiff_sample_type[] = {
+WEAK int16_t pixel_type_to_tiff_sample_type[kNumTypeCodes] = {
     // float, double, uint8, int8, ... uint64, int64
-    3, 3, 1, 2, 1, 2, 1, 2, 1, 2};
+    3, 3, 1, 2, 1, 2, 1, 2, 1, 2, 0};
 
 // See the .mat level 5 documentation for matlab class codes.
-WEAK uint8_t pixel_type_to_matlab_class_code[] = {
-    7, 6, 9, 8, 11, 10, 13, 12, 15, 14};
+WEAK uint8_t pixel_type_to_matlab_class_code[kNumTypeCodes] = {
+    7, 6, 9, 8, 11, 10, 13, 12, 15, 14, 0};
 
-WEAK uint8_t pixel_type_to_matlab_type_code[] = {
-    7, 9, 2, 1, 4, 3, 6, 5, 13, 12};
+WEAK uint8_t pixel_type_to_matlab_type_code[kNumTypeCodes] = {
+    7, 9, 2, 1, 4, 3, 6, 5, 13, 12, 0};
 
 #pragma pack(push)
 #pragma pack(2)
@@ -151,7 +153,7 @@ struct htype_to_dtype {
 };
 
 WEAK htype_to_dtype npy_dtypes[] = {
-    // TODO: float16
+    {halide_type_t(halide_type_float, 16), {host_endian_char, 'f', 2}},
     {halide_type_of<float>(), {host_endian_char, 'f', sizeof(float)}},
     {halide_type_of<double>(), {host_endian_char, 'f', sizeof(double)}},
     {halide_type_of<int8_t>(), {no_endian_char, 'i', sizeof(int8_t)}},
@@ -276,6 +278,11 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             return halide_error_code_debug_to_file_failed;
         }
     } else if (ends_with(filename, ".tiff") || ends_with(filename, ".tif")) {
+        if (type_code == 10) {
+            halide_error(user_context, "debug_to_file(): float16 is not supported by TIFF\n");
+            return halide_error_code_debug_to_file_failed;
+        }
+
         int32_t channels;
         int32_t width = shape[0].extent;
         int32_t height = shape[1].extent;
@@ -354,6 +361,11 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             }
         }
     } else if (ends_with(filename, ".mat")) {
+        if (type_code == 10) {
+            halide_error(user_context, "debug_to_file(): float16 is not supported by .mat\n");
+            return halide_error_code_debug_to_file_failed;
+        }
+
         // Construct a name for the array from the filename
         const char *end = filename;
         while (*end) {
@@ -441,6 +453,11 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             return halide_error_code_debug_to_file_failed;
         }
     } else {
+        if (type_code == 10) {
+            halide_error(user_context, "debug_to_file(): float16 is not supported by .tmp\n");
+            return halide_error_code_debug_to_file_failed;
+        }
+
         int32_t header[] = {shape[0].extent,
                             shape[1].extent,
                             shape[2].extent,
