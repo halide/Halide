@@ -116,6 +116,12 @@ template<>
 inline bool convert(const int64_t &in) {
     return in != 0;
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline bool convert(const _Float16 &in) {
+    return (float)in != 0;
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline bool convert(const float &in) {
     return in != 0;
@@ -165,6 +171,12 @@ template<>
 inline uint8_t convert(const int64_t &in) {
     return convert<uint8_t, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline uint8_t convert(const _Float16 &in) {
+    return (uint8_t)std::lround((float)in * 255.0f);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint8_t convert(const float &in) {
     return (uint8_t)std::lround(in * 255.0f);
@@ -211,6 +223,12 @@ template<>
 inline uint16_t convert(const int64_t &in) {
     return convert<uint16_t, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline uint16_t convert(const _Float16 &in) {
+    return (uint16_t)std::lround((float)in * 65535.0f);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint16_t convert(const float &in) {
     return (uint16_t)std::lround(in * 65535.0f);
@@ -257,6 +275,12 @@ template<>
 inline uint32_t convert(const int64_t &in) {
     return convert<uint32_t, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline uint32_t convert(const _Float16 &in) {
+    return (uint32_t)std::llround((float)in * 4294967295.0);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint32_t convert(const float &in) {
     return (uint32_t)std::llround(in * 4294967295.0);
@@ -303,6 +327,12 @@ template<>
 inline uint64_t convert(const int64_t &in) {
     return convert<uint64_t, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline uint64_t convert(const _Float16 &in) {
+    return convert<uint64_t, uint32_t>((uint32_t)std::llround((float)in * 4294967295.0));
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint64_t convert(const float &in) {
     return convert<uint64_t, uint32_t>((uint32_t)std::llround(in * 4294967295.0));
@@ -349,6 +379,12 @@ template<>
 inline int8_t convert(const int64_t &in) {
     return convert<uint8_t, int64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline int8_t convert(const _Float16 &in) {
+    return convert<uint8_t, float>((float)in);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int8_t convert(const float &in) {
     return convert<uint8_t, float>(in);
@@ -395,6 +431,12 @@ template<>
 inline int16_t convert(const int64_t &in) {
     return convert<uint16_t, int64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline int16_t convert(const _Float16 &in) {
+    return convert<uint16_t, float>((float)in);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int16_t convert(const float &in) {
     return convert<uint16_t, float>(in);
@@ -441,6 +483,12 @@ template<>
 inline int32_t convert(const int64_t &in) {
     return convert<uint32_t, int64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline int32_t convert(const _Float16 &in) {
+    return convert<uint32_t, float>((float)in);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int32_t convert(const float &in) {
     return convert<uint32_t, float>(in);
@@ -487,6 +535,12 @@ template<>
 inline int64_t convert(const int64_t &in) {
     return convert<uint64_t, int64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline int64_t convert(const _Float16 &in) {
+    return convert<uint64_t, float>((float)in);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int64_t convert(const float &in) {
     return convert<uint64_t, float>(in);
@@ -495,6 +549,58 @@ template<>
 inline int64_t convert(const double &in) {
     return convert<uint64_t, double>(in);
 }
+
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+// Convert to f16
+template<>
+inline _Float16 convert(const bool &in) {
+    return in;
+}
+template<>
+inline _Float16 convert(const uint8_t &in) {
+    return (_Float16)(in / 255.0f);
+}
+template<>
+inline _Float16 convert(const uint16_t &in) {
+    return (_Float16)(in / 65535.0f);
+}
+template<>
+inline _Float16 convert(const uint32_t &in) {
+    return (_Float16)(in / 4294967295.0);
+}
+template<>
+inline _Float16 convert(const uint64_t &in) {
+    return convert<_Float16, uint32_t>(uint32_t(in >> 32));
+}
+template<>
+inline _Float16 convert(const int8_t &in) {
+    return convert<_Float16, uint8_t>(in);
+}
+template<>
+inline _Float16 convert(const int16_t &in) {
+    return convert<_Float16, uint16_t>(in);
+}
+template<>
+inline _Float16 convert(const int32_t &in) {
+    return convert<_Float16, uint64_t>(in);
+}
+template<>
+inline _Float16 convert(const int64_t &in) {
+    return convert<_Float16, uint64_t>(in);
+}
+template<>
+inline _Float16 convert(const _Float16 &in) {
+    return in;
+}
+template<>
+inline _Float16 convert(const float &in) {
+    return (_Float16)in;
+}
+template<>
+inline _Float16 convert(const double &in) {
+    return (_Float16)in;
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 
 // Convert to f32
 template<>
@@ -533,6 +639,12 @@ template<>
 inline float convert(const int64_t &in) {
     return convert<float, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline float convert(const _Float16 &in) {
+    return (float)in;
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline float convert(const float &in) {
     return in;
@@ -579,6 +691,12 @@ template<>
 inline double convert(const int64_t &in) {
     return convert<double, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline double convert(const _Float16 &in) {
+    return (double)in;
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline double convert(const float &in) {
     return (double)in;
@@ -1073,8 +1191,8 @@ struct npy_dtype_info_t {
     }
 };
 
-inline static const std::array<std::pair<halide_type_t, npy_dtype_info_t>, 10> npy_dtypes = {{
-    // TODO: float16
+inline static const std::array<std::pair<halide_type_t, npy_dtype_info_t>, 11> npy_dtypes = {{
+    {halide_type_t(halide_type_float, 16), {host_endian_char, 'f', 2}},
     {halide_type_of<float>(), {host_endian_char, 'f', sizeof(float)}},
     {halide_type_of<double>(), {host_endian_char, 'f', sizeof(double)}},
     {halide_type_of<int8_t>(), {no_endian_char, 'i', sizeof(int8_t)}},
@@ -1368,15 +1486,15 @@ bool save_npy(ImageType &im, const std::string &filename) {
 
 inline const std::set<FormatInfo> &query_npy() {
     auto build_set = []() -> std::set<FormatInfo> {
-        // TODO: bfloat16
+        // NumPy doesn't support bfloat16, not sure if they plan to,
+        // so we don't attempt to support it here
         std::set<FormatInfo> s;
         for (halide_type_code_t code : {halide_type_int, halide_type_uint, halide_type_float}) {
             for (int bits : {8, 16, 32, 64}) {
+                if (code == halide_type_float && bits < 16) {
+                    continue;
+                }
                 for (int dims : {1, 2, 3, 4}) {
-                    // TODO: float16
-                    if (code == halide_type_float && bits < 32) {
-                        continue;
-                    }
                     s.insert({halide_type_t(code, bits), dims});
                 }
             }

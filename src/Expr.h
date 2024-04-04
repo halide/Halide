@@ -298,6 +298,11 @@ struct Expr : public Internal::IRHandle {
     Expr(bfloat16_t x)
         : IRHandle(Internal::FloatImm::make(BFloat(16), (double)x)) {
     }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    explicit Expr(_Float16 x)
+        : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {
+    }
+#endif
     Expr(float x)
         : IRHandle(Internal::FloatImm::make(Float(32), x)) {
     }
