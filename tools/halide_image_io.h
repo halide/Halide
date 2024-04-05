@@ -1243,8 +1243,12 @@ struct NpyHeader {
                 while (std::sscanf(ptr, "%d%n", &n, &consumed) == 1) {
                     extents.push_back(n);
                     ptr += consumed;
-                    if (*ptr == ',') ptr++;
-                    if (*ptr == ' ') ptr++;
+                    if (*ptr == ',') {
+                        ptr++;
+                    }
+                    if (*ptr == ' ') {
+                        ptr++;
+                    }
                 }
                 if (*ptr++ != ')') {
                     return false;
@@ -1254,8 +1258,12 @@ struct NpyHeader {
             } else {
                 return false;
             }
-            if (*ptr == ',') ptr++;
-            if (*ptr == ' ') ptr++;
+            if (*ptr == ',') {
+                ptr++;
+            }
+            if (*ptr == ' ') {
+                ptr++;
+            }
             assert(ptr <= &header.back());
         }
     }
