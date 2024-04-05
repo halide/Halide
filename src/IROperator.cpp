@@ -543,6 +543,12 @@ Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare>
 
 Expr lossless_negate(const Expr &x) {
     if (const Mul *m = x.as<Mul>()) {
+        // Check the terms can't multiply to produce the most negative value.
+        if (x.type().is_int() &&
+            !x.type().can_represent(-constant_integer_bounds(x))) {
+            return Expr();
+        }
+
         Expr b = lossless_negate(m->b);
         if (b.defined()) {
             return Mul::make(m->a, b);
@@ -569,8 +575,7 @@ Expr lossless_negate(const Expr &x) {
     } else if (const Cast *c = x.as<Cast>()) {
         Expr value = lossless_negate(c->value);
         if (value.defined()) {
-            // This works for constants, but not other things that
-            // could possibly be negated.
+            // This logic is only sound if we know the cast can't overflow.
             value = lossless_cast(c->type, value);
             if (value.defined()) {
                 return value;
