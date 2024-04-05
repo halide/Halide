@@ -2227,6 +2227,10 @@ struct ImageTypeConversion {
 
         const halide_type_t src_type = src.type();
         switch (src_type.element_of().as_u32()) {
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+        case halide_type_t(halide_type_float, 16).as_u32():
+            return convert_image<DstElemType>(src.template as<_Float16, AnyDims>());
+#endif
         case halide_type_t(halide_type_float, 32).as_u32():
             return convert_image<DstElemType>(src.template as<float, AnyDims>());
         case halide_type_t(halide_type_float, 64).as_u32():
@@ -2272,6 +2276,10 @@ struct ImageTypeConversion {
         // Call the appropriate static-to-static conversion routine
         // based on the desired dst type.
         switch (dst_type.element_of().as_u32()) {
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+        case halide_type_t(halide_type_float, 16).as_u32():
+            return convert_image<_Float16>(src);
+#endif
         case halide_type_t(halide_type_float, 32).as_u32():
             return convert_image<float>(src);
         case halide_type_t(halide_type_float, 64).as_u32():

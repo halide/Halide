@@ -86,6 +86,20 @@ extern "C" {
 
 #ifndef COMPILING_HALIDE_RUNTIME
 
+// ASAN builds can cause linker errors for Float16, so sniff for that and
+// don't enable it by default.
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define HALIDE_RUNTIME_ASAN_DETECTED
+#endif
+#endif
+
+#if defined(__SANITIZE_ADDRESS__) && !defined(HALIDE_RUNTIME_ASAN_DETECTED)
+#define HALIDE_RUNTIME_ASAN_DETECTED
+#endif
+
+#if !defined(HALIDE_RUNTIME_ASAN_DETECTED)
+
 // clang had _Float16 added as a reserved name in clang 8, but
 // doesn't actually support it on most platforms until clang 15.
 // Ideally there would be a better way to detect if the type
@@ -107,6 +121,8 @@ extern "C" {
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
 #endif
 #endif
+
+#endif  // !HALIDE_RUNTIME_ASAN_DETECTED
 
 #endif  // !COMPILING_HALIDE_RUNTIME
 
