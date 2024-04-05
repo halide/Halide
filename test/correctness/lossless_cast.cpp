@@ -109,7 +109,7 @@ Expr random_expr(std::mt19937 &rng) {
         int i1 = rng() % exprs.size();
         int i2 = rng() % exprs.size();
         int i3 = rng() % exprs.size();
-        int op = rng() % 7;
+        int op = rng() % 8;
         Expr e1 = exprs[i1];
         Expr e2 = cast(e1.type(), exprs[i2]);
         Expr e3 = cast(e1.type().with_code(halide_type_uint), exprs[i3]);
@@ -140,6 +140,10 @@ Expr random_expr(std::mt19937 &rng) {
             e = e1 / e2;
             break;
         case 6:
+            // Introduce some lets
+            e = common_subexpression_elimination(e1);
+            break;
+        case 7:
             switch (rng() % 19) {
             case 0:
                 if (may_widen) {
