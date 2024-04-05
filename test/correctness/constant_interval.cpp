@@ -181,5 +181,7 @@ int main(int argc, char **argv) {
                 << a.second << " " << b.first << " " << b.second;
         }
     }
+
+    printf("Success!\n");
     return 0;
 }
