@@ -1183,11 +1183,11 @@ constexpr char host_endian_char = (host_is_big_endian ? big_endian_char : little
 
 struct npy_dtype_info_t {
     char byte_order;
-    char kind;
-    size_t item_size;
+    char type_code;
+    char type_bytes;
 
     std::string descr() const {
-        return std::string(1, byte_order) + std::string(1, kind) + std::to_string(item_size);
+        return std::string(1, byte_order) + std::string(1, type_code) + std::to_string((int)type_bytes);
     }
 };
 
@@ -1217,57 +1217,49 @@ inline std::string trim_whitespace(const std::string &s) {
     return s.substr(first, (last - first + 1));
 }
 
-inline bool parse_python_dict(std::string dict_str, std::map<std::string, std::string> &m) {
-    dict_str = trim_whitespace(dict_str);
+struct NpyHeader {
+    char type_code;
+    int type_bytes;
+    std::vector<int> extents;
 
-    if (dict_str.front() != '{' || dict_str.back() != '}') {
-        return false;  // not a python dict
-    }
-    dict_str = dict_str.substr(1, dict_str.length() - 2);
-
-    std::vector<std::pair<size_t, std::string>> positions;
-
-    constexpr int kKeyCount = 3;
-    std::string keys[kKeyCount] = {"descr", "fortran_order", "shape"};
-    for (const auto &k : keys) {
-        size_t pos = dict_str.find("'" + k + "'");
-        if (pos == std::string::npos) {
-            pos = dict_str.find("\"" + k + "\"");
-            if (pos == std::string::npos) {
-                return false;  // missing a required key
+    bool parse(const std::string &header) {
+        const char *ptr = &header[0];
+        if (*ptr++ != '{') {
+            return false;
+        }
+        while (true) {
+            char endian;
+            int consumed;
+            if (std::sscanf(ptr, "'descr': '%c%c%d'%n", &endian, &type_code, &type_bytes, &consumed) == 3) {
+                if (endian != '<' && endian != '|') {
+                    return false;
+                }
+                ptr += consumed;
+            } else if (std::strncmp(ptr, "'fortran_order': False", 22) == 0) {
+                ptr += 22;
+            } else if (std::strncmp(ptr, "'shape': (", 10) == 0) {
+                ptr += 10;
+                int n;
+                while (std::sscanf(ptr, "%d%n", &n, &consumed) == 1) {
+                    extents.push_back(n);
+                    ptr += consumed;
+                    if (*ptr == ',') ptr++;
+                    if (*ptr == ' ') ptr++;
+                }
+                if (*ptr++ != ')') {
+                    return false;
+                }
+            } else if (*ptr == '}') {
+                return true;
+            } else {
+                return false;
             }
+            if (*ptr == ',') ptr++;
+            if (*ptr == ' ') ptr++;
+            assert(ptr <= &header.back());
         }
-        positions.emplace_back(pos, k);
     }
-
-    // The keys aren't guaranteed to be sorted, but our loop below
-    // needs them to be low-to-high
-    std::sort(positions.begin(), positions.end());
-
-    // Here we are going to slurp everything from the start of a key
-    // to just before the start of the next key (or end of input),
-    // then split on : with everything to the right as the presumed value.
-    for (size_t i = 0; i < positions.size(); ++i) {
-        size_t pos = positions[i].first;
-        std::string key = positions[i].second;
-
-        size_t begin = pos;
-        size_t end = (i + 1 < positions.size()) ? positions[i + 1].first : std::string::npos;
-
-        std::string value = trim_whitespace(dict_str.substr(begin, end - begin));
-        if (value.back() == ',') {
-            value.pop_back();
-        }
-
-        size_t colon = value.find_first_of(':');
-        if (colon == std::string::npos) {
-            return false;  // malformed!
-        }
-        m[key] = trim_whitespace(value.substr(colon + 1));
-    }
-
-    return true;
-}
+};
 
 // return true iff the buffer storage has no padding between
 // any elements, and is in strictly planar order.
@@ -1336,25 +1328,14 @@ bool load_npy(const std::string &filename, ImageType *im) {
         return false;
     }
 
-    std::map<std::string, std::string> m;
-    if (!check(parse_python_dict(header, m), "Could not parse .npy header dict")) {
+    NpyHeader h;
+    if (!check(h.parse(header), "Could not parse .npy header dict")) {
         return false;
     }
-
-    // TODO: should/can we support fortran_order=True?
-    if (!check(m["fortran_order"] == "False", "Only .npy files with fortran_order = False are supported")) {
-        return false;
-    }
-
-    std::string descr = m["descr"];
-    if (!check(descr.front() == '\'' && descr.back() == '\'', "Malformed descr")) {
-        return false;
-    }
-    descr = trim_whitespace(descr.substr(1, descr.size() - 2));
 
     halide_type_t im_type((halide_type_code_t)0, 0, 0);
     for (const auto &d : npy_dtypes) {
-        if (descr == d.second.descr()) {
+        if (h.type_code == d.second.type_code && h.type_bytes == d.second.type_bytes) {
             im_type = d.first;
             break;
         }
@@ -1363,24 +1344,7 @@ bool load_npy(const std::string &filename, ImageType *im) {
         return false;
     }
 
-    std::string shape = m["shape"];
-    if (!check(shape.front() == '(' && shape.back() == ')', "Malformed shape")) {
-        return false;
-    }
-    shape = trim_whitespace(shape.substr(1, shape.size() - 2));
-
-    std::vector<int> im_extents;
-    size_t start = 0;
-    size_t found = 0;
-    while ((found = shape.find(',', start)) != std::string::npos) {
-        im_extents.push_back(std::stoi(shape.substr(start, found - start)));
-        start = found + 1;
-    }
-    if (start <= shape.size()) {
-        im_extents.push_back(std::stoi(shape.substr(start, std::string::npos)));
-    }
-
-    *im = ImageType(im_type, im_extents);
+    *im = ImageType(im_type, h.extents);
 
     // This should never fail unless the default Buffer<> constructor behavior changes.
     if (!check(buffer_is_compact_planar(*im), "load_npy() requires compact planar images")) {
@@ -1447,7 +1411,6 @@ bool save_npy(ImageType &im, const std::string &filename) {
     }
     shape += ")";
 
-    // TODO: is it safe to assume that Halide will never write in fortran_order?
     std::string header_dict_str = "{'descr': '" + di.descr() + "', 'fortran_order': False, 'shape': " + shape + "}\n";
 
     const size_t unpadded_length = npy_magic_string.size() + npy_v1_bytes.size() + 2 + header_dict_str.size();
