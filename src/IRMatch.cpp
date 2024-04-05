@@ -262,6 +262,9 @@ public:
         if (result && e && types_match(op->type, e->type)) {
             expr = e->value;
             op->value.accept(this);
+        } else if (op->lanes == 0 && types_match(op->value.type(), expr.type())) {
+            // zero lanes means any number of lanes, so match scalars too.
+            op->value.accept(this);
         } else {
             result = false;
         }

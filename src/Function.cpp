@@ -491,8 +491,10 @@ ExternFuncArgument deep_copy_extern_func_argument_helper(const ExternFuncArgumen
 }  // namespace
 
 void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const {
-    internal_assert(copy.defined() && contents.defined())
-        << "Cannot deep-copy undefined Function\n";
+    internal_assert(copy.defined())
+        << "Cannot deep-copy to undefined Function\n";
+    internal_assert(contents.defined())
+        << "Cannot deep-copy from undefined Function\n";
 
     // Add reference to this Function's deep-copy to the map in case of
     // self-reference, e.g. self-reference in an Definition.

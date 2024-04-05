@@ -86,12 +86,26 @@ extern "C" {
 
 #ifndef COMPILING_HALIDE_RUNTIME
 
+// ASAN builds can cause linker errors for Float16, so sniff for that and
+// don't enable it by default.
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define HALIDE_RUNTIME_ASAN_DETECTED
+#endif
+#endif
+
+#if defined(__SANITIZE_ADDRESS__) && !defined(HALIDE_RUNTIME_ASAN_DETECTED)
+#define HALIDE_RUNTIME_ASAN_DETECTED
+#endif
+
+#if !defined(HALIDE_RUNTIME_ASAN_DETECTED)
+
 // clang had _Float16 added as a reserved name in clang 8, but
 // doesn't actually support it on most platforms until clang 15.
 // Ideally there would be a better way to detect if the type
 // is supported, even in a compiler independent fashion, but
 // coming up with one has proven elusive.
-#if defined(__clang__) && (__clang_major__ >= 16) && !defined(__EMSCRIPTEN__) && !defined(__i386__)
+#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__)
 #if defined(__is_identifier)
 #if !__is_identifier(_Float16)
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
@@ -107,6 +121,8 @@ extern "C" {
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
 #endif
 #endif
+
+#endif  // !HALIDE_RUNTIME_ASAN_DETECTED
 
 #endif  // !COMPILING_HALIDE_RUNTIME
 
@@ -1247,8 +1263,12 @@ enum halide_error_code_t {
      * runtime. */
     halide_error_code_split_factor_not_positive = -46,
 
+    /** "vscale" value of Scalable Vector detected in runtime does not match
+     * the vscale value used in compilation. */
+    halide_error_code_vscale_invalid = -47,
+
     /** Profiling failed for a pipeline invocation. */
-    halide_error_code_cannot_profile_pipeline = -47,
+    halide_error_code_cannot_profile_pipeline = -48,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1324,7 +1344,7 @@ extern int halide_error_storage_bound_too_small(void *user_context, const char *
                                                 int provided_size, int required_size);
 extern int halide_error_device_crop_failed(void *user_context);
 extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
-
+extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
 // @}
 
 /** Optional features a compilation Target can have.
