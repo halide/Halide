@@ -2647,10 +2647,10 @@ void CodeGen_LLVM::visit(const Call *op) {
         // Make the filename a global string constant
         Value *user_context = get_user_context();
         Value *char_ptr = codegen(Expr(filename));
-        vector<Value *> args = {user_context, char_ptr, codegen(op->args[1])};
+        vector<Value *> args = {user_context, char_ptr};
 
-        Value *buffer = codegen(op->args[2]);
-        buffer = builder->CreatePointerCast(buffer, debug_to_file->getFunctionType()->getParamType(3));
+        Value *buffer = codegen(op->args[1]);
+        buffer = builder->CreatePointerCast(buffer, debug_to_file->getFunctionType()->getParamType(2));
         args.push_back(buffer);
 
         value = builder->CreateCall(debug_to_file, args);

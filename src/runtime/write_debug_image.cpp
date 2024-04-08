@@ -26,25 +26,39 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-// Mappings from the type_code passed in to the type codes of the
-// formats. See "type_code" in DebugToFile.cpp
-
-constexpr int kNumTypeCodes = 11;
-
-// TIFF sample type values are:
-//     1 => Unsigned int
-//     2 => Signed int
-//     3 => Floating-point
-WEAK int16_t pixel_type_to_tiff_sample_type[kNumTypeCodes] = {
-    // float, double, uint8, int8, ... uint64, int64
-    3, 3, 1, 2, 1, 2, 1, 2, 1, 2, 0};
+struct mat_class_and_type_t {
+    halide_type_t htype;
+    uint8_t class_code, type_code;
+};
 
 // See the .mat level 5 documentation for matlab class codes.
-WEAK uint8_t pixel_type_to_matlab_class_code[kNumTypeCodes] = {
-    7, 6, 9, 8, 11, 10, 13, 12, 15, 14, 0};
+WEAK mat_class_and_type_t htype_to_mat_type[] = {
+    {halide_type_of<float>(), 7, 7},
+    {halide_type_of<double>(), 6, 9},
+    {halide_type_of<uint8_t>(), 9, 2},
+    {halide_type_of<bool>(), 9, 2},
+    {halide_type_of<int8_t>(), 8, 1},
+    {halide_type_of<uint16_t>(), 11, 4},
+    {halide_type_of<int16_t>(), 10, 3},
+    {halide_type_of<uint32_t>(), 13, 6},
+    {halide_type_of<int32_t>(), 12, 5},
+    {halide_type_of<uint64_t>(), 15, 13},
+    {halide_type_of<int64_t>(), 14, 12},
+};
 
-WEAK uint8_t pixel_type_to_matlab_type_code[kNumTypeCodes] = {
-    7, 9, 2, 1, 4, 3, 6, 5, 13, 12, 0};
+WEAK halide_type_t htypes_for_tmp[] = {
+    {halide_type_of<float>()},
+    {halide_type_of<double>()},
+    {halide_type_of<uint8_t>()},
+    {halide_type_of<bool>()},
+    {halide_type_of<int8_t>()},
+    {halide_type_of<uint16_t>()},
+    {halide_type_of<int16_t>()},
+    {halide_type_of<uint32_t>()},
+    {halide_type_of<int32_t>()},
+    {halide_type_of<uint64_t>()},
+    {halide_type_of<int64_t>()},
+};
 
 #pragma pack(push)
 #pragma pack(2)
@@ -167,8 +181,7 @@ WEAK htype_to_dtype npy_dtypes[] = {
 }  // namespace Runtime
 }  // namespace Halide
 
-WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filename,
-                                         int32_t type_code, struct halide_buffer_t *buf) {
+WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filename, struct halide_buffer_t *buf) {
 
     if (buf->is_bounds_query()) {
         halide_error(user_context, "Bounds query buffer passed to halide_debug_to_file");
@@ -272,10 +285,6 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             return halide_error_code_debug_to_file_failed;
         }
     } else if (ends_with(filename, ".tiff") || ends_with(filename, ".tif")) {
-        if (type_code == 10) {
-            return halide_error_code_debug_to_file_failed;
-        }
-
         int32_t channels;
         int32_t width = shape[0].extent;
         int32_t height = shape[1].extent;
@@ -287,6 +296,21 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         } else {
             channels = shape[3].extent;
             depth = shape[2].extent;
+        }
+
+        int16_t type_code;
+        switch (buf->type.code) {
+        case halide_type_uint:
+            type_code = 1;
+            break;
+        case halide_type_int:
+            type_code = 2;
+            break;
+        case halide_type_float:
+            type_code = 3;
+            break;
+        default:
+            return halide_error_code_debug_to_file_failed;
         }
 
         struct halide_tiff_header header;
@@ -320,9 +344,8 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
                         __builtin_offsetof(halide_tiff_header, height_resolution));  // Height resolution
         tag++->assign16(284, 1, 2);                                                  // Planar configuration -- planar
         tag++->assign16(296, 1, 1);                                                  // Resolution Unit -- none
-        tag++->assign16(339, 1,
-                        pixel_type_to_tiff_sample_type[type_code]);  // Sample type
-        tag++->assign32(32997, 1, depth);                            // Image depth
+        tag++->assign16(339, 1, type_code);                                          // Sample type
+        tag++->assign32(32997, 1, depth);                                            // Image depth
 
         header.ifd0_end = 0;
         header.width_resolution[0] = 1;
@@ -351,7 +374,15 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             }
         }
     } else if (ends_with(filename, ".mat")) {
-        if (type_code == 10) {
+        uint8_t class_code = 0, type_code = 0;
+        for (const auto &d : htype_to_mat_type) {
+            if (d.htype == buf->type) {
+                class_code = d.class_code;
+                type_code = d.type_code;
+                break;
+            }
+        }
+        if (class_code == 0) {
             return halide_error_code_debug_to_file_failed;
         }
 
@@ -406,7 +437,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             // This is a matrix
             14, 40 + padded_dimensions * 4 + padded_name_size + (uint32_t)payload_bytes + final_padding_bytes,
             // The element type
-            6, 8, pixel_type_to_matlab_class_code[type_code], 1,
+            6, 8, class_code, 1,
             // The shape
             5, (uint32_t)(dims * 4)};
 
@@ -430,13 +461,20 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         }
 
         // Payload header
-        uint32_t payload_header[2] = {
-            pixel_type_to_matlab_type_code[type_code], (uint32_t)payload_bytes};
+        uint32_t payload_header[2] = {type_code, (uint32_t)payload_bytes};
         if (!f.write(payload_header, sizeof(payload_header))) {
             return halide_error_code_debug_to_file_failed;
         }
     } else {
-        if (type_code == 10) {
+        int i = 0, type_code = -1;
+        for (const auto &d : htype_to_mat_type) {
+            if (d.htype == buf->type) {
+                type_code = i;
+                break;
+            }
+            i++;
+        }
+        if (type_code < 0) {
             return halide_error_code_debug_to_file_failed;
         }
 
