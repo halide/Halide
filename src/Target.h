@@ -119,8 +119,6 @@ struct Target {
         HexagonDma = halide_target_feature_hexagon_dma,
         HVX_128 = halide_target_feature_hvx_128,
         HVX = HVX_128,
-        HVX_v62 = halide_target_feature_hvx_v62,
-        HVX_v65 = halide_target_feature_hvx_v65,
         HVX_v66 = halide_target_feature_hvx_v66,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
