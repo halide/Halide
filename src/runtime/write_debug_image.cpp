@@ -1,13 +1,16 @@
 #include "HalideRuntime.h"
 
-// We support three formats, tiff, mat, and tmp.
+// We support four formats, npy, tiff, mat, and tmp.
 //
 // All formats support arbitrary types, and are easy to write in a
 // small amount of code.
 //
+// npy:
+// - Arbitrary dimensionality, type
+// - Readable by NumPy and other Python tools
 // TIFF:
 // - 2/3-D only
-// - Readable by the most tools
+// - Readable by a lot of tools
 // mat:
 // - Arbitrary dimensionality, type
 // - Readable by matlab, ImageStack, and many other tools
@@ -26,20 +29,22 @@ namespace Internal {
 // Mappings from the type_code passed in to the type codes of the
 // formats. See "type_code" in DebugToFile.cpp
 
+constexpr int kNumTypeCodes = 11;
+
 // TIFF sample type values are:
 //     1 => Unsigned int
 //     2 => Signed int
 //     3 => Floating-point
-WEAK int16_t pixel_type_to_tiff_sample_type[] = {
+WEAK int16_t pixel_type_to_tiff_sample_type[kNumTypeCodes] = {
     // float, double, uint8, int8, ... uint64, int64
-    3, 3, 1, 2, 1, 2, 1, 2, 1, 2};
+    3, 3, 1, 2, 1, 2, 1, 2, 1, 2, 0};
 
 // See the .mat level 5 documentation for matlab class codes.
-WEAK uint8_t pixel_type_to_matlab_class_code[] = {
-    7, 6, 9, 8, 11, 10, 13, 12, 15, 14};
+WEAK uint8_t pixel_type_to_matlab_class_code[kNumTypeCodes] = {
+    7, 6, 9, 8, 11, 10, 13, 12, 15, 14, 0};
 
-WEAK uint8_t pixel_type_to_matlab_type_code[] = {
-    7, 9, 2, 1, 4, 3, 6, 5, 13, 12};
+WEAK uint8_t pixel_type_to_matlab_type_code[kNumTypeCodes] = {
+    7, 9, 2, 1, 4, 3, 6, 5, 13, 12, 0};
 
 #pragma pack(push)
 #pragma pack(2)
@@ -125,6 +130,39 @@ struct ScopedFile {
     }
 };
 
+// Halide runtime has lots of assumptions that we are always little-endian,
+// so we'll hardcode this here; leaving in the logic to make it clear.
+constexpr bool host_is_big_endian = false;
+constexpr char little_endian_char = '<';
+constexpr char big_endian_char = '>';
+constexpr char no_endian_char = '|';
+constexpr char host_endian_char = (host_is_big_endian ? big_endian_char : little_endian_char);
+
+struct npy_dtype_info_t {
+    char byte_order;
+    char kind;
+    size_t item_size;
+};
+
+struct htype_to_dtype {
+    halide_type_t htype;
+    npy_dtype_info_t dtype;
+};
+
+WEAK htype_to_dtype npy_dtypes[] = {
+    {halide_type_t(halide_type_float, 16), {host_endian_char, 'f', 2}},
+    {halide_type_of<float>(), {host_endian_char, 'f', sizeof(float)}},
+    {halide_type_of<double>(), {host_endian_char, 'f', sizeof(double)}},
+    {halide_type_of<int8_t>(), {no_endian_char, 'i', sizeof(int8_t)}},
+    {halide_type_of<int16_t>(), {host_endian_char, 'i', sizeof(int16_t)}},
+    {halide_type_of<int32_t>(), {host_endian_char, 'i', sizeof(int32_t)}},
+    {halide_type_of<int64_t>(), {host_endian_char, 'i', sizeof(int64_t)}},
+    {halide_type_of<uint8_t>(), {no_endian_char, 'u', sizeof(uint8_t)}},
+    {halide_type_of<uint16_t>(), {host_endian_char, 'u', sizeof(uint16_t)}},
+    {halide_type_of<uint32_t>(), {host_endian_char, 'u', sizeof(uint32_t)}},
+    {halide_type_of<uint64_t>(), {host_endian_char, 'u', sizeof(uint64_t)}},
+};
+
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
@@ -142,10 +180,14 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         return halide_error_code_bad_dimensions;
     }
 
-    if (auto result = halide_copy_to_host(user_context, buf);
-        result != halide_error_code_success) {
+    if (auto result = halide_copy_to_host(user_context, buf); result != halide_error_code_success) {
+        // halide_error() has already been called
         return result;
     }
+
+    // Note: all calls to this function are wrapped in an assert that identifies
+    // the function that failed, so calling halide_error() anywhere after this is redundant
+    // and actually unhelpful.
 
     ScopedFile f(filename, "wb");
     if (!f.open()) {
@@ -167,7 +209,73 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
 
     uint32_t final_padding_bytes = 0;
 
-    if (ends_with(filename, ".tiff") || ends_with(filename, ".tif")) {
+    if (ends_with(filename, ".npy")) {
+        npy_dtype_info_t di = {0, 0, 0};
+        for (const auto &d : npy_dtypes) {
+            if (d.htype == buf->type) {
+                di = d.dtype;
+                break;
+            }
+        }
+        if (di.byte_order == 0) {
+            return halide_error_code_debug_to_file_failed;
+        }
+
+        constexpr int max_dict_string_size = 1024;
+        char dict_string_buf[max_dict_string_size];
+        char *dst = dict_string_buf;
+        char *end = dict_string_buf + max_dict_string_size - 1;
+
+        dst = halide_string_to_string(dst, end, "{'descr': '");
+        *dst++ = di.byte_order;
+        *dst++ = di.kind;
+        dst = halide_int64_to_string(dst, end, di.item_size, 1);
+        dst = halide_string_to_string(dst, end, "', 'fortran_order': False, 'shape': (");
+        for (int d = 0; d < buf->dimensions; ++d) {
+            if (d > 0) {
+                dst = halide_string_to_string(dst, end, ",");
+            }
+            dst = halide_int64_to_string(dst, end, buf->dim[d].extent, 1);
+            if (buf->dimensions == 1) {
+                dst = halide_string_to_string(dst, end, ",");  // special-case for single-element tuples
+            }
+        }
+        dst = halide_string_to_string(dst, end, ")}\n");
+        if (dst >= end) {
+            // bloody unlikely, but just in case
+            return halide_error_code_debug_to_file_failed;
+        }
+
+        const char *npy_magic_string_and_version = "\x93NUMPY\x01\x00";
+
+        const size_t unpadded_length = 8 + 2 + (dst - dict_string_buf);
+        const size_t padded_length = (unpadded_length + 64 - 1) & ~(64 - 1);
+        const size_t padding = padded_length - unpadded_length;
+        memset(dst, ' ', padding);
+        dst += padding;
+
+        const size_t header_len = dst - dict_string_buf;
+        if (header_len > 65535) {
+            return halide_error_code_debug_to_file_failed;
+        }
+        const uint8_t header_len_le[2] = {
+            (uint8_t)((header_len >> 0) & 0xff),
+            (uint8_t)((header_len >> 8) & 0xff)};
+
+        if (!f.write(npy_magic_string_and_version, 8)) {
+            return halide_error_code_debug_to_file_failed;
+        }
+        if (!f.write(header_len_le, 2)) {
+            return halide_error_code_debug_to_file_failed;
+        }
+        if (!f.write(dict_string_buf, dst - dict_string_buf)) {
+            return halide_error_code_debug_to_file_failed;
+        }
+    } else if (ends_with(filename, ".tiff") || ends_with(filename, ".tif")) {
+        if (type_code == 10) {
+            return halide_error_code_debug_to_file_failed;
+        }
+
         int32_t channels;
         int32_t width = shape[0].extent;
         int32_t height = shape[1].extent;
@@ -243,6 +351,10 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             }
         }
     } else if (ends_with(filename, ".mat")) {
+        if (type_code == 10) {
+            return halide_error_code_debug_to_file_failed;
+        }
+
         // Construct a name for the array from the filename
         const char *end = filename;
         while (*end) {
@@ -279,7 +391,6 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         // level 5 .mat files have a size limit. (Padding itself should never cause the overflow.
         // Code written this way for safety.)
         if (((uint64_t)payload_bytes + final_padding_bytes) >> 32) {
-            halide_error(user_context, "Can't debug_to_file to a .mat file greater than 4GB\n");
             return halide_error_code_debug_to_file_failed;
         }
 
@@ -325,6 +436,10 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             return halide_error_code_debug_to_file_failed;
         }
     } else {
+        if (type_code == 10) {
+            return halide_error_code_debug_to_file_failed;
+        }
+
         int32_t header[] = {shape[0].extent,
                             shape[1].extent,
                             shape[2].extent,
@@ -370,7 +485,6 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
     const uint64_t zero = 0;
     if (final_padding_bytes) {
         if (final_padding_bytes > sizeof(zero)) {
-            halide_error(user_context, "Unexpectedly large final_padding_bytes");
             return halide_error_code_debug_to_file_failed;
         }
         if (!f.write(&zero, final_padding_bytes)) {
