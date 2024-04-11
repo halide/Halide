@@ -482,16 +482,16 @@ WEAK int halide_hexagon_run(void *user_context,
     if (remote_poll_profiler_state) {
         halide_profiler_lock(s);
         const halide_profiler_instance_state *instance = s->instances;
-        // The instance that called this runtime function should be registered.
-        halide_abort_if_false(user_context, instance);
-        if (instance->next) {
-            halide_profiler_unlock(s);
-            error(user_context) << "Hexagon: multiple simultaneous profiled pipelines is unsupported.";
-            return halide_error_code_cannot_profile_pipeline;
-        }
-        s->get_remote_profiler_state = get_remote_profiler_state;
-        if (remote_profiler_set_current_func) {
-            remote_profiler_set_current_func(instance->current_func);
+        if(instance) {
+            if (instance->next) {
+                halide_profiler_unlock(s);
+                error(user_context) << "Hexagon: multiple simultaneous profiled pipelines is unsupported.";
+                return halide_error_code_cannot_profile_pipeline;
+            }
+            s->get_remote_profiler_state = get_remote_profiler_state;
+            if (remote_profiler_set_current_func) {
+                remote_profiler_set_current_func(instance->current_func);
+            }
         }
         halide_profiler_unlock(s);
     }

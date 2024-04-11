@@ -152,12 +152,17 @@ int release_library(handle_t module_ptr) {
 }
 
 extern "C" {
-halide_profiler_instance_state profiler_state;
-int *profiler_current_func_addr = &profiler_state.current_func;
+halide_profiler_instance_state hvx_profiler_instance;
+int *profiler_current_func_addr = &hvx_profiler_instance.current_func;
+
+halide_profiler_instance_state *halide_hexagon_remote_profiler_get_global_instance() {
+    return &hvx_profiler_instance;
+}
 }
 
-halide_profiler_instance_state *halide_profiler_get_state() {
-    return (halide_profiler_instance_state *)(&profiler_state);
+halide_profiler_state *halide_profiler_get_state() {
+    static halide_profiler_state profiler_state;
+    return &profiler_state;
 }
 
 extern "C" {
