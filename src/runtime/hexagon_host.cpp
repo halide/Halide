@@ -275,7 +275,6 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     halide_abort_if_false(user_context, state_ptr != nullptr);
 
 #ifdef DEBUG_RUNTIME
-    halide_start_clock(user_context);
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
@@ -593,6 +592,7 @@ WEAK int halide_hexagon_device_malloc(void *user_context, halide_buffer_t *buf) 
     debug(user_context) << "    allocating buffer of " << (uint64_t)size << " bytes\n";
 
 #ifdef DEBUG_RUNTIME
+    halide_start_clock(user_context);
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
