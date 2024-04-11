@@ -331,18 +331,20 @@ private:
         Stmt stmt = IRMutator::visit(op);
 
         if (!is_const_zero(alloc.size)) {
-            if (!alloc.on_stack && profiling_memory) {
-                int idx = get_func_id(op->name);
-                debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
+            if (!alloc.on_stack) {
+                if (profiling_memory) {
+                    int idx = get_func_id(op->name);
+                    debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << names.pipeline_name << "\n";
 
-                vector<Stmt> tasks{
-                    set_current_func(free_id),
-                    Evaluate::make(Call::make(Int(32), "halide_profiler_memory_free",
-                                              {profiler_instance, idx, alloc.size}, Call::Extern)),
-                    stmt,
-                    set_current_func(stack.back())};
+                    vector<Stmt> tasks{
+                        set_current_func(free_id),
+                        Evaluate::make(Call::make(Int(32), "halide_profiler_memory_free",
+                                                  {profiler_instance, idx, alloc.size}, Call::Extern)),
+                        stmt,
+                        set_current_func(stack.back())};
 
-                stmt = Block::make(tasks);
+                    stmt = Block::make(tasks);
+                }
             } else {
                 const uint64_t *int_size = as_const_uint(alloc.size);
                 internal_assert(int_size != nullptr);
