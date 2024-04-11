@@ -576,7 +576,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
             in_unreachable = false;
             if (true_unreachable) {
-                return false_value;
+                if (false_value.defined()) {
+                    return false_value;
+                } else {
+                    return make_zero(op->type);
+                }
             } else if (false_unreachable) {
                 return true_value;
             }
