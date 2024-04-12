@@ -2637,7 +2637,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     // handled in the standard library, but ones with e.g. varying
     // types are handled here.
     if (op->is_intrinsic(Call::debug_to_file)) {
-        internal_assert(op->args.size() == 3);
+        internal_assert(op->args.size() == 2);
         const StringImm *filename = op->args[0].as<StringImm>();
         internal_assert(filename) << "Malformed debug_to_file node\n";
         // Grab the function from the initial module
