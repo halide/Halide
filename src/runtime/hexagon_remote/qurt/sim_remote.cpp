@@ -160,11 +160,6 @@ halide_profiler_instance_state *halide_hexagon_remote_profiler_get_global_instan
 }
 }
 
-halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state profiler_state;
-    return &profiler_state;
-}
-
 extern "C" {
 
 // The global symbols with which we pass RPC commands and results.

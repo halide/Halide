@@ -438,9 +438,5 @@ int halide_hexagon_remote_profiler_set_current_func(int current_func) {
     halide_hexagon_remote_profiler_get_global_instance()->current_func = current_func;
     return 0;
 }
-halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state hvx_profiler_state;
-    return &hvx_profiler_state;
-}
 
 }  // extern "C"
