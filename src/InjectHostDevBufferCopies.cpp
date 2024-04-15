@@ -77,7 +77,7 @@ class FindBufferUsage : public IRVisitor {
             }
         } else if (op->is_intrinsic(Call::debug_to_file)) {
             internal_assert(op->args.size() == 2);
-            if (is_buffer_var(op->args[2])) {
+            if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
                 devices_writing.insert(current_device_api);
             }
