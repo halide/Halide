@@ -1379,6 +1379,7 @@ int main(int argc, char **argv) {
     }
 
     std::cout << "[SKIP] simd_op_check_sve2 is temporarily broken, skipping pending an LLVM fix.\n";
+    return 0;
 
     return SimdOpCheckTest::main<SimdOpCheckArmSve>(
         argc, argv,
