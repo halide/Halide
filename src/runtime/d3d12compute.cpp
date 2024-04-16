@@ -3528,26 +3528,25 @@ WEAK int halide_d3d12compute_compute_capability(void* user_context, int* major, 
         return halide_error_code_success;
     }
     else if (lib_dxcompiler != nullptr) {
-        // TODO
-        //IDxcCompiler3* dxCompiler;
-        //(*DxcCreateInstanceFunc)(CLSID_DxcCompiler, IID_PPV_ARGS(&dxCompiler));
+        D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = {};
 
-        //std::vector<LPCWSTR> arguments;
-        //arguments.push_back(L"--version");
+        shaderModel.HighestShaderModel = D3D_SHADER_MODEL_6_7;
 
-        //DxcBuffer sourceBuffer;
-        //sourceBuffer.Ptr = nullptr;
-        //sourceBuffer.Size = 0;
-        //sourceBuffer.Encoding = 0;
+        ID3D12Device *d3ddevice = (*device);
+        HRESULT hr = d3ddevice->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel));
+        while (hr == E_INVALIDARG && shaderModel.HighestShaderModel > D3D_SHADER_MODEL_6_0) {
+            shaderModel.HighestShaderModel = static_cast<D3D_SHADER_MODEL>(static_cast<int>(shaderModel.HighestShaderModel) - 1);
+            hr = d3ddevice->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel));
+        }
 
-        //IDxcResult* compileResult;
-        //HRESULT hr = dxCompiler->Compile(&sourceBuffer, arguments.data(), 1u, nullptr, IID_PPV_ARGS(&compileResult));
-        //dxCompiler->Compile(&sourceBuffer, nullptr, 0u, nullptr, IID_PPV_ARGS(&compileResult));
-        //SUCCEEDED(hr);
-
-        // TODO
-        *major = 6;
-        *minor = 0;
+        if (FAILED(hr)) {
+            shaderModel.HighestShaderModel = D3D_SHADER_MODEL_5_1;
+            *major = 5;
+            *minor = 1;
+        } else {
+            *major = 6;
+            *minor = shaderModel.HighestShaderModel - 0x60;
+        }
 
         return halide_error_code_success;
     }
