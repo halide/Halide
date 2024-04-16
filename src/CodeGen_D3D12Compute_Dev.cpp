@@ -141,12 +141,14 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         case 32:
             oss << "float";
             break;
-        case 64:
-            // "64-bit floating point value. You cannot use double precision values as inputs and outputs for a stream.
-            //  To pass double precision values between shaders, declare each double as a pair of uint data types.
-            //  Then, use the asdouble function to pack each double into the pair of uints and the asuint function to
-            //  unpack the pair of uints back into the double."
-            user_error << "HLSL (SM 5.1) does not have transparent support for 'double' types.\n";
+        case 64: 
+            if (target.get_d3d12_capability_lower_bound() == 51) {
+                // "64-bit floating point value. You cannot use double precision values as inputs and outputs for a stream.
+                //  To pass double precision values between shaders, declare each double as a pair of uint data types.
+                //  Then, use the asdouble function to pack each double into the pair of uints and the asuint function to
+                //  unpack the pair of uints back into the double."
+                user_error << "HLSL (SM 5.1) does not have transparent support for 'double' types.\n";
+            }
             oss << "double";
             break;
         default:
@@ -169,7 +171,14 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
 #endif
             break;
         case 64:
-            user_error << "HLSL (SM 5.1) does not support 64-bit integers.\n";
+            if (target.get_d3d12_capability_lower_bound() == 51) {
+                user_error << "HLSL (SM 5.1) does not support 64-bit integers.\n";
+            } else {
+                if (type.is_uint()) {
+                    oss << "u";
+                }
+                oss << "int64_t";
+            }
             break;
         default:
             user_error << "Can't represent an integer with this many bits in HLSL (SM 5.1): " << type << "\n";
@@ -194,7 +203,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         // TODO(marcos): are there 8-wide and 16-wide types in HLSL?
         // (CodeGen_GLSLBase seems to happily generate invalid vector types)
     default:
-        user_error << "Unsupported vector width in HLSL (SM 5.1): " << type << "\n";
+        user_error << "Unsupported vector width in HLSL (SM 5.1 or 6.x): " << type << "\n";
     }
 
     if (space == AppendSpace) {
@@ -884,8 +893,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     // some emulation in code...
     internal_assert(target_type.bits() >= 8);
     internal_assert(source_type.bits() >= 8);
-    internal_assert(target_type.bits() <= 32);
-    internal_assert(source_type.bits() <= 32);
+    // HLSL 6.0 support 64 bits integers and floats
+    if (target.get_d3d12_capability_lower_bound() == 51)
+    {
+        internal_assert(target_type.bits() <= 32);
+        internal_assert(source_type.bits() <= 32);
+    }
     internal_assert(target_type.bits() % 8 == 0);
     internal_assert(source_type.bits() % 8 == 0);
 
@@ -1105,7 +1118,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
-        // In D3D12/HLSL, only 32bit types (int/uint/float) are suppoerted (even
+        // In D3D12/HLSL, only 32bit types (int/uint/float) are supported (even
         // though things are changing with newer shader models). Since there is
         // no uint8 type, we'll have to emulate it with 32bit types...
         // This will also require pack/unpack logic with bit-masking and aliased
