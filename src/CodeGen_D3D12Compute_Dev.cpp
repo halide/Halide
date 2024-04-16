@@ -87,6 +87,7 @@ protected:
         std::string print_reinterpret_cast(Type type, const std::string &value_expr);
 
         std::string print_assignment(Type t, const std::string &rhs) override;
+        std::string print_parameters(std::vector<DeviceArgument> const& args, bool as_global);
 
         using CodeGen_GPU_C::visit;
         void visit(const Evaluate *op) override;
@@ -841,6 +842,37 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type t
     return CodeGen_GPU_C::print_assignment(type, rhs_modified);
 }
 
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_parameters(std::vector<DeviceArgument> const &args, bool as_global) {
+    ostringstream ss;
+    for (const auto &arg : args) {
+        if (!as_global) {
+            ss << ",\n";
+            ss << " ";
+        }
+        if (arg.is_buffer) {
+            // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
+            // all buffers as UAVs since there is no way the runtime can know
+            // if a given halide_buffer_t is read-only (SRV) or read-write...
+            ss << "RW"
+               << "Buffer"
+               << "<" << print_type(arg.type) << ">"
+               << " " << print_name(arg.name);
+            Allocation alloc;
+            alloc.type = arg.type;
+            allocations.push(arg.name, alloc);
+        } else {
+            ss << "uniform"
+               << " " << print_type(arg.type)
+               << " " << print_name(arg.name);
+        }
+        if (as_global) {
+            ss << ";\n";
+        }
+    }
+
+    return ss.str();
+}
+
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, const string &value_expr) {
     ostringstream ss;
     ss << print_type(type) << "(" << value_expr << ")";
@@ -1212,6 +1244,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
     FindThreadGroupSize ftg;
     s.accept(&ftg);
+
+    if (target.get_d3d12_capability_lower_bound() >= 60) {
+        stream << print_parameters(args, true);
+    }
+
     // for undetermined 'numthreads' dimensions, insert placeholders to the code
     // such as '__NUM_TREADS_X' that will later be patched when D3DCompile() is
     // invoked in halide_d3d12compute_run()
@@ -1228,25 +1265,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
            << "uint3 tgroup_index  : SV_GroupID,\n"
            << " "
            << "uint3 tid_in_tgroup : SV_GroupThreadID";
-    for (const auto &arg : args) {
-        stream << ",\n";
-        stream << " ";
-        if (arg.is_buffer) {
-            // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
-            // all buffers as UAVs since there is no way the runtime can know
-            // if a given halide_buffer_t is read-only (SRV) or read-write...
-            stream << "RW"
-                   << "Buffer"
-                   << "<" << print_type(arg.type) << ">"
-                   << " " << print_name(arg.name);
-            Allocation alloc;
-            alloc.type = arg.type;
-            allocations.push(arg.name, alloc);
-        } else {
-            stream << "uniform"
-                   << " " << print_type(arg.type)
-                   << " " << print_name(arg.name);
-        }
+    if (target.get_d3d12_capability_lower_bound() < 60) {
+        stream << print_parameters(args, false);
     }
     stream << ")\n";
 
@@ -1294,14 +1314,18 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         // warning X4714 : sum of temp registers and indexable temp registers times 256 threads exceeds the recommended total 16384.  Performance may be reduced
         << "#pragma warning( disable : 4714 )"
            "\n"
+        //// warning: magnitude of floating-point constant too large for type 'float'; maximum is 3.40282347E+38 [-Wliteral-range]
+        //<< "#pragma warning( disable : 462 )" // OR 4056
+        //   "\n"
         << "\n";
 
     src_stream << "#define halide_maybe_unused(x) (void)(x)\n";
 
     // Write out the Halide math functions.
-    src_stream
+    //src_stream
     //<< "namespace {\n"   // HLSL does not support unnamed namespaces...
 #if DEBUG_TYPES
+    src_stream
         << "#define  int8   int\n"
         << "#define  int16  int\n"
         << "#define  int32  int\n"
@@ -1319,11 +1343,20 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "\n"
         << "#define asint32  asint\n"
         << "#define asuint32 asuint\n"
-        << "\n"
+        << "\n";
 #endif
+    src_stream
+    if (target.get_d3d12_capability_lower_bound() < 60) {
         << "float nan_f32()     { return  1.#IND; } \n"  // Quiet NaN with minimum fractional value.
         << "float neg_inf_f32() { return -1.#INF; } \n"
         << "float inf_f32()     { return +1.#INF; } \n"
+    }
+    else {
+        << "float nan_f32()     { return  1.0f/0.0f; } \n"  // Quiet NaN with minimum fractional value.
+        << "float neg_inf_f32() { return -1.e1000f; } \n"
+        << "float inf_f32()     { return +1.e1000f; } \n"
+    }
+    src_stream
         << "#define is_inf_f32     isinf    \n"
         << "#define is_finite_f32  isfinite \n"
         << "#define is_nan_f32     isnan    \n"

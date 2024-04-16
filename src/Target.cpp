@@ -1614,15 +1614,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
         // These features are actually intersection-y, but because targets only record the _highest_,
         // we have to put their union in the result and then take a lower bound.
-        D3D12ComputeSM60,
-        D3D12ComputeSM61,
-        D3D12ComputeSM62,
-        D3D12ComputeSM63,
-        D3D12ComputeSM64,
-        D3D12ComputeSM65,
-        D3D12ComputeSM66,
-        D3D12ComputeSM67,
-        D3D12ComputeSM68,
         CUDACapability30,
         CUDACapability32,
         CUDACapability35,
