@@ -55,7 +55,13 @@
 #if !defined(COBJMACROS)
 #define COBJMACROS
 #endif
+// For HLSL 6.x
 #include "mini_d3d12.h"
+#include "dxcapi.h"
+
+#include <vector>
+
+//using std::vector;
 
 // For all intents and purposes, we always want to use COMPUTE command lists
 // (and queues) ...
@@ -434,6 +440,7 @@ WEAK DXGI_FORMAT FindD3D12FormatForHalideType(void *user_context, halide_type_t 
 WEAK void *lib_d3d12 = nullptr;
 WEAK void *lib_D3DCompiler_47 = nullptr;
 WEAK void *lib_dxgi = nullptr;
+WEAK void *lib_dxcompiler = nullptr;
 
 struct LibrarySymbol {
     template<typename T>
@@ -454,6 +461,8 @@ WEAK PFN_D3D12_GET_DEBUG_INTERFACE D3D12GetDebugInterface = nullptr;
 WEAK PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignature = nullptr;
 WEAK PFN_D3DCOMPILE D3DCompile = nullptr;
 WEAK PFN_CREATEDXGIFACORY1 CreateDXGIFactory1 = nullptr;
+
+WEAK DxcCreateInstanceProc DxcCreateInstanceFunc = nullptr;
 
 #if defined(__cplusplus) && !defined(_MSC_VER)
 #if defined(__MINGW32__)
@@ -934,12 +943,14 @@ WEAK void D3D12LoadDependencies(void *user_context) {
         "d3d12.dll",
         "D3DCompiler_47.dll",
         "dxgi.dll",
+        "dxcompiler.dll"
     };
     static const int num_libs = sizeof(lib_names) / sizeof(lib_names[0]);
     void **lib_handles[num_libs] = {
         &lib_d3d12,
         &lib_D3DCompiler_47,
         &lib_dxgi,
+        &lib_dxcompiler
     };
     for (size_t i = 0; i < num_libs; i++) {
         // Only attempt to load a library if the it has not been loaded already
@@ -963,6 +974,7 @@ WEAK void D3D12LoadDependencies(void *user_context) {
     D3D12SerializeRootSignature = LibrarySymbol::get(user_context, lib_d3d12, "D3D12SerializeRootSignature");
     D3DCompile = LibrarySymbol::get(user_context, lib_D3DCompiler_47, "D3DCompile");
     CreateDXGIFactory1 = LibrarySymbol::get(user_context, lib_dxgi, "CreateDXGIFactory1");
+    DxcCreateInstanceFunc = LibrarySymbol::get(user_context, lib_dxcompiler, "DxcCreateInstance");
 
     // Windows x64 follows the LLP64 integer type convention:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
@@ -3507,6 +3519,45 @@ WEAK int halide_d3d12compute_wrap_buffer(void *user_context, struct halide_buffe
     return halide_error_code_success;
 }
 
+WEAK int halide_d3d12compute_compute_capability(void* user_context, int* major, int* minor) {
+    TRACELOG;
+    if (lib_dxcompiler == nullptr && lib_D3DCompiler_47 != nullptr) {
+        *major = 5;
+        *minor = 1;
+
+        return halide_error_code_success;
+    }
+    else if (lib_dxcompiler != nullptr) {
+        // TODO
+        //IDxcCompiler3* dxCompiler;
+        //(*DxcCreateInstanceFunc)(CLSID_DxcCompiler, IID_PPV_ARGS(&dxCompiler));
+
+        //std::vector<LPCWSTR> arguments;
+        //arguments.push_back(L"--version");
+
+        //DxcBuffer sourceBuffer;
+        //sourceBuffer.Ptr = nullptr;
+        //sourceBuffer.Size = 0;
+        //sourceBuffer.Encoding = 0;
+
+        //IDxcResult* compileResult;
+        //HRESULT hr = dxCompiler->Compile(&sourceBuffer, arguments.data(), 1u, nullptr, IID_PPV_ARGS(&compileResult));
+        //dxCompiler->Compile(&sourceBuffer, nullptr, 0u, nullptr, IID_PPV_ARGS(&compileResult));
+        //SUCCEEDED(hr);
+
+        // TODO
+        *major = 6;
+        *minor = 0;
+
+        return halide_error_code_success;
+    }
+
+    *major = -1;
+    *minor = -1;
+
+    return halide_error_code_generic_error;
+}
+
 WEAK const struct halide_device_interface_t *halide_d3d12compute_device_interface() {
     TRACELOG;
     return &d3d12compute_device_interface;
@@ -3560,7 +3611,7 @@ WEAK halide_device_interface_t d3d12compute_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
-    nullptr,
+    halide_d3d12compute_compute_capability,
     &d3d12compute_device_interface_impl};
 
 }  // namespace D3D12Compute

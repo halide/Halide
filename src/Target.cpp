@@ -483,6 +483,43 @@ Target get_host_target() {
 
 namespace {
 
+Target::Feature calculate_host_d3d12_capability(Target t) {
+    const auto *interface = get_device_interface_for_device_api(DeviceAPI::D3D12Compute, t);
+    internal_assert(interface->compute_capability);
+    int major, minor;
+    int err = interface->compute_capability(nullptr, &major, &minor);
+    internal_assert(err == 0) << "Failed to query d3d12 compute capability\n";
+    int ver = major * 10 + minor;
+    if (ver < 51) {
+        return Target::FeatureEnd;
+    } else if (ver < 60) {
+        return Target::D3D12Compute;
+    } else if (ver < 61) {
+        return Target::D3D12ComputeSM60;
+    } else if (ver < 62) {
+        return Target::D3D12ComputeSM61;
+    } else if (ver < 63) {
+        return Target::D3D12ComputeSM62;
+    } else if (ver < 64) {
+        return Target::D3D12ComputeSM63;
+    } else if (ver < 65) {
+        return Target::D3D12ComputeSM64;
+    } else if (ver < 66) {
+        return Target::D3D12ComputeSM65;
+    } else if (ver < 67) {
+        return Target::D3D12ComputeSM66;
+    } else if (ver < 68) {
+        return Target::D3D12ComputeSM67;
+    } else {
+        return Target::D3D12ComputeSM68;
+    }
+}
+
+Target::Feature get_host_d3d12_capability(Target t) {
+    static Target::Feature cap = calculate_host_d3d12_capability(t);
+    return cap;
+}
+
 Target::Feature calculate_host_cuda_capability(Target t) {
     const auto *interface = get_device_interface_for_device_api(DeviceAPI::CUDA, t);
     internal_assert(interface->compute_capability);
@@ -672,6 +709,15 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"trace_realizations", Target::TraceRealizations},
     {"trace_pipeline", Target::TracePipeline},
     {"d3d12compute", Target::D3D12Compute},
+    {"d3d12compute_sm60", Target::D3D12ComputeSM60},
+    {"d3d12compute_sm61", Target::D3D12ComputeSM61},
+    {"d3d12compute_sm62", Target::D3D12ComputeSM62},
+    {"d3d12compute_sm63", Target::D3D12ComputeSM63},
+    {"d3d12compute_sm64", Target::D3D12ComputeSM64},
+    {"d3d12compute_sm65", Target::D3D12ComputeSM65},
+    {"d3d12compute_sm66", Target::D3D12ComputeSM66},
+    {"d3d12compute_sm67", Target::D3D12ComputeSM67},
+    {"d3d12compute_sm68", Target::D3D12ComputeSM68},
     {"strict_float", Target::StrictFloat},
     {"tsan", Target::TSAN},
     {"asan", Target::ASAN},
@@ -847,6 +893,21 @@ bool merge_string(Target &t, const std::string &target) {
         } else {
             return false;
         }
+    }
+
+    if (is_host &&
+        t.has_feature(Target::D3D12Compute) &&
+        !t.has_feature(Target::D3D12ComputeSM60) &&
+        !t.has_feature(Target::D3D12ComputeSM61) &&
+        !t.has_feature(Target::D3D12ComputeSM62) &&
+        !t.has_feature(Target::D3D12ComputeSM63) &&
+        !t.has_feature(Target::D3D12ComputeSM64) &&
+        !t.has_feature(Target::D3D12ComputeSM65) &&
+        !t.has_feature(Target::D3D12ComputeSM66) &&
+        !t.has_feature(Target::D3D12ComputeSM67) &&
+        !t.has_feature(Target::D3D12ComputeSM68)) {
+        // Detect host d3d12 capability
+        t.set_feature(get_host_d3d12_capability(t));
     }
 
     if (is_host &&
@@ -1219,6 +1280,40 @@ bool Target::has_gpu_feature() const {
             has_feature(WebGPU));
 }
 
+int Target::get_d3d12_capability_lower_bound() const {
+    if (!has_feature(Target::D3D12Compute)) {
+        return -1;
+    }
+    if (has_feature(Target::D3D12ComputeSM60)) {
+        return 60;
+    }
+    if (has_feature(Target::D3D12ComputeSM61)) {
+        return 61;
+    }
+    if (has_feature(Target::D3D12ComputeSM62)) {
+        return 62;
+    }
+    if (has_feature(Target::D3D12ComputeSM63)) {
+        return 63;
+    }
+    if (has_feature(Target::D3D12ComputeSM64)) {
+        return 64;
+    }
+    if (has_feature(Target::D3D12ComputeSM65)) {
+        return 65;
+    }
+    if (has_feature(Target::D3D12ComputeSM66)) {
+        return 66;
+    }
+    if (has_feature(Target::D3D12ComputeSM67)) {
+        return 67;
+    }
+    if (has_feature(Target::D3D12ComputeSM68)) {
+        return 68;
+    }
+    return 51;
+}
+
 int Target::get_cuda_capability_lower_bound() const {
     if (!has_feature(Target::CUDA)) {
         return -1;
@@ -1307,13 +1402,13 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return (!has_feature(Metal) &&
-                    !has_feature(D3D12Compute) &&
+                    !(get_d3d12_capability_lower_bound() < 60) &&
                     (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles)) &&
                     (!has_feature(Vulkan) || has_feature(Target::VulkanFloat64)) &&
                     !has_feature(WebGPU));
         } else {
             return (!has_feature(Metal) &&
-                    !has_feature(D3D12Compute) &&
+                    !(get_d3d12_capability_lower_bound() < 60) &&
                     (!has_feature(Vulkan) || has_feature(Target::VulkanInt64)) &&
                     !has_feature(WebGPU));
         }
@@ -1343,7 +1438,7 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
     } else if (device == DeviceAPI::D3D12Compute) {
         // Shader Model 5.x can optionally support double-precision; 64-bit int
         // types are not supported.
-        return t.bits() < 64;
+        return get_d3d12_capability_lower_bound() >= 60;
     } else if (device == DeviceAPI::Vulkan) {
         if (t.is_float() && t.bits() == 64) {
             return has_feature(Target::VulkanFloat64);
@@ -1506,6 +1601,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
+    const std::array<Feature, 31> union_features = {{
     const std::array<Feature, 33> union_features = {{
         // These are true union features.
         CUDA,
@@ -1518,6 +1614,15 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
         // These features are actually intersection-y, but because targets only record the _highest_,
         // we have to put their union in the result and then take a lower bound.
+        D3D12ComputeSM60,
+        D3D12ComputeSM61,
+        D3D12ComputeSM62,
+        D3D12ComputeSM63,
+        D3D12ComputeSM64,
+        D3D12ComputeSM65,
+        D3D12ComputeSM66,
+        D3D12ComputeSM67,
+        D3D12ComputeSM68,
         CUDACapability30,
         CUDACapability32,
         CUDACapability35,
@@ -1619,6 +1724,42 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // We merge the bits via bitwise or.
     Target output = Target{os, arch, bits, processor_tune};
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
+
+    // Pick tight lower bound for D3D12 capability. Use fall-through to clear redundant features
+    int d3d12_a = get_d3d12_capability_lower_bound();
+    int d3d12_b = other.get_d3d12_capability_lower_bound();
+
+    // get_d3d12_capability_lower_bound returns -1 when unused. Casting to unsigned makes this
+    // large, so min selects the true lower bound when one target doesn't specify a capability,
+    // and the other doesn't use D3D12 at all.
+    int d3d12_capability = std::min((unsigned)d3d12_a, (unsigned)d3d12_b);
+    if (d3d12_capability < 60) {
+        output.features.reset(D3D12ComputeSM60);
+    }
+    if (d3d12_capability < 61) {
+        output.features.reset(D3D12ComputeSM61);
+    }
+    if (d3d12_capability < 62) {
+        output.features.reset(D3D12ComputeSM62);
+    }
+    if (d3d12_capability < 63) {
+        output.features.reset(D3D12ComputeSM63);
+    }
+    if (d3d12_capability < 64) {
+        output.features.reset(D3D12ComputeSM64);
+    }
+    if (d3d12_capability < 65) {
+        output.features.reset(D3D12ComputeSM65);
+    }
+    if (d3d12_capability < 66) {
+        output.features.reset(D3D12ComputeSM66);
+    }
+    if (d3d12_capability < 67) {
+        output.features.reset(D3D12ComputeSM67);
+    }
+    if (d3d12_capability < 68) {
+        output.features.reset(D3D12ComputeSM68);
+    }
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
     int cuda_a = get_cuda_capability_lower_bound();

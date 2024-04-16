@@ -1417,7 +1417,16 @@ typedef enum halide_target_feature_t {
     halide_target_feature_strict_float,           ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
     halide_target_feature_tsan,                   ///< Enable hooks for TSAN support.
     halide_target_feature_asan,                   ///< Enable hooks for ASAN support.
-    halide_target_feature_d3d12compute,           ///< Enable Direct3D 12 Compute runtime.
+    halide_target_feature_d3d12compute,           ///< Enable Direct3D 12 Compute runtime (default compatibility 5.1).
+    halide_target_feature_d3d12compute_sm_60,     ///< Enable Direct3D 12 Compute runtime with HLSL 6.0.
+    halide_target_feature_d3d12compute_sm_61,     ///< Enable Direct3D 12 Compute runtime with HLSL 6.1.
+    halide_target_feature_d3d12compute_sm_62,     ///< Enable Direct3D 12 Compute runtime with HLSL 6.2.
+    halide_target_feature_d3d12compute_sm_63,     ///< Enable Direct3D 12 Compute runtime with HLSL 6.3.
+    halide_target_feature_d3d12compute_sm_64,     ///< Enable Direct3D 12 Compute runtime with HLSL 6.4.
+    halide_target_feature_d3d12compute_sm_65,     ///< Enable Direct3D 12 Compute runtime with HLSL 6.5.
+    halide_target_feature_d3d12compute_sm_66,     ///< Enable Direct3D 12 Compute runtime with HLSL 6.6.
+    halide_target_feature_d3d12compute_sm_67,     ///< Enable Direct3D 12 Compute runtime with HLSL 6.7.
+    halide_target_feature_d3d12compute_sm_68,     ///< Enable Direct3D 12 Compute runtime with HLSL 6.8.
     halide_target_feature_check_unsafe_promises,  ///< Insert assertions for promises.
     halide_target_feature_hexagon_dma,            ///< Enable Hexagon DMA buffers.
     halide_target_feature_embed_bitcode,          ///< Emulate clang -fembed-bitcode flag.
