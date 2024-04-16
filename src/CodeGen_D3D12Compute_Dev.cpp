@@ -1352,7 +1352,8 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "float inf_f32()     { return +1.#INF; } \n"
     }
     else {
-        << "float nan_f32()     { return  1.0f/0.0f; } \n"  // Quiet NaN with minimum fractional value.
+        // HLSL 6.x: Still a proposal https://microsoft.github.io/hlsl-specs/proposals/0003-numeric-constants.html
+        << "float nan_f32()     { return  1.0f/0.0f; } \n"
         << "float neg_inf_f32() { return -1.e1000f; } \n"
         << "float inf_f32()     { return +1.e1000f; } \n"
     }
