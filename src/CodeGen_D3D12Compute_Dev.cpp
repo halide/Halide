@@ -133,23 +133,34 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
     if (type.is_float()) {
         switch (type.bits()) {
         case 16:
-            // 16-bit floating point value. This data type is provided only for language compatibility.
-            // Direct3D 10 shader targets map all half data types to float data types.
-            // A half data type cannot be used on a uniform global variable (use the /Gec flag if this functionality is desired).
-            oss << "half";
+            if (target.get_d3d12_capability_lower_bound() < 62) {
+                // 16-bit floating point value. This data type is provided only for language compatibility.
+                // Direct3D 10 shader targets map all half data types to float data types.
+                // A half data type cannot be used on a uniform global variable (use the /Gec flag if this functionality is desired).
+                oss << "half";
+            } else {
+                // NOTE(soufianekhiat): need options "-enable-16bit-types -T c_s_6_2" for compilation
+                oss << "float16_t";
+            }
             break;
         case 32:
-            oss << "float";
+            if (target.get_d3d12_capability_lower_bound() < 60) {
+                oss << "float";
+            } else {
+                oss << "float32_t";
+            }
             break;
-        case 64: 
+        case 64:
             if (target.get_d3d12_capability_lower_bound() == 51) {
                 // "64-bit floating point value. You cannot use double precision values as inputs and outputs for a stream.
                 //  To pass double precision values between shaders, declare each double as a pair of uint data types.
                 //  Then, use the asdouble function to pack each double into the pair of uints and the asuint function to
                 //  unpack the pair of uints back into the double."
                 user_error << "HLSL (SM 5.1) does not have transparent support for 'double' types.\n";
+                oss << "double";
+            } else {
+                oss << "float64_t";
             }
-            oss << "double";
             break;
         default:
             user_error << "Can't represent a float with this many bits in HLSL (SM 5.1): " << type << "\n";
@@ -166,9 +177,14 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
                 oss << "u";
             }
             oss << "int";
+            if (target.get_d3d12_capability_lower_bound() >= 60) {
+                oss << type.bits();
+                oss << "_t";
+            } else {
 #if DEBUG_TYPES
             oss << type.bits();
 #endif
+            }
             break;
         case 64:
             if (target.get_d3d12_capability_lower_bound() == 51) {
@@ -416,6 +432,8 @@ string hex_literal(T value) {
 struct StoragePackUnpack {
     using CodeGen = CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
 
+    // TODO(soufianekhiat): https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_Pack_Unpack_Intrinsics.html
+
     // Shader Model 5.1: threadgroup shared memory is limited 32KB
     static const size_t ThreadGroupSharedStorageLimit = 32 * 1024;
 
@@ -438,6 +456,7 @@ struct StoragePackUnpack {
         std::ostringstream lhs;
         // NOTE(marcos): 8bit and 16bit word packing -- the smallest integer
         // type granularity available in HLSL SM 5.1 is 32bit (int/uint):
+        // TODO(soufianekhiat): 
         Type value_type = op->value.type();
         if (value_type.bits() == 32) {
             // storing a 32bit word? great! just reinterpret value to uint32:
@@ -457,21 +476,21 @@ struct StoragePackUnpack {
             index << i << " / " << divisor;
             ostringstream word;
             word << cg.print_name(op->name)
-                 << "[" + index.str() + "]";
+                    << "[" + index.str() + "]";
             // now mask the appropriate bits:
             ostringstream mask;
             mask << "("
-                 << hex_literal((1 << bits) - 1)
-                 << " << "
-                 << "(" << bits << "*(" << i << " % " << divisor << " ))"
-                 << ")";
+                    << hex_literal((1 << bits) - 1)
+                    << " << "
+                    << "(" << bits << "*(" << i << " % " << divisor << " ))"
+                    << ")";
             // apply the mask to the rhs value:
             ostringstream value;
             value << "("
-                  << mask.str()
-                  << " & "
-                  << "(" << cg.print_expr(op->value) << ")"
-                  << ")";
+                    << mask.str()
+                    << " & "
+                    << "(" << cg.print_expr(op->value) << ")"
+                    << ")";
 
             // the performance impact of atomic operations on shared memory is
             // not well documented... here is something:
