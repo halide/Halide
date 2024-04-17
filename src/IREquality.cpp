@@ -519,10 +519,13 @@ Order flip_result(Order r) {
     switch (r) {
     case Order::Equal:
         r = Order::Equal;
+        break;
     case Order::LessThan:
         r = Order::GreaterThan;
+        break;
     case Order::GreaterThan:
         r = Order::LessThan;
+        break;
     }
     return r;
 }
@@ -531,10 +534,13 @@ std::ostream &operator<<(std::ostream &s, Order o) {
     switch (o) {
     case Order::Equal:
         s << "Equal";
+        break;
     case Order::LessThan:
         s << "LessThan";
+        break;
     case Order::GreaterThan:
         s << "GreaterThan";
+        break;
     }
     return s;
 }
