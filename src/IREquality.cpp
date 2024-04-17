@@ -10,10 +10,9 @@ using std::vector;
 
 namespace {
 
-enum CmpResult { Unknown,
-                 Equal,
-                 LessThan,
-                 GreaterThan };
+enum class Order { Equal,
+                   LessThan,
+                   GreaterThan };
 
 // A helper class for comparing two pieces of IR with the minimum amount of
 // recursion.
@@ -32,7 +31,7 @@ struct Comparer {
     // IR, and the result of the comparison so far.
     const IRNode **stack_end = nullptr, **stack_ptr = nullptr;
     const IRNode *next_a = nullptr, *next_b = nullptr;
-    CmpResult result = Equal;
+    Order result = Order::Equal;
 
     Comparer(const IRNode **cache)
         : cache(cache) {
@@ -42,7 +41,7 @@ struct Comparer {
     // or Stmt, it's guaranteed to be defined.
     template<typename Node, typename MemberType>
     HALIDE_ALWAYS_INLINE void cmp(MemberType Node::*member_ptr) {
-        if (result == Equal) {
+        if (result == Order::Equal) {
             cmp(((const Node *)next_a)->*member_ptr, ((const Node *)next_b)->*member_ptr);
         }
     }
@@ -50,7 +49,7 @@ struct Comparer {
     // The same as above, but with no guarantee.
     template<typename Node, typename MemberType>
     HALIDE_ALWAYS_INLINE void cmp_if_defined(MemberType Node::*member_ptr) {
-        if (result == Equal) {
+        if (result == Order::Equal) {
             cmp_if_defined(((const Node *)next_a)->*member_ptr, ((const Node *)next_b)->*member_ptr);
         }
     }
@@ -95,7 +94,7 @@ struct Comparer {
         } else if (stack_ptr == stack_end) {
             // Out of stack space. Make a recursive call to buy some more stack.
             Comparer<cache_size> sub_comparer(cache);
-            result = sub_comparer.compare(a.get(), b.get());
+            result = sub_comparer.compare(*(a.get()), *(b.get()));
         } else {
             *stack_ptr++ = a.get();
             *stack_ptr++ = b.get();
@@ -106,9 +105,9 @@ struct Comparer {
     HALIDE_ALWAYS_INLINE
     void cmp_if_defined(const IRHandle &a, const IRHandle &b) {
         if (a.defined() < b.defined()) {
-            result = LessThan;
+            result = Order::LessThan;
         } else if (a.defined() > b.defined()) {
-            result = GreaterThan;
+            result = Order::GreaterThan;
         } else if (a.defined() && b.defined()) {
             cmp(a, b);
         }
@@ -117,11 +116,11 @@ struct Comparer {
     template<typename T>
     void cmp(const std::vector<T> &a, const std::vector<T> &b) {
         if (a.size() < b.size()) {
-            result = LessThan;
+            result = Order::LessThan;
         } else if (a.size() > b.size()) {
-            result = GreaterThan;
+            result = Order::GreaterThan;
         } else {
-            for (size_t i = 0; i < a.size() && result == Equal; i++) {
+            for (size_t i = 0; i < a.size() && result == Order::Equal; i++) {
                 cmp(a[i], b[i]);
             }
         }
@@ -144,9 +143,9 @@ struct Comparer {
         if (ha == hb) {
             return;
         } else if (!ha) {
-            result = LessThan;
+            result = Order::LessThan;
         } else if (!hb) {
-            result = GreaterThan;
+            result = Order::GreaterThan;
         } else {
             // They're both non-void handle types with distinct type info
             // structs. We now need to distinguish between different C++
@@ -170,9 +169,9 @@ struct Comparer {
         uint32_t ta = ((halide_type_t)a).as_u32();
         uint32_t tb = ((halide_type_t)b).as_u32();
         if (ta < tb) {
-            result = LessThan;
+            result = Order::LessThan;
         } else if (ta > tb) {
-            result = GreaterThan;
+            result = Order::GreaterThan;
         } else {
             if (a.handle_type || b.handle_type) {
                 cmp(a.handle_type, b.handle_type);
@@ -193,13 +192,13 @@ struct Comparer {
         // Floating point scalars need special handling, due to NaNs.
         if (std::isnan(a) && std::isnan(b)) {
         } else if (std::isnan(a)) {
-            result = LessThan;
+            result = Order::LessThan;
         } else if (std::isnan(b)) {
-            result = GreaterThan;
+            result = Order::GreaterThan;
         } else if (a < b) {
-            result = LessThan;
+            result = Order::LessThan;
         } else if (b < a) {
-            result = GreaterThan;
+            result = Order::GreaterThan;
         }
     }
 
@@ -207,9 +206,9 @@ struct Comparer {
     void cmp(const std::string &a, const std::string &b) {
         int r = a.compare(b);
         if (r < 0) {
-            result = LessThan;
+            result = Order::LessThan;
         } else if (r > 0) {
-            result = GreaterThan;
+            result = Order::GreaterThan;
         }
     }
 
@@ -218,24 +217,24 @@ struct Comparer {
                                                      std::is_same_v<decltype(std::declval<T>() < std::declval<T>()), bool>>>
     HALIDE_NEVER_INLINE void cmp(const T &a, const T &b) {
         if (a < b) {
-            result = LessThan;
+            result = Order::LessThan;
         } else if (b < a) {
-            result = GreaterThan;
+            result = Order::GreaterThan;
         }
     }
 
-    CmpResult compare(const IRNode *root_a, const IRNode *root_b) {
+    Order compare(const IRNode &root_a, const IRNode &root_b) {
         constexpr size_t stack_size = 64;             // 1 kb
         const IRNode *stack_storage[stack_size * 2];  // Intentionally uninitialized
 
         stack_ptr = stack_storage;
         stack_end = stack_storage + stack_size * 2;
-        result = Equal;
+        result = Order::Equal;
 
-        *stack_ptr++ = root_a;
-        *stack_ptr++ = root_b;
+        *stack_ptr++ = &root_a;
+        *stack_ptr++ = &root_b;
 
-        while (result == Equal && stack_ptr > stack_storage) {
+        while (result == Order::Equal && stack_ptr > stack_storage) {
             stack_ptr -= 2;
             next_a = stack_ptr[0];
             next_b = stack_ptr[1];
@@ -256,7 +255,7 @@ struct Comparer {
             }
 
             cmp(next_a->node_type, next_b->node_type);
-            if (result != Equal) {
+            if (result != Order::Equal) {
                 break;
             }
 
@@ -493,107 +492,59 @@ struct Comparer {
     }
 };
 
-template<bool use_cache>
-bool ir_equal(const IRHandle &a, const IRHandle &b) {
-    // Early out for the most common cases.
-    if (a.get() == b.get()) {
-        return true;
-    } else if (a.defined() != b.defined() ||
-               a.node_type() != b.node_type()) {
-        return false;
-    }
-    if (use_cache) {
-        const IRNode *cache[256] = {};
-        return Comparer<128>(cache).compare(a.get(), b.get()) == Equal;
-    } else {
-        return Comparer<0>(nullptr).compare(a.get(), b.get()) == Equal;
-    }
-}
-
-template<bool use_cache>
-bool ir_less_than(const IRHandle &a, const IRHandle &b) {
-    // Early out for the most common cases
-    if (a.get() == b.get()) {
-        return false;
-    } else if (!a.defined()) {
-        return true;
-    } else if (!b.defined()) {
-        return false;
-    }
-
-    if (use_cache) {
-        const IRNode *cache[256] = {};
-        return Comparer<128>(cache).compare(a.get(), b.get()) == LessThan;
-    } else {
-        return Comparer<0>(nullptr).compare(a.get(), b.get()) == LessThan;
-    }
-}
-
 }  // namespace
 
-bool equal(const Expr &a, const Expr &b) {
-    return ir_equal<false>(a, b);
+bool equal_impl(const IRNode &a, const IRNode &b) {
+    return Comparer<0>(nullptr).compare(a, b) == Order::Equal;
 }
 
-bool equal(const Stmt &a, const Stmt &b) {
-    return ir_equal<false>(a, b);
+bool graph_equal_impl(const IRNode &a, const IRNode &b) {
+    const IRNode *cache[256] = {};
+    return Comparer<128>(cache).compare(a, b) == Order::Equal;
 }
 
-bool graph_equal(const Expr &a, const Expr &b) {
-    return ir_equal<true>(a, b);
+bool less_than_impl(const IRNode &a, const IRNode &b) {
+    return Comparer<0>(nullptr).compare(a, b) == Order::LessThan;
 }
 
-bool graph_equal(const Stmt &a, const Stmt &b) {
-    return ir_equal<true>(a, b);
-}
-
-bool graph_less_than(const Expr &a, const Expr &b) {
-    return ir_less_than<true>(a, b);
-}
-
-bool graph_less_than(const Stmt &a, const Stmt &b) {
-    return ir_less_than<true>(a, b);
-}
-
-bool IRDeepCompare::operator()(const Expr &a, const Expr &b) const {
-    return ir_less_than<false>(a, b);
-}
-
-bool IRDeepCompare::operator()(const Stmt &a, const Stmt &b) const {
-    return ir_less_than<false>(a, b);
-}
-
-bool IRGraphDeepCompare::operator()(const Expr &a, const Expr &b) const {
-    return ir_less_than<true>(a, b);
-}
-
-bool IRGraphDeepCompare::operator()(const Stmt &a, const Stmt &b) const {
-    return ir_less_than<true>(a, b);
+bool graph_less_than_impl(const IRNode &a, const IRNode &b) {
+    const IRNode *cache[256] = {};
+    return Comparer<128>(cache).compare(a, b) == Order::LessThan;
 }
 
 // Testing code
 namespace {
 
-CmpResult flip_result(CmpResult r) {
+Order flip_result(Order r) {
     switch (r) {
-    case LessThan:
-        return GreaterThan;
-    case Equal:
-        return Equal;
-    case GreaterThan:
-        return LessThan;
-    case Unknown:
-        return Unknown;
+    case Order::Equal:
+        r = Order::Equal;
+    case Order::LessThan:
+        r = Order::GreaterThan;
+    case Order::GreaterThan:
+        r = Order::LessThan;
     }
-    return Unknown;
+    return r;
+}
+
+std::ostream &operator<<(std::ostream &s, Order o) {
+    switch (o) {
+    case Order::Equal:
+        s << "Equal";
+    case Order::LessThan:
+        s << "LessThan";
+    case Order::GreaterThan:
+        s << "GreaterThan";
+    }
+    return s;
 }
 
 void check_equal(const Expr &a, const Expr &b) {
     const IRNode *cache[256] = {};
-    CmpResult r = Comparer<128>(cache).compare(a.get(), b.get());
-    internal_assert(r == Equal)
+    Order r = Comparer<128>(cache).compare(*(a.get()), *(b.get()));
+    internal_assert(r == Order::Equal)
         << "Error in ir_equality_test: " << r
-        << " instead of " << Equal
+        << " instead of " << Order::Equal
         << " when comparing:\n"
         << a
         << "\nand\n"
@@ -602,10 +553,9 @@ void check_equal(const Expr &a, const Expr &b) {
 
 void check_not_equal(const Expr &a, const Expr &b) {
     const IRNode *cache[256] = {};
-    CmpResult r1 = Comparer<128>(cache).compare(a.get(), b.get());
-    CmpResult r2 = Comparer<128>(cache).compare(b.get(), a.get());
-    internal_assert(r1 != Equal &&
-                    r1 != Unknown &&
+    Order r1 = Comparer<128>(cache).compare(*(a.get()), *(b.get()));
+    Order r2 = Comparer<128>(cache).compare(*(b.get()), *(a.get()));
+    internal_assert(r1 != Order::Equal &&
                     flip_result(r1) == r2)
         << "Error in ir_equality_test: " << r1
         << " is not the opposite of " << r2
