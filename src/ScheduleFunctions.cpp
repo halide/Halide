@@ -514,7 +514,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
             Stmt then_case = build_provide_loop_nest(env, prefix, func, s.definition, start_fuse, is_update);
             stmt = IfThenElse::make(s.condition, then_case, stmt);
         } else {
-            internal_assert(equal(s.condition, const_true()));
+            internal_assert(is_const_one(s.condition));
             // specialize_fail() should only be possible on the final specialization
             internal_assert(i == specializations.size());
             Expr specialize_fail_error =
