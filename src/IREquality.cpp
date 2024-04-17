@@ -503,7 +503,7 @@ bool ir_equal(const IRHandle &a, const IRHandle &b) {
         return false;
     }
     if (use_cache) {
-        const IRNode *cache[256] = {0};
+        const IRNode *cache[256] = {};
         return Comparer<128>(cache).compare(a.get(), b.get()) == Equal;
     } else {
         return Comparer<0>(nullptr).compare(a.get(), b.get()) == Equal;
@@ -522,7 +522,7 @@ bool ir_less_than(const IRHandle &a, const IRHandle &b) {
     }
 
     if (use_cache) {
-        const IRNode *cache[256] = {0};
+        const IRNode *cache[256] = {};
         return Comparer<128>(cache).compare(a.get(), b.get()) == LessThan;
     } else {
         return Comparer<0>(nullptr).compare(a.get(), b.get()) == LessThan;
@@ -589,7 +589,7 @@ CmpResult flip_result(CmpResult r) {
 }
 
 void check_equal(const Expr &a, const Expr &b) {
-    const IRNode *cache[256] = {0};
+    const IRNode *cache[256] = {};
     CmpResult r = Comparer<128>(cache).compare(a.get(), b.get());
     internal_assert(r == Equal)
         << "Error in ir_equality_test: " << r
@@ -601,7 +601,7 @@ void check_equal(const Expr &a, const Expr &b) {
 }
 
 void check_not_equal(const Expr &a, const Expr &b) {
-    const IRNode *cache[256] = {0};
+    const IRNode *cache[256] = {};
     CmpResult r1 = Comparer<128>(cache).compare(a.get(), b.get());
     CmpResult r2 = Comparer<128>(cache).compare(b.get(), a.get());
     internal_assert(r1 != Equal &&
