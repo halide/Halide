@@ -1289,6 +1289,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 void CodeGen_D3D12Compute_Dev::init_module() {
     debug(2) << "D3D12Compute device codegen init_module\n";
 
+    Target const& target = d3d12compute_c.get_target();
+
     // wipe the internal kernel source
     src_stream.str("");
     src_stream.clear();
@@ -1345,17 +1347,18 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "#define asuint32 asuint\n"
         << "\n";
 #endif
-    src_stream
     if (target.get_d3d12_capability_lower_bound() < 60) {
-        << "float nan_f32()     { return  1.#IND; } \n"  // Quiet NaN with minimum fractional value.
-        << "float neg_inf_f32() { return -1.#INF; } \n"
-        << "float inf_f32()     { return +1.#INF; } \n"
+        src_stream
+            << "float nan_f32()     { return  1.#IND; } \n"  // Quiet NaN with minimum fractional value.
+            << "float neg_inf_f32() { return -1.#INF; } \n"
+            << "float inf_f32()     { return +1.#INF; } \n";
     }
     else {
         // HLSL 6.x: Still a proposal https://microsoft.github.io/hlsl-specs/proposals/0003-numeric-constants.html
-        << "float nan_f32()     { return  1.0f/0.0f; } \n"
-        << "float neg_inf_f32() { return -1.e1000f; } \n"
-        << "float inf_f32()     { return +1.e1000f; } \n"
+        src_stream
+            << "float nan_f32()     { return  1.0f/0.0f; } \n"
+            << "float neg_inf_f32() { return -1.e1000f; } \n"
+            << "float inf_f32()     { return +1.e1000f; } \n";
     }
     src_stream
         << "#define is_inf_f32     isinf    \n"
