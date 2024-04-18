@@ -88,6 +88,17 @@ int static_sign(const Expr &x) {
     return 0;
 }
 
+Interval simplify(Interval i) {
+    Interval result;
+    result.min = simplify(i.min);
+    if (i.is_single_point()) {
+        result.max = result.min;
+    } else {
+        result.max = simplify(i.max);
+    }
+    return result;
+}
+
 }  // anonymous namespace
 
 const FuncValueBounds &empty_func_value_bounds() {
@@ -109,8 +120,7 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
     Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
-    interval.min = simplify(interval.min);
-    interval.max = simplify(interval.max);
+    interval = simplify(interval);
 
     // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
     // for our purposes here, treat anything non-const as no-bound.
@@ -158,16 +168,6 @@ public:
     Bounds(const Scope<Interval> *s, const FuncValueBounds &fb, bool const_bound)
         : func_bounds(fb), const_bound(const_bound) {
         scope.set_containing_scope(s);
-
-        // Find any points that are single_points but fail is_single_point due to
-        // pointer equality checks and replace with single_points.
-        for (auto item = s->cbegin(); item != s->cend(); ++item) {
-            const Interval &item_interval = item.value();
-            if (!item_interval.is_single_point() &&
-                equal(item_interval.min, item_interval.max)) {
-                scope.push(item.name(), Interval::single_point(item_interval.min));
-            }
-        }
     }
 
 #if DO_TRACK_BOUNDS_INTERVALS
@@ -325,8 +325,7 @@ private:
                 // constants, so try to make the constants first.
 
                 // First constant-fold
-                a.min = simplify(a.min);
-                a.max = simplify(a.max);
+                a = simplify(a);
 
                 // Then try to strip off junk mins and maxes.
                 bool old_constant_bound = const_bound;
@@ -355,8 +354,7 @@ private:
                 // a is bounded, but from and to can't necessarily represent
                 // each other; however, if the bounds can be simplified to
                 // constants, they might fit regardless of types.
-                a.min = simplify(a.min);
-                a.max = simplify(a.max);
+                a = simplify(a);
                 const auto *umin = as_const_uint(a.min);
                 const auto *umax = as_const_uint(a.max);
                 if (umin && umax && to.can_represent(*umin) && to.can_represent(*umax)) {
@@ -2573,13 +2571,11 @@ private:
             op->value.accept(this);
 
             f.value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
-
-            bool fixed = f.value_bounds.min.same_as(f.value_bounds.max);
-            f.value_bounds.min = simplify(f.value_bounds.min);
-            f.value_bounds.max = fixed ? f.value_bounds.min : simplify(f.value_bounds.max);
+            f.value_bounds = simplify(f.value_bounds);
 
             if (is_small_enough_to_substitute(f.value_bounds.min) &&
-                (fixed || is_small_enough_to_substitute(f.value_bounds.max))) {
+                (f.value_bounds.is_single_point() ||
+                 is_small_enough_to_substitute(f.value_bounds.max))) {
                 scope.push(op->name, f.value_bounds);
             } else {
                 f.max_name = unique_name('t');
@@ -2769,9 +2765,7 @@ private:
                         const Expr *val = let_stmts.find(l.var);
                         internal_assert(val);
                         v_bound = bounds_of_expr_in_scope(*val, scope, func_bounds);
-                        bool fixed = v_bound.min.same_as(v_bound.max);
-                        v_bound.min = simplify(v_bound.min);
-                        v_bound.max = fixed ? v_bound.min : simplify(v_bound.max);
+                        v_bound = simplify(v_bound);
 
                         const Interval *old_bound = scope.find(l.var);
                         internal_assert(old_bound);
@@ -3368,12 +3362,12 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                 result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
                 // These can expand combinatorially as we go down the
                 // pipeline if we don't run CSE on them.
+                bool fixed = result.is_single_point();
                 if (result.has_lower_bound()) {
                     result.min = simplify(common_subexpression_elimination(result.min));
                 }
-
                 if (result.has_upper_bound()) {
-                    result.max = simplify(common_subexpression_elimination(result.max));
+                    result.max = fixed ? result.min : simplify(common_subexpression_elimination(result.max));
                 }
 
                 fb[key] = result;
@@ -3431,8 +3425,7 @@ namespace {
 void check(const Scope<Interval> &scope, const Expr &e, const Expr &correct_min, const Expr &correct_max) {
     FuncValueBounds fb;
     Interval result = bounds_of_expr_in_scope(e, scope, fb);
-    result.min = simplify(result.min);
-    result.max = simplify(result.max);
+    result = simplify(result);
     if (!equal(result.min, correct_min)) {
         internal_error << "In bounds of " << e << ":\n"
                        << "Incorrect min: " << result.min << "\n"
@@ -3448,8 +3441,7 @@ void check(const Scope<Interval> &scope, const Expr &e, const Expr &correct_min,
 void check_constant_bound(const Scope<Interval> &scope, const Expr &e, const Expr &correct_min, const Expr &correct_max) {
     FuncValueBounds fb;
     Interval result = bounds_of_expr_in_scope(e, scope, fb, true);
-    result.min = simplify(result.min);
-    result.max = simplify(result.max);
+    result = simplify(result);
     if (!equal(result.min, correct_min)) {
         internal_error << "In find constant bound of " << e << ":\n"
                        << "Incorrect min constant bound: " << result.min << "\n"
@@ -3603,8 +3595,7 @@ void boxes_touched_test() {
     for (size_t i = 0; i < result.size(); ++i) {
         const Interval &correct = expected[i];
         Interval b = result[i];
-        b.min = simplify(b.min);
-        b.max = simplify(b.max);
+        b = simplify(b);
         if (!equal(correct.min, b.min)) {
             internal_error << "In bounds of dim " << i << ":\n"
                            << "Incorrect min: " << b.min << "\n"
