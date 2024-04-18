@@ -194,8 +194,17 @@ struct Comparer {
     void cmp(double a, double b) {
         // Floating point scalars need special handling, due to NaNs.
         if (std::isnan(a) && std::isnan(b)) {
-            // Two nans should be considered equal, so leave comparison state
-            // unchanged.
+            // Under numeric rules, NaNs aren't equal, but we're not actually
+            // comparing numbers here. We are comparing IR nodes to see if
+            // they'll compile to the same thing. Two NaN FloatImms will compile
+            // to the same thing, so they should be considered equal in this
+            // context, so we leave comparison state unchanged.
+            //
+            // Note however that we consider -0 equal to 0 here, because
+            // otherwise you get tedious problems like std::nearbyint(-0.5) with
+            // round-to-nearest mode leaving it platform-dependent whether you
+            // get -0 or 0. So if we say -0 != 0, our constant folding would be
+            // platform-dependent.
         } else if (std::isnan(a)) {
             result = Order::LessThan;
         } else if (std::isnan(b)) {
