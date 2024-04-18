@@ -79,9 +79,9 @@ int static_sign(const Expr &x) {
         return -1;
     } else {
         Expr zero = make_zero(x.type());
-        if (equal(const_true(), simplify(x > zero))) {
+        if (is_const_one(simplify(x > zero))) {
             return 1;
-        } else if (equal(const_true(), simplify(x < zero))) {
+        } else if (is_const_one(simplify(x < zero))) {
             return -1;
         }
     }
