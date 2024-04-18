@@ -88,7 +88,7 @@ int static_sign(const Expr &x) {
     return 0;
 }
 
-Interval simplify(Interval i) {
+Interval simplify(const Interval &i) {
     Interval result;
     result.min = simplify(i.min);
     if (i.is_single_point()) {
