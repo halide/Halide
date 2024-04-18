@@ -55,6 +55,9 @@ struct Comparer {
     }
 
     size_t hash(const IRNode *a, const IRNode *b) {
+        // A simple hash designed to get enough information into the low bits to
+        // avoid too many collisions, while being robust to weird things like
+        // having strided set of Exprs.
         uintptr_t pa = (uintptr_t)a;
         uintptr_t pb = (uintptr_t)b;
         uintptr_t h = (((pa * 17) ^ (pb * 13)) >> 4);
@@ -191,6 +194,8 @@ struct Comparer {
     void cmp(double a, double b) {
         // Floating point scalars need special handling, due to NaNs.
         if (std::isnan(a) && std::isnan(b)) {
+            // Two nans should be considered equal, so leave comparison state
+            // unchanged.
         } else if (std::isnan(a)) {
             result = Order::LessThan;
         } else if (std::isnan(b)) {
