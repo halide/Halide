@@ -16,11 +16,9 @@ ConstantInterval bounds_helper(const Expr &e,
         return bounds_helper(e, scope, cache);
     };
 
-    auto get_bounds = [&]() {
+    auto get_infinite_bounds = [&]() {
         // Compute the bounds of each IR node from the bounds of its args. Math
-        // on ConstantInterval is in terms of infinite integers, so any op that
-        // can overflow needs to cast the resulting interval back to the output
-        // type.
+        // on ConstantInterval is in terms of infinite integers.
         if (const UIntImm *op = e.as<UIntImm>()) {
             if (Int(64).can_represent(op->value)) {
                 return ConstantInterval::single_point((int64_t)(op->value));
@@ -32,22 +30,21 @@ ConstantInterval bounds_helper(const Expr &e,
                 return *in;
             }
         } else if (const Add *op = e.as<Add>()) {
-            return cast(op->type, recurse(op->a) + recurse(op->b));
+            return recurse(op->a) + recurse(op->b);
         } else if (const Sub *op = e.as<Sub>()) {
-            return cast(op->type, recurse(op->a) - recurse(op->b));
+            return recurse(op->a) - recurse(op->b);
         } else if (const Mul *op = e.as<Mul>()) {
-            return cast(op->type, recurse(op->a) * recurse(op->b));
+            return recurse(op->a) * recurse(op->b);
         } else if (const Div *op = e.as<Div>()) {
-            // Can overflow when dividing type.min() by -1
-            return cast(op->type, recurse(op->a) / recurse(op->b));
+            return recurse(op->a) / recurse(op->b);
         } else if (const Mod *op = e.as<Mod>()) {
-            return cast(op->type, recurse(op->a) % recurse(op->b));
+            return recurse(op->a) % recurse(op->b);
         } else if (const Min *op = e.as<Min>()) {
             return min(recurse(op->a), recurse(op->b));
         } else if (const Max *op = e.as<Max>()) {
             return max(recurse(op->a), recurse(op->b));
         } else if (const Cast *op = e.as<Cast>()) {
-            return cast(op->type, recurse(op->value));
+            return recurse(op->value);
         } else if (const Broadcast *op = e.as<Broadcast>()) {
             return recurse(op->value);
         } else if (const VectorReduce *op = e.as<VectorReduce>()) {
@@ -56,7 +53,7 @@ ConstantInterval bounds_helper(const Expr &e,
             ConstantInterval arg_bounds = recurse(op->value);
             switch (op->op) {
             case VectorReduce::Add:
-                return cast(op->type, arg_bounds * factor);
+                return arg_bounds * factor;
             case VectorReduce::SaturatingAdd:
                 return saturating_cast(op->type, arg_bounds * factor);
             case VectorReduce::Min:
@@ -76,30 +73,21 @@ ConstantInterval bounds_helper(const Expr &e,
             ScopedBinding bind(scope, op->name, recurse(op->value));
             return recurse(op->body);
         } else if (const Call *op = e.as<Call>()) {
-            // For all intrinsics that can't possibly overflow, we don't need the
-            // final cast.
+            ConstantInterval result;
             if (op->is_intrinsic(Call::abs)) {
                 return abs(recurse(op->args[0]));
             } else if (op->is_intrinsic(Call::absd)) {
-                return abs(recurse(op->args[0]) -
-                           recurse(op->args[1]));
+                return abs(recurse(op->args[0]) - recurse(op->args[1]));
             } else if (op->is_intrinsic(Call::count_leading_zeros) ||
                        op->is_intrinsic(Call::count_trailing_zeros)) {
                 // Conservatively just say it's the potential number of zeros in the type.
                 return ConstantInterval(0, op->args[0].type().bits());
             } else if (op->is_intrinsic(Call::halving_add)) {
-                return (recurse(op->args[0]) +
-                        recurse(op->args[1])) /
-                       2;
+                return (recurse(op->args[0]) + recurse(op->args[1])) / 2;
             } else if (op->is_intrinsic(Call::halving_sub)) {
-                return cast(op->type, (recurse(op->args[0]) -
-                                       recurse(op->args[1])) /
-                                          2);
+                return (recurse(op->args[0]) - recurse(op->args[1])) / 2;
             } else if (op->is_intrinsic(Call::rounding_halving_add)) {
-                return (recurse(op->args[0]) +
-                        recurse(op->args[1]) +
-                        1) /
-                       2;
+                return (recurse(op->args[0]) + recurse(op->args[1]) + 1) / 2;
             } else if (op->is_intrinsic(Call::saturating_add)) {
                 return saturating_cast(op->type,
                                        (recurse(op->args[0]) +
@@ -108,31 +96,17 @@ ConstantInterval bounds_helper(const Expr &e,
                 return saturating_cast(op->type,
                                        (recurse(op->args[0]) -
                                         recurse(op->args[1])));
-            } else if (op->is_intrinsic(Call::widening_add)) {
+            } else if (op->is_intrinsic({Call::widening_add, Call::widen_right_add})) {
                 return recurse(op->args[0]) + recurse(op->args[1]);
-            } else if (op->is_intrinsic(Call::widening_sub)) {
-                // widening ops can't overflow ...
+            } else if (op->is_intrinsic({Call::widening_sub, Call::widen_right_sub})) {
                 return recurse(op->args[0]) - recurse(op->args[1]);
-            } else if (op->is_intrinsic(Call::widening_mul)) {
+            } else if (op->is_intrinsic({Call::widening_mul, Call::widen_right_mul})) {
                 return recurse(op->args[0]) * recurse(op->args[1]);
-            } else if (op->is_intrinsic(Call::widen_right_add)) {
-                // but the widen_right versions can overflow
-                return cast(op->type, (recurse(op->args[0]) +
-                                       recurse(op->args[1])));
-            } else if (op->is_intrinsic(Call::widen_right_sub)) {
-                return cast(op->type, (recurse(op->args[0]) -
-                                       recurse(op->args[1])));
-            } else if (op->is_intrinsic(Call::widen_right_mul)) {
-                return cast(op->type, (recurse(op->args[0]) *
-                                       recurse(op->args[1])));
-            } else if (op->is_intrinsic(Call::shift_right) ||
-                       op->is_intrinsic(Call::widening_shift_right)) {
-                return cast(op->type, recurse(op->args[0]) >> recurse(op->args[1]));
-            } else if (op->is_intrinsic(Call::shift_left) ||
-                       op->is_intrinsic(Call::widening_shift_left)) {
-                return cast(op->type, recurse(op->args[0]) << recurse(op->args[1]));
-            } else if (op->is_intrinsic(Call::rounding_shift_right) ||
-                       op->is_intrinsic(Call::rounding_shift_left)) {
+            } else if (op->is_intrinsic({Call::shift_right, Call::widening_shift_right})) {
+                return recurse(op->args[0]) >> recurse(op->args[1]);
+            } else if (op->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
+                return recurse(op->args[0]) << recurse(op->args[1]);
+            } else if (op->is_intrinsic({Call::rounding_shift_right, Call::rounding_shift_left})) {
                 ConstantInterval ca = recurse(op->args[0]);
                 ConstantInterval cb = recurse(op->args[1]);
                 if (op->is_intrinsic(Call::rounding_shift_left)) {
@@ -140,18 +114,18 @@ ConstantInterval bounds_helper(const Expr &e,
                 }
                 ConstantInterval rounding_term = 1 << (cb - 1);
                 // Note if cb is <= 0, rounding_term is zero.
-                return cast(op->type, (ca + rounding_term) >> cb);
+                return (ca + rounding_term) >> cb;
             } else if (op->is_intrinsic(Call::mul_shift_right)) {
                 ConstantInterval ca = recurse(op->args[0]);
                 ConstantInterval cb = recurse(op->args[1]);
                 ConstantInterval cq = recurse(op->args[2]);
-                return cast(op->type, (ca * cb) >> cq);
+                return (ca * cb) >> cq;
             } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
                 ConstantInterval ca = recurse(op->args[0]);
                 ConstantInterval cb = recurse(op->args[1]);
                 ConstantInterval cq = recurse(op->args[2]);
                 ConstantInterval rounding_term = 1 << (cq - 1);
-                return cast(op->type, (ca * cb + rounding_term) >> cq);
+                return (ca * cb + rounding_term) >> cq;
             }
             // If you add a new intrinsic here, also add it to the expression
             // generator in test/correctness/lossless_cast.cpp
@@ -160,15 +134,19 @@ ConstantInterval bounds_helper(const Expr &e,
         return ConstantInterval::bounds_of_type(e.type());
     };
 
+    auto get_typed_bounds = [&]() {
+        return cast(e.type(), get_infinite_bounds());
+    };
+
     ConstantInterval ret;
     if (cache) {
         auto [it, cache_miss] = cache->try_emplace(e);
         if (cache_miss) {
-            it->second = get_bounds();
+            it->second = get_typed_bounds();
         }
         ret = it->second;
     } else {
-        ret = get_bounds();
+        ret = get_typed_bounds();
     }
 
     internal_assert((!ret.min_defined || e.type().can_represent(ret.min)) &&
