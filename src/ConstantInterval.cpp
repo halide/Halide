@@ -82,8 +82,9 @@ void ConstantInterval::include(int64_t x) {
 }
 
 bool ConstantInterval::contains(int64_t x) const {
-    return !((min_defined && x < min) ||
-             (max_defined && x > max));
+    const bool too_small = min_defined && x < min;
+    const bool too_large = max_defined && x > max;
+    return !(too_small || too_large);
 }
 
 bool ConstantInterval::contains(int32_t x) const {
@@ -92,8 +93,12 @@ bool ConstantInterval::contains(int32_t x) const {
 
 bool ConstantInterval::contains(uint64_t x) const {
     if (x <= (uint64_t)std::numeric_limits<int64_t>::max()) {
+        // Representable as an int64_t, so just defer to that method.
         return contains((int64_t)x);
     } else {
+        // This uint64_t is not representable as an int64_t, which means it's
+        // greater than 2^32 - 1. Given that we can't represent that as a bound,
+        // the best we can do is checking if the interval is unbounded above.
         return !max_defined;
     }
 }
@@ -129,6 +134,9 @@ ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a,
         result.max_defined = b.max_defined;
         result.max = b.max;
     }
+    // Our class invariant is that whenever they're both defined, min <=
+    // max. Intersection is the only method that could break that, and it
+    // happens when the intersected intervals do not overlap.
     internal_assert(!result.is_bounded() || result.min <= result.max)
         << "Empty ConstantInterval constructed in make_intersection";
     return result;
@@ -357,6 +365,9 @@ ConstantInterval operator/(const ConstantInterval &a, const ConstantInterval &b)
         result.max = 0;
     }
 
+    // Check the class invariant as a sanity check.
+    internal_assert(!result.is_bounded() || (result.min <= result.max));
+
     return result;
 }
 
@@ -429,6 +440,9 @@ ConstantInterval operator*(const ConstantInterval &a, const ConstantInterval &b)
         result.max = 0;
     }
 
+    // Check the class invariant as a sanity check.
+    internal_assert(!result.is_bounded() || (result.min <= result.max));
+
     return result;
 }
 
@@ -464,6 +478,9 @@ ConstantInterval operator%(const ConstantInterval &a, const ConstantInterval &b)
             result.max = a.max;
         }
     }
+
+    // Check the class invariant as a sanity check.
+    internal_assert(!result.is_bounded() || (result.min <= result.max));
 
     return result;
 }
