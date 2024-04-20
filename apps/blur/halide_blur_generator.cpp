@@ -86,6 +86,8 @@ public:
             const int vector_size = 128;
 
             blur_y.compute_root()
+                .hexagon()
+                .prefetch(input, y, y, 2)
                 .split(y, y, yi, 128)
                 .parallel(y)
                 .vectorize(x, vector_size * 2);
