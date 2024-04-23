@@ -261,7 +261,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         if (f.info.old_uses) {
             unused_vars.insert(f.op->name);
         }
-        if (f.info.new_uses) {
+        if (f.info.new_uses && f.new_value.defined() && !f.info.replacement.is_sole_reference()) {
             unused_vars.insert(f.new_name);
         }
     }
