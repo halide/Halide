@@ -114,37 +114,37 @@ $(BIN)/%/thread_pool.o: thread_pool.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c thread_pool.cpp -o $@
 
-$(BIN)/%/halide_remote.o: halide_remote.cpp known_symbols.h $(BIN)/src/halide_hexagon_remote.h
+$(BIN)/%/halide_remote.o: qurt/halide_remote.cpp qurt/known_symbols.h $(BIN)/src/halide_hexagon_remote.h
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -fPIC -c halide_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -fPIC -c qurt/halide_remote.cpp -o $@
 
-$(BIN)/%/host_malloc.o: host_malloc.cpp
+$(BIN)/%/host_malloc.o: android/host_malloc.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c host_malloc.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c android/host_malloc.cpp -o $@
 
-$(BIN)/%/libadsprpc_shim.o: libadsprpc_shim.cpp
+$(BIN)/%/libadsprpc_shim.o: android/libadsprpc_shim.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c libadsprpc_shim.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c android/libadsprpc_shim.cpp -o $@
 
-$(BIN)/%/host_shim.o: host_shim.cpp $(BIN)/src/halide_hexagon_remote.h
+$(BIN)/%/host_shim.o: android/host_shim.cpp $(BIN)/src/halide_hexagon_remote.h
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -fPIC -c host_shim.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -fPIC -c android/host_shim.cpp -o $@
 
-$(BIN)/%/known_symbols.o: known_symbols.cpp
+$(BIN)/%/known_symbols.o: qurt/known_symbols.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c known_symbols.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c qurt/known_symbols.cpp -o $@
 
-$(BIN)/%/nearbyint.o: nearbyint.cpp
+$(BIN)/%/nearbyint.o: qurt/nearbyint.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c nearbyint.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c qurt/nearbyint.cpp -o $@
 
-$(BIN)/%/c11_stubs.o: c11_stubs.cpp
+$(BIN)/%/c11_stubs.o: qurt/c11_stubs.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c c11_stubs.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c qurt/c11_stubs.cpp -o $@
 
-$(BIN)/%/log.o: log.cpp
+$(BIN)/%/log.o: qurt/log.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c log.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c qurt/log.cpp -o $@
 
 # Build rules for the hexagon implementation.
 $(BIN)/%/libhalide_hexagon_remote_skel.so: $(BIN)/%/halide_remote.o $(BIN)/%/halide_hexagon_remote_skel.o $(BIN)/%/nearbyint.o $(BIN)/%/c11_stubs.o $(BIN)/%/log.o $(BIN)/%/known_symbols.o
@@ -170,21 +170,21 @@ $(BIN)/adsp/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bi
 	$(CC-$*) $^ $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@  -ladsprpc
 
 # Build rules for the simulator implementation.
-$(BIN)/%/sim_remote.o: sim_remote.cpp sim_protocol.h known_symbols.h $(BIN)/src/halide_hexagon_remote.h
+$(BIN)/%/sim_remote.o: qurt/sim_remote.cpp sim_protocol.h qurt/known_symbols.h $(BIN)/src/halide_hexagon_remote.h
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -c sim_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -I$(BIN)/.. -c qurt/sim_remote.cpp -o $@
 
 $(BIN)/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
 	$(CXX-$*) -std=c++17 $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
-$(BIN)/%/sim_qurt.o: sim_qurt.cpp
+$(BIN)/%/sim_qurt.o: qurt/sim_qurt.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -c sim_qurt.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -c qurt/sim_qurt.cpp -o $@
 
-$(BIN)/%/sim_qurt_vtcm.o: sim_qurt_vtcm.cpp
+$(BIN)/%/sim_qurt_vtcm.o: qurt/sim_qurt_vtcm.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -c sim_qurt_vtcm.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -c qurt/sim_qurt_vtcm.cpp -o $@
 
 $(BIN)/%/libsim_qurt.a: $(BIN)/%/sim_qurt.o $(BIN)/%/sim_qurt_vtcm.o
 	mkdir -p $(@D)
