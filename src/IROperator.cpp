@@ -863,8 +863,8 @@ Tuple halide_extended_exp(const Expr &x_full) {
     Expr scaled = x_full * one_over_ln2;
     Expr k_real = floor(scaled);
 
-    Expr x = strict_float(x_full - k_real * ln2_part1);
-    x = strict_float(x - k_real * ln2_part2);
+    Expr x = x_full - k_real * ln2_part1;
+    x = x - k_real * ln2_part2;
 
     float coeff[] = {
         0.00031965933071842413f,
