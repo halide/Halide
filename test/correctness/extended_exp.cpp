@@ -115,5 +115,5 @@ int main(int argc, char **argv) {
     two_pass_softmax_test(-10000.0f);
     two_pass_softmax_test(std::numeric_limits<float>::max());
     two_pass_softmax_test(std::numeric_limits<float>::lowest());
-    std::cout << "Success\n";
+    std::cout << "Success!\n";
 }
