@@ -131,6 +131,30 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         // dispatch, there is no need to complicate things with packoffset.
     }
 
+    // TODO(soufianekhiat):
+    //  Add support for HLSL 6.6:
+    //      Type:
+    //          uint8_t4_packed   // 4 packed uint8_t values in a uint32_t
+    //          int8_t4_packed  // 4 packed int8_t values in a uint32_t
+    //      Intrinsics:
+    //          int16_t4 unpack_s8s16(int8_t4_packed packedVal);        // Sign Extended
+    //          uint16_t4 unpack_u8u16(uint8_t4_packed packedVal);      // Non-Sign Extended
+    //
+    //          int32_t4 unpack_s8s32(int8_t4_packed packedVal);        // Sign Extended
+    //          uint32_t4 unpack_u8u32(uint8_t4_packed packedVal);      // Non-Sign Extended
+    //  And:
+    //          uint8_t4_packed pack_u8(uint32_t4 unpackedVal);         // Pack lower 8 bits, drop unused bits
+    //          int8_t4_packed pack_s8(int32_t4 unpackedVal);           // Pack lower 8 bits, drop unused bits
+    //
+    //          uint8_t4_packed pack_u8(uint16_t4 unpackedVal);         // Pack lower 8 bits, drop unused bits
+    //          int8_t4_packed pack_s8(int16_t4 unpackedVal);           // Pack lower 8 bits, drop unused bits
+    //
+    //          uint8_t4_packed pack_clamp_u8(int32_t4 unpackedVal);    // Pack and Clamp [0, 255]
+    //          int8_t4_packed pack_clamp_s8(int32_t4 unpackedVal);     // Pack and Clamp [-128, 127]
+    //
+    //          uint8_t4_packed pack_clamp_u8(int16_t4 unpackedVal);    // Pack and Clamp [0, 255]
+    //          int8_t4_packed pack_clamp_s8(int16_t4 unpackedVal);     // Pack and Clamp [-128, 127]
+
     if (type.is_float()) {
         switch (type.bits()) {
         case 16:
@@ -1354,9 +1378,12 @@ void CodeGen_D3D12Compute_Dev::init_module() {
     else {
         // HLSL 6.x: Still a proposal https://microsoft.github.io/hlsl-specs/proposals/0003-numeric-constants.html
         src_stream
+            // NOTE(soufianekhiat): cf. https://github.com/microsoft/hlsl-specs/issues/210
             << "float nan_f32()     { return  1.0f/0.0f; } \n"
-            << "float neg_inf_f32() { return -1.e1000f; } \n"
-            << "float inf_f32()     { return +1.e1000f; } \n";
+            << "float neg_inf_f32() { return -1.#INF; } \n"
+            << "float inf_f32()     { return +1.#INF; } \n";
+            //<< "float neg_inf_f32() { return -1.e1000f; } \n"
+            //<< "float inf_f32()     { return +1.e1000f; } \n";
     }
     src_stream
         << "#define is_inf_f32     isinf    \n"
