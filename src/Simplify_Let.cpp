@@ -254,7 +254,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
     // - unused_vars avoids dead lets being generated in cases where vars are
     //   seen as used by var_info, and then later removed.
 
-    std::unordered_set<std::string> unused_vars(frames.size() * 2);
+    std::unordered_set<std::string> unused_vars(frames.size());
     // Insert everything we think *might* be used, and then visit the body,
     // removing things from the set as we find uses of them.
     for (auto &f : frames) {
@@ -269,9 +269,9 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         }
         var_info.pop(f.op->name);
         if (f.info.old_uses) {
+            internal_assert(f.info.new_uses == 0);
             unused_vars.insert(f.op->name);
-        }
-        if (f.info.new_uses && f.new_value.defined()) {
+        } else if (f.info.new_uses && f.new_value.defined()) {
             unused_vars.insert(f.new_name);
         }
     }
