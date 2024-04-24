@@ -79,10 +79,10 @@ void two_pass_softmax_test(float scale) {
     float sum_probability = ((Buffer<float> &)output[3])();
 
     std::cout << "Two pass softmax with scale " << scale
-	      << "\nMax relative error: " << max_relative_error_result
-	      << "\nmax probability: " << max_probability
-	      << "\nmin probability: " << min_probability
-	      << "\nsum of probabilities: " << sum_probability << "\n";
+              << "\nMax relative error: " << max_relative_error_result
+              << "\nmax probability: " << max_probability
+              << "\nmin probability: " << min_probability
+              << "\nsum of probabilities: " << sum_probability << "\n";
     
     if (max_relative_error_result > .0001f) {
         std::cout << "Failed: Softmax results do not match.\n";
@@ -95,15 +95,16 @@ void expect(float x, float mantissa, float exponent) {
     float computed_exponent;
     evaluate(halide_extended_exp(x), &computed_mantissa, &computed_exponent);
     if (fabs(computed_mantissa) > exp(1.0f)) {
-      std::cout << "Mantissa large for x " << x << " mantissa " << computed_mantissa << " exponent " << computed_exponent << "\n";
+        std::cout << "Mantissa large for x " << x << " mantissa " << computed_mantissa
+		  << " exponent " << computed_exponent << "\n";
     }
     if (fabs(mantissa - computed_mantissa) > .00001 ||
-	fabs(exponent - computed_exponent) > .00001) {
+        fabs(exponent - computed_exponent) > .00001) {
         std::cout << "Falied: halide_extended_exp(" << x << ") == {"
-		  << computed_mantissa << ", " << computed_exponent
-		  << "} expected {"
-		  << mantissa << ", " << exponent << "}\n";
-	exit(1);
+                  << computed_mantissa << ", " << computed_exponent
+                  << "} expected {"
+                  << mantissa << ", " << exponent << "}\n";
+        exit(1);
     }
 }
 
