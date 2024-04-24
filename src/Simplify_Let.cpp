@@ -67,7 +67,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
     // the call stack where it could overflow onto an explicit stack.
     struct Frame {
         const LetOrLetStmt *op;
-        Expr value, new_value;
+        Expr value, new_value, new_var;
         string new_name;
         bool new_value_alignment_tracked = false, new_value_bounds_tracked = false;
         bool value_alignment_tracked = false, value_bounds_tracked = false;
@@ -208,6 +208,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
             // Nothing to substitute
             f.new_value = Expr();
             replacement = Expr();
+            new_var = Expr();
         } else {
             debug(4) << "new let " << f.new_name << " = " << f.new_value << " in ... " << replacement << " ...\n";
         }
@@ -216,6 +217,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
         info.old_uses = 0;
         info.new_uses = 0;
         info.replacement = replacement;
+        f.new_var = new_var;
 
         var_info.push(op->name, info);
 
@@ -257,11 +259,19 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
     // removing things from the set as we find uses of them.
     for (auto &f : frames) {
         f.info = var_info.get(f.op->name);
+        // Drop any reference to new_var held by the replacement expression so
+        // that the only references are either f.new_var, or ones in the body or
+        // new_values of other lets.
+        f.info.replacement = Expr();
+        if (f.new_var.is_sole_reference()) {
+            // Any new_uses must have been eliminated by later mutations.
+            f.info.new_uses = 0;
+        }
         var_info.pop(f.op->name);
         if (f.info.old_uses) {
             unused_vars.insert(f.op->name);
         }
-        if (f.info.new_uses && f.new_value.defined() && !f.info.replacement.is_sole_reference()) {
+        if (f.info.new_uses && f.new_value.defined()) {
             unused_vars.insert(f.new_name);
         }
     }
