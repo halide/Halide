@@ -852,6 +852,36 @@ Expr halide_exp(const Expr &x_full) {
     return result;
 }
 
+Tuple halide_extended_exp(const Expr &x_full) {
+    Type type = x_full.type();
+    internal_assert(type.element_of() == Float(32));
+
+    float ln2_part1 = 0.6931457519f;
+    float ln2_part2 = 1.4286067653e-6f;
+    float one_over_ln2 = 1.0f / logf(2.0f);
+
+    Expr scaled = x_full * one_over_ln2;
+    Expr k_real = floor(scaled);
+
+    Expr x = x_full - k_real * ln2_part1;
+    x -= k_real * ln2_part2;
+
+    float coeff[] = {
+        0.00031965933071842413f,
+        0.00119156835564003744f,
+        0.00848988645943932717f,
+        0.04160188091348320655f,
+        0.16667983794100929562f,
+        0.49999899033463041098f,
+        1.0f,
+        1.0f};
+    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff) / sizeof(coeff[0]));
+
+    result = common_subexpression_elimination(result);
+
+    return {result, k_real};
+}
+
 Expr halide_erf(const Expr &x_full) {
     user_assert(x_full.type() == Float(32)) << "halide_erf only works for Float(32)";
 
