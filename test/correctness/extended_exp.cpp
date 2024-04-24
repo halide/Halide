@@ -15,7 +15,7 @@ using Halide::Internal::halide_extended_exp;
 void two_pass_softmax_test(float scale) {
     Var x("x");
     RDom r(0, 1024);
-    
+
     Func input("input");
     input(x) = 0.0f;
     input(r) = random_float();
@@ -43,26 +43,17 @@ void two_pass_softmax_test(float scale) {
     Expr lambda = 1 / extended_exp_sum()[0];
     Func two_pass_softmax("two_pass_softmax");
     two_pass_softmax(x) = in_extended_exp(x)[0] * lambda * pow(2, in_extended_exp(x)[1] - extended_exp_sum()[1]);
-    
+
     Func relative_error("relative_error");
     relative_error(x) = abs(naive_softmax(x) - two_pass_softmax(x)) / naive_softmax(x);
     Func max_relative_error("max_relative_error");
     max_relative_error() = maximum(relative_error(r));
-#if 1
     Func max_prob("max_prob");
     max_prob() = maximum(two_pass_softmax(r));
     Func min_prob("min_prob");
     min_prob() = minimum(two_pass_softmax(r));
     Func sum_prob("sum_prob");
     sum_prob() = sum(two_pass_softmax(r));
-#else
-    Func max_prob("max_prob");
-    max_prob() = maximum(naive_softmax(r));
-    Func min_prob("min_prob");
-    min_prob() = minimum(naive_softmax(r));
-    Func sum_prob("sum_prob");
-    sum_prob() = sum(naive_softmax(r));
-#endif
 
     Func result("result");
     result() = Tuple(max_relative_error(), max_prob(), min_prob(), sum_prob());
@@ -83,7 +74,7 @@ void two_pass_softmax_test(float scale) {
               << "\nmax probability: " << max_probability
               << "\nmin probability: " << min_probability
               << "\nsum of probabilities: " << sum_probability << "\n";
-    
+
     if (max_relative_error_result > .0001f) {
         std::cout << "Failed: Softmax results do not match.\n";
         exit(1);
@@ -96,7 +87,7 @@ void expect(float x, float mantissa, float exponent) {
     evaluate(halide_extended_exp(x), &computed_mantissa, &computed_exponent);
     if (fabs(computed_mantissa) > exp(1.0f)) {
         std::cout << "Mantissa large for x " << x << " mantissa " << computed_mantissa
-		  << " exponent " << computed_exponent << "\n";
+                  << " exponent " << computed_exponent << "\n";
     }
     if (fabs(mantissa - computed_mantissa) > .00001 ||
         fabs(exponent - computed_exponent) > .00001) {
