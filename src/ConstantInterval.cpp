@@ -609,8 +609,9 @@ ConstantInterval operator<<(const ConstantInterval &a, const ConstantInterval &b
     // if b = [-4, 8],   b_pos = [0, 8]   and b_neg = [0, 4]
     // if b = [-10, -3], b_pos = [0, 0]   and b_neg = [3, 10]
     // if b = [-3, inf], b_pos = [0, inf] and b_neg = [0, 3]
-    // In all cases, note that b_pos - b_neg = b by our definition of - for
-    // ConstantIntervals above.
+    // In all cases, note that b_pos - b_neg = b by our definition of operator-
+    // for ConstantIntervals above (ignoring corner cases, for which b_pos -
+    // b_neg safely over-approximates the bounds of b).
 
     auto two_to_the = [](const ConstantInterval &i) {
         const int64_t one = 1;
