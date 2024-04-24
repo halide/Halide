@@ -73,21 +73,25 @@ protected:
                 simplified.as<IntImm>()) {
                 // The RHS collapsed to just a Var or a constant, so uses of
                 // this should be rewritten to that value and we should drop
-                // this let.
+                // this let. The LetStmts at this point in lowering that we're
+                // trying to remove are generally bounds inference expressions,
+                // so it's not worth checking for other types of constant.
                 rewrites[op->name] = simplified;
                 should_erase = true;
             } else {
-                auto iter = scope.find(value);
-                if (iter == scope.end()) {
-                    // The mutate implementation above checks Exprs
-                    // post-mutation but without simplification, so we should
-                    // put the unsimplified version of the Expr into the scope.
-                    scope[value] = Variable::make(value.type(), op->name);
+                Expr var = Variable::make(value.type(), op->name);
+
+                // The mutate implementation above checks Exprs
+                // post-mutation but without simplification, so we should
+                // put the unsimplified version of the Expr into the scope.
+                auto [it, inserted] = scope.emplace(value, var);
+
+                if (inserted) {
                     should_pop = true;
                 } else {
                     // We have the same RHS as some earlier Let
-                    rewrites[op->name] = iter->second;
                     should_erase = true;
+                    rewrites[op->name] = it->second;
                 }
             }
         }
