@@ -84,7 +84,7 @@ protected:
                 // The mutate implementation above checks Exprs
                 // post-mutation but without simplification, so we should
                 // put the unsimplified version of the Expr into the scope.
-                auto [it, inserted] = scope.emplace(value, var);
+                auto [it, inserted] = scope.emplace(value, std::move(var));
 
                 if (inserted) {
                     should_pop = true;
