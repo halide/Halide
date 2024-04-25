@@ -58,6 +58,7 @@ tests(GROUPS correctness
       computed_index.cpp
       concat.cpp
       constant_expr.cpp
+      constant_interval.cpp
       constant_type.cpp
       constraints.cpp
       convolution_multiple_kernels.cpp
