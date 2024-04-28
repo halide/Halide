@@ -759,16 +759,16 @@ class Interleaver : public IRMutator {
         Expr predicate = Shuffle::make_interleave(predicates);
         Stmt new_store = Store::make(store->name, value, index, store->param, predicate, ModulusRemainder());
 
-        // Continue recursively into the stuff that
-        // collect_strided_stores didn't collect.
-        Stmt stmt = Block::make(new_store, mutate(rest));
-
         // Rewrap the let statements we pulled off.
         while (!let_stmts.empty()) {
             const LetStmt *let = let_stmts.back().as<LetStmt>();
-            stmt = LetStmt::make(let->name, let->value, stmt);
+            new_store = LetStmt::make(let->name, let->value, new_store);
             let_stmts.pop_back();
         }
+
+        // Continue recursively into the stuff that
+        // collect_strided_stores didn't collect.
+        Stmt stmt = Block::make(new_store, mutate(rest));
 
         // Success!
         return stmt;
@@ -836,7 +836,7 @@ void deinterleave_vector_test() {
           Shuffle::make({vec_x, vec_y}, {0, 2, 4, 3, 1, 3}),
           Shuffle::make({vec_x, vec_y}, {4, 6, 2, 7, 2, 4}));
 
-    std::cout << "deinterleave_vector test passed" << std::endl;
+    std::cout << "deinterleave_vector test passed\n";
 }
 
 }  // namespace Internal

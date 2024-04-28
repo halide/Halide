@@ -973,11 +973,15 @@ using GeneratorParamImplBase =
  *   "int8"     Halide::Int(8)
  *   "int16"    Halide::Int(16)
  *   "int32"    Halide::Int(32)
+ *   "int64"    Halide::Int(64)
  *   "uint8"    Halide::UInt(8)
  *   "uint16"   Halide::UInt(16)
  *   "uint32"   Halide::UInt(32)
+ *   "uint64"   Halide::UInt(64)
+ *   "float16"  Halide::Float(16)
  *   "float32"  Halide::Float(32)
  *   "float64"  Halide::Float(64)
+ *   "bfloat16"  Halide::BFloat(16)
  *
  * No vector Types are currently supported by this mapping.
  *
@@ -1644,15 +1648,15 @@ public:
 // types in question satisfy the property of copies referring to the same underlying
 // structure (returning references is just an optimization). Since this is verbose
 // and used in several places, we'll use a helper macro:
-#define HALIDE_FORWARD_METHOD(Class, Method)                                                                                                        \
-    template<typename... Args>                                                                                                                      \
-    inline auto Method(Args &&...args)->typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
-        return this->template as<Class>().Method(std::forward<Args>(args)...);                                                                      \
+#define HALIDE_FORWARD_METHOD(Class, Method)                                                                                                          \
+    template<typename... Args>                                                                                                                        \
+    inline auto Method(Args &&...args) -> typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
+        return this->template as<Class>().Method(std::forward<Args>(args)...);                                                                        \
     }
 
 #define HALIDE_FORWARD_METHOD_CONST(Class, Method)                                                                  \
     template<typename... Args>                                                                                      \
-    inline auto Method(Args &&...args) const->                                                                      \
+    inline auto Method(Args &&...args) const ->                                                                     \
         typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
         this->check_gio_access();                                                                                   \
         return this->template as<Class>().Method(std::forward<Args>(args)...);                                      \
@@ -2001,7 +2005,8 @@ protected:
 
     void set_def_min_max() override {
         for (Parameter &p : this->parameters_) {
-            p.set_scalar<TBase>(def_);
+            // No: we want to leave the Parameter unset here.
+            // p.set_scalar<TBase>(def_);
             p.set_default_value(def_expr_);
         }
     }
@@ -2275,6 +2280,8 @@ public:
     HALIDE_FORWARD_METHOD(Func, align_bounds)
     HALIDE_FORWARD_METHOD(Func, align_extent)
     HALIDE_FORWARD_METHOD(Func, align_storage)
+    HALIDE_FORWARD_METHOD(Func, always_partition)
+    HALIDE_FORWARD_METHOD(Func, always_partition_all)
     HALIDE_FORWARD_METHOD_CONST(Func, args)
     HALIDE_FORWARD_METHOD(Func, bound)
     HALIDE_FORWARD_METHOD(Func, bound_extent)
@@ -2298,9 +2305,12 @@ public:
     HALIDE_FORWARD_METHOD(Func, hexagon)
     HALIDE_FORWARD_METHOD(Func, in)
     HALIDE_FORWARD_METHOD(Func, memoize)
+    HALIDE_FORWARD_METHOD(Func, never_partition)
+    HALIDE_FORWARD_METHOD(Func, never_partition_all)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD(Func, parallel)
+    HALIDE_FORWARD_METHOD(Func, partition)
     HALIDE_FORWARD_METHOD(Func, prefetch)
     HALIDE_FORWARD_METHOD(Func, print_loop_nest)
     HALIDE_FORWARD_METHOD(Func, rename)
@@ -3051,6 +3061,7 @@ protected:
     using LoopLevel = Halide::LoopLevel;
     using MemoryType = Halide::MemoryType;
     using NameMangling = Halide::NameMangling;
+    using Partition = Halide::Partition;
     using Pipeline = Halide::Pipeline;
     using PrefetchBoundStrategy = Halide::PrefetchBoundStrategy;
     using RDom = Halide::RDom;
@@ -3689,6 +3700,7 @@ public:
     void bind_input(const std::string &name, const std::vector<Expr> &v) override;
 
     bool emit_cpp_stub(const std::string &stub_file_path) override;
+    bool emit_hlpipe(const std::string &hlpipe_file_path) override;
 
     GeneratorBase(const GeneratorBase &) = delete;
     GeneratorBase &operator=(const GeneratorBase &) = delete;
@@ -3921,7 +3933,7 @@ struct ExecuteGeneratorArgs {
         Default,
 
         // Build a version suitable for using for gradient descent calculation.
-        Gradient
+        Gradient,
     } build_mode = Default;
 
     // The fn that will produce Generator(s) from the name specified.

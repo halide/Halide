@@ -45,7 +45,7 @@ add_app(depthwise_separable_conv)
 add_app(fft)
 add_app(hannk)
 add_app(harris)
-# add_app(hexagon_benchmarks)  # TODO(#5374): missing CMake build
+add_app(hexagon_benchmarks)
 # add_app(hexagon_dma)  # TODO(#5374): missing CMake build
 add_app(hist)
 add_app(iir_blur)
@@ -58,7 +58,6 @@ add_app(max_filter)
 add_app(nl_means)
 # add_app(nn_ops)  # TODO(#5374): missing CMake build
 # add_app(onnx)  # TODO(#5374): missing CMake build
-# add_app(openglcompute)  # TODO(#5374): missing CMake build
 add_app(resize)
 # add_app(resnet_50)  # TODO(#5374): missing CMake build
 # add_app(simd_op_check)  # TODO(#5374): missing CMake build

@@ -3,9 +3,10 @@
 #include <string>
 
 #include "CodeGen_Internal.h"
-#include "ExprUsesVar.h"
+#include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "InjectHostDevBufferCopies.h"
 #include "Profiling.h"
 #include "Scope.h"
 #include "Simplify.h"
@@ -70,13 +71,14 @@ public:
     vector<int> stack;  // What produce nodes are we currently inside of.
 
     string pipeline_name;
+    const map<string, Function> &env;
 
     bool in_fork = false;
     bool in_parallel = false;
     bool in_leaf_task = false;
 
-    InjectProfiling(const string &pipeline_name)
-        : pipeline_name(pipeline_name) {
+    InjectProfiling(const string &pipeline_name, const map<string, Function> &env)
+        : pipeline_name(pipeline_name), env(env) {
         stack.push_back(get_func_id("overhead"));
         // ID 0 is treated specially in the runtime as overhead
         internal_assert(stack.back() == 0);
@@ -118,10 +120,28 @@ private:
     bool profiling_memory = true;
 
     // Strip down the tuple name, e.g. f.0 into f
-    string normalize_name(const string &name) {
-        vector<string> v = split_string(name, ".");
-        internal_assert(!v.empty());
-        return v[0];
+    string normalize_name(const string &name) const {
+        size_t idx = name.find('.');
+        if (idx != std::string::npos) {
+            internal_assert(idx != 0);
+            return name.substr(0, idx);
+        } else {
+            return name;
+        }
+    }
+
+    Function lookup_function(const string &name) const {
+        auto it = env.find(name);
+        if (it != env.end()) {
+            return it->second;
+        }
+        string norm_name = normalize_name(name);
+        it = env.find(norm_name);
+        if (it != env.end()) {
+            return it->second;
+        }
+        internal_error << "No function in the environment found for name '" << name << "'.\n";
+        return {};
     }
 
     int get_func_id(const string &name) {
@@ -184,7 +204,6 @@ private:
     }
 
     Stmt visit(const Allocate *op) override {
-        int idx = get_func_id(op->name);
 
         auto [new_extents, changed] = mutate_with_changes(op->extents);
         Expr condition = mutate(op->condition);
@@ -198,6 +217,13 @@ private:
         // always conditionally false. remove_dead_allocations() is called after
         // inject_profiling() so this is a possible scenario.
         if (!is_const_zero(size) && on_stack) {
+            int idx;
+            Function func = lookup_function(op->name);
+            if (func.should_not_profile()) {
+                idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
+            } else {
+                idx = get_func_id(op->name);
+            }
             const uint64_t *int_size = as_const_uint(size);
             internal_assert(int_size != nullptr);  // Stack size is always a const int
             func_stack_current[idx] += *int_size;
@@ -211,6 +237,7 @@ private:
         vector<Stmt> tasks;
         bool track_heap_allocation = !is_const_zero(size) && !on_stack && profiling_memory;
         if (track_heap_allocation) {
+            int idx = get_func_id(op->name);
             debug(3) << "  Allocation on heap: " << op->name
                      << "(" << size << ") in pipeline "
                      << pipeline_name << "\n";
@@ -244,8 +271,6 @@ private:
     }
 
     Stmt visit(const Free *op) override {
-        int idx = get_func_id(op->name);
-
         AllocSize alloc = func_alloc_sizes.get(op->name);
         internal_assert(alloc.size.type() == UInt(64));
         func_alloc_sizes.pop(op->name);
@@ -255,6 +280,7 @@ private:
         if (!is_const_zero(alloc.size)) {
             if (!alloc.on_stack) {
                 if (profiling_memory) {
+                    int idx = get_func_id(op->name);
                     debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
 
                     vector<Stmt> tasks{
@@ -270,6 +296,13 @@ private:
                 const uint64_t *int_size = as_const_uint(alloc.size);
                 internal_assert(int_size != nullptr);
 
+                int idx;
+                Function func = lookup_function(op->name);
+                if (func.should_not_profile()) {
+                    idx = stack.back();  // Attribute the stack size contribution to the deepest _profiled_ func.
+                } else {
+                    idx = get_func_id(op->name);
+                }
                 func_stack_current[idx] -= *int_size;
                 debug(3) << "  Free on stack: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name
                          << "; current: " << func_stack_current[idx] << "; peak: " << func_stack_peak[idx] << "\n";
@@ -282,11 +315,19 @@ private:
         int idx;
         Stmt body;
         if (op->is_producer) {
-            idx = get_func_id(op->name);
-            stack.push_back(idx);
-            Stmt set_current = set_current_func(idx);
-            body = Block::make(set_current, mutate(op->body));
-            stack.pop_back();
+            Function func = lookup_function(op->name);
+            if (func.should_not_profile()) {
+                body = mutate(op->body);
+                if (body.same_as(op->body)) {
+                    return op;
+                }
+            } else {
+                idx = get_func_id(op->name);
+                stack.push_back(idx);
+                Stmt set_current = set_current_func(idx);
+                body = Block::make(set_current, mutate(op->body));
+                stack.pop_back();
+            }
         } else {
             // At the beginning of the consume step, set the current task
             // back to the outer one.
@@ -396,7 +437,7 @@ private:
             most_recently_set_func = -1;
         }
 
-        Stmt stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        Stmt stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
 
         if (update_active_threads) {
             stmt = suspend_thread(stmt, profiler_state);
@@ -422,12 +463,83 @@ private:
         }
         return IfThenElse::make(std::move(condition), std::move(then_case), std::move(else_case));
     }
+
+    Stmt visit(const LetStmt *op) override {
+        if (const Call *call = op->value.as<Call>()) {
+            Stmt start_profiler;
+            if (call->name == "halide_copy_to_host" || call->name == "halide_copy_to_device") {
+                std::string buffer_name;
+                if (const Variable *var = call->args.front().as<Variable>()) {
+                    buffer_name = var->name;
+                    if (ends_with(buffer_name, ".buffer")) {
+                        buffer_name = buffer_name.substr(0, buffer_name.size() - 7);
+                    } else {
+                        internal_error << "Expected to find a variable ending in .buffer as first argument to function call " << call->name << "\n";
+                    }
+                } else {
+                    internal_error << "Expected to find a variable as first argument of the function call " << call->name << ".\n";
+                }
+                bool requires_sync = false;
+                if (call->name == "halide_copy_to_host") {
+                    int copy_to_host_id = get_func_id(buffer_name + " (copy to host)");
+                    start_profiler = set_current_func(copy_to_host_id);
+                    requires_sync = false;
+                } else if (call->name == "halide_copy_to_device") {
+                    int copy_to_device_id = get_func_id(buffer_name + " (copy to device)");
+                    start_profiler = set_current_func(copy_to_device_id);
+                    requires_sync = true;
+                } else {
+                    internal_error << "Unexpected function name.\n";
+                }
+                if (start_profiler.defined()) {
+                    // The copy functions are followed by an assert, which we will wrap in the timed body.
+                    const AssertStmt *copy_assert = nullptr;
+                    Stmt other;
+                    if (const Block *block = op->body.as<Block>()) {
+                        if (const AssertStmt *assert = block->first.as<AssertStmt>()) {
+                            copy_assert = assert;
+                            other = block->rest;
+                        }
+                    } else if (const AssertStmt *assert = op->body.as<AssertStmt>()) {
+                        copy_assert = assert;
+                    }
+                    if (copy_assert) {
+                        std::vector<Stmt> steps;
+                        steps.push_back(AssertStmt::make(copy_assert->condition, copy_assert->message));
+                        if (requires_sync) {
+                            internal_assert(call->name == "halide_copy_to_device");
+                            Expr device_interface = call->args.back();  // The last argument to the copy_to_device calls is the device_interface.
+                            Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
+                            steps.push_back(sync_and_assert);
+                        }
+                        steps.push_back(set_current_func(stack.back()));
+
+                        if (other.defined()) {
+                            steps.push_back(mutate(other));
+                        }
+                        return Block::make(start_profiler,
+                                           LetStmt::make(op->name, mutate(op->value),
+                                                         Block::make(steps)));
+                    } else {
+                        internal_error << "No assert found after buffer copy.\n";
+                    }
+                }
+            }
+        }
+
+        Stmt body = mutate(op->body);
+        Expr value = mutate(op->value);
+        if (body.same_as(op->body) && value.same_as(op->value)) {
+            return op;
+        }
+        return LetStmt::make(op->name, value, body);
+    }
 };
 
 }  // namespace
 
-Stmt inject_profiling(Stmt s, const string &pipeline_name) {
-    InjectProfiling profiling(pipeline_name);
+Stmt inject_profiling(Stmt s, const string &pipeline_name, const std::map<string, Function> &env) {
+    InjectProfiling profiling(pipeline_name, env);
     s = profiling.mutate(s);
 
     int num_funcs = (int)(profiling.indices.size());

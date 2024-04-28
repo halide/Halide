@@ -40,6 +40,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_device_malloc",
         "halide_device_and_host_malloc",
         "halide_device_sync",
+        "halide_device_sync_global",
         "halide_do_par_for",
         "halide_do_loop_task",
         "halide_do_task",
@@ -63,7 +64,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_memoization_cache_release",
         "halide_cuda_run",
         "halide_opencl_run",
-        "halide_openglcompute_run",
         "halide_metal_run",
         "halide_d3d12compute_run",
         "halide_vulkan_run",
@@ -89,7 +89,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_vtcm_free",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
-        "halide_openglcompute_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_d3d12compute_initialize_kernels",
         "halide_vulkan_initialize_kernels",
@@ -611,7 +610,11 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UseInitArray = true;
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
+#if LLVM_VERSION >= 190
+    options.MCOptions.X86RelaxRelocations = false;
+#else
     options.RelaxELFRelocations = false;
+#endif
     options.MCOptions.ABIName = mabi;
 }
 
@@ -666,12 +669,17 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     bool use_large_code_model = false;
     get_md_bool(module.getModuleFlag("halide_use_large_code_model"), use_large_code_model);
 
+#if LLVM_VERSION >= 180
+    const auto opt_level = llvm::CodeGenOptLevel::Aggressive;
+#else
+    const auto opt_level = llvm::CodeGenOpt::Aggressive;
+#endif
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 /*CPU target=*/"", /*Features=*/"",
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
                                                 use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
-                                                llvm::CodeGenOpt::Aggressive);
+                                                opt_level);
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 

@@ -258,7 +258,7 @@ public:
 
         std::vector<const Variable *> pop_list;
         std::vector<const Variable *> bounds_pop_list;
-        std::vector<Expr> truths, falsehoods;
+        std::set<Expr, IRDeepCompare> truths, falsehoods;
 
         void learn_false(const Expr &fact);
         void learn_true(const Expr &fact);
@@ -352,6 +352,7 @@ public:
     Stmt visit(const Acquire *op);
     Stmt visit(const Fork *op);
     Stmt visit(const Atomic *op);
+    Stmt visit(const HoistedStorage *op);
 
     std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &old_exprs, ExprInfo *bounds);
 };

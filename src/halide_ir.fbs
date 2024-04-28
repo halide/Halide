@@ -1,10 +1,22 @@
 namespace Halide.Serialize;
 
-// This corresponds to the corresponding Halide version.
-file_identifier "HL17";
+// This identifies the serialized data being a Halide pipeline. Should be exactly 4 bytes.
+file_identifier "HLDE";
 
 // File extension of any written files. "hlpipe" stands for Halide Pipeline.
 file_extension "hlpipe";
+
+enum SerializationVersionMajor: int {
+    Value = 18
+}
+enum SerializationVersionMinor: int {
+    // 0 = Unstable
+    // 1 = First stable version
+    Value = 0
+}
+enum SerializationVersionPatch: int {
+    Value = 1
+}
 
 // from src/IR.cpp
 union Stmt {
@@ -24,6 +36,7 @@ union Stmt {
     Acquire,
     Fork,
     Atomic,
+    HoistedStorage,
     UndefinedStmt,
 }
 
@@ -73,13 +86,18 @@ enum ForType: byte {
     GPULane,
 }
 
+enum Partition: byte {
+    Auto,
+    Never,
+    Always,
+}
+
 enum DeviceAPI: byte {
     None,
     Host,
     Default_GPU,
     CUDA,
     OpenCL,
-    OpenGLCompute,
     Metal,
     Hexagon,
     HexagonDma,
@@ -127,6 +145,7 @@ table For {
     min: Expr;
     extent: Expr;
     for_type: ForType;
+    partition_policy: Partition;
     device_api: DeviceAPI;
     body: Stmt;
 }
@@ -230,6 +249,11 @@ table Fork {
 table Atomic {
     producer_name: string;
     mutex_name: string;
+    body: Stmt;
+}
+
+table HoistedStorage {
+    name: string;
     body: Stmt;
 }
 
@@ -490,6 +514,7 @@ table WrapperRef {
 table FuncSchedule {
     store_level: LoopLevel;
     compute_level: LoopLevel;
+    hoist_storage_level: LoopLevel;
     storage_dims: [StorageDim];
     bounds: [Bound];
     estimates: [Bound];
@@ -497,6 +522,7 @@ table FuncSchedule {
     memory_type: MemoryType = Auto;
     memoized: bool;
     async: bool;
+    ring_buffer: Expr;
     memoize_eviction_key: Expr;
 }
 
@@ -513,6 +539,8 @@ enum TailStrategy: ubyte {
     PredicateLoads,
     PredicateStores,
     ShiftInwards,
+    ShiftInwardsAndBlend,
+    RoundUpAndBlend,
     Auto,
 }
 
@@ -544,6 +572,7 @@ table Dim {
     for_type: ForType;
     device_api: DeviceAPI;
     dim_type: DimType;
+    partition_policy: Partition;
 }
 
 enum LoopAlignStrategy: ubyte {
@@ -618,11 +647,18 @@ table Parameter {
     host_alignment: int32;
     buffer_constraints: [BufferConstraint];
     memory_type: MemoryType;
-    data: uint64;
+    scalar_data: uint64 = null;  // Note: it is valid for this to be omitted, even if is_buffer = false.
     scalar_default: Expr;
     scalar_min: Expr;
     scalar_max: Expr;
     scalar_estimate: Expr;
+}
+
+table ExternalParameter {
+    is_buffer: bool;
+    type: Type;
+    dimensions: int32;
+    name: string;
 }
 
 enum ExternFuncArgumentType: ubyte {
@@ -677,6 +713,7 @@ table Func {
     trace_stores: bool = false;
     trace_realizations: bool = false;
     trace_tags: [string];
+    no_profiling: bool = false;
     frozen: bool = false;
 }
 
@@ -686,7 +723,10 @@ table Pipeline {
     requirements: [Stmt];
     func_names_in_order: [string];
     parameters: [Parameter];
+    external_parameters: [ExternalParameter];
     buffers: [Buffer];
+    halide_version: string;
+    serialization_version: string;
 }
 
 root_type Pipeline;

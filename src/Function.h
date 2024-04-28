@@ -17,8 +17,8 @@
 namespace Halide {
 
 struct ExternFuncArgument;
+class Parameter;
 class Tuple;
-
 class Var;
 
 /** An enum to specify calling convention for extern stages. */
@@ -31,7 +31,6 @@ enum class NameMangling {
 namespace Internal {
 
 struct Call;
-class Parameter;
 
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
@@ -89,6 +88,7 @@ public:
                                      bool trace_stores,
                                      bool trace_realizations,
                                      const std::vector<std::string> &trace_tags,
+                                     bool no_profiling,
                                      bool frozen);
 
     /** Get a handle on the halide function contents that this Function
@@ -168,7 +168,12 @@ public:
     int required_dimensions() const;
 
     /** Get the right-hand-side of the pure definition. Returns an
-     * empty vector if there is no pure definition. */
+     * empty vector if there is no pure definition.
+     *
+     * Warning: Any Vars in the Exprs are not qualified with the Func name, so
+     * the Exprs may contain names which collide with names provided by
+     * unique_name.
+     */
     const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition? */
@@ -286,6 +291,12 @@ public:
      * cannot be mutated further. */
     void lock_loop_levels();
 
+    /** Mark the function as too small for meaningful profiling. */
+    void do_not_profile();
+
+    /** Check if the function is marked as one that should not be profiled. */
+    bool should_not_profile() const;
+
     /** Mark function as frozen, which means it cannot accept new
      * definitions. */
     void freeze();
@@ -349,6 +360,8 @@ public:
 std::pair<std::vector<Function>, std::map<std::string, Function>> deep_copy(
     const std::vector<Function> &outputs,
     const std::map<std::string, Function> &env);
+
+extern std::atomic<int> random_variable_counter;
 
 }  // namespace Internal
 }  // namespace Halide

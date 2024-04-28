@@ -221,8 +221,8 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                 }
             }
         } else if (const Variable *op = e.as<Variable>()) {
-            if (monotonic_vectors.contains(op->name)) {
-                return monotonic_vectors.get(op->name);
+            if (const auto *p = monotonic_vectors.find(op->name)) {
+                return *p;
             }
         } else if (const Let *op = e.as<Let>()) {
             auto v = get_extreme_lanes(op->value);
@@ -362,7 +362,7 @@ private:
                 body = acquire_hvx_context(body, target);
                 body = substitute("uses_hvx", true, body);
                 Stmt new_for = For::make(op->name, op->min, op->extent, op->for_type,
-                                         op->device_api, body);
+                                         op->partition_policy, op->device_api, body);
                 Stmt prolog =
                     IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
                 Stmt epilog =
@@ -407,7 +407,7 @@ private:
                 //   halide_qurt_unlock
                 // }
                 s = For::make(op->name, op->min, op->extent, op->for_type,
-                              op->device_api, body);
+                              op->partition_policy, op->device_api, body);
             }
 
             uses_hvx = old_uses_hvx;
@@ -1801,13 +1801,14 @@ string CodeGen_Hexagon::mcpu_tune() const {
 }
 
 string CodeGen_Hexagon::mattrs() const {
-    std::stringstream attrs;
-    attrs << "+hvx-length128b";
-    attrs << ",+long-calls";
+    std::vector<std::string> attrs = {
+        "+hvx-length128b",
+        "+long-calls",
+    };
     if (target.has_feature(Target::HVX)) {
-        attrs << ",+hvxv" << isa_version;
+        attrs.push_back("+hvxv" + std::to_string(isa_version));
     }
-    return attrs.str();
+    return join_strings(attrs, ",");
 }
 
 bool CodeGen_Hexagon::use_soft_float_abi() const {
@@ -2244,10 +2245,9 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         codegen(alloc->body);
 
         // If there was no early free, free it now.
-        if (allocations.contains(alloc->name)) {
-            Allocation alloc_obj = allocations.get(alloc->name);
-            internal_assert(alloc_obj.destructor);
-            trigger_destructor(alloc_obj.destructor_function, alloc_obj.destructor);
+        if (const Allocation *alloc_obj = allocations.find(alloc->name)) {
+            internal_assert(alloc_obj->destructor);
+            trigger_destructor(alloc_obj->destructor_function, alloc_obj->destructor);
 
             allocations.pop(alloc->name);
             sym_pop(alloc->name);

@@ -161,28 +161,16 @@ string CodeGen_PowerPC::mcpu_tune() const {
 }
 
 string CodeGen_PowerPC::mattrs() const {
-    string features;
-    string separator;
-    string enable;
-
-    features += "+altivec";
-    separator = ",";
-
-    enable = target.has_feature(Target::VSX) ? "+" : "-";
-    features += separator + enable + "vsx";
-    separator = ",";
-
-    enable = target.has_feature(Target::POWER_ARCH_2_07) ? "+" : "-";
-    features += separator + enable + "power8-altivec";
-    separator = ",";
-
-    // These move instructions are defined in POWER ISA 2.06 but we do
-    // not check for 2.06 currently.  So disable this for anything
-    // lower than ISA 2.07
-    features += separator + enable + "direct-move";
-    separator = ",";
-
-    return features;
+    std::vector<std::string> attrs = {
+        "+altivec",
+        target.has_feature(Target::VSX) ? "+vsx" : "-vsx",
+        target.has_feature(Target::POWER_ARCH_2_07) ? "+power8-altivec" : "-power8-altivec",
+        // These move instructions are defined in POWER ISA 2.06 but we do
+        // not check for 2.06 currently.  So disable this for anything
+        // lower than ISA 2.07
+        target.has_feature(Target::POWER_ARCH_2_07) ? "+direct-move" : "-direct-move",
+    };
+    return join_strings(attrs, ",");
 }
 
 bool CodeGen_PowerPC::use_soft_float_abi() const {

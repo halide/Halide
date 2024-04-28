@@ -30,9 +30,9 @@ public:
             for (const auto &extern_arg : extern_args) {
                 if (extern_arg.is_buffer()) {
                     // Function with an extern definition
-                    record(Halide::Internal::Parameter(extern_arg.buffer.type(), true,
-                                                       extern_arg.buffer.dimensions(),
-                                                       extern_arg.buffer.name()));
+                    record(Halide::Parameter(extern_arg.buffer.type(), true,
+                                             extern_arg.buffer.dimensions(),
+                                             extern_arg.buffer.name()));
                 } else if (extern_arg.is_image_param()) {
                     record(extern_arg.image_param);
                 }
@@ -425,13 +425,10 @@ private:
 
             Stmt body = mutate(op->body);
 
-            std::string cache_miss_name = op->name + ".cache_miss";
-            Expr cache_miss = Variable::make(Bool(), cache_miss_name);
-
             if (op->is_producer) {
-                Stmt mutated_body = IfThenElse::make(cache_miss, body);
-                return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
-            } else {
+                std::string cache_miss_name = op->name + ".cache_miss";
+                Expr cache_miss = Variable::make(Bool(), cache_miss_name);
+
                 const Function f(iter->second);
                 KeyInfo key_info(f, top_level_name, memoize_instance);
 
@@ -447,9 +444,10 @@ private:
                                      key_info.store_computation(cache_key_name, computed_bounds_name,
                                                                 eviction_key_name, f.outputs(), op->name));
 
-                Stmt mutated_body = Block::make(cache_store_back, body);
-                return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+                body = Block::make(body, cache_store_back);
+                body = IfThenElse::make(cache_miss, body);
             }
+            return ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
             return IRMutator::visit(op);
         }

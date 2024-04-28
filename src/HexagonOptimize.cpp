@@ -3,6 +3,7 @@
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "DistributeShifts.h"
 #include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
@@ -91,6 +92,8 @@ string type_suffix(Type type, bool signed_variants) {
             return prefix + "h";
         case 32:
             return prefix + "w";
+        default:
+            break;
         }
     } else if (type.is_uint()) {
         switch (type.bits()) {
@@ -100,6 +103,8 @@ string type_suffix(Type type, bool signed_variants) {
             return prefix + "uh";
         case 32:
             return prefix + "uw";
+        default:
+            break;
         }
     }
     internal_error << "Unsupported HVX type: " << type << "\n";
@@ -261,25 +266,22 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     if (flags & Pattern::SafeReinterpretOp0) {
         // Use bounds inference to check if the first operand can
         // be safely reinterpreted.
-        const Type &t = matches[0].type();
-        std::cout << "matched with safe reinterpret\n";
+        const Expr &expr = matches[0];
+        const Type &t = expr.type();
         if (t.is_int()) {
             // A signed integer can be reinterpreted as unsigned if strictly positive.
-            Expr bound = find_constant_bound(matches[0], Direction::Lower);
-            if (const int64_t *lower = as_const_int(bound)) {
-                return *lower >= 0;
-            } else {
-                return false;
-            }
+            // TODO: might want to keep track of scope of bounds information.
+            const ConstantInterval ibounds = constant_integer_bounds(expr);
+            const Type reint_type = UInt(t.bits());
+            return ibounds.min_defined && reint_type.can_represent(ibounds.min);
         } else {
             internal_assert(t.is_uint());
             // An unsigned integer can be reinterpreted as signed if bounded by int max.
-            Expr bound = find_constant_bound(matches[0], Direction::Upper);
-            if (const uint64_t *upper = as_const_uint(bound)) {
-                return *upper <= (uint64_t)max_int(t.bits());
-            } else {
-                return false;
-            }
+
+            // TODO: might want to keep track of scope of bounds information.
+            const ConstantInterval ibounds = constant_integer_bounds(expr);
+            const Type reint_type = Int(t.bits());
+            return ibounds.max_defined && reint_type.can_represent(ibounds.max);
         }
     }
     return true;
@@ -946,6 +948,10 @@ class OptimizePatterns : public IRMutator {
             {"halide.hexagon.pack_satuh.vw", u16_sat(wild_u32x), Pattern::SafeReinterpretOp0},
             {"halide.hexagon.pack_satb.vh", i8_sat(wild_u16x), Pattern::SafeReinterpretOp0},
             {"halide.hexagon.pack_sath.vw", i16_sat(wild_u32x), Pattern::SafeReinterpretOp0},
+            // Slightly more expensive versions of uint saturation casts than the reinterpret
+            // patterns above, these perform vpack(min(UMAX, x)).
+            {"halide.hexagon.pack_satub.vuh", u8_sat(wild_u16x)},
+            {"halide.hexagon.pack_satuh.vuw", u16_sat(wild_u32x)},
 
             // We don't have a vpack equivalent to this one, so we match it directly.
             {"halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0},
@@ -1383,8 +1389,8 @@ class EliminateInterleaves : public IRMutator {
         }
 
         if (const Load *load = x.as<Load>()) {
-            if (buffers.contains(load->name)) {
-                return buffers.get(load->name) != BufferState::NotInterleaved;
+            if (const auto *state = buffers.find(load->name)) {
+                return *state != BufferState::NotInterleaved;
             }
         }
 
@@ -1424,8 +1430,8 @@ class EliminateInterleaves : public IRMutator {
         }
 
         if (const Load *load = x.as<Load>()) {
-            if (buffers.contains(load->name)) {
-                return buffers.get(load->name) != BufferState::NotInterleaved;
+            if (const auto *state = buffers.find(load->name)) {
+                return *state != BufferState::NotInterleaved;
             }
         }
 
@@ -1711,6 +1717,14 @@ class EliminateInterleaves : public IRMutator {
         return true;
     }
 
+    // Indicates the minimum Hexagon Vector Extension (HVX) target version required for using these instructions.
+    enum class HvxTarget {
+        v62orLater,  // Use for Hexagon v62 target or later
+        v65orLater,  // Use for Hexagon v65 target or later
+        v66orLater,  // Use for Hexagon v66 target or later
+    };
+    HvxTarget hvx_target;
+
     Expr visit(const Call *op) override {
         vector<Expr> args(op->args);
 
@@ -1728,25 +1742,27 @@ class EliminateInterleaves : public IRMutator {
         // does not deinterleave, and then opportunistically select
         // the interleaving alternative when we can cancel out to the
         // interleave.
-        static std::map<string, string> deinterleaving_alts = {
-            {"halide.hexagon.pack.vh", "halide.hexagon.trunc.vh"},
-            {"halide.hexagon.pack.vw", "halide.hexagon.trunc.vw"},
-            {"halide.hexagon.packhi.vh", "halide.hexagon.trunclo.vh"},
-            {"halide.hexagon.packhi.vw", "halide.hexagon.trunclo.vw"},
-            {"halide.hexagon.pack_satub.vh", "halide.hexagon.trunc_satub.vh"},
-            {"halide.hexagon.pack_sath.vw", "halide.hexagon.trunc_sath.vw"},
-            {"halide.hexagon.pack_satuh.vw", "halide.hexagon.trunc_satuh.vw"},
+        static std::map<string, std::pair<HvxTarget, std::string>> deinterleaving_alts = {
+            {"halide.hexagon.pack.vh", {HvxTarget::v62orLater, "halide.hexagon.trunc.vh"}},
+            {"halide.hexagon.pack.vw", {HvxTarget::v62orLater, "halide.hexagon.trunc.vw"}},
+            {"halide.hexagon.packhi.vh", {HvxTarget::v62orLater, "halide.hexagon.trunclo.vh"}},
+            {"halide.hexagon.packhi.vw", {HvxTarget::v62orLater, "halide.hexagon.trunclo.vw"}},
+            {"halide.hexagon.pack_satub.vh", {HvxTarget::v62orLater, "halide.hexagon.trunc_satub.vh"}},
+            {"halide.hexagon.pack_satub.vuh", {HvxTarget::v65orLater, "halide.hexagon.trunc_satub.vuh"}},
+            {"halide.hexagon.pack_sath.vw", {HvxTarget::v62orLater, "halide.hexagon.trunc_sath.vw"}},
+            {"halide.hexagon.pack_satuh.vw", {HvxTarget::v62orLater, "halide.hexagon.trunc_satuh.vw"}},
+            {"halide.hexagon.pack_satuh.vuw", {HvxTarget::v62orLater, "halide.hexagon.trunc_satuh.vuw"}},
         };
 
         // The reverse mapping of the above.
-        static std::map<string, string> interleaving_alts = {
-            {"halide.hexagon.trunc.vh", "halide.hexagon.pack.vh"},
-            {"halide.hexagon.trunc.vw", "halide.hexagon.pack.vw"},
-            {"halide.hexagon.trunclo.vh", "halide.hexagon.packhi.vh"},
-            {"halide.hexagon.trunclo.vw", "halide.hexagon.packhi.vw"},
-            {"halide.hexagon.trunc_satub.vh", "halide.hexagon.pack_satub.vh"},
-            {"halide.hexagon.trunc_sath.vw", "halide.hexagon.pack_sath.vw"},
-            {"halide.hexagon.trunc_satuh.vw", "halide.hexagon.pack_satuh.vw"},
+        static std::map<string, std::pair<HvxTarget, std::string>> interleaving_alts = {
+            {"halide.hexagon.trunc.vh", {HvxTarget::v62orLater, "halide.hexagon.pack.vh"}},
+            {"halide.hexagon.trunc.vw", {HvxTarget::v62orLater, "halide.hexagon.pack.vw"}},
+            {"halide.hexagon.trunclo.vh", {HvxTarget::v62orLater, "halide.hexagon.packhi.vh"}},
+            {"halide.hexagon.trunclo.vw", {HvxTarget::v62orLater, "halide.hexagon.packhi.vw"}},
+            {"halide.hexagon.trunc_satub.vh", {HvxTarget::v62orLater, "halide.hexagon.pack_satub.vh"}},
+            {"halide.hexagon.trunc_sath.vw", {HvxTarget::v62orLater, "halide.hexagon.pack_sath.vw"}},
+            {"halide.hexagon.trunc_satuh.vw", {HvxTarget::v62orLater, "halide.hexagon.pack_satuh.vw"}},
         };
 
         if (is_native_deinterleave(op) && yields_interleave(args[0])) {
@@ -1762,7 +1778,8 @@ class EliminateInterleaves : public IRMutator {
                                    op->func, op->value_index, op->image, op->param);
             // Add the interleave back to the result of the call.
             return native_interleave(expr);
-        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() &&
+        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() && hvx_target >= deinterleaving_alts[op->name].first &&
+
                    yields_removable_interleave(args)) {
             // This call has a deinterleaving alternative, and the
             // arguments are interleaved, so we should use the
@@ -1770,14 +1787,14 @@ class EliminateInterleaves : public IRMutator {
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            return Call::make(op->type, deinterleaving_alts[op->name], args, op->call_type);
-        } else if (interleaving_alts.count(op->name) && is_native_deinterleave(args[0])) {
+            return Call::make(op->type, deinterleaving_alts[op->name].second, args, op->call_type);
+        } else if (interleaving_alts.count(op->name) && hvx_target >= interleaving_alts[op->name].first && is_native_deinterleave(args[0])) {
             // This is an interleaving alternative with a
             // deinterleave, which can be generated when we
             // deinterleave storage. Revert back to the interleaving
             // op so we can remove the deinterleave.
             Expr arg = args[0].as<Call>()->args[0];
-            return Call::make(op->type, interleaving_alts[op->name], {arg}, op->call_type,
+            return Call::make(op->type, interleaving_alts[op->name].second, {arg}, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (changed) {
             return Call::make(op->type, op->name, args, op->call_type,
@@ -1840,34 +1857,33 @@ class EliminateInterleaves : public IRMutator {
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
 
-        if (buffers.contains(op->name)) {
+        if (BufferState *state = buffers.shallow_find(op->name)) {
             // When inspecting the stores to a buffer, update the state.
-            BufferState &state = buffers.ref(op->name);
             if (!is_const_one(predicate) || !op->value.type().is_vector()) {
                 // TODO(psuriana): This store is predicated. Mark the buffer as
                 // not interleaved for now.
-                state = BufferState::NotInterleaved;
+                *state = BufferState::NotInterleaved;
             } else if (yields_removable_interleave(value)) {
                 // The value yields a removable interleave. If we aren't tracking
                 // this buffer, mark it as interleaved.
-                if (state == BufferState::Unknown) {
-                    state = BufferState::Interleaved;
+                if (*state == BufferState::Unknown) {
+                    *state = BufferState::Interleaved;
                 }
             } else if (!yields_interleave(value)) {
                 // The value does not yield an interleave. Mark the
                 // buffer as not interleaved.
-                state = BufferState::NotInterleaved;
+                *state = BufferState::NotInterleaved;
             } else {
                 // If the buffer yields an interleave, but is not an
                 // interleave itself, we don't want to change the
                 // buffer state.
             }
-            internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
-            bool &aligned_accesses = aligned_buffer_access.ref(op->name);
+            bool *aligned_accesses = aligned_buffer_access.shallow_find(op->name);
+            internal_assert(aligned_accesses) << "Buffer not found in scope";
             int64_t aligned_offset = 0;
 
             if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
-                aligned_accesses = false;
+                *aligned_accesses = false;
             }
         }
         if (deinterleave_buffers.contains(op->name)) {
@@ -1896,12 +1912,13 @@ class EliminateInterleaves : public IRMutator {
                 // which is only true if any of the stores are
                 // actually interleaved (and don't just yield an
                 // interleave).
-                internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
-                bool &aligned_accesses = aligned_buffer_access.ref(op->name);
+                bool *aligned_accesses = aligned_buffer_access.shallow_find(op->name);
+                internal_assert(aligned_accesses) << "Buffer not found in scope";
+
                 int64_t aligned_offset = 0;
 
                 if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
-                    aligned_accesses = false;
+                    *aligned_accesses = false;
                 }
             } else {
                 // This is not a double vector load, so we can't
@@ -1920,8 +1937,15 @@ class EliminateInterleaves : public IRMutator {
     using IRMutator::visit;
 
 public:
-    EliminateInterleaves(int native_vector_bytes)
+    EliminateInterleaves(const Target &t, int native_vector_bytes)
         : native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes) {
+        if (t.features_any_of({Target::HVX_v65})) {
+            hvx_target = HvxTarget::v65orLater;
+        } else if (t.features_any_of({Target::HVX_v66})) {
+            hvx_target = HvxTarget::v66orLater;
+        } else {
+            hvx_target = HvxTarget::v62orLater;
+        }
     }
 };
 
@@ -2234,26 +2258,38 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
     // We need to redo intrinsic matching due to simplification that has
     // happened after the end of target independent lowering.
     s = find_intrinsics(s);
+    debug(4) << "Hexagon: Lowering after find_intrinsics\n"
+             << s << "\n";
 
     // Hexagon prefers widening shifts to be expressed as multiplies to
     // hopefully hit compound widening multiplies.
     s = distribute_shifts(s, /* multiply_adds */ false);
+    debug(4) << "Hexagon: Lowering after DistributeShiftsAsMuls\n"
+             << s << "\n";
 
     // Pattern match VectorReduce IR node. Handle vector reduce instructions
     // before OptimizePatterns to prevent being mutated by patterns like
     // (v0 + v1 * c) -> add_mpy
     s = VectorReducePatterns().mutate(s);
+    debug(4) << "Hexagon: Lowering after VectorReducePatterns\n"
+             << s << "\n";
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns(t).mutate(s);
+    debug(4) << "Hexagon: Lowering after OptimizePatterns\n"
+             << s << "\n";
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(t.natural_vector_size(Int(8))).mutate(s);
+    s = EliminateInterleaves(t, t.natural_vector_size(Int(8))).mutate(s);
+    debug(4) << "Hexagon: Lowering after EliminateInterleaves\n"
+             << s << "\n";
 
     // There may be interleaves left over that we can fuse with other
     // operations.
     s = FuseInterleaves().mutate(s);
+    debug(4) << "Hexagon: Lowering after FuseInterleaves\n"
+             << s << "\n";
     return s;
 }
 

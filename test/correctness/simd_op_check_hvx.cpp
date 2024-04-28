@@ -23,16 +23,10 @@ public:
     SimdOpCheckHVX(Target t, int w = 768 /*256*3*/, int h = 128)
         : SimdOpCheckTest(t, w, h) {
     }
-    void setup_images() override {
-        for (auto p : image_params) {
-            p.reset();
-            // HVX needs 128 byte alignment
-            constexpr int kHostAlignmentBytes = 128;
-            p.set_host_alignment(kHostAlignmentBytes);
-            Expr min = p.dim(0).min();
-            p.dim(0).set_min((min / 128) * 128);
-        }
+    int image_param_alignment() override {
+        return 128;
     }
+
     void add_tests() override {
         Expr f32_1 = in_f32(x), f32_2 = in_f32(x + 16), f32_3 = in_f32(x + 32);
         Expr f64_1 = in_f64(x), f64_2 = in_f64(x + 16), f64_3 = in_f64(x + 32);
@@ -45,7 +39,7 @@ public:
         Expr u32_1 = in_u32(x), u32_2 = in_u32(x + 16), u32_3 = in_u32(x + 32);
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
-        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_2 < -0.3f), bool_3 = (f32_3 != -0.34f);
 
         constexpr int hvx_width = 128;
 
@@ -301,16 +295,20 @@ public:
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(clamp(u16_1, 0, 15)));
 
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width / 1, u8_sat(i16_1));
+        check("v*.b = vpacke(v*.h,v*.h)", hvx_width / 1, u8_sat(u16_1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width / 1, i8_sat(i16_1));
         check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width / 2, u16_sat(i32_1));
+        // Due to the unavailability of an unsigned word "min" operation in HVX,
+        // we deinterlave a vector pair and then do a saturating downcast that interleaves
+        // (intrinsic:vsatuwuh). See halide.hexagon.pack_satuh.vuw in hvx_128.ll
+        // for a more detailed explanation.
+        check("v*.uh = vsat(v*.uw,v*.uw)", hvx_width / 2, u16_sat(u32_1));
         check("v*.h = vpack(v*.w,v*.w):sat", hvx_width / 2, i16_sat(i32_1));
         // Test that bounds-inference instruction selection is working properly.
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width / 1, u8_sat(u16_1 >> 1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width / 1, i8_sat(u16_1 >> 1));
-        // These tests don't work yet because bounds inference currently gives up on
-        // u32. See https://github.com/halide/Halide/issues/7807
-        // check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width / 2, u16_sat(u32_1 >> 1));
-        // check("v*.h = vpack(v*.w,v*.w):sat", hvx_width / 2, i16_sat(u32_1 >> 1));
+        check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width / 2, u16_sat(u32_1 >> 1));
+        check("v*.h = vpack(v*.w,v*.w):sat", hvx_width / 2, i16_sat(u32_1 >> 1));
 
         // vpack doesn't interleave its inputs, which means it doesn't
         // simplify with widening. This is preferable for when the

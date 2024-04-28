@@ -166,6 +166,9 @@ HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::float16_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::bfloat16_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(halide_task_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(halide_loop_task_t);
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(_Float16);
+#endif
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(float);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(double);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_buffer_t);
@@ -266,6 +269,10 @@ struct halide_handle_traits {
 
 namespace Halide {
 
+namespace Internal {
+struct ConstantInterval;
+}
+
 struct Expr;
 
 /** Types in the halide type system. They can be ints, unsigned ints,
@@ -304,6 +311,10 @@ public:
      * lanes: The number of vector elements in the type. */
     Type(halide_type_code_t code, int bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
         : type(code, (uint8_t)bits, (uint16_t)lanes), handle_type(handle_type) {
+        user_assert(lanes == type.lanes)
+            << "Halide only supports vector types with up to 65535 lanes. " << lanes << " lanes requested.";
+        user_assert(bits == type.bits)
+            << "Halide only supports types with up to 255 bits. " << bits << " bits requested.";
     }
 
     /** Trivial copy constructor. */
@@ -496,6 +507,10 @@ public:
 
     /** Can this type represent all values of another type? */
     bool can_represent(Type other) const;
+
+    /** Can this type represent exactly all integer values of some constant
+     * integer range? */
+    bool can_represent(const Internal::ConstantInterval &in) const;
 
     /** Can this type represent a particular constant? */
     // @{

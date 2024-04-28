@@ -76,7 +76,7 @@ public:
         Expr expr;
         int use_count = 0;
         // All consumer Exprs for which this is the last child Expr.
-        map<ExprWithCompareCache, int> uses;
+        map<Expr, int, IRGraphDeepCompare> uses;
         Entry(const Expr &e)
             : expr(e) {
         }
@@ -84,23 +84,13 @@ public:
     vector<std::unique_ptr<Entry>> entries;
 
     map<Expr, int, ExprCompare> shallow_numbering, output_numbering;
-    map<ExprWithCompareCache, int> leaves;
+    map<Expr, int, IRGraphDeepCompare> leaves;
 
-    int number = -1;
-
-    IRCompareCache cache;
-
-    GVN()
-        : number(0), cache(8) {
-    }
+    int number = 0;
 
     Stmt mutate(const Stmt &s) override {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
-    }
-
-    ExprWithCompareCache with_cache(const Expr &e) {
-        return ExprWithCompareCache(e, &cache);
     }
 
     Expr mutate(const Expr &e) override {
@@ -123,7 +113,7 @@ public:
         // that child has an identical parent to this one.
 
         auto &use_map = number == -1 ? leaves : entries[number]->uses;
-        auto p = use_map.emplace(with_cache(new_e), (int)entries.size());
+        auto p = use_map.emplace(new_e, (int)entries.size());
         auto iter = p.first;
         bool novel = p.second;
         if (novel) {
@@ -201,8 +191,8 @@ class RemoveLets : public IRGraphMutator {
     Scope<Expr> scope;
 
     Expr visit(const Variable *op) override {
-        if (scope.contains(op->name)) {
-            return scope.get(op->name);
+        if (const Expr *e = scope.find(op->name)) {
+            return *e;
         } else {
             return op;
         }
@@ -283,6 +273,39 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
     debug(4) << "After removing lets: " << e << "\n";
 
+    // CSE is run on unsanitized Exprs from the user, and may contain Vars with
+    // the same name as the temporaries we intend to introduce. Find any such
+    // Vars so that we know not to use those names.
+    class UniqueNameProvider : public IRGraphVisitor {
+        using IRGraphVisitor::visit;
+
+        const char prefix = 't';  // Annoyingly, this can't be static because this is a local class.
+
+        void visit(const Variable *op) override {
+            // It would be legal to just add all names found to the tracked set,
+            // but because we know the form of the new names we're going to
+            // introduce, we can save some time by only adding names that could
+            // plausibly collide. In the vast majority of cases, this check will
+            // result in the set being empty.
+            if (op->name.size() > 1 &&
+                op->name[0] == prefix &&
+                isdigit(op->name[1])) {
+                vars.insert(op->name);
+            }
+        }
+        std::set<string> vars;
+
+    public:
+        string make_unique_name() {
+            string name;
+            do {
+                name = unique_name(prefix);
+            } while (vars.count(name));
+            return name;
+        }
+    } namer;
+    e.accept(&namer);
+
     GVN gvn;
     e = gvn.mutate(e);
 
@@ -298,7 +321,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     for (size_t i = 0; i < gvn.entries.size(); i++) {
         const auto &e = gvn.entries[i];
         if (e->use_count > 1) {
-            string name = unique_name('t');
+            string name = namer.make_unique_name();
             lets.emplace_back(name, e->expr);
             // Point references to this expr to the variable instead.
             replacements[e->expr] = Variable::make(e->expr.type(), name);

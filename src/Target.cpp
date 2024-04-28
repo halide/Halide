@@ -128,8 +128,10 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
         }
         break;
     case 0x19:  // AMD Family 19h
-        if (model <= 0x0f || model == 0x21) {
+        if ((model & 0xf0) == 0 || model == 0x21) {
             return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
+        } else if (model == 0x61) {
+            return Target::Processor::ZnVer4;  // 61h: Zen4
         }
         break;
     default:
@@ -215,7 +217,21 @@ Target calculate_host_target() {
 
     if (vendor_signature == VendorSignatures::AuthenticAMD) {
         processor = get_amd_processor(family, model, have_sse3);
+
+        if (processor == Target::Processor::ZnVer4) {
+            Target t{os, arch, bits, processor, initial_features, vector_bits};
+            t.set_features({Target::SSE41, Target::AVX,
+                            Target::F16C, Target::FMA,
+                            Target::AVX2, Target::AVX512,
+                            Target::AVX512_Skylake, Target::AVX512_Cannonlake,
+                            Target::AVX512_Zen4});
+            return t;
+        }
     }
+
+    // Processors not specifically detected by model number above use the cpuid
+    // feature bits to determine what flags are supported. For future models,
+    // detect them explicitly above rather than extending the code below.
 
     if (have_sse41) {
         initial_features.push_back(Target::SSE41);
@@ -235,6 +251,8 @@ Target calculate_host_target() {
         // Call cpuid with eax=7, ecx=0
         int info2[4];
         cpuid(info2, 7, 0);
+        int info3[4];
+        cpuid(info3, 7, 1);
         const uint32_t avx2 = 1U << 5;
         const uint32_t avx512f = 1U << 16;
         const uint32_t avx512dq = 1U << 17;
@@ -265,18 +283,49 @@ Target calculate_host_target() {
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
-                const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
-                const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
-                int info3[4];
-                cpuid(info3, 7, 1);
+                const uint32_t avxvnni = 1U << 4;     // avxvnni (note, not avx512vnni) result in eax
+                const uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, with cpuid(eax=7, ecx=1)
                 // TODO: port to family/model -based detection.
-                if ((info2[2] & avx512vnni) == avx512vnni &&
+                if ((info3[0] & avxvnni) == avxvnni &&
                     (info3[0] & avx512bf16) == avx512bf16) {
                     initial_features.push_back(Target::AVX512_SapphireRapids);
                 }
             }
         }
+
+        // AVX10 converged vector instructions.
+        const uint32_t avx10 = 1U << 19;
+        if (info2[3] & avx10) {
+            int info_avx10[4];
+            cpuid(info_avx10, 0x24, 0x0);
+
+            // This checks that the AVX10 version is greater than zero.
+            // It isn't really needed as for now only one version exists, but
+            // the docs indicate bits 0:7 of EBX should be >= 0 so...
+            if ((info[1] & 0xff) >= 1) {
+                initial_features.push_back(Target::AVX10_1);
+
+                const uint32_t avx10_128 = 1U << 16;
+                const uint32_t avx10_256 = 1U << 17;
+                const uint32_t avx10_512 = 1U << 18;
+                // Choose the maximum one that is available.
+                if (info[1] & avx10_512) {
+                    vector_bits = 512;
+                } else if (info[1] & avx10_256) {
+                    vector_bits = 256;
+                } else if (info[1] & avx10_128) {  // Not clear it is worth turning on AVX10 for this case.
+                    vector_bits = 128;
+                }
+            }
+        }
+
+        // APX register extensions, etc.
+        const uint32_t apx = 1U << 21;
+        if (info3[3] & apx) {
+            initial_features.push_back(Target::X86APX);
+        }
     }
+
 #endif
 #endif
 #endif
@@ -441,6 +490,7 @@ const std::map<std::string, Target::Processor> processor_name_map = {
     {"tune_znver1", Target::Processor::ZnVer1},
     {"tune_znver2", Target::Processor::ZnVer2},
     {"tune_znver3", Target::Processor::ZnVer3},
+    {"tune_znver4", Target::Processor::ZnVer4},
 };
 
 bool lookup_processor(const std::string &tok, Target::Processor &result) {
@@ -481,7 +531,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
     {"cl_atomics64", Target::CLAtomics64},
-    {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},
     {"user_context", Target::UserContext},
     {"profile", Target::Profile},
@@ -502,6 +551,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
     {"avx512_sapphirerapids", Target::AVX512_SapphireRapids},
+    {"avx512_zen4", Target::AVX512_Zen4},
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
@@ -515,8 +565,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"embed_bitcode", Target::EmbedBitcode},
     {"enable_llvm_loop_opt", Target::EnableLLVMLoopOpt},
     {"wasm_simd128", Target::WasmSimd128},
-    {"wasm_signext", Target::WasmSignExt},
-    {"wasm_sat_float_to_int", Target::WasmSatFloatToInt},
+    {"wasm_mvponly", Target::WasmMvpOnly},
     {"wasm_threads", Target::WasmThreads},
     {"wasm_bulk_memory", Target::WasmBulkMemory},
     {"webgpu", Target::WebGPU},
@@ -540,6 +589,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"vk_v12", Target::VulkanV12},
     {"vk_v13", Target::VulkanV13},
     {"semihosting", Target::Semihosting},
+    {"avx10_1", Target::AVX10_1},
+    {"x86apx", Target::X86APX},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -768,7 +819,89 @@ void bad_target_string(const std::string &target) {
                << "On this platform, the host target is: " << get_host_target().to_string() << "\n";
 }
 
+void do_check_bad(const Target &t, const std::initializer_list<Target::Feature> &v) {
+    for (Target::Feature f : v) {
+        user_assert(!t.has_feature(f))
+            << "Target feature " << Target::feature_to_name(f)
+            << " is incompatible with the Target's architecture. (" << t << ")\n";
+    }
+}
+
 }  // namespace
+
+void Target::validate_features() const {
+    // Note that the features don't have to be exhaustive, but enough to avoid obvious mistakes is good.
+    if (arch == X86) {
+        do_check_bad(*this, {
+                                ARMDotProd,
+                                ARMFp16,
+                                ARMv7s,
+                                ARMv81a,
+                                NoNEON,
+                                POWER_ARCH_2_07,
+                                RVV,
+                                SVE,
+                                SVE2,
+                                VSX,
+                                WasmBulkMemory,
+                                WasmMvpOnly,
+                                WasmSimd128,
+                                WasmThreads,
+                            });
+    } else if (arch == ARM) {
+        do_check_bad(*this, {
+                                AVX,
+                                AVX2,
+                                AVX512,
+                                AVX512_Cannonlake,
+                                AVX512_KNL,
+                                AVX512_SapphireRapids,
+                                AVX512_Skylake,
+                                AVX512_Zen4,
+                                F16C,
+                                FMA,
+                                FMA4,
+                                POWER_ARCH_2_07,
+                                RVV,
+                                SSE41,
+                                VSX,
+                                WasmBulkMemory,
+                                WasmMvpOnly,
+                                WasmSimd128,
+                                WasmThreads,
+                            });
+    } else if (arch == WebAssembly) {
+        do_check_bad(*this, {
+                                ARMDotProd,
+                                ARMFp16,
+                                ARMv7s,
+                                ARMv81a,
+                                AVX,
+                                AVX2,
+                                AVX512,
+                                AVX512_Cannonlake,
+                                AVX512_KNL,
+                                AVX512_SapphireRapids,
+                                AVX512_Skylake,
+                                AVX512_Zen4,
+                                F16C,
+                                FMA,
+                                FMA4,
+                                HVX_128,
+                                HVX_128,
+                                HVX_v62,
+                                HVX_v65,
+                                HVX_v66,
+                                NoNEON,
+                                POWER_ARCH_2_07,
+                                RVV,
+                                SSE41,
+                                SVE,
+                                SVE2,
+                                VSX,
+                            });
+    }
+}
 
 Target::Target(const std::string &target) {
     Target host = get_host_target();
@@ -781,6 +914,7 @@ Target::Target(const std::string &target) {
             bad_target_string(target);
         }
     }
+    validate_features();
 }
 
 Target::Target(const char *s)
@@ -883,9 +1017,6 @@ bool Target::supported() const {
 #if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !defined(WITH_OPENGLCOMPUTE)
-    bad |= has_feature(Target::OpenGLCompute);
-#endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
 #endif
@@ -959,7 +1090,6 @@ bool Target::has_gpu_feature() const {
             has_feature(OpenCL) ||
             has_feature(Metal) ||
             has_feature(D3D12Compute) ||
-            has_feature(OpenGLCompute) ||
             has_feature(Vulkan) ||
             has_feature(WebGPU));
 }
@@ -1018,14 +1148,12 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return (!has_feature(Metal) &&
-                    !has_feature(OpenGLCompute) &&
                     !has_feature(D3D12Compute) &&
                     (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles)) &&
                     (!has_feature(Vulkan) || has_feature(Target::VulkanFloat64)) &&
                     !has_feature(WebGPU));
         } else {
             return (!has_feature(Metal) &&
-                    !has_feature(OpenGLCompute) &&
                     !has_feature(D3D12Compute) &&
                     (!has_feature(Vulkan) || has_feature(Target::VulkanInt64)) &&
                     !has_feature(WebGPU));
@@ -1056,8 +1184,6 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
     } else if (device == DeviceAPI::D3D12Compute) {
         // Shader Model 5.x can optionally support double-precision; 64-bit int
         // types are not supported.
-        return t.bits() < 64;
-    } else if (device == DeviceAPI::OpenGLCompute) {
         return t.bits() < 64;
     } else if (device == DeviceAPI::Vulkan) {
         if (t.is_float() && t.bits() == 64) {
@@ -1114,9 +1240,6 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenCL)) {
         return DeviceAPI::OpenCL;
     }
-    if (has_feature(Target::OpenGLCompute)) {
-        return DeviceAPI::OpenGLCompute;
-    }
     if (has_feature(Target::Vulkan)) {
         return DeviceAPI::Vulkan;
     }
@@ -1132,8 +1255,6 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::CUDA;
     case DeviceAPI::OpenCL:
         return Target::OpenCL;
-    case DeviceAPI::OpenGLCompute:
-        return Target::OpenGLCompute;
     case DeviceAPI::Metal:
         return Target::Metal;
     case DeviceAPI::Hexagon:
@@ -1233,7 +1354,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         Metal,
         NoNEON,
         OpenCL,
-        OpenGLCompute,
         Vulkan,
         WebGPU,
 
@@ -1258,7 +1378,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 14> intersection_features = {{
+    const std::array<Feature, 15> intersection_features = {{
         ARMv7s,
         ARMv81a,
         AVX,
@@ -1268,6 +1388,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         AVX512_KNL,
         AVX512_SapphireRapids,
         AVX512_Skylake,
+        AVX512_Zen4,
         F16C,
         FMA,
         FMA4,
@@ -1449,7 +1570,7 @@ void target_test() {
     internal_assert(with_vector_bits.vector_bits == 512) << "Vector bits not populated in constructor.\n";
     internal_assert(Target(with_vector_bits.to_string()).vector_bits == 512) << "Vector bits not round tripped properly.\n";
 
-    std::cout << "Target test passed" << std::endl;
+    std::cout << "Target test passed\n";
 }
 
 }  // namespace Internal

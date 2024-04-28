@@ -348,6 +348,12 @@ public:
     Stage &parallel(const VarOrRVar &var, const Expr &task_size, TailStrategy tail = TailStrategy::Auto);
     Stage &vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
     Stage &unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+    Stage &partition(const VarOrRVar &var, Partition partition_policy);
+    Stage &never_partition_all();
+    Stage &never_partition(const std::vector<VarOrRVar> &vars);
+    Stage &always_partition_all();
+    Stage &always_partition(const std::vector<VarOrRVar> &vars);
+
     Stage &tile(const VarOrRVar &x, const VarOrRVar &y,
                 const VarOrRVar &xo, const VarOrRVar &yo,
                 const VarOrRVar &xi, const VarOrRVar &yi, const Expr &xfactor, const Expr &yfactor,
@@ -377,6 +383,20 @@ public:
     reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
+    }
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    never_partition(const VarOrRVar &x, Args &&...args) {
+        std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
+        return never_partition(collected_args);
+    }
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    always_partition(const VarOrRVar &x, Args &&...args) {
+        std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
+        return always_partition(collected_args);
     }
 
     Stage &rename(const VarOrRVar &old_name, const VarOrRVar &new_name);
@@ -442,7 +462,7 @@ public:
 
     Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
-    Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
+    Stage &prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
     Stage &prefetch(const T &image, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
@@ -1395,9 +1415,10 @@ public:
      * factor does not provably divide the extent. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
-    /** Join two dimensions into a single fused dimension. The fused
-     * dimension covers the product of the extents of the inner and
-     * outer dimensions given. */
+    /** Join two dimensions into a single fused dimension. The fused dimension
+     * covers the product of the extents of the inner and outer dimensions
+     * given. The loop type (e.g. parallel, vectorized) of the resulting fused
+     * dimension is inherited from the first argument. */
     Func &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);
 
     /** Mark a dimension to be traversed serially. This is the default. */
@@ -1440,6 +1461,47 @@ public:
      * some constant factor. After this call, var refers to the outer
      * dimension of the split. 'factor' must be an integer. */
     Func &unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+
+    /** Set the loop partition policy. Loop partitioning can be useful to
+     * optimize boundary conditions (such as clamp_edge). Loop partitioning
+     * splits a for loop into three for loops: a prologue, a steady-state,
+     * and an epilogue.
+     * The default policy is Auto. */
+    Func &partition(const VarOrRVar &var, Partition partition_policy);
+
+    /** Set the loop partition policy to Never for a vector of Vars and
+     * RVars. */
+    Func &never_partition(const std::vector<VarOrRVar> &vars);
+
+    /** Set the loop partition policy to Never for some number of Vars and RVars. */
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
+    never_partition(const VarOrRVar &x, Args &&...args) {
+        std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
+        return never_partition(collected_args);
+    }
+
+    /** Set the loop partition policy to Never for all Vars and RVar of the
+     * initial definition of the Func. It must be called separately on any
+     * update definitions. */
+    Func &never_partition_all();
+
+    /** Set the loop partition policy to Always for a vector of Vars and
+     * RVars. */
+    Func &always_partition(const std::vector<VarOrRVar> &vars);
+
+    /** Set the loop partition policy to Always for some number of Vars and RVars. */
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
+    always_partition(const VarOrRVar &x, Args &&...args) {
+        std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
+        return always_partition(collected_args);
+    }
+
+    /** Set the loop partition policy to Always for all Vars and RVar of the
+     * initial definition of the Func. It must be called separately on any
+     * update definitions. */
+    Func &always_partition_all();
 
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This
@@ -1982,7 +2044,7 @@ public:
     // @{
     Func &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
-    Func &prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
+    Func &prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
     Func &prefetch(const T &image, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
@@ -2219,6 +2281,21 @@ public:
      */
     Func &async();
 
+    /** Expands the storage of the function by an extra dimension
+     * to enable ring buffering. For this to be useful the storage
+     * of the function has to be hoisted to an upper loop level using
+     * \ref Func::hoist_storage. The index for the new ring buffer dimension
+     * is calculated implicitly based on a linear combination of the all of
+     * the loop variables between hoist_storage and compute_at/store_at
+     * loop levels. Scheduling a function with ring_buffer increases the
+     * amount of memory required for this function by an *extent* times.
+     * ring_buffer is especially useful in combination with \ref Func::async,
+     * but can be used without it.
+     *
+     * The extent is expected to be a positive integer.
+     */
+    Func &ring_buffer(Expr extent);
+
     /** Bound the extent of a Func's storage, but not extent of its
      * compute. This can be useful for forcing a function's allocation
      * to be a fixed size, which often means it can go on the stack.
@@ -2335,6 +2412,95 @@ public:
      * outside the outermost loop. */
     Func &store_root();
 
+    /** Hoist storage for this function within f's loop over
+     * var. This is different from \ref Func::store_at, because hoist_storage
+     * simply moves an actual allocation to a given loop level and
+     * doesn't trigger any of the optimizations such as sliding window.
+     * Hoisting storage is optional and can be used as an optimization
+     * to avoid unnecessary allocations by moving it out from an inner
+     * loop.
+     *
+     * Consider again the pipeline from \ref Func::compute_at :
+     \code
+     Func f, g;
+     Var x, y;
+     g(x, y) = x*y;
+     f(x, y) = g(x, y) + g(x, y+1) + g(x+1, y) + g(x+1, y+1);
+     \endcode
+     *
+     * If we schedule f like so:
+     *
+     \code
+     g.compute_at(f, x);
+     \endcode
+     *
+     * Then the C code equivalent to this pipeline will look like this
+     *
+     \code
+
+     int f[height][width];
+     for (int y = 0; y < height; y++) {
+         for (int x = 0; x < width; x++) {
+             int g[2][2];
+             g[0][0] = x*y;
+             g[0][1] = (x+1)*y;
+             g[1][0] = x*(y+1);
+             g[1][1] = (x+1)*(y+1);
+             f[y][x] = g[0][0] + g[1][0] + g[0][1] + g[1][1];
+         }
+     }
+
+     \endcode
+     *
+     * Note the allocation for g inside of the loop over variable x which
+     * can happen for each iteration of the inner loop (in total height * width times).
+     * In some cases allocation can be expensive, so it might be better to do it once
+     * and reuse allocated memory across all iterations of the loop.
+     *
+     * This can be done by scheduling g like so:
+     *
+     \code
+     g.compute_at(f, x).hoist_storage(f, Var::outermost());
+     \endcode
+     *
+     * Then the C code equivalent to this pipeline will look like this
+     *
+     \code
+
+     int f[height][width];
+     int g[2][2];
+     for (int y = 0; y < height; y++) {
+         for (int x = 0; x < width; x++) {
+             g[0][0] = x*y;
+             g[0][1] = (x+1)*y;
+             g[1][0] = x*(y+1);
+             g[1][1] = (x+1)*(y+1);
+             f[y][x] = g[0][0] + g[1][0] + g[0][1] + g[1][1];
+         }
+     }
+
+     \endcode
+     *
+     * hoist_storage can be used together with \ref Func::store_at and
+     * \ref Func::fold_storage (for example, to hoist the storage allocated
+     * after sliding window optimization).
+     *
+     */
+    Func &hoist_storage(const Func &f, const Var &var);
+
+    /** Equivalent to the version of hoist_storage that takes a Var, but
+     * schedules storage within the loop over a dimension of a
+     * reduction domain */
+    Func &hoist_storage(const Func &f, const RVar &var);
+
+    /** Equivalent to the version of hoist_storage that takes a Var, but
+     * schedules storage at a given LoopLevel. */
+    Func &hoist_storage(LoopLevel loop_level);
+
+    /** Equivalent to \ref Func::hoist_storage_root, but schedules storage
+     * outside the outermost loop. */
+    Func &hoist_storage_root();
+
     /** Aggressively inline all uses of this function. This is the
      * default schedule, so you're unlikely to need to call this. For
      * a Func with an update definition, that means it gets computed
@@ -2392,6 +2558,15 @@ public:
      * tracing is not enabled for the Func (or globally).
      */
     Func &add_trace_tag(const std::string &trace_tag);
+
+    /** Marks this function as a function that should not be profiled
+     * when using the target feature Profile or ProfileByTimer.
+     * This is useful when this function is does too little work at once
+     * such that the overhead of setting the profiling token might
+     * become significant, or that the measured time is not representative
+     * due to modern processors (instruction level parallelism, out-of-order
+     * execution). */
+    Func &no_profiling();
 
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide

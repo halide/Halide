@@ -69,10 +69,9 @@ class ExpandExpr : public IRMutator {
     const Scope<Expr> &scope;
 
     Expr visit(const Variable *var) override {
-        if (scope.contains(var->name)) {
-            Expr expr = scope.get(var->name);
-            debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
-            return expr;
+        if (const Expr *expr = scope.find(var->name)) {
+            debug(4) << "Fully expanded " << var->name << " -> " << *expr << "\n";
+            return *expr;
         } else {
             return var;
         }
@@ -199,7 +198,7 @@ class RollFunc : public IRMutator {
             Stmt body = substitute(op->name, Variable::make(Int(32), new_name) + op->min, op->body);
             // use op->name *before* the re-assignment of result, which will clobber it
             loops_to_rebase.erase(op->name);
-            result = For::make(new_name, 0, op->extent, op->for_type, op->device_api, body);
+            result = For::make(new_name, 0, op->extent, op->for_type, op->partition_policy, op->device_api, body);
         }
         return result;
     }
@@ -224,6 +223,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Expr loop_min;
     set<int> &slid_dimensions;
     Scope<Expr> scope;
+
+    // Loops between the loop being slid over and the produce node
+    Scope<> enclosing_loops;
 
     map<string, Expr> replacements;
 
@@ -266,10 +268,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
             const std::vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
-                if (slid_dimensions.count(i)) {
-                    debug(3) << "Already slid over dimension " << i << ", so skipping it.\n";
-                    continue;
-                }
                 // Look up the region required of this function's last stage
                 string var = prefix + func_args[i];
                 internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
@@ -304,6 +302,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 }
             }
 
+            if (!dim.empty() && slid_dimensions.count(dim_idx)) {
+                debug(1) << "Already slid over dimension " << dim_idx << ", so skipping it.\n";
+                dim = "";
+                min_required = Expr();
+                max_required = Expr();
+            }
             if (!min_required.defined()) {
                 debug(3) << "Could not perform sliding window optimization of "
                          << func.name() << " over " << loop_var << " because multiple "
@@ -431,7 +435,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             new_loop_min_eq = simplify(new_loop_min_eq);
             Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
             internal_assert(!new_loop_min.defined());
-            if (solve_result.has_upper_bound() && !equal(solve_result.max, loop_min)) {
+            if (solve_result.has_upper_bound() &&
+                !equal(solve_result.max, loop_min) &&
+                !expr_uses_vars(solve_result.max, enclosing_loops)) {
                 new_loop_min = simplify(solve_result.max);
 
                 // We have a new loop min, so we an assume every iteration has
@@ -556,6 +562,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // the var we're sliding over.
         Expr min = expand_expr(op->min, scope);
         Expr extent = expand_expr(op->extent, scope);
+        ScopedBinding<> bind(enclosing_loops, op->name);
         if (is_const_one(extent)) {
             // Just treat it like a let
             Stmt s = LetStmt::make(op->name, min, op->body);
@@ -563,7 +570,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // Unpack it back into the for
             const LetStmt *l = s.as<LetStmt>();
             internal_assert(l);
-            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, l->body);
+            return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, l->body);
         } else if (is_monotonic(min, loop_var) != Monotonic::Constant ||
                    is_monotonic(extent, loop_var) != Monotonic::Constant) {
             debug(3) << "Not entering loop over " << op->name
@@ -808,7 +815,9 @@ class SlidingWindow : public IRMutator {
                 }
             }
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dimensions[func.name()]);
+            set<int> &slid_dims = slid_dimensions[func.name()];
+            size_t old_slid_dims_size = slid_dims.size();
+            SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dims);
             body = slider.mutate(body);
 
             if (func.schedule().memory_type() == MemoryType::Register &&
@@ -848,6 +857,15 @@ class SlidingWindow : public IRMutator {
                 new_lets.emplace_front(name + ".loop_min.orig", loop_min);
                 new_lets.emplace_front(name + ".loop_extent", (loop_max - loop_min) + 1);
             }
+
+            if (slid_dims.size() > old_slid_dims_size) {
+                // Let storage folding know there's now a read-after-write hazard here
+                Expr marker = Call::make(Int(32),
+                                         Call::sliding_window_marker,
+                                         {func.name(), Variable::make(Int(32), op->name)},
+                                         Call::Intrinsic);
+                body = Block::make(Evaluate::make(marker), body);
+            }
         }
 
         body = mutate(body);
@@ -855,7 +873,7 @@ class SlidingWindow : public IRMutator {
         if (body.same_as(op->body) && loop_min.same_as(op->min) && loop_extent.same_as(op->extent) && name == op->name) {
             return op;
         } else {
-            Stmt result = For::make(name, loop_min, loop_extent, op->for_type, op->device_api, body);
+            Stmt result = For::make(name, loop_min, loop_extent, op->for_type, op->partition_policy, op->device_api, body);
             if (!new_lets.empty()) {
                 result = LetStmt::make(name + ".loop_max", loop_max, result);
             }
@@ -901,7 +919,7 @@ class AddLoopMinOrig : public IRMutator {
         if (body.same_as(op->body) && min.same_as(op->min) && extent.same_as(op->extent)) {
             result = op;
         } else {
-            result = For::make(op->name, min, extent, op->for_type, op->device_api, body);
+            result = For::make(op->name, min, extent, op->for_type, op->partition_policy, op->device_api, body);
         }
         return LetStmt::make(op->name + ".loop_min.orig", Variable::make(Int(32), op->name + ".loop_min"), result);
     }

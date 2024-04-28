@@ -502,7 +502,7 @@ Expr lossless_cast(Type t, Expr e) {
             Expr a = lossless_cast(t.narrow(), sub->a);
             Expr b = lossless_cast(t.narrow(), sub->b);
             if (a.defined() && b.defined()) {
-                return cast(t, a) + cast(t, b);
+                return cast(t, a) - cast(t, b);
             } else {
                 return Expr();
             }
@@ -567,7 +567,8 @@ Expr lossless_cast(Type t, Expr e) {
 }
 
 Expr lossless_negate(const Expr &x) {
-    if (const Mul *m = x.as<Mul>()) {
+    if (false /* const Mul *m = x.as<Mul>() */) {  // disabled pending #8155
+        /*
         Expr b = lossless_negate(m->b);
         if (b.defined()) {
             return Mul::make(m->a, b);
@@ -576,6 +577,7 @@ Expr lossless_negate(const Expr &x) {
         if (a.defined()) {
             return Mul::make(a, m->b);
         }
+        */
     } else if (const Call *m = Call::as_intrinsic(x, {Call::widening_mul})) {
         Expr b = lossless_negate(m->args[1]);
         if (b.defined()) {
@@ -2593,10 +2595,23 @@ Expr mod_round_to_zero(Expr x, Expr y) {
                       Call::PureIntrinsic);
 }
 
+namespace {
+
+std::atomic<int> random_number_counter = 0;
+
+}  // namespace
+
+namespace Internal {
+
+void reset_random_counters() {
+    random_number_counter = 0;
+    random_variable_counter = 0;
+}
+
+}  // namespace Internal
+
 Expr random_float(Expr seed) {
-    // Random floats get even IDs
-    static std::atomic<int> counter{0};
-    int id = (counter++) * 2;
+    const int id = random_number_counter++;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -2614,9 +2629,7 @@ Expr random_float(Expr seed) {
 }
 
 Expr random_uint(Expr seed) {
-    // Random ints get odd IDs
-    static std::atomic<int> counter{0};
-    int id = (counter++) * 2 + 1;
+    const int id = random_number_counter++;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -2632,7 +2645,7 @@ Expr random_uint(Expr seed) {
 }
 
 Expr random_int(Expr seed) {
-    return cast<int32_t>(random_uint(std::move(seed)));
+    return reinterpret<int32_t>(random_uint(std::move(seed)));
 }
 
 Expr likely(Expr e) {

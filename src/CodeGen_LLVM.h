@@ -395,11 +395,6 @@ protected:
     void visit(const Realize *) override;
     // @}
 
-    /** If we have to bail out of a pipeline midway, this should
-     * inject the appropriate target-specific cleanup code. */
-    virtual void prepare_for_early_exit() {
-    }
-
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */
     virtual llvm::Type *llvm_type_of(const Type &) const;
@@ -583,6 +578,13 @@ protected:
 
     llvm::Constant *get_splat(int lanes, llvm::Constant *value,
                               VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
+
+    /** Make sure a value type has the same scalable/fixed vector type as a guide. */
+    // @{
+    llvm::Value *match_vector_type_scalable(llvm::Value *value, VectorTypeConstraint constraint);
+    llvm::Value *match_vector_type_scalable(llvm::Value *value, llvm::Type *guide);
+    llvm::Value *match_vector_type_scalable(llvm::Value *value, llvm::Value *guide);
+    // @}
 
     /** Support for generating LLVM vector predication intrinsics
      * ("@llvm.vp.*" and "@llvm.experimental.vp.*")

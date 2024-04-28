@@ -1,5 +1,6 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CSE.h"
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
@@ -105,8 +106,8 @@ protected:
     }
     Type upgrade_type_for_storage(const Type &t) const override;
 
-    /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
-     * ptx intrinsic functions to call to get them. */
+    /** Map from simt variable names (e.g. foo.block_id_x) to the llvm ptx
+     * intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
 
     bool supports_atomic_add(const Type &t) const override;
@@ -282,29 +283,25 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
 }
 
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
-    if (ends_with(name, ".__thread_id_x")) {
+    if (ends_with(name, gpu_thread_name(0))) {
         return "llvm.nvvm.read.ptx.sreg.tid.x";
-    } else if (ends_with(name, ".__thread_id_y")) {
+    } else if (ends_with(name, gpu_thread_name(1))) {
         return "llvm.nvvm.read.ptx.sreg.tid.y";
-    } else if (ends_with(name, ".__thread_id_z")) {
+    } else if (ends_with(name, gpu_thread_name(2))) {
         return "llvm.nvvm.read.ptx.sreg.tid.z";
-    } else if (ends_with(name, ".__thread_id_w")) {
-        return "llvm.nvvm.read.ptx.sreg.tid.w";
-    } else if (ends_with(name, ".__block_id_x")) {
+    } else if (ends_with(name, gpu_block_name(0))) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.x";
-    } else if (ends_with(name, ".__block_id_y")) {
+    } else if (ends_with(name, gpu_block_name(1))) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.y";
-    } else if (ends_with(name, ".__block_id_z")) {
+    } else if (ends_with(name, gpu_block_name(2))) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.z";
-    } else if (ends_with(name, ".__block_id_w")) {
-        return "llvm.nvvm.read.ptx.sreg.ctaid.w";
     }
     internal_error << "simt_intrinsic called on bad variable name\n";
     return "";
 }
 
 void CodeGen_PTX_Dev::visit(const For *loop) {
-    if (is_gpu_var(loop->name)) {
+    if (is_gpu(loop->for_type)) {
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
         internal_assert(is_const_zero(loop->min));
         sym_push(loop->name, codegen(simt_idx));
@@ -623,12 +620,17 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
 
+#if LLVM_VERSION >= 180
+    const auto opt_level = CodeGenOptLevel::Aggressive;
+#else
+    const auto opt_level = CodeGenOpt::Aggressive;
+#endif
     std::unique_ptr<TargetMachine>
         target_machine(llvm_target->createTargetMachine(triple.str(),
                                                         mcpu_target(), mattrs(), options,
                                                         llvm::Reloc::PIC_,
                                                         llvm::CodeModel::Small,
-                                                        CodeGenOpt::Aggressive));
+                                                        opt_level));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
@@ -695,7 +697,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     using OptimizationLevel = llvm::OptimizationLevel;
     OptimizationLevel level = OptimizationLevel::O3;
 
+#if LLVM_VERSION >= 180
+    target_machine->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
+#else
     target_machine->registerPassBuilderCallbacks(pb);
+#endif
 
     mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
     mpm.run(*module, mam);
@@ -724,10 +730,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Output string stream
 
+#if LLVM_VERSION >= 180
+    const auto file_type = ::llvm::CodeGenFileType::AssemblyFile;
+#else
+    const auto file_type = ::llvm::CGFT_AssemblyFile;
+#endif
     // Ask the target to add backend passes as necessary.
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
-                                                    ::llvm::CGFT_AssemblyFile,
-                                                    true);
+                                                    file_type, true);
     internal_assert(!fail) << "Failed to set up passes to emit PTX source\n";
     module_pass_manager.run(*module);
 

@@ -103,8 +103,8 @@ protected:
                 if (stride >= 2 && stride < r->lanes && r->stride.type().is_scalar()) {
                     const IRNode *s = scope;
                     const Allocate *a = nullptr;
-                    if (allocation_scope.contains(op->name)) {
-                        a = allocation_scope.get(op->name);
+                    if (const Allocate *const *a_ptr = allocation_scope.find(op->name)) {
+                        a = *a_ptr;
                     }
                     found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
                 }
@@ -161,8 +161,8 @@ public:
 protected:
     Expr visit(const Load *op) override {
         const Allocate *alloc = nullptr;
-        if (allocation_scope.contains(op->name)) {
-            alloc = allocation_scope.get(op->name);
+        if (const Allocate *const *a_ptr = allocation_scope.find(op->name)) {
+            alloc = *a_ptr;
         }
         auto it = replacements.find({alloc, op});
         if (it != replacements.end()) {

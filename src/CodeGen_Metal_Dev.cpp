@@ -2,6 +2,7 @@
 #include <sstream>
 #include <utility>
 
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
@@ -187,22 +188,18 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, const Ex
 
 namespace {
 string simt_intrinsic(const string &name) {
-    if (ends_with(name, ".__thread_id_x")) {
+    if (ends_with(name, gpu_thread_name(0))) {
         return "tid_in_tgroup.x";
-    } else if (ends_with(name, ".__thread_id_y")) {
+    } else if (ends_with(name, gpu_thread_name(1))) {
         return "tid_in_tgroup.y";
-    } else if (ends_with(name, ".__thread_id_z")) {
+    } else if (ends_with(name, gpu_thread_name(2))) {
         return "tid_in_tgroup.z";
-    } else if (ends_with(name, ".__thread_id_w")) {
-        user_error << "Metal does not support more than three dimensions in a kernel (threads).\n";
-    } else if (ends_with(name, ".__block_id_x")) {
+    } else if (ends_with(name, gpu_block_name(0))) {
         return "tgroup_index.x";
-    } else if (ends_with(name, ".__block_id_y")) {
+    } else if (ends_with(name, gpu_block_name(1))) {
         return "tgroup_index.y";
-    } else if (ends_with(name, ".__block_id_z")) {
+    } else if (ends_with(name, gpu_block_name(2))) {
         return "tgroup_index.z";
-    } else if (ends_with(name, ".__block_id_w")) {
-        user_error << "Metal does not support more than three dimensions in a kernel (groups).\n";
     }
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
@@ -272,10 +269,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
     user_assert(loop->for_type != ForType::GPULane)
         << "The Metal backend does not support the gpu_lanes() scheduling directive.";
 
-    if (is_gpu_var(loop->name)) {
-        internal_assert((loop->for_type == ForType::GPUBlock) ||
-                        (loop->for_type == ForType::GPUThread))
-            << "kernel loop must be either gpu block or gpu thread\n";
+    if (is_gpu(loop->for_type)) {
         internal_assert(is_const_zero(loop->min));
 
         stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
@@ -390,8 +384,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
     string id_index = print_expr(op->index);
 
     // Get the rhs just for the cache.
-    bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name).type == op->type);
+    const auto *alloc = allocations.find(op->name);
+    bool type_cast_needed = !(alloc &&
+                              alloc->type == op->type);
     ostringstream rhs;
     if (type_cast_needed) {
         rhs << "((" << get_memory_space(op->name) << " "
@@ -467,8 +462,8 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
                    << id_value << "[" << i << "];\n";
         }
     } else {
-        bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name).type == t);
+        const auto *alloc = allocations.find(op->name);
+        bool type_cast_needed = !(alloc && alloc->type == t);
 
         string id_index = print_expr(op->index);
         stream << get_indent();
@@ -795,6 +790,31 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define tanh_f32 tanh\n"
                << "#define atanh_f32 atanh\n"
                << "#define fast_inverse_sqrt_f32 rsqrt\n"
+               << "#define is_nan_f16 isnan\n"
+               << "#define is_inf_f16 isinf\n"
+               << "#define is_finite_f16 isfinite\n"
+               << "#define sqrt_f16 sqrt\n"
+               << "#define sin_f16 sin\n"
+               << "#define cos_f16 cos\n"
+               << "#define exp_f16 exp\n"
+               << "#define log_f16 log\n"
+               << "#define abs_f16 fabs\n"
+               << "#define floor_f16 floor\n"
+               << "#define ceil_f16 ceil\n"
+               << "#define trunc_f16 trunc\n"
+               << "#define pow_f16 pow\n"
+               << "#define asin_f16 asin\n"
+               << "#define acos_f16 acos\n"
+               << "#define tan_f16 tan\n"
+               << "#define atan_f16 atan\n"
+               << "#define atan2_f16 atan2\n"
+               << "#define sinh_f16 sinh\n"
+               << "#define asinh_f16 asinh\n"
+               << "#define cosh_f16 cosh\n"
+               << "#define acosh_f16 acosh\n"
+               << "#define tanh_f16 tanh\n"
+               << "#define atanh_f16 atanh\n"
+               << "#define fast_inverse_sqrt_f16 rsqrt\n"
                // This is quite annoying: even though the MSL docs claim
                // all versions of Metal support the same memory fence
                // names, the truth is that 1.0 does not.

@@ -18,6 +18,7 @@
 #include "PyLambda.h"
 #include "PyModule.h"
 #include "PyParam.h"
+#include "PyParameter.h"
 #include "PyPipeline.h"
 #include "PyRDom.h"
 #include "PyTarget.h"
@@ -61,6 +62,7 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_lambda(m);
     define_operators(m);
     define_param(m);
+    define_parameter(m);
     define_image_param(m);
     define_type(m);
     define_derivative(m);

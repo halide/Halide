@@ -5,6 +5,8 @@ namespace {
 class Multitarget : public Halide::Generator<Multitarget> {
 public:
     Output<Buffer<uint32_t, 2>> output{"output"};
+    Output<Buffer<float, 0>> random_float_output{"random_float_output"};
+    Output<Buffer<int32_t, 0>> random_int_output{"random_int_output"};
 
     void generate() {
         Var x, y;
@@ -16,6 +18,8 @@ public:
         } else {
             output(x, y) = cast<uint32_t>((int32_t)0xf00dcafe);
         }
+        random_float_output() = Halide::random_float();
+        random_int_output() = Halide::random_int();
     }
 };
 

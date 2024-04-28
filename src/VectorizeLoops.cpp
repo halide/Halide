@@ -29,103 +29,128 @@ Expr get_lane(const Expr &e, int l) {
     return Shuffle::make_slice(e, l, 0, 1);
 }
 
-/** Find the exact max and min lanes of a vector expression. Not
- * conservative like bounds_of_expr, but uses similar rules for some
- * common node types where it can be exact. If e is a nested vector,
- * the result will be the bounds of the vectors in each lane. */
-Interval bounds_of_nested_lanes(const Expr &e) {
+/** A helper like .as<Broadcast>(), but unwraps arbitrarily many layers of
+ * nested broadcasts. Guaranteed to return either a broadcast of a scalar or
+ * nullptr. */
+const Broadcast *as_scalar_broadcast(const Expr &e) {
+    const Broadcast *b = e.as<Broadcast>();
+    if (b && b->value.type().is_scalar()) {
+        return b;
+    } else if (b) {
+        return as_scalar_broadcast(b->value);
+    } else {
+        return nullptr;
+    }
+};
+
+/** Find the exact scalar max and min lanes of a vector expression. Not
+ * conservative like bounds_of_expr, but uses similar rules for some common node
+ * types where it can be exact. Always returns a scalar, even in the case of
+ * nested vectorization. */
+Interval bounds_of_lanes(const Expr &e) {
+    if (e.type().is_scalar()) {
+        return {e, e};
+    }
+
     if (const Add *add = e.as<Add>()) {
-        if (const Broadcast *b = add->b.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(add->a);
+        if (const Broadcast *b = as_scalar_broadcast(add->b)) {
+            Interval ia = bounds_of_lanes(add->a);
             return {ia.min + b->value, ia.max + b->value};
-        } else if (const Broadcast *b = add->a.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(add->b);
+        } else if (const Broadcast *b = as_scalar_broadcast(add->a)) {
+            Interval ia = bounds_of_lanes(add->b);
             return {b->value + ia.min, b->value + ia.max};
         }
     } else if (const Sub *sub = e.as<Sub>()) {
-        if (const Broadcast *b = sub->b.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(sub->a);
+        if (const Broadcast *b = as_scalar_broadcast(sub->b)) {
+            Interval ia = bounds_of_lanes(sub->a);
             return {ia.min - b->value, ia.max - b->value};
-        } else if (const Broadcast *b = sub->a.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(sub->b);
-            return {b->value - ia.max, b->value - ia.max};
+        } else if (const Broadcast *b = as_scalar_broadcast(sub->a)) {
+            Interval ia = bounds_of_lanes(sub->b);
+            return {b->value - ia.max, b->value - ia.min};
         }
     } else if (const Mul *mul = e.as<Mul>()) {
-        if (const Broadcast *b = mul->b.as<Broadcast>()) {
+        if (const Broadcast *b = as_scalar_broadcast(mul->b)) {
             if (is_positive_const(b->value)) {
-                Interval ia = bounds_of_nested_lanes(mul->a);
+                Interval ia = bounds_of_lanes(mul->a);
                 return {ia.min * b->value, ia.max * b->value};
             } else if (is_negative_const(b->value)) {
-                Interval ia = bounds_of_nested_lanes(mul->a);
+                Interval ia = bounds_of_lanes(mul->a);
                 return {ia.max * b->value, ia.min * b->value};
             }
-        } else if (const Broadcast *b = mul->a.as<Broadcast>()) {
+        } else if (const Broadcast *b = as_scalar_broadcast(mul->a)) {
             if (is_positive_const(b->value)) {
-                Interval ia = bounds_of_nested_lanes(mul->b);
+                Interval ia = bounds_of_lanes(mul->b);
                 return {b->value * ia.min, b->value * ia.max};
             } else if (is_negative_const(b->value)) {
-                Interval ia = bounds_of_nested_lanes(mul->b);
+                Interval ia = bounds_of_lanes(mul->b);
                 return {b->value * ia.max, b->value * ia.min};
             }
         }
     } else if (const Div *div = e.as<Div>()) {
-        if (const Broadcast *b = div->b.as<Broadcast>()) {
+        if (const Broadcast *b = as_scalar_broadcast(div->b)) {
             if (is_positive_const(b->value)) {
-                Interval ia = bounds_of_nested_lanes(div->a);
+                Interval ia = bounds_of_lanes(div->a);
                 return {ia.min / b->value, ia.max / b->value};
             } else if (is_negative_const(b->value)) {
-                Interval ia = bounds_of_nested_lanes(div->a);
+                Interval ia = bounds_of_lanes(div->a);
                 return {ia.max / b->value, ia.min / b->value};
             }
         }
     } else if (const And *and_ = e.as<And>()) {
-        if (const Broadcast *b = and_->b.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(and_->a);
+        if (const Broadcast *b = as_scalar_broadcast(and_->b)) {
+            Interval ia = bounds_of_lanes(and_->a);
             return {ia.min && b->value, ia.max && b->value};
-        } else if (const Broadcast *b = and_->a.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(and_->b);
+        } else if (const Broadcast *b = as_scalar_broadcast(and_->a)) {
+            Interval ia = bounds_of_lanes(and_->b);
             return {ia.min && b->value, ia.max && b->value};
         }
     } else if (const Or *or_ = e.as<Or>()) {
-        if (const Broadcast *b = or_->b.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(or_->a);
+        if (const Broadcast *b = as_scalar_broadcast(or_->b)) {
+            Interval ia = bounds_of_lanes(or_->a);
             return {ia.min && b->value, ia.max && b->value};
-        } else if (const Broadcast *b = or_->a.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(or_->b);
+        } else if (const Broadcast *b = as_scalar_broadcast(or_->a)) {
+            Interval ia = bounds_of_lanes(or_->b);
             return {ia.min && b->value, ia.max && b->value};
         }
     } else if (const Min *min = e.as<Min>()) {
-        if (const Broadcast *b = min->b.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(min->a);
+        if (const Broadcast *b = as_scalar_broadcast(min->b)) {
+            Interval ia = bounds_of_lanes(min->a);
+            // ia and b->value have both had one nesting layer of vectorization
+            // peeled off, but that doesn't make them the same type.
             return {Min::make(ia.min, b->value), Min::make(ia.max, b->value)};
-        } else if (const Broadcast *b = min->a.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(min->b);
+        } else if (const Broadcast *b = as_scalar_broadcast(min->a)) {
+            Interval ia = bounds_of_lanes(min->b);
             return {Min::make(ia.min, b->value), Min::make(ia.max, b->value)};
         }
     } else if (const Max *max = e.as<Max>()) {
-        if (const Broadcast *b = max->b.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(max->a);
+        if (const Broadcast *b = as_scalar_broadcast(max->b)) {
+            Interval ia = bounds_of_lanes(max->a);
             return {Max::make(ia.min, b->value), Max::make(ia.max, b->value)};
-        } else if (const Broadcast *b = max->a.as<Broadcast>()) {
-            Interval ia = bounds_of_nested_lanes(max->b);
+        } else if (const Broadcast *b = as_scalar_broadcast(max->a)) {
+            Interval ia = bounds_of_lanes(max->b);
             return {Max::make(ia.min, b->value), Max::make(ia.max, b->value)};
         }
     } else if (const Not *not_ = e.as<Not>()) {
-        Interval ia = bounds_of_nested_lanes(not_->a);
+        Interval ia = bounds_of_lanes(not_->a);
         return {!ia.max, !ia.min};
     } else if (const Ramp *r = e.as<Ramp>()) {
-        Expr last_lane_idx = make_const(r->base.type(), r->lanes - 1);
-        if (is_positive_const(r->stride)) {
-            return {r->base, r->base + last_lane_idx * r->stride};
-        } else if (is_negative_const(r->stride)) {
-            return {r->base + last_lane_idx * r->stride, r->base};
+        Expr last_lane_idx = make_const(r->base.type().element_of(), r->lanes - 1);
+        Interval ib = bounds_of_lanes(r->base);
+        const Broadcast *b = as_scalar_broadcast(r->stride);
+        Expr stride = b ? b->value : r->stride;
+        if (stride.type().is_scalar()) {
+            if (is_positive_const(stride)) {
+                return {ib.min, ib.max + last_lane_idx * stride};
+            } else if (is_negative_const(stride)) {
+                return {ib.min + last_lane_idx * stride, ib.max};
+            }
         }
     } else if (const LE *le = e.as<LE>()) {
         // The least true this can be is if we maximize the LHS and minimize the RHS.
         // The most true this can be is if we minimize the LHS and maximize the RHS.
         // This is only exact if one of the two sides is a Broadcast.
-        Interval ia = bounds_of_nested_lanes(le->a);
-        Interval ib = bounds_of_nested_lanes(le->b);
+        Interval ia = bounds_of_lanes(le->a);
+        Interval ib = bounds_of_lanes(le->b);
         if (ia.is_single_point() || ib.is_single_point()) {
             return {ia.max <= ib.min, ia.min <= ib.max};
         }
@@ -133,17 +158,17 @@ Interval bounds_of_nested_lanes(const Expr &e) {
         // The least true this can be is if we maximize the LHS and minimize the RHS.
         // The most true this can be is if we minimize the LHS and maximize the RHS.
         // This is only exact if one of the two sides is a Broadcast.
-        Interval ia = bounds_of_nested_lanes(lt->a);
-        Interval ib = bounds_of_nested_lanes(lt->b);
+        Interval ia = bounds_of_lanes(lt->a);
+        Interval ib = bounds_of_lanes(lt->b);
         if (ia.is_single_point() || ib.is_single_point()) {
             return {ia.max < ib.min, ia.min < ib.max};
         }
 
-    } else if (const Broadcast *b = e.as<Broadcast>()) {
+    } else if (const Broadcast *b = as_scalar_broadcast(e)) {
         return {b->value, b->value};
     } else if (const Let *let = e.as<Let>()) {
-        Interval ia = bounds_of_nested_lanes(let->value);
-        Interval ib = bounds_of_nested_lanes(let->body);
+        Interval ia = bounds_of_lanes(let->value);
+        Interval ib = bounds_of_lanes(let->body);
         if (expr_uses_var(ib.min, let->name)) {
             ib.min = Let::make(let->name, let->value, ib.min);
         }
@@ -165,19 +190,6 @@ Interval bounds_of_nested_lanes(const Expr &e) {
         return {min_lane, max_lane};
     }
 };
-
-/** Similar to bounds_of_nested_lanes, but it recursively reduces
- * the bounds of nested vectors to scalars. */
-Interval bounds_of_lanes(const Expr &e) {
-    Interval bounds = bounds_of_nested_lanes(e);
-    if (!bounds.min.type().is_scalar()) {
-        bounds.min = bounds_of_lanes(bounds.min).min;
-    }
-    if (!bounds.max.type().is_scalar()) {
-        bounds.max = bounds_of_lanes(bounds.max).max;
-    }
-    return bounds;
-}
 
 // A ramp with the lanes repeated inner_repetitions times, and then
 // the whole vector repeated outer_repetitions times.
@@ -285,8 +297,8 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
             return true;
         }
     } else if (const Variable *var = e.as<Variable>()) {
-        if (scope.contains(var->name)) {
-            return is_interleaved_ramp(scope.get(var->name), scope, result);
+        if (const Expr *e = scope.find(var->name)) {
+            return is_interleaved_ramp(*e, scope, result);
         }
     }
     return false;
@@ -342,7 +354,7 @@ class SerializeLoops : public IRMutator {
     Stmt visit(const For *op) override {
         if (op->for_type == ForType::Vectorized) {
             return For::make(op->name, op->min, op->extent,
-                             ForType::Serial, op->device_api, mutate(op->body));
+                             ForType::Serial, op->partition_policy, op->device_api, mutate(op->body));
         }
 
         return IRMutator::visit(op);
@@ -816,7 +828,7 @@ class VectorSubs : public IRMutator {
     }
 
     Stmt visit(const AssertStmt *op) override {
-        return (op->condition.type().lanes() > 1) ? scalarize(op) : op;
+        return (mutate(op->condition).type().lanes() > 1) ? scalarize(op) : op;
     }
 
     Stmt visit(const IfThenElse *op) override {
@@ -863,6 +875,7 @@ class VectorSubs : public IRMutator {
                 // generating a scalar condition that checks if
                 // the least-true lane is true.
                 Expr all_true = bounds_of_lanes(likely->args[0]).min;
+                internal_assert(all_true.type() == Bool());
                 // Wrap it in the same flavor of likely
                 all_true = Call::make(Bool(), likely->name,
                                       {all_true}, Call::PureIntrinsic);
@@ -935,7 +948,7 @@ class VectorSubs : public IRMutator {
             // Rebase the loop to zero and try again
             Expr var = Variable::make(Int(32), op->name);
             Stmt body = substitute(op->name, var + op->min, op->body);
-            Stmt transformed = For::make(op->name, 0, op->extent, for_type, op->device_api, body);
+            Stmt transformed = For::make(op->name, 0, op->extent, for_type, op->partition_policy, op->device_api, body);
             return mutate(transformed);
         }
 
@@ -951,7 +964,9 @@ class VectorSubs : public IRMutator {
 
         if (op->for_type == ForType::Vectorized) {
             const IntImm *extent_int = extent.as<IntImm>();
-            if (!extent_int || extent_int->value <= 1) {
+            internal_assert(extent_int)
+                << "Vectorized for loop extent should have been rewritten to a constant\n";
+            if (extent_int->value <= 1) {
                 user_error << "Loop over " << op->name
                            << " has extent " << extent
                            << ". Can only vectorize loops over a "
@@ -960,19 +975,27 @@ class VectorSubs : public IRMutator {
 
             vectorized_vars.push_back({op->name, min, (int)extent_int->value});
             update_replacements();
-            // Go over lets which were vectorized and update them according to the current
-            // loop level.
-            for (auto it = scope.cbegin(); it != scope.cend(); ++it) {
-                string vectorized_name = get_widened_var_name(it.name());
-                Expr vectorized_value = mutate(it.value());
+            // Go over lets which were vectorized in the order of their occurrence and update
+            // them according to the current loop level.
+            for (auto let = containing_lets.begin(); let != containing_lets.end(); let++) {
+                // Skip if this var wasn't vectorized.
+                if (!scope.contains(let->first)) {
+                    continue;
+                }
+                string vectorized_name = get_widened_var_name(let->first);
+                Expr vectorized_value = mutate(scope.get(let->first));
                 vector_scope.push(vectorized_name, vectorized_value);
             }
 
             body = mutate(body);
 
             // Append vectorized lets for this loop level.
-            for (auto it = scope.cbegin(); it != scope.cend(); ++it) {
-                string vectorized_name = get_widened_var_name(it.name());
+            for (auto let = containing_lets.rbegin(); let != containing_lets.rend(); let++) {
+                // Skip if this var wasn't vectorized.
+                if (!scope.contains(let->first)) {
+                    continue;
+                }
+                string vectorized_name = get_widened_var_name(let->first);
                 Expr vectorized_value = vector_scope.get(vectorized_name);
                 vector_scope.pop(vectorized_name);
                 InterleavedRamp ir;
@@ -994,7 +1017,7 @@ class VectorSubs : public IRMutator {
                 for_type == op->for_type) {
                 return op;
             } else {
-                return For::make(op->name, min, extent, for_type, op->device_api, body);
+                return For::make(op->name, min, extent, for_type, op->partition_policy, op->device_api, body);
             }
         }
     }
@@ -1284,7 +1307,7 @@ class VectorSubs : public IRMutator {
 
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
             s = For::make(vectorized_vars[ix].name, vectorized_vars[ix].min,
-                          vectorized_vars[ix].lanes, ForType::Serial, DeviceAPI::None, s);
+                          vectorized_vars[ix].lanes, ForType::Serial, Partition::Auto, DeviceAPI::None, s);
         }
 
         return s;

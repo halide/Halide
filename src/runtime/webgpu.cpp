@@ -328,9 +328,7 @@ WEAK int create_webgpu_context(void *user_context) {
         << "WGPU: create_webgpu_context (user_context: " << user_context
         << ")\n";
 
-    WGPUInstanceDescriptor desc{};
-    desc.nextInChain = nullptr;
-    global_instance = wgpuCreateInstance(&desc);
+    global_instance = wgpuCreateInstance(nullptr);
     debug(user_context)
         << "WGPU: wgpuCreateInstance produces: " << global_instance
         << ")\n";
@@ -472,7 +470,7 @@ WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
 
     __atomic_test_and_set(&result.complete, __ATOMIC_RELAXED);
     wgpuQueueOnSubmittedWorkDone(
-        context.queue, 0,
+        context.queue,
         [](WGPUQueueWorkDoneStatus status, void *userdata) {
             WorkDoneResult *result = (WorkDoneResult *)userdata;
             result->status = status;

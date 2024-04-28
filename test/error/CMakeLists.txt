@@ -9,6 +9,8 @@ tests(GROUPS error
       auto_schedule_no_parallel.cpp
       auto_schedule_no_reorder.cpp
       autodiff_unbounded.cpp
+      bad_async_producer.cpp
+      bad_async_producer_2.cpp
       bad_bound.cpp
       bad_bound_storage.cpp
       bad_compute_at.cpp
@@ -18,9 +20,12 @@ tests(GROUPS error
       bad_const_cast.cpp
       bad_device_api.cpp
       bad_dimensions.cpp
+      bad_ring_buffer.cpp
       bad_extern_split.cpp
       bad_fold.cpp
       bad_host_alignment.cpp
+      bad_hoist_storage.cpp
+      bad_partition_always.cpp
       bad_prefetch.cpp
       bad_reorder.cpp
       bad_reorder_storage.cpp
@@ -58,6 +63,8 @@ tests(GROUPS error
       func_tuple_dim_mismatch.cpp
       func_tuple_types_mismatch.cpp
       func_tuple_update_types_mismatch.cpp
+      fuse_vectorized_var_with_rvar.cpp
+      hoist_storage_without_compute_at.cpp
       implicit_args.cpp
       impossible_constraints.cpp
       incomplete_target.cpp
@@ -77,6 +84,7 @@ tests(GROUPS error
       overflow_during_constant_folding.cpp
       pointer_arithmetic.cpp
       race_condition.cpp
+      predicate_loads_used_in_inner_splits.cpp
       rdom_undefined.cpp
       rdom_where_races.cpp
       realization_with_too_many_outputs.cpp
@@ -87,11 +95,14 @@ tests(GROUPS error
       reuse_var_in_schedule.cpp
       reused_args.cpp
       rfactor_inner_dim_non_commutative.cpp
+      round_up_and_blend_race.cpp
       run_with_large_stack_throws.cpp
+      shift_inwards_and_blend_race.cpp
       specialize_fail.cpp
       split_inner_wrong_tail_strategy.cpp
       split_non_innermost_predicated.cpp
       split_same_var_names.cpp
+      store_at_without_compute_at.cpp
       thread_id_outside_block_id.cpp
       too_many_args.cpp
       tuple_arg_select_undef.cpp
@@ -106,6 +117,8 @@ tests(GROUPS error
       undefined_pipeline_compile.cpp
       undefined_pipeline_realize.cpp
       undefined_rdom_dimension.cpp
+      uninitialized_param.cpp
+      uninitialized_param_2.cpp
       unknown_target.cpp
       vector_tile.cpp
       vectorize_dynamic.cpp

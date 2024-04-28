@@ -98,11 +98,11 @@ static constexpr uint64_t trace_buf_size = 4096;
 WEAK char trace_buf[trace_buf_size] = {};
 WEAK int trace_indent = 0;
 
-struct trace : public BasicPrinter<trace_buf_size> {
+struct trace : public PrinterBase {
     ScopedMutexLock lock;
 
     explicit trace(void *user_context = nullptr)
-        : BasicPrinter<trace_buf_size>(user_context, trace_buf),
+        : PrinterBase(user_context, trace_buf, trace_buf_size),
           lock(&trace_lock) {
         for (int i = 0; i < trace_indent; i++) {
             *this << "    ";
@@ -2786,8 +2786,12 @@ WEAK int halide_d3d12compute_device_sync(void *user_context, struct halide_buffe
         return d3d12_context.error();
     }
 
-    d3d12_buffer *dbuffer = peel_buffer(buffer);
-    d3d12compute_device_sync_internal(d3d12_context.device, dbuffer);
+    if (buffer != nullptr) {
+        d3d12_buffer *dbuffer = peel_buffer(buffer);
+        d3d12compute_device_sync_internal(d3d12_context.device, dbuffer);
+    } else {
+        d3d12compute_device_sync_internal(d3d12_context.device, nullptr);
+    }
 
     return halide_error_code_success;
 }

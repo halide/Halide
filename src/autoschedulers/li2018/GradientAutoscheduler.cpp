@@ -37,7 +37,7 @@ std::vector<int> get_int_bounds(const Box &bounds) {
     std::vector<int> int_bounds;
     int_bounds.reserve(bounds.size());
     for (int i = 0; i < (int)bounds.size(); i++) {
-        Interval interval = bounds[i];
+        const Interval &interval = bounds[i];
         Expr extent = simplify(interval.max - interval.min + 1);
         extent = simplify(substitute_var_estimates(extent));
         const int64_t *extent_int = as_const_int(extent);

@@ -162,7 +162,6 @@ Stmt add_image_checks_inner(Stmt s,
                             const FuncValueBounds &fb,
                             bool will_inject_host_copies) {
 
-    bool no_asserts = t.has_feature(Target::NoAsserts);
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
 
     // First hunt for all the referenced buffers
@@ -618,12 +617,9 @@ Stmt add_image_checks_inner(Stmt s,
                 replace_with_constrained[name] = constrained_var;
             }
 
-            Expr error = 0;
-            if (!no_asserts) {
-                error = Call::make(Int(32), "halide_error_constraint_violated",
-                                   {name, var, constrained_var_str, constrained_var},
-                                   Call::Extern);
-            }
+            Expr error = Call::make(Int(32), "halide_error_constraint_violated",
+                                    {name, var, constrained_var_str, constrained_var},
+                                    Call::Extern);
 
             // Check the var passed in equals the constrained version (when not in inference mode)
             asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
@@ -679,14 +675,12 @@ Stmt add_image_checks_inner(Stmt s,
         }
     };
 
-    if (!no_asserts) {
-        // Inject the code that checks the host pointers.
-        prepend_stmts(&asserts_host_non_null);
-        prepend_stmts(&asserts_host_alignment);
-        prepend_stmts(&asserts_device_not_dirty);
-        prepend_stmts(&dims_no_overflow_asserts);
-        prepend_lets(&lets_overflow);
-    }
+    // Inject the code that checks the host pointers.
+    prepend_stmts(&asserts_host_non_null);
+    prepend_stmts(&asserts_host_alignment);
+    prepend_stmts(&asserts_device_not_dirty);
+    prepend_stmts(&dims_no_overflow_asserts);
+    prepend_lets(&lets_overflow);
 
     // Replace uses of the var with the constrained versions in the
     // rest of the program. We also need to respect the existence of
@@ -698,15 +692,10 @@ Stmt add_image_checks_inner(Stmt s,
     // all in reverse order compared to execution, as we incrementally
     // prepending code.
 
-    // Inject the code that checks the constraints are correct. We
-    // need these regardless of how NoAsserts is set, because they are
-    // what gets Halide to actually exploit the constraint.
+    // Inject the code that checks the constraints are correct.
     prepend_stmts(&asserts_constrained);
-
-    if (!no_asserts) {
-        prepend_stmts(&asserts_required);
-        prepend_stmts(&asserts_type_checks);
-    }
+    prepend_stmts(&asserts_required);
+    prepend_stmts(&asserts_type_checks);
 
     // Inject the code that returns early for inference mode.
     if (!no_bounds_query) {
@@ -714,9 +703,7 @@ Stmt add_image_checks_inner(Stmt s,
         prepend_stmts(&buffer_rewrites);
     }
 
-    if (!no_asserts) {
-        prepend_stmts(&asserts_proposed);
-    }
+    prepend_stmts(&asserts_proposed);
 
     // Inject the code that defines the proposed sizes.
     prepend_lets(&lets_proposed);
@@ -749,6 +736,36 @@ Stmt add_image_checks(const Stmt &s,
     // bounds inference.
     class Injector : public IRMutator {
         using IRMutator::visit;
+
+        Expr visit(const Variable *op) override {
+            // In the bounds inference lets we skip over, respect any buffer
+            // constraints.
+
+            // Note that in the case where the constraint doesn't hold, this
+            // changes the value of this Expr! This is safe because these lets
+            // are internal names, and no user-provided constraints can depend
+            // on them, so changing their value to use the constraint value
+            // instead of the actual buffer value can't possibly change whether
+            // or not the constraint check is going to pass.
+            const Parameter &p = op->param;
+            if (p.defined() && p.is_buffer()) {
+                for (int i = 0; i < p.dimensions(); i++) {
+                    if (p.min_constraint(i).defined() &&
+                        op->name == p.name() + ".min." + std::to_string(i)) {
+                        return p.min_constraint(i);
+                    }
+                    if (p.extent_constraint(i).defined() &&
+                        op->name == p.name() + ".extent." + std::to_string(i)) {
+                        return p.extent_constraint(i);
+                    }
+                    if (p.stride_constraint(i).defined() &&
+                        op->name == p.name() + ".stride." + std::to_string(i)) {
+                        return p.stride_constraint(i);
+                    }
+                }
+            }
+            return op;
+        }
 
         Stmt visit(const Block *op) override {
             const Evaluate *e = op->first.as<Evaluate>();

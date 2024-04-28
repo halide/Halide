@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         Var x("x"), y("y");
         circle(x, y) = x + y;
 
-        // Say we want an update that squares the values inside a
+        // Say we want an update that multiplies by two the values inside a
         // circular region centered at (3, 3) with radius of 3. To do
         // this, we first define the minimal bounding box over the
         // circular region using an RDom.

@@ -209,3 +209,8 @@ if (TARGET Halide::Mullapudi2016)
     add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND lesson_21_auto_scheduler_run)
     set_tests_properties(tutorial_lesson_21_auto_scheduler_run PROPERTIES LABELS "tutorial;multithreaded")
 endif ()
+
+# Lessons 22-24
+add_tutorial(lesson_22_jit_performance.cpp)
+add_tutorial(lesson_23_serialization.cpp WITH_IMAGE_IO)
+add_tutorial(lesson_24_async.cpp)

@@ -13,10 +13,12 @@
 /** \file
  * Various utility functions used internally Halide. */
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -184,6 +186,29 @@ std::string replace_all(const std::string &str, const std::string &find, const s
 
 /** Split the source string using 'delim' as the divider. */
 std::vector<std::string> split_string(const std::string &source, const std::string &delim);
+
+/** Join the source vector using 'delim' as the divider. */
+template<typename T>
+std::string join_strings(const std::vector<T> &sources, const std::string &delim) {
+    size_t sz = 0;
+    if (!sources.empty()) {
+        sz += delim.size() * (sources.size() - 1);
+    }
+    for (const auto &s : sources) {
+        sz += s.size();
+    }
+    std::string result;
+    result.reserve(sz);
+    bool need_delim = false;
+    for (const auto &s : sources) {
+        if (need_delim) {
+            result += delim;
+        }
+        result += s;
+        need_delim = true;
+    }
+    return result;
+}
 
 /** Perform a left fold of a vector. Returns a default-constructed
  * vector element if the vector is empty. Similar to std::accumulate
@@ -507,6 +532,16 @@ int popcount64(uint64_t x);
 int clz64(uint64_t x);
 int ctz64(uint64_t x);
 // @}
+
+/** Return an integer 2^n, for some n,  which is >= x. Argument x must be > 0. */
+inline int64_t next_power_of_two(int64_t x) {
+    return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
+}
+
+template<typename T>
+inline T align_up(T x, int n) {
+    return (x + n - 1) / n * n;
+}
 
 }  // namespace Internal
 }  // namespace Halide

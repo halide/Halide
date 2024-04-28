@@ -619,7 +619,7 @@ struct TickStackEntry {
 
 namespace {
 
-vector<TickStackEntry> tick_stack;
+thread_local vector<TickStackEntry> tick_stack;
 
 }  // namespace
 

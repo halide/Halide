@@ -375,6 +375,79 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
              rhs_checker.has_self_reference ||
              rhs_checker.has_rvar);
 }
+
+void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
+    // Splits with a 'blend' tail strategy do a load and then a store of values
+    // outside of the region to be computed, so for each split using a 'blend'
+    // tail strategy, verify that there aren't any parallel vars that stem from
+    // the same original dimension, so that this load and store doesn't race
+    // with a true computation of that value happening in some other thread.
+
+    // Note that we only need to check vars in the same dimension, because
+    // allocation bounds inference is done per-dimension and allocates padding
+    // based on the values actually accessed by the lowered code (i.e. it covers
+    // the blend region). So for example, an access beyond the end of a scanline
+    // can't overflow onto the next scanline. Halide will allocate padding, or
+    // throw a bounds error if it's an input or output.
+
+    if (sched.allow_race_conditions()) {
+        return;
+    }
+
+    std::set<std::string> parallel;
+    for (const auto &dim : sched.dims()) {
+        if (is_unordered_parallel(dim.for_type)) {
+            parallel.insert(dim.var);
+        }
+    }
+
+    // Process the splits in reverse order to figure out which root vars have a
+    // parallel child.
+    for (auto it = sched.splits().rbegin(); it != sched.splits().rend(); it++) {
+        if (it->is_fuse()) {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->inner);
+                parallel.insert(it->old_var);
+            }
+        } else if (it->is_rename() || it->is_purify()) {
+            if (parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        } else {
+            if (parallel.count(it->inner) || parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        }
+    }
+
+    // Now propagate back to all children of the identified root vars, to assert
+    // that none of them use a blending tail strategy.
+    for (auto it = sched.splits().begin(); it != sched.splits().end(); it++) {
+        if (it->is_fuse()) {
+            if (parallel.count(it->inner) || parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        } else if (it->is_rename() || it->is_purify()) {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->outer);
+            }
+        } else {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->inner);
+                parallel.insert(it->old_var);
+                if (it->tail == TailStrategy::ShiftInwardsAndBlend ||
+                    it->tail == TailStrategy::RoundUpAndBlend) {
+                    user_error << "Tail strategy " << it->tail
+                               << " may not be used to split " << it->old_var
+                               << " because other vars stemming from the same original "
+                               << "Var or RVar are marked as parallel."
+                               << "This could cause a race condition.\n";
+                }
+            }
+        }
+    }
+}
+
 }  // namespace
 
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
@@ -418,7 +491,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     << " condition resulting in incorrect output."
                     << " It is possible to parallelize this by using the"
                     << " atomic() method if the operation is associative,"
-                    << " or set override_associativity_test to true in the atomic method "
+                    << " or set override_associativity_test to true in the atomic method"
                     << " if you are certain that the operation is associative."
                     << " It is also possible to override this error using"
                     << " the allow_race_conditions() method. Use allow_race_conditions()"
@@ -438,6 +511,10 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                    << " to mark as " << t
                    << " in vars for function\n"
                    << dump_argument_list();
+    }
+
+    if (is_unordered_parallel(t)) {
+        check_for_race_conditions_in_split_with_blend(definition.schedule());
     }
 }
 
@@ -711,6 +788,17 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
 
+    // Figure out which pure vars were used in this update definition.
+    std::set<string> pure_vars_used;
+    internal_assert(args.size() == dim_vars.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        if (const Internal::Variable *var = args[i].as<Variable>()) {
+            if (var->name == dim_vars[i].name()) {
+                pure_vars_used.insert(var->name);
+            }
+        }
+    }
+
     // Check whether the operator is associative and determine the operator and
     // its identity for each value in the definition if it is a Tuple
     const auto &prover_result = prove_associativity(func_name, args, values);
@@ -935,16 +1023,20 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 
     // Determine the dims of the new update definition
 
+    // The new update definition needs all the pure vars of the Func, but the
+    // one we're rfactoring may not have used them all. Add any missing ones to
+    // the dims list.
+
     // Add pure Vars from the original init definition to the dims list
     // if they are not already in the list
     for (const Var &v : dim_vars) {
-        const auto &iter = std::find_if(dims.begin(), dims.end(),
-                                        [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
-        if (iter == dims.end()) {
-            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
+        if (!pure_vars_used.count(v.name())) {
+            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
+            // Insert it just before Var::outermost
             dims.insert(dims.end() - 1, d);
         }
     }
+
     // Then, we need to remove lifted RVars from the dims list
     for (const string &rv : rvars_removed) {
         remove(rv);
@@ -1090,6 +1182,34 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
             << "Use TailStrategy::GuardWithIf instead.";
     }
 
+    bool predicate_loads_ok = !exact;
+    if (predicate_loads_ok && tail == TailStrategy::PredicateLoads) {
+        // If it's the outermost split in this dimension, PredicateLoads
+        // is OK. Otherwise we can't prove it's safe.
+        std::set<string> inner_vars;
+        for (const Split &s : definition.schedule().splits()) {
+            if (s.is_split()) {
+                inner_vars.insert(s.inner);
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_rename() || s.is_purify()) {
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_fuse()) {
+                if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
+                    inner_vars.insert(s.old_var);
+                }
+            }
+        }
+        predicate_loads_ok = !inner_vars.count(old_name);
+        user_assert(predicate_loads_ok || tail != TailStrategy::PredicateLoads)
+            << "Can't use TailStrategy::PredicateLoads for splitting " << old_name
+            << " in the definition of " << name() << ". "
+            << "PredicateLoads may not be used to split a Var stemming from the inner Var of a prior split.";
+    }
+
     if (tail == TailStrategy::Auto) {
         // Select a tail strategy
         if (exact) {
@@ -1141,6 +1261,11 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
                 tail = TailStrategy::ShiftInwards;
             }
         }
+    }
+
+    if (tail == TailStrategy::ShiftInwardsAndBlend ||
+        tail == TailStrategy::RoundUpAndBlend) {
+        check_for_race_conditions_in_split_with_blend(definition.schedule());
     }
 
     if (!definition.is_init()) {
@@ -1225,6 +1350,10 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
             } else {
                 dims[i].dim_type = DimType::PureVar;
             }
+            // We just changed the dim_type without checking the
+            // for_type. Redundantly re-set the for type on the fused var just
+            // to trigger validation of the existing for_type.
+            set_dim_type(fused, dims[i].for_type);
         }
     }
 
@@ -1599,6 +1728,56 @@ Stage &Stage::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail
     return *this;
 }
 
+Stage &Stage::partition(const VarOrRVar &var, Partition policy) {
+    definition.schedule().touched() = true;
+    bool found = false;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
+            found = true;
+            dim.partition_policy = policy;
+        }
+    }
+    user_assert(found)
+        << "In schedule for " << name()
+        << ", could not find var " << var.name()
+        << " to set loop partition policy.\n"
+        << dump_argument_list();
+    return *this;
+}
+
+Stage &Stage::never_partition(const std::vector<VarOrRVar> &vars) {
+    for (const auto &v : vars) {
+        partition(v, Partition::Never);
+    }
+    return *this;
+}
+
+Stage &Stage::never_partition_all() {
+    definition.schedule().touched() = true;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        dim.partition_policy = Partition::Never;
+    }
+    return *this;
+}
+
+Stage &Stage::always_partition(const std::vector<VarOrRVar> &vars) {
+    for (const auto &v : vars) {
+        partition(v, Partition::Always);
+    }
+    return *this;
+}
+
+Stage &Stage::always_partition_all() {
+    definition.schedule().touched() = true;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        dim.partition_policy = Partition::Always;
+    }
+    return *this;
+}
+
 Stage &Stage::tile(const VarOrRVar &x, const VarOrRVar &y,
                    const VarOrRVar &xo, const VarOrRVar &yo,
                    const VarOrRVar &xi, const VarOrRVar &yi,
@@ -1723,6 +1902,11 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     }
 
     dims_old.swap(dims);
+
+    // We're not allowed to reorder Var::outermost inwards (rfactor assumes it's
+    // the last one).
+    user_assert(dims.back().var == Var::outermost().name())
+        << "Var::outermost() may not be reordered inside any other var.\n";
 
     return *this;
 }
@@ -1904,7 +2088,7 @@ Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from
     return *this;
 }
 
-Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+Stage &Stage::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     definition.schedule().touched() = true;
     PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
@@ -2234,6 +2418,12 @@ Func &Func::async() {
     return *this;
 }
 
+Func &Func::ring_buffer(Expr extent) {
+    invalidate_cache();
+    func.schedule().ring_buffer() = std::move(extent);
+    return *this;
+}
+
 Stage Func::specialize(const Expr &c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0).specialize(c);
@@ -2283,6 +2473,36 @@ Func &Func::vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tai
 Func &Func::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).unroll(var, factor, tail);
+    return *this;
+}
+
+Func &Func::partition(const VarOrRVar &var, Partition policy) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).partition(var, policy);
+    return *this;
+}
+
+Func &Func::never_partition(const std::vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).never_partition(vars);
+    return *this;
+}
+
+Func &Func::never_partition_all() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).never_partition_all();
+    return *this;
+}
+
+Func &Func::always_partition(const std::vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).always_partition(vars);
+    return *this;
+}
+
+Func &Func::always_partition_all() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).always_partition_all();
     return *this;
 }
 
@@ -2601,7 +2821,7 @@ Func &Func::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, 
     return *this;
 }
 
-Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+Func &Func::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
     Stage(func, func.definition(), 0).prefetch(param, at, from, std::move(offset), strategy);
     return *this;
@@ -2771,6 +2991,24 @@ Func &Func::store_root() {
     return store_at(LoopLevel::root());
 }
 
+Func &Func::hoist_storage(LoopLevel loop_level) {
+    invalidate_cache();
+    func.schedule().hoist_storage_level() = std::move(loop_level);
+    return *this;
+}
+
+Func &Func::hoist_storage(const Func &f, const RVar &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage(const Func &f, const Var &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage_root() {
+    return hoist_storage(LoopLevel::root());
+}
+
 Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
 }
@@ -2796,6 +3034,11 @@ Func &Func::trace_realizations() {
 Func &Func::add_trace_tag(const std::string &trace_tag) {
     invalidate_cache();
     func.add_trace_tag(trace_tag);
+    return *this;
+}
+
+Func &Func::no_profiling() {
+    func.do_not_profile();
     return *this;
 }
 

@@ -111,13 +111,9 @@ DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(msan)
 DECLARE_CPP_INITMOD(msan_stubs)
 DECLARE_CPP_INITMOD(opencl)
-DECLARE_CPP_INITMOD(opengl_egl_context)
-DECLARE_CPP_INITMOD(opengl_glx_context)
-DECLARE_CPP_INITMOD(openglcompute)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
-DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(osx_yield)
 DECLARE_CPP_INITMOD(posix_aligned_alloc)
 DECLARE_CPP_INITMOD(posix_allocator)
@@ -295,6 +291,37 @@ DECLARE_NO_INITMOD(riscv_cpu_features)
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
+#if LLVM_VERSION >= 180
+        if (target.bits == 32) {
+            if (target.os == Target::OSX) {
+                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:128-n8:16:32-S128");
+            } else if (target.os == Target::IOS) {
+                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:128-n8:16:32-S128");
+            } else if (target.os == Target::Windows) {
+                // For 32-bit MSVC targets, alignment of f80 values is 16 bytes (see https://reviews.llvm.org/D115942)
+                if (!target.has_feature(Target::JIT)) {
+                    return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32-a:0:32-S32");
+                } else {
+                    return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32-a:0:32-S32");
+                }
+            } else {
+                // Linux/Android
+                return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:32-n8:16:32-S128");
+            }
+        } else {  // 64-bit
+            if (target.os == Target::OSX) {
+                return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::IOS) {
+                return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
+                return llvm::DataLayout("e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::Windows) {
+                return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+            } else {
+                return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+            }
+        }
+#else
         if (target.bits == 32) {
             if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
@@ -324,6 +351,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
             }
         }
+#endif
     } else if (target.arch == Target::ARM) {
         if (target.bits == 32) {
             if (target.os == Target::IOS) {
@@ -370,11 +398,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         if (target.bits == 32) {
             return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32-S128");
         } else {
-#if LLVM_VERSION >= 160
             return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n32:64-S128");
-#else
-            return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n64-S128");
-#endif
         }
     } else {
         // Return empty data layout. Must be set later.
@@ -754,6 +778,7 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     // things that are 'alwaysinline' can be included here but are unnecessary.
     vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(std::move(extra_module));
+    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
     modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
     modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -768,7 +793,6 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
     modules.push_back(get_initmod_fopen(c, bits_64, debug));
     modules.push_back(get_initmod_device_interface(c, bits_64, debug));
-    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
     modules.push_back(get_initmod_float16_t(c, bits_64, debug));
     modules.push_back(get_initmod_errors(c, bits_64, debug));
     modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
@@ -814,6 +838,17 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     bool tsan = t.has_feature(Target::TSAN);
 
     vector<std::unique_ptr<llvm::Module>> modules;
+
+    // Start with the module that defines our struct types. This must be
+    // included first, because when parsing modules, if two structs are
+    // encountered with the same fields, they are deduped, and the first name
+    // wins.
+    //
+    // If in the future these names become unpredictable, an alternative
+    // strategy is to make this module include a global variable of each type we
+    // care about, recover the struct types from those named globals, and then
+    // delete the globals in link_modules.
+    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
 
     const auto add_allocator = [&]() {
         modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
@@ -1172,23 +1207,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_opencl(c, bits_64, debug));
             }
         }
-        if (t.has_feature(Target::OpenGLCompute)) {
-            modules.push_back(get_initmod_openglcompute(c, bits_64, debug));
-            if (t.os == Target::Android) {
-                // Only platform that supports OpenGL Compute for now.
-                modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-            } else if (t.os == Target::Linux) {
-                if (t.has_feature(Target::EGL)) {
-                    modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_opengl_glx_context(c, bits_64, debug));
-                }
-            } else if (t.os == Target::OSX) {
-                modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
-            } else {
-                // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
-            }
-        }
         if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));
             if (t.arch == Target::ARM) {
@@ -1248,8 +1266,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         t.os == Target::NoOS) {
         modules.push_back(get_initmod_runtime_api(c, bits_64, debug));
     }
-
-    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
 
     link_modules(modules, t);
 

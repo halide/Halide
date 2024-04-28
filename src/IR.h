@@ -11,6 +11,7 @@
 #include "Buffer.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
+#include "LoopPartitioningDirective.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
 #include "PrefetchDirective.h"
@@ -593,6 +594,19 @@ struct Call : public ExprNode<Call> {
         signed_integer_overflow,
         size_of_halide_buffer_t,
 
+        // Marks the point in lowering where the outermost skip stages checks
+        // should be introduced.
+        skip_stages_marker,
+
+        // Takes a realization name and a loop variable. Declares that values of
+        // the realization that were stored on earlier loop iterations of the
+        // given loop are potentially loaded in this loop iteration somewhere
+        // after this point. Must occur inside a Realize node and For node of
+        // the given names but outside any corresponding ProducerConsumer
+        // nodes. Communicates to storage folding that sliding window took
+        // place.
+        sliding_window_marker,
+
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
         strict_float,
@@ -614,6 +628,8 @@ struct Call : public ExprNode<Call> {
         widening_shift_left,
         widening_shift_right,
         widening_sub,
+
+        get_runtime_vscale,
 
         IntrinsicOpCount  // Sentinel: keep last.
     };
@@ -798,8 +814,13 @@ struct For : public StmtNode<For> {
     ForType for_type;
     DeviceAPI device_api;
     Stmt body;
+    Partition partition_policy;
 
-    static Stmt make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
+    static Stmt make(const std::string &name,
+                     Expr min, Expr extent,
+                     ForType for_type, Partition partition_policy,
+                     DeviceAPI device_api,
+                     Stmt body);
 
     bool is_unordered_parallel() const {
         return Halide::Internal::is_unordered_parallel(for_type);
@@ -858,11 +879,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_interleave() const;
 
-    /** Check if this shuffle can be represented as a broadcast.
-     * For example:
-     * A uint8 shuffle of with 4*n lanes and indices:
-     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
-     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    /** Check if this shuffle can be represented as a repeating pattern that
+     * repeats the same shuffle of the single input vector some number of times.
+     * For example: 0, 3, 1, 1,  0, 3, 1, 1, .....,  0, 3, 1, 1
+     */
     bool is_broadcast() const;
     int broadcast_factor() const;
 
@@ -907,6 +927,21 @@ struct Prefetch : public StmtNode<Prefetch> {
                      Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
+};
+
+/**
+ * Represents a location where storage will be hoisted to for a Func / Realize
+ * node with a given name.
+ *
+ */
+struct HoistedStorage : public StmtNode<HoistedStorage> {
+    std::string name;
+    Stmt body;
+
+    static Stmt make(const std::string &name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::HoistedStorage;
 };
 
 /** Lock all the Store nodes in the body statement.

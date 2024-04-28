@@ -73,6 +73,7 @@ struct Target {
         ZnVer1,    /// Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
         ZnVer2,    /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
         ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
+        ZnVer4,    /// Tune for AMD Zen 4 CPU (AMD Family 19h, launched 2022).
     } processor_tune = ProcessorGeneric;
 
     /** Optional features a target can have.
@@ -108,7 +109,6 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        OpenGLCompute = halide_target_feature_openglcompute,  // NOTE: This feature is deprecated and will be removed in Halide 17.
         EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Profile = halide_target_feature_profile,
@@ -130,6 +130,7 @@ struct Target {
         AVX512_Skylake = halide_target_feature_avx512_skylake,
         AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
         AVX512_SapphireRapids = halide_target_feature_avx512_sapphirerapids,
+        AVX512_Zen4 = halide_target_feature_avx512_zen4,
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
@@ -141,9 +142,8 @@ struct Target {
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
         EmbedBitcode = halide_target_feature_embed_bitcode,
         EnableLLVMLoopOpt = halide_target_feature_enable_llvm_loop_opt,
+        WasmMvpOnly = halide_target_feature_wasm_mvponly,
         WasmSimd128 = halide_target_feature_wasm_simd128,
-        WasmSignExt = halide_target_feature_wasm_signext,
-        WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
         WasmThreads = halide_target_feature_wasm_threads,
         WasmBulkMemory = halide_target_feature_wasm_bulk_memory,
         WebGPU = halide_target_feature_webgpu,
@@ -167,6 +167,8 @@ struct Target {
         VulkanV12 = halide_target_feature_vulkan_version12,
         VulkanV13 = halide_target_feature_vulkan_version13,
         Semihosting = halide_target_feature_semihosting,
+        AVX10_1 = halide_target_feature_avx10_1,
+        X86APX = halide_target_feature_x86_apx,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
@@ -176,6 +178,7 @@ struct Target {
         for (const auto &f : initial_features) {
             set_feature(f);
         }
+        validate_features();
     }
 
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
@@ -232,10 +235,7 @@ struct Target {
 
     /** Is a fully feature GPU compute runtime enabled? I.e. is
      * Func::gpu_tile and similar going to work? Currently includes
-     * CUDA, OpenCL, Metal and D3D12Compute. We do not include OpenGL,
-     * because it is not capable of gpgpu, and is not scheduled via
-     * Func::gpu_tile.
-     * TODO: Should OpenGLCompute be included here? */
+     * CUDA, OpenCL, Metal and D3D12Compute. */
     bool has_gpu_feature() const;
 
     /** Does this target allow using a certain type. Generally all
@@ -356,6 +356,11 @@ struct Target {
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
+
+    /** Attempt to validate that all features set are sensible for the base Target.
+     * This is *not* guaranteed to get all invalid combinations, but is intended
+     * to catch at least the most common (e.g., setting arm-specific features on x86). */
+    void validate_features() const;
 };
 
 /** Return the target corresponding to the host machine. */

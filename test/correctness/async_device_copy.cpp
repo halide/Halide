@@ -22,12 +22,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (get_jit_target_from_environment().has_feature(Target::OpenGLCompute)) {
-        printf("Skipping test for OpenGLCompute as it does not support copy_to_host/device() yet"
-               " (halide_buffer_copy is unimplemented in that backend).\n");
-        return 0;
-    }
-
     // Compute frames on GPU/CPU, and then sum then on
     // CPU/GPU. async() lets us overlap the CPU computation with the
     // copies.

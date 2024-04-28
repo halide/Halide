@@ -13,6 +13,8 @@ using namespace Halide::ConciseCasts;
 
 namespace {
 
+// This routine provides a guard on the return type of intrisics such that only
+// these types will ever be considered in the visiting that happens here.
 bool find_intrinsics_for_type(const Type &t) {
     // Currently, we only try to find and replace intrinsics for vector types that aren't bools.
     return t.is_vector() && t.bits() >= 8;
@@ -28,17 +30,36 @@ Expr narrow(Expr a) {
     return Cast::make(result_type, std::move(a));
 }
 
+// Check a type to make sure it can be narrowed. find_intrinsics_for_type
+// attempts to prevent this code from narrowing in cases that do not work, but
+// it is incomplete for two reasons:
+//
+//     - Arguments can be narrowed and that guard is only on return type, which
+//     are different for widening operations.
+//
+//     - find_intrinsics_for_type does not cull out float16, and it probably
+//     should not as while it's ok to skip matching bool things, float16 things
+//     are useful.
+bool can_narrow(const Type &t) {
+    return (t.is_float() && t.bits() >= 32) ||
+           t.bits() >= 8;
+}
+
 Expr lossless_narrow(const Expr &x) {
-    return lossless_cast(x.type().narrow(), x);
+    return can_narrow(x.type()) ? lossless_cast(x.type().narrow(), x) : Expr();
 }
 
 // Remove a widening cast even if it changes the sign of the result.
 Expr strip_widening_cast(const Expr &x) {
-    Expr narrow = lossless_narrow(x);
-    if (narrow.defined()) {
-        return narrow;
+    if (can_narrow(x.type())) {
+        Expr narrow = lossless_narrow(x);
+        if (narrow.defined()) {
+            return narrow;
+        }
+        return lossless_cast(x.type().narrow().with_code(halide_type_uint), x);
+    } else {
+        return Expr();
     }
-    return lossless_cast(x.type().narrow().with_code(halide_type_uint), x);
 }
 
 Expr saturating_narrow(const Expr &a) {
@@ -217,16 +238,18 @@ protected:
 
         // Try widening both from the same signedness as the result, and from uint.
         for (halide_type_code_t code : {op->type.code(), halide_type_uint}) {
-            Type narrow = op->type.narrow().with_code(code);
-            Expr narrow_a = lossless_cast(narrow, a);
-            Expr narrow_b = lossless_cast(narrow, b);
+            if (can_narrow(op->type)) {
+                Type narrow = op->type.narrow().with_code(code);
+                Expr narrow_a = lossless_cast(narrow, a);
+                Expr narrow_b = lossless_cast(narrow, b);
 
-            if (narrow_a.defined() && narrow_b.defined()) {
-                Expr result = widening_add(narrow_a, narrow_b);
-                if (result.type() != op->type) {
-                    result = Cast::make(op->type, result);
+                if (narrow_a.defined() && narrow_b.defined()) {
+                    Expr result = widening_add(narrow_a, narrow_b);
+                    if (result.type() != op->type) {
+                        result = Cast::make(op->type, result);
+                    }
+                    return mutate(result);
                 }
-                return mutate(result);
             }
         }
 
@@ -235,41 +258,43 @@ protected:
             // Yes we do an duplicate code, but we want to check the op->type.code() first,
             // and the opposite as well.
             for (halide_type_code_t code : {op->type.code(), halide_type_uint, halide_type_int}) {
-                Type narrow = op->type.narrow().with_code(code);
-                // Pulling casts out of VectorReduce nodes breaks too much codegen, skip for now.
-                Expr narrow_a = (a.node_type() == IRNodeType::VectorReduce) ? Expr() : lossless_cast(narrow, a);
-                Expr narrow_b = (b.node_type() == IRNodeType::VectorReduce) ? Expr() : lossless_cast(narrow, b);
+                if (can_narrow(op->type)) {
+                    Type narrow = op->type.narrow().with_code(code);
+                    // Pulling casts out of VectorReduce nodes breaks too much codegen, skip for now.
+                    Expr narrow_a = (a.node_type() == IRNodeType::VectorReduce) ? Expr() : lossless_cast(narrow, a);
+                    Expr narrow_b = (b.node_type() == IRNodeType::VectorReduce) ? Expr() : lossless_cast(narrow, b);
 
-                // This case should have been handled by the above check for widening_add.
-                internal_assert(!(narrow_a.defined() && narrow_b.defined()))
-                    << "find_intrinsics failed to find a widening_add: " << a << " + " << b << "\n";
+                    // This case should have been handled by the above check for widening_add.
+                    internal_assert(!(narrow_a.defined() && narrow_b.defined()))
+                        << "find_intrinsics failed to find a widening_add: " << a << " + " << b << "\n";
 
-                if (narrow_a.defined()) {
-                    Expr result;
-                    if (b.type().code() != narrow_a.type().code()) {
-                        // Need to do a safe reinterpret.
-                        Type t = b.type().with_code(code);
-                        result = widen_right_add(cast(t, b), narrow_a);
-                        internal_assert(result.type() != op->type);
-                        result = cast(op->type, result);
-                    } else {
-                        result = widen_right_add(b, narrow_a);
+                    if (narrow_a.defined()) {
+                        Expr result;
+                        if (b.type().code() != narrow_a.type().code()) {
+                            // Need to do a safe reinterpret.
+                            Type t = b.type().with_code(code);
+                            result = widen_right_add(cast(t, b), narrow_a);
+                            internal_assert(result.type() != op->type);
+                            result = cast(op->type, result);
+                        } else {
+                            result = widen_right_add(b, narrow_a);
+                        }
+                        internal_assert(result.type() == op->type);
+                        return mutate(result);
+                    } else if (narrow_b.defined()) {
+                        Expr result;
+                        if (a.type().code() != narrow_b.type().code()) {
+                            // Need to do a safe reinterpret.
+                            Type t = a.type().with_code(code);
+                            result = widen_right_add(cast(t, a), narrow_b);
+                            internal_assert(result.type() != op->type);
+                            result = cast(op->type, result);
+                        } else {
+                            result = widen_right_add(a, narrow_b);
+                        }
+                        internal_assert(result.type() == op->type);
+                        return mutate(result);
                     }
-                    internal_assert(result.type() == op->type);
-                    return mutate(result);
-                } else if (narrow_b.defined()) {
-                    Expr result;
-                    if (a.type().code() != narrow_b.type().code()) {
-                        // Need to do a safe reinterpret.
-                        Type t = a.type().with_code(code);
-                        result = widen_right_add(cast(t, a), narrow_b);
-                        internal_assert(result.type() != op->type);
-                        result = cast(op->type, result);
-                    } else {
-                        result = widen_right_add(a, narrow_b);
-                    }
-                    internal_assert(result.type() == op->type);
-                    return mutate(result);
                 }
             }
         }
@@ -294,22 +319,24 @@ protected:
 
         // Try widening both from the same type as the result, and from uint.
         for (halide_type_code_t code : {op->type.code(), halide_type_uint}) {
-            Type narrow = op->type.narrow().with_code(code);
-            Expr narrow_a = lossless_cast(narrow, a);
-            Expr narrow_b = lossless_cast(narrow, b);
+            if (can_narrow(op->type)) {
+                Type narrow = op->type.narrow().with_code(code);
+                Expr narrow_a = lossless_cast(narrow, a);
+                Expr narrow_b = lossless_cast(narrow, b);
 
-            if (narrow_a.defined() && narrow_b.defined()) {
-                Expr negative_narrow_b = lossless_negate(narrow_b);
-                Expr result;
-                if (negative_narrow_b.defined()) {
-                    result = widening_add(narrow_a, negative_narrow_b);
-                } else {
-                    result = widening_sub(narrow_a, narrow_b);
+                if (narrow_a.defined() && narrow_b.defined()) {
+                    Expr negative_narrow_b = lossless_negate(narrow_b);
+                    Expr result;
+                    if (negative_narrow_b.defined()) {
+                        result = widening_add(narrow_a, negative_narrow_b);
+                    } else {
+                        result = widening_sub(narrow_a, narrow_b);
+                    }
+                    if (result.type() != op->type) {
+                        result = Cast::make(op->type, result);
+                    }
+                    return mutate(result);
                 }
-                if (result.type() != op->type) {
-                    result = Cast::make(op->type, result);
-                }
-                return mutate(result);
             }
         }
 
@@ -324,22 +351,24 @@ protected:
             // Yes we do an duplicate code, but we want to check the op->type.code() first,
             // and the opposite as well.
             for (halide_type_code_t code : {op->type.code(), halide_type_uint, halide_type_int}) {
-                Type narrow = op->type.narrow().with_code(code);
-                Expr narrow_b = lossless_cast(narrow, b);
+                if (can_narrow(op->type)) {
+                    Type narrow = op->type.narrow().with_code(code);
+                    Expr narrow_b = lossless_cast(narrow, b);
 
-                if (narrow_b.defined()) {
-                    Expr result;
-                    if (a.type().code() != narrow_b.type().code()) {
-                        // Need to do a safe reinterpret.
-                        Type t = a.type().with_code(code);
-                        result = widen_right_sub(cast(t, a), narrow_b);
-                        internal_assert(result.type() != op->type);
-                        result = cast(op->type, result);
-                    } else {
-                        result = widen_right_sub(a, narrow_b);
+                    if (narrow_b.defined()) {
+                        Expr result;
+                        if (a.type().code() != narrow_b.type().code()) {
+                            // Need to do a safe reinterpret.
+                            Type t = a.type().with_code(code);
+                            result = widen_right_sub(cast(t, a), narrow_b);
+                            internal_assert(result.type() != op->type);
+                            result = cast(op->type, result);
+                        } else {
+                            result = widen_right_sub(a, narrow_b);
+                        }
+                        internal_assert(result.type() == op->type);
+                        return mutate(result);
                     }
-                    internal_assert(result.type() == op->type);
-                    return mutate(result);
                 }
             }
         }
@@ -401,40 +430,42 @@ protected:
             // Yes we do an duplicate code, but we want to check the op->type.code() first,
             // and the opposite as well.
             for (halide_type_code_t code : {op->type.code(), halide_type_uint, halide_type_int}) {
-                Type narrow = op->type.narrow().with_code(code);
-                Expr narrow_a = lossless_cast(narrow, a);
-                Expr narrow_b = lossless_cast(narrow, b);
+                if (can_narrow(op->type)) {
+                    Type narrow = op->type.narrow().with_code(code);
+                    Expr narrow_a = lossless_cast(narrow, a);
+                    Expr narrow_b = lossless_cast(narrow, b);
 
-                // This case should have been handled by the above check for widening_mul.
-                internal_assert(!(narrow_a.defined() && narrow_b.defined()))
-                    << "find_intrinsics failed to find a widening_mul: " << a << " + " << b << "\n";
+                    // This case should have been handled by the above check for widening_mul.
+                    internal_assert(!(narrow_a.defined() && narrow_b.defined()))
+                        << "find_intrinsics failed to find a widening_mul: " << a << " + " << b << "\n";
 
-                if (narrow_a.defined()) {
-                    Expr result;
-                    if (b.type().code() != narrow_a.type().code()) {
-                        // Need to do a safe reinterpret.
-                        Type t = b.type().with_code(code);
-                        result = widen_right_mul(cast(t, b), narrow_a);
-                        internal_assert(result.type() != op->type);
-                        result = cast(op->type, result);
-                    } else {
-                        result = widen_right_mul(b, narrow_a);
+                    if (narrow_a.defined()) {
+                        Expr result;
+                        if (b.type().code() != narrow_a.type().code()) {
+                            // Need to do a safe reinterpret.
+                            Type t = b.type().with_code(code);
+                            result = widen_right_mul(cast(t, b), narrow_a);
+                            internal_assert(result.type() != op->type);
+                            result = cast(op->type, result);
+                        } else {
+                            result = widen_right_mul(b, narrow_a);
+                        }
+                        internal_assert(result.type() == op->type);
+                        return mutate(result);
+                    } else if (narrow_b.defined()) {
+                        Expr result;
+                        if (a.type().code() != narrow_b.type().code()) {
+                            // Need to do a safe reinterpret.
+                            Type t = a.type().with_code(code);
+                            result = widen_right_mul(cast(t, a), narrow_b);
+                            internal_assert(result.type() != op->type);
+                            result = cast(op->type, result);
+                        } else {
+                            result = widen_right_mul(a, narrow_b);
+                        }
+                        internal_assert(result.type() == op->type);
+                        return mutate(result);
                     }
-                    internal_assert(result.type() == op->type);
-                    return mutate(result);
-                } else if (narrow_b.defined()) {
-                    Expr result;
-                    if (a.type().code() != narrow_b.type().code()) {
-                        // Need to do a safe reinterpret.
-                        Type t = a.type().with_code(code);
-                        result = widen_right_mul(cast(t, a), narrow_b);
-                        internal_assert(result.type() != op->type);
-                        result = cast(op->type, result);
-                    } else {
-                        result = widen_right_mul(a, narrow_b);
-                    }
-                    internal_assert(result.type() == op->type);
-                    return mutate(result);
                 }
             }
         }
@@ -853,21 +884,25 @@ protected:
         } else if (op->is_intrinsic(Call::widening_add) && (op->type.bits() >= 16)) {
             internal_assert(op->args.size() == 2);
             for (halide_type_code_t t : {op->type.code(), halide_type_uint}) {
-                Type narrow_t = op->type.narrow().narrow().with_code(t);
-                Expr narrow_a = lossless_cast(narrow_t, op->args[0]);
-                Expr narrow_b = lossless_cast(narrow_t, op->args[1]);
-                if (narrow_a.defined() && narrow_b.defined()) {
-                    return mutate(Cast::make(op->type, widening_add(narrow_a, narrow_b)));
+                if (can_narrow(op->type)) {
+                    Type narrow_t = op->type.narrow().narrow().with_code(t);
+                    Expr narrow_a = lossless_cast(narrow_t, op->args[0]);
+                    Expr narrow_b = lossless_cast(narrow_t, op->args[1]);
+                    if (narrow_a.defined() && narrow_b.defined()) {
+                        return mutate(Cast::make(op->type, widening_add(narrow_a, narrow_b)));
+                    }
                 }
             }
         } else if (op->is_intrinsic(Call::widening_sub) && (op->type.bits() >= 16)) {
             internal_assert(op->args.size() == 2);
             for (halide_type_code_t t : {op->type.code(), halide_type_uint}) {
-                Type narrow_t = op->type.narrow().narrow().with_code(t);
-                Expr narrow_a = lossless_cast(narrow_t, op->args[0]);
-                Expr narrow_b = lossless_cast(narrow_t, op->args[1]);
-                if (narrow_a.defined() && narrow_b.defined()) {
-                    return mutate(Cast::make(op->type, widening_sub(narrow_a, narrow_b)));
+                if (can_narrow(op->type)) {
+                    Type narrow_t = op->type.narrow().narrow().with_code(t);
+                    Expr narrow_a = lossless_cast(narrow_t, op->args[0]);
+                    Expr narrow_b = lossless_cast(narrow_t, op->args[1]);
+                    if (narrow_a.defined() && narrow_b.defined()) {
+                        return mutate(Cast::make(op->type, widening_sub(narrow_a, narrow_b)));
+                    }
                 }
             }
         }
@@ -900,9 +935,12 @@ protected:
             Expr b_narrow = lossless_narrow(op->args[1]);
             if (a_narrow.defined() && b_narrow.defined()) {
                 Expr result;
-                if (op->is_intrinsic(Call::rounding_shift_right) && can_prove(b_narrow > 0)) {
+                if (op->is_intrinsic(Call::rounding_shift_right) &&
+                    can_prove(b_narrow > 0 && b_narrow < a_narrow.type().bits())) {
                     result = rounding_shift_right(a_narrow, b_narrow);
-                } else if (op->is_intrinsic(Call::rounding_shift_left) && can_prove(b_narrow < 0)) {
+                } else if (op->is_intrinsic(Call::rounding_shift_left) &&
+                           b_narrow.type().is_int() &&
+                           can_prove(b_narrow < 0 && b_narrow > -a_narrow.type().bits())) {
                     result = rounding_shift_left(a_narrow, b_narrow);
                 } else {
                     return op;
@@ -1083,8 +1121,8 @@ class SubstituteInWideningLets : public IRMutator {
 
     Scope<Expr> replacements;
     Expr visit(const Variable *op) override {
-        if (replacements.contains(op->name)) {
-            return replacements.get(op->name);
+        if (const Expr *e = replacements.find(op->name)) {
+            return *e;
         } else {
             return op;
         }
@@ -1239,10 +1277,11 @@ Expr lower_widening_shift_right(const Expr &a, const Expr &b) {
 }
 
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
-    // Shift left, then add one to the result if bits were dropped
-    // (because b < 0) and the most significant dropped bit was a one.
+    // Shift left, then add one to the result if bits were dropped (because b < 0)
+    // and the most significant dropped bit was a one. We must take care not
+    // to introduce UB in the shifts, even if the result would be masked off.
     Expr b_negative = select(b < 0, make_one(a.type()), make_zero(a.type()));
-    return simplify((a << b) + (b_negative & (a << (b + 1))));
+    return simplify((a << b) + (b_negative & (a << saturating_add(b, make_one(b.type())))));
 }
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
@@ -1254,10 +1293,11 @@ Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
         Expr round = simplify(cast(a.type(), (1 << shift) - 1));
         return rounding_halving_add(a, round) >> shift;
     }
-    // Shift right, then add one to the result if bits were dropped
-    // (because b > 0) and the most significant dropped bit was a one.
+    // Shift right, then add one to the result if bits were dropped (because b > 0)
+    // and the most significant dropped bit was a one.  We must take care not to
+    // introduce UB in the shifts, even if the result would be masked off.
     Expr b_positive = select(b > 0, make_one(a.type()), make_zero(a.type()));
-    return simplify((a >> b) + (b_positive & (a >> (b - 1))));
+    return simplify((a >> b) + (b_positive & (a >> saturating_sub(b, make_one(b.type())))));
 }
 
 Expr lower_saturating_add(const Expr &a, const Expr &b) {

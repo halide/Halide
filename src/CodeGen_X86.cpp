@@ -1,4 +1,4 @@
-#include "Bounds.h"
+#include "ConstantBounds.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
@@ -29,7 +29,18 @@ namespace {
 // existing flags, so that instruction patterns can just check for the
 // oldest feature flag that supports an instruction.
 Target complete_x86_target(Target t) {
+    if (t.has_feature(Target::AVX10_1)) {
+        if (t.vector_bits >= 256) {
+            t.set_feature(Target::AVX2);
+        }
+        if (t.vector_bits >= 512) {
+            t.set_feature(Target::AVX512_SapphireRapids);
+        }
+    }
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        t.set_feature(Target::AVX512_Zen4);
+    }
+    if (t.has_feature(Target::AVX512_Zen4)) {
         t.set_feature(Target::AVX512_Cannonlake);
     }
     if (t.has_feature(Target::AVX512_Cannonlake)) {
@@ -45,10 +56,14 @@ Target complete_x86_target(Target t) {
     }
     if (t.has_feature(Target::AVX2)) {
         t.set_feature(Target::AVX);
+        // All AVX2-enabled architectures have F16C and FMA
+        t.set_feature(Target::F16C);
+        t.set_feature(Target::FMA);
     }
     if (t.has_feature(Target::AVX)) {
         t.set_feature(Target::SSE41);
     }
+
     return t;
 }
 
@@ -67,8 +82,6 @@ protected:
     int native_vector_bits() const override;
 
     int vector_lanes_for_slice(const Type &t) const;
-
-    llvm::Type *llvm_type_of(const Type &t) const override;
 
     using CodeGen_Posix::visit;
 
@@ -211,12 +224,19 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.sse2.pmulhu.w", UInt(16, 8), "pmulh", {UInt(16, 8), UInt(16, 8)}},
     {"llvm.x86.ssse3.pmul.hr.sw.128", Int(16, 8), "pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
 
+    // As of LLVM main September 5 2023, LLVM only has partial handling of
+    // bfloat16. The below rules will match fine for simple examples, but bfloat
+    // conversion will get folded through any nearby shuffles and cause
+    // unimplemented errors in llvm's x86 instruction selection for the shuffle
+    // node. Disabling them for now. See https://github.com/halide/Halide/issues/7219
+    /*
     // Convert FP32 to BF16
-    {"vcvtne2ps2bf16x32", BFloat(16, 32), "f32_to_bf16", {Float(32, 32)}, Target::AVX512_SapphireRapids},
-    {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_SapphireRapids},
-    {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_SapphireRapids},
+    {"vcvtne2ps2bf16x32", BFloat(16, 32), "f32_to_bf16", {Float(32, 32)}, Target::AVX512_Zen4},
+    {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_Zen4},
+    {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_Zen4},
     // LLVM does not provide an unmasked 128bit cvtneps2bf16 intrinsic, so provide a wrapper around the masked version.
-    {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
+    {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_Zen4},
+    */
 
     // 2-way dot products
     {"llvm.x86.avx2.pmadd.ub.sw", Int(16, 16), "saturating_dot_product", {UInt(8, 32), Int(8, 32)}, Target::AVX2},
@@ -243,23 +263,23 @@ const x86Intrinsic intrinsic_defs[] = {
 
     // 4-way dot product vector reduction
     // The LLVM intrinsics combine the bf16 pairs into i32, so provide a wrapper to correctly call the intrinsic.
-    {"dpbf16psx16", Float(32, 16), "dot_product", {Float(32, 16), BFloat(16, 32), BFloat(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpbf16psx16", Float(32, 16), "dot_product", {Float(32, 16), BFloat(16, 32), BFloat(16, 32)}, Target::AVX512_Zen4},
     {"dpbf16psx8", Float(32, 8), "dot_product", {Float(32, 8), BFloat(16, 16), BFloat(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpbf16psx4", Float(32, 4), "dot_product", {Float(32, 4), BFloat(16, 8), BFloat(16, 8)}, Target::AVX512_SapphireRapids},
 
-    {"dpbusdx16", Int(32, 16), "dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx16", Int(32, 16), "dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_Zen4},
     {"dpbusdx8", Int(32, 8), "dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_SapphireRapids},
     {"dpbusdx4", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_SapphireRapids},
 
-    {"dpwssdx16", Int(32, 16), "dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx16", Int(32, 16), "dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_Zen4},
     {"dpwssdx8", Int(32, 8), "dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpwssdx4", Int(32, 4), "dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
 
-    {"dpbusdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_SapphireRapids},
+    {"dpbusdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_Zen4},
     {"dpbusdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_SapphireRapids},
     {"dpbusdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_SapphireRapids},
 
-    {"dpwssdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpwssdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_Zen4},
     {"dpwssdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpwssdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
 
@@ -489,8 +509,25 @@ void CodeGen_X86::visit(const Select *op) {
 }
 
 void CodeGen_X86::visit(const Cast *op) {
-    if (!op->type.is_vector()) {
-        // We only have peephole optimizations for vectors in here.
+    Type src = op->value.type();
+    Type dst = op->type;
+
+    if (target.has_feature(Target::F16C) &&
+        dst.code() == Type::Float &&
+        src.code() == Type::Float &&
+        (dst.bits() == 16 || src.bits() == 16)) {
+        // Node we use code() == Type::Float instead of is_float(), because we
+        // don't want to catch bfloat casts.
+
+        // This target doesn't support full float16 arithmetic, but it *does*
+        // support float16 casts, so we emit a vanilla LLVM cast node.
+        value = codegen(op->value);
+        value = builder->CreateFPCast(value, llvm_type_of(dst));
+        return;
+    }
+
+    if (!dst.is_vector()) {
+        // We only have peephole optimizations for vectors after this point.
         CodeGen_Posix::visit(op);
         return;
     }
@@ -513,7 +550,7 @@ void CodeGen_X86::visit(const Cast *op) {
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
         if (expr_match(p.pattern, op, matches)) {
-            value = call_overloaded_intrin(op->type, p.intrin, matches);
+            value = call_overloaded_intrin(dst, p.intrin, matches);
             if (value) {
                 return;
             }
@@ -521,12 +558,12 @@ void CodeGen_X86::visit(const Cast *op) {
     }
 
     if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
-        if (op->value.type().bits() < op->type.bits() && op->type.bits() <= 32) {
+        if (src.bits() < dst.bits() && dst.bits() <= 32) {
             // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
             // widening to 32-bits after a widening multiply, LLVM prefers to see a
             // widening multiply directly to 32-bits. This may result in extra
             // casts, so simplify to remove them.
-            value = codegen(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
+            value = codegen(simplify(Mul::make(Cast::make(dst, mul->args[0]), Cast::make(dst, mul->args[1]))));
             return;
         }
     }
@@ -646,18 +683,19 @@ void CodeGen_X86::visit(const Call *op) {
     for (const auto &pattern : reinterpret_patterns) {
         if (expr_match(pattern.pattern, op, matches)) {
             const Expr &expr = matches[0];
-            Expr upper_bound = find_constant_bound(expr, Direction::Upper);
-            if (const uint64_t *bound = as_const_uint(upper_bound)) {
-                Type t = matches[0].type();
-                if (*bound <= (uint64_t)max_int(t.bits())) {
-                    // Can safely reinterpret to signed integer.
-                    matches[0] = cast(t.with_code(halide_type_int), matches[0]);
-                    value = call_overloaded_intrin(op->type, pattern.intrin, matches);
-                    if (value) {
-                        return;
-                    }
+            const Type &t = expr.type();
+            // TODO: might want to keep track of scope of bounds information.
+            const ConstantInterval ibounds = constant_integer_bounds(expr);
+            const Type reint_type = Int(t.bits());
+            if (ibounds.max_defined && reint_type.can_represent(ibounds.max)) {
+                // Can safely reinterpret to signed integer.
+                matches[0] = cast(t.with_code(halide_type_int), matches[0]);
+                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+                if (value) {
+                    return;
                 }
             }
+            // No reinterpret patterns match the same input, so stop matching.
             break;
         }
     }
@@ -870,28 +908,32 @@ void CodeGen_X86::visit(const Allocate *op) {
 }
 
 void CodeGen_X86::visit(const Load *op) {
-    if (mem_type.contains(op->name) && mem_type.get(op->name) == MemoryType::AMXTile) {
-        const Ramp *ramp = op->index.as<Ramp>();
-        internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
-        Value *ptr = codegen_buffer_pointer(op->name, op->type, ramp->base);
-        LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(upgrade_type_for_storage(op->type)), ptr, llvm::Align(op->type.bytes()));
-        add_tbaa_metadata(load, op->name, op->index);
-        value = load;
-        return;
+    if (const auto *mt = mem_type.find(op->name)) {
+        if (*mt == MemoryType::AMXTile) {
+            const Ramp *ramp = op->index.as<Ramp>();
+            internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
+            Value *ptr = codegen_buffer_pointer(op->name, op->type, ramp->base);
+            LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(upgrade_type_for_storage(op->type)), ptr, llvm::Align(op->type.bytes()));
+            add_tbaa_metadata(load, op->name, op->index);
+            value = load;
+            return;
+        }
     }
     CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const Store *op) {
-    if (mem_type.contains(op->name) && mem_type.get(op->name) == MemoryType::AMXTile) {
-        Value *val = codegen(op->value);
-        Halide::Type value_type = op->value.type();
-        const Ramp *ramp = op->index.as<Ramp>();
-        internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
-        Value *ptr = codegen_buffer_pointer(op->name, value_type, ramp->base);
-        StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
-        add_tbaa_metadata(store, op->name, op->index);
-        return;
+    if (const auto *mt = mem_type.find(op->name)) {
+        if (*mt == MemoryType::AMXTile) {
+            Value *val = codegen(op->value);
+            Halide::Type value_type = op->value.type();
+            const Ramp *ramp = op->index.as<Ramp>();
+            internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
+            Value *ptr = codegen_buffer_pointer(op->name, value_type, ramp->base);
+            StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
+            add_tbaa_metadata(store, op->name, op->index);
+            return;
+        }
     }
     CodeGen_Posix::visit(op);
 }
@@ -902,6 +944,8 @@ string CodeGen_X86::mcpu_target() const {
     //          The CPU choice here *WILL* affect -mattrs!
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         return "sapphirerapids";
+    } else if (target.has_feature(Target::AVX512_Zen4)) {
+        return "znver4";
     } else if (target.has_feature(Target::AVX512_Cannonlake)) {
         return "cannonlake";
     } else if (target.has_feature(Target::AVX512_Skylake)) {
@@ -920,6 +964,34 @@ string CodeGen_X86::mcpu_target() const {
         return "k8";
     }
 }
+
+namespace {
+bool gather_might_be_slow(Target target) {
+    // Intel x86 processors between broadwell and tiger lake have a microcode
+    // mitigation that makes gather instructions very slow. If we know we're on
+    // an AMD processor, gather is safe to use. If we have the AVX512 extensions
+    // present in Zen4 (or above), we also know we're not on an affected
+    // processor.
+    switch (target.processor_tune) {
+    case Target::Processor::AMDFam10:
+    case Target::Processor::BdVer1:
+    case Target::Processor::BdVer2:
+    case Target::Processor::BdVer3:
+    case Target::Processor::BdVer4:
+    case Target::Processor::BtVer1:
+    case Target::Processor::BtVer2:
+    case Target::Processor::K8:
+    case Target::Processor::K8_SSE3:
+    case Target::Processor::ZnVer1:
+    case Target::Processor::ZnVer2:
+    case Target::Processor::ZnVer3:
+    case Target::Processor::ZnVer4:
+        return false;
+    default:
+        return !target.has_feature(Target::AVX512_Zen4);
+    }
+}
+}  // namespace
 
 string CodeGen_X86::mcpu_tune() const {
     // Check if any explicit request for tuning exists.
@@ -948,6 +1020,8 @@ string CodeGen_X86::mcpu_tune() const {
         return "znver2";
     case Target::Processor::ZnVer3:
         return "znver3";
+    case Target::Processor::ZnVer4:
+        return "znver4";
 
     case Target::Processor::ProcessorGeneric:
         break;
@@ -959,41 +1033,76 @@ string CodeGen_X86::mcpu_tune() const {
 // FIXME: we should lower everything here, instead of relying
 //        that -mcpu= (`mcpu_target()`) implies/sets features for us.
 string CodeGen_X86::mattrs() const {
-    string features;
-    string separator;
+    std::vector<std::string_view> attrs;
     if (target.has_feature(Target::FMA)) {
-        features += "+fma";
-        separator = ",";
+        attrs.emplace_back("+fma");
     }
     if (target.has_feature(Target::FMA4)) {
-        features += separator + "+fma4";
-        separator = ",";
+        attrs.emplace_back("+fma4");
     }
     if (target.has_feature(Target::F16C)) {
-        features += separator + "+f16c";
-        separator = ",";
+        attrs.emplace_back("+f16c");
     }
     if (target.has_feature(Target::AVX512) ||
         target.has_feature(Target::AVX512_KNL) ||
         target.has_feature(Target::AVX512_Skylake) ||
         target.has_feature(Target::AVX512_Cannonlake)) {
-        features += separator + "+avx512f,+avx512cd";
-        separator = ",";
+        attrs.emplace_back("+avx512f");
+        attrs.emplace_back("+avx512cd");
         if (target.has_feature(Target::AVX512_KNL)) {
-            features += ",+avx512pf,+avx512er";
+            attrs.emplace_back("+avx512pf");
+            attrs.emplace_back("+avx512er");
         }
         if (target.has_feature(Target::AVX512_Skylake) ||
             target.has_feature(Target::AVX512_Cannonlake)) {
-            features += ",+avx512vl,+avx512bw,+avx512dq";
+            attrs.emplace_back("+avx512vl");
+            attrs.emplace_back("+avx512bw");
+            attrs.emplace_back("+avx512dq");
         }
         if (target.has_feature(Target::AVX512_Cannonlake)) {
-            features += ",+avx512ifma,+avx512vbmi";
+            attrs.emplace_back("+avx512ifma");
+            attrs.emplace_back("+avx512vbmi");
+        }
+        if (target.has_feature(Target::AVX512_Zen4)) {
+            attrs.emplace_back("+avx512bf16");
+            attrs.emplace_back("+avx512vnni");
+            attrs.emplace_back("+avx512bitalg");
+            attrs.emplace_back("+avx512vbmi2");
         }
         if (target.has_feature(Target::AVX512_SapphireRapids)) {
-            features += ",+avx512bf16,+avx512vnni,+amx-int8,+amx-bf16";
+            attrs.emplace_back("+avxvnni");
+            attrs.emplace_back("+amx-int8");
+            attrs.emplace_back("+amx-bf16");
         }
     }
-    return features;
+#if LLVM_VERSION >= 180
+    if (gather_might_be_slow(target)) {
+        attrs.emplace_back("+prefer-no-gather");
+    }
+#endif
+
+    if (target.has_feature(Target::AVX10_1)) {
+        switch (target.vector_bits) {
+        case 256:
+            attrs.emplace_back("+avx10.1-256");
+            break;
+        case 512:
+            attrs.emplace_back("+avx10.1-512");
+            break;
+        default:
+            user_error << "AVX10 only supports 256 or 512 bit variants at present.\n";
+            break;
+        }
+    }
+
+    if (target.has_feature(Target::X86APX)) {
+        attrs.emplace_back("+egpr");
+        attrs.emplace_back("+push2pop2");
+        attrs.emplace_back("+ppx");
+        attrs.emplace_back("+ndd");
+    }
+
+    return join_strings(attrs, ",");
 }
 
 bool CodeGen_X86::use_soft_float_abi() const {
@@ -1001,10 +1110,12 @@ bool CodeGen_X86::use_soft_float_abi() const {
 }
 
 int CodeGen_X86::native_vector_bits() const {
-    if (target.has_feature(Target::AVX512) ||
-        target.has_feature(Target::AVX512_Skylake) ||
-        target.has_feature(Target::AVX512_KNL) ||
-        target.has_feature(Target::AVX512_Cannonlake)) {
+    if (target.has_feature(Target::AVX10_1)) {
+        return target.vector_bits;
+    } else if (target.has_feature(Target::AVX512) ||
+               target.has_feature(Target::AVX512_Skylake) ||
+               target.has_feature(Target::AVX512_KNL) ||
+               target.has_feature(Target::AVX512_Cannonlake)) {
         return 512;
     } else if (target.has_feature(Target::AVX) ||
                target.has_feature(Target::AVX2)) {
@@ -1026,21 +1137,6 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
                                                                    128);
     // clang-format on
     return slice_bits / t.bits();
-}
-
-llvm::Type *CodeGen_X86::llvm_type_of(const Type &t) const {
-    if (t.is_float() && t.bits() < 32) {
-        // LLVM as of August 2019 has all sorts of issues in the x86
-        // backend for half types. It injects expensive calls to
-        // convert between float and half for seemingly no reason
-        // (e.g. to do a select), and bitcasting to int16 doesn't
-        // help, because it simplifies away the bitcast for you.
-        // See: https://bugs.llvm.org/show_bug.cgi?id=43065
-        // and: https://github.com/halide/Halide/issues/4166
-        return llvm_type_of(t.with_code(halide_type_uint));
-    } else {
-        return CodeGen_Posix::llvm_type_of(t);
-    }
 }
 
 }  // namespace

@@ -192,7 +192,7 @@ Callable::FailureFn Callable::check_fcci(size_t argc, const FullCallCheckInfo *a
 
     JITFuncCallContext jit_call_context(context, contents->saved_jit_handlers);
 
-    int exit_status = contents->jit_cache.call_jit_code(contents->jit_cache.jit_target, argv);
+    int exit_status = contents->jit_cache.call_jit_code(argv);
 
     // If we're profiling, report runtimes and reset profiler stats.
     contents->jit_cache.finish_profiling(context);

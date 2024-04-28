@@ -30,13 +30,14 @@ int main(int argc, char **argv) {
             Var bx, tx, by, ty;
             RVar ro, ri, rio, rii;
 
+            const int vec = target.natural_vector_size<uint8_t>();
+
             if (use_nested_vectorization) {
                 if (target.arch == Target::X86) {
                     // x86 schedule. Exploits the ability of pmaddwd
                     // to pull one arg from memory. Because we'll be
                     // intentionally spilling, the tile will be
                     // absurdly large for a gemm.
-                    const int vec = target.natural_vector_size<uint8_t>();
 
                     prod.in()
                         .tile(x, y, xi, yi, vec, vec / 2)
@@ -62,7 +63,7 @@ int main(int argc, char **argv) {
                     const int reduce = target.has_feature(Target::ARMDotProd) ? 4 : 2;
 
                     prod.in()
-                        .tile(x, y, xi, yi, 8, 8)
+                        .tile(x, y, xi, yi, vec, 4)
                         .vectorize(xi)
                         .unroll(yi);
 
@@ -82,12 +83,8 @@ int main(int argc, char **argv) {
                         .unroll(ri);
                 }
             } else {
-                g.in().compute_at(prod, ro).vectorize(_0).unroll(_1);
-
-                const int vec = target.natural_vector_size<uint8_t>();
-
                 prod.in()
-                    .tile(x, y, xi, yi, vec, 8, TailStrategy::RoundUp)
+                    .tile(x, y, xi, yi, vec, 4, TailStrategy::RoundUp)
                     .vectorize(xi)
                     .unroll(yi);
 
@@ -95,11 +92,9 @@ int main(int argc, char **argv) {
                     .vectorize(x)
                     .unroll(y)
                     .update()
-                    .split(r, ro, ri, 8)
-                    .reorder(ri, x, y, ro)
+                    .reorder(x, y, r)
                     .vectorize(x)
-                    .unroll(y)
-                    .unroll(ri);
+                    .unroll(y);
             }
 
             Buffer<uint8_t> f_buf(1024, 1024);
@@ -113,7 +108,7 @@ int main(int argc, char **argv) {
             Func result = prod.in();
 
             // Uncomment to check the asm
-            // result.compile_to_assembly("/dev/stdout", {f, g}, target);
+            // result.compile_to_assembly("/dev/stdout", {f, g}, target.with_feature(Target::NoAsserts).with_feature(Target::NoBoundsQuery));
 
             times[use_nested_vectorization] =
                 Tools::benchmark(20, 20, [&]() {

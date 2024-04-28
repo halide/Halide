@@ -13,6 +13,7 @@
 #include "DeviceAPI.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
+#include "LoopPartitioningDirective.h"
 #include "Parameter.h"
 #include "PrefetchDirective.h"
 
@@ -98,6 +99,32 @@ enum class TailStrategy {
      * that the input/output extent be at least the split factor,
      * instead of a multiple of the split factor as with RoundUp. */
     ShiftInwards,
+
+    /** Equivalent to ShiftInwards, but protects values that would be
+     * re-evaluated by loading the memory location that would be stored to,
+     * modifying only the elements not contained within the overlap, and then
+     * storing the blended result.
+     *
+     * This tail strategy is useful when you want to use ShiftInwards to
+     * vectorize without a scalar tail, but are scheduling a stage where that
+     * isn't legal (e.g. an update definition).
+     *
+     * Because this is a read - modify - write, this tail strategy cannot be
+     * used on any dimension the stage is parallelized over as it would cause a
+     * race condition.
+     */
+    ShiftInwardsAndBlend,
+
+    /** Equivalent to RoundUp, but protected values that would be written beyond
+     * the end by loading the memory location that would be stored to,
+     * modifying only the elements within the region being computed, and then
+     * storing the blended result.
+     *
+     * This tail strategy is useful when vectorizing an update to some sub-region
+     * of a larger Func. As with ShiftInwardsAndBlend, it can't be combined with
+     * parallelism.
+     */
+    RoundUpAndBlend,
 
     /** For pure definitions use ShiftInwards. For pure vars in
      * update definitions use RoundUp. For RVars in update
@@ -441,6 +468,9 @@ struct Dim {
      * loop (see the DimType enum above). */
     DimType dim_type;
 
+    /** The strategy for loop partitioning. */
+    Partition partition_policy;
+
     /** Can this loop be evaluated in any order (including in
      * parallel)? Equivalently, are there no data hazards between
      * evaluations of the Func at distinct values of this var? */
@@ -594,6 +624,9 @@ public:
     bool &async();
     bool async() const;
 
+    Expr &ring_buffer();
+    Expr &ring_buffer() const;
+
     /** The list and order of dimensions used to store this
      * function. The first dimension in the vector corresponds to the
      * innermost dimension for storage (i.e. which dimension is
@@ -644,8 +677,10 @@ public:
     // @{
     const LoopLevel &store_level() const;
     const LoopLevel &compute_level() const;
+    const LoopLevel &hoist_storage_level() const;
     LoopLevel &store_level();
     LoopLevel &compute_level();
+    LoopLevel &hoist_storage_level();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

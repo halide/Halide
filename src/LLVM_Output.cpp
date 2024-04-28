@@ -60,18 +60,18 @@ void emit_big_endian_u32(std::ostream &out, uint32_t value) {
     out << static_cast<uint8_t>((value >> 24) & 0xff)
         << static_cast<uint8_t>((value >> 16) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff)
-        << static_cast<uint8_t>((value)&0xff);
+        << static_cast<uint8_t>((value) & 0xff);
 }
 
 void emit_little_endian_u32(std::ostream &out, uint32_t value) {
-    out << static_cast<uint8_t>((value)&0xff)
+    out << static_cast<uint8_t>((value) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff)
         << static_cast<uint8_t>((value >> 16) & 0xff)
         << static_cast<uint8_t>((value >> 24) & 0xff);
 }
 
 void emit_little_endian_u16(std::ostream &out, uint16_t value) {
-    out << static_cast<uint8_t>((value)&0xff)
+    out << static_cast<uint8_t>((value) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff);
 }
 
@@ -331,6 +331,12 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
     // Read it back in.
     llvm::MemoryBufferRef buffer_ref(llvm::StringRef(clone_buffer.data(), clone_buffer.size()), "clone_buffer");
     auto cloned_module = llvm::parseBitcodeFile(buffer_ref, module_in.getContext());
+
+    // TODO(<add issue>): Add support for returning the error.
+    if (!cloned_module) {
+        llvm::dbgs() << cloned_module.takeError();
+        module_in.print(llvm::dbgs(), nullptr, false, true);
+    }
     internal_assert(cloned_module);
 
     return std::move(cloned_module.get());
@@ -425,11 +431,19 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
 }
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
+#if LLVM_VERSION >= 180
+    emit_file(module, out, llvm::CodeGenFileType::ObjectFile);
+#else
     emit_file(module, out, llvm::CGFT_ObjectFile);
+#endif
 }
 
 void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
+#if LLVM_VERSION >= 180
+    emit_file(module, out, llvm::CodeGenFileType::AssemblyFile);
+#else
     emit_file(module, out, llvm::CGFT_AssemblyFile);
+#endif
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream &out) {

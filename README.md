@@ -6,7 +6,7 @@ currently targets:
 
 - CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V
 - Operating systems: Linux, Windows, macOS, Android, iOS, Qualcomm QuRT
-- GPU Compute APIs: CUDA, OpenCL, OpenGL Compute Shaders, Apple Metal, Microsoft
+- GPU Compute APIs: CUDA, OpenCL, Apple Metal, Microsoft
   Direct X 12, Vulkan
 
 Rather than being a standalone programming language, Halide is embedded in C++.
@@ -138,7 +138,7 @@ Then build it like so:
 ```
 % cmake -DCMAKE_BUILD_TYPE=Release \
         -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
-        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly" \
+        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly;RISCV" \
         -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
         -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
         -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
@@ -300,7 +300,7 @@ D:\> cmake -G Ninja ^
            -DCMAKE_BUILD_TYPE=Release ^
            -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
            -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon ^
+           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;RISCV ^
            -DLLVM_ENABLE_ASSERTIONS=ON ^
            -DLLVM_ENABLE_EH=ON ^
            -DLLVM_ENABLE_RTTI=ON ^
@@ -315,7 +315,7 @@ D:\> cmake -G Ninja ^
            -DCMAKE_BUILD_TYPE=Release ^
            -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
            -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon ^
+           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;RISCV ^
            -DLLVM_ENABLE_ASSERTIONS=ON ^
            -DLLVM_ENABLE_EH=ON ^
            -DLLVM_ENABLE_RTTI=ON ^
@@ -406,15 +406,12 @@ branch.)
 
 ### 2. Download and install the Hexagon SDK and Hexagon Tools
 
-Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools
+Go to https://qpm.qualcomm.com/#/main/home
 
-1. Select the Hexagon Series 600 Software and download & run QPM and install
-   the Hexagon SDK 4.3.0 version or later for Linux.
-2. untar the installer
-3. Run the extracted installer to install the Hexagon SDK and Hexagon Tools,
-   selecting Installation of Hexagon SDK into `/location/of/SDK/Hexagon_SDK/4.x`
-   and the Hexagon tools into `/location/of/SDK/Hexagon_Tools/8.x`
-4. Set an environment variable to point to the SDK installation location
+1. Go to Tools, and download Qualcomm Package Manager 3. Install the package manager on your machine.
+2. Run the installed Qualcomm Package Manager and install the Qualcomm Hexagon SDK 5.x (or 4.x).
+   The SDK can be selected from the Qualcomm Hexagon SDK Products.
+3. Set an environment variable to point to the SDK installation location
    ```
    export SDK_LOC=/location/of/SDK
    ```

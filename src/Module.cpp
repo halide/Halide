@@ -18,7 +18,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
-#include "StmtToViz.h"
+#include "StmtToHTML.h"
 
 namespace Halide {
 namespace Internal {
@@ -40,6 +40,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {OutputFileType::featurization, {"featurization", ".featurization", IsMulti}},
         {OutputFileType::function_info_header, {"function_info_header", ".function_info.h", IsSingle}},
+        {OutputFileType::hlpipe, {"hlpipe", ".hlpipe", IsSingle}},
         {OutputFileType::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
         {OutputFileType::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
         {OutputFileType::python_extension, {"python_extension", ".py.cpp", IsSingle}},
@@ -48,7 +49,10 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::schedule, {"schedule", ".schedule.h", IsSingle}},
         {OutputFileType::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {OutputFileType::stmt, {"stmt", ".stmt", IsMulti}},
+        {OutputFileType::conceptual_stmt, {"conceptual_stmt", ".conceptual.stmt", IsMulti}},
         {OutputFileType::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
+        {OutputFileType::conceptual_stmt_html, {"conceptual_stmt_html", ".conceptual.stmt.html", IsMulti}},
+        {OutputFileType::device_code, {"device_code", ".device_code", IsMulti}},
     };
     return ext;
 }
@@ -324,6 +328,13 @@ struct ModuleContents {
     MetadataNameMap metadata_name_map;
     bool any_strict_float{false};
     std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
+
+    /** This is a copy of the code throughout the lowering process, which
+     * reflects best the actual pipeline, without introducing device-specific
+     * generated code from device-specific offloads (such as Cuda PTX,
+     * etc...). In other words, we'd like to keep this
+     * conceptually relevant and human-readable. */
+    Stmt conceptual_code;
 };
 
 template<>
@@ -405,6 +416,26 @@ std::vector<Internal::LoweredFunc> &Module::functions() {
 
 const std::vector<Module> &Module::submodules() const {
     return contents->submodules;
+}
+
+Buffer<> Module::get_cuda_ptx_assembly_buffer() const {
+    for (const Buffer<> &buf : buffers()) {
+        if (ends_with(buf.name(), "_gpu_source_kernels")) {
+            if (starts_with(buf.name(), "cuda_")) {
+                return buf;
+            }
+        }
+    }
+    return {};
+}
+
+Buffer<> Module::get_device_code_buffer() const {
+    for (const Buffer<> &buf : buffers()) {
+        if (ends_with(buf.name(), "_gpu_source_kernels")) {
+            return buf;
+        }
+    }
+    return {};
 }
 
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
@@ -518,12 +549,16 @@ MetadataNameMap Module::get_metadata_name_map() const {
     return contents->metadata_name_map;
 }
 
+void Module::set_conceptual_code_stmt(const Internal::Stmt &stmt) {
+    contents->conceptual_code = stmt;
+}
+
+const Internal::Stmt &Module::get_conceptual_stmt() const {
+    return contents->conceptual_code;
+}
+
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
-
-    if (target().has_feature(Target::OpenGLCompute)) {
-        user_warning << "WARNING: OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.\n";
-    }
 
     // Minor but worthwhile optimization: if all of the output files are of types that won't
     // ever rely on submodules (e.g.: toplevel declarations in C/C++), don't bother resolving
@@ -550,12 +585,20 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     std::string assembly_path;
     if (contains(output_files, OutputFileType::assembly)) {
         assembly_path = output_files.at(OutputFileType::assembly);
-    } else if (contains(output_files, OutputFileType::stmt_html)) {
+    } else if (contains(output_files, OutputFileType::stmt_html) || contains(output_files, OutputFileType::conceptual_stmt_html)) {
         // We need assembly in order to generate stmt_html, but the user doesn't
         // want it on its own, so we will generate it to a temp directory, since some
         // build systems (e.g. Bazel) are strict about what you can generate to the 'expected'
         // build-products directory (but grant exemptions for /tmp).
-        assembly_path = temp_assembly_dir.add_temp_file(output_files.at(OutputFileType::stmt_html),
+        std::string path;
+        if (contains(output_files, OutputFileType::stmt_html)) {
+            path = output_files.at(OutputFileType::stmt_html);
+        } else if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
+            path = output_files.at(OutputFileType::conceptual_stmt_html);
+        } else {
+            internal_error << "A html file path is required to determine the output of the temporary assembly file.\n";
+        }
+        assembly_path = temp_assembly_dir.add_temp_file(path,
                                                         get_output_info(target()).at(OutputFileType::assembly).extension,
                                                         target());
         debug(1) << "Module.compile(): creating temp file for assembly output at " << assembly_path << "\n";
@@ -626,10 +669,43 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::ofstream file(output_files.at(OutputFileType::stmt));
         file << *this;
     }
+    if (contains(output_files, OutputFileType::conceptual_stmt)) {
+        debug(1) << "Module.compile(): conceptual_stmt " << output_files.at(OutputFileType::conceptual_stmt) << "\n";
+        std::ofstream file(output_files.at(OutputFileType::conceptual_stmt));
+        file << get_conceptual_stmt();
+    }
     if (contains(output_files, OutputFileType::stmt_html)) {
         internal_assert(!assembly_path.empty());
         debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
-        Internal::print_to_viz(output_files.at(OutputFileType::stmt_html), *this, assembly_path);
+        Internal::print_to_stmt_html(output_files.at(OutputFileType::stmt_html),
+                                     *this, assembly_path);
+    }
+    if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
+        internal_assert(!assembly_path.empty());
+        debug(1) << "Module.compile(): conceptual_stmt_html " << output_files.at(OutputFileType::conceptual_stmt_html) << "\n";
+        Internal::print_to_conceptual_stmt_html(output_files.at(OutputFileType::conceptual_stmt_html),
+                                                *this, assembly_path);
+    }
+    if (contains(output_files, OutputFileType::device_code)) {
+        debug(1) << "Module.compile(): device_code " << output_files.at(OutputFileType::device_code) << "\n";
+        Buffer<> buf = get_device_code_buffer();
+        if (buf.defined()) {
+            int length = buf.size_in_bytes();
+            while (length > 0 && ((const char *)buf.data())[length - 1] == '\0') {
+                length--;
+            }
+            std::string str((const char *)buf.data(), length);
+            std::string device_code = std::string((const char *)buf.data(), buf.size_in_bytes());
+            while (!device_code.empty() && device_code.back() == '\0') {
+                device_code = device_code.substr(0, device_code.length() - 1);
+            }
+            std::ofstream file(output_files.at(OutputFileType::device_code));
+            file << device_code << "\n";
+            file.close();
+            debug(1) << "Saved GPU kernel sources (" << device_code.size() << " bytes).\n";
+        } else {
+            debug(1) << "No GPU kernel sources emitted.\n";
+        }
     }
     if (contains(output_files, OutputFileType::function_info_header)) {
         debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";
@@ -813,6 +889,7 @@ void compile_multitarget(const std::string &fn_name,
         // This would make the filename outputs more symmetrical (ie the same for n=1 as for n>1)
         // but at the expense of breaking existing users. So for now, we're going to continue
         // with the legacy treatment below:
+        reset_random_counters();
         module_factory(fn_name, base_target).compile(output_files);
         return;
     }
@@ -877,6 +954,8 @@ void compile_multitarget(const std::string &fn_name,
         // We always produce the runtime separately, so add NoRuntime explicitly.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
 
+        // Ensure that each subtarget sees the same sequence of random numbers
+        reset_random_counters();
         {
             ScopedCompilerLogger activate(compiler_logger_factory, sub_fn_name, sub_fn_target);
             Module sub_module = module_factory(sub_fn_name, sub_fn_target);

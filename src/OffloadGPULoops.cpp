@@ -1,11 +1,11 @@
 #include <memory>
 
+#include "CanonicalizeGPUVars.h"
 #include "Closure.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
-#include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Vulkan_Dev.h"
 #include "CodeGen_WebGPU_Dev.h"
@@ -32,13 +32,13 @@ namespace {
 // amount of shared memory to allocate.
 class ExtractBounds : public IRVisitor {
 public:
-    Expr num_threads[4];
-    Expr num_blocks[4];
+    Expr num_threads[3];
+    Expr num_blocks[3];
     Expr shared_mem_size;
 
     ExtractBounds()
         : shared_mem_size(0) {
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 3; i++) {
             num_threads[i] = num_blocks[i] = 1;
         }
     }
@@ -49,26 +49,17 @@ private:
     using IRVisitor::visit;
 
     void visit(const For *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (is_gpu(op->for_type)) {
             internal_assert(is_const_zero(op->min));
         }
 
-        if (ends_with(op->name, ".__thread_id_x")) {
-            num_threads[0] = op->extent;
-        } else if (ends_with(op->name, ".__thread_id_y")) {
-            num_threads[1] = op->extent;
-        } else if (ends_with(op->name, ".__thread_id_z")) {
-            num_threads[2] = op->extent;
-        } else if (ends_with(op->name, ".__thread_id_w")) {
-            num_threads[3] = op->extent;
-        } else if (ends_with(op->name, ".__block_id_x")) {
-            num_blocks[0] = op->extent;
-        } else if (ends_with(op->name, ".__block_id_y")) {
-            num_blocks[1] = op->extent;
-        } else if (ends_with(op->name, ".__block_id_z")) {
-            num_blocks[2] = op->extent;
-        } else if (ends_with(op->name, ".__block_id_w")) {
-            num_blocks[3] = op->extent;
+        for (int i = 0; i < 3; i++) {
+            if (ends_with(op->name, gpu_thread_name(i))) {
+                num_threads[i] = op->extent;
+            }
+            if (ends_with(op->name, gpu_block_name(i))) {
+                num_blocks[i] = op->extent;
+            }
         }
 
         op->body.accept(this);
@@ -128,7 +119,7 @@ class InjectGpuOffload : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *loop) override {
-        if (!CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
+        if (!is_gpu(loop->for_type)) {
             return IRMutator::visit(loop);
         }
 
@@ -143,12 +134,10 @@ class InjectGpuOffload : public IRMutator {
         debug(2) << "Kernel bounds: ("
                  << bounds.num_threads[0] << ", "
                  << bounds.num_threads[1] << ", "
-                 << bounds.num_threads[2] << ", "
-                 << bounds.num_threads[3] << ") threads, ("
+                 << bounds.num_threads[2] << ") threads, ("
                  << bounds.num_blocks[0] << ", "
                  << bounds.num_blocks[1] << ", "
-                 << bounds.num_blocks[2] << ", "
-                 << bounds.num_blocks[3] << ") blocks\n";
+                 << bounds.num_blocks[2] << ") blocks\n";
 
         // compute a closure over the state passed into the kernel
         HostClosure c;
@@ -166,7 +155,7 @@ class InjectGpuOffload : public IRMutator {
                      return a.type.bits() > b.type.bits();
                  } else {
                      // Ensure that buffer arguments come first:
-                     // for many OpenGL/Compute systems, the
+                     // for some GPU systems, the
                      // legal indices for buffer args are much
                      // more restrictive than for scalar args,
                      // and scalar args can be 'grown' by
@@ -223,10 +212,6 @@ class InjectGpuOffload : public IRMutator {
         }
         arg_is_buffer.emplace_back(cast<uint8_t>(0));
 
-        // TODO: only three dimensions can be passed to
-        // cuLaunchKernel. How should we handle blkid[3]?
-        internal_assert(is_const_one(bounds.num_threads[3]) && is_const_one(bounds.num_blocks[3]))
-            << bounds.num_threads[3] << ", " << bounds.num_blocks[3] << "\n";
         debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
         debug(3) << "bounds.num_blocks[1] = " << bounds.num_blocks[1] << "\n";
         debug(3) << "bounds.num_blocks[2] = " << bounds.num_blocks[2] << "\n";
@@ -249,7 +234,13 @@ class InjectGpuOffload : public IRMutator {
             Call::make(Handle(), Call::make_struct, args, Call::Intrinsic),
             Call::make(Handle(), Call::make_struct, arg_is_buffer, Call::Intrinsic),
         };
-        return call_extern_and_assert("halide_" + api_unique_name + "_run", run_args);
+        Stmt run_and_assert = call_extern_and_assert("halide_" + api_unique_name + "_run", run_args);
+        if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
+            Expr device_interface = make_device_interface_call(loop->device_api, MemoryType::Auto);
+            Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
+            return Block::make(run_and_assert, sync_and_assert);
+        }
+        return run_and_assert;
     }
 
 public:
@@ -261,9 +252,6 @@ public:
         // host arch or os.
         device_target.os = Target::OSUnknown;
         device_target.arch = Target::ArchUnknown;
-        if (target.has_feature(Target::OpenGLCompute)) {
-            cgdev[DeviceAPI::OpenGLCompute] = new_CodeGen_OpenGLCompute_Dev(device_target);
-        }
         if (target.has_feature(Target::CUDA)) {
             cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target);
         }

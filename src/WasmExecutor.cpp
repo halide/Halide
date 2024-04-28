@@ -101,11 +101,6 @@ struct debug_sink {
 // BDMalloc
 // ---------------------
 
-template<typename T>
-inline T align_up(T p, int alignment = 32) {
-    return (p + alignment - 1) & ~(alignment - 1);
-}
-
 // Debugging our Malloc is extremely noisy and usually undesired
 
 #define BDMALLOC_DEBUG_LEVEL 0
@@ -318,7 +313,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         stack_size += cg->get_requested_alloca_total();
     }
 
-    stack_size = align_up(stack_size);
+    stack_size = align_up(stack_size, 32);
     wdebug(1) << "Requesting stack size of " << stack_size << "\n";
 
     std::unique_ptr<llvm::Module> llvm_module =
@@ -708,7 +703,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf(WabtContext &wabt_context, const halide_buffer_t
     const size_t dims_size_in_bytes = sizeof(halide_dimension_t) * src->dimensions;
     const size_t dims_offset = sizeof(wasm_halide_buffer_t);
     const size_t mem_needed_base = sizeof(wasm_halide_buffer_t) + dims_size_in_bytes;
-    const size_t host_offset = align_up(mem_needed_base);
+    const size_t host_offset = align_up(mem_needed_base, 32);
     const size_t host_size_in_bytes = src->size_in_bytes();
     const size_t mem_needed = host_offset + host_size_in_bytes;
 
@@ -1308,14 +1303,12 @@ wabt::interp::HostFunc::Ptr make_extern_callback(wabt::interp::Store &store,
 
 wabt::Features calc_features(const Target &target) {
     wabt::Features f;
-    if (target.has_feature(Target::WasmSignExt)) {
+    if (!target.has_feature(Target::WasmMvpOnly)) {
         f.enable_sign_extension();
+        f.enable_sat_float_to_int();
     }
     if (target.has_feature(Target::WasmSimd128)) {
         f.enable_simd();
-    }
-    if (target.has_feature(Target::WasmSatFloatToInt)) {
-        f.enable_sat_float_to_int();
     }
     return f;
 }
@@ -1615,7 +1608,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf(const Local<Context> &context, const halide_buff
     const size_t dims_size_in_bytes = sizeof(halide_dimension_t) * src->dimensions;
     const size_t dims_offset = sizeof(wasm_halide_buffer_t);
     const size_t mem_needed_base = sizeof(wasm_halide_buffer_t) + dims_size_in_bytes;
-    const size_t host_offset = align_up(mem_needed_base);
+    const size_t host_offset = align_up(mem_needed_base, 32);
     const size_t host_size_in_bytes = src->size_in_bytes();
     const size_t mem_needed = host_offset + host_size_in_bytes;
 

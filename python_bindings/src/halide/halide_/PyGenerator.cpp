@@ -11,9 +11,9 @@ using Halide::Internal::AbstractGenerator;
 using Halide::Internal::AbstractGeneratorPtr;
 using Halide::Internal::GeneratorFactoryProvider;
 using ArgInfo = Halide::Internal::AbstractGenerator::ArgInfo;
+using Halide::Parameter;
 using Halide::Internal::ArgInfoDirection;
 using Halide::Internal::ArgInfoKind;
-using Halide::Internal::Parameter;
 
 template<typename T>
 std::map<std::string, T> dict_to_map(const py::dict &dict) {
@@ -97,6 +97,12 @@ public:
 
     bool emit_cpp_stub(const std::string & /*stub_file_path*/) override {
         // Python Generators don't support this (and *never* will, so don't ask),
+        // but don't throw an error, just return false.
+        return false;
+    }
+
+    bool emit_hlpipe(const std::string & /*hlpipe_file_path*/) override {
+        // Python Generators don't support this yet ...
         // but don't throw an error, just return false.
         return false;
     }

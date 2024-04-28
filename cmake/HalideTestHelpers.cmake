@@ -54,6 +54,9 @@ function(add_halide_test TARGET)
     add_test(NAME ${TARGET}
              COMMAND ${args_COMMAND} ${args_ARGS}
              WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
+    if (NOT Halide_TARGET MATCHES "wasm")
+        set_halide_compiler_warnings(${TARGET})
+    endif ()
 
     # We can't add Halide::TerminateHandler here, because it requires Halide::Error
     # and friends to be present in the final linkage, but some callers of add_halide_test()
@@ -76,6 +79,13 @@ function(add_halide_test TARGET)
     set_target_properties(${TARGET} PROPERTIES
                           CXX_VISIBILITY_PRESET hidden
                           VISIBILITY_INLINES_HIDDEN TRUE)
+
+
+    if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
+        if (WITH_SERIALIZATION)
+            target_compile_definitions(${TARGET} PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
+        endif ()
+    endif ()
 
     # Add a meta-target for each group, to allow us to build by group easily
     foreach (GROUP IN LISTS args_GROUPS)
