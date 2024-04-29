@@ -269,6 +269,10 @@ struct halide_handle_traits {
 
 namespace Halide {
 
+namespace Internal {
+struct ConstantInterval;
+}
+
 struct Expr;
 
 /** Types in the halide type system. They can be ints, unsigned ints,
@@ -503,6 +507,10 @@ public:
 
     /** Can this type represent all values of another type? */
     bool can_represent(Type other) const;
+
+    /** Can this type represent exactly all integer values of some constant
+     * integer range? */
+    bool can_represent(const Internal::ConstantInterval &in) const;
 
     /** Can this type represent a particular constant? */
     // @{

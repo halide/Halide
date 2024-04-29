@@ -283,11 +283,6 @@ Expr c(Variable::make(global_var_type, fuzz_var(2)));
 Expr d(Variable::make(global_var_type, fuzz_var(3)));
 Expr e(Variable::make(global_var_type, fuzz_var(4)));
 
-std::ostream &operator<<(std::ostream &stream, const Interval &interval) {
-    stream << "[" << interval.min << ", " << interval.max << "]";
-    return stream;
-}
-
 Interval random_interval(FuzzedDataProvider &fdp, Type t) {
     Interval interval;
 

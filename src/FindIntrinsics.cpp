@@ -935,9 +935,12 @@ protected:
             Expr b_narrow = lossless_narrow(op->args[1]);
             if (a_narrow.defined() && b_narrow.defined()) {
                 Expr result;
-                if (op->is_intrinsic(Call::rounding_shift_right) && can_prove(b_narrow > 0)) {
+                if (op->is_intrinsic(Call::rounding_shift_right) &&
+                    can_prove(b_narrow > 0 && b_narrow < a_narrow.type().bits())) {
                     result = rounding_shift_right(a_narrow, b_narrow);
-                } else if (op->is_intrinsic(Call::rounding_shift_left) && can_prove(b_narrow < 0)) {
+                } else if (op->is_intrinsic(Call::rounding_shift_left) &&
+                           b_narrow.type().is_int() &&
+                           can_prove(b_narrow < 0 && b_narrow > -a_narrow.type().bits())) {
                     result = rounding_shift_left(a_narrow, b_narrow);
                 } else {
                     return op;

@@ -145,7 +145,7 @@ bool associative_op_pattern_match(const Expr &e,
                 debug(5) << "Adding result: " << iter.first << " -> " << iter.second << "\n";
                 match.emplace(iter.first, iter.second);
             } else {
-                if (!equal(iter.first, match_iter->first) || !equal(iter.second, match_iter->second)) {
+                if (iter.first != match_iter->first || !equal(iter.second, match_iter->second)) {
                     return false;
                 }
             }

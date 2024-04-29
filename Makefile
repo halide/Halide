@@ -478,6 +478,8 @@ SOURCE_FILES = \
   CodeGen_X86.cpp \
   CodeGen_Xtensa.cpp \
   CompilerLogger.cpp \
+  ConstantBounds.cpp \
+  ConstantInterval.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
   Debug.cpp \
@@ -677,6 +679,8 @@ HEADER_FILES = \
   CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
+  ConstantBounds.h \
+  ConstantInterval.h \
   CSE.h \
   Debug.h \
   DebugArguments.h \
