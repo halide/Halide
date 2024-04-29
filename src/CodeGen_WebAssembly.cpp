@@ -253,7 +253,7 @@ void CodeGen_WebAssembly::visit(const Call *op) {
             if (expr_match(p.pattern, op, matches)) {
                 const Expr &expr = matches[0];
                 const Type &t = expr.type();
-                // TODO: might want to keep track of scope of bounds information.
+                // TODO(8212): might want to keep track of scope of bounds information.
                 const ConstantInterval ibounds = constant_integer_bounds(expr);
                 const Type reint_type = t.with_code(halide_type_int);
                 // If the signed type can represent the maximum value unsigned value,
