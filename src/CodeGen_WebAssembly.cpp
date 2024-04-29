@@ -3,6 +3,7 @@
 
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "IRMatch.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
@@ -206,6 +207,12 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
         {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
     };
+    static const Pattern reinterpret_patterns[] = {
+        {"saturating_narrow", i8_sat(wild_u16x_), Target::WasmSimd128},
+        {"saturating_narrow", u8_sat(wild_u16x_), Target::WasmSimd128},
+        {"saturating_narrow", i16_sat(wild_u32x_), Target::WasmSimd128},
+        {"saturating_narrow", u16_sat(wild_u32x_), Target::WasmSimd128},
+    };
     static const vector<pair<Expr, Expr>> cast_rewrites = {
         // Some double-narrowing saturating casts can be better expressed as
         // combinations of single-narrowing saturating casts.
@@ -233,6 +240,35 @@ void CodeGen_WebAssembly::visit(const Call *op) {
                 Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
                 value = codegen(replacement);
                 return;
+            }
+        }
+
+        // Search for saturating casts where the inner value can be
+        // reinterpreted to signed, so that we can use existing
+        // saturating_narrow instructions.
+        for (const Pattern &p : reinterpret_patterns) {
+            if (!target.has_feature(p.required_feature)) {
+                continue;
+            }
+            if (expr_match(p.pattern, op, matches)) {
+                const Expr &expr = matches[0];
+                const Type &t = expr.type();
+                // TODO: might want to keep track of scope of bounds information.
+                const ConstantInterval ibounds = constant_integer_bounds(expr);
+                const Type reint_type = t.with_code(halide_type_int);
+                // If the signed type can represent the maximum value unsigned value,
+                //  we can safely reinterpret this unsigned expression as signed.
+                if (reint_type.can_represent(ibounds)) {
+                    // Can safely reinterpret to signed integer.
+                    matches[0] = cast(reint_type, matches[0]);
+
+                    value = call_overloaded_intrin(op->type, p.intrin, matches);
+                    if (value) {
+                        return;
+                    }
+                }
+                // No reinterpret patterns match the same input, so stop matching.
+                break;
             }
         }
     }
