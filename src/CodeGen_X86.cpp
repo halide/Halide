@@ -686,10 +686,12 @@ void CodeGen_X86::visit(const Call *op) {
             const Type &t = expr.type();
             // TODO: might want to keep track of scope of bounds information.
             const ConstantInterval ibounds = constant_integer_bounds(expr);
-            const Type reint_type = Int(t.bits());
+            const Type reint_type = t.with_code(halide_type_int);
+            // If the signed type can represent the maximum value unsigned value,
+            //  we can safely reinterpret this unsigned expression as signed.
             if (ibounds.max_defined && reint_type.can_represent(ibounds.max)) {
                 // Can safely reinterpret to signed integer.
-                matches[0] = cast(t.with_code(halide_type_int), matches[0]);
+                matches[0] = cast(reint_type, matches[0]);
                 value = call_overloaded_intrin(op->type, pattern.intrin, matches);
                 if (value) {
                     return;
