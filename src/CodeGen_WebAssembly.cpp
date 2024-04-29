@@ -246,6 +246,7 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         // Search for saturating casts where the inner value can be
         // reinterpreted to signed, so that we can use existing
         // saturating_narrow instructions.
+        // TODO: should use lossless_cast once it is fixed.
         for (const Pattern &p : reinterpret_patterns) {
             if (!target.has_feature(p.required_feature)) {
                 continue;

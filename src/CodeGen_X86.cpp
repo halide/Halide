@@ -679,12 +679,13 @@ void CodeGen_X86::visit(const Call *op) {
 
     // Search for saturating casts where the inner value can be
     // reinterpreted to signed, so that we can use existing
-    // saturating_narrow patterns.
+    // saturating_narrow instructions.
+    // TODO: should use lossless_cast once it is fixed.
     for (const auto &pattern : reinterpret_patterns) {
         if (expr_match(pattern.pattern, op, matches)) {
             const Expr &expr = matches[0];
             const Type &t = expr.type();
-            // TODO: might want to keep track of scope of bounds information.
+            // TODO(8212): might want to keep track of scope of bounds information.
             const ConstantInterval ibounds = constant_integer_bounds(expr);
             const Type reint_type = t.with_code(halide_type_int);
             // If the signed type can represent the maximum value unsigned value,

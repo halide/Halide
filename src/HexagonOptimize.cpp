@@ -266,6 +266,7 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     if (flags & Pattern::SafeReinterpretOp0) {
         // Use bounds inference to check if the first operand can
         // be safely reinterpreted.
+        // TODO: should use lossless_cast once it is fixed.
         const Expr &expr = matches[0];
         const Type &t = expr.type();
         if (t.is_int()) {
