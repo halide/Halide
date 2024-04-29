@@ -109,6 +109,7 @@ function(set_halide_compiler_warnings NAME)
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Woverloaded-virtual>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wimplicit-fallthrough>
 
         $<$<CXX_COMPILER_ID:GNU>:-Wsuggest-override>
 
