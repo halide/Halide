@@ -356,6 +356,7 @@ struct Comparer {
             case IRNodeType::GT:
                 cmp(&GT::a);
                 cmp(&GT::b);
+                break;
             case IRNodeType::GE:
                 cmp(&GE::a);
                 cmp(&GE::b);
