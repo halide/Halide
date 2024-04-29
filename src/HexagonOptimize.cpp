@@ -273,14 +273,14 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
             const ConstantInterval ibounds = constant_integer_bounds(expr);
             const Type reint_type = UInt(t.bits());
             // A signed integer can be reinterpreted as unsigned if strictly positive.
-            return ibounds.min_defined && reint_type.can_represent(ibounds.min);
+            return reint_type.can_represent(ibounds);
         } else {
             internal_assert(t.is_uint());
             // TODO: might want to keep track of scope of bounds information.
             const ConstantInterval ibounds = constant_integer_bounds(expr);
             const Type reint_type = Int(t.bits());
             // An unsigned integer can be reinterpreted as signed if less than int max.
-            return ibounds.max_defined && reint_type.can_represent(ibounds.max);
+            return reint_type.can_represent(ibounds);
         }
     }
     return true;

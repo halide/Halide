@@ -1,7 +1,7 @@
-#include "ConstantBounds.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -689,7 +689,7 @@ void CodeGen_X86::visit(const Call *op) {
             const Type reint_type = t.with_code(halide_type_int);
             // If the signed type can represent the maximum value unsigned value,
             //  we can safely reinterpret this unsigned expression as signed.
-            if (ibounds.max_defined && reint_type.can_represent(ibounds.max)) {
+            if (reint_type.can_represent(ibounds)) {
                 // Can safely reinterpret to signed integer.
                 matches[0] = cast(reint_type, matches[0]);
                 value = call_overloaded_intrin(op->type, pattern.intrin, matches);
