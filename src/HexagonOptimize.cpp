@@ -3,6 +3,7 @@
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "DistributeShifts.h"
 #include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
@@ -189,8 +190,10 @@ struct Pattern {
         // re-interleave the result.
         ReinterleaveOp0 = InterleaveResult | DeinterleaveOp0,
 
-        v65orLater = 1 << 10,  // Pattern should be matched only for v65 target or later
-        v66orLater = 1 << 11,  // Pattern should be matched only for v66 target or later
+        SafeReinterpretOp0 = 1 << 10,  // Pattern should be matched only if the first arg can be safely reinterpreted.
+
+        v65orLater = 1 << 11,  // Pattern should be matched only for v65 target or later
+        v66orLater = 1 << 12,  // Pattern should be matched only for v66 target or later
     };
 
     string intrin;  // Name of the intrinsic
@@ -259,6 +262,27 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     if (flags & Pattern::SwapOps12) {
         internal_assert(matches.size() >= 3);
         std::swap(matches[1], matches[2]);
+    }
+    if (flags & Pattern::SafeReinterpretOp0) {
+        // Use bounds inference to check if the first operand can
+        // be safely reinterpreted.
+        // TODO: should use lossless_cast once it is fixed.
+        const Expr &expr = matches[0];
+        const Type &t = expr.type();
+        if (t.is_int()) {
+            // TODO(8212): might want to keep track of scope of bounds information.
+            const ConstantInterval ibounds = constant_integer_bounds(expr);
+            const Type reint_type = UInt(t.bits());
+            // A signed integer can be reinterpreted as unsigned if strictly positive.
+            return reint_type.can_represent(ibounds);
+        } else {
+            internal_assert(t.is_uint());
+            // TODO(8212): might want to keep track of scope of bounds information.
+            const ConstantInterval ibounds = constant_integer_bounds(expr);
+            const Type reint_type = Int(t.bits());
+            // An unsigned integer can be reinterpreted as signed if less than int max.
+            return reint_type.can_represent(ibounds);
+        }
     }
     return true;
 }
@@ -915,10 +939,18 @@ class OptimizePatterns : public IRMutator {
 
             // Saturating narrowing casts. These may interleave later with trunc_sat.
             {"halide.hexagon.pack_satub.vh", u8_sat(wild_i16x)},
-            {"halide.hexagon.pack_satub.vuh", u8_sat(wild_u16x)},
             {"halide.hexagon.pack_satuh.vw", u16_sat(wild_i32x)},
             {"halide.hexagon.pack_satb.vh", i8_sat(wild_i16x)},
             {"halide.hexagon.pack_sath.vw", i16_sat(wild_i32x)},
+            // The same patterns as above, but with safely reinterpreting the
+            // argument to be signed.
+            {"halide.hexagon.pack_satub.vh", u8_sat(wild_u16x), Pattern::SafeReinterpretOp0},
+            {"halide.hexagon.pack_satuh.vw", u16_sat(wild_u32x), Pattern::SafeReinterpretOp0},
+            {"halide.hexagon.pack_satb.vh", i8_sat(wild_u16x), Pattern::SafeReinterpretOp0},
+            {"halide.hexagon.pack_sath.vw", i16_sat(wild_u32x), Pattern::SafeReinterpretOp0},
+            // Slightly more expensive versions of uint saturation casts than the reinterpret
+            // patterns above, these perform vpack(min(UMAX, x)).
+            {"halide.hexagon.pack_satub.vuh", u8_sat(wild_u16x)},
             {"halide.hexagon.pack_satuh.vuw", u16_sat(wild_u32x)},
 
             // We don't have a vpack equivalent to this one, so we match it directly.
