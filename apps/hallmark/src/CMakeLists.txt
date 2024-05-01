@@ -1,6 +1,6 @@
 add_subdirectory(ml_ops)
 
-add_halide_generator(llm.generator llm_generator.cc)
+add_halide_generator(llm.generator llm_generator.cpp)
 target_link_libraries(llm.generator PRIVATE hallmark_ml_ops absl::log)
 
 add_halide_library(
@@ -117,7 +117,7 @@ add_halide_library(
 # --------------------
 
 add_library(hallmark_llm
-            llm.cc)
+            llm.cpp)
 target_include_directories(hallmark_llm PRIVATE
                            $<BUILD_INTERFACE:${hallmark_SOURCE_DIR}>)
 target_link_libraries(hallmark_llm
