@@ -258,7 +258,7 @@ public:
 
         std::vector<const Variable *> pop_list;
         std::vector<const Variable *> bounds_pop_list;
-        std::vector<Expr> truths, falsehoods;
+        std::set<Expr, IRDeepCompare> truths, falsehoods;
 
         void learn_false(const Expr &fact);
         void learn_true(const Expr &fact);

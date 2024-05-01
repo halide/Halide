@@ -188,18 +188,6 @@ Expr make_const_expr(halide_scalar_value_t val, halide_type_t ty) {
     return e;
 }
 
-bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept;
-
-// A fast version of expression equality that assumes a well-typed non-null expression tree.
-HALIDE_ALWAYS_INLINE
-bool equal(const BaseExprNode &a, const BaseExprNode &b) noexcept {
-    // Early out
-    return (&a == &b) ||
-           ((a.type == b.type) &&
-            (a.node_type == b.node_type) &&
-            equal_helper(a, b));
-}
-
 // A pattern that matches a specific expression
 struct SpecificExpr {
     struct pattern_tag {};

@@ -58,6 +58,9 @@ namespace Internal {
 struct AssociativePattern;
 struct AssociativeOp;
 class Closure;
+struct Interval;
+struct ConstantInterval;
+struct ModulusRemainder;
 
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */
@@ -90,8 +93,17 @@ std::ostream &operator<<(std::ostream &stream, const LinkageType &);
 /** Emit a halide dimension type in human-readable format */
 std::ostream &operator<<(std::ostream &stream, const DimType &);
 
-/** Emit a Closure in human-readable format */
+/** Emit a Closure in human-readable form */
 std::ostream &operator<<(std::ostream &out, const Closure &c);
+
+/** Emit an Interval in human-readable form */
+std::ostream &operator<<(std::ostream &out, const Interval &c);
+
+/** Emit a ConstantInterval in human-readable form */
+std::ostream &operator<<(std::ostream &out, const ConstantInterval &c);
+
+/** Emit a ModulusRemainder in human-readable form */
+std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c);
 
 struct Indentation {
     int indent;

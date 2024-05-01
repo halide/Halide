@@ -8,13 +8,14 @@
 #include <iostream>
 #include <string>
 
-#include "Interval.h"
+#include "ConstantInterval.h"
 #include "Scope.h"
 
 namespace Halide {
 namespace Internal {
 
-/** Find the bounds of the derivative of an expression. */
+/** Find the bounds of the derivative of an expression. The scope gives the
+ * bounds on the derivatives of any variables found. */
 ConstantInterval derivative_bounds(const Expr &e, const std::string &var,
                                    const Scope<ConstantInterval> &scope = Scope<ConstantInterval>::empty_scope());
 
