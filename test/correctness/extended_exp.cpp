@@ -18,8 +18,9 @@ void two_pass_softmax_test(float scale) {
 
     Func input("input");
     input(x) = 0.0f;
-    input(r) = random_float();
+    input(r) = random_float() * scale;
 
+    // Naive two pass algorithm. Doesn't work for large values or large size inputs.
     Func in_exp("in_exp");
     in_exp(x) = halide_exp(input(x));
     Func exp_sum("exp_sum");
@@ -28,6 +29,18 @@ void two_pass_softmax_test(float scale) {
     Func naive_softmax("naive_softmax");
     naive_softmax(x) = in_exp(x) / exp_sum();
 
+    // Three pass algorithm that works for all inputs.
+    Func max_input("max_input");
+    max_input() = maximum(input(r));
+    Func biased_in_exp("biased_in_exp");
+    biased_in_exp(x) = halide_exp(input(x) - max_input());
+    Func biased_exp_sum("biased_exp_sum");
+    biased_exp_sum() = sum(biased_in_exp(r));
+
+    Func three_pass_softmax("three_pass_softmax");
+    three_pass_softmax(x) = biased_in_exp(x) / biased_exp_sum();
+
+    // Two pass extended exp algorithm.
     Func in_extended_exp("in_extended_exp");
     in_extended_exp(x) = halide_extended_exp(input(x));
     Expr mantissa = in_extended_exp(x)[0];
@@ -45,7 +58,7 @@ void two_pass_softmax_test(float scale) {
     two_pass_softmax(x) = in_extended_exp(x)[0] * lambda * pow(2, in_extended_exp(x)[1] - extended_exp_sum()[1]);
 
     Func relative_error("relative_error");
-    relative_error(x) = abs(naive_softmax(x) - two_pass_softmax(x)) / naive_softmax(x);
+    relative_error(x) = abs(three_pass_softmax(x) - two_pass_softmax(x)) / max(.000001f, three_pass_softmax(x));
     Func max_relative_error("max_relative_error");
     max_relative_error() = maximum(relative_error(r));
     Func max_prob("max_prob");
@@ -58,8 +71,10 @@ void two_pass_softmax_test(float scale) {
     Func result("result");
     result() = Tuple(max_relative_error(), max_prob(), min_prob(), sum_prob());
     exp_sum.compute_root();
+    biased_exp_sum.compute_root();
     extended_exp_sum.compute_root();
     naive_softmax.compute_root();
+    three_pass_softmax.compute_root();
     two_pass_softmax.compute_root();
 
     auto output = result.realize();
@@ -69,14 +84,23 @@ void two_pass_softmax_test(float scale) {
     float min_probability = ((Buffer<float> &)output[2])();
     float sum_probability = ((Buffer<float> &)output[3])();
 
-    std::cout << "Two pass softmax with scale " << scale
-              << "\nMax relative error: " << max_relative_error_result
-              << "\nmax probability: " << max_probability
-              << "\nmin probability: " << min_probability
-              << "\nsum of probabilities: " << sum_probability << "\n";
-
     if (max_relative_error_result > .0001f) {
         std::cout << "Failed: Softmax results do not match.\n";
+        exit(1);
+    }
+
+    if (max_probability > 1.0f) {
+        std::cout << "Failed: Softmax probability is greater than 1.0f.\n";
+        exit(1);
+    }
+
+    if (min_probability < 0.0f) {
+        std::cout << "Failed: Softmax probability is negative.\n";
+        exit(1);
+    }
+
+    if (sum_probability > 1.0001f) {
+        std::cout << "Failed: Softmax probability sum is too large.\n";
         exit(1);
     }
 }
@@ -105,11 +129,8 @@ int main(int argc, char **argv) {
     expect(1, exp(1.0f) / 2, 1);
     expect(88, 1.94149, 126);
     expect(0x1.62e43p+23f, 0x1.085012p+0, 0x1p+24);
-    // Implementation does not support these yet.
-#if 0
-    expect(std::numeric_limits<float>::lowest(), 0, 0);
-    expect(std::numeric_limits<float>::max(), 0, 0);
-#endif
+    expect(std::numeric_limits<float>::lowest(), 1.0f, -std::numeric_limits<float>::infinity());
+    expect(std::numeric_limits<float>::max(), 1.0f, std::numeric_limits<float>::infinity());
     two_pass_softmax_test(1.0f);
     two_pass_softmax_test(10000.0f);
     two_pass_softmax_test(-10000.0f);

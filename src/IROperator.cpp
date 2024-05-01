@@ -879,6 +879,8 @@ Tuple halide_extended_exp(const Expr &x_full) {
         1.0f};
     Expr result = evaluate_polynomial(x, coeff, sizeof(coeff) / sizeof(coeff[0]));
 
+    // Ensure that the mantissa part is not a NaN or itself an infinity.
+    result = strict_float(select(!is_finite(k_real), 1, result));
     result = common_subexpression_elimination(result);
 
     return {result, k_real};
