@@ -75,7 +75,13 @@ FetchContent_Declare(protobuf
                      GIT_TAG v26.1
                      GIT_SHALLOW TRUE)
 
-FetchContent_MakeAvailable(abseil flatbuffers googletest googlebenchmark protobuf)
+# TODO(srj,zvookin): Exact parameters should be double checked.
+FetchContent_Declare(sentencepiece
+                     GIT_REPOSITORY https://github.com/google/sentencepiece
+                     GIT_TAG v0.2.0 # Old: 53de76561cfc149d3c01037f0595669ad32a5e7c
+                     )
+
+FetchContent_MakeAvailable(abseil flatbuffers googletest googlebenchmark protobuf sentencepiece)
 
 # ---------- Set up targets for flatc
 add_library(hallmark_flatbuffers INTERFACE)

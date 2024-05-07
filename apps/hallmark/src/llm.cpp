@@ -13,7 +13,7 @@
 #include "hallmark_transformer_kv_use_cache.h"
 #include "hallmark_transformer_no_kv_cache.h"
 
-#define DUMP_INFO_TO_STDOUT 0
+#define DUMP_INFO_TO_STDOUT 1
 
 namespace hallmark {
 
@@ -25,7 +25,13 @@ void dump_segpos(const float *data, size_t n) {
     }
 }
 
-void PrintBuffer(const std::string &base_name, const Halide::Runtime::Buffer<> &buf) {
+void do_indent(int indent) {
+    while (indent-- > 0) {
+        std::cout << "\t";
+    }
+}
+
+void PrintBuffer(const std::string &base_name, const Halide::Runtime::Buffer<> &buf, const char *end_of_line = "\n") {
 #if DUMP_INFO_TO_STDOUT
     std::cout << base_name << ": [";
     const char *prefix = "";
@@ -34,7 +40,7 @@ void PrintBuffer(const std::string &base_name, const Halide::Runtime::Buffer<> &
                   << buf.dim(i).extent() << "}";
         prefix = ", ";
     }
-    std::cout << "]\n"
+    std::cout << "]" << end_of_line
               << std::flush;
 #endif
 }
@@ -62,6 +68,43 @@ void DumpFloatBuffer(const std::string &base_name, const Halide::Runtime::Buffer
     }
     std::cout << std::flush;
 #endif
+}
+
+void PrintTensorInfo(int indent, const char *label, const ScaledTensor &tensor, const char *end_of_line = "\n") {
+    do_indent(indent);
+    PrintBuffer(std::string(label) + " weights: ", tensor.weights, "");
+    PrintBuffer(" scale: ", tensor.scale, "");
+    std::cout << " dim_scale: " << tensor.dim_scale << end_of_line;
+}
+
+void PrintNormWeightInfo(int indent, const char *label, const std::optional<LlmWeights::NormWeights> &norm_weights) {
+    do_indent(indent);    
+    if (norm_weights) {
+        switch (norm_weights->index()) {
+          case 0:
+            {
+              const auto &rms_weight = std::get<0>(*norm_weights);
+                std::cout << label << ": RMS Norm ";
+                PrintTensorInfo(0, "", rms_weight.norm_weight, "");
+            }
+            break;
+          case 1:
+            {
+                const auto &layer_weight = std::get<1>(*norm_weights);
+                std::cout << label << ": Layer Norm epsilon: " << layer_weight.epsilon << " gamma: ";
+                PrintTensorInfo(0, "", layer_weight.gamma, "");
+                std::cout << " beta: ";
+                PrintTensorInfo(0, "", layer_weight.beta, "");
+            }
+            break;
+          default:
+            std::cout << label << " <unrecoginzed norm kind>";
+            break;
+        }
+    } else {
+        std::cout << label << ": <no normalization>";
+    }
+    std::cout << "\n";
 }
 
 void PrintInFloatBuffer2D(const std::string &base_name,
@@ -139,7 +182,7 @@ void do_indent(int indent) {
 
 void Llm::PrintParamsAndWeights() const {
     // #if DUMP_INFO_TO_STDOUT
-#if 0
+#if 1
   std::cout << "LLM Params:\n\t";
   std::cout << "num_transformer_M: " << llm_params_.num_transformer_M << "\n\t";
   std::cout << "batch_size_B: " << llm_params_.batch_size_B << "\n\t";
@@ -182,7 +225,6 @@ void Llm::PrintParamsAndWeights() const {
   std::cout << "enable_kv_cache: " << llm_params_.enable_kv_cache << "\n\t";
   std::cout << "enable_dynamic_shape: " << llm_params_.enable_dynamic_shape
             << "\n\t";
-  std::cout << "cache_dir: " << llm_params_.cache_dir << "\n";
   std::cout << "Weights Info:\n";
   for (const auto &sa : llm_weights_.sas) {
     std::cout << "\tSelf Attention:\n";
@@ -214,10 +256,6 @@ void Llm::PrintParamsAndWeights() const {
   PrintTensorInfo(1, "softmax_linear", llm_weights_.softmax_linear);
   PrintTensorInfo(1, "softmax_bias", llm_weights_.softmax_bias);
   PrintTensorInfo(1, "token_embedding", llm_weights_.token_embedding);
-  std::cout << "\tCustom Weights:\n";
-  for (const auto &entry : llm_weights_.custom_weights) {
-    PrintTensorInfo(2, entry.first, entry.second);
-  }
 #endif
 }
 

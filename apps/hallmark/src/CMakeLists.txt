@@ -131,3 +131,19 @@ target_link_libraries(hallmark_llm
                         hallmark_transformer_kv_update_cache
                         hallmark_transformer_kv_use_cache
                         hallmark_transformer_no_kv_cache)
+
+add_executable(llm_runner llm_runner.cpp)
+target_link_libraries(llm_runner
+                      PRIVATE
+                        absl::flags
+                        absl::flags_parse
+                        hallmark_contrib
+                        hallmark_llm
+                        hallmark_position_embedding
+                        hallmark_postprocessor
+                        hallmark_preprocessor
+                        hallmark_rope_values
+                        hallmark_transformer_kv_update_cache
+                        hallmark_transformer_kv_use_cache
+			sentencepiece)
+target_include_directories(llm_runner PUBLIC ${sentencepiece_SOURCE_DIR})
