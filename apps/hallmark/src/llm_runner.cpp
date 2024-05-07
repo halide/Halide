@@ -45,6 +45,7 @@ int main(int argc, char *argv[]) {
     std::cerr << "Loading LLM params.\n";
     auto p = hallmark::LoadLlmParams(model_path);
     if (!p.ok()) {
+        std::cerr << p.status() << "\n";
         return 1;
     }
     auto llm_params = std::move(p.value());
@@ -53,6 +54,7 @@ int main(int argc, char *argv[]) {
     std::cerr << "Loading LLM weights.\n";
     auto w = hallmark::LoadLlmWeights(model_path, llm_params);
     if (!w.ok()) {
+        std::cerr << w.status() << "\n";
         return 1;
     }
     auto llm_weights = std::move(w.value());
@@ -60,24 +62,29 @@ int main(int argc, char *argv[]) {
     std::cerr << "Creating LLM.\n";
     auto l = hallmark::Llm::CreateLlm(llm_weights, llm_params);
     if (!l.ok()) {
+        std::cerr << l.status() << "\n";
         return 2;
     }
     auto llm = std::move(l.value());
 
     if (!llm->Reset().ok()) {
+        std::cerr << "Reset fails\n";
         return 3;
     }
     if (!llm->InitAttentionMaskValues(llm_params.seq_size_T).ok()) {
+        std::cerr << "InitAttentionMaskValues fails\n";
         return 4;
     }
 
     if (!llm->InitInputTokens(prompt_tokens).ok()) {
+        std::cerr << "InitInputTokens fails\n";
         return 1;
     }
 
     {
         std::string decoded_tokens;
         if (!tokenizer.Decode(prompt_tokens, &decoded_tokens).ok()) {
+            std::cerr << "Decode fails\n";
             return 5;
         }
         std::cout << decoded_tokens;
@@ -86,6 +93,7 @@ int main(int argc, char *argv[]) {
     for (int token = prompt_tokens.size(); token < max_tokens; token++) {
         std::vector<int> output_tokens;
         if (!llm->GetNextToken(&output_tokens).ok()) {
+            std::cerr << "GetNextToken fails\n";
             return 6;
         }
         if (output_tokens.empty()) {
@@ -97,6 +105,7 @@ int main(int argc, char *argv[]) {
         }
         std::string decoded_tokens;
         if (!tokenizer.Decode(output_tokens, &decoded_tokens).ok()) {
+            std::cerr << "Decode fails\n";
             return 7;
         }
         if (decoded_tokens.empty()) {
