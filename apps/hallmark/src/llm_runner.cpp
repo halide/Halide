@@ -1,7 +1,7 @@
+#include "llm.h"
 #include <HalideRuntime.h>
 #include <iomanip>
 #include <iostream>
-#include "llm.h"
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
@@ -14,7 +14,7 @@ ABSL_FLAG(std::string, tokenizer_path, "tokenizer.spm",
           "Path to the sentence piece model.");
 
 ABSL_FLAG(std::string, prompt, "Write a memo to myself titled \"Do the dumb things I gotta do.\"",
-	  "Initial prompt for llm.");
+          "Initial prompt for llm.");
 
 ABSL_FLAG(int, max_tokens, 512,
           "Maximum number of input and output tokens. This value needs to be "
@@ -30,13 +30,13 @@ int main(int argc, char *argv[]) {
 
     sentencepiece::SentencePieceProcessor tokenizer;
     {
-	auto result = tokenizer.Load(tokenizer_path);
-	if (!result.ok()) {
-	  std::cerr << result.message();
-	  return 1;
-	}
+        auto result = tokenizer.Load(tokenizer_path);
+        if (!result.ok()) {
+            std::cerr << result.message();
+            return 1;
+        }
     }
-    
+
     std::vector<int> prompt_tokens;
     {
         auto result = tokenizer.Encode(prompt, &prompt_tokens);
@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
         return 3;
     }
     if (!llm->InitAttentionMaskValues(llm_params.seq_size_T).ok()) {
-	return 4;
+        return 4;
     }
 
     if (!llm->InitInputTokens(prompt_tokens).ok()) {
@@ -77,34 +77,34 @@ int main(int argc, char *argv[]) {
 
     {
         std::string decoded_tokens;
-	if (!tokenizer.Decode(prompt_tokens, &decoded_tokens).ok()) {
-	    return 5;
-	}
-	std::cout << decoded_tokens;
+        if (!tokenizer.Decode(prompt_tokens, &decoded_tokens).ok()) {
+            return 5;
+        }
+        std::cout << decoded_tokens;
     }
 
     for (int token = prompt_tokens.size(); token < max_tokens; token++) {
         std::vector<int> output_tokens;
         if (!llm->GetNextToken(&output_tokens).ok()) {
-	    return 6;
-	}
-	if (output_tokens.empty()) {
-	    std::cerr << "Empty result from GetNextToken.\n";
-	} else {
-	  for (auto tok : output_tokens) {
-	    std::cout << "Token: " << tok << "\n";
-	  }
-	}
-	std::string decoded_tokens;
-	if (!tokenizer.Decode(output_tokens, &decoded_tokens).ok()) {
-	    return 7;
-	}
-	if (decoded_tokens.empty()) {
+            return 6;
+        }
+        if (output_tokens.empty()) {
+            std::cerr << "Empty result from GetNextToken.\n";
+        } else {
+            for (auto tok : output_tokens) {
+                std::cout << "Token: " << tok << "\n";
+            }
+        }
+        std::string decoded_tokens;
+        if (!tokenizer.Decode(output_tokens, &decoded_tokens).ok()) {
+            return 7;
+        }
+        if (decoded_tokens.empty()) {
 
-	  std::cout << "_";
-	}
-	std::cout << decoded_tokens;
-	std::cout.flush();
+            std::cout << "_";
+        }
+        std::cout << decoded_tokens;
+        std::cout.flush();
     }
 
     return 0;
