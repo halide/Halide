@@ -13,7 +13,7 @@
 #include "hallmark_transformer_kv_use_cache.h"
 #include "hallmark_transformer_no_kv_cache.h"
 
-#define DUMP_INFO_TO_STDOUT 1
+#define DUMP_INFO_TO_STDOUT 0
 
 namespace hallmark {
 
@@ -181,8 +181,7 @@ void do_indent(int indent) {
 }
 
 void Llm::PrintParamsAndWeights() const {
-    // #if DUMP_INFO_TO_STDOUT
-#if 1
+#if DUMP_INFO_TO_STDOUT
   std::cout << "LLM Params:\n\t";
   std::cout << "num_transformer_M: " << llm_params_.num_transformer_M << "\n\t";
   std::cout << "batch_size_B: " << llm_params_.batch_size_B << "\n\t";
@@ -413,6 +412,11 @@ Halide::Runtime::Buffer<> Llm::AllocateSeqBuffer(int current_seq_size) {
 
 // TODO: Rewrite this whole operation in Halide.
 absl::Status Llm::UpdateInput(const std::vector<int> &input_ids) {
+#if DUMP_INFO_TO_STDOUT
+    for (size_t i = 0; i < input_ids.size(); i++) {
+        std::cout << "UpdateInput Token " << (i + prev_ids_.size()) << ": " << input_ids[i] << "\n" << std::flush;
+    }
+#endif
     // At present prev_ids_ is always empty at entry, but it seems the
     // design is intended to support some sort of incremental operation.
     RET_CHECK(input_ids.size() + prev_ids_.size() <= llm_params_.seq_size_T);
