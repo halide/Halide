@@ -1479,7 +1479,9 @@ class ConvertGatherLoadIndex : public IRMutator {
         if (!is_const_one(op->predicate)) {
             return IRMutator::visit(op);
         }
-        if (!op->type.is_vector() || op->index.as<Ramp>()) {
+        // If dense_ramp_base is not defined, gather_load will be used and thus, index conversion is needed.
+        Expr dense_ramp_base = strided_ramp_base(op->index, 1);
+        if (!op->type.is_vector() || dense_ramp_base.defined()) {
             // Don't handle scalar or simple vector loads.
             return IRMutator::visit(op);
         }
