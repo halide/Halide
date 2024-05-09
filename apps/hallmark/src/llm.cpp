@@ -78,26 +78,22 @@ void PrintTensorInfo(int indent, const char *label, const ScaledTensor &tensor, 
 }
 
 void PrintNormWeightInfo(int indent, const char *label, const std::optional<LlmWeights::NormWeights> &norm_weights) {
-    do_indent(indent);    
+    do_indent(indent);
     if (norm_weights) {
         switch (norm_weights->index()) {
-          case 0:
-            {
-              const auto &rms_weight = std::get<0>(*norm_weights);
-                std::cout << label << ": RMS Norm ";
-                PrintTensorInfo(0, "", rms_weight.norm_weight, "");
-            }
-            break;
-          case 1:
-            {
-                const auto &layer_weight = std::get<1>(*norm_weights);
-                std::cout << label << ": Layer Norm epsilon: " << layer_weight.epsilon << " gamma: ";
-                PrintTensorInfo(0, "", layer_weight.gamma, "");
-                std::cout << " beta: ";
-                PrintTensorInfo(0, "", layer_weight.beta, "");
-            }
-            break;
-          default:
+        case 0: {
+            const auto &rms_weight = std::get<0>(*norm_weights);
+            std::cout << label << ": RMS Norm ";
+            PrintTensorInfo(0, "", rms_weight.norm_weight, "");
+        } break;
+        case 1: {
+            const auto &layer_weight = std::get<1>(*norm_weights);
+            std::cout << label << ": Layer Norm epsilon: " << layer_weight.epsilon << " gamma: ";
+            PrintTensorInfo(0, "", layer_weight.gamma, "");
+            std::cout << " beta: ";
+            PrintTensorInfo(0, "", layer_weight.beta, "");
+        } break;
+        default:
             std::cout << label << " <unrecoginzed norm kind>";
             break;
         }
@@ -182,79 +178,82 @@ void do_indent(int indent) {
 
 void Llm::PrintParamsAndWeights() const {
 #if DUMP_INFO_TO_STDOUT
-  std::cout << "LLM Params:\n\t";
-  std::cout << "num_transformer_M: " << llm_params_.num_transformer_M << "\n\t";
-  std::cout << "batch_size_B: " << llm_params_.batch_size_B << "\n\t";
-  std::cout << "seq_size_T: " << llm_params_.seq_size_T << "\n\t";
-  std::cout << "model_dim_D: " << llm_params_.model_dim_D << "\n\t";
-  std::cout << "hidden_dim_HD: " << llm_params_.hidden_dim_HD << "\n\t";
-  std::cout << "head_dim_H: " << llm_params_.head_dim_H << "\n\t";
-  std::cout << "n_heads_N: " << llm_params_.n_heads_N << "\n\t";
-  std::cout << "voc_size_V: " << llm_params_.voc_size_V << "\n\t";
-  std::cout << "num_kv_heads: " << llm_params_.num_kv_heads << "\n\t";
-  std::cout << "model_type: " << static_cast<int>(llm_params_.model_type)
-            << "\n\t";
-  std::cout << "skip_absolute_positional_embeddings: "
-            << llm_params_.skip_absolute_positional_embeddings << "\n\t";
-  std::cout << "sa_params:" << "\n\t\t";
-  std::cout << "qkv_no_bias: " << llm_params_.sa_params.qkv_no_bias << "\n\t\t";
-  std::cout << "post_proj_no_bias: " << llm_params_.sa_params.post_proj_no_bias
-            << "\n\t\t";
-  std::cout << "pre_norm: " << static_cast<int>(llm_params_.sa_params.pre_norm)
-            << "\n\t\t";
-  std::cout << "post_norm: "
-            << static_cast<int>(llm_params_.sa_params.post_norm) << "\n\t\t";
-  std::cout << "soft_cap_value: " << llm_params_.sa_params.soft_cap_value
-            << "\n\t\t";
-  std::cout << "attention_scale_type: "
-            << static_cast<int>(llm_params_.sa_params.attention_scale_type)
-            << "\n\t";
-  std::cout << "ff_params:" << "\n\t\t";
-  std::cout << "no_bias: " << llm_params_.ff_params.no_bias << "\n\t\t";
-  std::cout << "activation: "
-            << static_cast<int>(llm_params_.ff_params.activation) << "\n\t\t";
-  std::cout << "pre_norm: " << static_cast<int>(llm_params_.ff_params.pre_norm)
-            << "\n\t\t";
-  std::cout << "post_norm: "
-            << static_cast<int>(llm_params_.ff_params.post_norm) << "\n\t";
-  std::cout << "final_norm: " << static_cast<int>(llm_params_.final_norm)
-            << "\n\t";
-  std::cout << "final_proj_params:" << "\n\t\t";
-  std::cout << "no_bias: " << llm_params_.final_proj_params.no_bias << "\n\t";
-  std::cout << "enable_kv_cache: " << llm_params_.enable_kv_cache << "\n\t";
-  std::cout << "enable_dynamic_shape: " << llm_params_.enable_dynamic_shape
-            << "\n\t";
-  std::cout << "Weights Info:\n";
-  for (const auto &sa : llm_weights_.sas) {
-    std::cout << "\tSelf Attention:\n";
-    PrintNormWeightInfo(2, "pre_norm_weight", sa.pre_norm_weight);
-    PrintTensorInfo(2, "k_weight", sa.k_weight);
-    PrintTensorInfo(2, "k_bias", sa.k_bias);
-    PrintTensorInfo(2, "q_weight", sa.q_weight);
-    PrintTensorInfo(2, "q_bias", sa.q_bias);
-    PrintTensorInfo(2, "v_weight", sa.v_weight);
-    PrintTensorInfo(2, "v_bias", sa.v_bias);
-    PrintTensorInfo(2, "per_dim_scale", sa.per_dim_scale);
-    PrintTensorInfo(2, "post_proj_weight", sa.post_proj_weight);
-    PrintTensorInfo(2, "post_proj_bias", sa.post_proj_bias);
-    PrintNormWeightInfo(2, "post_norm_weight", sa.post_norm_weight);
-  }
+    std::cout << "LLM Params:\n\t";
+    std::cout << "num_transformer_M: " << llm_params_.num_transformer_M << "\n\t";
+    std::cout << "batch_size_B: " << llm_params_.batch_size_B << "\n\t";
+    std::cout << "seq_size_T: " << llm_params_.seq_size_T << "\n\t";
+    std::cout << "model_dim_D: " << llm_params_.model_dim_D << "\n\t";
+    std::cout << "hidden_dim_HD: " << llm_params_.hidden_dim_HD << "\n\t";
+    std::cout << "head_dim_H: " << llm_params_.head_dim_H << "\n\t";
+    std::cout << "n_heads_N: " << llm_params_.n_heads_N << "\n\t";
+    std::cout << "voc_size_V: " << llm_params_.voc_size_V << "\n\t";
+    std::cout << "num_kv_heads: " << llm_params_.num_kv_heads << "\n\t";
+    std::cout << "model_type: " << static_cast<int>(llm_params_.model_type)
+              << "\n\t";
+    std::cout << "skip_absolute_positional_embeddings: "
+              << llm_params_.skip_absolute_positional_embeddings << "\n\t";
+    std::cout << "sa_params:"
+              << "\n\t\t";
+    std::cout << "qkv_no_bias: " << llm_params_.sa_params.qkv_no_bias << "\n\t\t";
+    std::cout << "post_proj_no_bias: " << llm_params_.sa_params.post_proj_no_bias
+              << "\n\t\t";
+    std::cout << "pre_norm: " << static_cast<int>(llm_params_.sa_params.pre_norm)
+              << "\n\t\t";
+    std::cout << "post_norm: "
+              << static_cast<int>(llm_params_.sa_params.post_norm) << "\n\t\t";
+    std::cout << "soft_cap_value: " << llm_params_.sa_params.soft_cap_value
+              << "\n\t\t";
+    std::cout << "attention_scale_type: "
+              << static_cast<int>(llm_params_.sa_params.attention_scale_type)
+              << "\n\t";
+    std::cout << "ff_params:"
+              << "\n\t\t";
+    std::cout << "no_bias: " << llm_params_.ff_params.no_bias << "\n\t\t";
+    std::cout << "activation: "
+              << static_cast<int>(llm_params_.ff_params.activation) << "\n\t\t";
+    std::cout << "pre_norm: " << static_cast<int>(llm_params_.ff_params.pre_norm)
+              << "\n\t\t";
+    std::cout << "post_norm: "
+              << static_cast<int>(llm_params_.ff_params.post_norm) << "\n\t";
+    std::cout << "final_norm: " << static_cast<int>(llm_params_.final_norm)
+              << "\n\t";
+    std::cout << "final_proj_params:"
+              << "\n\t\t";
+    std::cout << "no_bias: " << llm_params_.final_proj_params.no_bias << "\n\t";
+    std::cout << "enable_kv_cache: " << llm_params_.enable_kv_cache << "\n\t";
+    std::cout << "enable_dynamic_shape: " << llm_params_.enable_dynamic_shape
+              << "\n\t";
+    std::cout << "Weights Info:\n";
+    for (const auto &sa : llm_weights_.sas) {
+        std::cout << "\tSelf Attention:\n";
+        PrintNormWeightInfo(2, "pre_norm_weight", sa.pre_norm_weight);
+        PrintTensorInfo(2, "k_weight", sa.k_weight);
+        PrintTensorInfo(2, "k_bias", sa.k_bias);
+        PrintTensorInfo(2, "q_weight", sa.q_weight);
+        PrintTensorInfo(2, "q_bias", sa.q_bias);
+        PrintTensorInfo(2, "v_weight", sa.v_weight);
+        PrintTensorInfo(2, "v_bias", sa.v_bias);
+        PrintTensorInfo(2, "per_dim_scale", sa.per_dim_scale);
+        PrintTensorInfo(2, "post_proj_weight", sa.post_proj_weight);
+        PrintTensorInfo(2, "post_proj_bias", sa.post_proj_bias);
+        PrintNormWeightInfo(2, "post_norm_weight", sa.post_norm_weight);
+    }
 
-  for (const auto &ff : llm_weights_.ffs) {
-    std::cout << "\tFeed Forward:\n";
-    PrintNormWeightInfo(2, "pre_norm_weight", ff.pre_norm_weight);
-    PrintTensorInfo(2, "layer_1_weight", ff.layer_1_weight);
-    PrintTensorInfo(2, "layer_1_bias", ff.layer_1_bias);
-    PrintTensorInfo(2, "layer_1_gate_weight", ff.layer_1_gate_weight);
-    PrintTensorInfo(2, "layer_1_gate_bias", ff.layer_1_gate_bias);
-    PrintTensorInfo(2, "layer_2_weight", ff.layer_2_weight);
-    PrintTensorInfo(2, "layer_2_bias", ff.layer_2_bias);
-    PrintNormWeightInfo(2, "post_norm_weight", ff.post_norm_weight);
-  }
-  PrintNormWeightInfo(1, "final_norm_weight", llm_weights_.final_norm_weight);
-  PrintTensorInfo(1, "softmax_linear", llm_weights_.softmax_linear);
-  PrintTensorInfo(1, "softmax_bias", llm_weights_.softmax_bias);
-  PrintTensorInfo(1, "token_embedding", llm_weights_.token_embedding);
+    for (const auto &ff : llm_weights_.ffs) {
+        std::cout << "\tFeed Forward:\n";
+        PrintNormWeightInfo(2, "pre_norm_weight", ff.pre_norm_weight);
+        PrintTensorInfo(2, "layer_1_weight", ff.layer_1_weight);
+        PrintTensorInfo(2, "layer_1_bias", ff.layer_1_bias);
+        PrintTensorInfo(2, "layer_1_gate_weight", ff.layer_1_gate_weight);
+        PrintTensorInfo(2, "layer_1_gate_bias", ff.layer_1_gate_bias);
+        PrintTensorInfo(2, "layer_2_weight", ff.layer_2_weight);
+        PrintTensorInfo(2, "layer_2_bias", ff.layer_2_bias);
+        PrintNormWeightInfo(2, "post_norm_weight", ff.post_norm_weight);
+    }
+    PrintNormWeightInfo(1, "final_norm_weight", llm_weights_.final_norm_weight);
+    PrintTensorInfo(1, "softmax_linear", llm_weights_.softmax_linear);
+    PrintTensorInfo(1, "softmax_bias", llm_weights_.softmax_bias);
+    PrintTensorInfo(1, "token_embedding", llm_weights_.token_embedding);
 #endif
 }
 
@@ -414,7 +413,8 @@ Halide::Runtime::Buffer<> Llm::AllocateSeqBuffer(int current_seq_size) {
 absl::Status Llm::UpdateInput(const std::vector<int> &input_ids) {
 #if DUMP_INFO_TO_STDOUT
     for (size_t i = 0; i < input_ids.size(); i++) {
-        std::cout << "UpdateInput Token " << (i + prev_ids_.size()) << ": " << input_ids[i] << "\n" << std::flush;
+        std::cout << "UpdateInput Token " << (i + prev_ids_.size()) << ": " << input_ids[i] << "\n"
+                  << std::flush;
     }
 #endif
     // At present prev_ids_ is always empty at entry, but it seems the

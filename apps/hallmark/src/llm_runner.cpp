@@ -92,23 +92,23 @@ int main(int argc, char *argv[]) {
 
     for (int token = prompt_tokens.size(); token < max_tokens; token++) {
         std::vector<int> output_tokens;
-	if (!llm->GetNextToken(&output_tokens).ok()) {
+        if (!llm->GetNextToken(&output_tokens).ok()) {
             std::cerr << "GetNextToken fails\n";
             return 6;
-	}
-	if (output_tokens.empty()) {
-	    std::cerr << "Empty result from GetNextToken.\n";
-	}
-	std::string decoded_tokens;
-	if (!tokenizer.Decode(output_tokens, &decoded_tokens).ok()) {
+        }
+        if (output_tokens.empty()) {
+            std::cerr << "Empty result from GetNextToken.\n";
+        }
+        std::string decoded_tokens;
+        if (!tokenizer.Decode(output_tokens, &decoded_tokens).ok()) {
             std::cerr << "Decode fails\n";
             return 7;
-	}
-	if (decoded_tokens.empty()) {
-	    std::cout << "_";
-	}
-	std::cout << decoded_tokens;
-	std::cout.flush();
+        }
+        if (decoded_tokens.empty()) {
+            std::cout << "_";
+        }
+        std::cout << decoded_tokens;
+        std::cout.flush();
     }
 
     return 0;
