@@ -124,7 +124,7 @@ public:
 
     void generate() {
         scaled_embedding_(n, t, b) =
-            input_(n, t, b) * sqrt((float)model_dim_D_) +
+            input_(n, t, b) * std::sqrt((float)model_dim_D_) +
             (skip_absolute_positional_embeddings_ ? 0 : (*pos_embedding_)(n, t, b));
     }
 
