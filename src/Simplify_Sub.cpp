@@ -3,23 +3,19 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
-    ExprInfo a_bounds, b_bounds;
-    Expr a = mutate(op->a, &a_bounds);
-    Expr b = mutate(op->b, &b_bounds);
+Expr Simplify::visit(const Sub *op, ExprInfo *info) {
+    ExprInfo a_info, b_info;
+    Expr a = mutate(op->a, &a_info);
+    Expr b = mutate(op->b, &b_info);
 
-    if (bounds && no_overflow_int(op->type)) {
+    if (info) {
         // Doesn't account for correlated a, b, so any
         // cancellation rule that exploits that should always
         // remutate to recalculate the bounds.
-        bounds->min_defined = a_bounds.min_defined &&
-                              b_bounds.max_defined &&
-                              sub_with_overflow(64, a_bounds.min, b_bounds.max, &(bounds->min));
-        bounds->max_defined = a_bounds.max_defined &&
-                              b_bounds.min_defined &&
-                              sub_with_overflow(64, a_bounds.max, b_bounds.min, &(bounds->max));
-        bounds->alignment = a_bounds.alignment - b_bounds.alignment;
-        bounds->trim_bounds_using_alignment();
+        info->bounds = a_info.bounds - b_info.bounds;
+        info->alignment = a_info.alignment - b_info.alignment;
+        info->trim_bounds_using_alignment();
+        info->cast_to(op->type);
     }
 
     if (may_simplify(op->type)) {
@@ -446,7 +442,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((min(z, x*c0 + y) + w) / c1 - x*c2, (min(z - x*c0, y) + w) / c1, c0 == c1 * c2) ||
 
                false)))) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
     }
     // clang-format on
