@@ -543,12 +543,12 @@ void associativity_test() {
         Expr x_idx = Variable::make(Int(32), "x_idx");
         Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, FunctionPtr(), 0);
 
-        for (Expr e : {cast<uint8_t>(min(cast<uint16_t>(x) + y, 255)),
-                       select(x > 255 - y, cast<uint8_t>(255), y),
-                       select(x < -y, y, cast<uint8_t>(255)),
-                       saturating_add(x, y),
-                       saturating_add(y, x),
-                       saturating_cast<uint8_t>(widening_add(x, y))}) {
+        for (const Expr &e : {cast<uint8_t>(min(cast<uint16_t>(x) + y, 255)),
+                              select(x > 255 - y, cast<uint8_t>(255), y),
+                              select(x < -y, y, cast<uint8_t>(255)),
+                              saturating_add(x, y),
+                              saturating_add(y, x),
+                              saturating_cast<uint8_t>(widening_add(x, y))}) {
             check_associativity("f", {x_idx}, {substitute("x", f_call_0, e)},
                                 AssociativeOp(
                                     AssociativePattern(solve_expression(e, "x").result,
