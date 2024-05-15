@@ -292,7 +292,6 @@ int main(int argc, char **argv) {
             printf("Testing subexpressions...\n");
             class TestSubexpressions : public IRMutator {
                 std::mt19937 &rng;
-                int samples;
                 bool found_failure = false;
 
             public:
