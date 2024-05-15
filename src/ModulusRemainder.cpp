@@ -487,7 +487,7 @@ ModulusRemainder ModulusRemainder::unify(const ModulusRemainder &a, const Modulu
     int64_t r;
     if (!sub_with_overflow(64, a.remainder, b.remainder, &r)) {
         // The modulus is not representable as an int64.
-        return {0, 1};
+        return ModulusRemainder{};
     }
 
     int64_t diff = a.remainder - b.remainder;
