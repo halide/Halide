@@ -15,10 +15,6 @@ using std::pair;
 using std::string;
 using std::vector;
 
-#if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
-int Simplify::debug_indent = 0;
-#endif
-
 Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
     : remove_dead_code(r) {
 

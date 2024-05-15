@@ -17,7 +17,7 @@
 // doesn't go into Halide.h, we're free to use any old names for our
 // macros.
 
-#define LOG_EXPR_MUTATIONS 1
+#define LOG_EXPR_MUTATIONS 0
 #define LOG_STMT_MUTATIONS 0
 
 // On old compilers, some visitors would use large stack frames,
@@ -122,11 +122,12 @@ public:
     }
 
 #if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
-    static int debug_indent;
+    int debug_indent = 0;
 #endif
 
 #if LOG_EXPR_MUTATIONS
     Expr mutate(const Expr &e, ExprInfo *b) {
+        internal_assert(debug_indent >= 0);
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
