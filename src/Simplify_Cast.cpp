@@ -11,14 +11,12 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
     Expr value = mutate(op->value, &value_info);
 
     if (info) {
-        if (no_overflow(op->type)) {
+        if (no_overflow(op->type) && !op->type.can_represent(value_info.bounds)) {
             // If there's overflow in a no-overflow type (e.g. due to casting
             // from a UInt(64) to an Int(32)), then forget everything we know
-            // about the bounds. The expression may or may not overflow. We
-            // don't know.
-            if (!op->type.can_represent(value_info.bounds)) {
-                info->bounds = ConstantInterval{};
-            }
+            // about the Expr. The expression may or may not overflow. We don't
+            // know.
+            *info = ExprInfo{};
         } else {
             *info = value_info;
             info->cast_to(op->type);
