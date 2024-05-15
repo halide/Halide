@@ -203,12 +203,6 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
 }
 
 bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) {
-    /*
-    for (map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
-        std::cerr << "Var " << i->first << " = " << i->second << "\n";
-    }
-    */
-
     for (int j = 0; j < t.lanes(); j++) {
         Expr a_j = a;
         Expr b_j = b;
