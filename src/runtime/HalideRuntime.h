@@ -463,7 +463,6 @@ extern halide_get_library_symbol_t halide_set_custom_get_library_symbol(halide_g
  * Cannot be replaced in JITted code at present.
  */
 extern int32_t halide_debug_to_file(void *user_context, const char *filename,
-                                    int32_t type_code,
                                     struct halide_buffer_t *buf);
 
 /** Types in the halide type system. They can be ints, unsigned ints,

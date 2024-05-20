@@ -304,7 +304,7 @@ struct Comparer {
                 cmp(&Cast::value);
                 break;
             case IRNodeType::Reinterpret:
-                cmp(&Cast::value);
+                cmp(&Reinterpret::value);
                 break;
             case IRNodeType::Variable:
                 cmp(&Variable::name);
@@ -356,6 +356,7 @@ struct Comparer {
             case IRNodeType::GT:
                 cmp(&GT::a);
                 cmp(&GT::b);
+                break;
             case IRNodeType::GE:
                 cmp(&GE::a);
                 cmp(&GE::b);

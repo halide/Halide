@@ -506,6 +506,11 @@ public:
                 check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(i32_1));
                 check("i16x8.narrow_i32x4_s", 8 * w, i8_sat(i32_1));
                 check("i16x8.narrow_i32x4_s", 8 * w, u8_sat(i32_1));
+                // Test that bounds-inference instruction selection is working properly.
+                check("i8x16.narrow_i16x8_s", 16 * w, i8_sat(u16_1 >> 1));
+                check("i8x16.narrow_i16x8_u", 16 * w, u8_sat(u16_1 >> 1));
+                check("i16x8.narrow_i32x4_s", 8 * w, i16_sat(u32_1 >> 1));
+                check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(u32_1 >> 1));
 
                 // Integer to integer widening
                 check("i16x8.extend_low_i8x16_s", 16 * w, i16(i8_1));
