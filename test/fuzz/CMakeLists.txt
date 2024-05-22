@@ -25,7 +25,7 @@ tests(GROUPS fuzz
 set(LIB_FUZZING_ENGINE "$ENV{LIB_FUZZING_ENGINE}"
     CACHE STRING "Compiler flags necessary to link the fuzzing engine of choice e.g. libfuzzer, afl etc.")
 
-foreach(fuzzer "fuzz_bounds" "fuzz_cse" "fuzz_simplify")
+foreach(fuzzer "fuzz_bounds" "fuzz_cse")
   target_link_libraries(${fuzzer} PRIVATE Halide::Halide)
 
   # Allow OSS-fuzz to manage flags directly
