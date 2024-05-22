@@ -411,6 +411,7 @@ enum class ForType {
     Extern,
     GPUBlock,
     GPUThread,
+    GPUThreadReduction,
     GPULane,
 };
 

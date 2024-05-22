@@ -1,6 +1,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "Expr.h"
 #include "IRPrinter.h"
 
 #include "AssociativeOpsTable.h"
@@ -295,6 +296,7 @@ ostream &operator<<(ostream &stream, const AssociativeOp &op) {
 ostream &operator<<(ostream &out, const ForType &type) {
     switch (type) {
     case ForType::Serial:
+    case ForType::GPUThreadReduction:
         out << "for";
         break;
     case ForType::Parallel:

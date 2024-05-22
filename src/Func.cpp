@@ -1,3 +1,7 @@
+#include "Error.h"
+#include "RDom.h"
+#include "Reduction.h"
+#include "Schedule.h"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -1095,17 +1099,122 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     return intm;
 }
 
-void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor, bool exact, TailStrategy tail) {
-    debug(4) << "In schedule for " << name() << ", split " << old << " into "
-             << outer << " and " << inner << " with factor of " << factor << "\n";
+// TODO(xylonx): WIP: use gpu_split to do two-step reduction
+Func Stage::gpu_rfactor(const RVar &r, const Var &block, const Var &thread, const Expr &factor, const DeviceAPI &device_api,
+                        TailStrategy tail) {
+    definition.schedule().touched() = true;
+
+    if (tail == TailStrategy::Auto) {
+        tail = TailStrategy::GuardWithIf;
+    }
+
+    std::string func_name = function.name();
+
+    vector<Dim> &dims = definition.schedule().dims();
+    vector<ReductionVariable> &rvars = definition.schedule().rvars();
+
+    std::vector<std::string> func_args = function.args();
+    std::vector<Expr> &init_def_args = function.definition().args();
+    std::vector<Expr> &init_def_values = function.definition().values();
+
+    std::vector<Expr> &update_def_args = definition.args();
+    std::vector<Expr> &update_def_values = definition.values();
+    // std::vector<Expr> &update_values = definition.values();
+
+    // Check whether the operator is associative and determine the operator and
+    // its identity for each value in the definition if it is a Tuple
+    const auto &prover_result = prove_associativity(func_name, update_def_args, update_def_values);
+    user_assert(prover_result.associative());
+
+    // TODO(xylonx): add an intermediate function that gives input array and output array.
+    std::vector<Expr> init_args;
+    init_args.insert(init_args.end(), dim_vars.begin(), dim_vars.end());
+
+    Func intermediate(func_name + "_intermediate");
+    function.update(0);
+    // Func intm(function.name() + "_intermediate");
+    // RDom r(0, old.rvar.extent());
+    // intm(init_args) = Tuple(init_vals);
+
+    return intermediate;
+}
+
+// GPU_rfactor
+Stage &Stage::gpu_split(const VarOrRVar &old, const VarOrRVar &block, const VarOrRVar &thread, const Expr &factor,
+                        TailStrategy tail) {
+    tail = TailStrategy::GuardWithIf;
+
+    std::string func_name = function.name();
+
+    vector<Dim> &dims = definition.schedule().dims();
+    vector<ReductionVariable> &rvars = definition.schedule().rvars();
+
+    std::vector<Expr> &args = definition.args();
+    std::vector<Expr> &values = definition.values();
+
+    definition.schedule().touched() = true;
+
+    // TODO(xylonx): add an intermediate function that gives input array and output array.
+    std::vector<Expr> init_args;
+    init_args.insert(init_args.end(), dim_vars.begin(), dim_vars.end());
+
+    vector<Expr> init_vals(values.size());
+    const auto &prover_result = prove_associativity(func_name, args, values);
+    for (size_t i = 0; i < init_vals.size(); ++i) {
+        init_vals[i] = prover_result.pattern.identities[i];
+    }
+
+    // Replace the old dimension with the new dimensions in the dims list
+    bool found = false;
+    string reduce_name, thread_name, block_name, old_name;
+
+    for (size_t i = 0; (!found) && i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, old.name())) {
+            found = true;
+
+            old_name = dims[i].var;
+            thread_name = old_name + "." + thread.name();
+            block_name = old_name + "." + block.name();
+            reduce_name = old_name + "." + block_name + "_" + thread_name;
+
+            dims.insert(dims.begin() + i, dims[i]);
+            dims[i].var = thread_name;
+            dims[i].device_api = DeviceAPI::Default_GPU;
+            dims[i].for_type = ForType::GPUThread;
+
+            dims[i + 1].var = block_name;
+            dims[i + 1].device_api = DeviceAPI::Default_GPU;
+            dims[i + 1].for_type = ForType::GPUBlock;
+
+            if (dims[i].for_type == ForType::Extern) {
+                dims[i + 1].for_type = ForType::Serial;
+            }
+
+            Dim r = {reduce_name, ForType::GPUThreadReduction, DeviceAPI::Default_GPU, DimType::PureRVar};
+            dims.insert(dims.begin() + i, r);
+
+            // add new rvar
+            ReductionVariable rv = {reduce_name, 0, factor};
+            rvars.push_back(rv);
+        }
+    }
+
+    Split split = {old_name, block_name, thread_name, factor, true, tail, Split::SplitVar};
+    definition.schedule().splits().push_back(split);
+
+    return *this;
+}
+
+void Stage::split(const string &old, const string &outer, const string &inner, const Expr &factor, bool exact,
+                  TailStrategy tail) {
+    debug(4) << "In schedule for " << name() << ", split " << old << " into " << outer << " and " << inner
+             << " with factor of " << factor << "\n";
     vector<Dim> &dims = definition.schedule().dims();
 
     definition.schedule().touched() = true;
 
-    user_assert(inner != outer) << "In schedule for " << name()
-                                << ", can't split " << old << " into "
-                                << outer << " and " << inner
-                                << " because the new Vars have the same name.\n"
+    user_assert(inner != outer) << "In schedule for " << name() << ", can't split " << old << " into " << outer
+                                << " and " << inner << " because the new Vars have the same name.\n"
                                 << dump_argument_list();
 
     // Check that the new names aren't already in the dims list.

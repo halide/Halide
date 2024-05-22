@@ -7,12 +7,14 @@
  */
 
 #include "Argument.h"
+#include "DeviceAPI.h"
 #include "Expr.h"
 #include "JITModule.h"
 #include "Module.h"
 #include "Param.h"
 #include "Pipeline.h"
 #include "RDom.h"
+#include "Schedule.h"
 #include "Target.h"
 #include "Tuple.h"
 #include "Var.h"
@@ -188,6 +190,9 @@ public:
     Func rfactor(const RVar &r, const Var &v);
     // @}
 
+    Func gpu_rfactor(const RVar &r, const Var &block, const Var &thread, const Expr &factor,
+                     const DeviceAPI &device_api = DeviceAPI::Default_GPU, TailStrategy tail = TailStrategy::Auto);
+
     /** Schedule the iteration over this stage to be fused with another
      * stage 's' from outermost loop to a given LoopLevel. 'this' stage will
      * be computed AFTER 's' in the innermost fused dimension. There should not
@@ -338,6 +343,8 @@ public:
     /** Scheduling calls that control how the domain of this stage is
      * traversed. See the documentation for Func for the meanings. */
     // @{
+
+    Stage &gpu_split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
     Stage &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
     Stage &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);

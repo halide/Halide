@@ -82,6 +82,7 @@ set(HEADER_FILES
     FuseGPUThreadLoops.h
     FuzzFloatStores.h
     Generator.h
+    GPUThreadReduction.h
     HexagonOffload.h
     HexagonOptimize.h
     ImageParam.h
@@ -253,6 +254,7 @@ set(SOURCE_FILES
     FuseGPUThreadLoops.cpp
     FuzzFloatStores.cpp
     Generator.cpp
+    GPUThreadReduction.cpp
     HexagonOffload.cpp
     HexagonOptimize.cpp
     ImageParam.cpp
