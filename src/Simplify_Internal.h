@@ -72,6 +72,12 @@ public:
                 alignment.modulus = 0;
                 alignment.remainder = bounds.min;
             }
+
+            if (bounds.is_bounded() && bounds.min > bounds.max) {
+                // Impossible, we must be in unreachable code. TODO: surface
+                // this to the simplify instance's in_unreachable flag.
+                bounds.max = bounds.min;
+            }
         }
 
         void cast_to(Type t) {
@@ -108,6 +114,13 @@ public:
 
         // Mix in existing knowledge about this Expr
         void intersect(const ExprInfo &other) {
+            if (bounds < other.bounds || other.bounds < bounds) {
+                // Impossible. We must be in unreachable code. TODO: It might
+                // be nice to surface this to the simplify instance's
+                // in_unreachable flag, but we'd have to be sure that it's going
+                // to be caught at the right place.
+                return;
+            }
             bounds = ConstantInterval::make_intersection(bounds, other.bounds);
             alignment = ModulusRemainder::intersect(alignment, other.alignment);
             trim_bounds_using_alignment();

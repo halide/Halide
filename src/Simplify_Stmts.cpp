@@ -233,10 +233,15 @@ Stmt Simplify::visit(const For *op) {
         bounds_and_alignment_info.push(op->name, loop_var_info);
     }
 
+    Expr extent_positive = mutate(0 < new_extent, nullptr);
+    if (is_const_zero(extent_positive)) {
+        return Evaluate::make(0);
+    }
+
     Stmt new_body;
     {
         // If we're in the loop, the extent must be greater than 0.
-        ScopedFact fact = scoped_truth(0 < new_extent);
+        ScopedFact fact = scoped_truth(extent_positive);
         new_body = mutate(op->body);
     }
     if (in_unreachable) {
