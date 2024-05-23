@@ -426,9 +426,26 @@ WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_complete
     0, sizeof(command_buffer_completed_handler_block_literal)};
 
 WEAK void command_buffer_completed_handler_invoke(command_buffer_completed_handler_block_literal *block, mtl_command_buffer *buffer) {
+    halide_print(nullptr, "Completion handler invoked\n");
     objc_id buffer_error = command_buffer_error(buffer);
     if (buffer_error != nullptr) {
+        retain_ns_object(buffer_error);
+
+        // Obtain the localized NSString for the error
+        typedef objc_id (*localized_description_method_t)(objc_id objc, objc_sel sel);
+        localized_description_method_t localized_description_method = (localized_description_method_t)&objc_msgSend;
+        objc_id error_ns_string = (*localized_description_method)(buffer_error, sel_getUid("localizedDescription"));
+
+        // Obtain a C-style string, but do not release the NSString until reporting/printing the error
+        typedef char* (*utf8_string_method_t)(objc_id objc, objc_sel sel);
+        utf8_string_method_t utf8_string_method = (utf8_string_method_t)&objc_msgSend;
+        char* error_string = (*utf8_string_method)(error_ns_string, sel_getUid("UTF8String"));
+
         ns_log_object(buffer_error);
+
+        // This is an error indicating the command buffer wasn't executed, and  because it is asynchronous 
+        // with respect to the pipeline that caused it, it is not recoverable
+        halide_error(nullptr, error_string);
         release_ns_object(buffer_error);
     }
 }
