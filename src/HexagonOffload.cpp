@@ -43,6 +43,7 @@ enum {
     EF_HEXAGON_MACH_V62 = 0x62,
     EF_HEXAGON_MACH_V65 = 0x65,
     EF_HEXAGON_MACH_V66 = 0x66,
+    EF_HEXAGON_MACH_V68 = 0x68,
 };
 
 enum {
@@ -551,7 +552,9 @@ public:
     uint32_t flags;
 
     HexagonLinker(const Target &target) {
-        if (target.has_feature(Target::HVX_v66)) {
+        if (target.has_feature(Target::HVX_v68)) {
+            flags = Elf::EF_HEXAGON_MACH_V68;
+        } else if (target.has_feature(Target::HVX_v66)) {
             flags = Elf::EF_HEXAGON_MACH_V66;
         } else if (target.has_feature(Target::HVX_v65)) {
             flags = Elf::EF_HEXAGON_MACH_V65;
@@ -983,6 +986,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         Target::HVX_v62,
         Target::HVX_v65,
         Target::HVX_v66,
+        Target::HVX_v68,
     };
     for (Target::Feature i : shared_features) {
         if (host_target.has_feature(i)) {
