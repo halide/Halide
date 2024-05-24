@@ -301,6 +301,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                // Required for nested GuardWithIf tilings
                rewrite(min((min(((y + c0)/c1), x)*c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
                rewrite(min((min(((y + c0)/c1), x)*c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
+               rewrite(min(min(((y + c0)/c1), x)*c1, y), min(x * c1, y), c1 > 0 && c1 <= c0 + 1) ||
 
                rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
                rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||

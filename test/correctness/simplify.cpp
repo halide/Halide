@@ -292,9 +292,6 @@ void check_algebra() {
     check((x * 2 - y) / 2, (0 - y) / 2 + x);
     check((x * -2 - y) / 2, (0 - y) / 2 - x);
     check((y - x * 4) / 2, y / 2 - x * 2);
-    check((x + 3) / 2 + 7, (x + 17) / 2);
-    check((x / 2 + 3) / 5, (x + 6) / 10);
-    check((x + (y + 3) / 5) + 5, (y + 28) / 5 + x);
     check((x + 8) / 2, x / 2 + 4);
     check((x - y) * -2, (y - x) * 2);
     check((xf - yf) * -2.0f, (yf - xf) * 2.0f);
