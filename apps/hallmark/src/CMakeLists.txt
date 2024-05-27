@@ -145,5 +145,5 @@ target_link_libraries(llm_runner
                         hallmark_rope_values
                         hallmark_transformer_kv_update_cache
                         hallmark_transformer_kv_use_cache
-			sentencepiece)
+                        sentencepiece)
 target_include_directories(llm_runner PUBLIC ${sentencepiece_SOURCE_DIR})
