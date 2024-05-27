@@ -62,7 +62,7 @@ LlmParams FromLLMParametersProto(const LlmParameters &llm_params) {
 
         .num_kv_heads =
             static_cast<size_t>(transformer_params.num_kv_heads() == 0 ? transformer_params.num_heads() : transformer_params.num_kv_heads()),
-        .enable_kv_cache = false,
+        .enable_kv_cache = true,
         .enable_dynamic_shape = false};
     switch (
         transformer_params.self_attention_parameters().attention_mask_type()) {
