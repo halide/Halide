@@ -10,14 +10,18 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
 
     if (info) {
         if (op->type.is_int_or_uint()) {
+            // ConstantInterval division is integer division, so we can't use
+            // this code path for floats.
             info->bounds = a_info.bounds / b_info.bounds;
             info->alignment = a_info.alignment / b_info.alignment;
             info->trim_bounds_using_alignment();
             info->cast_to(op->type);
 
-            // Bounded numerator divided by constantish
-            // denominator can sometimes collapse things to a
-            // constant at this point
+            // Bounded numerator divided by constantish bounded denominator can
+            // sometimes collapse things to a constant at this point. This
+            // mostly happens when the denominator is a constant and the
+            // numerator span is small (e.g. [23, 29]/10 = 2), but there are
+            // also cases with a bounded denominator (e.g. [5, 7]/[4, 5] = 1).
             if (info->bounds.is_single_point()) {
                 if (op->type.can_represent(info->bounds.min)) {
                     return make_const(op->type, info->bounds.min);
@@ -33,7 +37,9 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
                 }
             }
         } else {
-            // TODO: division bounds for floating-point division
+            // TODO: Tracking constant integer bounds of floating point values
+            // isn't so useful right now, but if we want integer bounds for
+            // floating point division later, here's the place to put it.
             clear_expr_info(info);
         }
     }
