@@ -473,7 +473,8 @@ public:
             if (use_mqa_) {
                 logits_fc_.default_schedule(LL(probs_softmax_.result, b), target);
             } else {
-                const int parallel_split = 16;
+                // Parallel here causes overruns and likely doesn't help.
+                const int parallel_split = 0;
                 logits_bmm_.default_schedule(LL(probs_softmax_.result, b), target,
                                              parallel_split);
             }
@@ -482,7 +483,7 @@ public:
                 transformer_kind_ == TransformerKind::PrefixOnlyUncached;
             probs_softmax_.default_schedule(LL::root(), target, vectorize_softmax);
 
-            const int parallel_split = 16;
+            const int parallel_split = 4;
             outcome_before_permute_bmm_.default_schedule(
                 LL(post_attention_proj_.result, b), target, parallel_split);
             kqv_merged_.compute_inline();
