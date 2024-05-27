@@ -532,7 +532,6 @@ absl::Status Llm::RunStack(Llm::TempBuffers &buffers) {
     int run_extent = decode_step - last_kv_cache_start_;
 
 #if DUMP_INFO_TO_STDOUT
-    if (decode_step == 6) exit(0);
     std::cout << "Llm::RunStack: Decode step " << decode_step << " run_extent "
               << run_extent << " llm_params.enable_dynamic_shape "
               << llm_params_.enable_dynamic_shape << "\n";
