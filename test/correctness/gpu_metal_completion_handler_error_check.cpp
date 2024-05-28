@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Func f;
+    Func f, g;
     Var c, x, ci, xi;
     RVar rxi;
     RDom r(0, 1000, -327600, 327600);
@@ -38,8 +38,17 @@ int main(int argc, char **argv) {
     JITHandlers handlers;
     handlers.custom_error = my_error;
     Internal::JITSharedRuntime::set_default_handlers(handlers);
+    f.jit_handlers().custom_error = my_error;
 
-    f.realize({1000, 100}, t);
+    // Metal is surprisingly resilient.  Run this in a loop just to make sure we trigger the error.
+    for (int i = 0; (i < 10) && !errored ; i++) {
+        auto out = f.realize({1000, 100}, t);
+        int result = out.device_sync();
+        if (result != halide_error_code_success) {
+            printf("Device sync failed as expected: %d\n", result);
+            errored = true;
+        }
+    }
 
     if (!errored) {
         printf("There was supposed to be an error\n");

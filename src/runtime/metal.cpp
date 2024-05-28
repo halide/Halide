@@ -381,6 +381,8 @@ WEAK int halide_metal_release_context(void *user_context) {
 
 }  // extern "C"
 
+extern "C" size_t strnlen(const char *s, size_t maxlen);
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
@@ -390,10 +392,14 @@ class MetalContextHolder {
     objc_id pool;
     void *const user_context;
     int status;  // must always be a valid halide_error_code_t value
+    static int saved_status; // must always be a valid halide_error_code_t value
+    static halide_mutex saved_status_mutex;  // mutex for accessing saved status
+    static char error_string[1024];
 
 public:
     mtl_device *device;
     mtl_command_queue *queue;
+
 
     ALWAYS_INLINE MetalContextHolder(void *user_context, bool create)
         : pool(create_autorelease_pool()), user_context(user_context) {
@@ -404,10 +410,56 @@ public:
         drain_autorelease_pool(pool);
     }
 
-    ALWAYS_INLINE int error() const {
-        return status;
+    // We use two variants of this function: one for just checking status, and one
+    // that returns and clears the previous status.
+    ALWAYS_INLINE static int get_and_clear_saved_status(char* error_string = nullptr) {
+        halide_mutex_lock(&saved_status_mutex);
+        int result = saved_status;
+        saved_status = halide_error_code_success;
+        if (error_string != nullptr && result != halide_error_code_success
+            && strnlen(MetalContextHolder::error_string, 1024) > 0 ) {
+            strncpy(error_string, MetalContextHolder::error_string, 1024);
+            MetalContextHolder::error_string[0] = '\0';
+            debug(nullptr) << "MetalContextHolder::get_and_clear_saved_status: " << error_string << "\n";
+        }
+        halide_mutex_unlock(&saved_status_mutex);
+        return result;
+    }
+
+    // Returns the previous status without clearing, and optionally copies the error string
+    ALWAYS_INLINE static int get_saved_status(char* error_string = nullptr) {
+        halide_mutex_lock(&saved_status_mutex);
+        int result = saved_status;
+        if (error_string != nullptr && result != halide_error_code_success
+            && strnlen(MetalContextHolder::error_string, 1024) > 0 ) {
+            strncpy(error_string, MetalContextHolder::error_string, 1024);
+        }
+        halide_mutex_unlock(&saved_status_mutex);
+        return result;
+    }
+
+    ALWAYS_INLINE static void set_saved_status(int new_status, char* error_string = nullptr) {
+        halide_mutex_lock(&saved_status_mutex);
+        saved_status = new_status;
+            if (error_string != nullptr) {
+                strncpy(MetalContextHolder::error_string, error_string, 1024);
+                debug(nullptr) << "MetalContextHolder::set_saved_status: " << error_string << "\n";
+        }
+        halide_mutex_unlock(&saved_status_mutex);
+    }
+
+    ALWAYS_INLINE int error(char* error_string = nullptr) const {
+        return status || get_saved_status(error_string);
+    }
+
+    ALWAYS_INLINE int get_and_clear_error(char* error_string = nullptr) const {
+        return status || get_and_clear_saved_status(error_string);
     }
 };
+
+int MetalContextHolder::saved_status = halide_error_code_success;
+halide_mutex MetalContextHolder::saved_status_mutex = {0};
+char MetalContextHolder::error_string[1024] = {0};
 
 struct command_buffer_completed_handler_block_descriptor_1 {
     unsigned long reserved;
@@ -426,7 +478,6 @@ WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_complete
     0, sizeof(command_buffer_completed_handler_block_literal)};
 
 WEAK void command_buffer_completed_handler_invoke(command_buffer_completed_handler_block_literal *block, mtl_command_buffer *buffer) {
-    halide_print(nullptr, "Completion handler invoked\n");
     objc_id buffer_error = command_buffer_error(buffer);
     if (buffer_error != nullptr) {
         retain_ns_object(buffer_error);
@@ -444,8 +495,8 @@ WEAK void command_buffer_completed_handler_invoke(command_buffer_completed_handl
         ns_log_object(buffer_error);
 
         // This is an error indicating the command buffer wasn't executed, and  because it is asynchronous 
-        // with respect to the pipeline that caused it, it is not recoverable
-        halide_error(nullptr, error_string);
+        // we store it in a static variable to report on the next check for an error
+        MetalContextHolder::set_saved_status(halide_error_code_device_run_failed, error_string);
         release_ns_object(buffer_error);
     }
 }
@@ -493,7 +544,7 @@ WEAK int halide_metal_device_malloc(void *user_context, halide_buffer_t *buf) {
 
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error()) {
-        return metal_context.error();
+        return metal_context.get_and_clear_error();
     }
 
 #ifdef DEBUG_RUNTIME
@@ -561,7 +612,7 @@ WEAK int halide_metal_device_free(void *user_context, halide_buffer_t *buf) {
 WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, const char *source, int source_size) {
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error()) {
-        return metal_context.error();
+        return metal_context.get_and_clear_error();
     }
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -617,7 +668,7 @@ WEAK int halide_metal_device_sync(void *user_context, struct halide_buffer_t *bu
 
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error()) {
-        return metal_context.error();
+        return metal_context.get_and_clear_error();
     }
 
     halide_metal_device_sync_internal(metal_context.queue, buffer);
@@ -668,7 +719,7 @@ WEAK int halide_metal_copy_to_device(void *user_context, halide_buffer_t *buffer
 
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error()) {
-        return metal_context.error();
+        return metal_context.get_and_clear_error();
     }
 
     if (!(buffer->host && buffer->device)) {
@@ -712,7 +763,7 @@ WEAK int halide_metal_copy_to_host(void *user_context, halide_buffer_t *buffer) 
 
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error()) {
-        return metal_context.error();
+        return metal_context.get_and_clear_error();
     }
 
     halide_metal_device_sync_internal(metal_context.queue, buffer);
@@ -755,7 +806,7 @@ WEAK int halide_metal_run(void *user_context,
 
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error()) {
-        return metal_context.error();
+        return metal_context.get_and_clear_error();
     }
 
     mtl_command_buffer *command_buffer = new_command_buffer(metal_context.queue, entry_name, strlen(entry_name));
@@ -979,7 +1030,7 @@ WEAK int halide_metal_buffer_copy(void *user_context, struct halide_buffer_t *sr
     {
         MetalContextHolder metal_context(user_context, true);
         if (metal_context.error()) {
-            return metal_context.error();
+            return metal_context.get_and_clear_error();
         }
 
         debug(user_context)
@@ -1053,7 +1104,7 @@ WEAK int metal_device_crop_from_offset(void *user_context,
                                        struct halide_buffer_t *dst) {
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error()) {
-        return metal_context.error();
+        return metal_context.get_and_clear_error();
     }
 
     dst->device_interface = src->device_interface;
