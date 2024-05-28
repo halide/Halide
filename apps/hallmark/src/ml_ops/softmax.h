@@ -1,4 +1,4 @@
-// TODO: license.
+@// TODO: license.
 #ifndef HALIDE_APPS_HALLMARK_SOFTMAX_H_
 #define HALIDE_APPS_HALLMARK_SOFTMAX_H_
 
@@ -102,9 +102,9 @@ Halide::Tuple extended_exp(const Expr &x_full) {
 
 struct Softmax : public Halide::NamesInterface {
     enum class Algorithm {
-      Naive,
-      TwoPass,
-      ThreePass,
+        Naive,
+        TwoPass,
+        ThreePass,
     };
 
     Softmax(const std::string &base_name,
@@ -129,7 +129,7 @@ struct Softmax : public Halide::NamesInterface {
     // Three pass algorithm
     Func max_bias;
     Func biased_exp;
-  
+
     // Common to different algorithms
     Func softmax_sum;
     Var result_inner;
@@ -139,13 +139,13 @@ struct Softmax : public Halide::NamesInterface {
 
     void apply(Func input, Expr size, const Type &generating_type) {
         switch (algorithm) {
-          case Algorithm::Naive:
+        case Algorithm::Naive:
             naive_algorithm(input, size, generating_type);
             break;
-          case Algorithm::TwoPass:
+        case Algorithm::TwoPass:
             two_pass_algorithm(input, size, generating_type);
             break;
-          case Algorithm::ThreePass:
+        case Algorithm::ThreePass:
             three_pass_algorithm(input, size, generating_type);
             break;
         };
@@ -250,7 +250,7 @@ struct Softmax : public Halide::NamesInterface {
     }
 
     // TODO: add support for resuse vs. recompute scheduling on exp operations.
-  
+
     void default_schedule(LoopLevel result_loop_level, const Target &t,
                           bool vectorize) {
         if (algorithm == Algorithm::Naive) {
@@ -258,9 +258,9 @@ struct Softmax : public Halide::NamesInterface {
         } else if (algorithm == Algorithm::TwoPass) {
             ext_exp.compute_inline();
         } else if (algorithm == Algorithm::ThreePass) {
-          max_bias.compute_at(softmax_sum_compute_at);
+            max_bias.compute_at(softmax_sum_compute_at);
             // TODO: vectorize max loop, maybe parallelize
-          biased_exp.compute_at(softmax_sum_compute_at);
+            biased_exp.compute_at(softmax_sum_compute_at);
         }
         softmax_sum.compute_at(softmax_sum_compute_at)
             .store_in(MemoryType::Register)

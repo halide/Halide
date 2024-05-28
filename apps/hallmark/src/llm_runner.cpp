@@ -42,7 +42,7 @@ struct SteadyClock<false> {
 
 
 struct TimingScope {
-  TimingScope(const char *name, int iterations = 1) : name(name), iterations(iterations) {
+    TimingScope(const char *name, int iterations = 1) : name(name), iterations(iterations) {
         start = SteadyClock<>::type::now();
     }
 
@@ -64,7 +64,7 @@ struct TimingScope {
     SteadyClock<>::type::time_point start;
 };
 
-}
+}  // anonymous namespace
 
 int main(int argc, char *argv[]) {
     absl::ParseCommandLine(argc, argv);
@@ -156,7 +156,7 @@ int main(int argc, char *argv[]) {
         TimingScope generate("\nGenerate tokens", max_tokens);
         std::vector<int> output_tokens;
         for (int token = prompt_tokens.size(); token < max_tokens - 2; token += output_tokens.size()) {
-          output_tokens.clear();
+            output_tokens.clear();
             if (!llm->GetNextToken(&output_tokens).ok()) {
                 std::cerr << "GetNextToken fails\n";
                 return 6;
