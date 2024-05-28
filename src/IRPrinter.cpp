@@ -7,6 +7,7 @@
 #include "Associativity.h"
 #include "Closure.h"
 #include "ConstantInterval.h"
+#include "Expr.h"
 #include "IROperator.h"
 #include "Interval.h"
 #include "Module.h"
@@ -48,7 +49,6 @@ ostream &operator<<(ostream &out, const Type &type) {
     }
     return out;
 }
-
 ostream &operator<<(ostream &stream, const Expr &ir) {
     if (!ir.defined()) {
         stream << "(undefined)";
@@ -268,6 +268,66 @@ void IRPrinter::test() {
                        << source.str();
     }
     std::cout << "IRPrinter test passed\n";
+}
+
+std::ostream &operator<<(std::ostream &stream, IRNodeType type) {
+#define CASE(e)         \
+    case IRNodeType::e: \
+        stream << #e;   \
+        break;
+    switch (type) {
+        CASE(IntImm)
+        CASE(UIntImm)
+        CASE(FloatImm)
+        CASE(StringImm)
+        CASE(Broadcast)
+        CASE(Cast)
+        CASE(Reinterpret)
+        CASE(Variable)
+        CASE(Add)
+        CASE(Sub)
+        CASE(Mod)
+        CASE(Mul)
+        CASE(Div)
+        CASE(Min)
+        CASE(Max)
+        CASE(EQ)
+        CASE(NE)
+        CASE(LT)
+        CASE(LE)
+        CASE(GT)
+        CASE(GE)
+        CASE(And)
+        CASE(Or)
+        CASE(Not)
+        CASE(Select)
+        CASE(Load)
+        CASE(Ramp)
+        CASE(Call)
+        CASE(Let)
+        CASE(Shuffle)
+        CASE(VectorReduce)
+        // Stmts
+        CASE(LetStmt)
+        CASE(AssertStmt)
+        CASE(ProducerConsumer)
+        CASE(For)
+        CASE(Acquire)
+        CASE(Store)
+        CASE(Provide)
+        CASE(Allocate)
+        CASE(Free)
+        CASE(Realize)
+        CASE(Block)
+        CASE(Fork)
+        CASE(IfThenElse)
+        CASE(Evaluate)
+        CASE(Prefetch)
+        CASE(Atomic)
+        CASE(HoistedStorage)
+    }
+#undef CASE
+    return stream;
 }
 
 ostream &operator<<(ostream &stream, const AssociativePattern &p) {
