@@ -234,6 +234,10 @@ inline int GetCycleCount() {
             halide_type_t(halide_type_float, 16),
         };
 
+        const HalideTypeSet no_multiples_types = {
+            halide_type_t(halide_type_float, 16, target.natural_vector_size<float16_t>() / 2)  // we want to have multiple of N version
+        };
+
         HalideTypeSet multiple_of_native_types;
         for (const auto &type : vector_types) {
             if (predefined_vectors.count(type) > 0 ||
@@ -241,6 +245,10 @@ inline int GetCycleCount() {
                 continue;
             }
             for (const auto &native_vector : native_vector_types) {
+                if (no_multiples_types.count(native_vector) > 0) {
+                    continue;
+                }
+
                 if (native_vector.code == type.code() &&
                     native_vector.bits == type.bits() &&
                     type.lanes() > native_vector.lanes &&
