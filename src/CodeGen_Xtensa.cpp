@@ -221,7 +221,8 @@ inline int GetCycleCount() {
             halide_type_t(halide_type_uint, 24, target.natural_vector_size<uint8_t>()),
             halide_type_t(halide_type_int, 48, target.natural_vector_size<int16_t>()),
             halide_type_t(halide_type_uint, 48, target.natural_vector_size<uint16_t>()),
-            halide_type_t(halide_type_int, 64, target.natural_vector_size<int32_t>()),  // Yes, int32, not int64
+            halide_type_t(halide_type_int, 64, target.natural_vector_size<int32_t>()),          // Yes, int32, not int64
+            halide_type_t(halide_type_float, 16, target.natural_vector_size<float16_t>() / 2),  // We have N / 2 float16_t vectors
             halide_type_t(halide_type_float, 16, target.natural_vector_size<float16_t>()),
             halide_type_t(halide_type_float, 32, target.natural_vector_size<float>()),
         };
@@ -235,7 +236,8 @@ inline int GetCycleCount() {
 
         HalideTypeSet multiple_of_native_types;
         for (const auto &type : vector_types) {
-            if (predefined_vectors.count(type) > 0) {
+            if (predefined_vectors.count(type) > 0 ||
+                native_vector_types.count(type) > 0) {
                 continue;
             }
             for (const auto &native_vector : native_vector_types) {
