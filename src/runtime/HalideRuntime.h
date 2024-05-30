@@ -1573,11 +1573,11 @@ typedef struct halide_buffer_t {
         }
     }
 
-    HALIDE_ALWAYS_INLINE bool host_dirty() const {
+    HALIDE_MUST_USE_RESULT HALIDE_ALWAYS_INLINE bool host_dirty() const {
         return get_flag(halide_buffer_flag_host_dirty);
     }
 
-    HALIDE_ALWAYS_INLINE bool device_dirty() const {
+    HALIDE_MUST_USE_RESULT HALIDE_ALWAYS_INLINE bool device_dirty() const {
         return get_flag(halide_buffer_flag_device_dirty);
     }
 
