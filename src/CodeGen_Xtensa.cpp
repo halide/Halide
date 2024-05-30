@@ -1198,7 +1198,7 @@ void CodeGen_Xtensa::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_error << "Prefetch is not supported by Xtensa backend." << Expr(op) << "\n";
-    } else if (op->name == "sqrt" || op->name == "sqrt_f32") {
+    } else if (op->name == "sqrt" || op->name == "sqrt_f16" || op->name == "sqrt_f32") {
         string a0 = print_expr(op->args[0]);
         if (is_native_xtensa_vector<float>(op->type)) {
             rhs << "IVP_SQRTN_2XF32(" << a0 << ")";
