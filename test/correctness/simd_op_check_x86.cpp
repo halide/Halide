@@ -356,9 +356,10 @@ public:
                     // avx512 uses a variety of predicated mov ops instead of blend
                     check("blend*ps", 2 * w, select(f32_1 > 0.7f, f32_1, f32_2));
                     check("blend*pd", w, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
-                    check("pblend*b", 8 * w, select(u8_1 > 7, u8_1, u8_2));
-                    check("pblend*b", 8 * w, select(u8_1 == 7, u8_1, u8_2));
-                    check("pblend*b", 8 * w, select(u8_1 <= 7, i8_1, i8_2));
+                    // Temporarily disabled due to injection from https://github.com/llvm/llvm-project/pull/92794
+                    // check("pblend*b", 8 * w, select(u8_1 > 7, u8_1, u8_2));
+                    // check("pblend*b", 8 * w, select(u8_1 == 7, u8_1, u8_2));
+                    // check("pblend*b", 8 * w, select(u8_1 <= 7, i8_1, i8_2));
                 }
 
                 check("pmaxsb", 8 * w, max(i8_1, i8_2));
