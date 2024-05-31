@@ -1409,6 +1409,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_trace_pipeline,         ///< Trace the pipeline.
     halide_target_feature_hvx_v65,                ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66,                ///< Enable Hexagon v66 architecture.
+    halide_target_feature_hvx_v68,                ///< Enable Hexagon v68 architecture.
     halide_target_feature_cl_half,                ///< Enable half support on OpenCL targets
     halide_target_feature_strict_float,           ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
     halide_target_feature_tsan,                   ///< Enable hooks for TSAN support.
