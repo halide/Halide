@@ -245,12 +245,12 @@ Stmt Simplify::visit(const For *op) {
         new_body = mutate(op->body);
     }
     if (in_unreachable) {
-        if (extent_info.bounds > 0) {
-            // If we know the loop executes at least once, the code that runs
-            // this loop is unreachable.
-            return new_body;
-        }
-        in_unreachable = false;
+        // We found that the body of this loop is unreachable when recursively
+        // mutating it, so we can remove the loop. Additionally, if we know the
+        // extent is greater than zero, then the code *outside* the loop must be
+        // unreachable too, because if it weren't, it'd run the unreachable body
+        // at least once.
+        in_unreachable = extent_info.bounds > 0;
         return Evaluate::make(0);
     }
 

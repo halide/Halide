@@ -8,18 +8,10 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
-    // debug(0) << "max(" << a_info.bounds << " " << b_info.bounds << ")\n";
-
     if (info) {
         info->bounds = max(a_info.bounds, b_info.bounds);
         info->alignment = ModulusRemainder::unify(a_info.alignment, b_info.alignment);
-        /*
-        debug(0) << "max(" << a_info.bounds << " " << a_info.alignment << "\n    "
-                 << b_info.bounds << " " << b_info.alignment << ")\n";
-        */
         info->trim_bounds_using_alignment();
-
-        // debug(0) << info->bounds << " " << info->alignment << "\n";
     }
 
     auto strip_likely = [](const Expr &e) {
@@ -34,11 +26,9 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
 
     // Early out when the bounds tells us one side or the other is smaller
     if (a_info.bounds <= b_info.bounds) {
-        // debug(0) << "b dominates\n";
         return strip_likely(b);
     }
     if (b_info.bounds <= a_info.bounds) {
-        // debug(0) << "a dominates\n";
         return strip_likely(a);
     }
 

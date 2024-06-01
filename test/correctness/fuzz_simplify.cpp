@@ -28,8 +28,23 @@ Expr random_var(std::mt19937 &rng, Type t) {
     return cast(t, Variable::make(Int(32), fuzz_var(fuzz_count)));
 }
 
+template<typename T, int N>
+T random_choice(std::mt19937 &rng, const T (&choices)[N]) {
+    return choices[rng() % N];
+}
+
+template<typename T>
+T random_choice(std::mt19937 &rng, const std::vector<T> &choices) {
+    return choices[rng() % choices.size()];
+}
+
+template<typename T, size_t N>
+T random_choice(std::mt19937 &rng, const std::array<T, N> &choices) {
+    return choices[rng() % N];
+}
+
 Type random_type(std::mt19937 &rng, int width) {
-    Type t = fuzz_types[rng() % 7];
+    Type t = random_choice(rng, fuzz_types);
     if (width > 1) {
         t = t.with_lanes(width);
     }
@@ -44,7 +59,7 @@ int get_random_divisor(std::mt19937 &rng, Type t) {
         }
     }
 
-    return divisors[rng() % divisors.size()];
+    return random_choice(rng, divisors);
 }
 
 Expr random_leaf(std::mt19937 &rng, Type t, bool overflow_undef = false, bool imm_only = false) {
@@ -95,7 +110,7 @@ Expr random_condition(std::mt19937 &rng, Type t, int depth, bool maybe_scalar) {
 
     Expr a = random_expr(rng, t, depth);
     Expr b = random_expr(rng, t, depth);
-    return make_bin_op[rng() % 6](a, b);
+    return random_choice(rng, make_bin_op)(a, b);
 }
 
 Expr make_absd(Expr a, Expr b) {
@@ -182,7 +197,7 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
 
             Expr a = random_expr(rng, t, depth, overflow_undef);
             Expr b = random_expr(rng, t, depth, overflow_undef);
-            return make_bin_op[rng() % 8](a, b);
+            return random_choice(rng, make_bin_op)(a, b);
         },
         [&]() {
             static make_bin_op_fn make_bin_op[] = {
@@ -197,9 +212,9 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
             Type bool_with_lanes = Bool(t.lanes());
             a = cast(bool_with_lanes, a);
             b = cast(bool_with_lanes, b);
-            return cast(t, make_bin_op[rng() % 2](a, b));
+            return cast(t, random_choice(rng, make_bin_op)(a, b));
         }};
-    return operations[rng() % (sizeof(operations) / sizeof(operations[0]))]();
+    return random_choice(rng, operations)();
 }
 
 bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) {
@@ -282,7 +297,7 @@ int main(int argc, char **argv) {
         printf("Seed: %d\n", seed);
         std::mt19937 rng{seed};
         std::array<int, 6> vector_widths = {1, 2, 3, 4, 6, 8};
-        int width = vector_widths[rng() % 6];
+        int width = random_choice(rng, vector_widths);
         Type VT = random_type(rng, width);
         // Generate a random expr...
         Expr test = random_expr(rng, VT, depth);

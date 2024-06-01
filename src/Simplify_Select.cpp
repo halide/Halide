@@ -13,13 +13,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
     if (info) {
         info->bounds = ConstantInterval::make_union(t_info.bounds, f_info.bounds);
         info->alignment = ModulusRemainder::unify(t_info.alignment, f_info.alignment);
-        /*
-        debug(0) << t_info.bounds << " " << t_info.alignment << "\n"
-                 << f_info.bounds << " " << f_info.alignment << "\n"
-                 << info->bounds << " " << info->alignment << "\n";
-        */
         info->trim_bounds_using_alignment();
-        // debug(0) << info->bounds << " " << info->alignment << "\n";
     }
 
     if (may_simplify(op->type)) {
