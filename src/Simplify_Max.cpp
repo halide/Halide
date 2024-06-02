@@ -3,44 +3,33 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
-    ExprInfo a_bounds, b_bounds;
-    Expr a = mutate(op->a, &a_bounds);
-    Expr b = mutate(op->b, &b_bounds);
+Expr Simplify::visit(const Max *op, ExprInfo *info) {
+    ExprInfo a_info, b_info;
+    Expr a = mutate(op->a, &a_info);
+    Expr b = mutate(op->b, &b_info);
 
-    if (bounds) {
-        bounds->min_defined = a_bounds.min_defined || b_bounds.min_defined;
-        bounds->max_defined = a_bounds.max_defined && b_bounds.max_defined;
-        bounds->max = std::max(a_bounds.max, b_bounds.max);
-        if (a_bounds.min_defined && b_bounds.min_defined) {
-            bounds->min = std::max(a_bounds.min, b_bounds.min);
-        } else if (a_bounds.min_defined) {
-            bounds->min = a_bounds.min;
-        } else {
-            bounds->min = b_bounds.min;
-        }
-        bounds->alignment = ModulusRemainder::unify(a_bounds.alignment, b_bounds.alignment);
-        bounds->trim_bounds_using_alignment();
+    if (info) {
+        info->bounds = max(a_info.bounds, b_info.bounds);
+        info->alignment = ModulusRemainder::unify(a_info.alignment, b_info.alignment);
+        info->trim_bounds_using_alignment();
     }
+
+    auto strip_likely = [](const Expr &e) {
+        if (const Call *call = e.as<Call>()) {
+            if (call->is_intrinsic(Call::likely) ||
+                call->is_intrinsic(Call::likely_if_innermost)) {
+                return call->args[0];
+            }
+        }
+        return e;
+    };
 
     // Early out when the bounds tells us one side or the other is smaller
-    if (a_bounds.max_defined && b_bounds.min_defined && a_bounds.max <= b_bounds.min) {
-        if (const Call *call = b.as<Call>()) {
-            if (call->is_intrinsic(Call::likely) ||
-                call->is_intrinsic(Call::likely_if_innermost)) {
-                return call->args[0];
-            }
-        }
-        return b;
+    if (a_info.bounds <= b_info.bounds) {
+        return strip_likely(b);
     }
-    if (b_bounds.max_defined && a_bounds.min_defined && b_bounds.max <= a_bounds.min) {
-        if (const Call *call = a.as<Call>()) {
-            if (call->is_intrinsic(Call::likely) ||
-                call->is_intrinsic(Call::likely_if_innermost)) {
-                return call->args[0];
-            }
-        }
-        return a;
+    if (b_info.bounds <= a_info.bounds) {
+        return strip_likely(a);
     }
 
     if (may_simplify(op->type)) {
@@ -48,7 +37,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
         // Order commutative operations by node type
         if (should_commute(a, b)) {
             std::swap(a, b);
-            std::swap(a_bounds, b_bounds);
+            std::swap(a_info, b_info);
         }
 
         int lanes = op->type.lanes();
@@ -301,7 +290,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
 
                rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
 
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         // clang-format on
     }
