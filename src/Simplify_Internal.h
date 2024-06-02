@@ -9,10 +9,9 @@
 #include "Bounds.h"
 #include "ConstantInterval.h"
 #include "IRMatch.h"
+#include "IRPrinter.h"
 #include "IRVisitor.h"
 #include "Scope.h"
-
-#include "IRPrinter.h"
 
 // Because this file is only included by the simplify methods and
 // doesn't go into Halide.h, we're free to use any old names for our
@@ -73,6 +72,12 @@ public:
                 alignment.modulus = 0;
                 alignment.remainder = bounds.min;
             }
+
+            if (bounds.is_bounded() && bounds.min > bounds.max) {
+                // Impossible, we must be in unreachable code. TODO: surface
+                // this to the simplify instance's in_unreachable flag.
+                bounds.max = bounds.min;
+            }
         }
 
         void cast_to(Type t) {
@@ -84,29 +89,38 @@ public:
             // integer type, and we need to project the bounds and alignment
             // back in-range.
 
-            // Bounds:
-            bounds.cast_to(t);
-
-            if (t.bits() >= 64) {
-                // Just preserve any power-of-two factor in the modulus. When
-                // alignment.modulus == 0, the value is some positive constant
-                // representable as any 64-bit integer type, so there's no
-                // wraparound.
-                if (alignment.modulus > 0) {
-                    // This masks off all bits except for the lowest set one,
-                    // giving the largest power-of-two factor of a number.
-                    alignment.modulus &= -alignment.modulus;
-                    alignment.remainder = mod_imp(alignment.remainder, alignment.modulus);
+            if (!t.can_represent(bounds)) {
+                if (t.bits() >= 64) {
+                    // Just preserve any power-of-two factor in the modulus. When
+                    // alignment.modulus == 0, the value is some positive constant
+                    // representable as any 64-bit integer type, so there's no
+                    // wraparound.
+                    if (alignment.modulus > 0) {
+                        // This masks off all bits except for the lowest set one,
+                        // giving the largest power-of-two factor of a number.
+                        alignment.modulus &= -alignment.modulus;
+                        alignment.remainder = mod_imp(alignment.remainder, alignment.modulus);
+                    }
+                } else {
+                    // A narrowing integer cast that could possibly overflow adds
+                    // some unknown multiple of 2^bits
+                    alignment = alignment + ModulusRemainder(((int64_t)1 << t.bits()), 0);
                 }
-            } else {
-                // A narrowing integer cast adds some unknown multiple of 2^bits
-                // TODO: Add += for ModulusRemainder
-                alignment = alignment + ModulusRemainder(((int64_t)1 << t.bits()), 0);
             }
+
+            // Truncate the bounds to the new type.
+            bounds.cast_to(t);
         }
 
         // Mix in existing knowledge about this Expr
         void intersect(const ExprInfo &other) {
+            if (bounds < other.bounds || other.bounds < bounds) {
+                // Impossible. We must be in unreachable code. TODO: It might
+                // be nice to surface this to the simplify instance's
+                // in_unreachable flag, but we'd have to be sure that it's going
+                // to be caught at the right place.
+                return;
+            }
             bounds = ConstantInterval::make_intersection(bounds, other.bounds);
             alignment = ModulusRemainder::intersect(alignment, other.alignment);
             trim_bounds_using_alignment();
@@ -121,11 +135,12 @@ public:
     }
 
 #if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
-    static int debug_indent;
+    int debug_indent = 0;
 #endif
 
 #if LOG_EXPR_MUTATIONS
     Expr mutate(const Expr &e, ExprInfo *b) {
+        internal_assert(debug_indent >= 0);
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
@@ -135,6 +150,19 @@ public:
             debug(1)
                 << spaces << "Before: " << e << "\n"
                 << spaces << "After:  " << new_e << "\n";
+            if (b) {
+                debug(1)
+                    << spaces << "Bounds: " << b->bounds << " " << b->alignment << "\n";
+                if (const int64_t *i = as_const_int(new_e)) {
+                    internal_assert(b->bounds.contains(*i)) << e << "\n"
+                                                            << new_e << "\n"
+                                                            << b->bounds;
+                } else if (const uint64_t *i = as_const_uint(new_e)) {
+                    internal_assert(b->bounds.contains(*i)) << e << "\n"
+                                                            << new_e << "\n"
+                                                            << b->bounds;
+                }
+            }
         }
         internal_assert(e.type() == new_e.type());
         return new_e;
@@ -263,7 +291,7 @@ public:
 
         std::vector<const Variable *> pop_list;
         std::vector<const Variable *> bounds_pop_list;
-        std::vector<Expr> truths, falsehoods;
+        std::set<Expr, IRDeepCompare> truths, falsehoods;
 
         void learn_false(const Expr &fact);
         void learn_true(const Expr &fact);

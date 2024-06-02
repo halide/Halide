@@ -21,9 +21,6 @@ namespace Internal {
  * Exprs that should be assumed to be true.
  */
 // @{
-
-// TODO: Change the interface to accept a scope of ConstantInterval
-
 Stmt simplify(const Stmt &,
               bool remove_dead_code = true,
               const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),

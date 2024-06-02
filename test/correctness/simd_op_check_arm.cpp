@@ -230,6 +230,13 @@ public:
             check(arm32 ? "vcvt.s32.f32" : "fcvtzs", 2 * w, i32(f32_1));
             // skip the fixed point conversions for now
 
+            if (!arm32) {
+                check("fcvtmu *v", 2 * w, u32(floor(f32_1)));
+                check("fcvtpu *v", 2 * w, u32(ceil(f32_1)));
+                check("fcvtms *v", 2 * w, i32(floor(f32_1)));
+                check("fcvtps *v", 2 * w, i32(ceil(f32_1)));
+            }
+
             // VDIV     -       F, D    Divide
             // This doesn't actually get vectorized in 32-bit. Not sure cortex processors can do vectorized division.
             check(arm32 ? "vdiv.f32" : "fdiv", 2 * w, f32_1 / f32_2);

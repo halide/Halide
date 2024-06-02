@@ -117,7 +117,9 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
         const EQ *eq = rewrite.result.as<EQ>();
         if (eq &&
             eq->a.same_as(op->a) &&
-            eq->b.same_as(op->b)) {
+            equal(eq->b, op->b)) {
+            // Note we don't use same_as for b, because the shuffling of the RHS
+            // to the LHS and back might mutate it and then mutate it back.
             return op;
         } else {
             return rewrite.result;

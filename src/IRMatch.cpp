@@ -262,6 +262,9 @@ public:
         if (result && e && types_match(op->type, e->type)) {
             expr = e->value;
             op->value.accept(this);
+        } else if (op->lanes == 0 && types_match(op->value.type(), expr.type())) {
+            // zero lanes means any number of lanes, so match scalars too.
+            op->value.accept(this);
         } else {
             result = false;
         }
@@ -406,149 +409,5 @@ Expr with_lanes(const Expr &x, int lanes) {
     return WithLanes(lanes).mutate(x);
 }
 
-namespace IRMatcher {
-
-HALIDE_ALWAYS_INLINE
-bool equal_helper(const Expr &a, const Expr &b) {
-    return equal(*a.get(), *b.get());
-}
-
-template<typename Op>
-HALIDE_ALWAYS_INLINE bool equal_helper_binop(const BaseExprNode &a, const BaseExprNode &b) {
-    return (equal_helper(((const Op &)a).a, ((const Op &)b).a) &&
-            equal_helper(((const Op &)a).b, ((const Op &)b).b));
-}
-
-HALIDE_ALWAYS_INLINE
-bool equal_helper(int a, int b) {
-    return a == b;
-}
-
-template<typename T>
-HALIDE_ALWAYS_INLINE bool equal_helper(const std::vector<T> &a, const std::vector<T> &b) {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < a.size(); i++) {
-        if (!equal_helper(a[i], b[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
-    switch (a.node_type) {
-    case IRNodeType::IntImm:
-        return ((const IntImm &)a).value == ((const IntImm &)b).value;
-    case IRNodeType::UIntImm:
-        return ((const UIntImm &)a).value == ((const UIntImm &)b).value;
-    case IRNodeType::FloatImm:
-        return ((const FloatImm &)a).value == ((const FloatImm &)b).value;
-    case IRNodeType::StringImm:
-        return ((const StringImm &)a).value == ((const StringImm &)b).value;
-    case IRNodeType::Cast:
-        // While we know a and b have matching type, we don't know
-        // that the types of the values match, so use equal rather
-        // than equal_helper.
-        return equal(((const Cast &)a).value, ((const Cast &)b).value);
-    case IRNodeType::Reinterpret:
-        // While we know a and b have matching type, we don't know
-        // that the types of the values match, so use equal rather
-        // than equal_helper.
-        return equal(((const Reinterpret &)a).value, ((const Reinterpret &)b).value);
-    case IRNodeType::Variable:
-        return ((const Variable &)a).name == ((const Variable &)b).name;
-    case IRNodeType::Add:
-        return equal_helper_binop<Add>(a, b);
-    case IRNodeType::Sub:
-        return equal_helper_binop<Sub>(a, b);
-    case IRNodeType::Mul:
-        return equal_helper_binop<Mul>(a, b);
-    case IRNodeType::Div:
-        return equal_helper_binop<Div>(a, b);
-    case IRNodeType::Mod:
-        return equal_helper_binop<Mod>(a, b);
-    case IRNodeType::Min:
-        return equal_helper_binop<Min>(a, b);
-    case IRNodeType::Max:
-        return equal_helper_binop<Max>(a, b);
-    case IRNodeType::EQ:
-        return equal_helper_binop<EQ>(a, b);
-    case IRNodeType::NE:
-        return equal_helper_binop<NE>(a, b);
-    case IRNodeType::LT:
-        return equal_helper_binop<LT>(a, b);
-    case IRNodeType::LE:
-        return equal_helper_binop<LE>(a, b);
-    case IRNodeType::GT:
-        return equal_helper_binop<GT>(a, b);
-    case IRNodeType::GE:
-        return equal_helper_binop<GE>(a, b);
-    case IRNodeType::And:
-        return equal_helper_binop<And>(a, b);
-    case IRNodeType::Or:
-        return equal_helper_binop<Or>(a, b);
-    case IRNodeType::Not:
-        return equal_helper(((const Not &)a).a, ((const Not &)b).a);
-    case IRNodeType::Select:
-        return (equal_helper(((const Select &)a).condition, ((const Select &)b).condition) &&
-                equal_helper(((const Select &)a).true_value, ((const Select &)b).true_value) &&
-                equal_helper(((const Select &)a).false_value, ((const Select &)b).false_value));
-    case IRNodeType::Load:
-        return (((const Load &)a).name == ((const Load &)b).name &&
-                equal_helper(((const Load &)a).index, ((const Load &)b).index));
-    case IRNodeType::Ramp:
-        return (equal_helper(((const Ramp &)a).base, ((const Ramp &)b).base) &&
-                equal_helper(((const Ramp &)a).stride, ((const Ramp &)b).stride));
-    case IRNodeType::Broadcast:
-        return equal_helper(((const Broadcast &)a).value, ((const Broadcast &)b).value);
-    case IRNodeType::Call:
-        return (((const Call &)a).name == ((const Call &)b).name &&
-                ((const Call &)a).call_type == ((const Call &)b).call_type &&
-                ((const Call &)a).value_index == ((const Call &)b).value_index &&
-                equal_helper(((const Call &)a).args, ((const Call &)b).args));
-    case IRNodeType::Let:
-        return (((const Let &)a).name == ((const Let &)b).name &&
-                equal_helper(((const Let &)a).value, ((const Let &)b).value) &&
-                equal_helper(((const Let &)a).body, ((const Let &)b).body));
-    case IRNodeType::Shuffle:
-        return (equal_helper(((const Shuffle &)a).vectors, ((const Shuffle &)b).vectors) &&
-                equal_helper(((const Shuffle &)a).indices, ((const Shuffle &)b).indices));
-    case IRNodeType::VectorReduce:
-        // As with Cast above, we use equal instead of equal_helper
-        // here, because while we know a.type == b.type, we don't know
-        // if the types of the value fields also match. We could be
-        // comparing a reduction of an 8-vector down to a 4 vector to
-        // a reduction of a 16-vector down to a 4-vector.
-        return (((const VectorReduce &)a).op == ((const VectorReduce &)b).op &&
-                equal(((const VectorReduce &)a).value, ((const VectorReduce &)b).value));
-
-    // Explicitly list all the Stmts instead of using a default
-    // clause so that if new Exprs are added without being handled
-    // here we get a compile-time error.
-    case IRNodeType::LetStmt:
-    case IRNodeType::AssertStmt:
-    case IRNodeType::ProducerConsumer:
-    case IRNodeType::For:
-    case IRNodeType::Acquire:
-    case IRNodeType::Store:
-    case IRNodeType::Provide:
-    case IRNodeType::Allocate:
-    case IRNodeType::Free:
-    case IRNodeType::Realize:
-    case IRNodeType::Block:
-    case IRNodeType::Fork:
-    case IRNodeType::IfThenElse:
-    case IRNodeType::Evaluate:
-    case IRNodeType::Prefetch:
-    case IRNodeType::Atomic:
-    case IRNodeType::HoistedStorage:
-        break;
-    }
-    return false;
-}
-
-}  // namespace IRMatcher
 }  // namespace Internal
 }  // namespace Halide

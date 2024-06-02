@@ -1,31 +1,25 @@
 #include "Simplify_Internal.h"
 
+#include "IRPrinter.h"
+
 namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Cast *op, ExprInfo *info) {
-    Expr value = mutate(op->value, info);
+
+    ExprInfo value_info;
+    Expr value = mutate(op->value, &value_info);
 
     if (info) {
-        if (no_overflow(op->type)) {
+        if (no_overflow(op->type) && !op->type.can_represent(value_info.bounds)) {
             // If there's overflow in a no-overflow type (e.g. due to casting
-            // from a UInt(64) to an Int(32), then set the corresponding bound
-            // to infinity.
-            if (info->bounds.max_defined && !op->type.can_represent(info->bounds.max)) {
-                info->bounds.max_defined = false;
-                info->bounds.max = 0;
-            }
-            if (info->bounds.min_defined && !op->type.can_represent(info->bounds.min)) {
-                info->bounds.min_defined = false;
-                info->bounds.min = 0;
-            }
+            // from a UInt(64) to an Int(32)), then forget everything we know
+            // about the Expr. The expression may or may not overflow. We don't
+            // know.
+            *info = ExprInfo{};
         } else {
-            info->bounds.cast_to(op->type);
-        }
-
-        if (!op->type.can_represent(info->alignment.modulus) ||
-            !op->type.can_represent(info->alignment.remainder)) {
-            info->alignment = ModulusRemainder();
+            *info = value_info;
+            info->cast_to(op->type);
         }
     }
 
@@ -51,7 +45,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
                    const_float(value, &f) &&
                    std::isfinite(f)) {
             // float -> uint
-            return make_const(op->type, safe_numeric_cast<uint64_t>(f));
+            // Recursively call mutate just to set the bounds
+            return mutate(make_const(op->type, safe_numeric_cast<uint64_t>(f)), info);
         } else if (op->type.is_float() &&
                    const_float(value, &f)) {
             // float -> float
@@ -68,7 +63,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         } else if (op->type.is_float() &&
                    const_int(value, &i)) {
             // int -> float
-            return make_const(op->type, safe_numeric_cast<double>(i));
+            return mutate(make_const(op->type, safe_numeric_cast<double>(i)), info);
         } else if (op->type.is_int() &&
                    const_uint(value, &u) &&
                    op->type.bits() < value.type().bits()) {
@@ -95,7 +90,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         } else if (op->type.is_uint() &&
                    const_uint(value, &u)) {
             // uint -> uint
-            return make_const(op->type, u);
+            return mutate(make_const(op->type, u), info);
         } else if (op->type.is_float() &&
                    const_uint(value, &u)) {
             // uint -> float

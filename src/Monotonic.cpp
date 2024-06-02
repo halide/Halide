@@ -5,6 +5,7 @@
 #include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "SimplifyCorrelatedDifferences.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -36,7 +37,7 @@ const int64_t *as_const_int_or_uint(const Expr &e) {
     if (const int64_t *i = as_const_int(e)) {
         return i;
     } else if (const uint64_t *u = as_const_uint(e)) {
-        if ((*u >> 63) == 0) {
+        if (*u <= (uint64_t)std::numeric_limits<int64_t>::max()) {
             return (const int64_t *)u;
         }
     }
@@ -173,7 +174,7 @@ class DerivativeBounds : public IRVisitor {
                 // take floor division, and for the max we want to use ceil
                 // division.
                 if (*b == 0) {
-                    result = ConstantInterval(0, 0);
+                    result = ConstantInterval::single_point(0);
                 } else {
                     if (result.min_defined) {
                         result.min = div_imp(result.min, *b);
@@ -197,7 +198,7 @@ class DerivativeBounds : public IRVisitor {
     }
 
     void visit(const Mod *op) override {
-        // TODO
+        // TODO: It's possible to get tighter bounds here. What if neither arg uses the var!
         result = ConstantInterval::everything();
     }
 
@@ -305,8 +306,15 @@ class DerivativeBounds : public IRVisitor {
             // If the condition is not constant, we hit a "bump" when the condition changes value.
             if (!is_constant(rcond)) {
                 // It's very important to have stripped likelies here, or the
-                // simplification might not cancel things that it should.
+                // simplification might not cancel things that it should. This
+                // happens below in the top-level derivative_bounds call.
                 Expr bump = simplify(op->true_value - op->false_value);
+
+                // This is of dubious value, because
+                // bound_correlated_differences really assumes you've solved for
+                // a variable that you're trying to cancel first. TODO: try
+                // removing this.
+                bump = bound_correlated_differences(bump);
                 ConstantInterval bump_bounds = constant_integer_bounds(bump, value_bounds);
                 result += rcond * bump_bounds;
             }
@@ -371,8 +379,10 @@ class DerivativeBounds : public IRVisitor {
     void visit(const Let *op) override {
         op->value.accept(this);
 
+        // As above, this is of dubious value. TODO: Try removing it.
+        Expr v = bound_correlated_differences(op->value);
         ScopedBinding<ConstantInterval> vb_binding(value_bounds, op->name,
-                                                   constant_integer_bounds(op->value, value_bounds));
+                                                   constant_integer_bounds(v, value_bounds));
         if (is_constant(result)) {
             // No point pushing it if it's constant w.r.t the var,
             // because unknown variables are treated as constant.

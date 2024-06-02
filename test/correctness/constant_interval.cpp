@@ -60,17 +60,23 @@ int main(int argc, char **argv) {
             };
 
             // Arithmetic
-            c.first = a.first + b.first;
-            c.second = a.second + b.second;
-            check("+");
+            if (!add_would_overflow(64, a.second, b.second)) {
+                c.first = a.first + b.first;
+                c.second = a.second + b.second;
+                check("+");
+            }
 
-            c.first = a.first - b.first;
-            c.second = a.second - b.second;
-            check("-");
+            if (!sub_would_overflow(64, a.second, b.second)) {
+                c.first = a.first - b.first;
+                c.second = a.second - b.second;
+                check("-");
+            }
 
-            c.first = a.first * b.first;
-            c.second = a.second * b.second;
-            check("*");
+            if (!mul_would_overflow(64, a.second, b.second)) {
+                c.first = a.first * b.first;
+                c.second = a.second * b.second;
+                check("*");
+            }
 
             c.first = a.first / b.first;
             c.second = div_imp(a.second, b.second);
@@ -89,17 +95,23 @@ int main(int argc, char **argv) {
             check("%");
 
             // Arithmetic with constant RHS
-            c.first = a.first + b.second;
-            c.second = a.second + b.second;
-            check_scalar("+");
+            if (!add_would_overflow(64, a.second, b.second)) {
+                c.first = a.first + b.second;
+                c.second = a.second + b.second;
+                check_scalar("+");
+            }
 
-            c.first = a.first - b.second;
-            c.second = a.second - b.second;
-            check_scalar("-");
+            if (!sub_would_overflow(64, a.second, b.second)) {
+                c.first = a.first - b.second;
+                c.second = a.second - b.second;
+                check_scalar("-");
+            }
 
-            c.first = a.first * b.second;
-            c.second = a.second * b.second;
-            check_scalar("*");
+            if (!mul_would_overflow(64, a.second, b.second)) {
+                c.first = a.first * b.second;
+                c.second = a.second * b.second;
+                check_scalar("*");
+            }
 
             c.first = a.first / b.second;
             c.second = div_imp(a.second, b.second);
@@ -169,5 +181,7 @@ int main(int argc, char **argv) {
                 << a.second << " " << b.first << " " << b.second;
         }
     }
+
+    printf("Success!\n");
     return 0;
 }

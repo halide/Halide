@@ -338,6 +338,7 @@ bool is_using_hexagon(const Target &t) {
             t.has_feature(Target::HVX_v62) ||
             t.has_feature(Target::HVX_v65) ||
             t.has_feature(Target::HVX_v66) ||
+            t.has_feature(Target::HVX_v68) ||
             t.has_feature(Target::HexagonDma) ||
             t.arch == Target::Hexagon);
 }
@@ -354,6 +355,9 @@ int get_hvx_lower_bound(const Target &t) {
     }
     if (t.has_feature(Target::HVX_v66)) {
         return 66;
+    }
+    if (t.has_feature(Target::HVX_v68)) {
+        return 68;
     }
     return 60;
 }
@@ -543,6 +547,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hvx_v62", Target::HVX_v62},
     {"hvx_v65", Target::HVX_v65},
     {"hvx_v66", Target::HVX_v66},
+    {"hvx_v68", Target::HVX_v68},
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
@@ -892,6 +897,7 @@ void Target::validate_features() const {
                                 HVX_v62,
                                 HVX_v65,
                                 HVX_v66,
+                                HVX_v68,
                                 NoNEON,
                                 POWER_ARCH_2_07,
                                 RVV,
@@ -1371,6 +1377,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         HVX_v62,
         HVX_v65,
         HVX_v66,
+        HVX_v68,
         VulkanV10,
         VulkanV12,
         VulkanV13,
@@ -1514,6 +1521,9 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
     if (hvx_version < 66) {
         output.features.reset(HVX_v66);
+    }
+    if (hvx_version < 68) {
+        output.features.reset(HVX_v68);
     }
 
     result = output;

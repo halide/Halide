@@ -557,6 +557,7 @@ Expr lossless_negate(const Expr &x) {
         if (a.defined()) {
             return Mul::make(a, m->b);
         }
+
     } else if (const Call *m = Call::as_intrinsic(x, {Call::widening_mul})) {
         Expr b = lossless_negate(m->args[1]);
         if (b.defined()) {

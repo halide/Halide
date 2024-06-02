@@ -82,8 +82,25 @@ void ConstantInterval::include(int64_t x) {
 }
 
 bool ConstantInterval::contains(int64_t x) const {
-    return !((min_defined && x < min) ||
-             (max_defined && x > max));
+    const bool too_small = min_defined && x < min;
+    const bool too_large = max_defined && x > max;
+    return !(too_small || too_large);
+}
+
+bool ConstantInterval::contains(int32_t x) const {
+    return contains((int64_t)x);
+}
+
+bool ConstantInterval::contains(uint64_t x) const {
+    if (x <= (uint64_t)std::numeric_limits<int64_t>::max()) {
+        // Representable as an int64_t, so just defer to that method.
+        return contains((int64_t)x);
+    } else {
+        // This uint64_t is not representable as an int64_t, which means it's
+        // greater than 2^32 - 1. Given that we can't represent that as a bound,
+        // the best we can do is checking if the interval is unbounded above.
+        return !max_defined;
+    }
 }
 
 ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const ConstantInterval &b) {
@@ -117,6 +134,9 @@ ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a,
         result.max_defined = b.max_defined;
         result.max = b.max;
     }
+    // Our class invariant is that whenever they're both defined, min <=
+    // max. Intersection is the only method that could break that, and it
+    // happens when the intersected intervals do not overlap.
     internal_assert(!result.is_bounded() || result.min <= result.max)
         << "Empty ConstantInterval constructed in make_intersection";
     return result;
@@ -345,6 +365,9 @@ ConstantInterval operator/(const ConstantInterval &a, const ConstantInterval &b)
         result.max = 0;
     }
 
+    // Check the class invariant as a sanity check.
+    internal_assert(!result.is_bounded() || (result.min <= result.max));
+
     return result;
 }
 
@@ -382,10 +405,10 @@ ConstantInterval operator*(const ConstantInterval &a, const ConstantInterval &b)
         consider_case(a.max, b.max);
     }
 
-    bool a_bounded_negative = a.min_defined && a <= 0;
-    bool a_bounded_positive = a.max_defined && a >= 0;
-    bool b_bounded_negative = b.min_defined && b <= 0;
-    bool b_bounded_positive = b.max_defined && b >= 0;
+    const bool a_bounded_negative = a.min_defined && a <= 0;
+    const bool a_bounded_positive = a.max_defined && a >= 0;
+    const bool b_bounded_negative = b.min_defined && b <= 0;
+    const bool b_bounded_positive = b.max_defined && b >= 0;
 
     if (result.min_defined) {
         result.min_defined =
@@ -417,6 +440,9 @@ ConstantInterval operator*(const ConstantInterval &a, const ConstantInterval &b)
         result.max = 0;
     }
 
+    // Check the class invariant as a sanity check.
+    internal_assert(!result.is_bounded() || (result.min <= result.max));
+
     return result;
 }
 
@@ -424,7 +450,7 @@ ConstantInterval operator%(const ConstantInterval &a, const ConstantInterval &b)
     ConstantInterval result;
 
     // Maybe the mod won't actually do anything
-    if (a >= 0 && a < b) {
+    if (a >= 0 && a < abs(b)) {
         return a;
     }
 
@@ -436,11 +462,13 @@ ConstantInterval operator%(const ConstantInterval &a, const ConstantInterval &b)
     // and max(0, abs(modulus) - 1). However, if b is unbounded in
     // either direction, abs(modulus) could be arbitrarily
     // large.
-    if (b.is_bounded()) {
+    if (b.is_bounded() && b.max != INT64_MIN) {
         result.max_defined = true;
-        result.max = 0;                                 // When b == 0
-        result.max = std::max(result.max, b.max - 1);   // When b > 0
-        result.max = std::max(result.max, -1 - b.min);  // When b < 0
+        result.max = 0;                                // When b == 0
+        result.max = std::max(result.max, b.max - 1);  // When b > 0
+        result.max = std::max(result.max, ~b.min);     // When b < 0
+        // Note that ~b.min is equal to (-1 - b.min). It's written as ~b.min to
+        // make it clear that it can't overflow.
     }
 
     // If a is positive, mod can't make it larger
@@ -452,6 +480,9 @@ ConstantInterval operator%(const ConstantInterval &a, const ConstantInterval &b)
             result.max = a.max;
         }
     }
+
+    // Check the class invariant as a sanity check.
+    internal_assert(!result.is_bounded() || (result.min <= result.max));
 
     return result;
 }
@@ -547,6 +578,8 @@ ConstantInterval abs(const ConstantInterval &a) {
     result.min_defined = true;
     if (a.min_defined && a.min > 0) {
         result.min = a.min;
+    } else if (a.max_defined && a.max < 0 && a.max != INT64_MIN) {
+        result.min = -a.max;
     } else {
         result.min = 0;
     }
@@ -555,40 +588,72 @@ ConstantInterval abs(const ConstantInterval &a) {
 }
 
 ConstantInterval operator<<(const ConstantInterval &a, const ConstantInterval &b) {
-    // Try to map this to a multiplication and a division
-    ConstantInterval mul, div;
-    constexpr int64_t one = 1;
-    if (b.min_defined) {
-        if (b.min >= 0 && b.min < 63) {
-            mul.min = one << b.min;
-            mul.min_defined = true;
-            div.max = one;
-            div.max_defined = true;
-        } else if (b.min > -63 && b.min <= 0) {
-            mul.min = one;
-            mul.min_defined = true;
-            div.max = one << (-b.min);
-            div.max_defined = true;
+    // In infinite integers (with no overflow):
+
+    // a << b == a * 2^b
+
+    // This can't be used directly, because if b is negative then 2^b is not an
+    // integer. Instead, we'll break b into a difference of two positive values:
+    // b = b_pos - b_neg
+    // So
+    // a * 2^b
+    // = a * 2^(b_pos - b_neg)
+    // = (a * 2^b_pos) / 2^b_neg
+
+    // From there we can use the * and / operators.
+
+    ConstantInterval b_pos = max(b, 0), b_neg = max(-b, 0);
+
+    // At this point, we have sliced the interval b into two parts. E.g.
+    // if b = [10, 12],  b_pos = [10, 12] and b_neg = [0, 0]
+    // if b = [-4, 8],   b_pos = [0, 8]   and b_neg = [0, 4]
+    // if b = [-10, -3], b_pos = [0, 0]   and b_neg = [3, 10]
+    // if b = [-3, inf], b_pos = [0, inf] and b_neg = [0, 3]
+    // In all cases, note that b_pos - b_neg = b by our definition of operator-
+    // for ConstantIntervals above (ignoring corner cases, for which b_pos -
+    // b_neg safely over-approximates the bounds of b).
+
+    auto two_to_the = [](const ConstantInterval &i) {
+        const int64_t one = 1;
+        ConstantInterval r;
+        // We should know i is positive at this point.
+        internal_assert(i.min_defined && i.min >= 0);
+        r.min_defined = true;
+        if (i.min >= 63) {
+            // It's at least a value too large for us to represent, which is not
+            // the same as min_defined = false.
+            r.min = INT64_MAX;
+        } else {
+            r.min = one << i.min;
         }
-    }
-    if (b.max_defined) {
-        if (b.max >= 0 && b.max < 63) {
-            mul.max = one << b.max;
-            mul.max_defined = true;
-            div.min = one;
-            div.min_defined = true;
-        } else if (b.max > -63 && b.max <= 0) {
-            mul.max = one;
-            mul.max_defined = true;
-            div.min = one << (-b.max);
-            div.min_defined = true;
+        if (i.max < 63) {
+            r.max_defined = true;
+            r.max = one << i.max;
         }
-    }
-    return (a * mul) / div;
+        return r;
+    };
+
+    return (a * two_to_the(b_pos)) / two_to_the(b_neg);
+}
+
+ConstantInterval operator<<(const ConstantInterval &a, int64_t b) {
+    return a << ConstantInterval::single_point(b);
+}
+
+ConstantInterval operator<<(int64_t a, const ConstantInterval &b) {
+    return ConstantInterval::single_point(a) << b;
 }
 
 ConstantInterval operator>>(const ConstantInterval &a, const ConstantInterval &b) {
     return a << (-b);
+}
+
+ConstantInterval operator>>(const ConstantInterval &a, int64_t b) {
+    return a >> ConstantInterval::single_point(b);
+}
+
+ConstantInterval operator>>(int64_t a, const ConstantInterval &b) {
+    return ConstantInterval::single_point(a) >> b;
 }
 
 }  // namespace Internal
@@ -603,35 +668,13 @@ ConstantInterval cast(Type t, const ConstantInterval &a) {
 
 ConstantInterval saturating_cast(Type t, const ConstantInterval &a) {
     ConstantInterval b = ConstantInterval::bounds_of_type(t);
-
-    if (b.max_defined && a.min_defined && a.min > b.max) {
-        return ConstantInterval(b.max, b.max);
-    } else if (b.min_defined && a.max_defined && a.max < b.min) {
-        return ConstantInterval(b.min, b.min);
+    if (a >= b) {
+        return ConstantInterval::single_point(b.max);
+    } else if (a <= b) {
+        return ConstantInterval::single_point(b.min);
+    } else {
+        return ConstantInterval::make_intersection(a, b);
     }
-
-    ConstantInterval result = a;
-    result.max_defined = a.max_defined || b.max_defined;
-    if (a.max_defined) {
-        if (b.max_defined) {
-            result.max = std::min(a.max, b.max);
-        } else {
-            result.max = a.max;
-        }
-    } else if (b.max_defined) {
-        result.max = b.max;
-    }
-    result.min_defined = a.min_defined || b.min_defined;
-    if (a.min_defined) {
-        if (b.min_defined) {
-            result.min = std::max(a.min, b.min);
-        } else {
-            result.min = a.min;
-        }
-    } else if (b.min_defined) {
-        result.min = b.min;
-    }
-    return result;
 }
 
 }  // namespace Halide

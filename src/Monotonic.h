@@ -8,7 +8,7 @@
 #include <iostream>
 #include <string>
 
-#include "ConstantBounds.h"
+#include "ConstantInterval.h"
 #include "Scope.h"
 
 namespace Halide {

@@ -81,9 +81,7 @@ int lossless_cast_test() {
     e = cast(i64, 1024) * cast(i64, 1024) * cast(i64, 1024);
     res |= check_lossless_cast(i32, e, (cast(i32, 1024) * 1024) * 1024);
 
-    return 0;
-
-    // return res;
+    return res;
 }
 
 constexpr int size = 1024;
@@ -107,7 +105,7 @@ Expr random_expr(std::mt19937 &rng) {
         int i1 = rng() % exprs.size();
         int i2 = rng() % exprs.size();
         int i3 = rng() % exprs.size();
-        int op = rng() % 7;
+        int op = rng() % 8;
         Expr e1 = exprs[i1];
         Expr e2 = cast(e1.type(), exprs[i2]);
         Expr e3 = cast(e1.type().with_code(halide_type_uint), exprs[i3]);
@@ -138,7 +136,11 @@ Expr random_expr(std::mt19937 &rng) {
             e = e1 / e2;
             break;
         case 6:
-            switch (rng() % 15) {
+            // Introduce some lets
+            e = common_subexpression_elimination(e1);
+            break;
+        case 7:
+            switch (rng() % 19) {
             case 0:
                 if (may_widen) {
                     e = widening_add(e1, e2);
@@ -199,6 +201,18 @@ Expr random_expr(std::mt19937 &rng) {
                 if (may_widen_right) {
                     e = widen_right_mul(e1, e2_narrow);
                 }
+                break;
+            case 15:
+                e = e1 << e2;
+                break;
+            case 16:
+                e = e1 >> e2;
+                break;
+            case 17:
+                e = rounding_shift_right(e1, e2);
+                break;
+            case 18:
+                e = rounding_shift_left(e1, e2);
                 break;
             }
         }
@@ -352,8 +366,12 @@ int test_one(uint32_t seed) {
                 << "Lossless cast: " << e2 << "\n";
             return 1;
         }
+    }
 
-        if (!bounds.contains(out1(x))) {
+    for (int x = 0; x < size; x++) {
+        if ((e1.type().is_int() && !bounds.contains(out1(x))) ||
+            (e1.type().is_uint() && !bounds.contains((uint64_t)out1(x)))) {
+            Expr simplified = simplify(e1);
             std::cout
                 << "constant_integer_bounds failure\n"
                 << "seed = " << seed << "\n"
@@ -362,7 +380,11 @@ int test_one(uint32_t seed) {
                 << "buf_i8 = " << (int)buf_i8(x) << "\n"
                 << "out1 = " << out1(x) << "\n"
                 << "Expression: " << e1 << "\n"
-                << "Bounds: " << bounds << "\n";
+                << "Bounds: " << bounds << "\n"
+                << "Simplified: " << simplified << "\n"
+                // If it's still out-of-bounds when the expression is
+                // simplified, that'll be easier to debug.
+                << "Bounds: " << constant_integer_bounds(simplified) << "\n";
             return 1;
         }
     }

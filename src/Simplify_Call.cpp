@@ -363,6 +363,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         ExprInfo a_info;
         Expr a = mutate(op->args[0], &a_info);
 
+        // In principle we could use constant bounds here to convert saturating
+        // casts to casts, but it's probably a bad idea. Saturating casts only
+        // show up if the user asks for them, and they're faster than a cast on
+        // some platforms. We should leave them be.
+
         if (is_const(a)) {
             a = lower_saturating_cast(op->type, a);
             return mutate(a, info);

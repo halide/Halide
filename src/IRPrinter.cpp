@@ -1126,10 +1126,6 @@ void IRPrinter::visit(const Shuffle *op) {
                << ", " << op->slice_stride()
                << ", " << op->indices.size()
                << ")";
-    } else if (op->is_broadcast()) {
-        stream << "broadcast(";
-        print_list(op->vectors);
-        stream << ", " << op->broadcast_factor() << ")";
     } else {
         stream << "shuffle(";
         print_list(op->vectors);

@@ -58,6 +58,7 @@ tests(GROUPS correctness
       computed_index.cpp
       concat.cpp
       constant_expr.cpp
+      constant_interval.cpp
       constant_type.cpp
       constraints.cpp
       convolution_multiple_kernels.cpp
@@ -121,6 +122,7 @@ tests(GROUPS correctness
       fused_where_inner_extent_is_zero.cpp
       fuzz_float_stores.cpp
       fuzz_schedule.cpp
+      fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
@@ -277,6 +279,7 @@ tests(GROUPS correctness
       simd_op_check_hvx.cpp
       simd_op_check_powerpc.cpp
       simd_op_check_riscv.cpp
+      simd_op_check_sve2.cpp
       simd_op_check_wasm.cpp
       simd_op_check_x86.cpp
       simplified_away_embedded_image.cpp

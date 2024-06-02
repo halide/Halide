@@ -360,6 +360,17 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64");
             }
         } else {  // 64-bit
+#if LLVM_VERSION >= 190
+            if (target.os == Target::IOS) {
+                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
+            } else if (target.os == Target::OSX) {
+                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
+            } else if (target.os == Target::Windows) {
+                return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128-Fn32");
+            } else {
+                return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32");
+            }
+#else
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
             } else if (target.os == Target::OSX) {
@@ -369,6 +380,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             } else {
                 return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128");
             }
+#endif
         }
     } else if (target.arch == Target::POWERPC) {
         if (target.bits == 32) {
@@ -1117,7 +1129,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
                 modules.push_back(get_initmod_hvx_128_ll(c));
-                if (t.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+                if (t.features_any_of({Target::HVX_v65, Target::HVX_v66,
+                                       Target::HVX_v68})) {
                     modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
                                                                 debug));
                 }

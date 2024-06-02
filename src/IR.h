@@ -629,6 +629,8 @@ struct Call : public ExprNode<Call> {
         widening_shift_right,
         widening_sub,
 
+        get_runtime_vscale,
+
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
@@ -877,11 +879,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_interleave() const;
 
-    /** Check if this shuffle can be represented as a broadcast.
-     * For example:
-     * A uint8 shuffle of with 4*n lanes and indices:
-     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
-     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    /** Check if this shuffle can be represented as a repeating pattern that
+     * repeats the same shuffle of the single input vector some number of times.
+     * For example: 0, 3, 1, 1,  0, 3, 1, 1, .....,  0, 3, 1, 1
+     */
     bool is_broadcast() const;
     int broadcast_factor() const;
 

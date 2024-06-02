@@ -15,10 +15,6 @@ using std::pair;
 using std::string;
 using std::vector;
 
-#if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
-int Simplify::debug_indent = 0;
-#endif
-
 Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
     : remove_dead_code(r) {
 
@@ -181,7 +177,7 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
         return;
     }
     if (simplify->falsehoods.insert(fact).second) {
-        falsehoods.push_back(fact);
+        falsehoods.insert(fact);
     }
 }
 
@@ -311,20 +307,38 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         return;
     }
     if (simplify->truths.insert(fact).second) {
-        truths.push_back(fact);
+        truths.insert(fact);
     }
 }
 
-template<class T>
-T substitute_facts_impl(T t, const vector<Expr> &truths, const vector<Expr> &falsehoods) {
-    // An std::map<Expr, Expr> version of substitute might be an optimization?
-    for (const auto &i : truths) {
-        t = substitute(i, const_true(i.type().lanes()), t);
-    }
-    for (const auto &i : falsehoods) {
-        t = substitute(i, const_false(i.type().lanes()), t);
-    }
-    return t;
+template<typename T>
+T substitute_facts_impl(const T &t,
+                        const std::set<Expr, IRDeepCompare> &truths,
+                        const std::set<Expr, IRDeepCompare> &falsehoods) {
+    class Substitutor : public IRMutator {
+        const std::set<Expr, IRDeepCompare> &truths, &falsehoods;
+
+    public:
+        using IRMutator::mutate;
+        Expr mutate(const Expr &e) override {
+            if (!e.type().is_bool()) {
+                return IRMutator::mutate(e);
+            } else if (truths.count(e)) {
+                return make_one(e.type());
+            } else if (falsehoods.count(e)) {
+                return make_zero(e.type());
+            } else {
+                return IRMutator::mutate(e);
+            }
+        }
+
+        Substitutor(const std::set<Expr, IRDeepCompare> &t,
+                    const std::set<Expr, IRDeepCompare> &f)
+            : truths(t), falsehoods(f) {
+        }
+    } substitutor(truths, falsehoods);
+
+    return substitutor.mutate(t);
 }
 
 Expr Simplify::ScopedFact::substitute_facts(const Expr &e) {

@@ -88,11 +88,11 @@ bool Interval::is_everything() const {
 }
 
 bool Interval::is_single_point() const {
-    return min.same_as(max);
+    return is_bounded() && equal(min, max);
 }
 
 bool Interval::is_single_point(const Expr &e) const {
-    return min.same_as(e) && max.same_as(e);
+    return is_bounded() && equal(min, e) && equal(max, e);
 }
 
 bool Interval::has_upper_bound() const {

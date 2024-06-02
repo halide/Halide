@@ -12,14 +12,15 @@ Expr Simplify::visit(const Mod *op, ExprInfo *info) {
     // we can use them to simplify down to a constant if the bounds
     // are tight enough.
     ExprInfo mod_info;
-    if (no_overflow_int(op->type)) {
+    if (op->type.is_int_or_uint()) {
         mod_info.bounds = a_info.bounds % b_info.bounds;
         mod_info.alignment = a_info.alignment % b_info.alignment;
         mod_info.trim_bounds_using_alignment();
-
-        if (info) {
-            *info = mod_info;
-        }
+        // Modulo can't overflow, so no mod_info.cast_to(op->type)
+    }
+    // TODO: Modulo bounds for floating-point modulo
+    if (info) {
+        *info = mod_info;
     }
 
     if (may_simplify(op->type)) {

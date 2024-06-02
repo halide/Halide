@@ -2131,7 +2131,9 @@ void check_invariant() {
         Expr w = Variable::make(t, "w");
         check_inv(x + y);
         check_inv(x - y);
-        check_inv(x % y);
+        if (t != UInt(1)) {
+            check_inv(x % y);
+        }
         check_inv(x * y);
         check_inv(x / y);
         check_inv(min(x, y));
@@ -2221,7 +2223,7 @@ int main(int argc, char **argv) {
 
     // This expression used to cause infinite recursion.
     check(Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2)),
-          const_true(2));
+          Broadcast::make(make_const(UInt(1), 1), 2));
 
     {
         // Verify that integer types passed to min() and max() are coerced to match

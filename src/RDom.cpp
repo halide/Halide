@@ -264,7 +264,7 @@ std::ostream &operator<<(std::ostream &stream, const RDom &dom) {
     }
     stream << ")";
     Expr pred = simplify(dom.domain().predicate());
-    if (!equal(const_true(), pred)) {
+    if (!is_const_one(pred)) {
         stream << " where (\n  " << pred << ")";
     }
     stream << "\n";
