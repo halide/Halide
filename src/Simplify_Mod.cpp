@@ -3,60 +3,33 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
-    ExprInfo a_bounds, b_bounds;
-    Expr a = mutate(op->a, &a_bounds);
-    Expr b = mutate(op->b, &b_bounds);
+Expr Simplify::visit(const Mod *op, ExprInfo *info) {
+    ExprInfo a_info, b_info;
+    Expr a = mutate(op->a, &a_info);
+    Expr b = mutate(op->b, &b_info);
 
     // We always combine bounds here, even if not requested, because
     // we can use them to simplify down to a constant if the bounds
     // are tight enough.
-    ExprInfo mod_bounds;
-
-    if (no_overflow_int(op->type)) {
-        // The result is at least zero.
-        mod_bounds.min_defined = true;
-        mod_bounds.min = 0;
-
-        // Mod by produces a result between 0
-        // and max(0, abs(modulus) - 1). However, if b is unbounded in
-        // either direction, abs(modulus) could be arbitrarily
-        // large.
-        if (b_bounds.max_defined && b_bounds.min_defined) {
-            mod_bounds.max_defined = true;
-            mod_bounds.max = 0;                                            // When b == 0
-            mod_bounds.max = std::max(mod_bounds.max, b_bounds.max - 1);   // When b > 0
-            mod_bounds.max = std::max(mod_bounds.max, -1 - b_bounds.min);  // When b < 0
-        }
-
-        // If a is positive, mod can't make it larger
-        if (a_bounds.min_defined && a_bounds.min >= 0 && a_bounds.max_defined) {
-            if (mod_bounds.max_defined) {
-                mod_bounds.max = std::min(mod_bounds.max, a_bounds.max);
-            } else {
-                mod_bounds.max_defined = true;
-                mod_bounds.max = a_bounds.max;
-            }
-        }
-
-        mod_bounds.alignment = a_bounds.alignment % b_bounds.alignment;
-        mod_bounds.trim_bounds_using_alignment();
-        if (bounds) {
-            *bounds = mod_bounds;
-        }
+    ExprInfo mod_info;
+    if (op->type.is_int_or_uint()) {
+        mod_info.bounds = a_info.bounds % b_info.bounds;
+        mod_info.alignment = a_info.alignment % b_info.alignment;
+        mod_info.trim_bounds_using_alignment();
+        // Modulo can't overflow, so no mod_info.cast_to(op->type)
+    }
+    // TODO: Modulo bounds for floating-point modulo
+    if (info) {
+        *info = mod_info;
     }
 
     if (may_simplify(op->type)) {
-        if (a_bounds.min_defined && a_bounds.min >= 0 &&
-            a_bounds.max_defined && b_bounds.min_defined && a_bounds.max < b_bounds.min) {
-            if (bounds) {
-                *bounds = a_bounds;
-            }
+        if (a_info.bounds >= 0 && a_info.bounds < b_info.bounds) {
             return a;
         }
 
-        if (mod_bounds.min_defined && mod_bounds.max_defined && mod_bounds.min == mod_bounds.max) {
-            return make_const(op->type, mod_bounds.min);
+        if (mod_info.bounds.is_single_point()) {
+            return make_const(op->type, mod_info.bounds.min);
         }
 
         int lanes = op->type.lanes();
@@ -94,7 +67,7 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
                rewrite(ramp(x + c0, c2, c3) % broadcast(c1, c3), ramp(x + fold(c0 % c1), fold(c2 % c1), c3) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
                rewrite(ramp(x * c0 + y, c2, c3) % broadcast(c1, c3), ramp(y, fold(c2 % c1), c3) % c1, c0 % c1 == 0) ||
                rewrite(ramp(y + x * c0, c2, c3) % broadcast(c1, c3), ramp(y, fold(c2 % c1), c3) % c1, c0 % c1 == 0))))) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         // clang-format on
     }

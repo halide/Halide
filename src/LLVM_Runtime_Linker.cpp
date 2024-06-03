@@ -1129,7 +1129,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
                 modules.push_back(get_initmod_hvx_128_ll(c));
-                if (t.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+                if (t.features_any_of({Target::HVX_v65, Target::HVX_v66,
+                                       Target::HVX_v68})) {
                     modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
                                                                 debug));
                 }

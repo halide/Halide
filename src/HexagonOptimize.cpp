@@ -106,6 +106,13 @@ string type_suffix(Type type, bool signed_variants) {
         default:
             break;
         }
+    } else if (type.is_float()) {
+        switch (type.bits()) {
+        case 32:
+            return prefix + "sf";
+        default:
+            break;
+        }
     }
     internal_error << "Unsupported HVX type: " << type << "\n";
     return "";
@@ -194,6 +201,7 @@ struct Pattern {
 
         v65orLater = 1 << 11,  // Pattern should be matched only for v65 target or later
         v66orLater = 1 << 12,  // Pattern should be matched only for v66 target or later
+        v68orLater = 1 << 13,  // Pattern should be matched only for v68 target or later
     };
 
     string intrin;  // Name of the intrinsic
@@ -227,11 +235,16 @@ Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 // Check if a pattern with flags 'flags' is supported on the target.
 bool check_pattern_target(int flags, const Target &target) {
     if ((flags & (Pattern::v65orLater)) &&
-        !target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+        !target.features_any_of({Target::HVX_v65, Target::HVX_v66,
+                                 Target::HVX_v68})) {
         return false;
     }
     if ((flags & (Pattern::v66orLater)) &&
-        !target.features_any_of({Target::HVX_v66})) {
+        !target.features_any_of({Target::HVX_v66, Target::HVX_v68})) {
+        return false;
+    }
+    if ((flags & (Pattern::v68orLater)) &&
+        !target.features_any_of({Target::HVX_v68})) {
         return false;
     }
     return true;
@@ -1722,6 +1735,7 @@ class EliminateInterleaves : public IRMutator {
         v62orLater,  // Use for Hexagon v62 target or later
         v65orLater,  // Use for Hexagon v65 target or later
         v66orLater,  // Use for Hexagon v66 target or later
+        v68orLater,  // Use for Hexagon v68 target or later
     };
     HvxTarget hvx_target;
 
@@ -1943,6 +1957,8 @@ public:
             hvx_target = HvxTarget::v65orLater;
         } else if (t.features_any_of({Target::HVX_v66})) {
             hvx_target = HvxTarget::v66orLater;
+        } else if (t.features_any_of({Target::HVX_v68})) {
+            hvx_target = HvxTarget::v68orLater;
         } else {
             hvx_target = HvxTarget::v62orLater;
         }
