@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
         Var xy("xy");
         f.compute_root()
             .fuse(x, y, xy)
-            .vectorize(xy, 16);
+            .vectorize(xy, 16, TailStrategy::RoundUp);
 
         f.add_custom_lowering_pass(new CheckForMod);
         f.compile_jit();
