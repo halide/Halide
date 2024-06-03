@@ -552,7 +552,6 @@ protected:
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
             auto x_y_same_sign = (is_int(x) && is_int(y)) || (is_uint(x) && is_uint(y));
-            // auto is_y_narrow_uint = op->type.is_uint() && is_uint(y, bits / 2);
             if (
                 // Saturating patterns
                 rewrite(max(min(widening_add(x, y), upper), lower),
