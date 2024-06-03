@@ -4,9 +4,8 @@ using namespace Halide;
 int main(int argc, char *argv[]) {
 
     auto target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::Metal) &&
-        !(target.has_feature(Target::OpenCL) && target.has_feature(Target::CLHalf)) {
-        printf("[SKIP] No metal target enabled, and no OpenCL target with CLHalf enabled.\n");
+    if (!target.has_feature(Target::Metal)) {
+        printf("[SKIP] No metal target enabled.\n");
         return 0;
     }
     
