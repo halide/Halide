@@ -98,6 +98,7 @@ protected:
         void visit(const Cast *op) override;
         void visit(const VectorReduce *op) override;
         void visit(const Atomic *op) override;
+        void visit(const FloatImm *op) override;
     };
 
     std::ostringstream src_stream;
@@ -556,6 +557,51 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
     user_assert(false) << "Atomic updates are not supported inside Metal kernels";
 }
 
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const FloatImm *op) {
+    if (op->type.bits() == 16) {
+        float16_t f(op->value);
+        if (f.is_nan()) {
+            id = "nan_f16()";
+        } else if (f.is_infinity()) {
+            if (!f.is_negative()) {
+                id = "inf_f16()";
+            } else {
+                id = "neg_inf_f16()";
+            }
+        } else {
+            // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
+            ostringstream oss;
+            oss << "half_from_bits(" << f.to_bits() << " /* " << float(f) << " */)";
+            print_assignment(op->type, oss.str());
+        }
+    } else {
+        if (std::isnan(op->value)) {
+            id = "nan_f32()";
+        } else if (std::isinf(op->value)) {
+            if (op->value > 0) {
+                id = "inf_f32()";
+            } else {
+                id = "neg_inf_f32()";
+            }
+        } else {
+            // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
+            ostringstream oss;
+            union {
+                uint32_t as_uint;
+                float as_float;
+            } u;
+            u.as_float = op->value;
+            if (op->type.bits() == 64) {
+                user_error << "Metal does not support 64-bit floating point literals.\n";
+            } else if (op->type.bits() == 32) {
+                oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
+            } else {
+                user_error << "Unsupported floating point literal with " << op->type.bits() << " bits.\n";
+            }
+            print_assignment(op->type, oss.str());
+        }
+    }
+}
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const string &name,
                                    const vector<DeviceArgument> &args) {
@@ -815,6 +861,10 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define tanh_f16 tanh\n"
                << "#define atanh_f16 atanh\n"
                << "#define fast_inverse_sqrt_f16 rsqrt\n"
+               << "constexpr half half_from_bits(unsigned short x) {return as_type<half>(x);}\n"
+               << "constexpr half nan_f16() { return half_from_bits(32767); }\n"
+               << "constexpr half neg_inf_f16() { return half_from_bits(64512); }\n"
+               << "constexpr half inf_f16() { return half_from_bits(31744); }\n"
                // This is quite annoying: even though the MSL docs claim
                // all versions of Metal support the same memory fence
                // names, the truth is that 1.0 does not.
