@@ -382,6 +382,7 @@ typedef pair<Expr, Expr> MulExpr;
 // the number of lanes in Broadcast or indices in a Shuffle
 // to match the ty lanes before using lossless_cast on it.
 Expr unbroadcast_lossless_cast(Type ty, Expr x) {
+    internal_assert(x.defined());
     if (x.type().is_vector()) {
         if (const Broadcast *bc = x.as<Broadcast>()) {
             if (ty.is_scalar()) {
@@ -410,57 +411,78 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
 // multiplies in 'mpys', added to 'rest'.
 // Difference in mpys.size() - return indicates the number of
 // expressions where we pretend the op to be multiplied by 1.
-int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
+int find_mpy_ops(const Expr &op, Type result_ty, Type a_ty, Type b_ty, int max_mpy_count,
                  vector<MulExpr> &mpys, Expr &rest) {
 
+    auto add_to_rest = [&](const Expr &a) {
+        if (rest.defined()) {
+            // Just widen to the result type. We run find_intrinsics on rest
+            // after calling this, to find things like widen_right_add in this
+            // summation.
+            rest = Add::make(rest, cast(result_ty, a));
+        } else {
+            rest = cast(result_ty, a);
+        }
+    };
+
     if ((int)mpys.size() >= max_mpy_count) {
-        rest = rest.defined() ? Add::make(rest, op) : op;
+        add_to_rest(op);
         return 0;
     }
 
-    // If the add is also widening, remove the cast.
-    Expr stripped = op;
-    int mpy_bits = std::max(a_ty.bits(), b_ty.bits()) * 2;
-    if (op.type().bits() == mpy_bits * 2) {
-        if (const Cast *cast = op.as<Cast>()) {
-            if (cast->value.type().bits() == mpy_bits) {
-                stripped = cast->value;
-            }
-        }
-    }
-
-    Expr maybe_mul = as_mul(stripped);
-    if (maybe_mul.defined()) {
-        const Mul *mul = maybe_mul.as<Mul>();
-        Expr a = unbroadcast_lossless_cast(a_ty, mul->a);
-        Expr b = unbroadcast_lossless_cast(b_ty, mul->b);
+    auto handle_mul = [&](const Expr &arg0, const Expr &arg1) -> bool {
+        Expr a = unbroadcast_lossless_cast(a_ty, arg0);
+        Expr b = unbroadcast_lossless_cast(b_ty, arg1);
         if (a.defined() && b.defined()) {
             mpys.emplace_back(a, b);
-            return 1;
-        } else {
+            return true;
+        } else if (a_ty != b_ty) {
             // Try to commute the op.
-            a = unbroadcast_lossless_cast(a_ty, mul->b);
-            b = unbroadcast_lossless_cast(b_ty, mul->a);
+            a = unbroadcast_lossless_cast(a_ty, arg1);
+            b = unbroadcast_lossless_cast(b_ty, arg0);
             if (a.defined() && b.defined()) {
                 mpys.emplace_back(a, b);
-                return 1;
+                return true;
             }
         }
-    } else if (const Add *add = stripped.as<Add>()) {
-        int mpy_count = 0;
-        mpy_count += find_mpy_ops(add->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-        mpy_count += find_mpy_ops(add->b, a_ty, b_ty, max_mpy_count, mpys, rest);
-        return mpy_count;
-    } else if (const Call *add = Call::as_intrinsic(stripped, {Call::widening_add})) {
-        int mpy_count = 0;
-        mpy_count += find_mpy_ops(cast(op.type(), add->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
-        mpy_count += find_mpy_ops(cast(op.type(), add->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
-        return mpy_count;
-    } else if (const Call *wadd = Call::as_intrinsic(stripped, {Call::widen_right_add})) {
-        int mpy_count = 0;
-        mpy_count += find_mpy_ops(wadd->args[0], a_ty, b_ty, max_mpy_count, mpys, rest);
-        mpy_count += find_mpy_ops(cast(op.type(), wadd->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
-        return mpy_count;
+        return false;
+    };
+
+    if (const Mul *mul = op.as<Mul>()) {
+        bool no_overflow = mul->type.can_represent(constant_integer_bounds(mul->a) *
+                                                   constant_integer_bounds(mul->b));
+        if (no_overflow && handle_mul(mul->a, mul->b)) {
+            return 1;
+        }
+    } else if (const Call *mul = Call::as_intrinsic(op, {Call::widening_mul, Call::widen_right_mul})) {
+        bool no_overflow = (mul->is_intrinsic(Call::widening_mul) ||
+                            mul->type.can_represent(constant_integer_bounds(mul->args[0]) *
+                                                    constant_integer_bounds(mul->args[1])));
+        if (no_overflow && handle_mul(mul->args[0], mul->args[1])) {
+            return 1;
+        }
+    } else if (const Add *add = op.as<Add>()) {
+        bool no_overflow = (add->type == result_ty ||
+                            add->type.can_represent(constant_integer_bounds(add->a) +
+                                                    constant_integer_bounds(add->b)));
+        if (no_overflow) {
+            return (find_mpy_ops(add->a, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest) +
+                    find_mpy_ops(add->b, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest));
+        }
+    } else if (const Call *add = Call::as_intrinsic(op, {Call::widening_add, Call::widen_right_add})) {
+        bool no_overflow = (add->type == result_ty ||
+                            add->is_intrinsic(Call::widening_add) ||
+                            add->type.can_represent(constant_integer_bounds(add->args[0]) +
+                                                    constant_integer_bounds(add->args[1])));
+        if (no_overflow) {
+            return (find_mpy_ops(add->args[0], result_ty, a_ty, b_ty, max_mpy_count, mpys, rest) +
+                    find_mpy_ops(add->args[1], result_ty, a_ty, b_ty, max_mpy_count, mpys, rest));
+        }
+    } else if (const Cast *cast = op.as<Cast>()) {
+        bool cast_is_lossless = cast->type.can_represent(constant_integer_bounds(cast->value));
+        if (cast_is_lossless) {
+            return find_mpy_ops(cast->value, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest);
+        }
     }
 
     // Attempt to pretend this op is multiplied by 1.
@@ -472,7 +494,7 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
     } else if (as_b.defined()) {
         mpys.emplace_back(make_one(a_ty), as_b);
     } else {
-        rest = rest.defined() ? Add::make(rest, op) : op;
+        add_to_rest(op);
     }
     return 0;
 }
@@ -555,10 +577,10 @@ class OptimizePatterns : public IRMutator {
             // match a subset of the expressions that vector*vector
             // matches.
             if (op->type.is_uint()) {
-                mpy_count = find_mpy_ops(op, UInt(8, lanes), UInt(8), 4, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, UInt(8, lanes), UInt(8), 4, mpys, rest);
                 suffix = ".vub.ub";
             } else {
-                mpy_count = find_mpy_ops(op, UInt(8, lanes), Int(8), 4, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, UInt(8, lanes), Int(8), 4, mpys, rest);
                 suffix = ".vub.b";
             }
 
@@ -589,7 +611,7 @@ class OptimizePatterns : public IRMutator {
                         new_expr = Call::make(op->type, "halide.hexagon.pack.vw", {new_expr}, Call::PureExtern);
                     }
                     if (rest.defined()) {
-                        new_expr = Add::make(new_expr, rest);
+                        new_expr = Add::make(new_expr, find_intrinsics(rest));
                     }
                     return mutate(new_expr);
                 }
@@ -599,10 +621,10 @@ class OptimizePatterns : public IRMutator {
             mpys.clear();
             rest = Expr();
             if (op->type.is_uint()) {
-                mpy_count = find_mpy_ops(op, UInt(8, lanes), UInt(8, lanes), 4, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, UInt(8, lanes), UInt(8, lanes), 4, mpys, rest);
                 suffix = ".vub.vub";
             } else {
-                mpy_count = find_mpy_ops(op, Int(8, lanes), Int(8, lanes), 4, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, Int(8, lanes), Int(8, lanes), 4, mpys, rest);
                 suffix = ".vb.vb";
             }
 
@@ -632,7 +654,7 @@ class OptimizePatterns : public IRMutator {
                         new_expr = Call::make(op->type, "halide.hexagon.pack.vw", {new_expr}, Call::PureExtern);
                     }
                     if (rest.defined()) {
-                        new_expr = Add::make(new_expr, rest);
+                        new_expr = Add::make(new_expr, find_intrinsics(rest));
                     }
                     return mutate(new_expr);
                 }
@@ -651,11 +673,11 @@ class OptimizePatterns : public IRMutator {
 
             // Try to find vector*scalar multiplies.
             if (op->type.bits() == 16) {
-                mpy_count = find_mpy_ops(op, UInt(8, lanes), Int(8), 2, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, UInt(8, lanes), Int(8), 2, mpys, rest);
                 vmpa_suffix = ".vub.vub.b.b";
                 vdmpy_suffix = ".vub.b";
             } else if (op->type.bits() == 32) {
-                mpy_count = find_mpy_ops(op, Int(16, lanes), Int(8), 2, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, Int(16, lanes), Int(8), 2, mpys, rest);
                 vmpa_suffix = ".vh.vh.b.b";
                 vdmpy_suffix = ".vh.b";
             }
@@ -683,7 +705,7 @@ class OptimizePatterns : public IRMutator {
                     new_expr = halide_hexagon_add_2mpy(op->type, vmpa_suffix, mpys[0].first, mpys[1].first, mpys[0].second, mpys[1].second);
                 }
                 if (rest.defined()) {
-                    new_expr = Add::make(new_expr, rest);
+                    new_expr = Add::make(new_expr, find_intrinsics(rest));
                 }
                 return mutate(new_expr);
             }
@@ -2272,6 +2294,9 @@ Stmt scatter_gather_generator(Stmt s) {
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
+    debug(4) << "Hexagon: lowering before find_intrinsics\n"
+             << s << "\n";
+
     // We need to redo intrinsic matching due to simplification that has
     // happened after the end of target independent lowering.
     s = find_intrinsics(s);
