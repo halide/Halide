@@ -391,15 +391,14 @@ namespace Metal {
 class MetalContextHolder {
     objc_id pool;
     void *const user_context;
-    int status;  // must always be a valid halide_error_code_t value
-    static int saved_status; // must always be a valid halide_error_code_t value
+    int status;                              // must always be a valid halide_error_code_t value
+    static int saved_status;                 // must always be a valid halide_error_code_t value
     static halide_mutex saved_status_mutex;  // mutex for accessing saved status
     static char error_string[1024];
 
 public:
     mtl_device *device;
     mtl_command_queue *queue;
-
 
     ALWAYS_INLINE MetalContextHolder(void *user_context, bool create)
         : pool(create_autorelease_pool()), user_context(user_context) {
@@ -412,12 +411,11 @@ public:
 
     // We use two variants of this function: one for just checking status, and one
     // that returns and clears the previous status.
-    ALWAYS_INLINE static int get_and_clear_saved_status(char* error_string = nullptr) {
+    ALWAYS_INLINE static int get_and_clear_saved_status(char *error_string = nullptr) {
         halide_mutex_lock(&saved_status_mutex);
         int result = saved_status;
         saved_status = halide_error_code_success;
-        if (error_string != nullptr && result != halide_error_code_success
-            && strnlen(MetalContextHolder::error_string, 1024) > 0 ) {
+        if (error_string != nullptr && result != halide_error_code_success && strnlen(MetalContextHolder::error_string, 1024) > 0) {
             strncpy(error_string, MetalContextHolder::error_string, 1024);
             MetalContextHolder::error_string[0] = '\0';
             debug(nullptr) << "MetalContextHolder::get_and_clear_saved_status: " << error_string << "\n";
@@ -427,32 +425,31 @@ public:
     }
 
     // Returns the previous status without clearing, and optionally copies the error string
-    ALWAYS_INLINE static int get_saved_status(char* error_string = nullptr) {
+    ALWAYS_INLINE static int get_saved_status(char *error_string = nullptr) {
         halide_mutex_lock(&saved_status_mutex);
         int result = saved_status;
-        if (error_string != nullptr && result != halide_error_code_success
-            && strnlen(MetalContextHolder::error_string, 1024) > 0 ) {
+        if (error_string != nullptr && result != halide_error_code_success && strnlen(MetalContextHolder::error_string, 1024) > 0) {
             strncpy(error_string, MetalContextHolder::error_string, 1024);
         }
         halide_mutex_unlock(&saved_status_mutex);
         return result;
     }
 
-    ALWAYS_INLINE static void set_saved_status(int new_status, char* error_string = nullptr) {
+    ALWAYS_INLINE static void set_saved_status(int new_status, char *error_string = nullptr) {
         halide_mutex_lock(&saved_status_mutex);
         saved_status = new_status;
-            if (error_string != nullptr) {
-                strncpy(MetalContextHolder::error_string, error_string, 1024);
-                debug(nullptr) << "MetalContextHolder::set_saved_status: " << error_string << "\n";
+        if (error_string != nullptr) {
+            strncpy(MetalContextHolder::error_string, error_string, 1024);
+            debug(nullptr) << "MetalContextHolder::set_saved_status: " << error_string << "\n";
         }
         halide_mutex_unlock(&saved_status_mutex);
     }
 
-    ALWAYS_INLINE int error(char* error_string = nullptr) const {
+    ALWAYS_INLINE int error(char *error_string = nullptr) const {
         return status || get_saved_status(error_string);
     }
 
-    ALWAYS_INLINE int get_and_clear_error(char* error_string = nullptr) const {
+    ALWAYS_INLINE int get_and_clear_error(char *error_string = nullptr) const {
         return status || get_and_clear_saved_status(error_string);
     }
 };
@@ -488,13 +485,13 @@ WEAK void command_buffer_completed_handler_invoke(command_buffer_completed_handl
         objc_id error_ns_string = (*localized_description_method)(buffer_error, sel_getUid("localizedDescription"));
 
         // Obtain a C-style string, but do not release the NSString until reporting/printing the error
-        typedef char* (*utf8_string_method_t)(objc_id objc, objc_sel sel);
+        typedef char *(*utf8_string_method_t)(objc_id objc, objc_sel sel);
         utf8_string_method_t utf8_string_method = (utf8_string_method_t)&objc_msgSend;
-        char* error_string = (*utf8_string_method)(error_ns_string, sel_getUid("UTF8String"));
+        char *error_string = (*utf8_string_method)(error_ns_string, sel_getUid("UTF8String"));
 
         ns_log_object(buffer_error);
 
-        // This is an error indicating the command buffer wasn't executed, and  because it is asynchronous 
+        // This is an error indicating the command buffer wasn't executed, and  because it is asynchronous
         // we store it in a static variable to report on the next check for an error
         MetalContextHolder::set_saved_status(halide_error_code_device_run_failed, error_string);
         release_ns_object(buffer_error);
