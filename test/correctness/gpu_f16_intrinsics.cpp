@@ -8,7 +8,7 @@ int main(int argc, char *argv[]) {
         printf("[SKIP] No metal target enabled.\n");
         return 0;
     }
-    
+
     Func output, output_cpu;
     Var x, y;
     Expr val = cast(Float(16), cast(Float(16), x + y) + 1.f);
@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < 64; i++) {
         for (int j = 0; j < 64; j++) {
-            if (fabs(float(out2(i,j)) - float(out(i, j))) > 0.01) {
+            if (fabs(float(out2(i, j)) - float(out(i, j))) > 0.01) {
                 fprintf(stderr, "Failed: Incorrect value at %d,%d: %f vs %f\n", i, j, float(out(i, j)), float(out2(i, j)));
                 return 1;
             }
@@ -54,15 +54,15 @@ int main(int argc, char *argv[]) {
     hout.copy_to_host();
 
     for (int i = 0; i < 8; i++) {
-        if (!fout(i).is_infinity()) { 
+        if (!fout(i).is_infinity()) {
             fprintf(stderr, "Failed: did not get infinity at %d (got: %u, expected: %u)\n", i, fout(i).to_bits(), float16_t::make_infinity().to_bits());
             return 1;
         }
-        if (!(gout(i).is_infinity()  && gout(i).is_negative())) { 
+        if (!(gout(i).is_infinity() && gout(i).is_negative())) {
             fprintf(stderr, "Failed: did not get negative infinity at %d (got: %u, expected: %u)\n", i, gout(i).to_bits(), float16_t::make_negative_infinity().to_bits());
             return 1;
         }
-        if (!hout(i).is_nan()) { 
+        if (!hout(i).is_nan()) {
             fprintf(stderr, "Failed: did not get nan at %d (got: %u, expected: %u)\n", i, hout(i).to_bits(), float16_t::make_nan().to_bits());
             return 1;
         }
