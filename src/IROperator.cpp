@@ -444,33 +444,23 @@ Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare>
     } else if (const Cast *c = e.as<Cast>()) {
         if (c->type.can_represent(c->value.type())) {
             return lossless_cast(t, c->value, cache);
-        } else {
-            return Expr();
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         Expr v = lossless_cast(t.element_of(), b->value, cache);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
-        } else {
-            return Expr();
         }
     } else if (const IntImm *i = e.as<IntImm>()) {
         if (t.can_represent(i->value)) {
             return make_const(t, i->value);
-        } else {
-            return Expr();
         }
     } else if (const UIntImm *i = e.as<UIntImm>()) {
         if (t.can_represent(i->value)) {
             return make_const(t, i->value);
-        } else {
-            return Expr();
         }
     } else if (const FloatImm *f = e.as<FloatImm>()) {
         if (t.can_represent(f->value)) {
             return make_const(t, f->value);
-        } else {
-            return Expr();
         }
     } else if (const Shuffle *shuf = e.as<Shuffle>()) {
         std::vector<Expr> vecs;
@@ -484,16 +474,7 @@ Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare>
     } else if (t.is_int_or_uint()) {
         // Check the bounds. If they're small enough, we can throw narrowing
         // casts around e, or subterms.
-        ConstantInterval ci;
-        if (cache) {
-            auto [it, cache_miss] = cache->try_emplace(e);
-            if (cache_miss) {
-                it->second = constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), cache);
-            }
-            ci = it->second;
-        } else {
-            ci = constant_integer_bounds(e);
-        }
+        ConstantInterval ci = constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), cache);
 
         if (t.can_represent(ci)) {
             // There are certain IR nodes where if the result is expressible
@@ -503,25 +484,62 @@ Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare>
                 Expr a = lossless_cast(t, op->a, cache);
                 Expr b = lossless_cast(t, op->b, cache);
                 if (a.defined() && b.defined()) {
-                    return a + b;
+                    return Add::make(a, b);
                 }
             } else if (const Sub *op = e.as<Sub>()) {
                 Expr a = lossless_cast(t, op->a, cache);
                 Expr b = lossless_cast(t, op->b, cache);
                 if (a.defined() && b.defined()) {
-                    return a - b;
+                    return Sub::make(a, b);
                 }
             } else if (const Mul *op = e.as<Mul>()) {
                 Expr a = lossless_cast(t, op->a, cache);
                 Expr b = lossless_cast(t, op->b, cache);
                 if (a.defined() && b.defined()) {
-                    return a * b;
+                    return Mul::make(a, b);
                 }
-            } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_add})) {
+            } else if (const Min *op = e.as<Min>()) {
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
+                if (a.defined() && b.defined()) {
+                    debug(0) << a << " " << b << "\n";
+                    return Min::make(a, b);
+                }
+            } else if (const Max *op = e.as<Max>()) {
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
+                if (a.defined() && b.defined()) {
+                    return Max::make(a, b);
+                }
+            } else if (const Mod *op = e.as<Mod>()) {
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
+                if (a.defined() && b.defined()) {
+                    return Mod::make(a, b);
+                }
+            } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_add, Call::widen_right_add})) {
                 Expr a = lossless_cast(t, op->args[0], cache);
                 Expr b = lossless_cast(t, op->args[1], cache);
                 if (a.defined() && b.defined()) {
-                    return a + b;
+                    return Add::make(a, b);
+                }
+            } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_sub, Call::widen_right_sub})) {
+                Expr a = lossless_cast(t, op->args[0], cache);
+                Expr b = lossless_cast(t, op->args[1], cache);
+                if (a.defined() && b.defined()) {
+                    return Sub::make(a, b);
+                }
+            } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_mul, Call::widen_right_mul})) {
+                Expr a = lossless_cast(t, op->args[0], cache);
+                Expr b = lossless_cast(t, op->args[1], cache);
+                if (a.defined() && b.defined()) {
+                    return Mul::make(a, b);
+                }
+            } else if (const Call *op = Call::as_intrinsic(e, {Call::shift_left, Call::widening_shift_left})) {
+                Expr a = lossless_cast(t, op->args[0], cache);
+                Expr b = lossless_cast(t, op->args[1], cache);
+                if (a.defined() && b.defined()) {
+                    return a << b;
                 }
             } else if (const VectorReduce *op = e.as<VectorReduce>()) {
                 if (op->op == VectorReduce::Add ||
@@ -534,7 +552,14 @@ Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare>
                 }
             }
 
-            return cast(t, e);
+            // At this point we know the expression fits in the target type, but
+            // what we really want is for the expression to be computed in the
+            // target type. So we can add a cast to the target type if we want
+            // here, but it only makes sense to do it if the expression type has
+            // the same or fewer bits than the target type.
+            if (e.type().bits() <= t.bits()) {
+                return cast(t, e);
+            }
         }
     }
 
