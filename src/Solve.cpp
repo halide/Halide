@@ -433,6 +433,37 @@ private:
         // Ignore intrinsics that shouldn't affect the results.
         if (Call::as_tag(op)) {
             return mutate(op->args[0]);
+        } else if (op->is_intrinsic({Call::absd, Call::bitwise_and, Call::bitwise_or,
+                                     Call::bitwise_xor, Call::halving_add, Call::rounding_halving_add,
+                                     Call::saturating_add, Call::widening_add, Call::widening_mul})) {
+            // It's a commutative intrinsic. We won't try to lift uses of the
+            // var out of the call, but we will reorder the args if it would
+            // help.
+            internal_assert(op->args.size() == 2);
+            bool old_uses_var = uses_var;
+            uses_var = false;
+            bool old_failed = failed;
+            failed = false;
+            Expr a = mutate(op->args[0]);
+            bool a_uses_var = uses_var;
+            bool a_failed = failed;
+            uses_var = false;
+            failed = false;
+            Expr b = mutate(op->args[1]);
+            bool b_uses_var = uses_var;
+            bool b_failed = failed;
+            uses_var = old_uses_var || a_uses_var || b_uses_var;
+            failed = old_failed || a_failed || b_failed;
+
+            failed |= a_uses_var && b_uses_var;
+
+            if (b_uses_var && !a_uses_var) {
+                return Call::make(op->type, op->name, {b, a}, op->call_type);
+            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                return op;
+            } else {
+                return Call::make(op->type, op->name, {a, b}, op->call_type);
+            }
         } else {
             return IRMutator::visit(op);
         }

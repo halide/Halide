@@ -7,49 +7,48 @@ namespace Internal {
 
 // Miscellaneous expression visitors that are too small to bother putting in their own files
 
-Expr Simplify::visit(const IntImm *op, ExprInfo *bounds) {
-    if (bounds && no_overflow_int(op->type)) {
-        bounds->min_defined = bounds->max_defined = true;
-        bounds->min = bounds->max = op->value;
-        bounds->alignment.remainder = op->value;
-        bounds->alignment.modulus = 0;
+Expr Simplify::visit(const IntImm *op, ExprInfo *info) {
+    if (info) {
+        info->bounds = ConstantInterval::single_point(op->value);
+        info->alignment = ModulusRemainder(0, op->value);
+        info->cast_to(op->type);
     } else {
-        clear_bounds_info(bounds);
+        clear_expr_info(info);
     }
     return op;
 }
 
-Expr Simplify::visit(const UIntImm *op, ExprInfo *bounds) {
-    if (bounds && Int(64).can_represent(op->value)) {
-        bounds->min_defined = bounds->max_defined = true;
-        bounds->min = bounds->max = (int64_t)(op->value);
-        bounds->alignment.remainder = op->value;
-        bounds->alignment.modulus = 0;
+Expr Simplify::visit(const UIntImm *op, ExprInfo *info) {
+    if (info && Int(64).can_represent(op->value)) {
+        int64_t v = (int64_t)(op->value);
+        info->bounds = ConstantInterval::single_point(v);
+        info->alignment = ModulusRemainder(0, v);
+        info->cast_to(op->type);
     } else {
-        clear_bounds_info(bounds);
+        clear_expr_info(info);
     }
     return op;
 }
 
-Expr Simplify::visit(const FloatImm *op, ExprInfo *bounds) {
-    clear_bounds_info(bounds);
+Expr Simplify::visit(const FloatImm *op, ExprInfo *info) {
+    clear_expr_info(info);
     return op;
 }
 
-Expr Simplify::visit(const StringImm *op, ExprInfo *bounds) {
-    clear_bounds_info(bounds);
+Expr Simplify::visit(const StringImm *op, ExprInfo *info) {
+    clear_expr_info(info);
     return op;
 }
 
-Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
-    Expr value = mutate(op->value, bounds);
+Expr Simplify::visit(const Broadcast *op, ExprInfo *info) {
+    Expr value = mutate(op->value, info);
 
     const int lanes = op->lanes;
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::broadcast(value, lanes), op->type);
     if (rewrite(broadcast(broadcast(x, c0), lanes), broadcast(x, c0 * lanes)) ||
         false) {
-        return mutate(rewrite.result, bounds);
+        return mutate(rewrite.result, info);
     }
 
     if (value.same_as(op->value)) {
@@ -59,8 +58,8 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
     }
 }
 
-Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
-    Expr value = mutate(op->value, bounds);
+Expr Simplify::visit(const VectorReduce *op, ExprInfo *info) {
+    Expr value = mutate(op->value, info);
 
     const int lanes = op->type.lanes();
     const int arg_lanes = op->value.type().lanes();
@@ -69,32 +68,22 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
         return value;
     }
 
-    if (bounds && op->type.is_int()) {
+    if (info && op->type.is_int()) {
         switch (op->op) {
         case VectorReduce::Add:
             // Alignment of result is the alignment of the arg. Bounds
             // of the result can grow according to the reduction
             // factor.
-            if (bounds->min_defined) {
-                bounds->min *= factor;
-            }
-            if (bounds->max_defined) {
-                bounds->max *= factor;
-            }
+            info->bounds = cast(op->type, info->bounds * factor);
             break;
         case VectorReduce::SaturatingAdd:
-            if (bounds->min_defined) {
-                bounds->min = saturating_mul(bounds->min, factor);
-            }
-            if (bounds->max_defined) {
-                bounds->max = saturating_mul(bounds->max, factor);
-            }
+            info->bounds = saturating_cast(op->type, info->bounds * factor);
             break;
         case VectorReduce::Mul:
             // Don't try to infer anything about bounds. Leave the
             // alignment unchanged even though we could theoretically
             // upgrade it.
-            bounds->min_defined = bounds->max_defined = false;
+            info->bounds = ConstantInterval{};
             break;
         case VectorReduce::Min:
         case VectorReduce::Max:
@@ -104,8 +93,8 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
         case VectorReduce::Or:
             // For integer types this is a bitwise operator. Don't try
             // to infer anything for now.
-            bounds->min_defined = bounds->max_defined = false;
-            bounds->alignment = ModulusRemainder{};
+            info->bounds = ConstantInterval{};
+            info->alignment = ModulusRemainder{};
             break;
         }
     }
@@ -134,7 +123,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
         auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
         if (rewrite(h_add(x * broadcast(y, arg_lanes), lanes), h_add(x, lanes) * broadcast(y, lanes)) ||
             rewrite(h_add(broadcast(x, arg_lanes) * y, lanes), h_add(y, lanes) * broadcast(x, lanes))) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         break;
     }
@@ -148,7 +137,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
             rewrite(h_min(broadcast(x, c0), lanes), h_min(x, lanes), factor % c0 == 0) ||
             rewrite(h_min(ramp(x, y, arg_lanes), lanes), x + min(y * (arg_lanes - 1), 0)) ||
             false) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         break;
     }
@@ -162,7 +151,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
             rewrite(h_max(broadcast(x, c0), lanes), h_max(x, lanes), factor % c0 == 0) ||
             rewrite(h_max(ramp(x, y, arg_lanes), lanes), x + max(y * (arg_lanes - 1), 0)) ||
             false) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         break;
     }
@@ -183,7 +172,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
             rewrite(h_and(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
                     x <= y + min(z * (arg_lanes - 1), 0)) ||
             false) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         break;
     }
@@ -205,7 +194,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
             rewrite(h_or(broadcast(x, arg_lanes) < ramp(y, z, arg_lanes), lanes),
                     x <= y + max(z * (arg_lanes - 1), 0)) ||
             false) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         break;
     }
@@ -220,33 +209,35 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     }
 }
 
-Expr Simplify::visit(const Variable *op, ExprInfo *bounds) {
+Expr Simplify::visit(const Variable *op, ExprInfo *info) {
     if (const ExprInfo *b = bounds_and_alignment_info.find(op->name)) {
-        if (bounds) {
-            *bounds = *b;
+        if (info) {
+            *info = *b;
         }
-        if (b->min_defined && b->max_defined && b->min == b->max) {
-            return make_const(op->type, b->min);
+        if (b->bounds.is_single_point()) {
+            return make_const(op->type, b->bounds.min);
         }
+    } else if (info && !no_overflow_int(op->type)) {
+        info->bounds = ConstantInterval::bounds_of_type(op->type);
     }
 
-    if (auto *info = var_info.shallow_find(op->name)) {
+    if (auto *v_info = var_info.shallow_find(op->name)) {
         // if replacement is defined, we should substitute it in (unless
         // it's a var that has been hidden by a nested scope).
-        if (info->replacement.defined()) {
-            internal_assert(info->replacement.type() == op->type)
+        if (v_info->replacement.defined()) {
+            internal_assert(v_info->replacement.type() == op->type)
                 << "Cannot replace variable " << op->name
                 << " of type " << op->type
-                << " with expression of type " << info->replacement.type() << "\n";
-            info->new_uses++;
+                << " with expression of type " << v_info->replacement.type() << "\n";
+            v_info->new_uses++;
             // We want to remutate the replacement, because we may be
             // injecting it into a context where it is known to be a
             // constant (e.g. due to an if).
-            return mutate(info->replacement, bounds);
+            return mutate(v_info->replacement, info);
         } else {
             // This expression was not something deemed
             // substitutable - no replacement is defined.
-            info->old_uses++;
+            v_info->old_uses++;
             return op;
         }
     } else {
@@ -256,29 +247,28 @@ Expr Simplify::visit(const Variable *op, ExprInfo *bounds) {
     }
 }
 
-Expr Simplify::visit(const Ramp *op, ExprInfo *bounds) {
-    ExprInfo base_bounds, stride_bounds;
-    Expr base = mutate(op->base, &base_bounds);
-    Expr stride = mutate(op->stride, &stride_bounds);
+Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
+    ExprInfo base_info, stride_info;
+    Expr base = mutate(op->base, &base_info);
+    Expr stride = mutate(op->stride, &stride_info);
     const int lanes = op->lanes;
 
-    if (bounds && no_overflow_int(op->type)) {
-        bounds->min_defined = base_bounds.min_defined && stride_bounds.min_defined;
-        bounds->max_defined = base_bounds.max_defined && stride_bounds.max_defined;
-        bounds->min = std::min(base_bounds.min, base_bounds.min + (lanes - 1) * stride_bounds.min);
-        bounds->max = std::max(base_bounds.max, base_bounds.max + (lanes - 1) * stride_bounds.max);
+    if (info) {
+        info->bounds = base_info.bounds + stride_info.bounds * ConstantInterval(0, lanes - 1);
         // A ramp lane is b + l * s. Expanding b into mb * x + rb and s into ms * y + rs, we get:
         //   mb * x + rb + l * (ms * y + rs)
         // = mb * x + ms * l * y + rs * l + rb
         // = gcd(rs, ms, mb) * z + rb
-        int64_t m = stride_bounds.alignment.modulus;
-        m = gcd(m, stride_bounds.alignment.remainder);
-        m = gcd(m, base_bounds.alignment.modulus);
-        int64_t r = base_bounds.alignment.remainder;
+        int64_t m = stride_info.alignment.modulus;
+        m = gcd(m, stride_info.alignment.remainder);
+        m = gcd(m, base_info.alignment.modulus);
+        int64_t r = base_info.alignment.remainder;
         if (m != 0) {
-            r = mod_imp(base_bounds.alignment.remainder, m);
+            r = mod_imp(base_info.alignment.remainder, m);
         }
-        bounds->alignment = {m, r};
+        info->alignment = {m, r};
+        info->trim_bounds_using_alignment();
+        info->cast_to(op->type);
     }
 
     // A somewhat torturous way to check if the stride is zero,
@@ -303,8 +293,12 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *bounds) {
     }
 }
 
-Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
+Expr Simplify::visit(const Load *op, ExprInfo *info) {
     found_buffer_reference(op->name);
+
+    if (info) {
+        info->bounds = ConstantInterval::bounds_of_type(op->type);
+    }
 
     Expr predicate = mutate(op->predicate, nullptr);
 
@@ -319,16 +313,10 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     if (is_const_one(op->predicate)) {
         string alloc_extent_name = op->name + ".total_extent_bytes";
         if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
-            if (index_info.max_defined && index_info.max < 0) {
+            if (index_info.bounds < 0 ||
+                index_info.bounds * op->type.bytes() > alloc_info->bounds) {
                 in_unreachable = true;
                 return unreachable(op->type);
-            }
-            if (alloc_info->max_defined && index_info.min_defined) {
-                int index_min_bytes = index_info.min * op->type.bytes();
-                if (index_min_bytes > alloc_info->max) {
-                    in_unreachable = true;
-                    return unreachable(op->type);
-                }
             }
         }
     }
