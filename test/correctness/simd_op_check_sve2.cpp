@@ -602,8 +602,10 @@ private:
                 Expr float_max = Float(bits).max();
                 add_arm64("ucvtf", cast_f(min(float_max, u_1)));
                 add_arm64("scvtf", cast_f(i_1));
-                add_arm64({{"fcvtzu", bits, force_vectorized_lanes}}, vf, cast(UInt(bits), f_1));
-                add_arm64({{"fcvtzs", bits, force_vectorized_lanes}}, vf, cast(Int(bits), f_1));
+                if (is_vector) {
+                    add_arm64("fcvtzu", cast(UInt(bits), max(f_1, 0.f)));
+                    add_arm64("fcvtzs", cast(Int(bits), f_1));
+                }
                 add_arm64({{"frintn", bits, force_vectorized_lanes}}, vf, round(f_1));
                 add_arm64({{"frintm", bits, force_vectorized_lanes}}, vf, floor(f_1));
                 add_arm64({{"frintp", bits, force_vectorized_lanes}}, vf, ceil(f_1));
@@ -612,8 +614,8 @@ private:
                 add_arm32_f32({{"vmax.f", bits, force_vectorized_lanes}}, vf, max(f_1, f_2));
                 add_arm32_f32({{"vmin.f", bits, force_vectorized_lanes}}, vf, min(f_1, f_2));
 
-                add_arm64({{"fmax", bits, force_vectorized_lanes}}, vf, max(f_1, f_2));
-                add_arm64({{"fmin", bits, force_vectorized_lanes}}, vf, min(f_1, f_2));
+                add_arm64("fmax", is_vector ? "fmax" : "fmaxnm", max(f_1, f_2));
+                add_arm64("fmin", is_vector ? "fmin" : "fminnm", min(f_1, f_2));
                 if (bits != 64 && total_bits != 192) {
                     // Halide relies on LLVM optimization for this pattern, and in some case it doesn't work
                     add_arm64("fmla", is_vector ? (has_sve() ? "(fmla|fmad)" : "fmla") : "fmadd", f_1 + f_2 * f_3);
