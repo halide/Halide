@@ -211,6 +211,7 @@ inline int GetCycleCount() {
         stream << std::flush;
 
         const HalideTypeSet native_vector_types = {
+            halide_type_t(halide_type_int, 8, target.natural_vector_size<int8_t>() / 2),  // We have N int8_t vectors
             halide_type_t(halide_type_int, 8, target.natural_vector_size<int8_t>()),
             halide_type_t(halide_type_uint, 8, target.natural_vector_size<uint8_t>()),
             halide_type_t(halide_type_int, 16, target.natural_vector_size<int16_t>()),
@@ -235,6 +236,7 @@ inline int GetCycleCount() {
         };
 
         const HalideTypeSet no_multiples_types = {
+            halide_type_t(halide_type_int, 8, target.natural_vector_size<int8_t>() / 2),       // we want to have multiple of 2N version
             halide_type_t(halide_type_float, 16, target.natural_vector_size<float16_t>() / 2)  // we want to have multiple of N version
         };
 

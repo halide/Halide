@@ -36,6 +36,7 @@ using native_vector_f32 = xb_vecN_2xf32;
 using native_vector_i64 = xb_vecN_2x64w;
 
 #if XCHAL_VISION_TYPE == 7
+using int8x32_t = xb_vecNx8;
 using int8x64_t = xb_vec2Nx8;
 using uint8x64_t = xb_vec2Nx8U;
 using int16x32_t = xb_vecNx16;
@@ -55,6 +56,7 @@ using float16x16_t = xb_vecN_2xf16;
 using float16x32_t = xb_vecNxf16;
 using float32x16_t = xb_vecN_2xf32;
 #elif XCHAL_VISION_TYPE == 8
+using int8x64_t = xb_vecNx8;
 using int8x128_t = xb_vec2Nx8;
 using uint8x128_t = xb_vec2Nx8U;
 using int16x64_t = xb_vecNx16;
@@ -2906,6 +2908,10 @@ HALIDE_ALWAYS_INLINE native_vector_f32_x2 halide_xtensa_convert_to_f32_from_i32(
 
 HALIDE_ALWAYS_INLINE native_mask_i32 halide_xtensa_slice_to_native(const native_mask_i16 &src, int index, int native_lanes, int total_lanes) {
     return (index == 0) ? IVP_EXTRACTBLN(src) : IVP_EXTRACTBHN(src);
+}
+
+HALIDE_ALWAYS_INLINE native_mask_i16 halide_xtensa_slice_to_native(const native_mask_i8 &src, int index, int native_lanes, int total_lanes) {
+    return (index == 0) ? IVP_EXTRACTBL2N(src) : IVP_EXTRACTBL2N(src);
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i32 halide_xtensa_convert_i16_low_i32(const native_vector_i16 &src) {
