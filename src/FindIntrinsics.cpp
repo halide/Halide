@@ -1472,23 +1472,25 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
         // Try to scale up the args by factors of two without overflowing
         int a_shift = 0, b_shift = 0;
         ConstantInterval ca = constant_integer_bounds(a);
-        do {
+        while (true) {
             ConstantInterval bigger = ca * 2;
             if (a.type().can_represent(bigger) && a_shift + b_shift < missing_q) {
                 ca = bigger;
                 a_shift++;
-                continue;
+            } else {
+                break;
             }
-        } while (false);
+        }
         ConstantInterval cb = constant_integer_bounds(b);
-        do {
+        while (true) {
             ConstantInterval bigger = cb * 2;
             if (b.type().can_represent(bigger) && a_shift + b_shift < missing_q) {
                 cb = bigger;
                 b_shift++;
-                continue;
+            } else {
+                break;
             }
-        } while (false);
+        }
         if (a_shift + b_shift == missing_q) {
             return rounding_mul_shift_right(simplify(a << a_shift), simplify(b << b_shift), full_q);
         }
