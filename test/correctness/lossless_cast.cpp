@@ -231,6 +231,25 @@ Expr random_expr(std::mt19937 &rng) {
     }
 }
 
+bool definitely_has_ub(Expr e) {
+    e = simplify(e);
+
+    class HasOverflow : public IRVisitor {
+        void visit(const Call *op) override {
+            if (op->is_intrinsic({Call::signed_integer_overflow})) {
+                found = true;
+            }
+            IRVisitor::visit(op);
+        }
+
+    public:
+        bool found = false;
+    } has_overflow;
+    e.accept(&has_overflow);
+
+    return has_overflow.found;
+}
+
 bool might_have_ub(Expr e) {
     class MightOverflow : public IRVisitor {
         std::map<Expr, ConstantInterval, ExprCompare> cache;
@@ -328,7 +347,7 @@ int test_one(uint32_t seed) {
 
     Expr e1 = random_expr(rng);
 
-    if (might_have_ub(e1)) {
+    if (might_have_ub(e1) || might_have_ub(simplify(e1))) {
         return 0;
     }
 
@@ -344,12 +363,26 @@ int test_one(uint32_t seed) {
         return 0;
     }
 
+    if (definitely_has_ub(e2)) {
+        std::cout << "lossless_cast introduced ub:\n"
+                  << "seed = " << seed << "\n"
+                  << "e1 = " << e1 << "\n"
+                  << "e2 = " << e2 << "\n"
+                  << "simplify(e1) = " << simplify(e1) << "\n"
+                  << "simplify(e2) = " << simplify(e2) << "\n";
+        return 1;
+    }
+
     Func f;
     f(x) = {cast<int64_t>(e1), cast<int64_t>(e2)};
     f.vectorize(x, 4, TailStrategy::RoundUp);
 
     Buffer<int64_t> out1(size), out2(size);
     Pipeline p(f);
+
+    // Check for signed integer overflow
+    // Module m = p.compile_to_module({}, "test");
+
     p.realize({out1, out2});
 
     for (int x = 0; x < size; x++) {
@@ -397,7 +430,9 @@ int fuzz_test(uint32_t root_seed) {
 
     std::cout << "Fuzz testing with root seed " << root_seed << "\n";
     for (int i = 0; i < 1000; i++) {
-        if (test_one(seed_generator())) {
+        auto s = seed_generator();
+        std::cout << s << "\n";
+        if (test_one(s)) {
             return 1;
         }
     }

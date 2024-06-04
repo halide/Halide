@@ -535,11 +535,19 @@ Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare>
                 if (a.defined() && b.defined()) {
                     return Mul::make(a, b);
                 }
-            } else if (const Call *op = Call::as_intrinsic(e, {Call::shift_left, Call::widening_shift_left})) {
+            } else if (const Call *op = Call::as_intrinsic(e, {Call::shift_left, Call::widening_shift_left,
+                                                               Call::shift_right, Call::widening_shift_right})) {
                 Expr a = lossless_cast(t, op->args[0], cache);
                 Expr b = lossless_cast(t, op->args[1], cache);
                 if (a.defined() && b.defined()) {
-                    return a << b;
+                    ConstantInterval cb = constant_integer_bounds(b, Scope<ConstantInterval>::empty_scope(), cache);
+                    if (cb > -t.bits() && cb < t.bits()) {
+                        if (op->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
+                            return a << b;
+                        } else if (op->is_intrinsic({Call::shift_right, Call::widening_shift_right})) {
+                            return a >> b;
+                        }
+                    }
                 }
             } else if (const VectorReduce *op = e.as<VectorReduce>()) {
                 if (op->op == VectorReduce::Add ||
