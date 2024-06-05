@@ -12,6 +12,7 @@
 #include "EliminateBoolVectors.h"
 #include "EmulateFloat16Math.h"
 #include "ExprUsesVar.h"
+#include "Float16.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
@@ -1183,11 +1184,15 @@ void CodeGen_OpenCL_Dev::init_module() {
     }
 
     if (target.has_feature(Target::CLHalf)) {
+        constexpr unsigned short nan_f16 = float16_t::exponent_mask | float16_t::mantissa_mask;
+        constexpr unsigned short neg_inf_f16 = float16_t::sign_mask | float16_t::exponent_mask;
+        constexpr unsigned short inf_f16 = float16_t::exponent_mask;
+
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
                    << "inline half half_from_bits(unsigned short x) {return __builtin_astype(x, half);}\n"
-                   << "inline half nan_f16() { return half_from_bits(32767); }\n"
-                   << "inline half neg_inf_f16() { return half_from_bits(31744); }\n"
-                   << "inline half inf_f16() { return half_from_bits(64512); }\n"
+                   << "inline half nan_f16() { return half_from_bits(" << nan_f16 << "); }\n"
+                   << "inline half neg_inf_f16() { return half_from_bits(" << neg_inf_f16 << "); }\n"
+                   << "inline half inf_f16() { return half_from_bits(" << inf_f16 << "); }\n"
                    << "inline bool is_nan_f16(half x) {return isnan(x); }\n"
                    << "inline bool is_inf_f16(half x) {return isinf(x); }\n"
                    << "inline bool is_finite_f16(half x) {return isfinite(x); }\n"
