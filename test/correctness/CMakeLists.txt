@@ -139,6 +139,7 @@ tests(GROUPS correctness
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
       gpu_many_kernels.cpp
+      gpu_f16_intrinsics.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
