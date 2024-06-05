@@ -2514,12 +2514,20 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_workgroup_size(SpvId kernel_func
 namespace {
 
 // Locate all the unique GPU variables used as SIMT intrinsics
+// This pass is used to identify if LocalInvocationID and/or WorkgroupID
+// need to be declared as variables for the entrypoint to the Kernel. Since
+// these can only be declared once and their type is vec3, we don't
+// care about the specific dims that are mapped to loop variables.
 class FindIntrinsicsUsed : public IRVisitor {
     using IRVisitor::visit;
     void visit(const For *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->for_type)) {
+
+            // map the block or thread id name to the SIMT intrinsic definition
             auto intrinsic = simt_intrinsic(op->name);
-            intrinsics_used.insert(intrinsic.first);
+
+            // mark the name of the intrinsic being used (without the dimension)
+            intrinsics_used.insert(intrinsic.first);  // name only!
         }
         op->body.accept(this);
     }
@@ -2555,20 +2563,22 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_entry_point(const Stmt &s, SpvId
     s.accept(&find_intrinsics);
 
     SpvFactory::Variables entry_point_variables;
-    for (const std::string &intrinsic_name : find_intrinsics.intrinsics_used) {
+    for (const std::string &used_intrinsic : find_intrinsics.intrinsics_used) {
 
-        // The builtins are pointers to vec3
+        // The builtins are pointers to vec3 and can only be declared once per kernel entrypoint
         SpvStorageClass storage_class = SpvStorageClassInput;
         SpvId intrinsic_type_id = builder.declare_type(Type(Type::UInt, 32, 3));
         SpvId intrinsic_ptr_type_id = builder.declare_pointer_type(intrinsic_type_id, storage_class);
-        const std::string intrinsic_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + intrinsic_name;
+        const std::string intrinsic_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + used_intrinsic;
         SpvId intrinsic_var_id = builder.declare_global_variable(intrinsic_var_name, intrinsic_ptr_type_id, storage_class);
         SpvId intrinsic_loaded_id = builder.reserve_id();
         builder.append(SpvFactory::load(intrinsic_type_id, intrinsic_loaded_id, intrinsic_var_id));
         symbol_table.push(intrinsic_var_name, {intrinsic_loaded_id, storage_class});
 
-        // Annotate that this is the specific builtin
-        SpvBuiltIn built_in_kind = map_simt_builtin(intrinsic_name);
+        // Map the used intrinsic name to the specific builtin
+        SpvBuiltIn built_in_kind = map_simt_builtin(used_intrinsic);
+
+        // Add an annotation that indicates this variable is bound to the requested intrinsic
         SpvBuilder::Literals annotation_literals = {(uint32_t)built_in_kind};
         builder.add_annotation(intrinsic_var_id, SpvDecorationBuiltIn, annotation_literals);
 
