@@ -61,6 +61,11 @@ class Closure;
 struct Interval;
 struct ConstantInterval;
 struct ModulusRemainder;
+enum class IRNodeType;
+
+/** Emit a halide node type on an output stream (such as std::cout) in
+ * human-readable form */
+std::ostream &operator<<(std::ostream &stream, IRNodeType);
 
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */
