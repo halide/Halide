@@ -8,7 +8,7 @@ const IntImm *IntImm::make(Type t, int64_t value) {
     internal_assert(t.is_int() && t.is_scalar())
         << "IntImm must be a scalar Int\n";
     internal_assert(t.bits() >= 1 && t.bits() <= 64)
-        << "IntImm must have between 1 and 64 bits\n";
+        << "IntImm must have between 1 and 64 bits: " << t << "\n";
 
     // Normalize the value by dropping the high bits.
     // Since left-shift of negative value is UB in C++, cast to uint64 first;
@@ -28,7 +28,7 @@ const UIntImm *UIntImm::make(Type t, uint64_t value) {
     internal_assert(t.is_uint() && t.is_scalar())
         << "UIntImm must be a scalar UInt\n";
     internal_assert(t.bits() >= 1 && t.bits() <= 64)
-        << "UIntImm must have between 1 and 64 bits\n";
+        << "UIntImm must have between 1 and 64 bits " << t << "\n";
 
     // Normalize the value by dropping the high bits
     value <<= (64 - t.bits());

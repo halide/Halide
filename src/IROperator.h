@@ -8,6 +8,7 @@
  */
 
 #include <cmath>
+#include <map>
 
 #include "Expr.h"
 #include "Tuple.h"
@@ -140,10 +141,16 @@ Expr const_true(int lanes = 1);
  * falses, if a lanes argument is given. */
 Expr const_false(int lanes = 1);
 
-/** Attempt to cast an expression to a smaller type while provably not
- * losing information. If it can't be done, return an undefined
- * Expr. */
-Expr lossless_cast(Type t, Expr e);
+/** Attempt to cast an expression to a smaller type while provably not losing
+ * information. If it can't be done, return an undefined Expr.
+ *
+ * Optionally accepts a map that gives the constant bounds of exprs already
+ * analyzed to avoid redoing work across many calls to lossless_cast. It is not
+ * safe to use this optional map in contexts where the same Expr object may
+ * take on a different value. For example:
+ * (let x = 4 in some_expr_object) + (let x = 5 in the_same_expr_object)).
+ * It is safe to use it after uniquify_variable_names has been run. */
+Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr);
 
 /** Attempt to negate x without introducing new IR and without overflow.
  * If it can't be done, return an undefined Expr. */
