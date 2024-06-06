@@ -94,6 +94,7 @@ tests(GROUPS error
       require_fail.cpp
       reuse_var_in_schedule.cpp
       reused_args.cpp
+      rfactor_fused_var_and_rvar.cpp
       rfactor_inner_dim_non_commutative.cpp
       round_up_and_blend_race.cpp
       run_with_large_stack_throws.cpp
