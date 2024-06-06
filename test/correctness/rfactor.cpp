@@ -992,6 +992,23 @@ int self_assignment_rfactor_test() {
     return 0;
 }
 
+int rfactor_with_partial_pure_fusion_test() {
+    Func f{"f"};
+    Var x{"x"}, y{"y"}, z{"z"};
+    RDom r({{0, 5}, {0, 5}, {0, 5}}, "r");
+    RVar rxy{"rxy"}, yrz{"yrz"};
+
+    f(x, y) = 0;
+    f(x, y) += r.x + r.y + r.z;
+
+    f.update()
+        .fuse(r.x, r.y, rxy)
+        .fuse(r.z, y, yrz)
+        .rfactor(rxy, z);
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1032,6 +1049,7 @@ int main(int argc, char **argv) {
         {"rfactor tile reorder test: checking output img correctness...", rfactor_tile_reorder_test},
         {"complex multiply rfactor test", complex_multiply_rfactor_test},
         {"argmin rfactor test", argmin_rfactor_test},
+        {"rfactor a fused rvar+rvar in the presence of a fused var+rvar", rfactor_with_partial_pure_fusion_test},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;
