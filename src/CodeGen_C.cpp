@@ -1155,8 +1155,9 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     bool is_constant = buffer.dimensions() != 0;
 
     // If it is an GPU source kernel, we would like to see the actual output, not the
-    // uint8 representation. We use a string literal for this.
-    if (ends_with(name, "gpu_source_kernels")) {
+    // uint8 representation. We use a string literal for this. Since the Vulkan backend
+    // actually generates a SPIR-V binary, keep it as raw data to avoid textual reformatting.
+    if (ends_with(name, "gpu_source_kernels") && !target.has_feature(Target::Vulkan)) {
         stream << "static const char *" << name << "_string = R\"BUFCHARSOURCE(";
         stream.write((char *)b.host, num_elems);
         stream << ")BUFCHARSOURCE\";\n";
