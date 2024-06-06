@@ -214,8 +214,6 @@ Serialize::DeviceAPI Serializer::serialize_device_api(const DeviceAPI &device_ap
         return Serialize::DeviceAPI::CUDA;
     case DeviceAPI::OpenCL:
         return Serialize::DeviceAPI::OpenCL;
-    case DeviceAPI::OpenGLCompute:
-        return Serialize::DeviceAPI::OpenGLCompute;
     case DeviceAPI::Metal:
         return Serialize::DeviceAPI::Metal;
     case DeviceAPI::Hexagon:
@@ -1031,6 +1029,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
     for (const auto &tag : function.get_trace_tags()) {
         trace_tags_serialized.push_back(serialize_string(builder, tag));
     }
+    const bool no_profiling = function.should_not_profile();
     const bool frozen = function.frozen();
     auto func = Serialize::CreateFunc(builder,
                                       name_serialized,
@@ -1052,7 +1051,9 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
                                       trace_loads,
                                       trace_stores,
                                       trace_realizations,
-                                      builder.CreateVector(trace_tags_serialized), frozen);
+                                      builder.CreateVector(trace_tags_serialized),
+                                      no_profiling,
+                                      frozen);
     return func;
 }
 
@@ -1117,6 +1118,7 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
     const Serialize::MemoryType memory_type = serialize_memory_type(func_schedule.memory_type());
     const auto memoized = func_schedule.memoized();
     const auto async = func_schedule.async();
+    const auto ring_buffer = serialize_expr(builder, func_schedule.ring_buffer());
     const auto memoize_eviction_key_serialized = serialize_expr(builder, func_schedule.memoize_eviction_key());
     return Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized,
                                          hoist_storage_level_serialized,
@@ -1124,7 +1126,7 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
                                          builder.CreateVector(bounds_serialized),
                                          builder.CreateVector(estimates_serialized),
                                          builder.CreateVector(wrappers_serialized),
-                                         memory_type, memoized, async,
+                                         memory_type, memoized, async, ring_buffer.first, ring_buffer.second,
                                          memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
 }
 

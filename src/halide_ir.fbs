@@ -7,13 +7,15 @@ file_identifier "HLDE";
 file_extension "hlpipe";
 
 enum SerializationVersionMajor: int {
-    Value = 0
+    Value = 18
 }
 enum SerializationVersionMinor: int {
-    Value = 1
+    // 0 = Unstable
+    // 1 = First stable version
+    Value = 0
 }
 enum SerializationVersionPatch: int {
-    Value = 0
+    Value = 1
 }
 
 // from src/IR.cpp
@@ -96,7 +98,6 @@ enum DeviceAPI: byte {
     Default_GPU,
     CUDA,
     OpenCL,
-    OpenGLCompute,
     Metal,
     Hexagon,
     HexagonDma,
@@ -521,6 +522,7 @@ table FuncSchedule {
     memory_type: MemoryType = Auto;
     memoized: bool;
     async: bool;
+    ring_buffer: Expr;
     memoize_eviction_key: Expr;
 }
 
@@ -711,6 +713,7 @@ table Func {
     trace_stores: bool = false;
     trace_realizations: bool = false;
     trace_tags: [string];
+    no_profiling: bool = false;
     frozen: bool = false;
 }
 

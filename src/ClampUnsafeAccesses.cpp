@@ -50,8 +50,10 @@ protected:
     }
 
     Expr visit(const Variable *var) override {
-        if (is_inside_indexing && let_var_inside_indexing.contains(var->name)) {
-            let_var_inside_indexing.ref(var->name) = true;
+        if (is_inside_indexing) {
+            if (bool *b = let_var_inside_indexing.shallow_find(var->name)) {
+                *b = true;
+            }
         }
         return var;
     }

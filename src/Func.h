@@ -2281,6 +2281,21 @@ public:
      */
     Func &async();
 
+    /** Expands the storage of the function by an extra dimension
+     * to enable ring buffering. For this to be useful the storage
+     * of the function has to be hoisted to an upper loop level using
+     * \ref Func::hoist_storage. The index for the new ring buffer dimension
+     * is calculated implicitly based on a linear combination of the all of
+     * the loop variables between hoist_storage and compute_at/store_at
+     * loop levels. Scheduling a function with ring_buffer increases the
+     * amount of memory required for this function by an *extent* times.
+     * ring_buffer is especially useful in combination with \ref Func::async,
+     * but can be used without it.
+     *
+     * The extent is expected to be a positive integer.
+     */
+    Func &ring_buffer(Expr extent);
+
     /** Bound the extent of a Func's storage, but not extent of its
      * compute. This can be useful for forcing a function's allocation
      * to be a fixed size, which often means it can go on the stack.
@@ -2543,6 +2558,15 @@ public:
      * tracing is not enabled for the Func (or globally).
      */
     Func &add_trace_tag(const std::string &trace_tag);
+
+    /** Marks this function as a function that should not be profiled
+     * when using the target feature Profile or ProfileByTimer.
+     * This is useful when this function is does too little work at once
+     * such that the overhead of setting the profiling token might
+     * become significant, or that the measured time is not representative
+     * due to modern processors (instruction level parallelism, out-of-order
+     * execution). */
+    Func &no_profiling();
 
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide

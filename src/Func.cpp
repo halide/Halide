@@ -2418,6 +2418,12 @@ Func &Func::async() {
     return *this;
 }
 
+Func &Func::ring_buffer(Expr extent) {
+    invalidate_cache();
+    func.schedule().ring_buffer() = std::move(extent);
+    return *this;
+}
+
 Stage Func::specialize(const Expr &c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0).specialize(c);
@@ -3028,6 +3034,11 @@ Func &Func::trace_realizations() {
 Func &Func::add_trace_tag(const std::string &trace_tag) {
     invalidate_cache();
     func.add_trace_tag(trace_tag);
+    return *this;
+}
+
+Func &Func::no_profiling() {
+    func.do_not_profile();
     return *this;
 }
 

@@ -241,6 +241,8 @@ struct FuncScheduleContents {
     MemoryType memory_type = MemoryType::Auto;
     bool memoized = false;
     bool async = false;
+    // This is an extent of the ring buffer and expected to be a positive integer.
+    Expr ring_buffer;
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
@@ -352,9 +354,9 @@ FuncSchedule FuncSchedule::deep_copy(
 
     internal_assert(contents.defined()) << "Cannot deep-copy undefined FuncSchedule\n";
     FuncSchedule copy;
-    copy.contents->store_level = contents->store_level;
-    copy.contents->compute_level = contents->compute_level;
-    copy.contents->hoist_storage_level = contents->hoist_storage_level;
+    copy.contents->store_level.set(contents->store_level);
+    copy.contents->compute_level.set(contents->compute_level);
+    copy.contents->hoist_storage_level.set(contents->hoist_storage_level);
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
@@ -362,6 +364,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memoized = contents->memoized;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
+    copy.contents->ring_buffer = contents->ring_buffer;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
@@ -403,6 +406,14 @@ bool &FuncSchedule::async() {
 
 bool FuncSchedule::async() const {
     return contents->async;
+}
+
+Expr &FuncSchedule::ring_buffer() {
+    return contents->ring_buffer;
+}
+
+Expr &FuncSchedule::ring_buffer() const {
+    return contents->ring_buffer;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {

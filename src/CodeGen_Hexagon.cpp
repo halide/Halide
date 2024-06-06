@@ -128,7 +128,9 @@ private:
 
 CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
     : CodeGen_Posix(t) {
-    if (target.has_feature(Halide::Target::HVX_v66)) {
+    if (target.has_feature(Halide::Target::HVX_v68)) {
+        isa_version = 68;
+    } else if (target.has_feature(Halide::Target::HVX_v66)) {
         isa_version = 66;
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
         isa_version = 65;
@@ -221,8 +223,8 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                 }
             }
         } else if (const Variable *op = e.as<Variable>()) {
-            if (monotonic_vectors.contains(op->name)) {
-                return monotonic_vectors.get(op->name);
+            if (const auto *p = monotonic_vectors.find(op->name)) {
+                return *p;
             }
         } else if (const Let *op = e.as<Let>()) {
             auto v = get_extreme_lanes(op->value);
@@ -1787,7 +1789,9 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
 }
 
 string CodeGen_Hexagon::mcpu_target() const {
-    if (target.has_feature(Halide::Target::HVX_v66)) {
+    if (target.has_feature(Halide::Target::HVX_v68)) {
+        return "hexagonv68";
+    } else if (target.has_feature(Halide::Target::HVX_v66)) {
         return "hexagonv66";
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
         return "hexagonv65";
@@ -1856,6 +1860,12 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             return;
         }
 
+        // v68 has vector support for single-precision float.
+        if (target.has_feature(Halide::Target::HVX_v68) &&
+            op->type.is_float() && op->type.bits() == 32) {
+            CodeGen_Posix::visit(op);
+            return;
+        }
         internal_error << "Unhandled HVX multiply " << op->a.type() << "*"
                        << op->b.type() << "\n"
                        << Expr(op) << "\n";
@@ -2245,10 +2255,9 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         codegen(alloc->body);
 
         // If there was no early free, free it now.
-        if (allocations.contains(alloc->name)) {
-            Allocation alloc_obj = allocations.get(alloc->name);
-            internal_assert(alloc_obj.destructor);
-            trigger_destructor(alloc_obj.destructor_function, alloc_obj.destructor);
+        if (const Allocation *alloc_obj = allocations.find(alloc->name)) {
+            internal_assert(alloc_obj->destructor);
+            trigger_destructor(alloc_obj->destructor_function, alloc_obj->destructor);
 
             allocations.pop(alloc->name);
             sym_pop(alloc->name);

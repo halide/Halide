@@ -4,7 +4,7 @@
 
  * CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V, WebAssembly
  * Operating systems: Linux, Windows, macOS, Android, iOS, Qualcomm QuRT
- * GPU APIs: CUDA, OpenCL, OpenGL Compute Shaders, Apple Metal, Direct X 12
+ * GPU APIs: CUDA, OpenCL, Apple Metal, Direct X 12
 
 Rather than being a standalone programming language, Halide is embedded in C++.
 This means you write C++ code that builds an in-memory representation of a

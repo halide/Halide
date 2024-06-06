@@ -121,6 +121,8 @@ Expr make_leaf(Type t, const char *name) {
 }
 
 int main(int argc, char **argv) {
+    Expr i1x = make_leaf(Int(1, 4), "i1x");
+    Expr i1y = make_leaf(Int(1, 4), "i1y");
     Expr i8x = make_leaf(Int(8, 4), "i8x");
     Expr i8y = make_leaf(Int(8, 4), "i8y");
     Expr i8z = make_leaf(Int(8, 4), "i8w");
@@ -150,15 +152,18 @@ int main(int argc, char **argv) {
     // check(u32(u8x) * 256, u32(widening_shift_left(u8x, u8(8))));
 
     // Check widening arithmetic
+    check(i8(i1x) + i1y, widening_add(i1x, i1y));
     check(i16(i8x) + i8y, widening_add(i8x, i8y));
     check(u16(u8x) + u8y, widening_add(u8x, u8y));
     check(i16(u8x) + u8y, i16(widening_add(u8x, u8y)));
     check(f32(f16x) + f32(f16y), widening_add(f16x, f16y));
 
+    check(i8(i1x) - i1y, widening_sub(i1x, i1y));
     check(i16(i8x) - i8y, widening_sub(i8x, i8y));
     check(i16(u8x) - u8y, widening_sub(u8x, u8y));
     check(f32(f16x) - f32(f16y), widening_sub(f16x, f16y));
 
+    check(i8(i1x) * i1y, widening_mul(i1x, i1y));
     check(i16(i8x) * i8y, widening_mul(i8x, i8y));
     check(u16(u8x) * u8y, widening_mul(u8x, u8y));
     check(i32(i8x) * i8y, i32(widening_mul(i8x, i8y)));
@@ -353,6 +358,22 @@ int main(int argc, char **argv) {
         g.vectorize(x, 8);
 
         // This used to crash with a missing symbol error
+        g.compile_jit();
+    }
+
+    // Rounding shifts by extreme values, when lowered, used to have the
+    // potential to overflow and turn into out-of-range shifts. The simplifier
+    // detected this and injected a signed_integer_overflow intrinsic, which
+    // then threw an error in codegen, even though the rounding shift calls are
+    // well-defined.
+    {
+        Func f, g;
+
+        f(x) = cast<uint8_t>(x);
+        f.compute_root();
+
+        g(x) = rounding_shift_right(x, 0) + rounding_shift_left(x, 8);
+
         g.compile_jit();
     }
 

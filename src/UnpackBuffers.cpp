@@ -26,37 +26,46 @@ class FindBufferSymbols : public IRVisitor {
     void visit_param(const string &ref_name, const Parameter &param) {
         if (param.defined() && param.is_buffer()) {
             const string &name = param.name();
-            buffers[name] =
-                BufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", param),
-                           param.dimensions()};
+            auto r = buffers.try_emplace(name);
+            if (r.second) {
+                // It's the first time we've seen this Parameter
+                r.first->second.handle = Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", param);
+                r.first->second.dimensions = param.dimensions();
+            }
         }
     }
 
     void visit_buffer(const string &ref_name, const Buffer<> &buffer) {
         if (buffer.defined()) {
             const string &name = buffer.name();
-            buffers[name] =
-                BufferInfo{Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", buffer),
-                           buffer.dimensions()};
+            auto r = buffers.try_emplace(name);
+            if (r.second) {
+                // It's the first time we've seen this Buffer
+                r.first->second.handle = Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", buffer);
+                r.first->second.dimensions = buffer.dimensions();
+            }
         }
     }
 
     void visit(const Variable *op) override {
-        visit_param(op->name, op->param);
-        visit_buffer(op->name, op->image);
-        symbols.insert(op->name);
+        if (symbols.insert(op->name).second) {
+            visit_param(op->name, op->param);
+            visit_buffer(op->name, op->image);
+        }
     }
 
     void visit(const Load *op) override {
-        visit_param(op->name, op->param);
-        visit_buffer(op->name, op->image);
-        symbols.insert(op->name);
+        if (symbols.insert(op->name).second) {
+            visit_param(op->name, op->param);
+            visit_buffer(op->name, op->image);
+        }
         IRVisitor::visit(op);
     }
 
     void visit(const Store *op) override {
-        visit_param(op->name, op->param);
-        symbols.insert(op->name);
+        if (symbols.insert(op->name).second) {
+            visit_param(op->name, op->param);
+        }
         IRVisitor::visit(op);
     }
 

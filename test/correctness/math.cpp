@@ -50,7 +50,6 @@ bool relatively_equal(value_t a, value_t b, Target target) {
         // For HLSL, try again with a lower error threshold, as it might be using
         // fast but approximated trigonometric functions:
         if (target.supports_device_api(DeviceAPI::D3D12Compute) ||
-            target.supports_device_api(DeviceAPI::OpenGLCompute) ||
             target.supports_device_api(DeviceAPI::WebGPU)) {
             // this threshold value has been empirically determined since there
             // is no clear documentation on the precision of these algorithms
@@ -299,12 +298,7 @@ int main(int argc, char **argv) {
     call_1_float_types(ceil, 256, -25, 25);
     call_1_float_types(trunc, 256, -25, 25);
 
-    if (get_jit_target_from_environment().has_feature(Target::OpenGLCompute)) {
-        // GLSL isn't required to support NaN, so keep things real
-        call_2_float_types(pow, 256, 0.0, 10.0, -4.0f, 4.0f);
-    } else {
-        call_2_float_types(pow, 256, -10.0, 10.0, -4.0f, 4.0f);
-    }
+    call_2_float_types(pow, 256, -10.0, 10.0, -4.0f, 4.0f);
 
     const int8_t int8_min = std::numeric_limits<int8_t>::min();
     const int16_t int16_min = std::numeric_limits<int16_t>::min();

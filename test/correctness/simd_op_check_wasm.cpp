@@ -37,7 +37,7 @@ public:
         Expr u32_1 = in_u32(x), u32_2 = in_u32(x + 16), u32_3 = in_u32(x + 32);
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
-        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_2 < -0.3f), bool_3 = (f32_3 != -0.34f);
 
         check("f32.sqrt", 1, sqrt(f32_1));
         check("f32.min", 1, min(f32_1, f32_2));
@@ -388,17 +388,10 @@ public:
                 // check("v128.load64_zero", 2 * w, in_u64(0));
 
                 // Load vector with identical lanes generates *.splat.
-                if (Halide::Internal::get_llvm_version() >= 160) {
-                    check("i8x16.splat", 16 * w, in_u8(0));
-                    check("i16x8.splat", 8 * w, in_u16(0));
-                    check("i32x4.splat", 4 * w, in_u32(0));
-                    check("i64x2.splat", 2 * w, in_u64(0));
-                } else {
-                    check("v128.load8_splat", 16 * w, in_u8(0));
-                    check("v128.load16_splat", 8 * w, in_u16(0));
-                    check("v128.load32_splat", 4 * w, in_u32(0));
-                    check("v128.load64_splat", 2 * w, in_u64(0));
-                }
+                check("i8x16.splat", 16 * w, in_u8(0));
+                check("i16x8.splat", 8 * w, in_u16(0));
+                check("i32x4.splat", 4 * w, in_u32(0));
+                check("i64x2.splat", 2 * w, in_u64(0));
 
                 // Load Lane
                 // TODO: does Halide have any idiom that obviously generates these?
@@ -513,6 +506,11 @@ public:
                 check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(i32_1));
                 check("i16x8.narrow_i32x4_s", 8 * w, i8_sat(i32_1));
                 check("i16x8.narrow_i32x4_s", 8 * w, u8_sat(i32_1));
+                // Test that bounds-inference instruction selection is working properly.
+                check("i8x16.narrow_i16x8_s", 16 * w, i8_sat(u16_1 >> 1));
+                check("i8x16.narrow_i16x8_u", 16 * w, u8_sat(u16_1 >> 1));
+                check("i16x8.narrow_i32x4_s", 8 * w, i16_sat(u32_1 >> 1));
+                check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(u32_1 >> 1));
 
                 // Integer to integer widening
                 check("i16x8.extend_low_i8x16_s", 16 * w, i16(i8_1));
@@ -540,6 +538,11 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
+#ifdef HALIDE_INTERNAL_USING_ASAN
+    printf("[SKIP] This test causes an ASAN crash relating to ASAN's use of sigaltstack. It doesn't seem to be due to a bug in the test itself (see https://github.com/halide/Halide/pull/8078#issuecomment-1935407878)");
+    return 0;
+#endif
+
     return SimdOpCheckTest::main<SimdOpCheckWASM>(
         argc, argv,
         {

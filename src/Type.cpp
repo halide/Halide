@@ -1,3 +1,4 @@
+#include "ConstantBounds.h"
 #include "IR.h"
 #include <cfloat>
 #include <sstream>
@@ -124,6 +125,10 @@ bool Type::can_represent(Type other) const {
     } else {
         return false;
     }
+}
+
+bool Type::can_represent(const Internal::ConstantInterval &in) const {
+    return in.is_bounded() && can_represent(in.min) && can_represent(in.max);
 }
 
 bool Type::can_represent(int64_t x) const {

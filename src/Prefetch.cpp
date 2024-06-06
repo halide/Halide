@@ -86,10 +86,9 @@ private:
     using IRMutator::visit;
 
     Box get_buffer_bounds(const string &name, int dims) {
-        if (buffer_bounds.contains(name)) {
-            const Box &b = buffer_bounds.ref(name);
-            internal_assert((int)b.size() == dims);
-            return b;
+        if (const Box *b = buffer_bounds.find(name)) {
+            internal_assert((int)b->size() == dims);
+            return *b;
         }
 
         // It is an external buffer.

@@ -149,7 +149,6 @@ public:
 private:
     Internal::IntrusivePtr<PipelineContents> contents;
 
-    // For the three method below, precisely one of the first two args should be non-null
     void prepare_jit_call_arguments(RealizationArg &output, const Target &target,
                                     JITUserContext **user_context, bool is_bounds_inference, Internal::JITCallArgs &args_result);
 
@@ -160,7 +159,7 @@ private:
 
     static AutoSchedulerFn find_autoscheduler(const std::string &autoscheduler_name);
 
-    int call_jit_code(const Target &target, const Internal::JITCallArgs &args);
+    int call_jit_code(const Internal::JITCallArgs &args);
 
     // Get the value of contents->jit_target, but reality-check that the contents
     // sensibly match the value. Return Target() if not jitted.

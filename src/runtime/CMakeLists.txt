@@ -43,13 +43,9 @@ set(RUNTIME_CPP
     msan
     msan_stubs
     opencl
-    opengl_egl_context
-    opengl_glx_context
-    openglcompute
     osx_clock
     osx_get_symbol
     osx_host_cpu_count
-    osx_opengl_context
     osx_yield
     posix_aligned_alloc
     posix_allocator
@@ -135,7 +131,6 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeHexagonHost.h
     HalideRuntimeMetal.h
     HalideRuntimeOpenCL.h
-    HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
     HalideRuntimeVulkan.h
     HalideRuntimeWebGPU.h
@@ -172,6 +167,7 @@ set(RUNTIME_CXX_FLAGS
     -Wno-unused-function
     -Wvla
     -Wsign-compare
+    -Wimplicit-fallthrough
 )
 
 option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)

@@ -23,7 +23,7 @@
 // our CMake build, so that we ensure that the in-build metadata (eg soversion)
 // matches, but keeping the canonical version here makes it easier to keep
 // downstream build systems (eg Blaze/Bazel) properly in sync with the source.
-#define HALIDE_VERSION_MAJOR 17
+#define HALIDE_VERSION_MAJOR 18
 #define HALIDE_VERSION_MINOR 0
 #define HALIDE_VERSION_PATCH 1
 
@@ -86,12 +86,26 @@ extern "C" {
 
 #ifndef COMPILING_HALIDE_RUNTIME
 
+// ASAN builds can cause linker errors for Float16, so sniff for that and
+// don't enable it by default.
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define HALIDE_RUNTIME_ASAN_DETECTED
+#endif
+#endif
+
+#if defined(__SANITIZE_ADDRESS__) && !defined(HALIDE_RUNTIME_ASAN_DETECTED)
+#define HALIDE_RUNTIME_ASAN_DETECTED
+#endif
+
+#if !defined(HALIDE_RUNTIME_ASAN_DETECTED)
+
 // clang had _Float16 added as a reserved name in clang 8, but
 // doesn't actually support it on most platforms until clang 15.
 // Ideally there would be a better way to detect if the type
 // is supported, even in a compiler independent fashion, but
 // coming up with one has proven elusive.
-#if defined(__clang__) && (__clang_major__ >= 16) && !defined(__EMSCRIPTEN__)
+#if defined(__clang__) && (__clang_major__ >= 15) && !defined(__EMSCRIPTEN__) && !defined(__i386__)
 #if defined(__is_identifier)
 #if !__is_identifier(_Float16)
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
@@ -107,6 +121,8 @@ extern "C" {
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
 #endif
 #endif
+
+#endif  // !HALIDE_RUNTIME_ASAN_DETECTED
 
 #endif  // !COMPILING_HALIDE_RUNTIME
 
@@ -195,7 +211,7 @@ extern void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mute
 /** Functions for constructing/destroying/locking/unlocking arrays of mutexes. */
 struct halide_mutex_array;
 //@{
-extern struct halide_mutex_array *halide_mutex_array_create(int sz);
+extern struct halide_mutex_array *halide_mutex_array_create(uint64_t sz);
 extern void halide_mutex_array_destroy(void *user_context, void *array);
 extern int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
 extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
@@ -214,7 +230,7 @@ typedef int (*halide_task_t)(void *user_context, int task_number, uint8_t *closu
 extern int halide_do_par_for(void *user_context,
                              halide_task_t task,
                              int min, int size, uint8_t *closure);
-extern void halide_shutdown_thread_pool();
+extern void halide_shutdown_thread_pool(void);
 //@}
 
 /** Set a custom method for performing a parallel for loop. Returns
@@ -447,7 +463,6 @@ extern halide_get_library_symbol_t halide_set_custom_get_library_symbol(halide_g
  * Cannot be replaced in JITted code at present.
  */
 extern int32_t halide_debug_to_file(void *user_context, const char *filename,
-                                    int32_t type_code,
                                     struct halide_buffer_t *buf);
 
 /** Types in the halide type system. They can be ints, unsigned ints,
@@ -751,7 +766,7 @@ extern int halide_get_trace_file(void *user_context);
 
 /** If tracing is writing to a file. This call closes that file
  * (flushing the trace). Returns zero on success. */
-extern int halide_shutdown_trace();
+extern int halide_shutdown_trace(void);
 
 /** All Halide GPU or device backend implementations provide an
  * interface to be used with halide_device_malloc, etc. This is
@@ -1005,7 +1020,7 @@ extern void halide_memoization_cache_release(void *user_context, void *host);
 /** Free all memory and resources associated with the memoization cache.
  * Must be called at a time when no other threads are accessing the cache.
  */
-extern void halide_memoization_cache_cleanup();
+extern void halide_memoization_cache_cleanup(void);
 
 /** Verify that a given range of memory has been initialized; only used when Target::MSAN is enabled.
  *
@@ -1242,6 +1257,14 @@ enum halide_error_code_t {
     /** An explicit storage bound provided is too small to store
      * all the values produced by the function. */
     halide_error_code_storage_bound_too_small = -45,
+
+    /** A factor used to split a loop was discovered to be zero or negative at
+     * runtime. */
+    halide_error_code_split_factor_not_positive = -46,
+
+    /** "vscale" value of Scalable Vector detected in runtime does not match
+     * the vscale value used in compilation. */
+    halide_error_code_vscale_invalid = -47,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1316,6 +1339,8 @@ extern int halide_error_device_dirty_with_no_device_support(void *user_context, 
 extern int halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
                                                 int provided_size, int required_size);
 extern int halide_error_device_crop_failed(void *user_context);
+extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
+extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1356,8 +1381,6 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
     halide_target_feature_cl_atomic64,  ///< Enable 64-bit atomics operations on OpenCL targets
 
-    halide_target_feature_openglcompute,  ///< Enable OpenGL Compute runtime. NOTE: This feature is deprecated and will be removed in Halide 17.
-
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 
     halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
@@ -1386,6 +1409,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_trace_pipeline,         ///< Trace the pipeline.
     halide_target_feature_hvx_v65,                ///< Enable Hexagon v65 architecture.
     halide_target_feature_hvx_v66,                ///< Enable Hexagon v66 architecture.
+    halide_target_feature_hvx_v68,                ///< Enable Hexagon v68 architecture.
     halide_target_feature_cl_half,                ///< Enable half support on OpenCL targets
     halide_target_feature_strict_float,           ///< Turn off all non-IEEE floating-point optimization. Currently applies only to LLVM targets.
     halide_target_feature_tsan,                   ///< Enable hooks for TSAN support.
@@ -1421,6 +1445,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_vulkan_version12,       ///< Enable Vulkan v1.2 runtime target support.
     halide_target_feature_vulkan_version13,       ///< Enable Vulkan v1.3 runtime target support.
     halide_target_feature_semihosting,            ///< Used together with Target::NoOS for the baremetal target built with semihosting library and run with semihosting mode where minimum I/O communication with a host PC is available.
+    halide_target_feature_avx10_1,                ///< Intel AVX10 version 1 support. vector_bits is used to indicate width.
+    halide_target_feature_x86_apx,                ///< Intel x86 APX support. Covers initial set of features released as APX: egpr,push2pop2,ppx,ndd .
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
@@ -1548,11 +1574,11 @@ typedef struct halide_buffer_t {
         }
     }
 
-    HALIDE_ALWAYS_INLINE bool host_dirty() const {
+    HALIDE_MUST_USE_RESULT HALIDE_ALWAYS_INLINE bool host_dirty() const {
         return get_flag(halide_buffer_flag_host_dirty);
     }
 
-    HALIDE_ALWAYS_INLINE bool device_dirty() const {
+    HALIDE_MUST_USE_RESULT HALIDE_ALWAYS_INLINE bool device_dirty() const {
         return get_flag(halide_buffer_flag_device_dirty);
     }
 
@@ -1911,7 +1937,7 @@ enum {
 
 /** Get a pointer to the global profiler state for programmatic
  * inspection. Lock it before using to pause the profiler. */
-extern struct halide_profiler_state *halide_profiler_get_state();
+extern struct halide_profiler_state *halide_profiler_get_state(void);
 
 /** Get a pointer to the pipeline state associated with pipeline_name.
  * This function grabs the global profiler state's lock on entry. */
@@ -1930,14 +1956,14 @@ extern int halide_profiler_sample(struct halide_profiler_state *s, uint64_t *pre
  * running; halide_profiler_memory_allocate/free and
  * halide_profiler_stack_peak_update update the profiler pipeline's
  * state without grabbing the global profiler state's lock. */
-extern void halide_profiler_reset();
+extern void halide_profiler_reset(void);
 
 /** Reset all profiler state.
  * WARNING: Do NOT call this method while any halide pipeline is
  * running; halide_profiler_memory_allocate/free and
  * halide_profiler_stack_peak_update update the profiler pipeline's
  * state without grabbing the global profiler state's lock. */
-void halide_profiler_shutdown();
+void halide_profiler_shutdown(void);
 
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
@@ -1946,12 +1972,12 @@ extern void halide_profiler_report(void *user_context);
 /** For timer based profiling, this routine starts the timer chain running.
  * halide_get_profiler_state can be called to get the current timer interval.
  */
-extern void halide_start_timer_chain();
+extern void halide_start_timer_chain(void);
 /** These routines are called to temporarily disable and then reenable
  * timer interuppts for profiling */
 //@{
-extern void halide_disable_timer_interrupt();
-extern void halide_enable_timer_interrupt();
+extern void halide_disable_timer_interrupt(void);
+extern void halide_enable_timer_interrupt(void);
 //@}
 
 /// \name "Float16" functions

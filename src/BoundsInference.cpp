@@ -1152,7 +1152,7 @@ public:
         map<string, Function> stage_name_to_func;
 
         if (producing >= 0) {
-            fused_group.insert(make_pair(f.name(), stage_index));
+            fused_group.emplace(f.name(), stage_index);
         }
 
         if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
@@ -1164,12 +1164,12 @@ public:
                 if (!((pair.func_1 == stages[producing].name) && ((int)pair.stage_1 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
                                                                                                                              f, stage_index,
                                                                                                                              pair.func_1, pair.stage_1, var)) {
-                    fused_group.insert(make_pair(pair.func_1, pair.stage_1));
+                    fused_group.emplace(pair.func_1, pair.stage_1);
                 }
                 if (!((pair.func_2 == stages[producing].name) && ((int)pair.stage_2 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
                                                                                                                              f, stage_index,
                                                                                                                              pair.func_2, pair.stage_2, var)) {
-                    fused_group.insert(make_pair(pair.func_2, pair.stage_2));
+                    fused_group.emplace(pair.func_2, pair.stage_2);
                 }
             }
 
@@ -1383,9 +1383,14 @@ Stmt bounds_inference(Stmt s,
         fused_pairs_in_groups.push_back(pairs);
     }
 
+    // Add a note in the IR for where the outermost dynamic-stage skipping
+    // checks should go. These are injected in a later pass.
+    Expr marker = Call::make(Int(32), Call::skip_stages_marker, {}, Call::Intrinsic);
+    s = Block::make(Evaluate::make(marker), s);
+
     // Add a note in the IR for where assertions on input images
     // should go. Those are handled by a later lowering pass.
-    Expr marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);
+    marker = Call::make(Int(32), Call::add_image_checks_marker, {}, Call::Intrinsic);
     s = Block::make(Evaluate::make(marker), s);
 
     // Add a synthetic outermost loop to act as 'root'.

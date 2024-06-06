@@ -244,8 +244,6 @@ DeviceAPI Deserializer::deserialize_device_api(Serialize::DeviceAPI device_api) 
         return DeviceAPI::CUDA;
     case Serialize::DeviceAPI::OpenCL:
         return DeviceAPI::OpenCL;
-    case Serialize::DeviceAPI::OpenGLCompute:
-        return DeviceAPI::OpenGLCompute;
     case Serialize::DeviceAPI::Metal:
         return DeviceAPI::Metal;
     case Serialize::DeviceAPI::Hexagon:
@@ -506,12 +504,14 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
     const std::vector<std::string> trace_tags =
         deserialize_vector<flatbuffers::String, std::string>(function->trace_tags(),
                                                              &Deserializer::deserialize_string);
+    const bool no_profiling = function->no_profiling();
     const bool frozen = function->frozen();
     hl_function.update_with_deserialization(name, origin_name, output_types, required_types,
                                             required_dim, args, func_schedule, init_def, updates,
                                             debug_file, output_buffers, extern_arguments, extern_function_name,
                                             name_mangling, extern_function_device_api, extern_proxy_expr,
-                                            trace_loads, trace_stores, trace_realizations, trace_tags, frozen);
+                                            trace_loads, trace_stores, trace_realizations, trace_tags,
+                                            no_profiling, frozen);
 }
 
 Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt) {
@@ -1017,6 +1017,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const auto memory_type = deserialize_memory_type(func_schedule->memory_type());
     const auto memoized = func_schedule->memoized();
     const auto async = func_schedule->async();
+    const auto ring_buffer = deserialize_expr(func_schedule->ring_buffer_type(), func_schedule->ring_buffer());
     const auto memoize_eviction_key = deserialize_expr(func_schedule->memoize_eviction_key_type(), func_schedule->memoize_eviction_key());
     auto hl_func_schedule = FuncSchedule();
     hl_func_schedule.store_level() = store_level;
@@ -1029,6 +1030,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     hl_func_schedule.memory_type() = memory_type;
     hl_func_schedule.memoized() = memoized;
     hl_func_schedule.async() = async;
+    hl_func_schedule.ring_buffer() = ring_buffer;
     hl_func_schedule.memoize_eviction_key() = memoize_eviction_key;
     return hl_func_schedule;
 }

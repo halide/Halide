@@ -12,7 +12,7 @@ extern "C" {
 
 // In Clang 15 and later, this function is passed a uint16... but in the xmm0 register on x86-64.
 // So we'll declare it as a float and just grab the upper 16 bits.
-__attribute__((weak)) float __extendhfsf2(float actually_a_float16) {
+__attribute__((weak, visibility("default"))) float __extendhfsf2(float actually_a_float16) {
     uint16_t data;
     memcpy(&data, &actually_a_float16, sizeof(data));
     return (float)Halide::float16_t::make_from_bits(data);
@@ -20,7 +20,7 @@ __attribute__((weak)) float __extendhfsf2(float actually_a_float16) {
 
 #else
 
-__attribute__((weak)) float __extendhfsf2(uint16_t data) {
+__attribute__((weak, visibility("default"))) float __extendhfsf2(uint16_t data) {
     return (float)Halide::float16_t::make_from_bits(data);
 }
 
@@ -236,14 +236,14 @@ int run_test() {
         Param<float16_t> mul("mul");
 
         Func output;
-        output(x, y) = x * y * (input(x, y) * mul);
+        output(x, y) = x * y * (sqrt(input(x, y)) * mul);
 
         Var xi, yi;
         output.gpu_tile(x, y, xi, yi, 8, 8);
 
         mul.set(float16_t(2.0f));
         Buffer<float16_t> in(8, 8);
-        in.fill(float16_t(0.25f));
+        in.fill(float16_t(0.0625f));
         input.set(in);
         Buffer<float16_t> buf = output.realize({8, 8});
         for (int y = 0; y < 8; y++) {

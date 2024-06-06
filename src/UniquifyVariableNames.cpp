@@ -104,10 +104,9 @@ class UniquifyVariableNames : public IRMutator {
     }
 
     Expr visit(const Variable *op) override {
-        if (renaming.contains(op->name)) {
-            string new_name = renaming.get(op->name);
-            if (new_name != op->name) {
-                return Variable::make(op->type, new_name);
+        if (const string *new_name = renaming.find(op->name)) {
+            if (*new_name != op->name) {
+                return Variable::make(op->type, *new_name);
             }
         }
         return op;
@@ -248,7 +247,7 @@ void uniquify_variable_names_test() {
           {{x, Let::make(y.name(), 3, y)},
            {x_1, Let::make(y.name(), 4, y)}});
 
-    std::cout << "uniquify_variable_names test passed" << std::endl;
+    std::cout << "uniquify_variable_names test passed\n";
 }
 
 }  // namespace Internal

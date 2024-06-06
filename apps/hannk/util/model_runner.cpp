@@ -636,7 +636,7 @@ void ModelRunner::run(const std::string &filename) {
                     std::cout << ',' << RunNames[i] << "_matches_tflite";
                 }
             }
-            std::cout << '\n';
+            std::cout << "\n";
         }
     }
 
@@ -724,7 +724,7 @@ void ModelRunner::run(const std::string &filename) {
     }
 
     if (csv_output) {
-        std::cout << '\n';
+        std::cout << "\n";
     }
 }
 

@@ -37,7 +37,7 @@ public:
         Expr u32_1 = in_u32(x), u32_2 = in_u32(x + 16), u32_3 = in_u32(x + 32);
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
-        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_2 < -0.3f), bool_3 = (f32_3 != -0.34f);
 
         // Table copied from the Cortex-A9 TRM.
 
@@ -229,6 +229,13 @@ public:
             check(arm32 ? "vcvt.u32.f32" : "fcvtzu", 2 * w, u32(f32_1));
             check(arm32 ? "vcvt.s32.f32" : "fcvtzs", 2 * w, i32(f32_1));
             // skip the fixed point conversions for now
+
+            if (!arm32) {
+                check("fcvtmu *v", 2 * w, u32(floor(f32_1)));
+                check("fcvtpu *v", 2 * w, u32(ceil(f32_1)));
+                check("fcvtms *v", 2 * w, i32(floor(f32_1)));
+                check("fcvtps *v", 2 * w, i32(ceil(f32_1)));
+            }
 
             // VDIV     -       F, D    Divide
             // This doesn't actually get vectorized in 32-bit. Not sure cortex processors can do vectorized division.
@@ -948,8 +955,7 @@ public:
             // LLVM15 emits UZP2 if the shift amount is half the width of the vector element.
             const auto shrn_or_uzp2 = [&](int element_width, int shift_amt, int vector_width) {
                 constexpr int simd_vector_bits = 128;
-                if (Halide::Internal::get_llvm_version() >= 150 &&
-                    ((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
+                if (((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
                     shift_amt == element_width / 2) {
                     return "uzp2";
                 }

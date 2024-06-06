@@ -116,6 +116,12 @@ template<>
 inline bool convert(const int64_t &in) {
     return in != 0;
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline bool convert(const _Float16 &in) {
+    return (float)in != 0;
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline bool convert(const float &in) {
     return in != 0;
@@ -165,6 +171,12 @@ template<>
 inline uint8_t convert(const int64_t &in) {
     return convert<uint8_t, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline uint8_t convert(const _Float16 &in) {
+    return (uint8_t)std::lround((float)in * 255.0f);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint8_t convert(const float &in) {
     return (uint8_t)std::lround(in * 255.0f);
@@ -211,6 +223,12 @@ template<>
 inline uint16_t convert(const int64_t &in) {
     return convert<uint16_t, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline uint16_t convert(const _Float16 &in) {
+    return (uint16_t)std::lround((float)in * 65535.0f);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint16_t convert(const float &in) {
     return (uint16_t)std::lround(in * 65535.0f);
@@ -257,6 +275,12 @@ template<>
 inline uint32_t convert(const int64_t &in) {
     return convert<uint32_t, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline uint32_t convert(const _Float16 &in) {
+    return (uint32_t)std::llround((float)in * 4294967295.0);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint32_t convert(const float &in) {
     return (uint32_t)std::llround(in * 4294967295.0);
@@ -303,6 +327,12 @@ template<>
 inline uint64_t convert(const int64_t &in) {
     return convert<uint64_t, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline uint64_t convert(const _Float16 &in) {
+    return convert<uint64_t, uint32_t>((uint32_t)std::llround((float)in * 4294967295.0));
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline uint64_t convert(const float &in) {
     return convert<uint64_t, uint32_t>((uint32_t)std::llround(in * 4294967295.0));
@@ -349,6 +379,12 @@ template<>
 inline int8_t convert(const int64_t &in) {
     return convert<uint8_t, int64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline int8_t convert(const _Float16 &in) {
+    return convert<uint8_t, float>((float)in);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int8_t convert(const float &in) {
     return convert<uint8_t, float>(in);
@@ -395,6 +431,12 @@ template<>
 inline int16_t convert(const int64_t &in) {
     return convert<uint16_t, int64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline int16_t convert(const _Float16 &in) {
+    return convert<uint16_t, float>((float)in);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int16_t convert(const float &in) {
     return convert<uint16_t, float>(in);
@@ -441,6 +483,12 @@ template<>
 inline int32_t convert(const int64_t &in) {
     return convert<uint32_t, int64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline int32_t convert(const _Float16 &in) {
+    return convert<uint32_t, float>((float)in);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int32_t convert(const float &in) {
     return convert<uint32_t, float>(in);
@@ -487,6 +535,12 @@ template<>
 inline int64_t convert(const int64_t &in) {
     return convert<uint64_t, int64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline int64_t convert(const _Float16 &in) {
+    return convert<uint64_t, float>((float)in);
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline int64_t convert(const float &in) {
     return convert<uint64_t, float>(in);
@@ -495,6 +549,58 @@ template<>
 inline int64_t convert(const double &in) {
     return convert<uint64_t, double>(in);
 }
+
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+// Convert to f16
+template<>
+inline _Float16 convert(const bool &in) {
+    return in;
+}
+template<>
+inline _Float16 convert(const uint8_t &in) {
+    return (_Float16)(in / 255.0f);
+}
+template<>
+inline _Float16 convert(const uint16_t &in) {
+    return (_Float16)(in / 65535.0f);
+}
+template<>
+inline _Float16 convert(const uint32_t &in) {
+    return (_Float16)(in / 4294967295.0);
+}
+template<>
+inline _Float16 convert(const uint64_t &in) {
+    return convert<_Float16, uint32_t>(uint32_t(in >> 32));
+}
+template<>
+inline _Float16 convert(const int8_t &in) {
+    return convert<_Float16, uint8_t>(in);
+}
+template<>
+inline _Float16 convert(const int16_t &in) {
+    return convert<_Float16, uint16_t>(in);
+}
+template<>
+inline _Float16 convert(const int32_t &in) {
+    return convert<_Float16, uint64_t>(in);
+}
+template<>
+inline _Float16 convert(const int64_t &in) {
+    return convert<_Float16, uint64_t>(in);
+}
+template<>
+inline _Float16 convert(const _Float16 &in) {
+    return in;
+}
+template<>
+inline _Float16 convert(const float &in) {
+    return (_Float16)in;
+}
+template<>
+inline _Float16 convert(const double &in) {
+    return (_Float16)in;
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 
 // Convert to f32
 template<>
@@ -533,6 +639,12 @@ template<>
 inline float convert(const int64_t &in) {
     return convert<float, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline float convert(const _Float16 &in) {
+    return (float)in;
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline float convert(const float &in) {
     return in;
@@ -579,6 +691,12 @@ template<>
 inline double convert(const int64_t &in) {
     return convert<double, uint64_t>(in);
 }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+inline double convert(const _Float16 &in) {
+    return (double)in;
+}
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 template<>
 inline double convert(const float &in) {
     return (double)in;
@@ -1048,6 +1166,317 @@ bool save_ppm(ImageType &im, const std::string &filename) {
     return Internal::save_pnm<ImageType, check>(im, 3, filename);
 }
 
+// -------------- .npy file format
+// Based on documentation at https://numpy.org/devdocs/reference/generated/numpy.lib.format.html
+// and elsewhere
+
+#if (defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN) || defined(HALIDE_FORCE_BIG_ENDIAN)
+constexpr bool host_is_big_endian = true;
+#else
+constexpr bool host_is_big_endian = false;
+#endif
+
+constexpr char little_endian_char = '<';
+constexpr char big_endian_char = '>';
+constexpr char no_endian_char = '|';
+constexpr char host_endian_char = (host_is_big_endian ? big_endian_char : little_endian_char);
+
+struct npy_dtype_info_t {
+    char byte_order;
+    char type_code;
+    char type_bytes;
+
+    std::string descr() const {
+        return std::string(1, byte_order) + std::string(1, type_code) + std::to_string((int)type_bytes);
+    }
+};
+
+inline static const std::array<std::pair<halide_type_t, npy_dtype_info_t>, 11> npy_dtypes = {{
+    {halide_type_t(halide_type_float, 16), {host_endian_char, 'f', 2}},
+    {halide_type_of<float>(), {host_endian_char, 'f', sizeof(float)}},
+    {halide_type_of<double>(), {host_endian_char, 'f', sizeof(double)}},
+    {halide_type_of<int8_t>(), {no_endian_char, 'i', sizeof(int8_t)}},
+    {halide_type_of<int16_t>(), {host_endian_char, 'i', sizeof(int16_t)}},
+    {halide_type_of<int32_t>(), {host_endian_char, 'i', sizeof(int32_t)}},
+    {halide_type_of<int64_t>(), {host_endian_char, 'i', sizeof(int64_t)}},
+    {halide_type_of<uint8_t>(), {no_endian_char, 'u', sizeof(uint8_t)}},
+    {halide_type_of<uint16_t>(), {host_endian_char, 'u', sizeof(uint16_t)}},
+    {halide_type_of<uint32_t>(), {host_endian_char, 'u', sizeof(uint32_t)}},
+    {halide_type_of<uint64_t>(), {host_endian_char, 'u', sizeof(uint64_t)}},
+}};
+
+inline static const std::array<char, 6> npy_magic_string = {'\x93', 'N', 'U', 'M', 'P', 'Y'};
+inline static const std::array<char, 2> npy_v1_bytes = {'\x01', '\x00'};
+
+inline std::string trim_whitespace(const std::string &s) {
+    const size_t first = s.find_first_not_of(" \t\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+    const size_t last = s.find_last_not_of(" \t\n");
+    return s.substr(first, (last - first + 1));
+}
+
+struct NpyHeader {
+    char type_code;
+    int type_bytes;
+    std::vector<int> extents;
+
+    bool parse(const std::string &header) {
+        const char *ptr = &header[0];
+        if (*ptr++ != '{') {
+            return false;
+        }
+        while (true) {
+            char endian;
+            int consumed;
+            if (std::sscanf(ptr, "'descr': '%c%c%d'%n", &endian, &type_code, &type_bytes, &consumed) == 3) {
+                if (endian != '<' && endian != '|') {
+                    return false;
+                }
+                ptr += consumed;
+            } else if (std::strncmp(ptr, "'fortran_order': False", 22) == 0) {
+                ptr += 22;
+            } else if (std::strncmp(ptr, "'shape': (", 10) == 0) {
+                ptr += 10;
+                int n;
+                while (std::sscanf(ptr, "%d%n", &n, &consumed) == 1) {
+                    extents.push_back(n);
+                    ptr += consumed;
+                    if (*ptr == ',') {
+                        ptr++;
+                    }
+                    if (*ptr == ' ') {
+                        ptr++;
+                    }
+                }
+                if (*ptr++ != ')') {
+                    return false;
+                }
+            } else if (*ptr == '}') {
+                return true;
+            } else {
+                return false;
+            }
+            if (*ptr == ',') {
+                ptr++;
+            }
+            if (*ptr == ' ') {
+                ptr++;
+            }
+            assert(ptr <= &header.back());
+        }
+    }
+};
+
+// return true iff the buffer storage has no padding between
+// any elements, and is in strictly planar order.
+template<typename ImageType>
+bool buffer_is_compact_planar(ImageType &im) {
+    const halide_type_t im_type = im.type();
+    const size_t elem_size = (im_type.bits / 8);
+    if (((const uint8_t *)im.begin() + (im.number_of_elements() * elem_size)) != (const uint8_t *)im.end()) {
+        return false;
+    }
+    for (int d = 1; d < im.dimensions(); ++d) {
+        if (im.dim(d - 1).stride() > im.dim(d).stride()) {
+            return false;
+        }
+        // Strides can only match if the previous dimension has extent 1
+        // (this can happen when artificially adding dimension(s), e.g.
+        // to write a .tmp file)
+        if (im.dim(d - 1).stride() == im.dim(d).stride() && im.dim(d - 1).extent() != 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool load_npy(const std::string &filename, ImageType *im) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    FileOpener f(filename, "rb");
+    if (!check(f.f != nullptr, "File could not be opened for reading")) {
+        return false;
+    }
+
+    char magic_and_version[8];
+    if (!check(f.read_bytes(magic_and_version, 8), "Could not read .npy header")) {
+        return false;
+    }
+    if (memcmp(magic_and_version, npy_magic_string.data(), npy_magic_string.size()) != 0) {
+        return check(false, "Bad .npy magic string");
+    }
+    if ((magic_and_version[6] != 1 && magic_and_version[6] != 2 && magic_and_version[6] != 3) || magic_and_version[7] != 0) {
+        return check(false, "Bad .npy version");
+    }
+    size_t header_len;
+    uint8_t header_len_le[4];
+    if (magic_and_version[6] == 1) {
+        if (!check(f.read_bytes(header_len_le, 2), "Could not read .npy header")) {
+            return false;
+        }
+        header_len = (header_len_le[0] << 0) | (header_len_le[1] << 8);
+        if (!check((6 + 2 + 2 + header_len) % 64 == 0, ".npy header is not aligned properly")) {
+            return false;
+        }
+    } else {
+        if (!check(f.read_bytes(header_len_le, 4), "Could not read .npy header")) {
+            return false;
+        }
+        header_len = (header_len_le[0] << 0) | (header_len_le[1] << 8) | (header_len_le[2] << 16) | (header_len_le[3] << 24);
+        if (!check((6 + 2 + 4 + header_len) % 64 == 0, ".npy header is not aligned properly")) {
+            return false;
+        }
+    }
+
+    std::string header(header_len + 1, ' ');
+    if (!check(f.read_bytes(header.data(), header_len), "Could not read .npy header string")) {
+        return false;
+    }
+
+    NpyHeader h;
+    if (!check(h.parse(header), "Could not parse .npy header dict")) {
+        return false;
+    }
+
+    halide_type_t im_type((halide_type_code_t)0, 0, 0);
+    for (const auto &d : npy_dtypes) {
+        if (h.type_code == d.second.type_code && h.type_bytes == d.second.type_bytes) {
+            im_type = d.first;
+            break;
+        }
+    }
+    if (!check(im_type.bits != 0, "Unsupported type in load_npy")) {
+        return false;
+    }
+
+    *im = ImageType(im_type, h.extents);
+
+    // This should never fail unless the default Buffer<> constructor behavior changes.
+    if (!check(buffer_is_compact_planar(*im), "load_npy() requires compact planar images")) {
+        return false;
+    }
+
+    if (!check(f.read_bytes(im->begin(), im->size_in_bytes()), "Count not read .npy payload")) {
+        return false;
+    }
+
+    im->set_host_dirty();
+    return true;
+}
+
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool write_planar_payload(ImageType &im, FileOpener &f) {
+    if (im.dimensions() == 0 || buffer_is_compact_planar(im)) {
+        // Contiguous buffer! Write it all in one swell foop.
+        if (!check(f.write_bytes(im.begin(), im.size_in_bytes()), "Count not write planar payload")) {
+            return false;
+        }
+    } else {
+        // We have to do this the hard way.
+        int d = im.dimensions() - 1;
+        for (int i = im.dim(d).min(); i <= im.dim(d).max(); i++) {
+            auto slice = im.sliced(d, i);
+            if (!write_planar_payload(slice, f)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool save_npy(ImageType &im, const std::string &filename) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    if (!check(im.copy_to_host() == halide_error_code_success, "copy_to_host() failed.")) {
+        return false;
+    }
+
+    const halide_type_t im_type = im.type();
+    npy_dtype_info_t di = {0, 0, 0};
+    for (const auto &d : npy_dtypes) {
+        if (d.first == im_type) {
+            di = d.second;
+            break;
+        }
+    }
+    if (!check(di.byte_order != 0, "Unsupported type in save_npy")) {
+        return false;
+    }
+
+    std::string shape = "(";
+    for (int d = 0; d < im.dimensions(); ++d) {
+        if (d > 0) {
+            shape += ",";
+        }
+        shape += std::to_string(im.dim(d).extent());
+        if (im.dimensions() == 1) {
+            shape += ",";  // special-case for single-element tuples
+        }
+    }
+    shape += ")";
+
+    std::string header_dict_str = "{'descr': '" + di.descr() + "', 'fortran_order': False, 'shape': " + shape + "}\n";
+
+    const size_t unpadded_length = npy_magic_string.size() + npy_v1_bytes.size() + 2 + header_dict_str.size();
+    const size_t padded_length = (unpadded_length + 64 - 1) & ~(64 - 1);
+    const size_t padding = padded_length - unpadded_length;
+    header_dict_str += std::string(padding, ' ');
+
+    if (!check(header_dict_str.size() <= 65535, "Header is too large for v1 .npy file")) {
+        return false;
+    }
+    const uint16_t header_len = (uint16_t)(header_dict_str.size());
+    const uint8_t header_len_le[2] = {
+        (uint8_t)((header_len >> 0) & 0xff),
+        (uint8_t)((header_len >> 8) & 0xff)};
+
+    FileOpener f(filename, "wb");
+    if (!check(f.write_bytes(npy_magic_string.data(), npy_magic_string.size()), ".npy write failed")) {
+        return false;
+    }
+    if (!check(f.write_bytes(npy_v1_bytes.data(), npy_v1_bytes.size()), ".npy write failed")) {
+        return false;
+    }
+    if (!check(f.write_bytes(header_len_le, 2), ".npy write failed")) {
+        return false;
+    }
+    if (!check(f.write_bytes(header_dict_str.data(), header_dict_str.size()), ".npy write failed")) {
+        return false;
+    }
+
+    if (!write_planar_payload<ImageType, check>(im, f)) {
+        return false;
+    }
+
+    return true;
+}
+
+inline const std::set<FormatInfo> &query_npy() {
+    auto build_set = []() -> std::set<FormatInfo> {
+        // NumPy doesn't support bfloat16, not sure if they plan to,
+        // so we don't attempt to support it here
+        std::set<FormatInfo> s;
+        for (halide_type_code_t code : {halide_type_int, halide_type_uint, halide_type_float}) {
+            for (int bits : {8, 16, 32, 64}) {
+                if (code == halide_type_float && bits < 16) {
+                    continue;
+                }
+                for (int dims : {1, 2, 3, 4}) {
+                    s.insert({halide_type_t(code, bits), dims});
+                }
+            }
+        }
+        return s;
+    };
+
+    static std::set<FormatInfo> info = build_set();
+    return info;
+}
+
 #ifndef HALIDE_NO_JPEG
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
@@ -1175,29 +1604,6 @@ inline const halide_type_t *tmp_code_to_halide_type() {
     return tmp_code_to_halide_type_;
 }
 
-// return true iff the buffer storage has no padding between
-// any elements, and is in strictly planar order.
-template<typename ImageType>
-bool buffer_is_compact_planar(ImageType &im) {
-    const halide_type_t im_type = im.type();
-    const size_t elem_size = (im_type.bits / 8);
-    if (((const uint8_t *)im.begin() + (im.number_of_elements() * elem_size)) != (const uint8_t *)im.end()) {
-        return false;
-    }
-    for (int d = 1; d < im.dimensions(); ++d) {
-        if (im.dim(d - 1).stride() > im.dim(d).stride()) {
-            return false;
-        }
-        // Strides can only match if the previous dimension has extent 1
-        // (this can happen when artificially adding dimension(s), e.g.
-        // to write a .tmp file)
-        if (im.dim(d - 1).stride() == im.dim(d).stride() && im.dim(d - 1).extent() != 1) {
-            return false;
-        }
-    }
-    return true;
-}
-
 // ".tmp" is a file format used by the ImageStack tool (see https://github.com/abadams/ImageStack)
 template<typename ImageType, CheckFunc check = CheckReturn>
 bool load_tmp(const std::string &filename, ImageType *im) {
@@ -1251,26 +1657,6 @@ inline const std::set<FormatInfo> &query_tmp() {
         {halide_type_t(halide_type_int, 64), 4},
     };
     return info;
-}
-
-template<typename ImageType, CheckFunc check = CheckReturn>
-bool write_planar_payload(ImageType &im, FileOpener &f) {
-    if (im.dimensions() == 0 || buffer_is_compact_planar(im)) {
-        // Contiguous buffer! Write it all in one swell foop.
-        if (!check(f.write_bytes(im.begin(), im.size_in_bytes()), "Count not write .tmp payload")) {
-            return false;
-        }
-    } else {
-        // We have to do this the hard way.
-        int d = im.dimensions() - 1;
-        for (int i = im.dim(d).min(); i <= im.dim(d).max(); i++) {
-            auto slice = im.sliced(d, i);
-            if (!write_planar_payload(slice, f)) {
-                return false;
-            }
-        }
-    }
-    return true;
 }
 
 // ".tmp" is a file format used by the ImageStack tool (see https://github.com/abadams/ImageStack)
@@ -1455,6 +1841,9 @@ bool load_mat(const std::string &filename, ImageType *im) {
     case miDOUBLE:
         type = halide_type_of<double>();
         break;
+    default:
+        check(false, "Unknown header");
+        return false;
     }
 
     *im = ImageType(type, extents);
@@ -2000,6 +2389,7 @@ bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result
         {"jpeg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
         {"jpg", {load_jpg<ImageType, check>, save_jpg<ConstImageType, check>, query_jpg}},
 #endif
+        {"npy", {load_npy<ImageType, check>, save_npy<ConstImageType, check>, query_npy}},
         {"pgm", {load_pgm<ImageType, check>, save_pgm<ConstImageType, check>, query_pgm}},
 #ifndef HALIDE_NO_PNG
         {"png", {load_png<ImageType, check>, save_png<ConstImageType, check>, query_png}},
@@ -2106,6 +2496,10 @@ struct ImageTypeConversion {
 
         const halide_type_t src_type = src.type();
         switch (src_type.element_of().as_u32()) {
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+        case halide_type_t(halide_type_float, 16).as_u32():
+            return convert_image<DstElemType>(src.template as<_Float16, AnyDims>());
+#endif
         case halide_type_t(halide_type_float, 32).as_u32():
             return convert_image<DstElemType>(src.template as<float, AnyDims>());
         case halide_type_t(halide_type_float, 64).as_u32():
@@ -2151,6 +2545,10 @@ struct ImageTypeConversion {
         // Call the appropriate static-to-static conversion routine
         // based on the desired dst type.
         switch (dst_type.element_of().as_u32()) {
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+        case halide_type_t(halide_type_float, 16).as_u32():
+            return convert_image<_Float16>(src);
+#endif
         case halide_type_t(halide_type_float, 32).as_u32():
             return convert_image<float>(src);
         case halide_type_t(halide_type_float, 64).as_u32():
@@ -2312,7 +2710,7 @@ public:
     operator ImageType() {
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_d;
-        (void)load<DynamicImageType, Internal::CheckFail>(filename, &im_d);
+        Internal::CheckFail(load<DynamicImageType, Internal::CheckFail>(filename, &im_d), "load() failed");
         Internal::CheckFail(ImageType::can_convert_from(im_d),
                             "Type mismatch assigning the result of load_image. "
                             "Did you mean to use load_and_convert_image?");
@@ -2335,7 +2733,7 @@ public:
     inline operator ImageType() {
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_d;
-        (void)load<DynamicImageType, Internal::CheckFail>(filename, &im_d);
+        Internal::CheckFail(load<DynamicImageType, Internal::CheckFail>(filename, &im_d), "load() failed");
         const halide_type_t expected_type = ImageType::static_halide_type();
         if (im_d.type() == expected_type) {
             return im_d.template as<typename ImageType::ElemType, Internal::AnyDims>();

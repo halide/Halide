@@ -2204,6 +2204,89 @@ int two_compute_at_test() {
     return 0;
 }
 
+// Test for the issue described in https://github.com/halide/Halide/issues/8149.
+int child_var_dependent_bounds_test() {
+    Func f{"f"}, g{"g"};
+    Var x{"x"}, y{"y"};
+    RDom r(0, 10, "r");
+
+    Func f_inter{"f_inter"}, g_inter{"g_inter"};
+
+    f_inter(x, y) = x;
+    f_inter(x, y) += 1;
+    f(x) = x;
+    f(x) += f_inter(x, r);
+
+    g_inter(x, y) = x;
+    g_inter(x, y) += 1;
+    g(x) = x;
+    g(x) += g_inter(x, r);
+
+    f_inter.compute_at(f, r);
+    g_inter.compute_at(f, r);
+    g.update().compute_with(f.update(), r);
+    f.update().unscheduled();
+
+    Pipeline p({f, g});
+
+    p.compile_jit();
+    Buffer<int> f_buf(10), g_buf(10);
+
+    f_buf.set_min(2);
+    p.realize({f_buf, g_buf});
+    f_buf.set_min(0);
+
+    for (int i = 0; i < 10; i++) {
+        int correct_f = 10 + 11 * (i + 2);
+        int correct_g = 10 + 11 * i;
+        if (f_buf(i) != correct_f) {
+            printf("f(%d) = %d instead of %d\n", i, f_buf(i), correct_f);
+        }
+        if (g_buf(i) != correct_g) {
+            printf("g(%d) = %d instead of %d\n", i, g_buf(i), correct_f);
+        }
+    }
+
+    return 0;
+}
+
+int overlapping_updates_test() {
+    Func f{"f"}, g{"g"};
+    Var x{"x"};
+
+    f(x) = 0;
+    f(x) += x;
+    g(x) = 0;
+    g(x) += x;
+
+    g.update().compute_with(f.update(), x);
+    f.update().unscheduled();
+
+    Pipeline p({f, g});
+
+    p.compile_jit();
+    Buffer<int> f_buf(10), g_buf(10);
+
+    f_buf.set_min(2);
+    p.realize({f_buf, g_buf});
+    f_buf.set_min(0);
+
+    for (int i = 0; i < 10; i++) {
+        int correct_f = i + 2;
+        int correct_g = i;
+        if (f_buf(i) != correct_f) {
+            printf("f(%d) = %d instead of %d\n", i, f_buf(i), correct_f);
+            return 1;
+        }
+        if (g_buf(i) != correct_g) {
+            printf("g(%d) = %d instead of %d\n", i, g_buf(i), correct_f);
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -2247,7 +2330,9 @@ int main(int argc, char **argv) {
         {"different arg number compute_at test", different_arg_num_compute_at_test},
         {"store_at different levels test", store_at_different_levels_test},
         {"rvar bounds test", rvar_bounds_test},
-        {"two_compute_at test", two_compute_at_test},
+        {"two compute at test", two_compute_at_test},
+        {"overlapping updates test", overlapping_updates_test},
+        {"child var dependent bounds test", child_var_dependent_bounds_test},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;

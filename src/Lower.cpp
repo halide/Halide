@@ -9,6 +9,7 @@
 #include "AddAtomicMutex.h"
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
+#include "AddSplitFactorChecks.h"
 #include "AllocationBoundsInference.h"
 #include "AsyncProducers.h"
 #include "BoundConstantExtentLoops.h"
@@ -67,6 +68,7 @@
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "StrictifyFloat.h"
+#include "StripAsserts.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
@@ -89,15 +91,39 @@ namespace {
 
 class LoweringLogger {
     Stmt last_written;
+    std::chrono::time_point<std::chrono::high_resolution_clock> last_time;
+    std::vector<std::pair<double, std::string>> timings;
+    bool time_lowering_passes = false;
 
 public:
+    LoweringLogger() {
+        last_time = std::chrono::high_resolution_clock::now();
+        static bool should_time = !get_env_variable("HL_TIME_LOWERING_PASSES").empty();
+        time_lowering_passes = should_time;
+    }
+
     void operator()(const string &message, const Stmt &s) {
+        auto t = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = t - last_time;
         if (!s.same_as(last_written)) {
             debug(2) << message << "\n"
                      << s << "\n";
             last_written = s;
+            last_time = t;
         } else {
             debug(2) << message << " (unchanged)\n\n";
+            last_time = t;
+        }
+        timings.emplace_back(diff.count() * 1000, message);
+    }
+
+    ~LoweringLogger() {
+        if (time_lowering_passes) {
+            debug(0) << "Lowering pass runtimes:\n";
+            std::sort(timings.begin(), timings.end());
+            for (const auto &p : timings) {
+                debug(0) << " " << p.first << " ms : " << p.second << "\n";
+            }
         }
     }
 };
@@ -182,6 +208,10 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
     log("Lowering after computation bounds inference:", s);
 
+    debug(1) << "Asserting that all split factors are positive...\n";
+    s = add_split_factor_checks(s, env);
+    log("Lowering after asserting that all split factors are positive:", s);
+
     debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);
     log("Lowering after removing extern loops:", s);
@@ -211,7 +241,6 @@ void lower_impl(const vector<Function> &output_funcs,
 
     bool will_inject_host_copies =
         (t.has_gpu_feature() ||
-         t.has_feature(Target::OpenGLCompute) ||
          t.has_feature(Target::HexagonDma) ||
          (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
 
@@ -240,7 +269,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after discarding safe promises:", s);
 
     debug(1) << "Dynamically skipping stages...\n";
-    s = skip_stages(s, order);
+    s = skip_stages(s, outputs, fused_groups, env);
     log("Lowering after dynamically skipping stages:", s);
 
     debug(1) << "Forking asynchronous producers...\n";
@@ -251,11 +280,7 @@ void lower_impl(const vector<Function> &output_funcs,
     s = split_tuples(s, env);
     log("Lowering after destructuring tuple-valued realizations:", s);
 
-    // OpenGL relies on GPU var canonicalization occurring before
-    // storage flattening.
-    if (t.has_gpu_feature() ||
-        t.has_feature(Target::Vulkan) ||
-        t.has_feature(Target::OpenGLCompute)) {
+    if (t.has_gpu_feature()) {
         debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
         log("Lowering after canonicalizing GPU var names:", s);
@@ -271,7 +296,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after storage flattening:", s);
 
     debug(1) << "Adding atomic mutex allocation...\n";
-    s = add_atomic_mutex(s, env);
+    s = add_atomic_mutex(s, outputs);
     log("Lowering after adding atomic mutex allocation:", s);
 
     debug(1) << "Unpacking buffer arguments...\n";
@@ -303,7 +328,7 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
-    log("Lowering after second simplifcation:", s);
+    log("Lowering after second simplification:", s);
 
     debug(1) << "Reduce prefetch dimension...\n";
     s = reduce_prefetch_dimension(s, t);
@@ -327,8 +352,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after vectorizing:", s);
 
     if (t.has_gpu_feature() ||
-        t.has_feature(Target::Vulkan) ||
-        t.has_feature(Target::OpenGLCompute)) {
+        t.has_feature(Target::Vulkan)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         log("Lowering after injecting per-block gpu synchronization:", s);
@@ -381,7 +405,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
         debug(1) << "Injecting profiling...\n";
-        s = inject_profiling(s, pipeline_name);
+        s = inject_profiling(s, pipeline_name, env);
         log("Lowering after injecting profiling:", s);
     }
 
@@ -424,6 +448,12 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Hoisting prefetches...\n";
     s = hoist_prefetches(s);
     log("Lowering after hoisting prefetches:", s);
+
+    if (t.has_feature(Target::NoAsserts)) {
+        debug(1) << "Stripping asserts...\n";
+        s = strip_asserts(s);
+        log("Lowering after stripping asserts:", s);
+    }
 
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";

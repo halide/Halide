@@ -98,11 +98,11 @@ static constexpr uint64_t trace_buf_size = 4096;
 WEAK char trace_buf[trace_buf_size] = {};
 WEAK int trace_indent = 0;
 
-struct trace : public BasicPrinter<trace_buf_size> {
+struct trace : public PrinterBase {
     ScopedMutexLock lock;
 
     explicit trace(void *user_context = nullptr)
-        : BasicPrinter<trace_buf_size>(user_context, trace_buf),
+        : PrinterBase(user_context, trace_buf, trace_buf_size),
           lock(&trace_lock) {
         for (int i = 0; i < trace_indent; i++) {
             *this << "    ";

@@ -10,6 +10,7 @@ set(HEADER_FILES
     AddAtomicMutex.h
     AddImageChecks.h
     AddParameterChecks.h
+    AddSplitFactorChecks.h
     AlignLoads.h
     AllocationBoundsInference.h
     ApplySplit.h
@@ -22,7 +23,7 @@ set(HEADER_FILES
     Bounds.h
     BoundsInference.h
     BoundConstantExtentLoops.h
-    BoundSmallAllocations.h    
+    BoundSmallAllocations.h
     Buffer.h
     Callable.h
     CanonicalizeGPUVars.h
@@ -35,7 +36,6 @@ set(HEADER_FILES
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
     CodeGen_OpenCL_Dev.h
-    CodeGen_OpenGLCompute_Dev.h
     CodeGen_Posix.h
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
@@ -45,6 +45,8 @@ set(HEADER_FILES
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
+    ConstantBounds.h
+    ConstantInterval.h
     CSE.h
     Debug.h
     DebugArguments.h
@@ -156,6 +158,7 @@ set(HEADER_FILES
     StorageFlattening.h
     StorageFolding.h
     StrictifyFloat.h
+    StripAsserts.h
     Substitute.h
     Target.h
     Tracing.h
@@ -179,6 +182,7 @@ set(SOURCE_FILES
     AddAtomicMutex.cpp
     AddImageChecks.cpp
     AddParameterChecks.cpp
+    AddSplitFactorChecks.cpp
     AlignLoads.cpp
     AllocationBoundsInference.cpp
     ApplySplit.cpp
@@ -206,7 +210,6 @@ set(SOURCE_FILES
     CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
     CodeGen_OpenCL_Dev.cpp
-    CodeGen_OpenGLCompute_Dev.cpp
     CodeGen_Posix.cpp
     CodeGen_PowerPC.cpp
     CodeGen_PTX_Dev.cpp
@@ -218,6 +221,8 @@ set(SOURCE_FILES
     CodeGen_X86.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
+    ConstantBounds.cpp
+    ConstantInterval.cpp
     CSE.cpp
     Debug.cpp
     DebugArguments.cpp
@@ -340,6 +345,7 @@ set(SOURCE_FILES
     StorageFlattening.cpp
     StorageFolding.cpp
     StrictifyFloat.cpp
+    StripAsserts.cpp
     Substitute.cpp
     Target.cpp
     Tracing.cpp
@@ -548,7 +554,7 @@ set_target_properties(Halide PROPERTIES
 # Note that we (deliberately) redeclare these versions here, even though the macros
 # with identical versions are expected to be defined in source; this allows us to
 # ensure that the versions defined between all build systems are identical.
-target_compile_definitions(Halide PUBLIC 
+target_compile_definitions(Halide PUBLIC
                            HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
                            HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
                            HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
@@ -575,73 +581,7 @@ endif ()
 ##
 # Set compiler options for libHalide
 ##
-
-target_compile_options(
-        Halide
-        PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
-
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Woverloaded-virtual>
-
-        $<$<CXX_COMPILER_ID:GNU>:-Wsuggest-override>
-
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
-
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-field-initializers>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-old-style-cast>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-sign-conversion>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-switch-enum>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undef>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-function>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-macros>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-parameter>
-
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat-pedantic>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-cast-align>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-comma>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-covered-switch-default>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation-unknown-command>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-exit-time-destructors>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-global-constructors>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-float-conversion>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-conversion>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-float-conversion>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-missing-prototypes>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nonportable-system-include-path>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-reserved-id-macro>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field-in-constructor>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
-
-        # This warning was removed in Clang 13
-        $<$<AND:$<CXX_COMPILER_ID:Clang,AppleClang>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,13.0>>:-Wno-return-std-move-in-c++11>
-
-        $<$<CXX_COMPILER_ID:MSVC>:/W3>
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 4141: 'inline' used more than once
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # 4146: unary minus applied to unsigned type
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: conversion from 'size_t' to 'int', possible loss of data
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # 4291: No matching operator delete found
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4503>  # 4503: disable "decorated name length exceeded, name was truncated"
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # 4800: forcing value to bool 'true' or 'false' (performance warning)
-
-        # No: enable deprecation warnings
-        # $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
-)
+set_halide_compiler_warnings(Halide)
 
 if (CMAKE_GENERATOR MATCHES "Visual Studio")
     # We could expose the /MP flag to all targets, but that might end up saturating the build
@@ -676,11 +616,6 @@ endif ()
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
-endif ()
-
-option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
-if (TARGET_OPENGLCOMPUTE)
-    target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
 
 if (TARGET_VULKAN)

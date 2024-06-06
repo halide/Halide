@@ -674,6 +674,7 @@ const char *const intrinsic_op_names[] = {
     "shift_right",
     "signed_integer_overflow",
     "size_of_halide_buffer_t",
+    "skip_stages_marker",
     "sliding_window_marker",
     "sorted_avg",
     "strict_float",
@@ -689,6 +690,7 @@ const char *const intrinsic_op_names[] = {
     "widening_shift_left",
     "widening_shift_right",
     "widening_sub",
+    "get_runtime_vscale",
 };
 
 static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,

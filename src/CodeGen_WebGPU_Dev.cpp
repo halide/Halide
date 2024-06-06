@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_WebGPU_Dev.h"
@@ -603,22 +604,18 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const FloatImm *op) {
 
 namespace {
 string simt_intrinsic(const string &name) {
-    if (ends_with(name, ".__thread_id_x")) {
+    if (ends_with(name, gpu_thread_name(0))) {
         return "local_id.x";
-    } else if (ends_with(name, ".__thread_id_y")) {
+    } else if (ends_with(name, gpu_thread_name(1))) {
         return "local_id.y";
-    } else if (ends_with(name, ".__thread_id_z")) {
+    } else if (ends_with(name, gpu_thread_name(2))) {
         return "local_id.z";
-    } else if (ends_with(name, ".__thread_id_w")) {
-        user_error << "WebGPU does not support more than three dimensions.\n";
-    } else if (ends_with(name, ".__block_id_x")) {
+    } else if (ends_with(name, gpu_block_name(0))) {
         return "group_id.x";
-    } else if (ends_with(name, ".__block_id_y")) {
+    } else if (ends_with(name, gpu_block_name(1))) {
         return "group_id.y";
-    } else if (ends_with(name, ".__block_id_z")) {
+    } else if (ends_with(name, gpu_block_name(2))) {
         return "group_id.z";
-    } else if (ends_with(name, ".__block_id_w")) {
-        user_error << "WebGPU does not support more than three dimensions.\n";
     }
     internal_error << "invalid simt_intrinsic name: " << name << "\n";
     return "";
@@ -646,10 +643,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
     user_assert(loop->for_type != ForType::GPULane)
         << "The WebGPU backend does not support the gpu_lanes() directive.";
 
-    if (is_gpu_var(loop->name)) {
-        internal_assert((loop->for_type == ForType::GPUBlock) ||
-                        (loop->for_type == ForType::GPUThread))
-            << "kernel loop must be either gpu block or gpu thread\n";
+    if (is_gpu(loop->for_type)) {
         internal_assert(is_const_zero(loop->min));
 
         stream << get_indent()
@@ -684,8 +678,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
 
     // Get the allocation type, which may be different from the result type.
     Type alloc_type = result_type;
-    if (allocations.contains(op->name)) {
-        alloc_type = allocations.get(op->name).type;
+    if (const auto *alloc = allocations.find(op->name)) {
+        alloc_type = alloc->type;
     } else if (workgroup_allocations.count(op->name)) {
         alloc_type = workgroup_allocations.at(op->name)->type;
     }
@@ -826,8 +820,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
 
     // Get the allocation type, which may be different from the value type.
     Type alloc_type = value_type;
-    if (allocations.contains(op->name)) {
-        alloc_type = allocations.get(op->name).type;
+    if (const auto *alloc = allocations.find(op->name)) {
+        alloc_type = alloc->type;
     } else if (workgroup_allocations.count(op->name)) {
         alloc_type = workgroup_allocations.at(op->name)->type;
     }

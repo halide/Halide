@@ -174,11 +174,9 @@ string CodeGen_RISCV::mattrs() const {
 
     if (target.has_feature(Target::RVV)) {
         attrs.emplace_back("+v");
-#if LLVM_VERSION >= 160
         if (target.vector_bits != 0) {
             attrs.push_back("+zvl" + std::to_string(target.vector_bits) + "b");
         }
-#endif
     }
     return join_strings(attrs, ",");
 }

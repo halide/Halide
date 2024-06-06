@@ -7,7 +7,7 @@ namespace Internal {
 
 using std::vector;
 
-Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
+Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
     if (op->is_extract_element()) {
         int index = op->indices[0];
         internal_assert(index >= 0);
@@ -18,7 +18,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                     // the same shuffle back.
                     break;
                 } else {
-                    return extract_lane(mutate(vector, bounds), index);
+                    return extract_lane(mutate(vector, info), index);
                 }
             }
             index -= vector.type().lanes();
@@ -29,20 +29,17 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     vector<Expr> new_vectors;
     bool changed = false;
     for (const Expr &vector : op->vectors) {
-        ExprInfo v_bounds;
-        Expr new_vector = mutate(vector, &v_bounds);
+        ExprInfo v_info;
+        Expr new_vector = mutate(vector, &v_info);
         if (!vector.same_as(new_vector)) {
             changed = true;
         }
-        if (bounds) {
+        if (info) {
             if (new_vectors.empty()) {
-                *bounds = v_bounds;
+                *info = v_info;
             } else {
-                bounds->min_defined &= v_bounds.min_defined;
-                bounds->max_defined &= v_bounds.max_defined;
-                bounds->min = std::min(bounds->min, v_bounds.min);
-                bounds->max = std::max(bounds->max, v_bounds.max);
-                bounds->alignment = ModulusRemainder::unify(bounds->alignment, v_bounds.alignment);
+                info->bounds = ConstantInterval::make_union(info->bounds, v_info.bounds);
+                info->alignment = ModulusRemainder::unify(info->alignment, v_info.alignment);
             }
         }
         new_vectors.push_back(new_vector);
@@ -141,7 +138,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 }
             }
             if (can_collapse) {
-                return mutate(Ramp::make(r->base, r->stride / terms, r->lanes * terms), bounds);
+                return mutate(Ramp::make(r->base, r->stride / terms, r->lanes * terms), info);
             }
         }
 
@@ -272,7 +269,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
             if (cast->type.bits() > cast->value.type().bits()) {
                 return mutate(Cast::make(cast->type.with_lanes(op->type.lanes()),
                                          Shuffle::make({cast->value}, op->indices)),
-                              bounds);
+                              info);
             }
         }
     }

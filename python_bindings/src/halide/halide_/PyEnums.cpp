@@ -25,7 +25,6 @@ void define_enums(py::module &m) {
         .value("CUDA", DeviceAPI::CUDA)
         .value("Vulkan", DeviceAPI::Vulkan)
         .value("OpenCL", DeviceAPI::OpenCL)
-        .value("OpenGLCompute", DeviceAPI::OpenGLCompute)
         .value("Metal", DeviceAPI::Metal)
         .value("Hexagon", DeviceAPI::Hexagon);
 
@@ -137,7 +136,6 @@ void define_enums(py::module &m) {
         .value("CLDoubles", Target::Feature::CLDoubles)
         .value("CLHalf", Target::Feature::CLHalf)
         .value("CLAtomics64", Target::Feature::CLAtomics64)
-        .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
         .value("Profile", Target::Feature::Profile)
@@ -150,6 +148,7 @@ void define_enums(py::module &m) {
         .value("HVX_v62", Target::Feature::HVX_v62)
         .value("HVX_v65", Target::Feature::HVX_v65)
         .value("HVX_v66", Target::Feature::HVX_v66)
+        .value("HVX_v68", Target::Feature::HVX_v68)
         .value("FuzzFloatStores", Target::Feature::FuzzFloatStores)
         .value("SoftFloatABI", Target::Feature::SoftFloatABI)
         .value("MSAN", Target::Feature::MSAN)
@@ -194,6 +193,8 @@ void define_enums(py::module &m) {
         .value("VulkanV12", Target::VulkanV12)
         .value("VulkanV13", Target::VulkanV13)
         .value("Semihosting", Target::Feature::Semihosting)
+        .value("AVX10_1", Target::Feature::AVX10_1)
+        .value("X86APX", Target::Feature::X86APX)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

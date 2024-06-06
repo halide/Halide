@@ -1,6 +1,7 @@
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -28,6 +29,14 @@ namespace {
 // existing flags, so that instruction patterns can just check for the
 // oldest feature flag that supports an instruction.
 Target complete_x86_target(Target t) {
+    if (t.has_feature(Target::AVX10_1)) {
+        if (t.vector_bits >= 256) {
+            t.set_feature(Target::AVX2);
+        }
+        if (t.vector_bits >= 512) {
+            t.set_feature(Target::AVX512_SapphireRapids);
+        }
+    }
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
         t.set_feature(Target::AVX512_Zen4);
     }
@@ -54,6 +63,7 @@ Target complete_x86_target(Target t) {
     if (t.has_feature(Target::AVX)) {
         t.set_feature(Target::SSE41);
     }
+
     return t;
 }
 
@@ -528,7 +538,7 @@ void CodeGen_X86::visit(const Cast *op) {
     };
 
     // clang-format off
-    static Pattern patterns[] = {
+    static const Pattern patterns[] = {
         // This isn't rounding_multiply_quantzied(i16, i16, 15) because it doesn't
         // saturate the result.
         {"pmulhrs", i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), 15))},
@@ -638,7 +648,7 @@ void CodeGen_X86::visit(const Call *op) {
     };
 
     // clang-format off
-    static Pattern patterns[] = {
+    static const Pattern patterns[] = {
         {"pmulh", mul_shift_right(wild_i16x_, wild_i16x_, 16)},
         {"pmulh", mul_shift_right(wild_u16x_, wild_u16x_, 16)},
         {"saturating_narrow", i16_sat(wild_i32x_)},
@@ -655,6 +665,41 @@ void CodeGen_X86::visit(const Call *op) {
             if (value) {
                 return;
             }
+        }
+    }
+
+    // clang-format off
+    static const Pattern reinterpret_patterns[] = {
+        {"saturating_narrow", i16_sat(wild_u32x_)},
+        {"saturating_narrow", u16_sat(wild_u32x_)},
+        {"saturating_narrow", i8_sat(wild_u16x_)},
+        {"saturating_narrow", u8_sat(wild_u16x_)},
+    };
+    // clang-format on
+
+    // Search for saturating casts where the inner value can be
+    // reinterpreted to signed, so that we can use existing
+    // saturating_narrow instructions.
+    // TODO: should use lossless_cast once it is fixed.
+    for (const auto &pattern : reinterpret_patterns) {
+        if (expr_match(pattern.pattern, op, matches)) {
+            const Expr &expr = matches[0];
+            const Type &t = expr.type();
+            // TODO(8212): might want to keep track of scope of bounds information.
+            const ConstantInterval ibounds = constant_integer_bounds(expr);
+            const Type reint_type = t.with_code(halide_type_int);
+            // If the signed type can represent the maximum value unsigned value,
+            //  we can safely reinterpret this unsigned expression as signed.
+            if (reint_type.can_represent(ibounds)) {
+                // Can safely reinterpret to signed integer.
+                matches[0] = cast(reint_type, matches[0]);
+                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+                if (value) {
+                    return;
+                }
+            }
+            // No reinterpret patterns match the same input, so stop matching.
+            break;
         }
     }
 
@@ -866,28 +911,32 @@ void CodeGen_X86::visit(const Allocate *op) {
 }
 
 void CodeGen_X86::visit(const Load *op) {
-    if (mem_type.contains(op->name) && mem_type.get(op->name) == MemoryType::AMXTile) {
-        const Ramp *ramp = op->index.as<Ramp>();
-        internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
-        Value *ptr = codegen_buffer_pointer(op->name, op->type, ramp->base);
-        LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(upgrade_type_for_storage(op->type)), ptr, llvm::Align(op->type.bytes()));
-        add_tbaa_metadata(load, op->name, op->index);
-        value = load;
-        return;
+    if (const auto *mt = mem_type.find(op->name)) {
+        if (*mt == MemoryType::AMXTile) {
+            const Ramp *ramp = op->index.as<Ramp>();
+            internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
+            Value *ptr = codegen_buffer_pointer(op->name, op->type, ramp->base);
+            LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(upgrade_type_for_storage(op->type)), ptr, llvm::Align(op->type.bytes()));
+            add_tbaa_metadata(load, op->name, op->index);
+            value = load;
+            return;
+        }
     }
     CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const Store *op) {
-    if (mem_type.contains(op->name) && mem_type.get(op->name) == MemoryType::AMXTile) {
-        Value *val = codegen(op->value);
-        Halide::Type value_type = op->value.type();
-        const Ramp *ramp = op->index.as<Ramp>();
-        internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
-        Value *ptr = codegen_buffer_pointer(op->name, value_type, ramp->base);
-        StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
-        add_tbaa_metadata(store, op->name, op->index);
-        return;
+    if (const auto *mt = mem_type.find(op->name)) {
+        if (*mt == MemoryType::AMXTile) {
+            Value *val = codegen(op->value);
+            Halide::Type value_type = op->value.type();
+            const Ramp *ramp = op->index.as<Ramp>();
+            internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
+            Value *ptr = codegen_buffer_pointer(op->name, value_type, ramp->base);
+            StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
+            add_tbaa_metadata(store, op->name, op->index);
+            return;
+        }
     }
     CodeGen_Posix::visit(op);
 }
@@ -1031,9 +1080,31 @@ string CodeGen_X86::mattrs() const {
     }
 #if LLVM_VERSION >= 180
     if (gather_might_be_slow(target)) {
-        attrs.push_back("+prefer-no-gather");
+        attrs.emplace_back("+prefer-no-gather");
     }
 #endif
+
+    if (target.has_feature(Target::AVX10_1)) {
+        switch (target.vector_bits) {
+        case 256:
+            attrs.emplace_back("+avx10.1-256");
+            break;
+        case 512:
+            attrs.emplace_back("+avx10.1-512");
+            break;
+        default:
+            user_error << "AVX10 only supports 256 or 512 bit variants at present.\n";
+            break;
+        }
+    }
+
+    if (target.has_feature(Target::X86APX)) {
+        attrs.emplace_back("+egpr");
+        attrs.emplace_back("+push2pop2");
+        attrs.emplace_back("+ppx");
+        attrs.emplace_back("+ndd");
+    }
+
     return join_strings(attrs, ",");
 }
 
@@ -1042,10 +1113,12 @@ bool CodeGen_X86::use_soft_float_abi() const {
 }
 
 int CodeGen_X86::native_vector_bits() const {
-    if (target.has_feature(Target::AVX512) ||
-        target.has_feature(Target::AVX512_Skylake) ||
-        target.has_feature(Target::AVX512_KNL) ||
-        target.has_feature(Target::AVX512_Cannonlake)) {
+    if (target.has_feature(Target::AVX10_1)) {
+        return target.vector_bits;
+    } else if (target.has_feature(Target::AVX512) ||
+               target.has_feature(Target::AVX512_Skylake) ||
+               target.has_feature(Target::AVX512_KNL) ||
+               target.has_feature(Target::AVX512_Cannonlake)) {
         return 512;
     } else if (target.has_feature(Target::AVX) ||
                target.has_feature(Target::AVX2)) {

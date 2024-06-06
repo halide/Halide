@@ -502,7 +502,7 @@ Expr lossless_cast(Type t, Expr e) {
             Expr a = lossless_cast(t.narrow(), sub->a);
             Expr b = lossless_cast(t.narrow(), sub->b);
             if (a.defined() && b.defined()) {
-                return cast(t, a) + cast(t, b);
+                return cast(t, a) - cast(t, b);
             } else {
                 return Expr();
             }
@@ -567,7 +567,8 @@ Expr lossless_cast(Type t, Expr e) {
 }
 
 Expr lossless_negate(const Expr &x) {
-    if (const Mul *m = x.as<Mul>()) {
+    if (false /* const Mul *m = x.as<Mul>() */) {  // disabled pending #8155
+        /*
         Expr b = lossless_negate(m->b);
         if (b.defined()) {
             return Mul::make(m->a, b);
@@ -576,6 +577,7 @@ Expr lossless_negate(const Expr &x) {
         if (a.defined()) {
             return Mul::make(a, m->b);
         }
+        */
     } else if (const Call *m = Call::as_intrinsic(x, {Call::widening_mul})) {
         Expr b = lossless_negate(m->args[1]);
         if (b.defined()) {
@@ -1585,10 +1587,31 @@ Tuple mux(const Expr &id, const std::vector<Tuple> &values) {
     return Tuple{result};
 }
 
+namespace {
+void cast_bounds_for_promise_clamped(const Expr &value, const Expr &min, const Expr &max, Expr &casted_min, Expr &casted_max, const char *call_name) {
+    {
+        Expr n_min_val = lossless_cast(value.type(), min);
+        if (min.defined()) {
+            user_assert(n_min_val.defined())
+                << call_name << " min argument (type " << min.node_type() << " " << min.type() << ") could not be cast losslessly to " << value.type();
+        }
+        casted_min = n_min_val.defined() ? n_min_val : value.type().min();
+    }
+    {
+        Expr n_max_val = lossless_cast(value.type(), max);
+        if (max.defined()) {
+            user_assert(n_max_val.defined())
+                << call_name << " max argument (type " << max.node_type() << " " << max.type() << ") could not be cast losslessly to " << value.type();
+        }
+        casted_max = n_max_val.defined() ? n_max_val : value.type().max();
+    }
+}
+}  // namespace
+
 Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
     user_assert(value.defined()) << "unsafe_promise_clamped with undefined value.\n";
-    Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
-    Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
+    Expr n_min_val, n_max_val;
+    cast_bounds_for_promise_clamped(value, min, max, n_min_val, n_max_val, "unsafe_promise_clamped");
 
     // Min and max are allowed to be undefined with the meaning of no bound on that side.
     return Call::make(value.type(),
@@ -1600,8 +1623,8 @@ Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max)
 namespace Internal {
 Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
     internal_assert(value.defined()) << "promise_clamped with undefined value.\n";
-    Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
-    Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
+    Expr n_min_val, n_max_val;
+    cast_bounds_for_promise_clamped(value, min, max, n_min_val, n_max_val, "promise_clamped");
 
     // Min and max are allowed to be undefined with the meaning of no bound on that side.
     return Call::make(value.type(),

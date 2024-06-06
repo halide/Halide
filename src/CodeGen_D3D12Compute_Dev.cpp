@@ -3,6 +3,7 @@
 #include <sstream>
 #include <utility>
 
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
@@ -221,22 +222,18 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type 
 
 namespace {
 string simt_intrinsic(const string &name) {
-    if (ends_with(name, ".__thread_id_x")) {
+    if (ends_with(name, gpu_thread_name(0))) {
         return "tid_in_tgroup.x";
-    } else if (ends_with(name, ".__thread_id_y")) {
+    } else if (ends_with(name, gpu_thread_name(1))) {
         return "tid_in_tgroup.y";
-    } else if (ends_with(name, ".__thread_id_z")) {
+    } else if (ends_with(name, gpu_thread_name(2))) {
         return "tid_in_tgroup.z";
-    } else if (ends_with(name, ".__thread_id_w")) {
-        user_error << "HLSL (SM5.1) does not support more than three dimensions for compute kernel threads.\n";
-    } else if (ends_with(name, ".__block_id_x")) {
+    } else if (ends_with(name, gpu_block_name(0))) {
         return "tgroup_index.x";
-    } else if (ends_with(name, ".__block_id_y")) {
+    } else if (ends_with(name, gpu_block_name(1))) {
         return "tgroup_index.y";
-    } else if (ends_with(name, ".__block_id_z")) {
+    } else if (ends_with(name, gpu_block_name(2))) {
         return "tgroup_index.z";
-    } else if (ends_with(name, ".__block_id_w")) {
-        user_error << "HLSL (SM5.1) does not support more than three dimensions for compute dispatch groups.\n";
     }
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
@@ -300,15 +297,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
     user_assert(loop->for_type != ForType::GPULane)
         << "The D3D12Compute backend does not support the gpu_lanes() scheduling directive.";
 
-    if (!is_gpu_var(loop->name)) {
-        user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside D3D12Compute kernel\n";
+    if (!is_gpu(loop->for_type)) {
         CodeGen_GPU_C::visit(loop);
         return;
     }
-
-    internal_assert((loop->for_type == ForType::GPUBlock) ||
-                    (loop->for_type == ForType::GPUThread))
-        << "kernel loop must be either gpu block or gpu thread\n";
     internal_assert(is_const_zero(loop->min));
 
     stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
@@ -592,8 +584,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     string id_index = print_expr(op->index);
 
     // Get the rhs just for the cache.
-    bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name).type == op->type);
+    const auto *alloc = allocations.find(op->name);
+    bool type_cast_needed = !(alloc &&
+                              alloc->type == op->type);
 
     ostringstream rhs;
     if (type_cast_needed) {
@@ -1152,7 +1145,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     struct FindThreadGroupSize : public IRVisitor {
         using IRVisitor::visit;
         void visit(const For *loop) override {
-            if (!is_gpu_var(loop->name)) {
+            if (!is_gpu(loop->for_type)) {
                 return loop->body.accept(this);
             }
             if (loop->for_type != ForType::GPUThread) {
@@ -1174,13 +1167,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             loop->body.accept(this);
         }
         int thread_loop_workgroup_index(const string &name) {
-            string ids[] = {".__thread_id_x",
-                            ".__thread_id_y",
-                            ".__thread_id_z",
-                            ".__thread_id_w"};
-            for (auto &id : ids) {
-                if (ends_with(name, id)) {
-                    return (&id - ids);
+            for (int i = 0; i < 3; i++) {
+                if (ends_with(name, gpu_thread_name(i))) {
+                    return i;
                 }
             }
             return -1;

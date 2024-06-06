@@ -145,7 +145,7 @@ bool associative_op_pattern_match(const Expr &e,
                 debug(5) << "Adding result: " << iter.first << " -> " << iter.second << "\n";
                 match.emplace(iter.first, iter.second);
             } else {
-                if (!equal(iter.first, match_iter->first) || !equal(iter.second, match_iter->second)) {
+                if (iter.first != match_iter->first || !equal(iter.second, match_iter->second)) {
                     return false;
                 }
             }
@@ -543,37 +543,20 @@ void associativity_test() {
         Expr x_idx = Variable::make(Int(32), "x_idx");
         Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, FunctionPtr(), 0);
 
-        // f(x) = uint8(uint16(x + y), 255)
-        check_associativity("f", {x_idx}, {Cast::make(UInt(8), min(Cast::make(UInt(16), y + f_call_0), make_const(t, 255)))},
-                            AssociativeOp(
-                                AssociativePattern(Cast::make(UInt(8), min(Cast::make(UInt(16), x + y), make_const(t, 255))), make_const(t, 0), true),
-                                {Replacement("x", f_call_0)},
-                                {Replacement("y", y)},
-                                true));
-
-        // f(x) = uint8(uint16(x + y), uint16(255))
-        check_associativity("f", {x_idx}, {Cast::make(UInt(8), min(Cast::make(UInt(16), y + f_call_0), Cast::make(UInt(16), make_const(t, 255))))},
-                            AssociativeOp(
-                                AssociativePattern(Cast::make(UInt(8), min(Cast::make(UInt(16), x + y), make_const(t, 255))), make_const(t, 0), true),
-                                {Replacement("x", f_call_0)},
-                                {Replacement("y", y)},
-                                true));
-
-        // f(x) = select(x > 255 - y, 255, y)
-        check_associativity("f", {x_idx}, {select(f_call_0 > make_const(t, 255) - y, make_const(t, 255), y)},
-                            AssociativeOp(
-                                AssociativePattern(select(x > make_const(t, 255) - y, make_const(t, 255), y), make_const(t, 0), true),
-                                {Replacement("x", f_call_0)},
-                                {Replacement("y", y)},
-                                true));
-
-        // f(x) = select(x >= -y, 255, y)
-        check_associativity("f", {x_idx}, {select(f_call_0 >= -y, make_const(t, 255), y)},
-                            AssociativeOp(
-                                AssociativePattern(select(x < -y, y, make_const(t, 255)), make_const(t, 0), true),
-                                {Replacement("x", f_call_0)},
-                                {Replacement("y", y)},
-                                true));
+        for (const Expr &e : {cast<uint8_t>(min(cast<uint16_t>(x) + y, 255)),
+                              select(x > 255 - y, cast<uint8_t>(255), y),
+                              select(x < -y, y, cast<uint8_t>(255)),
+                              saturating_add(x, y),
+                              saturating_add(y, x),
+                              saturating_cast<uint8_t>(widening_add(x, y))}) {
+            check_associativity("f", {x_idx}, {substitute("x", f_call_0, e)},
+                                AssociativeOp(
+                                    AssociativePattern(solve_expression(e, "x").result,
+                                                       make_const(t, 0), true),
+                                    {Replacement("x", f_call_0)},
+                                    {Replacement("y", y)},
+                                    true));
+        }
     }
 
     {
@@ -781,7 +764,7 @@ void associativity_test() {
                                 true));
     }
 
-    std::cout << "Associativity test passed" << std::endl;
+    std::cout << "Associativity test passed\n";
 }
 
 }  // namespace Internal

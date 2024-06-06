@@ -203,12 +203,12 @@ Stmt Simplify::visit(const AssertStmt *op) {
 }
 
 Stmt Simplify::visit(const For *op) {
-    ExprInfo min_bounds, extent_bounds;
-    Expr new_min = mutate(op->min, &min_bounds);
+    ExprInfo min_info, extent_info;
+    Expr new_min = mutate(op->min, &min_info);
     if (in_unreachable) {
         return Evaluate::make(new_min);
     }
-    Expr new_extent = mutate(op->extent, &extent_bounds);
+    Expr new_extent = mutate(op->extent, &extent_info);
     if (in_unreachable) {
         return Evaluate::make(new_extent);
     }
@@ -217,32 +217,41 @@ Stmt Simplify::visit(const For *op) {
                                          (in_vector_loop ||
                                           op->for_type == ForType::Vectorized));
 
-    bool bounds_tracked = false;
-    if (min_bounds.min_defined || (min_bounds.max_defined && extent_bounds.max_defined)) {
-        min_bounds.max += extent_bounds.max - 1;
-        min_bounds.max_defined &= extent_bounds.max_defined;
-        min_bounds.alignment = ModulusRemainder{};
-        bounds_tracked = true;
-        bounds_and_alignment_info.push(op->name, min_bounds);
-    }
-
-    Stmt new_body;
-    {
-        // If we're in the loop, the extent must be greater than 0.
-        ScopedFact fact = scoped_truth(0 < new_extent);
-        new_body = mutate(op->body);
-    }
-    if (in_unreachable) {
-        if (extent_bounds.min_defined && extent_bounds.min >= 1) {
-            // If we know the loop executes once, the code that runs this loop is unreachable.
-            return new_body;
-        }
-        in_unreachable = false;
+    Expr extent_positive = mutate(0 < new_extent, nullptr);
+    if (is_const_zero(extent_positive)) {
+        // This loop never runs
         return Evaluate::make(0);
     }
 
-    if (bounds_tracked) {
-        bounds_and_alignment_info.pop(op->name);
+    ExprInfo loop_var_info;
+    // Deduce bounds for the loop var that are true for any code than runs
+    // inside the loop body. Code in the inner loop only runs if the extent is
+    // at least one, so we can throw a max around the extent bounds.
+
+    loop_var_info.bounds =
+        ConstantInterval::make_union(min_info.bounds,
+                                     min_info.bounds + max(extent_info.bounds, 1) - 1);
+    Stmt new_body;
+    {
+        ScopedBinding<ExprInfo> bind_if((loop_var_info.bounds.max_defined ||
+                                         loop_var_info.bounds.min_defined),
+                                        bounds_and_alignment_info,
+                                        op->name,
+                                        loop_var_info);
+
+        // If we're in the loop, the extent must be greater than 0.
+        ScopedFact fact = scoped_truth(extent_positive);
+        new_body = mutate(op->body);
+    }
+
+    if (in_unreachable) {
+        // We found that the body of this loop is unreachable when recursively
+        // mutating it, so we can remove the loop. Additionally, if we know the
+        // extent is greater than zero, then the code *outside* the loop must be
+        // unreachable too, because if it weren't, it'd run the unreachable body
+        // at least once.
+        in_unreachable = extent_info.bounds > 0;
+        return Evaluate::make(0);
     }
 
     if (const Acquire *acquire = new_body.as<Acquire>()) {
@@ -254,14 +263,14 @@ Stmt Simplify::visit(const For *op) {
 
     if (is_no_op(new_body)) {
         return new_body;
-    } else if (extent_bounds.max_defined &&
-               extent_bounds.max <= 0) {
+    } else if (extent_info.bounds <= 0) {
         return Evaluate::make(0);
-    } else if (extent_bounds.max_defined &&
-               extent_bounds.max <= 1 &&
+    } else if (extent_info.bounds <= 1 &&
                op->device_api == DeviceAPI::None) {
+        // Loop body runs at most once
         Stmt s = LetStmt::make(op->name, new_min, new_body);
-        if (extent_bounds.min < 1) {
+        if (extent_info.bounds.contains(0)) {
+            // Loop body might not run at all
             s = IfThenElse::make(0 < new_extent, s);
         }
         return mutate(s);
@@ -280,8 +289,8 @@ Stmt Simplify::visit(const Provide *op) {
     found_buffer_reference(op->name, op->args.size());
 
     // Mutate the args
-    auto [new_args, changed_args] = mutate_with_changes(op->args, nullptr);
-    auto [new_values, changed_values] = mutate_with_changes(op->values, nullptr);
+    auto [new_args, changed_args] = mutate_with_changes(op->args);
+    auto [new_values, changed_values] = mutate_with_changes(op->values);
     Expr new_predicate = mutate(op->predicate, nullptr);
 
     if (!(changed_args || changed_values) && new_predicate.same_as(op->predicate)) {
@@ -305,16 +314,10 @@ Stmt Simplify::visit(const Store *op) {
     // but perhaps the branch was hard to prove constant true or false. This
     // provides an alternative mechanism to simplify these unreachable stores.
     string alloc_extent_name = op->name + ".total_extent_bytes";
-    if (is_const_one(op->predicate) &&
-        bounds_and_alignment_info.contains(alloc_extent_name)) {
-        if (index_info.max_defined && index_info.max < 0) {
-            in_unreachable = true;
-            return Evaluate::make(unreachable());
-        }
-        const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
-        if (alloc_info.max_defined && index_info.min_defined) {
-            int index_min_bytes = index_info.min * op->value.type().bytes();
-            if (index_min_bytes > alloc_info.max) {
+    if (is_const_one(op->predicate)) {
+        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
+            if (index_info.bounds < 0 ||
+                index_info.bounds * op->value.type().bytes() > alloc_info->bounds) {
                 in_unreachable = true;
                 return Evaluate::make(unreachable());
             }
@@ -356,33 +359,14 @@ Stmt Simplify::visit(const Allocate *op) {
     std::vector<Expr> new_extents;
     bool all_extents_unmodified = true;
     ExprInfo total_extent_info;
-    total_extent_info.min_defined = true;
-    total_extent_info.max_defined = true;
-    total_extent_info.min = 1;
-    total_extent_info.max = 1;
+    total_extent_info.bounds = ConstantInterval::single_point(op->type.bytes());
     for (size_t i = 0; i < op->extents.size(); i++) {
         ExprInfo extent_info;
         new_extents.push_back(mutate(op->extents[i], &extent_info));
         all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
-        if (extent_info.min_defined) {
-            total_extent_info.min *= extent_info.min;
-        } else {
-            total_extent_info.min_defined = false;
-        }
-        if (extent_info.max_defined) {
-            total_extent_info.max *= extent_info.max;
-        } else {
-            total_extent_info.max_defined = false;
-        }
+        total_extent_info.bounds *= extent_info.bounds;
     }
-    if (total_extent_info.min_defined) {
-        total_extent_info.min *= op->type.bytes();
-        total_extent_info.min -= 1;
-    }
-    if (total_extent_info.max_defined) {
-        total_extent_info.max *= op->type.bytes();
-        total_extent_info.max -= 1;
-    }
+    total_extent_info.bounds -= 1;
 
     ScopedBinding<ExprInfo> b(bounds_and_alignment_info, op->name + ".total_extent_bytes", total_extent_info);
 

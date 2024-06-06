@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "CSE.h"
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_OpenCL_Dev.h"
@@ -184,22 +185,18 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, const 
 
 namespace {
 string simt_intrinsic(const string &name) {
-    if (ends_with(name, ".__thread_id_x")) {
+    if (ends_with(name, gpu_thread_name(0))) {
         return "get_local_id(0)";
-    } else if (ends_with(name, ".__thread_id_y")) {
+    } else if (ends_with(name, gpu_thread_name(1))) {
         return "get_local_id(1)";
-    } else if (ends_with(name, ".__thread_id_z")) {
+    } else if (ends_with(name, gpu_thread_name(2))) {
         return "get_local_id(2)";
-    } else if (ends_with(name, ".__thread_id_w")) {
-        return "get_local_id(3)";
-    } else if (ends_with(name, ".__block_id_x")) {
+    } else if (ends_with(name, gpu_block_name(0))) {
         return "get_group_id(0)";
-    } else if (ends_with(name, ".__block_id_y")) {
+    } else if (ends_with(name, gpu_block_name(1))) {
         return "get_group_id(1)";
-    } else if (ends_with(name, ".__block_id_z")) {
+    } else if (ends_with(name, gpu_block_name(2))) {
         return "get_group_id(2)";
-    } else if (ends_with(name, ".__block_id_w")) {
-        return "get_group_id(3)";
     }
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
@@ -210,10 +207,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     user_assert(loop->for_type != ForType::GPULane)
         << "The OpenCL backend does not support the gpu_lanes() scheduling directive.";
 
-    if (is_gpu_var(loop->name)) {
-        internal_assert((loop->for_type == ForType::GPUBlock) ||
-                        (loop->for_type == ForType::GPUThread))
-            << "kernel loop must be either gpu block or gpu thread\n";
+    if (is_gpu(loop->for_type)) {
         internal_assert(is_const_zero(loop->min));
 
         stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
@@ -389,6 +383,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
                 rhs << "(int4)(" << coord[0] << idx << ", " << coord[1] << idx
                     << ", " << coord[2] << idx << ", 0)).s0";
                 break;
+            default:
+                internal_error << "Unsupported dims";
+                break;
             }
             print_assignment(op->type.with_bits(32).with_lanes(1), rhs.str());
             results[i] = id;
@@ -448,6 +445,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
                 write_image << "(int4)(" << coord[0] << idx << ", " << coord[1] << idx
                             << ", " << coord[2] << idx << ", 0)";
                 break;
+            default:
+                internal_error << "Unsupported dims";
+                break;
             }
             write_image << ", (" << print_type(value_type.with_bits(32).with_lanes(4))
                         << ")(" << value << idx << ", 0, 0, 0));\n";
@@ -478,8 +478,8 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string &na
                                                                 const Type &type,
                                                                 const string &id_index) {
     ostringstream rhs;
-    bool type_cast_needed = !(allocations.contains(name) &&
-                              allocations.get(name).type == type);
+    const auto *alloc = allocations.find(name);
+    bool type_cast_needed = !(alloc && alloc->type == type);
 
     if (type_cast_needed) {
         rhs << "((" << get_memory_space(name) << " "
@@ -577,8 +577,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         // For atomicAdd, we check if op->value - store[index] is independent of store.
         // The atomicAdd operations in OpenCL only supports integers so we also check that.
         bool is_atomic_add = t.is_int_or_uint() && !expr_uses_var(delta, op->name);
-        bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name).type == t);
+        const auto *alloc = allocations.find(op->name);
+        bool type_cast_needed = !(alloc && alloc->type == t);
         auto print_store_var = [&]() {
             if (type_cast_needed) {
                 stream << "(("
