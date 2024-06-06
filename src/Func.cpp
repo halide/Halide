@@ -841,6 +841,21 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
                 << ", since it is already used in this Func's schedule elsewhere.\n"
                 << dump_argument_list();
         }
+        {
+            // Check that the RVar has not had a pure var fused into it
+            for (const Split &s : splits) {
+                if (s.is_fuse() && var_name_match(s.old_var, rv.name())) {
+                    const auto &iter = std::find_if(pure_vars_used.begin(), pure_vars_used.end(), [&s](const std::string &v) {
+                        return (var_name_match(v, s.outer) || var_name_match(v, s.inner));
+                    });
+                    user_assert(iter == pure_vars_used.end())
+                        << "In schedule for " << name()
+                        << ", can't perform rfactor() on " << rv.name()
+                        << " because the pure var " << (*iter)
+                        << " is fused into it.\n";
+                }
+            }
+        }
     }
 
     // If the operator is associative but non-commutative, rfactor() on inner
