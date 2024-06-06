@@ -1184,9 +1184,9 @@ void CodeGen_OpenCL_Dev::init_module() {
     }
 
     if (target.has_feature(Target::CLHalf)) {
-        constexpr unsigned short nan_f16 = float16_t::exponent_mask | float16_t::mantissa_mask;
-        constexpr unsigned short neg_inf_f16 = float16_t::sign_mask | float16_t::exponent_mask;
-        constexpr unsigned short inf_f16 = float16_t::exponent_mask;
+        const uint16_t nan_f16 = float16_t::make_nan().to_bits();
+        const uint16_t neg_inf_f16 = float16_t::make_negative_infinity().to_bits();
+        const uint16_t inf_f16 = float16_t::make_infinity().to_bits();
 
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
                    << "inline half half_from_bits(unsigned short x) {return __builtin_astype(x, half);}\n"
