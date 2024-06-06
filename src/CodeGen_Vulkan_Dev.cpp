@@ -2521,7 +2521,7 @@ namespace {
 class FindIntrinsicsUsed : public IRVisitor {
     using IRVisitor::visit;
     void visit(const For *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->for_type)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
 
             // map the block or thread id name to the SIMT intrinsic definition
             auto intrinsic = simt_intrinsic(op->name);
