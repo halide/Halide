@@ -76,7 +76,8 @@ int test() {
             .parallel(y)
             .vectorize(x, vector_size / 2);
 
-        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66,
+                                    Target::HVX_v68})) {
             f.store_in(MemoryType::VTCM);
         }
     }

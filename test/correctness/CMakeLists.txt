@@ -58,6 +58,7 @@ tests(GROUPS correctness
       computed_index.cpp
       concat.cpp
       constant_expr.cpp
+      constant_interval.cpp
       constant_type.cpp
       constraints.cpp
       convolution_multiple_kernels.cpp
@@ -121,6 +122,7 @@ tests(GROUPS correctness
       fused_where_inner_extent_is_zero.cpp
       fuzz_float_stores.cpp
       fuzz_schedule.cpp
+      fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
@@ -137,6 +139,7 @@ tests(GROUPS correctness
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
       gpu_many_kernels.cpp
+      gpu_f16_intrinsics.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp

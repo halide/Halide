@@ -674,8 +674,16 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 #else
     const auto opt_level = llvm::CodeGenOpt::Aggressive;
 #endif
+
+    // Get module mcpu_target and mattrs.
+    std::string mcpu_target;
+    get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
+    std::string mattrs;
+    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
-                                                /*CPU target=*/"", /*Features=*/"",
+                                                mcpu_target,
+                                                mattrs,
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
                                                 use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,

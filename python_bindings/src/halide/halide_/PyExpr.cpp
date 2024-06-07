@@ -29,6 +29,7 @@ void define_expr(py::module &m) {
             // PyBind11 searches in declared order,
             // int should be tried before float conversion
             .def(py::init<int>())
+            .def(py::init<int64_t>())
             // Python float is implemented by double
             // But Halide prohibits implicitly construct by double.
             .def(py::init([](double v) {
@@ -65,6 +66,7 @@ void define_expr(py::module &m) {
     // int should be tried before float conversion
     py::implicitly_convertible<bool, Expr>();
     py::implicitly_convertible<int, Expr>();
+    py::implicitly_convertible<int64_t, Expr>();
     py::implicitly_convertible<float, Expr>();
     py::implicitly_convertible<double, Expr>();
 

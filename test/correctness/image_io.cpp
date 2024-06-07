@@ -25,7 +25,10 @@ void test_round_trip(Buffer<T> buf, std::string format) {
         reloaded.translate(d, buf.dim(d).min() - reloaded.dim(d).min());
     }
 
-    Tools::save_image(reloaded, Internal::get_test_tmp_dir() + "test_reloaded." + format);
+    o = std::ostringstream();
+    o << Internal::get_test_tmp_dir() << "test_" << halide_type_of<T>() << "x" << buf.channels() << ".reloaded." << format;
+    filename = o.str();
+    Tools::save_image(reloaded, filename);
 
     // Check they're not too different.
     RDom r(reloaded);
@@ -33,15 +36,15 @@ void test_round_trip(Buffer<T> buf, std::string format) {
     for (int i = 0; i < r.dimensions(); ++i) {
         args.push_back(r[i]);
     }
-    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(reloaded(args)))));
+    double diff = evaluate<double>(maximum(abs(cast<double>(buf(args)) - cast<double>(reloaded(args)))));
 
-    uint32_t max_diff = 0;
+    double max_diff = 0.00001;
     if (format == "jpg") {
         max_diff = 32;
     }
     if (diff > max_diff) {
-        printf("test_round_trip: Difference of %d when saved and loaded as %s\n", diff, format.c_str());
-        abort();
+        printf("test_round_trip: Difference of %f when saved and loaded as %s\n", diff, format.c_str());
+        exit(1);
     }
 }
 
@@ -62,7 +65,7 @@ void test_convert_image_s2s(Buffer<T> buf) {
     uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
     if (diff > 0) {
         printf("test_convert_image_s2s: Difference of %d when converted\n", diff);
-        abort();
+        exit(1);
     }
 }
 
@@ -85,7 +88,7 @@ void test_convert_image_d2s(Buffer<T> buf) {
     uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
     if (diff > 0) {
         printf("test_convert_image_d2s: Difference of %d when converted\n", diff);
-        abort();
+        exit(1);
     }
 }
 
@@ -110,7 +113,7 @@ void test_convert_image_s2d(Buffer<T> buf) {
     uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
     if (diff > 0) {
         printf("test_convert_image_s2d: Difference of %d when converted\n", diff);
-        abort();
+        exit(1);
     }
 }
 
@@ -135,7 +138,7 @@ void test_convert_image_d2d(Buffer<> buf_d) {
     uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
     if (diff > 0) {
         printf("test_convert_image_d2d: Difference of %d when converted\n", diff);
-        abort();
+        exit(1);
     }
 }
 
@@ -166,8 +169,8 @@ void do_test() {
     // Make some colored noise
     Func f;
     Var x, y, c, w;
-    const float one = std::numeric_limits<T>::max();
-    f(x, y, c) = cast<T>(clamp(make_noise(10)(x, y, c), 0.0f, 1.0f) * one);
+    const Expr one = std::is_floating_point<T>::value ? Expr(1.0) : Expr(std::numeric_limits<T>::max());
+    f(x, y, c) = cast<T>(clamp(make_noise(10)(x, y, c), Expr(0.0), Expr(1.0)) * one);
 
     Buffer<T> color_buf = f.realize({width, height, 3});
 
@@ -176,16 +179,19 @@ void do_test() {
     color_buf.crop(0, inset, width - inset * 2);
     color_buf.crop(1, inset, height - inset * 2);
 
-    test_convert_image_s2s<T>(color_buf);
-    test_convert_image_s2d<T>(color_buf);
-    test_convert_image_d2s<T>(color_buf);
-    test_convert_image_d2d<T>(color_buf);
+    const auto ht = halide_type_of<T>();
+    if (ht == halide_type_t(halide_type_uint, 8) || ht == halide_type_t(halide_type_uint, 16)) {
+        test_convert_image_s2s<T>(color_buf);
+        test_convert_image_s2d<T>(color_buf);
+        test_convert_image_d2s<T>(color_buf);
+        test_convert_image_d2d<T>(color_buf);
+    }
 
     Buffer<T> luma_buf(width, height, 1);
     luma_buf.copy_from(color_buf);
     luma_buf.slice(2);
 
-    std::vector<std::string> formats = {"ppm", "pgm", "tmp", "mat", "tiff"};
+    std::vector<std::string> formats = {"npy", "ppm", "pgm", "tmp", "mat", "tiff"};
 #ifndef HALIDE_NO_JPEG
     formats.push_back("jpg");
 #endif
@@ -193,7 +199,14 @@ void do_test() {
     formats.push_back("png");
 #endif
     for (std::string format : formats) {
-        if (format == "jpg" && halide_type_of<T>() != halide_type_t(halide_type_uint, 8)) {
+        // .npy is the only format here that supports float16
+        if (halide_type_of<T>() == halide_type_t(halide_type_float, 16) && format != "npy") {
+            continue;
+        }
+        if ((format == "jpg" || format == "pgm" || format == "ppm") && ht != halide_type_t(halide_type_uint, 8)) {
+            continue;
+        }
+        if (format == "png" && ht != halide_type_t(halide_type_uint, 8) && ht != halide_type_t(halide_type_uint, 16)) {
             continue;
         }
         if (format == "tmp") {
@@ -238,7 +251,7 @@ void test_mat_header() {
     std::ifstream fs(filename.c_str(), std::ifstream::binary);
     if (!fs) {
         std::cout << "Cannot read " << filename << "\n";
-        abort();
+        exit(1);
     }
     fs.seekg(0, fs.end);
     // .mat file begins with a 128 bytes header and a 8 bytes
@@ -251,13 +264,24 @@ void test_mat_header() {
     fs.close();
     if (file_size != stored_file_size) {
         std::cout << "Wrong file size written for " << filename << ". Expected " << file_size << ", got" << stored_file_size << "\n";
-        abort();
+        exit(1);
     }
 }
 
 int main(int argc, char **argv) {
+    do_test<int8_t>();
+    do_test<int16_t>();
+    do_test<int32_t>();
+    do_test<int64_t>();
     do_test<uint8_t>();
     do_test<uint16_t>();
+    do_test<uint32_t>();
+    do_test<uint64_t>();
+    do_test<float>();
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    do_test<_Float16>();
+#endif
+    do_test<double>();
     test_mat_header();
     printf("Success!\n");
     return 0;

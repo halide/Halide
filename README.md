@@ -406,15 +406,12 @@ branch.)
 
 ### 2. Download and install the Hexagon SDK and Hexagon Tools
 
-Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools
+Go to https://qpm.qualcomm.com/#/main/home
 
-1. Select the Hexagon Series 600 Software and download & run QPM and install
-   the Hexagon SDK 4.3.0 version or later for Linux.
-2. untar the installer
-3. Run the extracted installer to install the Hexagon SDK and Hexagon Tools,
-   selecting Installation of Hexagon SDK into `/location/of/SDK/Hexagon_SDK/4.x`
-   and the Hexagon tools into `/location/of/SDK/Hexagon_Tools/8.x`
-4. Set an environment variable to point to the SDK installation location
+1. Go to Tools, and download Qualcomm Package Manager 3. Install the package manager on your machine.
+2. Run the installed Qualcomm Package Manager and install the Qualcomm Hexagon SDK 5.x (or 4.x).
+   The SDK can be selected from the Qualcomm Hexagon SDK Products.
+3. Set an environment variable to point to the SDK installation location
    ```
    export SDK_LOC=/location/of/SDK
    ```

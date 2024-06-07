@@ -55,7 +55,7 @@ void populate_environment_helper(const Function &f,
     auto insert_func = [](const Function &f,
                           std::map<std::string, Function> *env,
                           std::vector<Function> *order) {
-        auto [it, inserted] = env->emplace(f.name(), f);
+        bool inserted = env->emplace(f.name(), f).second;
         if (inserted) {
             order->push_back(f);
         }

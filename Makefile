@@ -193,7 +193,7 @@ WITH_RTTI ?= $(if $(LLVM_HAS_NO_RTTI),, not-empty)
 RTTI_CXX_FLAGS=$(if $(WITH_RTTI), , -fno-rtti )
 
 CXX_VERSION = $(shell $(CXX) --version | head -n1)
-CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -Wno-mismatched-new-delete
+CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -Wno-mismatched-new-delete -Wimplicit-fallthrough
 ifneq (,$(findstring g++,$(CXX_VERSION)))
 GCC_MAJOR_VERSION := $(shell $(CXX) -dumpfullversion -dumpversion | cut -f1 -d.)
 GCC_MINOR_VERSION := $(shell $(CXX) -dumpfullversion -dumpversion | cut -f2 -d.)
@@ -477,6 +477,8 @@ SOURCE_FILES = \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
   CompilerLogger.cpp \
+  ConstantBounds.cpp \
+  ConstantInterval.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
   Debug.cpp \
@@ -671,6 +673,8 @@ HEADER_FILES = \
   CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
+  ConstantBounds.h \
+  ConstantInterval.h \
   CSE.h \
   Debug.h \
   DebugArguments.h \

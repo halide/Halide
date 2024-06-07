@@ -269,8 +269,8 @@ protected:
 
     Stmt emit_defs(Stmt stmt) {
         for (auto &p : func_info) {
-            stmt = LetStmt::make(used_var_name(p.first), p.second.used, stmt);
-            stmt = LetStmt::make(loaded_var_name(p.first), p.second.loaded, stmt);
+            stmt = LetStmt::make(used_var_name(p.first), simplify(p.second.used), stmt);
+            stmt = LetStmt::make(loaded_var_name(p.first), simplify(p.second.loaded), stmt);
             need_uniquify |= !lets_emitted.insert(p.first).second;
         }
         return stmt;
