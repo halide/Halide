@@ -417,6 +417,7 @@ public:
         saved_status = halide_error_code_success;
         if (error_string != nullptr && result != halide_error_code_success && strnlen(MetalContextHolder::error_string, 1024) > 0) {
             strncpy(error_string, MetalContextHolder::error_string, 1024);
+            error_string[1023] = '\0'; 
             MetalContextHolder::error_string[0] = '\0';
             debug(nullptr) << "MetalContextHolder::get_and_clear_saved_status: " << error_string << "\n";
         }
@@ -430,6 +431,7 @@ public:
         int result = saved_status;
         if (error_string != nullptr && result != halide_error_code_success && strnlen(MetalContextHolder::error_string, 1024) > 0) {
             strncpy(error_string, MetalContextHolder::error_string, 1024);
+            error_string[1023] = '\0'; 
         }
         halide_mutex_unlock(&saved_status_mutex);
         return result;
@@ -440,23 +442,82 @@ public:
         saved_status = new_status;
         if (error_string != nullptr) {
             strncpy(MetalContextHolder::error_string, error_string, 1024);
+            error_string[1023] = '\0'; 
             debug(nullptr) << "MetalContextHolder::set_saved_status: " << error_string << "\n";
         }
         halide_mutex_unlock(&saved_status_mutex);
     }
 
     ALWAYS_INLINE int error(char *error_string = nullptr) const {
-        return status || get_saved_status(error_string);
+        if (status != halide_error_code_success) {
+            return status;
+        } else {
+            return get_saved_status(error_string);
+        }
     }
 
     ALWAYS_INLINE int get_and_clear_error(char *error_string = nullptr) const {
-        return status || get_and_clear_saved_status(error_string);
+        auto cleared_status = get_and_clear_saved_status(error_string);
+        if (status != halide_error_code_success) {
+            return status;
+        } else {
+            return cleared_status;
+        }
     }
 };
 
 int MetalContextHolder::saved_status = halide_error_code_success;
 halide_mutex MetalContextHolder::saved_status_mutex = {0};
 char MetalContextHolder::error_string[1024] = {0};
+
+}  // namespace Metal
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+extern "C" {
+WEAK int halide_metal_command_buffer_completion_handler(void* user_context, mtl_command_buffer *buffer, char **returned_error_string) {
+    objc_id buffer_error = command_buffer_error(buffer);
+    if (buffer_error != nullptr) {
+        retain_ns_object(buffer_error);
+
+        ns_log_object(buffer_error);
+
+        // Obtain the localized NSString for the error
+        typedef objc_id (*localized_description_method_t)(objc_id objc, objc_sel sel);
+        localized_description_method_t localized_description_method = (localized_description_method_t)&objc_msgSend;
+        objc_id error_ns_string = (*localized_description_method)(buffer_error, sel_getUid("localizedDescription"));
+
+        retain_ns_object(error_ns_string);
+
+        // Obtain a C-style string
+        typedef char *(*utf8_string_method_t)(objc_id objc, objc_sel sel);
+        utf8_string_method_t utf8_string_method = (utf8_string_method_t)&objc_msgSend;
+        char *error_string = (*utf8_string_method)(error_ns_string, sel_getUid("UTF8String"));
+
+        // Copy C-style string into a fresh buffer
+        if (returned_error_string != nullptr) {
+            *returned_error_string = (char*)malloc(sizeof(char) * 1024);
+            if (*returned_error_string != nullptr) {
+                strncpy(*returned_error_string, error_string, 1024);
+                (*returned_error_string)[1023] = '\0';
+            } else {
+                debug(user_context) << "halide_metal_command_buffer_completion_handler: Failed to allocate memory for error string.\n";
+            }
+        }
+
+        release_ns_object(error_ns_string);
+        release_ns_object(buffer_error);
+        return halide_error_code_device_run_failed;
+    }
+    return halide_error_code_success;
+}
+} // extern "C"
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace Metal {
 
 struct command_buffer_completed_handler_block_descriptor_1 {
     unsigned long reserved;
@@ -475,27 +536,14 @@ WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_complete
     0, sizeof(command_buffer_completed_handler_block_literal)};
 
 WEAK void command_buffer_completed_handler_invoke(command_buffer_completed_handler_block_literal *block, mtl_command_buffer *buffer) {
-    objc_id buffer_error = command_buffer_error(buffer);
-    if (buffer_error != nullptr) {
-        retain_ns_object(buffer_error);
+    retain_ns_object(buffer);
+    char* error_string = nullptr;
+    auto status = halide_metal_command_buffer_completion_handler(nullptr, buffer, &error_string);
+    release_ns_object(buffer);
 
-        // Obtain the localized NSString for the error
-        typedef objc_id (*localized_description_method_t)(objc_id objc, objc_sel sel);
-        localized_description_method_t localized_description_method = (localized_description_method_t)&objc_msgSend;
-        objc_id error_ns_string = (*localized_description_method)(buffer_error, sel_getUid("localizedDescription"));
+    MetalContextHolder::set_saved_status(status, error_string);
+    free(error_string);
 
-        // Obtain a C-style string, but do not release the NSString until reporting/printing the error
-        typedef char *(*utf8_string_method_t)(objc_id objc, objc_sel sel);
-        utf8_string_method_t utf8_string_method = (utf8_string_method_t)&objc_msgSend;
-        char *error_string = (*utf8_string_method)(error_ns_string, sel_getUid("UTF8String"));
-
-        ns_log_object(buffer_error);
-
-        // This is an error indicating the command buffer wasn't executed, and  because it is asynchronous
-        // we store it in a static variable to report on the next check for an error
-        MetalContextHolder::set_saved_status(halide_error_code_device_run_failed, error_string);
-        release_ns_object(buffer_error);
-    }
 }
 
 WEAK command_buffer_completed_handler_block_literal command_buffer_completed_handler_block = {
