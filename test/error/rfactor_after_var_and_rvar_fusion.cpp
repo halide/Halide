@@ -9,15 +9,14 @@ int main(int argc, char **argv) {
     f(x, y) = 0;
     f(x, y) += r.x + r.y + r.z;
 
-    RVar rxy{"rxy"}, yrz{"yrz"}, yr{"yr"};
+    RVar rxy{"rxy"}, yrz{"yrz"};
     Var z{"z"};
 
-    // Error: In schedule for f.update(0), can't perform rfactor() after fusing r$z and y
+    // Error: In schedule for f.update(0), can't perform rfactor() after fusing y and r$z
     f.update()
         .fuse(r.x, r.y, rxy)
-        .fuse(y, r.z, yrz)
-        .fuse(rxy, yrz, yr)
-        .rfactor(yr, z);
+        .fuse(r.z, y, yrz)
+        .rfactor(rxy, z);
 
     f.print_loop_nest();
 
