@@ -666,13 +666,23 @@ void CodeGen_Xtensa::visit(const Broadcast *op) {
             rhs = print_type(vector_type) + "((" + print_type(op->type.with_lanes(1)) + ")" + id_value + ")";
         } else if (op->lanes > 1) {
             if (op->type.is_bool()) {
+                const bool has_q8 = get_target().has_feature(Target::Feature::XtensaQ8);
+
                 // TODO(vksnk): figure out how to broadcast bool.
                 if (op->type.lanes() == 16) {
                     rhs = id_value + "? (int32x16_t(1) == int32x16_t(1)) : (int32x16_t(1) == int32x16_t(0))";
                 } else if (op->type.lanes() == 32) {
-                    rhs = id_value + "? (int16x32_t(1) == int16x32_t(1)) : (int16x32_t(1) == int16x32_t(0))";
+                    if (has_q8) {
+                        rhs = id_value + "? (int32x32_t(1) == int32x32_t(1)) : (int32x32_t(1) == int32x32_t(0))";
+                    } else {
+                        rhs = id_value + "? (int16x32_t(1) == int16x32_t(1)) : (int16x32_t(1) == int16x32_t(0))";
+                    }
                 } else if (op->type.lanes() == 64) {
-                    rhs = id_value + "? (int8x64_t(1) == int8x64_t(1)) : (int8x64_t(1) == int8x64_t(0))";
+                    if (has_q8) {
+                        rhs = id_value + "? (int16x64_t(1) == int16x64_t(1)) : (int16x64_t(1) == int16x64_t(0))";
+                    } else {
+                        rhs = id_value + "? (int8x64_t(1) == int8x64_t(1)) : (int8x64_t(1) == int8x64_t(0))";
+                    }
                 }
             } else {
                 rhs = id_value;
