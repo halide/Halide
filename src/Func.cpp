@@ -69,11 +69,11 @@ Func::Func(const std::vector<Type> &required_types, int required_dims, const str
 }
 
 Func::Func()
-    : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
+    : func(unique_name('f')) {
 }
 
 Func::Func(const Expr &e)
-    : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
+    : func(unique_name('f')) {
     (*this)(_) = e;
 }
 
@@ -2144,14 +2144,6 @@ Stage &Stage::compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrate
     return compute_with(LoopLevel(s.function, var, s.stage_index), align);
 }
 
-/** Attempt to get the source file and line where this stage was
- * defined by parsing the process's own debug symbols. Returns an
- * empty string if no debug symbols were found or the debug
- * symbols were not understood. Works on OS X and Linux only. */
-std::string Stage::source_location() const {
-    return definition.source_location();
-}
-
 void Stage::unscheduled() {
     user_assert(!definition.schedule().touched()) << "Stage::unscheduled called on an update definition with a schedule\n";
     definition.schedule().touched() = true;
@@ -3488,11 +3480,6 @@ Pipeline Func::pipeline() {
 
 vector<Argument> Func::infer_arguments() const {
     return Pipeline(*this).infer_arguments();
-}
-
-std::string Func::source_location() const {
-    user_assert(defined()) << "A Func with no definition has no source_location\n";
-    return func.definition().source_location();
 }
 
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {

@@ -1057,8 +1057,9 @@ Definition Deserializer::deserialize_definition(const Serialize::Definition *def
     const std::vector<Specialization> specializations =
         deserialize_vector<Serialize::Specialization, Specialization>(definition->specializations(),
                                                                       &Deserializer::deserialize_specialization);
+    // Desaerialize and ignore this value.
     const auto source_location = deserialize_string(definition->source_location());
-    return Definition(is_init, predicate, args, values, stage_schedule, specializations, source_location);
+    return Definition(is_init, predicate, args, values, stage_schedule, specializations);
 }
 
 ReductionVariable Deserializer::deserialize_reduction_variable(const Serialize::ReductionVariable *reduction_variable) {

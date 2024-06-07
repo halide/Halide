@@ -135,7 +135,7 @@ void RDom::validate_min_extent(const Expr &min, const Expr &extent) {
 
 void RDom::initialize_from_region(const Region &region, string name) {
     if (name.empty()) {
-        name = make_entity_name(this, "Halide:.*:RDom", 'r');
+        name = unique_name('r');
     }
 
     std::vector<ReductionVariable> vars;
