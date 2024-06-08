@@ -788,6 +788,15 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
 
+    // Check whether the operator is associative and determine the operator and
+    // its identity for each value in the definition if it is a Tuple
+    const auto &prover_result = prove_associativity(func_name, args, values);
+
+    user_assert(prover_result.associative())
+        << "Failed to call rfactor() on " << name()
+        << " since it can't prove associativity of the operator\n";
+    internal_assert(prover_result.size() == values.size());
+
     // Figure out which pure vars were used in this update definition.
     std::set<string> pure_vars_used;
     internal_assert(args.size() == dim_vars.size());
@@ -798,15 +807,6 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
             }
         }
     }
-
-    // Check whether the operator is associative and determine the operator and
-    // its identity for each value in the definition if it is a Tuple
-    const auto &prover_result = prove_associativity(func_name, args, values);
-
-    user_assert(prover_result.associative())
-        << "Failed to call rfactor() on " << name()
-        << " since it can't prove associativity of the operator\n";
-    internal_assert(prover_result.size() == values.size());
 
     vector<Split> &splits = definition.schedule().splits();
     vector<Dim> &dims = definition.schedule().dims();
