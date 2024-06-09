@@ -144,6 +144,8 @@ CodeGen_Xtensa::CodeGen_Xtensa(ostream &s, const Target &t, OutputKind k, const 
 
           {"halide_xtensa_sat_left_shift_i16", "IVP_SLSNX16"},
           {"halide_xtensa_sat_left_shift_i32", "IVP_SLSN_2X32"},
+
+          {"halide_xtensa_sat_right_shift_i32", "IVP_SRSN_2X32"},
       } {
 }
 
