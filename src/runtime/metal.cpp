@@ -418,7 +418,7 @@ public:
         saved_status = halide_error_code_success;
         if (error_string != nullptr && result != halide_error_code_success && strnlen(MetalContextHolder::error_string, 1024) > 0) {
             strncpy(error_string, MetalContextHolder::error_string, 1024);
-            error_string[1023] = '\0'; 
+            error_string[1023] = '\0';
             MetalContextHolder::error_string[0] = '\0';
             debug(nullptr) << "MetalContextHolder::get_and_clear_saved_status: " << error_string << "\n";
         }
@@ -432,7 +432,7 @@ public:
         int result = saved_status;
         if (error_string != nullptr && result != halide_error_code_success && strnlen(MetalContextHolder::error_string, 1024) > 0) {
             strncpy(error_string, MetalContextHolder::error_string, 1024);
-            error_string[1023] = '\0'; 
+            error_string[1023] = '\0';
         }
         halide_mutex_unlock(&saved_status_mutex);
         return result;
@@ -443,7 +443,7 @@ public:
         saved_status = new_status;
         if (error_string != nullptr) {
             strncpy(MetalContextHolder::error_string, error_string, 1024);
-            error_string[1023] = '\0'; 
+            error_string[1023] = '\0';
             debug(nullptr) << "MetalContextHolder::set_saved_status: " << error_string << "\n";
         }
         halide_mutex_unlock(&saved_status_mutex);
@@ -479,13 +479,13 @@ char MetalContextHolder::error_string[1024] = {0};
 extern "C" {
 /** This function is called as part of the callback when a Metal command buffer completes.
  * The return value, if not halide_error_code_success, will be stashed in Metal runtime and returned
- * to the next call into the runtime, and the error string will be saved as well.  
+ * to the next call into the runtime, and the error string will be saved as well.
  * The error string will be freed by the caller. The return value must be a valid Halide error code.
  * This is called from the Metal driver, and thus:
  * - Any user_context must be preserved between the call to halide_metal_run and the corresponding callback
  * - The function must be thread-safe
-*/
-WEAK int halide_metal_command_buffer_completion_handler(void* user_context, mtl_command_buffer *buffer, char **returned_error_string) {
+ */
+WEAK int halide_metal_command_buffer_completion_handler(void *user_context, mtl_command_buffer *buffer, char **returned_error_string) {
     objc_id buffer_error = command_buffer_error(buffer);
     if (buffer_error != nullptr) {
         retain_ns_object(buffer_error);
@@ -506,7 +506,7 @@ WEAK int halide_metal_command_buffer_completion_handler(void* user_context, mtl_
 
         // Copy C-style string into a fresh buffer
         if (returned_error_string != nullptr) {
-            *returned_error_string = (char*)malloc(sizeof(char) * 1024);
+            *returned_error_string = (char *)malloc(sizeof(char) * 1024);
             if (*returned_error_string != nullptr) {
                 strncpy(*returned_error_string, error_string, 1024);
                 (*returned_error_string)[1023] = '\0';
@@ -521,7 +521,7 @@ WEAK int halide_metal_command_buffer_completion_handler(void* user_context, mtl_
     }
     return halide_error_code_success;
 }
-} // extern "C"
+}  // extern "C"
 
 namespace Halide {
 namespace Runtime {
@@ -533,7 +533,7 @@ struct user_context_block_byref {
     struct user_context_block_byref *forwarding;
     int flags;
     int size;
-    void* user_context;
+    void *user_context;
 };
 
 struct command_buffer_completed_handler_block_descriptor_1 {
@@ -555,16 +555,13 @@ WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_complete
 
 WEAK void command_buffer_completed_handler_invoke(command_buffer_completed_handler_block_literal *block, mtl_command_buffer *buffer) {
     retain_ns_object(buffer);
-    char* error_string = nullptr;
+    char *error_string = nullptr;
     auto status = halide_metal_command_buffer_completion_handler(block->user_context_holder->user_context, buffer, &error_string);
     release_ns_object(buffer);
 
     MetalContextHolder::set_saved_status(status, error_string);
     free(error_string);
-
 }
-
-
 
 }  // namespace Metal
 }  // namespace Internal

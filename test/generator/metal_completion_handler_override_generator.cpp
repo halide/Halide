@@ -10,7 +10,7 @@ public:
         Var x("x"), y("y");
 
         // Create a simple pipeline that scales pixel values by 2.
-        output(x, y) = x + y * 2; 
+        output(x, y) = x + y * 2;
 
         Target target = get_target();
         if (target.has_gpu_feature()) {

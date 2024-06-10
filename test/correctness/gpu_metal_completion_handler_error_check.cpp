@@ -25,7 +25,6 @@ int main(int argc, char **argv) {
     f.gpu_tile(x, c, xi, ci, 4, 4);
     f.update(0).gpu_tile(r.x, c, rxi, ci, 4, 4);
 
-
     // Metal is surprisingly resilient.  Run this in a loop just to make sure we trigger the error.
     for (int i = 0; (i < 10) && !errored; i++) {
         auto out = f.realize({1000, 100}, t);

@@ -96,13 +96,13 @@ extern int halide_metal_release_context(void *user_context);
 
 /** This function is called as part of the callback when a Metal command buffer completes.
  * The return value, if not halide_error_code_success, will be stashed in Metal runtime and returned
- * to the next call into the runtime, and the error string will be saved as well.  
+ * to the next call into the runtime, and the error string will be saved as well.
  * The error string will be freed by the caller. The return value must be a valid Halide error code.
  * This is called from the Metal driver, and thus:
  * - Any user_context must be preserved between the call to halide_metal_run and the corresponding callback
  * - The function must be thread-safe
-*/
-extern int halide_metal_command_buffer_completion_handler(void* user_context, struct halide_metal_command_buffer *buffer, 
+ */
+extern int halide_metal_command_buffer_completion_handler(void *user_context, struct halide_metal_command_buffer *buffer,
                                                           char **returned_error_string);
 
 #ifdef __cplusplus

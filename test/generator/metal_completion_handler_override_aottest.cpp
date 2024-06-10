@@ -4,20 +4,21 @@
 
 #include "metal_completion_handler_override.h"
 
-
 struct MyUserContext {
     int counter;
 
-    MyUserContext() : counter(0) {}
+    MyUserContext()
+        : counter(0) {
+    }
 };
 
-extern "C" int halide_metal_command_buffer_completion_handler(void* user_context, struct halide_metal_command_buffer *, char **) {
+extern "C" int halide_metal_command_buffer_completion_handler(void *user_context, struct halide_metal_command_buffer *, char **) {
     auto ctx = (MyUserContext *)user_context;
     ctx->counter++;
     return halide_error_code_success;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
 #if defined(TEST_METAL)
     Halide::Runtime::Buffer<int32_t> output(32, 32);
 
@@ -39,7 +40,7 @@ int main(int argc, char* argv[]) {
         printf("Error: completion handler was not called\n");
         return -1;
     }
-    
+
     printf("Success!\n");
 #else
     printf("[SKIP] Metal not enabled\n");
