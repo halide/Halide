@@ -346,8 +346,11 @@ int test_one(uint32_t seed) {
     buf_i8.fill(rng);
 
     Expr e1 = random_expr(rng);
+    Expr simplified = simplify(e1);
 
-    if (might_have_ub(e1) || might_have_ub(simplify(e1))) {
+    if (might_have_ub(e1) ||
+        might_have_ub(simplified) ||
+        might_have_ub(lower_intrinsics(simplified))) {
         return 0;
     }
 
