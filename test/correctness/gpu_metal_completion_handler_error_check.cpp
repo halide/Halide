@@ -1,5 +1,5 @@
 #include "Halide.h"
-#include <unistd.h>
+#include <stdio.h>
 
 using namespace Halide;
 

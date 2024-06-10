@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
 #include "HalideRuntimeMetal.h"
