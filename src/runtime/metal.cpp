@@ -418,6 +418,7 @@ public:
         saved_status = halide_error_code_success;
         if (error_string != nullptr && result != halide_error_code_success && strnlen(MetalContextHolder::error_string, 1024) > 0) {
             strncpy(error_string, MetalContextHolder::error_string, 1024);
+            // Ensure null-termination, since strncpy won't if the source string is too long
             error_string[1023] = '\0';
             MetalContextHolder::error_string[0] = '\0';
             debug(nullptr) << "MetalContextHolder::get_and_clear_saved_status: " << error_string << "\n";
@@ -432,6 +433,7 @@ public:
         int result = saved_status;
         if (error_string != nullptr && result != halide_error_code_success && strnlen(MetalContextHolder::error_string, 1024) > 0) {
             strncpy(error_string, MetalContextHolder::error_string, 1024);
+            // Ensure null-termination, since strncpy won't if the source string is too long
             error_string[1023] = '\0';
         }
         halide_mutex_unlock(&saved_status_mutex);
@@ -443,6 +445,7 @@ public:
         saved_status = new_status;
         if (error_string != nullptr) {
             strncpy(MetalContextHolder::error_string, error_string, 1024);
+            // Ensure null-termination, since strncpy won't if the source string is too long
             error_string[1023] = '\0';
             debug(nullptr) << "MetalContextHolder::set_saved_status: " << error_string << "\n";
         }
@@ -509,6 +512,7 @@ WEAK int halide_metal_command_buffer_completion_handler(void *user_context, mtl_
             *returned_error_string = (char *)malloc(sizeof(char) * 1024);
             if (*returned_error_string != nullptr) {
                 strncpy(*returned_error_string, error_string, 1024);
+                // Ensure null-termination, since strncpy won't if the source string is too long
                 (*returned_error_string)[1023] = '\0';
             } else {
                 debug(user_context) << "halide_metal_command_buffer_completion_handler: Failed to allocate memory for error string.\n";
