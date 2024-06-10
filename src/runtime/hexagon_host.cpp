@@ -481,7 +481,7 @@ WEAK int halide_hexagon_run(void *user_context,
     if (remote_poll_profiler_state) {
         halide_profiler_lock(s);
         const halide_profiler_instance_state *instance = s->instances;
-        if(instance) {
+        if (instance) {
             if (instance->next) {
                 halide_profiler_unlock(s);
                 error(user_context) << "Hexagon: multiple simultaneous profiled pipelines is unsupported.";
