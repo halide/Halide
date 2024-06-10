@@ -1015,8 +1015,8 @@ WEAK int halide_metal_run(void *user_context,
         user_context};
 
     command_buffer_completed_handler_block_literal command_buffer_completed_handler_block = {
-        &_NSConcreteGlobalBlock,
-        /*(1 << 28) | */ (1 << 29),  // BLOCK_IS_GLOBAL | BLOCK_HAS_DESCRIPTOR
+        &_NSConcreteStackBlock,
+        (1 << 29),  // BLOCK_HAS_DESCRIPTOR
         0, command_buffer_completed_handler_invoke,
         &command_buffer_completed_handler_descriptor,
         &user_context_holder};
