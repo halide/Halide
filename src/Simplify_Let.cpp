@@ -34,7 +34,7 @@ class FindVarUses : public IRVisitor {
 
     void visit(const Block *op) override {
         // Early out at Block nodes if we've already seen every name we're
-        // interested in. In principal we could early-out at every node, but
+        // interested in. In principle we could early-out at every node, but
         // blocks, loads, and stores seem to be enough.
         if (!unused_vars.empty()) {
             op->first.accept(this);
