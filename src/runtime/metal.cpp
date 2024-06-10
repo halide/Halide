@@ -12,6 +12,7 @@
 extern "C" {
 extern objc_id MTLCreateSystemDefaultDevice();
 extern struct ObjectiveCClass _NSConcreteGlobalBlock;
+extern struct ObjectiveCClass _NSConcreteStackBlock;
 void *dlsym(void *, const char *);
 #define RTLD_DEFAULT ((void *)-2)
 }
@@ -23,8 +24,8 @@ namespace Metal {
 
 typedef halide_metal_device mtl_device;
 typedef halide_metal_command_queue mtl_command_queue;
+typedef halide_metal_command_buffer mtl_command_buffer;
 struct mtl_buffer;
-struct mtl_command_buffer;
 struct mtl_compute_command_encoder;
 struct mtl_blit_command_encoder;
 struct mtl_compute_pipeline_state;
@@ -476,6 +477,14 @@ char MetalContextHolder::error_string[1024] = {0};
 }  // namespace Halide
 
 extern "C" {
+/** This function is called as part of the callback when a Metal command buffer completes.
+ * The return value, if not halide_error_code_success, will be stashed in Metal runtime and returned
+ * to the next call into the runtime, and the error string will be saved as well.  
+ * The error string will be freed by the caller. The return value must be a valid Halide error code.
+ * This is called from the Metal driver, and thus:
+ * - Any user_context must be preserved between the call to halide_metal_run and the corresponding callback
+ * - The function must be thread-safe
+*/
 WEAK int halide_metal_command_buffer_completion_handler(void* user_context, mtl_command_buffer *buffer, char **returned_error_string) {
     objc_id buffer_error = command_buffer_error(buffer);
     if (buffer_error != nullptr) {
@@ -519,6 +528,14 @@ namespace Runtime {
 namespace Internal {
 namespace Metal {
 
+struct user_context_block_byref {
+    void *isa;
+    struct user_context_block_byref *forwarding;
+    int flags;
+    int size;
+    void* user_context;
+};
+
 struct command_buffer_completed_handler_block_descriptor_1 {
     unsigned long reserved;
     unsigned long block_size;
@@ -530,6 +547,7 @@ struct command_buffer_completed_handler_block_literal {
     int reserved;
     void (*invoke)(command_buffer_completed_handler_block_literal *, mtl_command_buffer *buffer);
     struct command_buffer_completed_handler_block_descriptor_1 *descriptor;
+    struct user_context_block_byref *user_context_holder;
 };
 
 WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_completed_handler_descriptor = {
@@ -538,7 +556,7 @@ WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_complete
 WEAK void command_buffer_completed_handler_invoke(command_buffer_completed_handler_block_literal *block, mtl_command_buffer *buffer) {
     retain_ns_object(buffer);
     char* error_string = nullptr;
-    auto status = halide_metal_command_buffer_completion_handler(nullptr, buffer, &error_string);
+    auto status = halide_metal_command_buffer_completion_handler(block->user_context_holder->user_context, buffer, &error_string);
     release_ns_object(buffer);
 
     MetalContextHolder::set_saved_status(status, error_string);
@@ -546,11 +564,7 @@ WEAK void command_buffer_completed_handler_invoke(command_buffer_completed_handl
 
 }
 
-WEAK command_buffer_completed_handler_block_literal command_buffer_completed_handler_block = {
-    &_NSConcreteGlobalBlock,
-    (1 << 28) | (1 << 29),  // BLOCK_IS_GLOBAL | BLOCK_HAS_DESCRIPTOR
-    0, command_buffer_completed_handler_invoke,
-    &command_buffer_completed_handler_descriptor};
+
 
 }  // namespace Metal
 }  // namespace Internal
@@ -994,6 +1008,21 @@ WEAK int halide_metal_run(void *user_context,
                           blocksX, blocksY, blocksZ,
                           threadsX, threadsY, threadsZ);
     end_encoding(encoder);
+
+    // Construct an Objective C block to check for errors on command buffer completion, saving the user context
+    user_context_block_byref user_context_holder = {
+        &_NSConcreteStackBlock,
+        &user_context_holder,
+        0,
+        sizeof(user_context_holder),
+        user_context};
+
+    command_buffer_completed_handler_block_literal command_buffer_completed_handler_block = {
+        &_NSConcreteGlobalBlock,
+        /*(1 << 28) | */ (1 << 29),  // BLOCK_IS_GLOBAL | BLOCK_HAS_DESCRIPTOR
+        0, command_buffer_completed_handler_invoke,
+        &command_buffer_completed_handler_descriptor,
+        &user_context_holder};
 
     add_command_buffer_completed_handler(command_buffer, &command_buffer_completed_handler_block);
 
