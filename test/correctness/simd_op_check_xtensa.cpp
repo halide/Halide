@@ -125,6 +125,8 @@ public:
         check("IVP_SLLINX16U", vector_width / 2, u16_1 * 4);
         check("IVP_SLLN_2X32U", vector_width / 4, u32_1 << min(max(i32_2, -31), 31));
         check("IVP_SLLIN_2X32U", vector_width / 4, u32_1 * 4);
+        check("IVP_SLSN_2X32", vector_width / 4, i32_sat(widening_shift_left(i32_1, u32_2)));
+        check("IVP_SRSN_2X32", vector_width / 4, i32_sat(widening_shift_right(i32_1, u32_2)));
 
         // Casts.
         // Note: we deliberately leave out the spaces here, to keep the symbols
