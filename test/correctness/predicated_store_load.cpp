@@ -464,6 +464,22 @@ int vectorized_predicated_load_lut_test(const Target &t) {
     return 0;
 }
 
+int predicated_atomic_store_test(const Target &t) {
+    // We don't support atomic predicated stores, so ensure that we don't
+    // generate them. See https://github.com/halide/Halide/issues/8280
+    ImageParam in(Float(32), 1);
+    Func f;
+    Var x;
+    RDom r(0, 20);
+
+    f(x) = 0.f;
+    f(x) += in(r) + x;
+    f.update().vectorize(x, 8, TailStrategy::GuardWithIf).atomic().parallel(r);
+
+    f.compile_jit(t);
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -526,6 +542,11 @@ int main(int argc, char **argv) {
 
     printf("Running vectorized predicated load lut test\n");
     if (vectorized_predicated_load_lut_test(t) != 0) {
+        return 1;
+    }
+
+    printf("predicated atomic store test\n");
+    if (predicated_atomic_store_test(t) != 0) {
         return 1;
     }
 
