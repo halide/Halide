@@ -992,6 +992,45 @@ int self_assignment_rfactor_test() {
     return 0;
 }
 
+int inlined_rfactor_with_disappearing_rvar_test() {
+    ImageParam in1(Float(32), 1);
+
+    Var x("x"), r("r"), u("u");
+    RVar ro("ro"), ri("ri");
+    Func f("f"), g("g");
+    Func sum1("sum1");
+
+    RDom rdom(0, 16);
+    g(r, x) = in1(x);
+    f(x) = sum(rdom, g(rdom, x), sum1);
+
+    {
+        // Some of the autoschedulers execute code like the below, which can
+        // erase an RDom from the RHS of a Func, but not from the dims list,
+        // which confused the implementation of rfactor (see
+        // https://github.com/halide/Halide/issues/8282)
+        using namespace Halide::Internal;
+        std::vector<Function> outputs = {f.function()};
+        auto env = build_environment(outputs);
+
+        for (auto &iter : env) {
+            iter.second.lock_loop_levels();
+        }
+
+        inline_function(sum1.function(), g.function());
+    }
+
+    sum1.compute_root()
+        .update(0)
+        .split(rdom, ro, ri, 8, TailStrategy::GuardWithIf)
+        .rfactor({{ro, u}})
+        .compute_root();
+
+    // This would crash with a missing symbol error prior to #8282 being fixed.
+    f.compile_jit();
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1032,6 +1071,7 @@ int main(int argc, char **argv) {
         {"rfactor tile reorder test: checking output img correctness...", rfactor_tile_reorder_test},
         {"complex multiply rfactor test", complex_multiply_rfactor_test},
         {"argmin rfactor test", argmin_rfactor_test},
+        {"inlined rfactor with disappearing rvar test", inlined_rfactor_with_disappearing_rvar_test},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;
