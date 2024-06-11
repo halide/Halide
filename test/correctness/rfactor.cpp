@@ -1006,8 +1006,8 @@ int inlined_rfactor_with_disappearing_rvar_test() {
 
     {
         // Some of the autoschedulers execute code like the below, which can
-        // erase an RDom from the RHS of a Func, but not from the dims list,
-        // which confused the implementation of rfactor (see
+        // erase an RDom from the LHS and RHS of a Func, but not from the dims
+        // list, which confused the implementation of rfactor (see
         // https://github.com/halide/Halide/issues/8282)
         using namespace Halide::Internal;
         std::vector<Function> outputs = {f.function()};
