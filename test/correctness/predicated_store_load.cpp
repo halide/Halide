@@ -476,6 +476,8 @@ int predicated_atomic_store_test(const Target &t) {
     f(x) += in(r) + x;
     f.update().vectorize(x, 8, TailStrategy::GuardWithIf).atomic().parallel(r);
 
+    // This will cause an internal_error in the LLVM backend if we pass a
+    // predicated atomic store down to codegen.
     f.compile_jit(t);
     return 0;
 }
