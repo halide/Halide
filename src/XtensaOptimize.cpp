@@ -1079,6 +1079,7 @@ private:
 
             {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_i32x))},
             {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_u32x))},
+            {"halide_xtensa_sat_right_shift_i32", i32_sat(widening_shift_right(wild_i32x, wild_i32x))},
             {"halide_xtensa_sat_right_shift_i32", i32_sat(widening_shift_right(wild_i32x, wild_u32x))},
 
             {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_i64))},
