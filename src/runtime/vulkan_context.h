@@ -90,8 +90,8 @@ int vk_find_compute_capability(void *user_context, int *major, int *minor) {
 
     if (!lib_vulkan) {
         // If the Vulkan loader can't be found, we want to return compute
-        // capability of (0, 0) ... this is not considered an error. So we 
-        // should be very careful about looking for Vulkan without tripping 
+        // capability of (0, 0) ... this is not considered an error. So we
+        // should be very careful about looking for Vulkan without tripping
         // any errors in the rest of this runtime.
         void *sym = halide_vulkan_get_symbol(user_context, "vkCreateInstance");
         if (!sym) {
@@ -102,7 +102,7 @@ int vk_find_compute_capability(void *user_context, int *major, int *minor) {
 
     if (vkCreateInstance == nullptr) {
         vk_load_vulkan_loader_functions(user_context);
-        if(vkCreateInstance == nullptr) {
+        if (vkCreateInstance == nullptr) {
             debug(user_context) << "  no valid vulkan loader library was found ...\n";
             *major = *minor = 0;
             return halide_error_code_success;
@@ -123,7 +123,7 @@ int vk_find_compute_capability(void *user_context, int *major, int *minor) {
 
     if (vkCreateDevice == nullptr) {
         vk_load_vulkan_functions(user_context, instance);
-        if(vkCreateDevice == nullptr) {
+        if (vkCreateDevice == nullptr) {
             debug(user_context) << "  no valid vulkan runtime was found ...\n";
             *major = *minor = 0;
             return halide_error_code_success;
@@ -452,7 +452,7 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
 
     if (vkCreateInstance == nullptr) {
         vk_load_vulkan_loader_functions(user_context);
-        if(vkCreateInstance == nullptr) {
+        if (vkCreateInstance == nullptr) {
             error(user_context) << "Vulkan: Failed to resolve loader library methods to create instance!\n";
             return halide_error_code_symbol_not_found;
         }

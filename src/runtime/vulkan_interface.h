@@ -87,8 +87,8 @@ VULKAN_FN(vkGetInstanceProcAddr)
 void WEAK vk_load_vulkan_loader_functions(void *user_context) {
     debug(user_context) << "    vk_load_vulkan_loader_functions (user_context: " << user_context << ")\n";
 #define VULKAN_FN(fn) fn = (PFN_##fn)halide_vulkan_get_symbol(user_context, #fn);
-VULKAN_FN(vkCreateInstance)
-VULKAN_FN(vkGetInstanceProcAddr)
+    VULKAN_FN(vkCreateInstance)
+    VULKAN_FN(vkGetInstanceProcAddr)
 #undef VULKAN_FN
 }
 
