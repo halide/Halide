@@ -1004,10 +1004,10 @@ WEAK int halide_metal_run(void *user_context,
                           blocksX, blocksY, blocksZ,
                           threadsX, threadsY, threadsZ);
     end_encoding(encoder);
-    
+
     command_buffer_completed_handler_block_literal command_buffer_completed_handler_block = {
         &_NSConcreteStackBlock,
-        0, // must be 0 for stack blocks
+        0,  // must be 0 for stack blocks
         0, command_buffer_completed_handler_invoke,
         &command_buffer_completed_handler_descriptor,
         user_context};
