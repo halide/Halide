@@ -14,7 +14,11 @@ struct MyUserContext {
     }
 };
 
-extern "C" int halide_metal_command_buffer_completion_handler(void *user_context, struct halide_metal_command_buffer *, char **) {
+extern "C" int halide_metal_command_buffer_completion_handler(void *const user_context, struct halide_metal_command_buffer *, char **) {
+    if (user_context == nullptr) {
+        printf("Error: user_context is nullptr\n");
+        return -1;
+    }
     auto ctx = (MyUserContext *)user_context;
     ctx->counter++;
     return halide_error_code_success;

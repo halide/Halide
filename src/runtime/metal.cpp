@@ -487,8 +487,9 @@ extern "C" {
  * This is called from the Metal driver, and thus:
  * - Any user_context must be preserved between the call to halide_metal_run and the corresponding callback
  * - The function must be thread-safe
+ * - For Objective-C API reasons, the user context is passed in as a void *const
  */
-WEAK int halide_metal_command_buffer_completion_handler(void *user_context, mtl_command_buffer *buffer, char **returned_error_string) {
+WEAK int halide_metal_command_buffer_completion_handler(void *const user_context, mtl_command_buffer *buffer, char **returned_error_string) {
     objc_id buffer_error = command_buffer_error(buffer);
     if (buffer_error != nullptr) {
         retain_ns_object(buffer_error);
@@ -532,14 +533,6 @@ namespace Runtime {
 namespace Internal {
 namespace Metal {
 
-struct user_context_block_byref {
-    void *isa;
-    struct user_context_block_byref *forwarding;
-    int flags;
-    int size;
-    void *user_context;
-};
-
 struct command_buffer_completed_handler_block_descriptor_1 {
     unsigned long reserved;
     unsigned long block_size;
@@ -551,7 +544,7 @@ struct command_buffer_completed_handler_block_literal {
     int reserved;
     void (*invoke)(command_buffer_completed_handler_block_literal *, mtl_command_buffer *buffer);
     struct command_buffer_completed_handler_block_descriptor_1 *descriptor;
-    struct user_context_block_byref *user_context_holder;
+    void *const user_context;
 };
 
 WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_completed_handler_descriptor = {
@@ -560,7 +553,9 @@ WEAK command_buffer_completed_handler_block_descriptor_1 command_buffer_complete
 WEAK void command_buffer_completed_handler_invoke(command_buffer_completed_handler_block_literal *block, mtl_command_buffer *buffer) {
     retain_ns_object(buffer);
     char *error_string = nullptr;
-    auto status = halide_metal_command_buffer_completion_handler(block->user_context_holder->user_context, buffer, &error_string);
+    void *const user_context = block->user_context;
+
+    auto status = halide_metal_command_buffer_completion_handler(user_context, buffer, &error_string);
     release_ns_object(buffer);
 
     MetalContextHolder::set_saved_status(status, error_string);
@@ -1009,21 +1004,13 @@ WEAK int halide_metal_run(void *user_context,
                           blocksX, blocksY, blocksZ,
                           threadsX, threadsY, threadsZ);
     end_encoding(encoder);
-
-    // Construct an Objective C block to check for errors on command buffer completion, saving the user context
-    user_context_block_byref user_context_holder = {
-        &_NSConcreteStackBlock,
-        &user_context_holder,
-        0,
-        sizeof(user_context_holder),
-        user_context};
-
+    
     command_buffer_completed_handler_block_literal command_buffer_completed_handler_block = {
         &_NSConcreteStackBlock,
-        (1 << 29),  // BLOCK_HAS_DESCRIPTOR
+        0, // must be 0 for stack blocks
         0, command_buffer_completed_handler_invoke,
         &command_buffer_completed_handler_descriptor,
-        &user_context_holder};
+        user_context};
 
     add_command_buffer_completed_handler(command_buffer, &command_buffer_completed_handler_block);
 
