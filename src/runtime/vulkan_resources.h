@@ -923,6 +923,21 @@ int vk_setup_compute_pipeline(void *user_context,
             dispatch_constant_values[dispatch_constant_index] = dynamic_array_size;
             dispatch_constant_index++;
         }
+
+        // verify the device can actually support the necessary amount of shared memory requested
+        if (allocator->current_physical_device_limits().maxComputeSharedMemorySize > 0) {
+            uint64_t device_shared_mem_size = allocator->current_physical_device_limits().maxComputeSharedMemorySize;
+            if (static_shared_mem_bytes > device_shared_mem_size) {
+                error(user_context) << "Vulkan: Amount of static shared memory used exceeds device limit! "
+                                    << static_shared_mem_bytes << " > " << device_shared_mem_size << " bytes\n";
+                return halide_error_code_incompatible_device_interface;
+            }
+            if (dispatch_data->shared_mem_bytes > device_shared_mem_size) {
+                error(user_context) << "Vulkan: Amount of dynamic shared memory exceeds device limit! "
+                                    << (uint64_t)dispatch_data->shared_mem_bytes << " > " << device_shared_mem_size << " bytes\n";
+                return halide_error_code_incompatible_device_interface;
+            }
+        }
     }
 
     // locate the mapping for overriding any dynamic workgroup local sizes
