@@ -487,7 +487,6 @@ extern "C" {
  * This is called from the Metal driver, and thus:
  * - Any user_context must be preserved between the call to halide_metal_run and the corresponding callback
  * - The function must be thread-safe
- * - For Objective-C API reasons, the user context is passed in as a void *const
  */
 WEAK int halide_metal_command_buffer_completion_handler(void *const user_context, mtl_command_buffer *buffer, char **returned_error_string) {
     objc_id buffer_error = command_buffer_error(buffer);
