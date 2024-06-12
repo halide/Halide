@@ -1,4 +1,5 @@
-// NOTE: vkCreateInstance is already defined in the mini_vulkan header
+// NOTE: vkCreateInstance and vkGetInstanceProcAddr are defined in the loader library and will be resolved seperately
+// The rest of these are resolved via vkGetInstanceProcAddr which the loader exports and maps to the driver implementation
 VULKAN_FN(vkDestroyInstance)
 VULKAN_FN(vkCreateDevice)
 VULKAN_FN(vkDestroyDevice)

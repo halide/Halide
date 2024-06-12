@@ -335,9 +335,6 @@ endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -lOpenCL
 endif
-ifneq ($(TEST_VULKAN), )
-VULKAN_LD_FLAGS ?= -lvulkan
-endif
 HOST_OS=linux
 endif
 
@@ -348,10 +345,6 @@ CUDA_LD_FLAGS ?= -L/usr/local/cuda/lib -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -framework OpenCL
-endif
-ifneq ($(TEST_VULKAN), )
-# The Vulkan loader is distributed as a dylib on OSX (not a framework)
-VULKAN_LD_FLAGS ?= -lvulkan
 endif
 ifneq ($(TEST_METAL), )
 METAL_LD_FLAGS ?= -framework Metal -framework Foundation

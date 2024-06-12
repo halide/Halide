@@ -88,27 +88,52 @@ int vk_find_compute_capability(void *user_context, int *major, int *minor) {
     VkPhysicalDevice physical_device = nullptr;
     uint32_t queue_family_index = 0;
 
+    if (!lib_vulkan) {
+        // If the Vulkan loader can't be found, we want to return compute
+        // capability of (0, 0) ... this is not considered an error. So we 
+        // should be very careful about looking for Vulkan without tripping 
+        // any errors in the rest of this runtime.
+        void *sym = halide_vulkan_get_symbol(user_context, "vkCreateInstance");
+        if (!sym) {
+            *major = *minor = 0;
+            return halide_error_code_success;
+        }
+    }
+
+    if (vkCreateInstance == nullptr) {
+        vk_load_vulkan_loader_functions(user_context);
+        if(vkCreateInstance == nullptr) {
+            debug(user_context) << "  no valid vulkan loader library was found ...\n";
+            *major = *minor = 0;
+            return halide_error_code_success;
+        }
+    }
+
     StringTable requested_layers;
     vk_get_requested_layers(user_context, requested_layers);
 
+    // Attempt to find a suitable instance that can support the requested layers
     const VkAllocationCallbacks *alloc_callbacks = halide_vulkan_get_allocation_callbacks(user_context);
     int status = vk_create_instance(user_context, requested_layers, &instance, alloc_callbacks);
     if (status != halide_error_code_success) {
         debug(user_context) << "  no valid vulkan runtime was found ...\n";
-        *major = 0;
-        *minor = 0;
+        *major = *minor = 0;
         return 0;
     }
 
     if (vkCreateDevice == nullptr) {
-        vk_load_vulkan_functions(instance);
+        vk_load_vulkan_functions(user_context, instance);
+        if(vkCreateDevice == nullptr) {
+            debug(user_context) << "  no valid vulkan runtime was found ...\n";
+            *major = *minor = 0;
+            return halide_error_code_success;
+        }
     }
 
     status = vk_select_device_for_context(user_context, &instance, &device, &physical_device, &queue_family_index);
     if (status != halide_error_code_success) {
         debug(user_context) << "  no valid vulkan device was found ...\n";
-        *major = 0;
-        *minor = 0;
+        *major = *minor = 0;
         return 0;
     }
 
@@ -425,6 +450,14 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
 
     debug(user_context) << " vk_create_context (user_context: " << user_context << ")\n";
 
+    if (vkCreateInstance == nullptr) {
+        vk_load_vulkan_loader_functions(user_context);
+        if(vkCreateInstance == nullptr) {
+            error(user_context) << "Vulkan: Failed to resolve loader library methods to create instance!\n";
+            return halide_error_code_symbol_not_found;
+        }
+    }
+
     StringTable requested_layers;
     uint32_t requested_layer_count = vk_get_requested_layers(user_context, requested_layers);
     debug(user_context) << "  requested " << requested_layer_count << " layers for instance!\n";
@@ -440,7 +473,11 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
     }
 
     if (vkCreateDevice == nullptr) {
-        vk_load_vulkan_functions(*instance);
+        vk_load_vulkan_functions(user_context, *instance);
+        if (vkCreateDevice == nullptr) {
+            error(user_context) << "Vulkan: Failed to resolve API library methods to create device!\n";
+            return halide_error_code_symbol_not_found;
+        }
     }
 
     error_code = vk_select_device_for_context(user_context, instance, device, physical_device, queue_family_index);
