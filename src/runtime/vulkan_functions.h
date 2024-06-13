@@ -2,6 +2,7 @@
 // The rest of these are resolved via vkGetInstanceProcAddr which the loader exports and maps to the driver implementation
 VULKAN_FN(vkDestroyInstance)
 VULKAN_FN(vkCreateDevice)
+VULKAN_FN(vkDeviceWaitIdle)
 VULKAN_FN(vkDestroyDevice)
 VULKAN_FN(vkGetDeviceQueue)
 VULKAN_FN(vkCreateBuffer)

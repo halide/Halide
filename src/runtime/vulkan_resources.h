@@ -113,7 +113,11 @@ int vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator
         error(user_context) << "Vulkan: Failed to destroy command pool ... invalid allocator pointer!\n";
         return halide_error_code_generic_error;
     }
-
+    if (command_pool == VkInvalidCommandPool) {
+        debug(user_context) << "Vulkan: Command pool already destroyed.\n";
+        return halide_error_code_success;
+    }
+    vkResetCommandPool(allocator->current_device(), command_pool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
     vkDestroyCommandPool(allocator->current_device(), command_pool, allocator->callbacks());
     return halide_error_code_success;
 }

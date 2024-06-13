@@ -24,7 +24,7 @@ halide_vulkan_memory_allocator *WEAK cached_allocator = nullptr;
 // Cached instance related handles for device resources
 VkInstance WEAK cached_instance = nullptr;
 VkDevice WEAK cached_device = nullptr;
-VkCommandPool WEAK cached_command_pool = 0;
+VkCommandPool WEAK cached_command_pool = VkInvalidCommandPool;
 VkQueue WEAK cached_queue = nullptr;
 VkPhysicalDevice WEAK cached_physical_device = nullptr;
 uint32_t WEAK cached_queue_family_index = 0;
@@ -42,7 +42,7 @@ public:
     VulkanMemoryAllocator *allocator = nullptr;
     VkInstance instance = nullptr;
     VkDevice device = nullptr;
-    VkCommandPool command_pool = 0;
+    VkCommandPool command_pool = VkInvalidCommandPool;
     VkPhysicalDevice physical_device = nullptr;
     VkQueue queue = nullptr;
     uint32_t queue_family_index = 0;  // used for operations requiring queue family
@@ -504,6 +504,32 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
         return error_code;
     }
 
+    return halide_error_code_success;
+}
+
+// Destroys the context and all associated resources (used by halide_vulkan_device_release)
+// NOTE: This should be called inside an acquire_context/release_context scope
+int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
+                       VkInstance instance, VkDevice device, VkPhysicalDevice physical_device,
+                       VkCommandPool command_pool, VkQueue queue) {
+
+    debug(user_context)
+        << "vk_destroy_context (user_context: " << user_context << ")\n";
+
+    if (device != nullptr) {
+        vkDeviceWaitIdle(device);
+    }
+    if ((command_pool != VkInvalidCommandPool) && (allocator != nullptr)) {
+        vk_destroy_command_pool(user_context, allocator, command_pool);
+        vk_destroy_shader_modules(user_context, allocator);
+        vk_destroy_memory_allocator(user_context, allocator);
+    }
+    if (device != nullptr) {
+        vkDestroyDevice(device, nullptr);
+    }
+    if (instance != nullptr) {
+        vkDestroyInstance(instance, nullptr);
+    }
     return halide_error_code_success;
 }
 
