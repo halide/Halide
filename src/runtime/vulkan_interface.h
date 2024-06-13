@@ -55,12 +55,11 @@ extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *n
     }
 
     const char *lib_names[] = {
-#if defined(_WIN32)
+#ifdef WINDOWS
         "vulkan-1.dll",
-#elif defined(__APPLE__)
-        "libvulkan.1.dylib",
 #else
-        "libvulkan.so.1"
+        "libvulkan.so.1",
+        "libvulkan.1.dylib",
 #endif
     };
     for (auto &lib_name : lib_names) {
@@ -68,6 +67,8 @@ extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *n
         if (lib_vulkan) {
             debug(user_context) << "    Loaded Vulkan loader library: " << lib_name << "\n";
             break;
+        } else {
+            debug(user_context) << "    Missing Vulkan loader library: " << lib_name << "\n";
         }
     }
 
