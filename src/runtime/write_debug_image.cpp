@@ -26,26 +26,6 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-// Mappings from the type_code passed in to the type codes of the
-// formats. See "type_code" in DebugToFile.cpp
-
-constexpr int kNumTypeCodes = 11;
-
-// TIFF sample type values are:
-//     1 => Unsigned int
-//     2 => Signed int
-//     3 => Floating-point
-WEAK int16_t pixel_type_to_tiff_sample_type[kNumTypeCodes] = {
-    // float, double, uint8, int8, ... uint64, int64
-    3, 3, 1, 2, 1, 2, 1, 2, 1, 2, 0};
-
-// See the .mat level 5 documentation for matlab class codes.
-WEAK uint8_t pixel_type_to_matlab_class_code[kNumTypeCodes] = {
-    7, 6, 9, 8, 11, 10, 13, 12, 15, 14, 0};
-
-WEAK uint8_t pixel_type_to_matlab_type_code[kNumTypeCodes] = {
-    7, 9, 2, 1, 4, 3, 6, 5, 13, 12, 0};
-
 #pragma pack(push)
 #pragma pack(2)
 
@@ -138,37 +118,56 @@ constexpr char big_endian_char = '>';
 constexpr char no_endian_char = '|';
 constexpr char host_endian_char = (host_is_big_endian ? big_endian_char : little_endian_char);
 
-struct npy_dtype_info_t {
+struct npy_type_info_t {
     char byte_order;
     char kind;
-    size_t item_size;
+    uint16_t item_size;
 };
 
-struct htype_to_dtype {
+struct mat_type_info_t {
+    uint8_t class_code, type_code;
+};
+
+struct tmp_type_info_t {
+    int8_t type_code;
+};
+
+struct tiff_type_info_t {
+    int8_t type_code;
+};
+
+struct halide_type_to_dst_type_t {
     halide_type_t htype;
-    npy_dtype_info_t dtype;
+    npy_type_info_t npy;
+    mat_type_info_t mat;
+    tmp_type_info_t tmp;
+    tiff_type_info_t tiff;
 };
 
-WEAK htype_to_dtype npy_dtypes[] = {
-    {halide_type_t(halide_type_float, 16), {host_endian_char, 'f', 2}},
-    {halide_type_of<float>(), {host_endian_char, 'f', sizeof(float)}},
-    {halide_type_of<double>(), {host_endian_char, 'f', sizeof(double)}},
-    {halide_type_of<int8_t>(), {no_endian_char, 'i', sizeof(int8_t)}},
-    {halide_type_of<int16_t>(), {host_endian_char, 'i', sizeof(int16_t)}},
-    {halide_type_of<int32_t>(), {host_endian_char, 'i', sizeof(int32_t)}},
-    {halide_type_of<int64_t>(), {host_endian_char, 'i', sizeof(int64_t)}},
-    {halide_type_of<uint8_t>(), {no_endian_char, 'u', sizeof(uint8_t)}},
-    {halide_type_of<uint16_t>(), {host_endian_char, 'u', sizeof(uint16_t)}},
-    {halide_type_of<uint32_t>(), {host_endian_char, 'u', sizeof(uint32_t)}},
-    {halide_type_of<uint64_t>(), {host_endian_char, 'u', sizeof(uint64_t)}},
+// See the .mat level 5 documentation for matlab class codes.
+
+// clang-format off
+WEAK halide_type_to_dst_type_t debug_to_file_type_map[] = {  //                        mat       tmp   tiff
+    { halide_type_of<float>(),              {host_endian_char, 'f', sizeof(float)},    {7, 7},   {0},  {3} },
+    { halide_type_of<double>(),             {host_endian_char, 'f', sizeof(double)},   {6, 9},   {1},  {3} },
+    { halide_type_of<uint8_t>(),            {no_endian_char,   'u', sizeof(uint8_t)},  {9, 2},   {2},  {1} },
+    { halide_type_of<bool>(),               {no_endian_char,   'u', sizeof(uint8_t)},  {9, 2},   {2},  {1} },
+    { halide_type_of<int8_t>(),             {no_endian_char,   'i', sizeof(int8_t)},   {8, 1},   {3},  {2} },
+    { halide_type_of<uint16_t>(),           {host_endian_char, 'u', sizeof(uint16_t)}, {11, 4},  {4},  {1} },
+    { halide_type_of<int16_t>(),            {host_endian_char, 'i', sizeof(int16_t)},  {10, 3},  {5},  {2} },
+    { halide_type_of<uint32_t>(),           {host_endian_char, 'u', sizeof(uint32_t)}, {13, 6},  {6},  {1} },
+    { halide_type_of<int32_t>(),            {host_endian_char, 'i', sizeof(int32_t)},  {12, 5},  {7},  {2} },
+    { halide_type_of<uint64_t>(),           {host_endian_char, 'u', sizeof(uint64_t)}, {15, 13}, {8},  {1} },
+    { halide_type_of<int64_t>(),            {host_endian_char, 'i', sizeof(int64_t)},  {14, 12}, {9},  {2} },
+    { halide_type_t(halide_type_float, 16), {host_endian_char, 'f', 2},                {0, 0},   {-1}, {0} },
 };
+// clang-format on
 
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
 
-WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filename,
-                                         int32_t type_code, struct halide_buffer_t *buf) {
+WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filename, struct halide_buffer_t *buf) {
 
     if (buf->is_bounds_query()) {
         halide_error(user_context, "Bounds query buffer passed to halide_debug_to_file");
@@ -209,15 +208,19 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
 
     uint32_t final_padding_bytes = 0;
 
-    if (ends_with(filename, ".npy")) {
-        npy_dtype_info_t di = {0, 0, 0};
-        for (const auto &d : npy_dtypes) {
-            if (d.htype == buf->type) {
-                di = d.dtype;
-                break;
-            }
+    const halide_type_to_dst_type_t *type_found = nullptr;
+    for (const auto &d : debug_to_file_type_map) {
+        if (d.htype == buf->type) {
+            type_found = &d;
+            break;
         }
-        if (di.byte_order == 0) {
+    }
+    if (!type_found) {
+        return halide_error_code_debug_to_file_failed;
+    }
+
+    if (ends_with(filename, ".npy")) {
+        if (type_found->npy.item_size == 0) {
             return halide_error_code_debug_to_file_failed;
         }
 
@@ -227,9 +230,9 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         char *end = dict_string_buf + max_dict_string_size - 1;
 
         dst = halide_string_to_string(dst, end, "{'descr': '");
-        *dst++ = di.byte_order;
-        *dst++ = di.kind;
-        dst = halide_int64_to_string(dst, end, di.item_size, 1);
+        *dst++ = type_found->npy.byte_order;
+        *dst++ = type_found->npy.kind;
+        dst = halide_int64_to_string(dst, end, type_found->npy.item_size, 1);
         dst = halide_string_to_string(dst, end, "', 'fortran_order': False, 'shape': (");
         for (int d = 0; d < buf->dimensions; ++d) {
             if (d > 0) {
@@ -272,7 +275,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             return halide_error_code_debug_to_file_failed;
         }
     } else if (ends_with(filename, ".tiff") || ends_with(filename, ".tif")) {
-        if (type_code == 10) {
+        if (type_found->tiff.type_code == 0) {
             return halide_error_code_debug_to_file_failed;
         }
 
@@ -320,9 +323,8 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
                         __builtin_offsetof(halide_tiff_header, height_resolution));  // Height resolution
         tag++->assign16(284, 1, 2);                                                  // Planar configuration -- planar
         tag++->assign16(296, 1, 1);                                                  // Resolution Unit -- none
-        tag++->assign16(339, 1,
-                        pixel_type_to_tiff_sample_type[type_code]);  // Sample type
-        tag++->assign32(32997, 1, depth);                            // Image depth
+        tag++->assign16(339, 1, type_found->tiff.type_code);                         // Sample type
+        tag++->assign32(32997, 1, depth);                                            // Image depth
 
         header.ifd0_end = 0;
         header.width_resolution[0] = 1;
@@ -351,7 +353,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             }
         }
     } else if (ends_with(filename, ".mat")) {
-        if (type_code == 10) {
+        if (type_found->mat.type_code == 0) {
             return halide_error_code_debug_to_file_failed;
         }
 
@@ -406,7 +408,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
             // This is a matrix
             14, 40 + padded_dimensions * 4 + padded_name_size + (uint32_t)payload_bytes + final_padding_bytes,
             // The element type
-            6, 8, pixel_type_to_matlab_class_code[type_code], 1,
+            6, 8, type_found->mat.class_code, 1,
             // The shape
             5, (uint32_t)(dims * 4)};
 
@@ -430,13 +432,12 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         }
 
         // Payload header
-        uint32_t payload_header[2] = {
-            pixel_type_to_matlab_type_code[type_code], (uint32_t)payload_bytes};
+        uint32_t payload_header[2] = {type_found->mat.type_code, (uint32_t)payload_bytes};
         if (!f.write(payload_header, sizeof(payload_header))) {
             return halide_error_code_debug_to_file_failed;
         }
     } else {
-        if (type_code == 10) {
+        if (type_found->tmp.type_code < 0) {
             return halide_error_code_debug_to_file_failed;
         }
 
@@ -444,7 +445,7 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
                             shape[1].extent,
                             shape[2].extent,
                             shape[3].extent,
-                            type_code};
+                            type_found->tmp.type_code};
         if (!f.write((void *)(&header[0]), sizeof(header))) {
             return halide_error_code_debug_to_file_failed;
         }
