@@ -1197,6 +1197,17 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f16 load<native_vector_f1
 }
 
 template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f16_x2 load<native_vector_f16_x2, float16_t, 2 * VECTOR_WIDTH_F16>(const void *base, int32_t offset) {
+    native_vector_f16 r1, r2;
+    const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const float16_t *)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    const native_vector_f16 *__restrict ptr = (const native_vector_f16 *)ptr8;
+    IVP_LANXF16_IP(r1, align, ptr);
+    IVP_LANXF16_IP(r2, align, ptr);
+    return native_vector_f16_x2(native_vector_f16_x2::from_native_vector, r1, r2);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 load<native_vector_f32, float, VECTOR_WIDTH_F32>(const void *base, int32_t offset) {
     native_vector_f32 r;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const float *)base + offset);
@@ -1204,6 +1215,17 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 load<native_vector_f3
     const native_vector_f32 *__restrict ptr = (const native_vector_f32 *)ptr8;
     IVP_LAN_2XF32_IP(r, align, ptr);
     return r;
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32_x2 load<native_vector_f32_x2, float32_t, 2 * VECTOR_WIDTH_F32>(const void *base, int32_t offset) {
+    native_vector_f32 r1, r2;
+    const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const float *)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    const native_vector_f32 *__restrict ptr = (const native_vector_f32 *)ptr8;
+    IVP_LAN_2XF32_IP(r1, align, ptr);
+    IVP_LAN_2XF32_IP(r2, align, ptr);
+    return native_vector_f32_x2(native_vector_f32_x2::from_native_vector, r1, r2);
 }
 
 template<>

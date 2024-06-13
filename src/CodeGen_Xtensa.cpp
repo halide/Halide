@@ -144,6 +144,9 @@ CodeGen_Xtensa::CodeGen_Xtensa(ostream &s, const Target &t, OutputKind k, const 
 
           {"halide_xtensa_sat_left_shift_i16", "IVP_SLSNX16"},
           {"halide_xtensa_sat_left_shift_i32", "IVP_SLSN_2X32"},
+
+          // The shift should be in the range [-31, 31].
+          {"halide_xtensa_sat_right_shift_i32", "IVP_SRSN_2X32"},
       } {
 }
 
@@ -666,13 +669,23 @@ void CodeGen_Xtensa::visit(const Broadcast *op) {
             rhs = print_type(vector_type) + "((" + print_type(op->type.with_lanes(1)) + ")" + id_value + ")";
         } else if (op->lanes > 1) {
             if (op->type.is_bool()) {
+                const bool has_q8 = get_target().has_feature(Target::Feature::XtensaQ8);
+
                 // TODO(vksnk): figure out how to broadcast bool.
                 if (op->type.lanes() == 16) {
                     rhs = id_value + "? (int32x16_t(1) == int32x16_t(1)) : (int32x16_t(1) == int32x16_t(0))";
                 } else if (op->type.lanes() == 32) {
-                    rhs = id_value + "? (int16x32_t(1) == int16x32_t(1)) : (int16x32_t(1) == int16x32_t(0))";
+                    if (has_q8) {
+                        rhs = id_value + "? (int32x32_t(1) == int32x32_t(1)) : (int32x32_t(1) == int32x32_t(0))";
+                    } else {
+                        rhs = id_value + "? (int16x32_t(1) == int16x32_t(1)) : (int16x32_t(1) == int16x32_t(0))";
+                    }
                 } else if (op->type.lanes() == 64) {
-                    rhs = id_value + "? (int8x64_t(1) == int8x64_t(1)) : (int8x64_t(1) == int8x64_t(0))";
+                    if (has_q8) {
+                        rhs = id_value + "? (int16x64_t(1) == int16x64_t(1)) : (int16x64_t(1) == int16x64_t(0))";
+                    } else {
+                        rhs = id_value + "? (int8x64_t(1) == int8x64_t(1)) : (int8x64_t(1) == int8x64_t(0))";
+                    }
                 }
             } else {
                 rhs = id_value;
@@ -1198,7 +1211,7 @@ void CodeGen_Xtensa::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_error << "Prefetch is not supported by Xtensa backend." << Expr(op) << "\n";
-    } else if (op->name == "sqrt" || op->name == "sqrt_f32") {
+    } else if (op->name == "sqrt" || op->name == "sqrt_f16" || op->name == "sqrt_f32") {
         string a0 = print_expr(op->args[0]);
         if (is_native_xtensa_vector<float>(op->type)) {
             rhs << "IVP_SQRTN_2XF32(" << a0 << ")";

@@ -809,14 +809,14 @@ private:
 
     Expr visit(const Min *op) override {
         if (op->type.is_vector()) {
-            static const std::vector<Pattern> maxes = {
+            static const std::vector<Pattern> mins = {
                 // NOTE(vksnk): patterns below are for predicated instructions and look like they may
                 // be more efficient, but they are not according to simulator. We will need to check with
                 // Cadence about this.
                 // {"halide_xtensa_pred_min_i16", max(wild_i16x, select(wild_u1x, wild_i16x, wild_i16x))}
             };
 
-            Expr new_expr = apply_commutative_patterns(op, maxes, this);
+            Expr new_expr = apply_commutative_patterns(op, mins, this);
             if (!new_expr.same_as(op)) {
                 return new_expr;
             }
@@ -1079,6 +1079,8 @@ private:
 
             {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_i32x))},
             {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_u32x))},
+            {"halide_xtensa_sat_right_shift_i32", i32_sat(widening_shift_right(wild_i32x, wild_i32x))},
+            {"halide_xtensa_sat_right_shift_i32", i32_sat(widening_shift_right(wild_i32x, wild_u32x))},
 
             {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_i64))},
             {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x / bc(wild_i64)), Pattern::ExactLog2Op1},
@@ -1479,7 +1481,9 @@ class ConvertGatherLoadIndex : public IRMutator {
         if (!is_const_one(op->predicate)) {
             return IRMutator::visit(op);
         }
-        if (!op->type.is_vector() || op->index.as<Ramp>()) {
+        // If dense_ramp_base is not defined, gather_load will be used and thus, index conversion is needed.
+        Expr dense_ramp_base = strided_ramp_base(op->index, 1);
+        if (!op->type.is_vector() || dense_ramp_base.defined()) {
             // Don't handle scalar or simple vector loads.
             return IRMutator::visit(op);
         }
