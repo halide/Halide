@@ -102,7 +102,7 @@ int vk_create_command_pool(void *user_context, VulkanMemoryAllocator *allocator,
 int vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool);
 
 // Command pools are uint64_t and zero may be valid, so use this as a sentinel for invalid
-static const VkCommandPool VkInvalidCommandPool(uint64_t(-1));
+const VkCommandPool VkInvalidCommandPool(uint64_t(-1));
 
 // -- Command Buffer
 int vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool pool, VkCommandBuffer *command_buffer);
