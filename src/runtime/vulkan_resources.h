@@ -754,6 +754,16 @@ int vk_create_pipeline_layout(void *user_context,
         return halide_error_code_generic_error;
     }
 
+    if (allocator->current_physical_device_limits().maxBoundDescriptorSets > 0) {
+        uint64_t max_bound_descriptor_sets = allocator->current_physical_device_limits().maxBoundDescriptorSets;
+        if (descriptor_set_count > max_bound_descriptor_sets) {
+            error(user_context) << "Vulkan: Number of descriptor sets for pipeline layout exceeds the number that can be bound by device!\n"
+                                << " requested: " << descriptor_set_count << ","
+                                << " available: " << max_bound_descriptor_sets << "\n";
+            return halide_error_code_incompatible_device_interface;
+        }
+    }
+
     VkPipelineLayoutCreateInfo pipeline_layout_info = {
         VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,  // structure type
         nullptr,                                        // pointer to a structure extending this
@@ -912,16 +922,18 @@ int vk_setup_compute_pipeline(void *user_context,
             }
         }
         uint32_t shared_mem_bytes_avail = (dispatch_data->shared_mem_bytes - static_shared_mem_bytes);
+#ifdef DEBUG_RUNTIME
         debug(user_context) << "  pipeline uses " << static_shared_mem_bytes << " bytes of static shared memory\n";
         debug(user_context) << "  dispatch requests " << dispatch_data->shared_mem_bytes << " bytes of shared memory\n";
         debug(user_context) << "  dynamic shared memory " << shared_mem_bytes_avail << " bytes available\n";
-
+#endif
         // setup the dynamic array size
         if ((shared_mem_constant_id > 0) && (shared_mem_bytes_avail > 0)) {
             uint32_t dynamic_array_size = (uint32_t)shared_mem_bytes_avail / shared_mem_type_size;
+#ifdef DEBUG_RUNTIME
             debug(user_context) << "  setting shared memory to " << (uint32_t)dynamic_array_size << " elements "
                                 << "(or " << (uint32_t)shared_mem_bytes_avail << " bytes)\n";
-
+#endif
             // save the shared mem specialization constant in the first slot
             dispatch_constant_ids[dispatch_constant_index] = shared_mem_constant_id;
             dispatch_constant_values[dispatch_constant_index] = dynamic_array_size;
@@ -932,13 +944,15 @@ int vk_setup_compute_pipeline(void *user_context,
         if (allocator->current_physical_device_limits().maxComputeSharedMemorySize > 0) {
             uint64_t device_shared_mem_size = allocator->current_physical_device_limits().maxComputeSharedMemorySize;
             if (static_shared_mem_bytes > device_shared_mem_size) {
-                error(user_context) << "Vulkan: Amount of static shared memory used exceeds device limit! "
-                                    << static_shared_mem_bytes << " > " << device_shared_mem_size << " bytes\n";
+                error(user_context) << "Vulkan: Amount of static shared memory used exceeds device limit!\n"
+                                    << " requested: " << static_shared_mem_bytes << " bytes,"
+                                    << " available: " << device_shared_mem_size << " bytes\n";
                 return halide_error_code_incompatible_device_interface;
             }
             if (dispatch_data->shared_mem_bytes > device_shared_mem_size) {
-                error(user_context) << "Vulkan: Amount of dynamic shared memory exceeds device limit! "
-                                    << (uint64_t)dispatch_data->shared_mem_bytes << " > " << device_shared_mem_size << " bytes\n";
+                error(user_context) << "Vulkan: Amount of dynamic shared memory used exceeds device limit!\n"
+                                    << " requested: " << dispatch_data->shared_mem_bytes << " bytes,"
+                                    << " available: " << device_shared_mem_size << " bytes\n";
                 return halide_error_code_incompatible_device_interface;
             }
         }
@@ -959,9 +973,11 @@ int vk_setup_compute_pipeline(void *user_context,
         uint32_t found_index = invalid_index;
         for (uint32_t sc = 0; sc < shader_bindings->specialization_constants_count; sc++) {
             if (shader_bindings->specialization_constants[sc].constant_id == dispatch_constant_ids[dc]) {
+#ifdef DEBUG_RUNTIME
                 debug(user_context) << "  binding specialization constant [" << dispatch_constant_ids[dc] << "] "
                                     << "'" << shader_bindings->specialization_constants[sc].constant_name << "' "
                                     << " => " << dispatch_constant_values[dc] << "\n";
+#endif
                 found_index = sc;
                 break;
             }
@@ -1273,6 +1289,56 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
     return shader_bindings;
 }
 
+int vk_validate_shader_for_device(void *user_context, VulkanMemoryAllocator *allocator,
+                                  const VulkanShaderBinding *shader_bindings, uint32_t shader_count) {
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << " vk_validate_shader_for_device (user_context: " << user_context << ", "
+        << "allocator: " << (void *)allocator << ", "
+        << "shader_bindings: " << (void *)shader_bindings << ", "
+        << "shader_count: " << shader_count << ")\n";
+#endif
+
+    // validate that the shared memory used is less than the available amount on device
+    if (shader_bindings->shared_memory_allocations_count) {
+
+        uint32_t static_shared_mem_bytes = 0;
+
+        for (uint32_t sm = 0; sm < shader_bindings->shared_memory_allocations_count; sm++) {
+            VulkanSharedMemoryAllocation *allocation = &(shader_bindings->shared_memory_allocations[sm]);
+            if (allocation->constant_id == 0) {
+                // static fixed-size allocation
+                static_shared_mem_bytes += allocation->type_size * allocation->array_size;
+            } else {
+                // dynamic allocation (can't determine this until runtime)
+            }
+        }
+
+        // verify the device can actually support the necessary amount of shared memory requested
+        if (allocator->current_physical_device_limits().maxComputeSharedMemorySize > 0) {
+            uint64_t device_shared_mem_size = allocator->current_physical_device_limits().maxComputeSharedMemorySize;
+            if (static_shared_mem_bytes > device_shared_mem_size) {
+                error(user_context) << "Vulkan: Amount of static shared memory used exceeds device limit!\n"
+                                    << " requested: " << static_shared_mem_bytes << " bytes,"
+                                    << " available: " << device_shared_mem_size << " bytes\n";
+                return halide_error_code_incompatible_device_interface;
+            }
+        }
+    }
+
+    // validate the number of descriptor sets used is within the amount supported by the device
+    if (allocator->current_physical_device_limits().maxPerStageDescriptorStorageBuffers > 0) {
+        uint64_t max_descriptors = allocator->current_physical_device_limits().maxPerStageDescriptorStorageBuffers;
+        if (shader_count > max_descriptors) {
+            error(user_context) << "Vulkan: Number of required descriptor sets exceeds the amount available for device!\n"
+                                << " requested: " << shader_count << ","
+                                << " available: " << max_descriptors << "\n";
+            return halide_error_code_incompatible_device_interface;
+        }
+    }
+    return halide_error_code_success;
+}
+
 VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
                                                       const char *ptr, int size) {
 #ifdef DEBUG_RUNTIME
@@ -1339,6 +1405,14 @@ VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, Vulkan
     VulkanShaderBinding *decoded_bindings = vk_decode_shader_bindings(user_context, allocator, module_ptr, module_size);
     if (decoded_bindings == nullptr) {
         error(user_context) << "Vulkan: Failed to decode shader bindings!\n";
+        return nullptr;
+    }
+
+    // validate that the compiled shader can be executed by the device with the requested resources
+    int valid_status = vk_validate_shader_for_device(user_context, allocator, decoded_bindings, shader_count);
+    if (valid_status != halide_error_code_success) {
+        vk_host_free(user_context, cache_entry->shader_bindings, allocator->callbacks());
+        vk_host_free(user_context, cache_entry, allocator->callbacks());
         return nullptr;
     }
 
