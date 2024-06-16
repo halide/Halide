@@ -24,6 +24,12 @@
 #include <intrin.h>
 #endif  // _MSC_VER
 
+#ifdef __APPLE__
+#include <mach/machine.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#endif
+
 namespace Halide {
 
 using std::string;
@@ -143,6 +149,28 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
 
 #endif  // defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
 
+bool sysctl_is_set(const char *name) {
+    int enabled = 0;
+    size_t enabled_len = sizeof(enabled);
+    return sysctlbyname(name, &enabled, &enabled_len, nullptr, 0) == 0 && enabled;
+}
+
+bool is_armv7s() {
+    cpu_type_t type;
+    size_t type_len = sizeof(type);
+    if (sysctlbyname("hw.cputype", &type, &type_len, nullptr, 0)) {
+        return false;
+    }
+
+    cpu_subtype_t subtype;
+    size_t subtype_len = sizeof(subtype);
+    if (sysctlbyname("hw.cpusubtype", &subtype, &subtype_len, nullptr, 0)) {
+        return false;
+    }
+
+    return type == CPU_TYPE_ARM && subtype == CPU_SUBTYPE_ARM_V7S;
+}
+
 Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
 #ifdef __linux__
@@ -166,6 +194,21 @@ Target calculate_host_target() {
 #else
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
+
+#ifdef __APPLE__
+    if (is_armv7s()) {
+        initial_features.push_back(Target::ARMv7s);
+    }
+
+    if (sysctl_is_set("hw.optional.arm.FEAT_DotProd")) {
+        initial_features.push_back(Target::ARMDotProd);
+    }
+
+    if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
+        initial_features.push_back(Target::ARMFp16);
+    }
+#endif
+
 #else
 #if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
     Target::Arch arch = Target::POWERPC;
