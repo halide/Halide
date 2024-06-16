@@ -9,7 +9,7 @@ namespace Internal {
 
 extern unsigned long getauxval(unsigned long type);
 #define AT_HWCAP 16
-//#define AT_HWCAP2 26
+// #define AT_HWCAP2 26
 
 #define HWCAP_VFPv4 (1 << 16)
 #define HWCAP_ASIMDDP (1 << 20)
