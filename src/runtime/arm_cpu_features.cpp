@@ -14,7 +14,9 @@ extern unsigned long getauxval(unsigned long type);
 #define HWCAP_VFPv4 (1 << 16)
 #define HWCAP_ASIMDDP (1 << 20)
 
-static void set_platform_features(CpuFeatures &features) {
+namespace {
+
+void set_platform_features(CpuFeatures &features) {
     unsigned long hwcaps = getauxval(AT_HWCAP);
 
     // runtime detection for ARMDotProd extension
@@ -29,6 +31,8 @@ static void set_platform_features(CpuFeatures &features) {
     }
 }
 
+}  // namespace
+
 #elif OSX
 
 typedef int integer_t;
@@ -41,13 +45,15 @@ typedef integer_t cpu_subtype_t;
 
 extern int sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
-static bool sysctl_is_set(const char *name) {
+namespace {
+
+bool sysctl_is_set(const char *name) {
     int enabled = 0;
     size_t enabled_len = sizeof(enabled);
     return sysctlbyname(name, &enabled, &enabled_len, nullptr, 0) == 0 && enabled;
 }
 
-static bool is_armv7s() {
+bool is_armv7s() {
     cpu_type_t type;
     size_t type_len = sizeof(type);
     if (sysctlbyname("hw.cputype", &type, &type_len, nullptr, 0)) {
@@ -63,7 +69,7 @@ static bool is_armv7s() {
     return type == CPU_TYPE_ARM && subtype == CPU_SUBTYPE_ARM_V7S;
 }
 
-static void set_platform_features(CpuFeatures &features) {
+void set_platform_features(CpuFeatures &features) {
     // runtime detection for ARMv7s
     features.set_known(halide_target_feature_armv7s);
     if (is_armv7s()) {
@@ -81,15 +87,21 @@ static void set_platform_features(CpuFeatures &features) {
     }
 }
 
+}  // namespace
+
 #else
 
-static void set_platform_features(CpuFeatures &) {
+namespace {
+
+void set_platform_features(CpuFeatures &) {
     // TODO: add runtime detection for ARMDotProd extension
     // https://github.com/halide/Halide/issues/4727
 
     // TODO: add runtime detection for ARMFp16 extension
     // https://github.com/halide/Halide/issues/6106
 }
+
+}  // namespace
 
 #endif
 
