@@ -32,6 +32,7 @@ set(RUNTIME_CPP
     hexagon_dma_pool
     hexagon_host
     ios_io
+    linux_aarch64_cpu_features
     linux_arm_cpu_features
     linux_clock
     linux_host_cpu_count
@@ -44,6 +45,7 @@ set(RUNTIME_CPP
     msan
     msan_stubs
     opencl
+    osx_aarch64_cpu_features
     osx_arm_cpu_features
     osx_clock
     osx_get_symbol

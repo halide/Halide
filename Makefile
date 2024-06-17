@@ -828,6 +828,7 @@ RUNTIME_CPP_COMPONENTS = \
   hexagon_dma_pool \
   hexagon_host \
   ios_io \
+  linux_aarch64_cpu_features \
   linux_arm_cpu_features \
   linux_clock \
   linux_host_cpu_count \
@@ -840,6 +841,7 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
+  osx_aarch64_cpu_features \
   osx_arm_cpu_features \
   osx_clock \
   osx_get_symbol \

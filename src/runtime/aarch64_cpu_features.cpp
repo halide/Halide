@@ -37,7 +37,7 @@ void set_platform_features(CpuFeatures &features) {
         features.set_available(halide_target_feature_sve);
     }
 
-    if (hwcaps2 & HWCAP_SVE2) {
+    if (hwcaps2 & HWCAP2_SVE2) {
         features.set_available(halide_target_feature_sve2);
     }
 }
