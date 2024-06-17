@@ -149,27 +149,28 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
 
 #endif  // defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
 
+#ifdef __APPLE__
+
+template<typename T>
+std::optional<T> getsysctl(const char *name) {
+    T value;
+    size_t size = sizeof(value);
+    if (sysctlbyname(name, &value, &size, nullptr, 0)) {
+        return std::nullopt;
+    }
+    return std::make_optional(value);
+}
+
 bool sysctl_is_set(const char *name) {
-    int enabled = 0;
-    size_t enabled_len = sizeof(enabled);
-    return sysctlbyname(name, &enabled, &enabled_len, nullptr, 0) == 0 && enabled;
+    return getsysctl<int>(name).value_or(0);
 }
 
 bool is_armv7s() {
-    cpu_type_t type;
-    size_t type_len = sizeof(type);
-    if (sysctlbyname("hw.cputype", &type, &type_len, nullptr, 0)) {
-        return false;
-    }
-
-    cpu_subtype_t subtype;
-    size_t subtype_len = sizeof(subtype);
-    if (sysctlbyname("hw.cpusubtype", &subtype, &subtype_len, nullptr, 0)) {
-        return false;
-    }
-
-    return type == CPU_TYPE_ARM && subtype == CPU_SUBTYPE_ARM_V7S;
+    return getsysctl<cpu_type_t>("hw.cputype") == CPU_TYPE_ARM &&
+           getsysctl<cpu_subtype_t>("hw.cpusubtype") == CPU_SUBTYPE_ARM_V7S;
 }
+
+#endif  // __APPLE__
 
 Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
