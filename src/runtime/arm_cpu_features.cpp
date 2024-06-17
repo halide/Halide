@@ -13,7 +13,7 @@ extern "C" unsigned long getauxval(unsigned long type);
 
 // https://cs.android.com/android/platform/superproject/+/master:bionic/libc/kernel/uapi/asm-arm/asm/hwcap.h
 // https://github.com/torvalds/linux/blob/master/arch/arm/include/uapi/asm/hwcap.h
-#define HWCAP_FPHP (1 << 22)
+#define HWCAP_ASIMDHP (1 << 23)
 #define HWCAP_ASIMDDP (1 << 24)
 
 namespace {
@@ -25,7 +25,7 @@ void set_platform_features(CpuFeatures &features) {
         features.set_available(halide_target_feature_arm_dot_prod);
     }
 
-    if (hwcaps & HWCAP_FPHP) {
+    if (hwcaps & HWCAP_ASIMDHP) {
         features.set_available(halide_target_feature_arm_fp16);
     }
 }
