@@ -30,6 +30,23 @@
 #include <sys/types.h>
 #endif
 
+#if defined(__linux__) && (defined(__arm__) || defined(__aarch64__))
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#ifndef HWCAP_FPHP
+#define HWCAP_FPHP 0
+#endif
+#ifndef HWCAP_ASIMDDP
+#define HWCAP_ASIMDDP 0
+#endif
+#ifndef HWCAP_SVE
+#define HWCAP_SVE 0
+#endif
+#ifndef HWCAP2_SVE2
+#define HWCAP2_SVE2 0
+#endif
+#endif
+
 namespace Halide {
 
 using std::string;
@@ -216,6 +233,27 @@ Target calculate_host_target() {
     // SVE features.
     if (sysctl_is_set("hw.optional.arm.FEAT_SME")) {
         initial_features.push_back(Target::SVE);
+        initial_features.push_back(Target::SVE2);
+    }
+#endif
+
+#ifdef __linux__
+    unsigned long hwcaps = getauxval(AT_HWCAP);
+    unsigned long hwcaps2 = getauxval(AT_HWCAP2);
+
+    if (hwcaps & HWCAP_ASIMDDP) {
+        initial_features.push_back(Target::ARMDotProd);
+    }
+
+    if (hwcaps & HWCAP_FPHP) {
+        initial_features.push_back(Target::ARMFp16);
+    }
+
+    if (hwcaps & HWCAP_SVE) {
+        initial_features.push_back(Target::SVE);
+    }
+
+    if (hwcaps2 & HWCAP2_SVE2) {
         initial_features.push_back(Target::SVE2);
     }
 #endif
