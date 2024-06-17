@@ -7,7 +7,7 @@ namespace Internal {
 
 #if LINUX
 
-extern unsigned long getauxval(unsigned long type);
+extern "C" unsigned long getauxval(unsigned long type);
 
 #define AT_HWCAP 16
 
@@ -42,7 +42,7 @@ typedef integer_t cpu_subtype_t;
 #define CPU_TYPE_ARM ((cpu_type_t)12)
 #define CPU_SUBTYPE_ARM_V7S ((cpu_subtype_t)11) /* Swift */
 
-extern int sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
+extern "C" int sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
 namespace {
 
