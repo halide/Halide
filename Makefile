@@ -813,6 +813,7 @@ RUNTIME_CPP_COMPONENTS = \
   alignment_32 \
   alignment_64 \
   allocation_cache \
+  android_arm_cpu_features \
   android_clock \
   android_host_cpu_count \
   android_io \
@@ -851,6 +852,7 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
+  osx_arm_cpu_features \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
