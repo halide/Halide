@@ -877,6 +877,7 @@ RUNTIME_CPP_COMPONENTS = \
   wasm_cpu_features \
   webgpu_dawn \
   webgpu_emscripten \
+  windows_aarch64_cpu_features_arm \
   windows_clock \
   windows_cuda \
   windows_d3d12compute_arm \

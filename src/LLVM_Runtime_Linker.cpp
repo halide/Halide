@@ -198,11 +198,13 @@ DECLARE_LL_INITMOD(aarch64)
 DECLARE_CPP_INITMOD(aarch64_cpu_features)
 DECLARE_CPP_INITMOD(linux_aarch64_cpu_features)
 DECLARE_CPP_INITMOD(osx_aarch64_cpu_features)
+DECLARE_CPP_INITMOD(windows_aarch64_cpu_features_arm)
 #else
 DECLARE_NO_INITMOD(aarch64)
 DECLARE_NO_INITMOD(aarch64_cpu_features)
 DECLARE_NO_INITMOD(linux_aarch64_cpu_features)
 DECLARE_NO_INITMOD(osx_aarch64_cpu_features)
+DECLARE_NO_INITMOD(windows_aarch64_cpu_features_arm)
 #endif  // WITH_AARCH64
 
 #ifdef WITH_NVPTX
@@ -1218,6 +1220,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                         modules.push_back(get_initmod_linux_aarch64_cpu_features(c, bits_64, debug));
                     } else if (t.os == Target::OSX || t.os == Target::IOS) {
                         modules.push_back(get_initmod_osx_aarch64_cpu_features(c, bits_64, debug));
+                    } else if (t.os == Target::Windows) {
+                        modules.push_back(get_initmod_windows_aarch64_cpu_features_arm(c, bits_64, debug));
                     } else {
                         modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
                     }

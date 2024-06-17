@@ -89,7 +89,6 @@ void set_platform_features(CpuFeatures &features) {
 namespace {
 
 void set_platform_features(CpuFeatures &) {
-    // TODO: Windows detection
 }
 
 }  // namespace

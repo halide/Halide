@@ -78,12 +78,46 @@ void set_platform_features(CpuFeatures &features) {
 
 }  // namespace
 
+#elif WINDOWS
+
+typedef int BOOL;
+typedef unsigned long DWORD;
+
+extern "C" BOOL IsProcessorFeaturePresent(DWORD feature);
+
+#define PF_FLOATING_POINT_EMULATED (1)
+#define PF_ARM_FMAC_INSTRUCTIONS_AVAILABLE (27)
+#define PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE (43)
+
+// Magic value from: https://github.com/dotnet/runtime/blob/7e977dcbe5efaeec2c75ed0c3e200c85b2e55522/src/native/minipal/cpufeatures.c#L19
+#define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
+
+namespace {
+
+void set_platform_features(CpuFeatures &features) {
+    // This is the strategy used by Google's cpuinfo library for
+    // detecting fp16 arithmetic support on Windows.
+    if (!IsProcessorFeaturePresent(PF_FLOATING_POINT_EMULATED) &&
+        IsProcessorFeaturePresent(PF_ARM_FMAC_INSTRUCTIONS_AVAILABLE)) {
+        features.set_available(halide_target_feature_arm_fp16);
+    }
+
+    if (IsProcessorFeaturePresent(PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE)) {
+        features.set_available(halide_target_feature_arm_dot_prod);
+    }
+
+    if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
+        features.set_available(halide_target_feature_sve);
+    }
+}
+
+}  // namespace
+
 #else
 
 namespace {
 
 void set_platform_features(CpuFeatures &) {
-    // TODO: Windows detection
 }
 
 }  // namespace
