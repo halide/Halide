@@ -5,28 +5,27 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-#if ANDROID
+#if LINUX
 
 extern unsigned long getauxval(unsigned long type);
-#define AT_HWCAP 16
-// #define AT_HWCAP2 26
 
-#define HWCAP_VFPv4 (1 << 16)
-#define HWCAP_ASIMDDP (1 << 20)
+#define AT_HWCAP 16
+
+// https://cs.android.com/android/platform/superproject/+/master:bionic/libc/kernel/uapi/asm-arm/asm/hwcap.h
+// https://github.com/torvalds/linux/blob/master/arch/arm/include/uapi/asm/hwcap.h
+#define HWCAP_FPHP (1 << 22)
+#define HWCAP_ASIMDDP (1 << 24)
 
 namespace {
 
 void set_platform_features(CpuFeatures &features) {
     unsigned long hwcaps = getauxval(AT_HWCAP);
 
-    // runtime detection for ARMDotProd extension
     if (hwcaps & HWCAP_ASIMDDP) {
         features.set_available(halide_target_feature_arm_dot_prod);
     }
 
-    // runtime detection for ARMFp16 extension
-    if (hwcaps & HWCAP_VFPv4) {
-        // VFPv4 is the only 32-bit arm-fp revision to support fp16
+    if (hwcaps & HWCAP_FPHP) {
         features.set_available(halide_target_feature_arm_fp16);
     }
 }
@@ -70,18 +69,14 @@ bool is_armv7s() {
 }
 
 void set_platform_features(CpuFeatures &features) {
-    // runtime detection for ARMv7s
-    features.set_known(halide_target_feature_armv7s);
     if (is_armv7s()) {
         features.set_available(halide_target_feature_armv7s);
     }
 
-    // runtime detection for ARMDotProd extension
     if (sysctl_is_set("hw.optional.arm.FEAT_DotProd")) {
         features.set_available(halide_target_feature_arm_dot_prod);
     }
 
-    // runtime detection for ARMFp16 extension
     if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
         features.set_available(halide_target_feature_arm_fp16);
     }
@@ -94,11 +89,7 @@ void set_platform_features(CpuFeatures &features) {
 namespace {
 
 void set_platform_features(CpuFeatures &) {
-    // TODO: add runtime detection for ARMDotProd extension
-    // https://github.com/halide/Halide/issues/4727
-
-    // TODO: add runtime detection for ARMFp16 extension
-    // https://github.com/halide/Halide/issues/6106
+    // TODO: Windows detection
 }
 
 }  // namespace
@@ -107,12 +98,15 @@ void set_platform_features(CpuFeatures &) {
 
 WEAK CpuFeatures halide_get_cpu_features() {
     CpuFeatures features;
-    // All ARM architectures support "No Neon".
-    features.set_known(halide_target_feature_no_neon);
-    features.set_available(halide_target_feature_no_neon);
-
     features.set_known(halide_target_feature_arm_dot_prod);
     features.set_known(halide_target_feature_arm_fp16);
+    features.set_known(halide_target_feature_armv7s);
+    features.set_known(halide_target_feature_no_neon);
+    features.set_known(halide_target_feature_sve);
+    features.set_known(halide_target_feature_sve2);
+
+    // All ARM architectures support "No Neon".
+    features.set_available(halide_target_feature_no_neon);
 
     set_platform_features(features);
 

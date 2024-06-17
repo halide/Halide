@@ -180,16 +180,16 @@ DECLARE_NO_INITMOD(metal_objc_x86)
 #endif  // WITH_METAL
 
 #ifdef WITH_ARM
-DECLARE_CPP_INITMOD(android_arm_cpu_features)
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(arm_no_neon)
 DECLARE_CPP_INITMOD(arm_cpu_features)
+DECLARE_CPP_INITMOD(linux_arm_cpu_features)
 DECLARE_CPP_INITMOD(osx_arm_cpu_features)
 #else
-DECLARE_CPP_INITMOD(android_arm_cpu_features)
 DECLARE_NO_INITMOD(arm)
 DECLARE_NO_INITMOD(arm_no_neon)
 DECLARE_NO_INITMOD(arm_cpu_features)
+DECLARE_NO_INITMOD(linux_arm_cpu_features)
 DECLARE_NO_INITMOD(osx_arm_cpu_features)
 #endif  // WITH_ARM
 
@@ -1212,8 +1212,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.bits == 64) {
                     modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
                 } else {
-                    if (t.os == Target::Android) {
-                        modules.push_back(get_initmod_android_arm_cpu_features(c, bits_64, debug));
+                    if (t.os == Target::Android || t.os == Target::Linux) {
+                        modules.push_back(get_initmod_linux_arm_cpu_features(c, bits_64, debug));
                     } else if (t.os == Target::OSX || t.os == Target::IOS) {
                         modules.push_back(get_initmod_osx_arm_cpu_features(c, bits_64, debug));
                     } else {
