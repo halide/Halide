@@ -7,7 +7,7 @@ namespace Internal {
 
 #if LINUX
 
-extern unsigned long getauxval(unsigned long type);
+extern "C" unsigned long getauxval(unsigned long type);
 
 #define AT_HWCAP 16
 #define AT_HWCAP2 26
@@ -46,7 +46,7 @@ void set_platform_features(CpuFeatures &features) {
 
 #elif OSX
 
-extern int sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
+extern "C" int sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
 namespace {
 
