@@ -84,6 +84,7 @@ set(RUNTIME_CPP
     # webgpu
     webgpu_dawn
     webgpu_emscripten
+    windows_aarch64_cpu_features_arm
     windows_clock
     windows_cuda
     windows_d3d12compute_arm
