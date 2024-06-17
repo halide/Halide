@@ -33,8 +33,8 @@
 #if defined(__linux__) && (defined(__arm__) || defined(__aarch64__))
 #include <asm/hwcap.h>
 #include <sys/auxv.h>
-#ifndef HWCAP_FPHP
-#define HWCAP_FPHP 0
+#ifndef HWCAP_ASIMDHP
+#define HWCAP_ASIMDHP 0
 #endif
 #ifndef HWCAP_ASIMDDP
 #define HWCAP_ASIMDDP 0
@@ -245,7 +245,7 @@ Target calculate_host_target() {
         initial_features.push_back(Target::ARMDotProd);
     }
 
-    if (hwcaps & HWCAP_FPHP) {
+    if (hwcaps & HWCAP_ASIMDHP) {
         initial_features.push_back(Target::ARMFp16);
     }
 
