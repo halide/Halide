@@ -497,6 +497,11 @@ _add_halide_libraries(metadata_tester_ucon
 _add_halide_aot_tests(metadata_tester
                       HALIDE_LIBRARIES metadata_tester metadata_tester_ucon)
 
+# metal_completion_handler_override_aottest.cpp
+# metal_completion_handler_override_generator.cpp
+_add_halide_libraries(metal_completion_handler_override FEATURES user_context)
+_add_halide_aot_tests(metal_completion_handler_override)
+
 # msan_aottest.cpp
 # msan_generator.cpp
 if ("${Halide_TARGET}" MATCHES "webgpu")
