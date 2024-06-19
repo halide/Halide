@@ -64,16 +64,6 @@ void set_platform_features(CpuFeatures &features) {
     if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
         features.set_available(halide_target_feature_arm_fp16);
     }
-
-    // Apple M3 sets FEAT_SME to 0 and does not define FEAT_SVE
-    // or FEAT_SVE2. As the M4 will be ARMv9.2-A, it will have
-    // SVE, SVE2, and SME. We do not currently have an SME feature,
-    // but we can at least be sure that FEAT_SME implies the two
-    // SVE features.
-    if (sysctl_is_set("hw.optional.arm.FEAT_SME")) {
-        features.set_available(halide_target_feature_sve);
-        features.set_available(halide_target_feature_sve2);
-    }
 }
 
 }  // namespace
