@@ -244,7 +244,8 @@ Stmt Simplify::visit(const For *op) {
 
         // The loop variable will never exceed the loop bound.
         Expr loop_var = Variable::make(Int(32), op->name);
-        ScopedFact fact_loop_var_less_than_extent = scoped_truth(loop_var < new_extent);
+        Expr new_max = mutate(new_min + new_extent, nullptr);
+        ScopedFact fact_loop_var_less_than_extent = scoped_truth(loop_var < new_max);
 
         new_body = mutate(op->body);
     }
