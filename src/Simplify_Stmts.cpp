@@ -240,7 +240,15 @@ Stmt Simplify::visit(const For *op) {
                                         loop_var_info);
 
         // If we're in the loop, the extent must be greater than 0.
-        ScopedFact fact = scoped_truth(extent_positive);
+        ScopedFact fact_extent_positive = scoped_truth(extent_positive);
+
+        // The loop variable will never exceed the loop bound.
+        Expr loop_var = Variable::make(Int(32), op->name);
+        Expr new_max = mutate(new_min + new_extent, nullptr);
+        ScopedFact fact_loop_var_less_than_extent = scoped_truth(loop_var < new_max);
+
+        ScopedFact fact_loop_var_ge_than_min = scoped_truth(new_min <= loop_var);
+
         new_body = mutate(op->body);
     }
 
