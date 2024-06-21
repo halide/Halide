@@ -102,6 +102,17 @@
       "architecture": "x64"
     },
     {
+      "name": "macOS",
+      "displayName": "macOS (Apple Clang)",
+      "description": "macOS build using Apple Clang and Homebrew LLVM",
+      "generator": "Ninja",
+      "inherits": "release",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "/opt/homebrew;/opt/homebrew/opt/llvm;/opt/homebrew/opt/jpeg",
+        "Halide_SHARED_LLVM": "YES"
+      }
+    },
+    {
       "name": "package",
       "hidden": true,
       "cacheVariables": {
