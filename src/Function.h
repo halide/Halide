@@ -12,6 +12,7 @@
 #include "Definition.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
+#include "Reduction.h"
 #include "Schedule.h"
 
 namespace Halide {
@@ -117,15 +118,15 @@ public:
      * reduction domain */
     void define(const std::vector<std::string> &args, std::vector<Expr> values);
 
-    /** Add an update definition to this function. It must already
-     * have a pure definition but not an update definition, and the
-     * length of args must match the length of args used in the pure
-     * definition. 'value' must depend on some reduction domain, and
-     * may contain variables from that domain as well as pure
-     * variables. Any pure variables must also appear as Variables in
-     * the args array, and they must have the same name as the pure
+    /** Add an update definition to this function. It must already have a pure
+     * definition but not an update definition, and the length of args must
+     * match the length of args used in the pure definition. 'value' may depend
+     * on some reduction domain may contain variables from that domain as well
+     * as pure variables. A reduction domain may also be introduced by passing
+     * it as the last argument. Any pure variables must also appear as Variables
+     * in the args array, and they must have the same name as the pure
      * definition's argument in the same index. */
-    void define_update(const std::vector<Expr> &args, std::vector<Expr> values);
+    void define_update(const std::vector<Expr> &args, std::vector<Expr> values, const ReductionDomain &rdom = ReductionDomain{});
 
     /** Accept a visitor to visit all of the definitions and arguments
      * of this function. */

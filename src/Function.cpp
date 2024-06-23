@@ -678,7 +678,7 @@ void Function::create_output_buffers(const std::vector<Type> &types, int dims) c
     }
 }
 
-void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
+void Function::define_update(const vector<Expr> &_args, vector<Expr> values, const ReductionDomain &rdom) {
     int update_idx = static_cast<int>(contents->updates.size());
 
     user_assert(!name().empty())
@@ -767,6 +767,23 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     for (const auto &value : values) {
         value.accept(&check);
     }
+    if (!check.reduction_domain.defined()) {
+        // Use the provided one
+        check.reduction_domain = rdom;
+    } else if (rdom.defined()) {
+        // This is an internal error because the ability to pass an explicit
+        // RDom is not exposed to the front-end. At the time of writing this is
+        // only used by rfactor.
+        internal_assert(rdom.same_as(check.reduction_domain))
+            << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
+            << "Explicit reduction domain passed to Function::define_update, "
+            << "but another reduction domain was referred to by the args or values.\n"
+            << "Explicit reduction domain passed:\n"
+            << RDom(rdom) << "\n"
+            << "Found reduction domain:\n"
+            << RDom(check.reduction_domain) << "\n";
+    }
+
     if (check.reduction_domain.defined()) {
         check.unbound_reduction_vars_ok = true;
         check.reduction_domain.predicate().accept(&check);
