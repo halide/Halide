@@ -25,7 +25,7 @@
 // downstream build systems (eg Blaze/Bazel) properly in sync with the source.
 #define HALIDE_VERSION_MAJOR 17
 #define HALIDE_VERSION_MINOR 0
-#define HALIDE_VERSION_PATCH 1
+#define HALIDE_VERSION_PATCH 2
 
 #ifdef __cplusplus
 // Forward declare type to allow naming typed handles.
