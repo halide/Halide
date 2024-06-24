@@ -151,9 +151,16 @@ Expr lower_float16_transcendental_to_float32_equivalent(const Call *op) {
         for (size_t i = 0; i < op->args.size(); i++) {
             new_args[i] = float16_to_float32(op->args[i]);
         }
-        Expr e = Call::make(Float(32, op->type.lanes()), it->second, new_args, op->call_type,
+        // Most of the intrinsics above return float, so the return type needs
+        // adjusting, but some return bool.
+        Type t = op->type.is_float() ? Float(32, op->type.lanes()) : op->type;
+        Expr e = Call::make(t, it->second, new_args, op->call_type,
                             op->func, op->value_index, op->image, op->param);
-        return float32_to_float16(e);
+        if (op->type.is_float()) {
+            e = float32_to_float16(e);
+        }
+        internal_assert(e.type() == op->type);
+        return e;
     } else {
         internal_error << "Unknown float16 transcendental: " << Expr(op) << "\n";
         return Expr();
