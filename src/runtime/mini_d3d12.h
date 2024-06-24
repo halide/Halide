@@ -37,6 +37,10 @@
 #define _In_opt_
 #endif  //_In_opt_
 
+#ifndef _In_opt_z_
+#define _In_opt_z_
+#endif  //_In_opt_z_
+
 #ifndef _Out_
 #define _Out_
 #endif  //_Out_
@@ -133,6 +137,10 @@
 #define _Outptr_opt_result_bytebuffer_(size)
 #endif  //_Outptr_opt_result_bytebuffer_
 
+#ifndef _Outptr_opt_result_z_
+#define _Outptr_opt_result_z_
+#endif  //_Outptr_opt_result_z_
+
 #ifndef _Must_inspect_result_
 #define _Must_inspect_result_
 #endif  //_Must_inspect_result_
@@ -144,6 +152,46 @@
 #ifndef _Always_
 #define _Always_(annos)
 #endif  //_Always_
+
+#ifndef _In_opt_count_
+#define _In_opt_count_(annos)
+#endif  //_In_opt_count_
+
+#ifndef _In_bytecount_
+#define _In_bytecount_(annos)
+#endif  //_In_bytecount_
+
+#ifndef _In_count_
+#define _In_count_(annos)
+#endif  //_In_count_
+
+#ifndef _COM_Outptr_result_maybenull_
+#define _COM_Outptr_result_maybenull_
+#endif  // _COM_Outptr_result_maybenull_
+
+#ifndef _Outptr_result_nullonfailure_
+#define _Outptr_result_nullonfailure_
+#endif  // _Outptr_result_nullonfailure_
+
+#ifndef _COM_Outptr_opt_result_maybenull_
+#define _COM_Outptr_opt_result_maybenull_
+#endif  // _COM_Outptr_opt_result_maybenull_
+
+#ifndef _COM_Outptr_opt_result_maybenull_
+#define _COM_Outptr_opt_result_maybenull_
+#endif  // _COM_Outptr_opt_result_maybenull_
+
+#ifndef _Maybenull_
+#define _Maybenull_
+#endif  // _Maybenull_
+
+#ifndef _Outptr_result_z_
+#define _Outptr_result_z_
+#endif  // _Outptr_result_z_
+
+#ifndef _Out_writes_bytes_to_
+#define _Out_writes_bytes_to_(cb, pcbRead)
+#endif  // _Out_writes_bytes_to_
 
 /* rpcsal.h */
 #ifndef __RPC_string
@@ -204,6 +252,7 @@ typedef unsigned short WCHAR;  // wc,   16-bit UNICODE character
 typedef _Null_terminated_ CHAR *NPSTR, *LPSTR, *PSTR;
 typedef _Null_terminated_ CONST CHAR *LPCSTR, *PCSTR;
 typedef _Null_terminated_ CONST WCHAR *LPCWSTR, *PCWSTR;
+typedef _Null_terminated_ WCHAR *NWPSTR, *LPWSTR, *PWSTR;
 
 #define FAR far
 #define NEAR near
@@ -458,6 +507,7 @@ typedef HINSTANCE HMODULE; /* HMODULEs can be used in place of HINSTANCEs */
 /* winerror.h */
 #define _HRESULT_TYPEDEF_(_sc) ((HRESULT)(_sc))
 #define S_OK _HRESULT_TYPEDEF_(0x0L)
+#define E_INVALIDARG _HRESULT_TYPEDEF_(0x80070057L)
 #define E_UNEXPECTED _HRESULT_TYPEDEF_(0x8000FFFFL)
 #define DXGI_ERROR_NOT_FOUND _HRESULT_TYPEDEF_(0x887a0002)
 #define SUCCEEDED(hr) (((HRESULT)(hr)) >= 0)
@@ -506,6 +556,45 @@ typedef IID *LPIID;
 #define DEFINE_GUID(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
     EXTERN_C const GUID FAR name
 #endif  // INITGUID
+
+/* guiddef.h */
+#ifndef _REFGUID_DEFINED
+#define _REFGUID_DEFINED
+#ifdef __cplusplus
+#define REFGUID const GUID &
+#else
+#define REFGUID const GUID *__MIDL_CONST
+#endif
+#endif
+
+#ifndef _REFIID_DEFINED
+#define _REFIID_DEFINED
+#ifdef __cplusplus
+#define REFIID const IID &
+#else
+#define REFIID const IID *__MIDL_CONST
+#endif
+#endif
+
+#ifndef _REFCLSID_DEFINED
+#define _REFCLSID_DEFINED
+#ifdef __cplusplus
+#define REFCLSID const IID &
+#else
+#define REFCLSID const IID *__MIDL_CONST
+#endif
+#endif
+
+#ifndef _REFFMTID_DEFINED
+#define _REFFMTID_DEFINED
+#ifdef __cplusplus
+#define REFFMTID const IID &
+#else
+#define REFFMTID const IID *__MIDL_CONST
+#endif
+#endif
+
+typedef GUID CLSID;
 
 /* rpc.h */
 #if defined(__specstrings)
@@ -941,6 +1030,30 @@ typedef LPSTR LPOLESTR;
 typedef LPCSTR LPCOLESTR;
 #define OLESTR(str) str
 #endif
+
+/* wtypesbase.h */
+typedef _Null_terminated_ OLECHAR *BSTR;
+typedef BSTR *LPBSTR;
+
+/* objidlbase.h */
+typedef _Null_terminated_ OLECHAR *BSTR;
+typedef BSTR *LPBSTR;
+
+#ifndef __ISequentialStream_FWD_DEFINED__
+#define __ISequentialStream_FWD_DEFINED__
+typedef interface ISequentialStream ISequentialStream;
+
+#endif /* __ISequentialStream_FWD_DEFINED__ */ 
+
+#ifndef __IStream_FWD_DEFINED__
+#define __IStream_FWD_DEFINED__
+typedef interface IStream IStream;
+
+#endif /* __IStream_FWD_DEFINED__ */
+
+EXTERN_C const IID IID_ISequentialStream;
+EXTERN_C const IID IID_IStream;
+
 
 /* d3dcommon.h */
 #ifdef __cplusplus
@@ -3096,6 +3209,24 @@ typedef struct D3D12_VERSIONED_ROOT_SIGNATURE_DESC {
         D3D12_ROOT_SIGNATURE_DESC1 Desc_1_1;
     };
 } D3D12_VERSIONED_ROOT_SIGNATURE_DESC;
+
+
+typedef enum D3D_SHADER_MODEL {
+    D3D_SHADER_MODEL_5_1 = 0x51,
+    D3D_SHADER_MODEL_6_0 = 0x60,
+    D3D_SHADER_MODEL_6_1 = 0x61,
+    D3D_SHADER_MODEL_6_2 = 0x62,
+    D3D_SHADER_MODEL_6_3 = 0x63,
+    D3D_SHADER_MODEL_6_4 = 0x64,
+    D3D_SHADER_MODEL_6_5 = 0x65,
+    D3D_SHADER_MODEL_6_6 = 0x66,
+    D3D_SHADER_MODEL_6_7 = 0x67,
+    D3D_HIGHEST_SHADER_MODEL = D3D_SHADER_MODEL_6_7
+} D3D_SHADER_MODEL;
+
+typedef struct D3D12_FEATURE_DATA_SHADER_MODEL {
+    _Inout_ D3D_SHADER_MODEL HighestShaderModel;
+} D3D12_FEATURE_DATA_SHADER_MODEL;
 
 #define D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND (0xffffffff)
 
