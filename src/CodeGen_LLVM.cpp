@@ -1232,7 +1232,7 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (tm) {
-#if LLVM_VERSION >= 180
+#if LLVM_VERSION >= 180 && LLVM_VERSION < 190
         tm->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
 #else
         tm->registerPassBuilderCallbacks(pb);
