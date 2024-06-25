@@ -999,7 +999,9 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         val = substitute_self_reference(val, func_name, intm.function(), vars_rename);
         update_vals[i] = val;
     }
-    intm(update_args) = Tuple(update_vals);
+    // There may not actually be a reference to the RDom in the args or values,
+    // so we use Function::define_update, which lets pass pass an explicit RDom.
+    intm.function().define_update(update_args, update_vals, intm_rdom.domain());
 
     // Determine the dims and schedule of the update definition of the
     // intermediate Func. We copy over the schedule from the original

@@ -624,10 +624,12 @@ if (TARGET_VULKAN)
 endif()
 
 if (TARGET_SPIRV)
-    # Our vendored SPIRV headers are only used internally; users do not need
-    # them installed.
+    find_package(
+        SPIRV-Headers 1.5.5 REQUIRED
+        HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
+    )
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:Halide::SPIRV>")
+    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
 endif ()
 
 option(TARGET_WEBGPU "Include WebGPU target" ON)
