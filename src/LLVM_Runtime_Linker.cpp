@@ -555,6 +555,18 @@ llvm::Triple get_triple_for_target(const Target &target) {
         // Return default-constructed triple. Must be set later.
     }
 
+    // Setting a minimum OS version here enables LLVM to include platform
+    // metadata in the MachO object file. Without this, Xcode 15's ld
+    // issues warnings about missing the "platform load command".
+    if (triple.isOSBinFormatMachO()) {
+        const llvm::VersionTuple minVer = triple.getMinimumSupportedOSVersion();
+        if (!minVer.empty()) {
+            const llvm::StringRef name = triple.getOSName();
+            // llvm::Triple determines the version by parsing the OSName.
+            triple.setOSName(name.str() + minVer.getAsString());
+        }
+    }
+
     return triple;
 }
 
