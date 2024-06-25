@@ -32,25 +32,8 @@ public:
      * but not for Generator. subject_ptr is the value actually associated
      * with this instance; it is usually (but not necessarily) the same
      * as this_ptr. Assert if this_ptr is already registered.
-     *
-     * If 'this' is directly heap allocated (not a member of a
-     * heap-allocated object) and you want the introspection subsystem
-     * to know about it and its members, set the introspection_helper
-     * argument to a pointer to a global variable with the same true
-     * type as 'this'. For example:
-     *
-     * MyObject *obj = new MyObject;
-     * static MyObject *introspection_helper = nullptr;
-     * register_instance(obj, sizeof(MyObject), kind, obj, &introspection_helper);
-     *
-     * I.e. introspection_helper should be a pointer to a pointer to
-     * an object instance. The inner pointer can be null. The
-     * introspection subsystem will then assume this new object is of
-     * the matching type, which will help its members deduce their
-     * names on construction.
      */
-    static void register_instance(void *this_ptr, size_t size, Kind kind, void *subject_ptr,
-                                  const void *introspection_helper);
+    static void register_instance(void *this_ptr, size_t size, Kind kind, void *subject_ptr);
 
     /** Remove an instance from the registry. Assert if not found.
      */
@@ -70,11 +53,10 @@ private:
         void *subject_ptr = nullptr;  // May be different from the this_ptr in the key
         size_t size = 0;              // May be 0 for params
         Kind kind = Invalid;
-        bool registered_for_introspection = false;
 
         InstanceInfo() = default;
-        InstanceInfo(size_t size, Kind kind, void *subject_ptr, bool registered_for_introspection)
-            : subject_ptr(subject_ptr), size(size), kind(kind), registered_for_introspection(registered_for_introspection) {
+        InstanceInfo(size_t size, Kind kind, void *subject_ptr)
+            : subject_ptr(subject_ptr), size(size), kind(kind) {
         }
     };
 

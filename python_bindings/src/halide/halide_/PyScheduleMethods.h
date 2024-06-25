@@ -107,9 +107,7 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
                 // Templated function; specializing only on ImageParam for now
                 return t.template prefetch<ImageParam>(image, at, from, offset, strategy);
             },
-            py::arg("image"), py::arg("at"), py::arg("from"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
-
-        .def("source_location", &T::source_location);
+            py::arg("image"), py::arg("at"), py::arg("from"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf);
 }
 
 }  // namespace PythonBindings

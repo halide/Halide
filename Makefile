@@ -130,7 +130,6 @@ WITH_D3D12 ?= not-empty
 WITH_VULKAN ?= not-empty
 WITH_SPIRV ?= not-empty
 WITH_WEBGPU ?= not-empty
-WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 
@@ -173,7 +172,6 @@ AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 RISCV_CXX_FLAGS=$(if $(WITH_RISCV), -DWITH_RISCV, )
 RISCV_LLVM_CONFIG_LIB=$(if $(WITH_RISCV), riscv, )
 
-INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
 EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DHALIDE_WITH_EXCEPTIONS -fexceptions, )
 
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON, )
@@ -218,7 +216,6 @@ CXX_FLAGS += $(METAL_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
 CXX_FLAGS += $(WEBGPU_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
-CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 CXX_FLAGS += $(AMDGPU_CXX_FLAGS)
 CXX_FLAGS += $(RISCV_CXX_FLAGS)
@@ -512,7 +509,6 @@ SOURCE_FILES = \
   InlineReductions.cpp \
   IntegerDivisionTable.cpp \
   Interval.cpp \
-  Introspection.cpp \
   IR.cpp \
   IREquality.cpp \
   IRMatch.cpp \
@@ -712,7 +708,6 @@ HEADER_FILES = \
   InlineReductions.h \
   IntegerDivisionTable.h \
   Interval.h \
-  Introspection.h \
   IntrusivePtr.h \
   IR.h \
   IREquality.h \

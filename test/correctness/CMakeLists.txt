@@ -188,7 +188,6 @@ tests(GROUPS correctness
       interleave_x.cpp
       interval.cpp
       intrinsics.cpp
-      introspection.cpp
       invalid_gpu_loop_nests.cpp
       inverse.cpp
       isnan.cpp

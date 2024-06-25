@@ -40,7 +40,7 @@ class RVar {
 public:
     /** An empty reduction variable. */
     RVar()
-        : _name(Internal::make_entity_name(this, "Halide:.*:RVar", 'r')) {
+        : _name(Internal::unique_name('r')) {
     }
 
     /** Construct an RVar with the given name */

@@ -7,7 +7,6 @@
 #include "Util.h"
 #include "Debug.h"
 #include "Error.h"
-#include "Introspection.h"
 #include <atomic>
 #include <chrono>
 #include <fstream>
@@ -271,22 +270,6 @@ string replace_all(const string &str, const string &find, const string &replace)
         pos += replace.length();
     }
     return result;
-}
-
-string make_entity_name(void *stack_ptr, const string &type, char prefix) {
-    string name = Introspection::get_variable_name(stack_ptr, type);
-
-    if (name.empty()) {
-        return unique_name(prefix);
-    } else {
-        // Halide names may not contain '.'
-        for (char &c : name) {
-            if (c == '.') {
-                c = ':';
-            }
-        }
-        return unique_name(name);
-    }
 }
 
 std::vector<std::string> split_string(const std::string &source, const std::string &delim) {
