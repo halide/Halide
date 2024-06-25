@@ -653,6 +653,7 @@ const char *const intrinsic_op_names[] = {
     "mux",
     "popcount",
     "prefetch",
+    "profiling_enable_instance_marker",
     "promise_clamped",
     "random",
     "register_destructor",
