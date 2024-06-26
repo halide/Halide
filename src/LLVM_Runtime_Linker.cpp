@@ -486,7 +486,11 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else {
             user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
 #ifdef WITH_AARCH64
-            triple.setArch(llvm::Triple::aarch64);
+            if (target.has_feature(Target::ARM64e)) {
+              triple.setArch(llvm::Triple::aarch64, llvm::Triple::AArch64SubArch_arm64e);
+            } else {
+              triple.setArch(llvm::Triple::aarch64);
+            }
 #else
             user_error << "AArch64 llvm target not enabled in this build of Halide\n";
 #endif

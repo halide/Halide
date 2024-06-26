@@ -21,6 +21,7 @@ int main(int argc, char **argv) {
         "arm-64-android",
         "arm-64-android-hvx",
         "arm-64-ios",
+        "arm-64-ios-arm64e",
         "arm-64-linux",
         "arm-64-noos-semihosting",
         "arm-64-windows",

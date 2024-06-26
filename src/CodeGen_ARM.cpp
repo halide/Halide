@@ -2445,9 +2445,13 @@ string CodeGen_ARM::mcpu_target() const {
         }
     } else {
         if (target.os == Target::IOS) {
-            return "cyclone";
+            if (target.has_feature(Target::ARM64e)) {
+                return "apple-a12";
+            } else {
+                return "cyclone";  // aka Apple A7
+            }
         } else if (target.os == Target::OSX) {
-            return "apple-a12";
+            return "apple-m1";
         } else if (target.has_feature(Target::SVE2)) {
             return "cortex-x1";
         } else {
@@ -2482,7 +2486,7 @@ string CodeGen_ARM::mattrs() const {
         }
     } else {
         // TODO: Should Halide's SVE flags be 64-bit only?
-        // TODO: Sound we ass "-neon" if NoNEON is set? Does this make any sense?
+        // TODO: Sound we add "-neon" if NoNEON is set? Does this make any sense?
         if (target.has_feature(Target::SVE2)) {
             attrs.emplace_back("+sve2");
         } else if (target.has_feature(Target::SVE)) {

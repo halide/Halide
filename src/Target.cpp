@@ -581,6 +581,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     {"rvv", Target::RVV},
     {"armv81a", Target::ARMv81a},
+    {"arm64e", Target::ARM64e},
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
     {"spirv", Target::SPIRV},
@@ -1388,6 +1389,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     const std::array<Feature, 15> intersection_features = {{
         ARMv7s,
         ARMv81a,
+        ARM64e,
         AVX,
         AVX2,
         AVX512,
