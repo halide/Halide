@@ -2476,8 +2476,7 @@ string CodeGen_ARM::mattrs() const {
         attrs.emplace_back("+v8.1a");
     }
     if (target.has_feature(Target::ARMv83a)) {
-        arch_flags += separator + "+v8.3a";
-        separator = ",";
+        attrs.emplace_back("+v8.3a");
     }
     if (target.has_feature(Target::ARMDotProd)) {
         attrs.emplace_back("+dotprod");
@@ -2502,7 +2501,6 @@ string CodeGen_ARM::mattrs() const {
         if (target.os == Target::IOS || target.os == Target::OSX) {
             attrs.emplace_back("+reserve-x18");
         }
-        return arch_flags;
     }
     return join_strings(attrs, ",");
 }
