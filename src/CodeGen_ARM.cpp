@@ -1212,50 +1212,42 @@ void CodeGen_ARM::visit(const Add *op) {
     Expr ac_u8 = Variable::make(UInt(8, 0), "ac"), bc_u8 = Variable::make(UInt(8, 0), "bc");
     Expr cc_u8 = Variable::make(UInt(8, 0), "cc"), dc_u8 = Variable::make(UInt(8, 0), "dc");
 
-    // clang-format off
+    Expr ma_i8 = widening_mul(a_i8, ac_i8);
+    Expr mb_i8 = widening_mul(b_i8, bc_i8);
+    Expr mc_i8 = widening_mul(c_i8, cc_i8);
+    Expr md_i8 = widening_mul(d_i8, dc_i8);
+
+    Expr ma_u8 = widening_mul(a_u8, ac_u8);
+    Expr mb_u8 = widening_mul(b_u8, bc_u8);
+    Expr mc_u8 = widening_mul(c_u8, cc_u8);
+    Expr md_u8 = widening_mul(d_u8, dc_u8);
+
     static const Pattern patterns[] = {
-        // If we had better normalization, we could drastically reduce the number of patterns here.
         // Signed variants.
-        {init_i32 + widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8)), "dot_product"},
-        {init_i32 + widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), i16(d_i8)), "dot_product", Int(8)},
-        {init_i32 + widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(i16(c_i8), widening_mul(d_i8, dc_i8)), "dot_product", Int(8)},
-        {init_i32 + widening_add(widening_mul(a_i8, ac_i8),  i16(b_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8)), "dot_product", Int(8)},
-        {init_i32 + widening_add(i16(a_i8), widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8)), "dot_product", Int(8)},
-        // Signed variants (associative).
-        {init_i32 + (widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8))), "dot_product"},
-        {init_i32 + (widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), i16(d_i8))), "dot_product", Int(8)},
-        {init_i32 + (widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(i16(c_i8), widening_mul(d_i8, dc_i8))), "dot_product", Int(8)},
-        {init_i32 + (widening_add(widening_mul(a_i8, ac_i8),  i16(b_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8))), "dot_product", Int(8)},
-        {init_i32 + (widening_add(i16(a_i8), widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8))), "dot_product", Int(8)},
+        {(init_i32 + widening_add(ma_i8, mb_i8)) + widening_add(mc_i8, md_i8), "dot_product"},
+        {init_i32 + (widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8)), "dot_product"},
+        {widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8), "dot_product"},
+
         // Unsigned variants.
-        {init_u32 + widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8)), "dot_product"},
-        {init_u32 + widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), u16(d_u8)), "dot_product", UInt(8)},
-        {init_u32 + widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(u16(c_u8), widening_mul(d_u8, dc_u8)), "dot_product", UInt(8)},
-        {init_u32 + widening_add(widening_mul(a_u8, ac_u8),  u16(b_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8)), "dot_product", UInt(8)},
-        {init_u32 + widening_add(u16(a_u8), widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8)), "dot_product", UInt(8)},
-        // Unsigned variants (associative).
-        {init_u32 + (widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8))), "dot_product"},
-        {init_u32 + (widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), u16(d_u8))), "dot_product", UInt(8)},
-        {init_u32 + (widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(u16(c_u8), widening_mul(d_u8, dc_u8))), "dot_product", UInt(8)},
-        {init_u32 + (widening_add(widening_mul(a_u8, ac_u8),  u16(b_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8))), "dot_product", UInt(8)},
-        {init_u32 + (widening_add(u16(a_u8), widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8))), "dot_product", UInt(8)},
+        {(init_u32 + widening_add(ma_u8, mb_u8)) + widening_add(mc_u8, md_u8), "dot_product"},
+        {init_u32 + (widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8)), "dot_product"},
+        {widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8), "dot_product"},
     };
-    // clang-format on
 
     std::map<std::string, Expr> matches;
     for (const Pattern &p : patterns) {
         if (expr_match(p.pattern, op, matches)) {
-            Expr init = matches["init"];
-            Expr values = Shuffle::make_interleave({matches["a"], matches["b"], matches["c"], matches["d"]});
-            // Coefficients can be 1 if not in the pattern.
-            Expr one = make_one(p.coeff_type.with_lanes(op->type.lanes()));
-            // This hideous code pattern implements fetching a
-            // default value if the map doesn't contain a key.
-            Expr _ac = matches.try_emplace("ac", one).first->second;
-            Expr _bc = matches.try_emplace("bc", one).first->second;
-            Expr _cc = matches.try_emplace("cc", one).first->second;
-            Expr _dc = matches.try_emplace("dc", one).first->second;
-            Expr coeffs = Shuffle::make_interleave({_ac, _bc, _cc, _dc});
+            Expr init;
+            auto it = matches.find("init");
+            if (it == matches.end()) {
+                init = make_zero(op->type);
+            } else {
+                init = it->second;
+            }
+            Expr values = Shuffle::make_interleave({matches["a"], matches["b"],
+                                                    matches["c"], matches["d"]});
+            Expr coeffs = Shuffle::make_interleave({matches["ac"], matches["bc"],
+                                                    matches["cc"], matches["dc"]});
             value = call_overloaded_intrin(op->type, p.intrin, {init, values, coeffs});
             if (value) {
                 return;
