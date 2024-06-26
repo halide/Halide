@@ -10,6 +10,8 @@
 #include "HalideRuntimeOpenCL.h"
 #elif defined(TEST_METAL)
 #include "HalideRuntimeMetal.h"
+#elif defined(TEST_VULKAN)
+#include "HalideRuntimeVulkan.h"
 #endif
 
 #include "gpu_object_lifetime.h"
@@ -34,6 +36,8 @@ int main(int argc, char **argv) {
     printf("TEST_OPENCL enabled for gpu_object_lifetime testing...\n");
 #elif defined(TEST_METAL)
     printf("TEST_METAL enabled for gpu_object_lifetime testing...\n");
+#elif defined(TEST_VULKAN)
+    printf("TEST_VULKAN enabled for gpu_object_lifetime testing...\n");
 #else
     // TODO: we can't support WebGPU here (yet) because our WebGPU runtime doesn't
     // (yet) support halide_webgpu_wrap_native(); when it does, we should be able
@@ -211,6 +215,8 @@ int main(int argc, char **argv) {
         halide_device_release(nullptr, halide_opencl_device_interface());
 #elif defined(TEST_METAL)
         halide_device_release(nullptr, halide_metal_device_interface());
+#elif defined(TEST_VULKAN)
+        halide_device_release(nullptr, halide_vulkan_device_interface());
 #endif
     }
 

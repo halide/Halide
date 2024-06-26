@@ -1,6 +1,5 @@
 #include "ObjectInstanceRegistry.h"
 #include "Error.h"
-#include "Introspection.h"
 
 namespace Halide {
 namespace Internal {
@@ -13,17 +12,12 @@ ObjectInstanceRegistry &ObjectInstanceRegistry::get_registry() {
 
 /* static */
 void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind kind,
-                                               void *subject_ptr, const void *introspection_helper) {
+                                               void *subject_ptr) {
     ObjectInstanceRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     uintptr_t key = (uintptr_t)this_ptr;
     internal_assert(registry.instances.find(key) == registry.instances.end());
-    if (introspection_helper) {
-        registry.instances[key] = InstanceInfo(size, kind, subject_ptr, true);
-        Introspection::register_heap_object(this_ptr, size, introspection_helper);
-    } else {
-        registry.instances[key] = InstanceInfo(size, kind, subject_ptr, false);
-    }
+    registry.instances[key] = InstanceInfo(size, kind, subject_ptr);
 }
 
 /* static */
@@ -33,9 +27,6 @@ void ObjectInstanceRegistry::unregister_instance(void *this_ptr) {
     uintptr_t key = (uintptr_t)this_ptr;
     std::map<uintptr_t, InstanceInfo>::iterator it = registry.instances.find(key);
     internal_assert(it != registry.instances.end());
-    if (it->second.registered_for_introspection) {
-        Introspection::deregister_heap_object(this_ptr, it->second.size);
-    }
     registry.instances.erase(it);
 }
 

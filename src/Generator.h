@@ -274,7 +274,6 @@
 #include "AbstractGenerator.h"
 #include "Func.h"
 #include "ImageParam.h"
-#include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
 #include "Target.h"
 
@@ -3360,7 +3359,7 @@ public:
     }
 
 protected:
-    GeneratorBase(size_t size, const void *introspection_helper);
+    GeneratorBase(size_t size);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
     // Note that it is explicitly legal to override init_from_context(), so that you can (say)
@@ -3742,8 +3741,7 @@ template<class T>
 class Generator : public Internal::GeneratorBase {
 protected:
     Generator()
-        : Internal::GeneratorBase(sizeof(T),
-                                  Internal::Introspection::get_introspection_helper<T>()) {
+        : Internal::GeneratorBase(sizeof(T)) {
     }
 
 public:

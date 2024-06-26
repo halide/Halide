@@ -128,44 +128,6 @@ void define_operators(py::module &m) {
         return py::cast(false_expr_value);
     });
 
-    m.def("tuple_select", [](const py::args &args) -> py::tuple {
-        // HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
-        PyErr_WarnEx(PyExc_DeprecationWarning,
-                     "tuple_select has been deprecated. Use select instead (which now works for Tuples)",
-                     1);
-
-        _halide_user_assert(args.size() >= 3)
-            << "tuple_select() must have at least 3 arguments";
-        _halide_user_assert((args.size() % 2) != 0)
-            << "tuple_select() must have an odd number of arguments";
-
-        int pos = (int)args.size() - 1;
-        Tuple false_value = args[pos--].cast<Tuple>();
-        bool has_tuple_cond = false, has_expr_cond = false;
-        while (pos > 0) {
-            Tuple true_value = args[pos--].cast<Tuple>();
-            // Note that 'condition' can be either Expr or Tuple, but must be consistent across all
-            py::object py_cond = args[pos--];
-            Expr expr_cond;
-            Tuple tuple_cond(expr_cond);
-            try {
-                tuple_cond = py_cond.cast<Tuple>();
-                has_tuple_cond = true;
-            } catch (...) {
-                expr_cond = py_cond.cast<Expr>();
-                has_expr_cond = true;
-            }
-
-            if (expr_cond.defined()) {
-                false_value = select(expr_cond, true_value, false_value);
-            } else {
-                false_value = select(tuple_cond, true_value, false_value);
-            }
-        }
-        _halide_user_assert(!(has_tuple_cond && has_expr_cond))
-            << "tuple_select() may not mix Expr and Tuple for the condition elements.";
-        return to_python_tuple(false_value);
-    });
     m.def("mux", (Expr(*)(const Expr &, const std::vector<Expr> &)) & mux);
 
     m.def("sin", &sin);

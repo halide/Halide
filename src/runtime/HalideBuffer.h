@@ -306,15 +306,21 @@ private:
     // Note that this is called "cropped" but can also encompass a slice/embed
     // operation as well.
     struct DevRefCountCropped : DeviceRefCount {
-        Buffer<T, Dims, InClassDimStorage> cropped_from;
-        explicit DevRefCountCropped(const Buffer<T, Dims, InClassDimStorage> &cropped_from)
+        // We will only store Buffers that have a dynamic number of dimensions.
+        // Buffers that cropped or sliced from need to be first converted to
+        // one with variable size. This is required because we cannot possibly
+        // know what the actual dimensionality is of the buffer this is a
+        // crop or slice from. Since cropping a sliced buffer is also possible,
+        // no optimizations can be made for cropped buffers either.
+        Buffer<T, AnyDims> cropped_from;
+        explicit DevRefCountCropped(const Buffer<T, AnyDims> &cropped_from)
             : cropped_from(cropped_from) {
             ownership = BufferDeviceOwnership::Cropped;
         }
     };
 
     /** Setup the device ref count for a buffer to indicate it is a crop (or slice, embed, etc) of cropped_from */
-    void crop_from(const Buffer<T, Dims, InClassDimStorage> &cropped_from) {
+    void crop_from(const Buffer<T, AnyDims> &cropped_from) {
         assert(dev_ref_count == nullptr);
         dev_ref_count = new DevRefCountCropped(cropped_from);
     }
@@ -517,15 +523,15 @@ private:
     void complete_device_crop(Buffer<T, Dims, InClassDimStorage> &result_host_cropped) const {
         assert(buf.device_interface != nullptr);
         if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == halide_error_code_success) {
-            const Buffer<T, Dims, InClassDimStorage> *cropped_from = this;
             // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
             // is it possible to get to this point without incref having run at least once since
             // the device field was set? (I.e. in the internal logic of crop. incref might have been
             // called.)
             if (dev_ref_count != nullptr && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
-                cropped_from = &((DevRefCountCropped *)dev_ref_count)->cropped_from;
+                result_host_cropped.crop_from(((DevRefCountCropped *)dev_ref_count)->cropped_from);
+            } else {
+                result_host_cropped.crop_from(*this);
             }
-            result_host_cropped.crop_from(*cropped_from);
         }
     }
 
@@ -549,16 +555,17 @@ private:
     void complete_device_slice(Buffer<T, AnyDims, InClassDimStorage> &result_host_sliced, int d, int pos) const {
         assert(buf.device_interface != nullptr);
         if (buf.device_interface->device_slice(nullptr, &this->buf, d, pos, &result_host_sliced.buf) == halide_error_code_success) {
-            const Buffer<T, Dims, InClassDimStorage> *sliced_from = this;
             // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
             // is it possible to get to this point without incref having run at least once since
             // the device field was set? (I.e. in the internal logic of slice. incref might have been
             // called.)
             if (dev_ref_count != nullptr && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
-                sliced_from = &((DevRefCountCropped *)dev_ref_count)->cropped_from;
+                // crop_from() is correct here, despite the fact that we are slicing.
+                result_host_sliced.crop_from(((DevRefCountCropped *)dev_ref_count)->cropped_from);
+            } else {
+                // crop_from() is correct here, despite the fact that we are slicing.
+                result_host_sliced.crop_from(*this);
             }
-            // crop_from() is correct here, despite the fact that we are slicing.
-            result_host_sliced.crop_from(*sliced_from);
         }
     }
 

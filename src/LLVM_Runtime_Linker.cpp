@@ -422,6 +422,25 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
 
 namespace Internal {
 
+namespace {
+
+std::optional<llvm::VersionTuple> get_os_version_constraint(const llvm::Triple &triple) {
+    if (!triple.isOSBinFormatMachO()) {
+        return std::nullopt;
+    }
+
+    if (triple.getOS() == llvm::Triple::MacOSX && triple.getArch() == llvm::Triple::x86_64) {
+        // At time of writing (June 2024), this is one version prior
+        // to the oldest version still supported by Apple.
+        return llvm::VersionTuple(11, 0, 0);
+    }
+
+    llvm::VersionTuple t = triple.getMinimumSupportedOSVersion();
+    return t.empty() ? std::nullopt : std::make_optional(t);
+}
+
+}  // namespace
+
 llvm::Triple get_triple_for_target(const Target &target) {
     llvm::Triple triple;
 
@@ -553,6 +572,14 @@ llvm::Triple get_triple_for_target(const Target &target) {
         }
     } else {
         // Return default-constructed triple. Must be set later.
+    }
+
+    // Setting a minimum OS version here enables LLVM to include platform
+    // metadata in the MachO object file. Without this, Xcode 15's ld
+    // issues warnings about missing the "platform load command".
+    if (auto version = get_os_version_constraint(triple)) {
+        // llvm::Triple determines the version by parsing the OSName.
+        triple.setOSName((triple.getOSName() + version->getAsString()).str());
     }
 
     return triple;

@@ -471,12 +471,6 @@ public:
     }
     // @}
 
-    /** Attempt to get the source file and line where this stage was
-     * defined by parsing the process's own debug symbols. Returns an
-     * empty string if no debug symbols were found or the debug
-     * symbols were not understood. Works on OS X and Linux only. */
-    std::string source_location() const;
-
     /** Assert that this stage has intentionally been given no schedule, and
      * suppress the warning about unscheduled update definitions that would
      * otherwise fire. This counts as a schedule, so calling this twice on the
@@ -2602,10 +2596,6 @@ public:
      \endcode
      */
     std::vector<Argument> infer_arguments() const;
-
-    /** Get the source location of the pure definition of this
-     * Func. See Stage::source_location() */
-    std::string source_location() const;
 
     /** Return the current StageSchedule associated with this initial
      * Stage of this Func. For introspection only: to modify schedule,
