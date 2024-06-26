@@ -6,8 +6,8 @@ class StencilChain : public Halide::Generator<StencilChain> {
 public:
     GeneratorParam<int> stencils{"stencils", 32, 1, 100};
 
-    Input<Buffer<uint16_t>> input{"input", 2};
-    Output<Buffer<uint16_t>> output{"output", 2};
+    Input<Buffer<uint16_t, 2>> input{"input"};
+    Output<Buffer<uint16_t, 2>> output{"output"};
 
     void generate() {
 
@@ -45,7 +45,7 @@ public:
             output.set_estimates({{0, width}, {0, height}});
         }
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             // nothing
         } else if (get_target().has_gpu_feature()) {
             // GPU schedule

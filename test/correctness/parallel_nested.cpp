@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
             for (int z = 0; z < 64; z++) {
                 if (im(x, y, z) != x * y + z * 3 + 1) {
                     printf("im(%d, %d, %d) = %d\n", x, y, z, im(x, y, z));
-                    return -1;
+                    return 1;
                 }
             }
         }

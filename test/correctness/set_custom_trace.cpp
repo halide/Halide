@@ -17,7 +17,7 @@ protected:
             if (op->name == "f") {
                 if (producer != "g") {
                     printf("Produce \"f\" should be inside of produce \"g\"\n");
-                    exit(-1);
+                    exit(1);
                 }
             }
             std::string old_producer = producer;
@@ -28,7 +28,7 @@ protected:
             if (op->name == "f") {
                 if (producer != "g") {
                     printf("Consume \"f\" should be inside of produce \"g\"\n");
-                    exit(-1);
+                    exit(1);
                 }
             }
             std::string old_consumer = consumer;
@@ -39,7 +39,7 @@ protected:
     }
 };
 
-int allocation_bound_test_trace(void *user_context, const halide_trace_event_t *e) {
+int allocation_bound_test_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     return 0;
 }
 
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     g(x) += f(x);
 
     f.compute_at(g, x);
-    f.set_custom_trace(allocation_bound_test_trace);
+    f.jit_handlers().custom_trace = allocation_bound_test_trace;
 
     Module m = g.compile_to_module({g.infer_arguments()});
     CheckCompute checker;

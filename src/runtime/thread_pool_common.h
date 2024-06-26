@@ -14,9 +14,16 @@ int gettid() {
 }
 }  // namespace
 
-#define log_message(stuff) print(nullptr) << gettid() << ": " << stuff << "\n"
+// clang-format off
+#define log_message(stuff) do { print(nullptr) << gettid() << ": " << stuff << "\n"; } while (0)
+// clang-format on
+
 #else
-#define log_message(stuff)
+
+// clang-format off
+#define log_message(stuff) do { /*nothing*/ } while (0)
+// clang-format on
+
 #endif
 
 namespace Halide {
@@ -64,30 +71,25 @@ struct work {
     }
 };
 
-#define MAX_THREADS 256
-
-WEAK int clamp_num_threads(int threads) {
+ALWAYS_INLINE int clamp_num_threads(int threads) {
     if (threads > MAX_THREADS) {
-        threads = MAX_THREADS;
+        return MAX_THREADS;
     } else if (threads < 1) {
-        threads = 1;
+        return 1;
+    } else {
+        return threads;
     }
-    return threads;
 }
 
 WEAK int default_desired_num_threads() {
-    int desired_num_threads = 0;
     char *threads_str = getenv("HL_NUM_THREADS");
     if (!threads_str) {
         // Legacy name for HL_NUM_THREADS
         threads_str = getenv("HL_NUMTHREADS");
     }
-    if (threads_str) {
-        desired_num_threads = atoi(threads_str);
-    } else {
-        desired_num_threads = halide_host_cpu_count();
-    }
-    return desired_num_threads;
+    return threads_str ?
+               atoi(threads_str) :
+               halide_host_cpu_count();
 }
 
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
@@ -144,13 +146,13 @@ struct work_queue_t {
 
     // Used to check initial state is correct.
     ALWAYS_INLINE void assert_zeroed() const {
-        // Assert that all fields except the mutex and desired hreads count are zeroed.
+        // Assert that all fields except the mutex and desired threads count are zeroed.
         const char *bytes = ((const char *)&this->zero_marker);
         const char *limit = ((const char *)this) + sizeof(work_queue_t);
         while (bytes < limit && *bytes == 0) {
             bytes++;
         }
-        halide_assert(nullptr, bytes == limit && "Logic error in thread pool work queue initialization.\n");
+        halide_abort_if_false(nullptr, bytes == limit && "Logic error in thread pool work queue initialization.\n");
     }
 
     // Return the work queue to initial state. Must be called while locked
@@ -166,6 +168,7 @@ struct work_queue_t {
 WEAK work_queue_t work_queue = {};
 
 #if EXTENDED_DEBUG
+
 WEAK void print_job(work *job, const char *indent, const char *prefix = nullptr) {
     if (prefix == nullptr) {
         prefix = indent;
@@ -187,9 +190,14 @@ WEAK void dump_job_state() {
     }
     log_message("Done dumping job state.");
 }
+
 #else
-#define print_job(job, indent, prefix)
-#define dump_job_state()
+
+// clang-format off
+#define print_job(job, indent, prefix)  do { /*nothing*/ } while (0)
+#define dump_job_state()                do { /*nothing*/ } while (0)
+// clang-format on
+
 #endif
 
 WEAK void worker_thread(void *);
@@ -203,7 +211,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         work **prev_ptr = &work_queue.jobs;
 
         if (owned_job) {
-            if (owned_job->exit_status != 0) {
+            if (owned_job->exit_status != halide_error_code_success) {
                 if (owned_job->active_workers == 0) {
                     while (job != owned_job) {
                         prev_ptr = &job->next_job;
@@ -213,7 +221,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                     job->task.extent = 0;
                     continue;  // So loop exit is always in the same place.
                 }
-            } else if (owned_job->parent_job && owned_job->parent_job->exit_status != 0) {
+            } else if (owned_job->parent_job && owned_job->parent_job->exit_status != halide_error_code_success) {
                 owned_job->exit_status = owned_job->parent_job->exit_status;
                 // The wakeup can likely be only done under certain conditions, but it is only happening
                 // in when an error has already occured and it seems more important to ensure reliable
@@ -250,7 +258,6 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             enough_threads = threads_available >= job->task.min_threads;
 
             if (!enough_threads) {
-
                 log_message("Not enough threads for job " << job->task.name << " available: " << threads_available << " min_threads: " << job->task.min_threads);
             }
             bool can_use_this_thread_stack = !owned_job || (job->siblings == owned_job->siblings) || job->task.min_threads == 0;
@@ -325,7 +332,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             log_message("Reserved " << job->task.min_threads << " on " << job->parent_job->task.name << " for " << job->task.name << " giving " << job->parent_job->threads_reserved << " of " << job->parent_job->task.min_threads);
         }
 
-        int result = 0;
+        int result = halide_error_code_success;
 
         if (job->task.serial) {
             // Remove it from the stack while we work on it
@@ -335,7 +342,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             halide_mutex_unlock(&work_queue.mutex);
             int total_iters = 0;
             int iters = 1;
-            while (result == 0) {
+            while (result == halide_error_code_success) {
                 // Claim as many iterations as possible
                 while ((job->task.extent - total_iters) > iters &&
                        job->make_runnable()) {
@@ -358,7 +365,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             job->task.extent -= total_iters;
 
             // Put it back on the job stack, if it hasn't failed.
-            if (result != 0) {
+            if (result != halide_error_code_success) {
                 job->task.extent = 0;  // Force job to be finished.
             } else if (job->task.extent > 0) {
                 job->next_job = work_queue.jobs;
@@ -389,19 +396,19 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             halide_mutex_lock(&work_queue.mutex);
         }
 
-        if (result != 0) {
-            log_message("Saw thread pool saw error from task: " << result);
+        if (result != halide_error_code_success) {
+            log_message("Saw thread pool saw error from task: " << (int)result);
         }
 
         bool wake_owners = false;
 
         // If this task failed, set the exit status on the job.
-        if (result != 0) {
+        if (result != halide_error_code_success) {
             job->exit_status = result;
             // Mark all siblings as also failed.
             for (int i = 0; i < job->sibling_count; i++) {
                 log_message("Marking " << job->sibling_count << " siblings ");
-                if (job->siblings[i].exit_status == 0) {
+                if (job->siblings[i].exit_status == halide_error_code_success) {
                     job->siblings[i].exit_status = result;
                     wake_owners |= (job->active_workers == 0 && job->siblings[i].owner_is_sleeping);
                 }
@@ -423,7 +430,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         log_message("Done working on job " << job->task.name);
 
         if (wake_owners ||
-            (job->active_workers == 0 && (job->task.extent == 0 || job->exit_status != 0) && job->owner_is_sleeping)) {
+            (job->active_workers == 0 && (job->task.extent == 0 || job->exit_status != halide_error_code_success) && job->owner_is_sleeping)) {
             // The job is done or some owned job failed via sibling linkage. Wake up the owner.
             halide_cond_broadcast(&work_queue.wake_owners);
         }
@@ -515,9 +522,9 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         }
     } else {
         log_message("enqueue_work_already_locked job " << jobs[0].task.name << " with min_threads " << min_threads << " task_parent " << task_parent->task.name << " task_parent->task.min_threads " << task_parent->task.min_threads << " task_parent->threads_reserved " << task_parent->threads_reserved);
-        halide_assert(nullptr, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
-                                                task_parent->threads_reserved)) &&
-                                   "Logic error: thread over commit.\n");
+        halide_abort_if_false(nullptr, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
+                                                        task_parent->threads_reserved)) &&
+                                           "Logic error: thread over commit.\n");
         if (job_has_acquires || job_may_block) {
             task_parent->threads_reserved++;
         }
@@ -600,7 +607,7 @@ WEAK int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
 WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
                                    int min, int size, uint8_t *closure) {
     if (size <= 0) {
-        return 0;
+        return halide_error_code_success;
     }
 
     work job;
@@ -615,7 +622,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.task.name = nullptr;
     job.task_fn = f;
     job.user_context = user_context;
-    job.exit_status = 0;
+    job.exit_status = halide_error_code_success;
     job.active_workers = 0;
     job.next_semaphore = 0;
     job.owner_is_sleeping = false;
@@ -643,7 +650,7 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
         jobs[i].task = *tasks++;
         jobs[i].task_fn = nullptr;
         jobs[i].user_context = user_context;
-        jobs[i].exit_status = 0;
+        jobs[i].exit_status = halide_error_code_success;
         jobs[i].active_workers = 0;
         jobs[i].next_semaphore = 0;
         jobs[i].owner_is_sleeping = false;
@@ -651,17 +658,17 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
     }
 
     if (num_tasks == 0) {
-        return 0;
+        return halide_error_code_success;
     }
 
     halide_mutex_lock(&work_queue.mutex);
     enqueue_work_already_locked(num_tasks, jobs, (work *)task_parent);
-    int exit_status = 0;
+    int exit_status = halide_error_code_success;
     for (int i = 0; i < num_tasks; i++) {
         // It doesn't matter what order we join the tasks in, because
         // we'll happily assist with siblings too.
         worker_thread_already_locked(jobs + i);
-        if (jobs[i].exit_status != 0) {
+        if (jobs[i].exit_status != halide_error_code_success) {
             exit_status = jobs[i].exit_status;
         }
     }

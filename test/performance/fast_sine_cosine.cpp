@@ -41,12 +41,12 @@ int main(int argc, char **argv) {
 
     if (t_sin < t_fast_sin) {
         printf("fast_sin is not faster than sin\n");
-        return -1;
+        return 1;
     }
 
     if (t_cos < t_fast_cos) {
         printf("fast_cos is not faster than cos\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

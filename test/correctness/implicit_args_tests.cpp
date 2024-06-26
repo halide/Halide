@@ -17,7 +17,7 @@ int check_image(const Realization &r, const std::vector<FuncChecker> &funcs) {
                     if (im(x, y, z) != correct) {
                         printf("im(%d, %d, %d) = %d instead of %d\n",
                                x, y, z, im(x, y, z), correct);
-                        return -1;
+                        return 1;
                     }
                 }
             }
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
             return y + z + 2;
         };
         if (check_image(result, {func})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
             return (x == 0) || (x == 1) ? y + z + 3 : y + z + 1;
         };
         if (check_image(result, {func})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
             return (y + z + 3) + (y + z) * (y + 2);
         };
         if (check_image(result, {func})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
             return y + z + 2;
         };
         if (check_image(result, {func})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
             return (x + y) * (x + 2) + 3;
         };
         if (check_image(result, {func})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
             return x + 2;
         };
         if (check_image(result, {func1, func2})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
             return (x == 0) || (x == 1) ? y + z + 3 : y + z + 1;
         };
         if (check_image(result, {func})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -202,7 +202,7 @@ int main(int argc, char **argv) {
             return (y + z) * 3;
         };
         if (check_image(result, {func1, func2})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -229,7 +229,7 @@ int main(int argc, char **argv) {
             return (y - z + 4) + (y - z) * (y - 2);
         };
         if (check_image(result, {func1, func2})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -256,7 +256,7 @@ int main(int argc, char **argv) {
             return (x - y) * (x - 2) + 4;
         };
         if (check_image(result, {func1, func2})) {
-            return -1;
+            return 1;
         }
     }
 

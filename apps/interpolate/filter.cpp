@@ -19,8 +19,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    Halide::Runtime::Buffer<float> input = load_and_convert_image(argv[1]);
-    Halide::Runtime::Buffer<float> output(input.width(), input.height(), 3);
+    Halide::Runtime::Buffer<float, 3> input = load_and_convert_image(argv[1]);
+    Halide::Runtime::Buffer<float, 3> output(input.width(), input.height(), 3);
 
     double best_manual = benchmark([&]() {
         interpolate(input, output);

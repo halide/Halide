@@ -4,8 +4,10 @@
 /** \file
  * Defines the internal representation of parameters to halide piplines
  */
+#include <optional>
 #include <string>
 
+#include "Buffer.h"
 #include "IntrusivePtr.h"
 #include "Type.h"
 #include "Util.h"                   // for HALIDE_NO_USER_CODE_INLINE
@@ -14,15 +16,24 @@
 namespace Halide {
 
 struct ArgumentEstimates;
-template<typename T>
-class Buffer;
 struct Expr;
 struct Type;
 enum class MemoryType;
 
+struct BufferConstraint {
+    Expr min, extent, stride;
+    Expr min_estimate, extent_estimate;
+};
+
 namespace Internal {
 
+#ifdef WITH_SERIALIZATION
+class Deserializer;
+class Serializer;
+#endif
 struct ParameterContents;
+
+}  // namespace Internal
 
 /** A reference-counted handle to a parameter to a halide
  * pipeline. May be a scalar parameter or a buffer */
@@ -34,7 +45,44 @@ class Parameter {
     void check_type(const Type &t) const;
 
 protected:
-    IntrusivePtr<ParameterContents> contents;
+    Internal::IntrusivePtr<Internal::ParameterContents> contents;
+
+#ifdef WITH_SERIALIZATION
+    friend class Internal::Deserializer;  //< for scalar_data()
+    friend class Internal::Serializer;    //< for scalar_data()
+#endif
+    friend class Pipeline;  //< for read_only_scalar_address()
+
+    /** Get the raw currently-bound buffer. null if unbound */
+    const halide_buffer_t *raw_buffer() const;
+
+    /** Get the pointer to the current value of the scalar
+     * parameter. For a given parameter, this address will never
+     * change. Note that this can only be used to *read* from -- it must
+     * not be written to, so don't cast away the constness. Only relevant when jitting. */
+    const void *read_only_scalar_address() const;
+
+    /** If the Parameter is a scalar, and the scalar data is valid, return
+     * the scalar data. Otherwise, return nullopt. */
+    std::optional<halide_scalar_value_t> scalar_data() const;
+
+    /** If the Parameter is a scalar and has a valid scalar value, return it.
+     * Otherwise, assert-fail. */
+    halide_scalar_value_t scalar_data_checked() const;
+
+    /** If the Parameter is a scalar *of the given type* and has a valid scalar value, return it.
+     * Otherwise, assert-fail. */
+    halide_scalar_value_t scalar_data_checked(const Type &val_type) const;
+
+    /** Construct a new buffer parameter via deserialization. */
+    Parameter(const Type &t, int dimensions, const std::string &name,
+              const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
+              MemoryType memory_type);
+
+    /** Construct a new scalar parameter via deserialization. */
+    Parameter(const Type &t, int dimensions, const std::string &name,
+              const std::optional<halide_scalar_value_t> &scalar_data, const Expr &scalar_default, const Expr &scalar_min,
+              const Expr &scalar_max, const Expr &scalar_estimate);
 
 public:
     /** Construct a new undefined handle */
@@ -77,44 +125,41 @@ public:
      * bound value. Only relevant when jitting */
     template<typename T>
     HALIDE_NO_USER_CODE_INLINE T scalar() const {
-        check_type(type_of<T>());
-        return *((const T *)(scalar_address()));
+        static_assert(sizeof(T) <= sizeof(halide_scalar_value_t));
+        const auto sv = scalar_data_checked(type_of<T>());
+        T t;
+        memcpy(&t, &sv.u.u64, sizeof(t));
+        return t;
     }
 
-    /** This returns the current value of scalar<type()>()
-     * as an Expr. */
+    /** This returns the current value of scalar<type()>() as an Expr.
+     * If the Parameter is not scalar, or its scalar data is not valid, this will assert-fail. */
     Expr scalar_expr() const;
+
+    /** This returns true if scalar_expr() would return a valid Expr,
+     * false if not. */
+    bool has_scalar_value() const;
 
     /** If the parameter is a scalar parameter, set its current
      * value. Only relevant when jitting */
     template<typename T>
     HALIDE_NO_USER_CODE_INLINE void set_scalar(T val) {
-        check_type(type_of<T>());
-        *((T *)(scalar_address())) = val;
+        halide_scalar_value_t sv;
+        memcpy(&sv.u.u64, &val, sizeof(val));
+        set_scalar(type_of<T>(), sv);
     }
 
     /** If the parameter is a scalar parameter, set its current
      * value. Only relevant when jitting */
-    HALIDE_NO_USER_CODE_INLINE void set_scalar(const Type &val_type, halide_scalar_value_t val) {
-        check_type(val_type);
-        memcpy(scalar_address(), &val, val_type.bytes());
-    }
+    void set_scalar(const Type &val_type, halide_scalar_value_t val);
 
     /** If the parameter is a buffer parameter, get its currently
      * bound buffer. Only relevant when jitting */
     Buffer<void> buffer() const;
 
-    /** Get the raw currently-bound buffer. null if unbound */
-    const halide_buffer_t *raw_buffer() const;
-
     /** If the parameter is a buffer parameter, set its current
      * value. Only relevant when jitting */
     void set_buffer(const Buffer<void> &b);
-
-    /** Get the pointer to the current value of the scalar
-     * parameter. For a given parameter, this address will never
-     * change. Only relevant when jitting. */
-    void *scalar_address() const;
 
     /** Tests if this handle is the same as another handle */
     bool same_as(const Parameter &other) const;
@@ -125,11 +170,11 @@ public:
     /** Get and set constraints for the min, extent, stride, and estimates on
      * the min/extent. */
     //@{
-    void set_min_constraint(int dim, Expr e);
-    void set_extent_constraint(int dim, Expr e);
-    void set_stride_constraint(int dim, Expr e);
-    void set_min_constraint_estimate(int dim, Expr min);
-    void set_extent_constraint_estimate(int dim, Expr extent);
+    void set_min_constraint(int dim, const Expr &e);
+    void set_extent_constraint(int dim, const Expr &e);
+    void set_stride_constraint(int dim, const Expr &e);
+    void set_min_constraint_estimate(int dim, const Expr &min);
+    void set_extent_constraint_estimate(int dim, const Expr &extent);
     void set_host_alignment(int bytes);
     Expr min_constraint(int dim) const;
     Expr extent_constraint(int dim) const;
@@ -138,6 +183,10 @@ public:
     Expr extent_constraint_estimate(int dim) const;
     int host_alignment() const;
     //@}
+
+    /** Get buffer constraints for all dimensions,
+     *  only relevant when serializing. */
+    const std::vector<BufferConstraint> &buffer_constraints() const;
 
     /** Get and set constraints for scalar parameters. These are used
      * directly by Param, so they must be exported. */
@@ -171,6 +220,8 @@ public:
     void store_in(MemoryType memory_type);
     MemoryType memory_type() const;
 };
+
+namespace Internal {
 
 /** Validate arguments to a call to a func, image or imageparam. */
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims);

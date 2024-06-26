@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    //int W = 64*3, H = 64*3;
+    // int W = 64*3, H = 64*3;
     const int W = 128, H = 48;
 
     Buffer<uint16_t> in(W, H);
@@ -106,11 +106,11 @@ int main(int argc, char **argv) {
                                 1 * in(x - 1, y + 1) + 2 * in(x, y + 1) + 1 * in(x + 1, y + 1));
             if (out1(x, y) != correct) {
                 printf("out1(%d, %d) = %d instead of %d\n", x, y, out1(x, y), correct);
-                return -1;
+                return 1;
             }
             if (out2(x, y) != correct) {
                 printf("out2(%d, %d) = %d instead of %d\n", x, y, out2(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }

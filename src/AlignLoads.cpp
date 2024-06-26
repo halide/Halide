@@ -1,7 +1,6 @@
 #include <algorithm>
 
 #include "AlignLoads.h"
-#include "Bounds.h"
 #include "HexagonAlignment.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -21,8 +20,8 @@ namespace {
 // intended vector out of the aligned vector.
 class AlignLoads : public IRMutator {
 public:
-    AlignLoads(int alignment)
-        : alignment_analyzer(alignment), required_alignment(alignment) {
+    AlignLoads(int alignment, int min_bytes)
+        : alignment_analyzer(alignment), required_alignment(alignment), min_bytes_to_align(min_bytes) {
     }
 
 private:
@@ -30,6 +29,9 @@ private:
 
     // Loads and stores should ideally be aligned to the vector width in bytes.
     int required_alignment;
+
+    // Minimum size of load to align.
+    int min_bytes_to_align;
 
     using IRMutator::visit;
 
@@ -62,7 +64,7 @@ private:
             return IRMutator::visit(op);
         }
 
-        if (op->type.bytes() * op->type.lanes() <= 8) {
+        if (op->type.bytes() * op->type.lanes() <= min_bytes_to_align) {
             // These can probably be treated as scalars instead.
             return IRMutator::visit(op);
         }
@@ -75,8 +77,8 @@ private:
             // non-constant strides.
             return IRMutator::visit(op);
         }
-        if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3)) {
-            // Handle ramps with stride 1, 2 or 3 only.
+        if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3 || *const_stride == 4)) {
+            // Handle ramps with stride 1, 2, 3 or 4 only.
             return IRMutator::visit(op);
         }
 
@@ -162,8 +164,8 @@ private:
 
 }  // namespace
 
-Stmt align_loads(const Stmt &s, int alignment) {
-    return AlignLoads(alignment).mutate(s);
+Stmt align_loads(const Stmt &s, int alignment, int min_bytes_to_align) {
+    return AlignLoads(alignment, min_bytes_to_align).mutate(s);
 }
 
 }  // namespace Internal

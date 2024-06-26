@@ -35,6 +35,18 @@ int main(int argc, char **argv) {
     assert(float_expr.type() == Float(32));
     assert(double_expr.type() == Float(64));
 
+    // Verify that broadcast-of-ramp works properly when cast
+    {
+        Type t = Int(32, 6);
+        Expr r = Halide::Internal::Ramp::make(3, 7, 2);
+        Expr b = Halide::Internal::Broadcast::make(r, 3);
+        assert(b.type() == t);
+
+        Type t_bool = UInt(1, 6);
+        Expr b_bool = cast(t_bool, b);
+        assert(b_bool.type() == t_bool);
+    }
+
     printf("Success!\n");
     return 0;
 }

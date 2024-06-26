@@ -20,6 +20,10 @@ DEVICE_DIR="/data/local/tmp/halide/benchmarking"
 if [[ -n "${ANDROID_SERIAL}" ]]; then
   echo Using ANDROID_SERIAL=${ANDROID_SERIAL}
 fi
+if [[ -n "${TASKSET}" ]]; then
+  echo Using TASKSET=${TASKSET}
+  TASKSET_CMD="taskset ${TASKSET}"
+fi
 echo Using HL_TARGET=${HL_TARGET}
 
 if [ "$#" -eq 0 ]; then
@@ -67,7 +71,7 @@ adb shell rm -rf "${DEVICE_DIR}"
 adb shell mkdir -p "${DEVICE_DIR}"
 
 adb push ${BUILD_TARGETS} ${LOCAL_FILES} ${DEVICE_DIR}/
-adb shell "${DEVICE_DIR}/benchmark ${DEVICE_ARGS}"
+adb shell ${TASKSET_CMD} "${DEVICE_DIR}/benchmark ${DEVICE_ARGS}"
 
 echo
 echo All benchmarks complete.

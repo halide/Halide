@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
 
         if (error_1(0) > 0.0001 || error_2(0) > 0.0001) {
             printf("Approximate sin errors too large: %1.20f %1.20f\n", error_1(0), error_2(0));
-            return -1;
+            return 1;
         }
     }
 
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
 
         if (error_1(0) > 0.0001 || error_2(0) > 0.0001) {
             printf("Approximate exp errors too large: %1.20f %1.20f\n", error_1(0), error_2(0));
-            return -1;
+            return 1;
         }
     }
 

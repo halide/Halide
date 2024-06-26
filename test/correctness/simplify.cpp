@@ -76,6 +76,20 @@ Expr slice(const Expr &e, int begin, int stride, int w) {
     return Shuffle::make_slice(e, begin, stride, w);
 }
 
+// An arbitrary fixed permutation of the lanes of a single vector that isn't one
+// of the classes above. Requires a power of two number of lanes.
+Expr permute_lanes(const Expr &e) {
+    std::vector<int> mask(e.type().lanes());
+    for (int i = 0; i < e.type().lanes(); i++) {
+        mask[i] = i;
+        // Some arbitrary permutation
+        if (i & 1) {
+            std::swap(mask[i], mask[i / 2]);
+        }
+    }
+    return Shuffle::make({e}, std::move(mask));
+}
+
 Expr ramp(const Expr &base, const Expr &stride, int w) {
     return Ramp::make(base, stride, w);
 }
@@ -145,6 +159,9 @@ void check_casts() {
     check(cast(UInt(8), x + 1) - cast(UInt(8), x),
           cast(UInt(8), x + 1) - cast(UInt(8), x));
 
+    // Overflow is well-defined for ints < 32 bits
+    check(cast(Int(8), make_const(UInt(8), 128)), make_const(Int(8), -128));
+
     // Check that chains of widening casts don't lose the distinction
     // between zero-extending and sign-extending.
     check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
@@ -155,6 +172,11 @@ void check_casts() {
     Expr some_vector = ramp(y, 2, 8) * ramp(x, 1, 8);
     check(slice(cast(UInt(64, 8), some_vector), 2, 1, 3),
           cast(UInt(64, 3), slice(some_vector, 2, 1, 3)));
+
+    // But we currently have no logic for pulling things outside of shuffles
+    // other than slices.
+    check(permute_lanes(some_vector) + permute_lanes(some_vector + 1),
+          permute_lanes(some_vector) + permute_lanes(some_vector + 1));
 
     std::vector<int> indices(18);
     for (int i = 0; i < 18; i++) {
@@ -270,9 +292,6 @@ void check_algebra() {
     check((x * 2 - y) / 2, (0 - y) / 2 + x);
     check((x * -2 - y) / 2, (0 - y) / 2 - x);
     check((y - x * 4) / 2, y / 2 - x * 2);
-    check((x + 3) / 2 + 7, (x + 17) / 2);
-    check((x / 2 + 3) / 5, (x + 6) / 10);
-    check((x + (y + 3) / 5) + 5, (y + 28) / 5 + x);
     check((x + 8) / 2, x / 2 + 4);
     check((x - y) * -2, (y - x) * 2);
     check((xf - yf) * -2.0f, (yf - xf) * 2.0f);
@@ -709,6 +728,23 @@ void check_vectors() {
         }
 
         check(concat_vectors(loads), Load::make(Float(32, lanes * vectors), "buf", ramp(0, 1, lanes * vectors), Buffer<>(), Parameter(), const_true(vectors * lanes), ModulusRemainder(0, 0)));
+    }
+
+    {
+        Expr vx = Variable::make(Int(32, 32), "x");
+        Expr vy = Variable::make(Int(32, 32), "y");
+        Expr vz = Variable::make(Int(32, 8), "z");
+        Expr vw = Variable::make(Int(32, 16), "w");
+        // Check that vector slices are hoisted.
+        check(slice(vx, 0, 2, 8) + slice(vy, 0, 2, 8), slice(vx + vy, 0, 2, 8));
+        check(slice(vx, 0, 2, 8) + (slice(vy, 0, 2, 8) + vz), slice(vx + vy, 0, 2, 8) + vz);
+        check(slice(vx, 0, 2, 8) + (vz + slice(vy, 0, 2, 8)), slice(vx + vy, 0, 2, 8) + vz);
+        // Check that degenerate vector slices are not hoisted.
+        check(slice(vx, 0, 2, 1) + slice(vy, 0, 2, 1), slice(vx, 0, 2, 1) + slice(vy, 0, 2, 1));
+        check(slice(vx, 0, 2, 1) + (slice(vy, 0, 2, 1) + z), slice(vx, 0, 2, 1) + (slice(vy, 0, 2, 1) + z));
+        // Check slices are only hoisted when the lanes of the sliced vectors match.
+        check(slice(vx, 0, 2, 8) + slice(vw, 0, 2, 8), slice(vx, 0, 2, 8) + slice(vw, 0, 2, 8));
+        check(slice(vx, 0, 2, 8) + (slice(vw, 0, 2, 8) + vz), slice(vx, 0, 2, 8) + (slice(vw, 0, 2, 8) + vz));
     }
 
     {
@@ -1277,6 +1313,13 @@ void check_bounds() {
     check(max(x * 4 + 63, y) - max(y - 3, x * 4), clamp(x * 4 - y, -63, -3) + 66);
     check(max(x * 4, y - 3) - max(x * 4 + 63, y), clamp(y - x * 4, 3, 63) + -66);
     check(max(y - 3, x * 4) - max(x * 4 + 63, y), clamp(y - x * 4, 3, 63) + -66);
+
+    // Check we can track bounds correctly through various operations
+    check(ramp(cast<uint8_t>(x) / 2 + 3, cast<uint8_t>(1), 16) < broadcast(200, 16), const_true(16));
+    check(cast<int16_t>(cast<uint8_t>(x)) * 3 >= cast<int16_t>(0), const_true());
+    check(cast<int16_t>(cast<uint8_t>(x)) * 3 < cast<int16_t>(768), const_true());
+    check(cast<int16_t>(abs(cast<int8_t>(x))) >= cast<int16_t>(0), const_true());
+    check(cast<int16_t>(abs(cast<int8_t>(x))) - cast<int16_t>(128) <= cast<int16_t>(0), const_true());
 }
 
 void check_boolean() {
@@ -1605,6 +1648,24 @@ void check_boolean() {
                            Block::make(not_no_op(x + 1), not_no_op(x + 2)),
                            not_no_op(x + 3)));
 
+    check(x < y && y < x, const_false());
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y < x, not_no_op(x + 3))),
+          IfThenElse::make(x < y, not_no_op(x + 1),
+                           Block::make(not_no_op(x + 2),
+                                       IfThenElse::make(y < x, not_no_op(x + 3)))));
+
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y <= x, not_no_op(x + 3))),
+          IfThenElse::make(x < y, not_no_op(x + 1),
+                           Block::make(not_no_op(x + 2),
+                                       not_no_op(x + 3))));
+
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y <= x, not_no_op(x + 3), not_no_op(x + 4))),
+          Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y <= x, not_no_op(x + 3), not_no_op(x + 4))));
+
     // The construct
     //     if (var == expr) then a else b;
     // was being simplified incorrectly, but *only* if var was of type Bool.
@@ -1661,7 +1722,7 @@ void check_boolean() {
 
     // A for loop is also an if statement that the extent is greater than zero
     Stmt body = AssertStmt::make(y == z, y);
-    Stmt loop = For::make("t", 0, x, ForType::Serial, DeviceAPI::None, body);
+    Stmt loop = For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body);
     check(IfThenElse::make(0 < x, loop), loop);
 
     // A for loop where the extent is exactly one is just the body
@@ -1712,7 +1773,7 @@ void check_boolean() {
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
     check(select(x == 3, 5, y) - y, select(x == 3, 5 - y, 0));
     check(select(x == 3, y, 5) - y, select(x == 3, 0, 5 - y));
-    check(y - select(x == 3, 5, y), select(x == 3, y + (-5), 0));
+    check(y - select(x == 3, 5, y), select(x == 3, y, 5) + (-5));
     check(y - select(x == 3, y, 5), select(x == 3, 0, y + (-5)));
 
     check(select(x == 3, 5, 7) == 7, x != 3);
@@ -2067,7 +2128,9 @@ void check_invariant() {
         Expr w = Variable::make(t, "w");
         check_inv(x + y);
         check_inv(x - y);
-        check_inv(x % y);
+        if (t != UInt(1)) {
+            check_inv(x % y);
+        }
         check_inv(x * y);
         check_inv(x / y);
         check_inv(min(x, y));
@@ -2102,14 +2165,14 @@ void check_unreachable() {
     check(IfThenElse::make(x != 0, Evaluate::make(unreachable()), not_no_op(y)),
           not_no_op(y));
 
-    check(y + Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), unreachable()}, Call::Intrinsic),
+    check(y + Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), unreachable()}, Call::PureIntrinsic),
           unreachable());
-    check(Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::Intrinsic), y);
-    check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::Intrinsic), y);
+    check(Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::PureIntrinsic), y);
+    check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::PureIntrinsic), y);
 
-    check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable()))),
+    check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, Partition::Auto, DeviceAPI::None, Evaluate::make(unreachable()))),
           Evaluate::make(unreachable()));
-    check(For::make("i", 0, x, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())),
+    check(For::make("i", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, Evaluate::make(unreachable())),
           Evaluate::make(0));
 }
 
@@ -2130,17 +2193,18 @@ int main(int argc, char **argv) {
     Expr x = Var("x"), y = Var("y");
 
     // Check that constant args to a stringify get combined
-    check(Call::make(type_of<const char *>(), Call::stringify, {3, std::string(" "), 4}, Call::Intrinsic),
+    check(Call::make(type_of<const char *>(), Call::stringify, {3, std::string(" "), 4}, Call::PureIntrinsic),
           std::string("3 4"));
 
-    check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, std::string(", "), 3.4f}, Call::Intrinsic),
-          Call::make(type_of<const char *>(), Call::stringify, {std::string("3"), x, std::string("4, 3.400000")}, Call::Intrinsic));
+    check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, std::string(", "), 3.4f}, Call::PureIntrinsic),
+          Call::make(type_of<const char *>(), Call::stringify, {std::string("3"), x, std::string("4, 3.400000")}, Call::PureIntrinsic));
 
     {
         // Check that contiguous prefetch call get collapsed
         Expr base = Variable::make(Handle(), "buf");
-        check(Call::make(Int(32), Call::prefetch, {base, x, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
-              Call::make(Int(32), Call::prefetch, {base, x, min(x + y, 128) * 256, 1}, Call::Intrinsic));
+        Expr offset = x;
+        check(Call::make(Int(32), Call::prefetch, {base, offset, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
+              Call::make(Int(32), Call::prefetch, {base, offset, min(x + y, 128) * 256, 1}, Call::Intrinsic));
     }
 
     // This expression is a good stress-test. It caused exponential
@@ -2156,7 +2220,7 @@ int main(int argc, char **argv) {
 
     // This expression used to cause infinite recursion.
     check(Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2)),
-          Broadcast::make(-15, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2)));
+          Broadcast::make(make_const(UInt(1), 1), 2));
 
     {
         // Verify that integer types passed to min() and max() are coerced to match
@@ -2343,8 +2407,12 @@ int main(int argc, char **argv) {
 
     {
         Stmt body = AssertStmt::make(x > 0, y);
-        check(For::make("t", 0, x, ForType::Serial, DeviceAPI::None, body),
+        check(For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body),
               Evaluate::make(0));
+    }
+
+    {
+        check(concat_bits({x}), x);
     }
 
     // Check a bounds-related fuzz tester failure found in issue https://github.com/halide/Halide/issues/3764

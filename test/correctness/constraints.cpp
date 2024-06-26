@@ -7,8 +7,8 @@
 using namespace Halide;
 
 bool error_occurred = false;
-void my_error_handler(void *user_context, const char *msg) {
-    //printf("%s\n", msg);
+void my_error_handler(JITUserContext *user_context, const char *msg) {
+    // printf("%s\n", msg);
     error_occurred = true;
 }
 
@@ -23,7 +23,7 @@ int basic_constraints() {
 
     param.dim(0).set_bounds(0, 128);
 
-    f.set_error_handler(my_error_handler);
+    f.jit_handlers().custom_error = my_error_handler;
 
     // This should be fine
     param.set(image1);
@@ -32,7 +32,7 @@ int basic_constraints() {
 
     if (error_occurred) {
         printf("Error incorrectly raised\n");
-        return -1;
+        return 1;
     }
     // This should be an error, because dimension 0 of image 2 is not from 0 to 128 like we promised
     param.set(image2);
@@ -41,23 +41,23 @@ int basic_constraints() {
 
     if (!error_occurred) {
         printf("Error incorrectly not raised\n");
-        return -1;
+        return 1;
     }
 
     // Now try constraining the output buffer of a function
     g(x, y) = x * y;
-    g.set_error_handler(my_error_handler);
+    g.jit_handlers().custom_error = my_error_handler;
     g.output_buffer().dim(0).set_stride(2);
     error_occurred = false;
     g.realize(image1);
     if (!error_occurred) {
         printf("Error incorrectly not raised when constraining output buffer\n");
-        return -1;
+        return 1;
     }
 
     Func h;
     h(x, y) = x * y;
-    h.set_error_handler(my_error_handler);
+    h.jit_handlers().custom_error = my_error_handler;
     h.output_buffer()
         .dim(0)
         .set_stride(1)
@@ -74,7 +74,7 @@ int basic_constraints() {
     h.compile_to_assembly(assembly_file, {image1}, "h");
     if (error_occurred) {
         printf("Error incorrectly raised when constraining output buffer\n");
-        return -1;
+        return 1;
     }
 
     Internal::assert_file_exists(assembly_file);
@@ -123,7 +123,7 @@ int alignment_constraints() {
     std::string unaligned_code = load_file_to_string(unaligned_ll_file);
     if (unaligned_code.find("align 16") != std::string::npos) {
         printf("Found aligned load from unaligned buffer!\n");
-        return -1;
+        return 1;
     }
 
     std::string aligned_ll_file = Internal::get_test_tmp_dir() + "aligned.ll";
@@ -132,7 +132,7 @@ int alignment_constraints() {
     std::string aligned_code = load_file_to_string(aligned_ll_file);
     if (aligned_code.find("align 16") == std::string::npos) {
         printf("Did not find aligned load from aligned buffer!\n");
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -155,7 +155,7 @@ int unstructured_constraints() {
     pf.add_requirement(param.dim(0).min() == required_min && param.dim(0).extent() == required_extent,
                        "Custom message:", param.dim(0).min(), param.dim(0).max());
 
-    pf.set_error_handler(my_error_handler);
+    pf.jit_handlers().custom_error = my_error_handler;
 
     // This should be fine
     param.set(image1);
@@ -164,7 +164,7 @@ int unstructured_constraints() {
 
     if (error_occurred) {
         printf("Error incorrectly raised\n");
-        return -1;
+        return 1;
     }
     // This should be an error, because dimension 0 of image 2 is not from 0 to 128 like we promised
     param.set(image2);
@@ -173,7 +173,7 @@ int unstructured_constraints() {
 
     if (!error_occurred) {
         printf("Error incorrectly not raised\n");
-        return -1;
+        return 1;
     }
 
     // Now try constraining the output buffer of a function
@@ -184,20 +184,20 @@ int unstructured_constraints() {
     Param<int> required_stride;
     required_stride.set(2);
     pg.add_requirement(g.output_buffer().dim(0).stride() == required_stride);
-    pg.set_error_handler(my_error_handler);
+    pg.jit_handlers().custom_error = my_error_handler;
 
     error_occurred = false;
     pg.realize(image1);
     if (!error_occurred) {
         printf("Error incorrectly not raised when constraining output buffer\n");
-        return -1;
+        return 1;
     }
 
     Func h;
     h(x, y) = x * y;
 
     Pipeline ph(h);
-    ph.set_error_handler(my_error_handler);
+    ph.jit_handlers().custom_error = my_error_handler;
     ph.add_requirement(h.output_buffer().dim(0).stride() == 1);
     ph.add_requirement(h.output_buffer().dim(0).min() == 0);
     ph.add_requirement(h.output_buffer().dim(0).extent() % 8 == 0);
@@ -210,7 +210,7 @@ int unstructured_constraints() {
 
     if (error_occurred) {
         printf("Error incorrectly raised when constraining output buffer\n");
-        return -1;
+        return 1;
     }
 
     return 0;

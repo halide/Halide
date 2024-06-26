@@ -4,10 +4,10 @@ Halide is a programming language designed to make it easier to write
 high-performance image and array processing code on modern machines. Halide
 currently targets:
 
-- CPU architectures: X86, ARM, MIPS, Hexagon, PowerPC, RISC-V
+- CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V
 - Operating systems: Linux, Windows, macOS, Android, iOS, Qualcomm QuRT
-- GPU Compute APIs: CUDA, OpenCL, OpenGL Compute Shaders, Apple Metal, Microsoft
-  Direct X 12
+- GPU Compute APIs: CUDA, OpenCL, Apple Metal, Microsoft
+  Direct X 12, Vulkan
 
 Rather than being a standalone programming language, Halide is embedded in C++.
 This means you write C++ code that builds an in-memory representation of a
@@ -15,6 +15,8 @@ Halide pipeline using Halide's C++ API. You can then compile this representation
 to an object file, or JIT-compile it and run it in the same process. Halide also
 provides a Python binding that provides full support for writing Halide embedded
 in Python without C++.
+
+Halide requires C++17 (or later) to use.
 
 For more detail about what Halide is, see http://halide-lang.org.
 
@@ -29,10 +31,12 @@ If you've acquired a full source distribution and want to build Halide, see the
 
 ## Binary tarballs
 
-The latest version of Halide is **Halide 12.0.0**. We provide binary releases
-for many popular platforms and architectures, including 32/64-bit x86 Windows,
-64-bit macOS, and 32/64-bit x86/ARM Ubuntu Linux. See the releases tab on the
-right (or click [here](https://github.com/halide/Halide/releases/tag/v12.0.0)).
+The latest version of Halide can always be found on GitHub
+at https://github.com/halide/Halide/releases
+
+We provide binary releases for many popular platforms and architectures, 
+including 32/64-bit x86 Windows, 64-bit macOS, and 32/64-bit x86/ARM
+Ubuntu Linux.
 
 ## Vcpkg
 
@@ -59,7 +63,7 @@ $ brew install halide
 
 ## Other package managers
 
-We are interested in bringing Halide 12 to other popular package managers and
+We are interested in bringing Halide to other popular package managers and
 Linux distribution repositories including, but not limited to, Conan,
 Debian, [Ubuntu (or PPA)](https://github.com/halide/Halide/issues/5285),
 CentOS/Fedora, and Arch. If you have experience publishing packages we would be
@@ -78,12 +82,12 @@ These are the **tested** host toolchain and platform combinations for building
 and running the Halide compiler library.
 
 | Compiler   | Version      | OS                     | Architectures   |
-| ---------- | ------------ | ---------------------- | --------------- |
-| GCC        | 7.5          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
-| GCC        | 7.5          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
+|------------|--------------|------------------------|-----------------|
+| GCC        | 9.4          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
+| GCC        | 9.4          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
 | MSVC       | 2019 (19.28) | Windows 10 (20H2)      | x86, x64        |
-| AppleClang | 12.0.0       | macOS 10.15            | x86_64          |
-| AppleClang | 12.0.0       | macOS 11.1             | ARM64           |
+| AppleClang | 14.0.3       | macOS 13.4             | x86_64          |
+| AppleClang | 14.0.3       | macOS 13.4             | ARM64           |
 
 Some users have successfully built Halide for Linux using Clang 9.0.0+, for
 Windows using ClangCL 11.0.0+, and for Windows ARM64 by cross-compiling with
@@ -97,7 +101,7 @@ Windows 7 and includes Ubuntu 18.04 LTS.
 
 Compiled AOT pipelines are expected to have much broader platform support. The
 binaries use the C ABI, and we expect any compliant C compiler to be able to use
-the generated headers correctly. The C++ bindings currently require C++11. If
+the generated headers correctly. The C++ bindings currently require C++17. If
 you discover a compatibility problem with a generated pipeline, please open an
 issue.
 
@@ -105,14 +109,14 @@ issue.
 
 ### TL;DR
 
-Have llvm-11.0 (or greater) installed and run `make` in the root directory of
+Have llvm-16.0 (or greater) installed and run `make` in the root directory of
 the repository (where this README is).
 
 ### Acquiring LLVM
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
-this means versions 12.0 and 11.0 are supported, but 10.0 is not. The commands
+this means versions 18, 17, and 16 are supported, but 15 is not. The commands
 `llvm-config` and `clang` must be somewhere in the path.
 
 If your OS does not have packages for LLVM, you can find binaries for it at
@@ -123,10 +127,10 @@ works well on OS X and Ubuntu.)
 If you want to build it yourself, first check it out from GitHub:
 
 ```
-% git clone --depth 1 --branch llvmorg-12.0.0 https://github.com/llvm/llvm-project.git
+% git clone --depth 1 --branch llvmorg-16.0.6 https://github.com/llvm/llvm-project.git
 ```
 
-(If you want to build LLVM 11.x, use branch `llvmorg-11.1.0`; for current trunk,
+(If you want to build LLVM 17.x, use branch `release/17.x`; for current trunk,
 use `main`)
 
 Then build it like so:
@@ -134,16 +138,17 @@ Then build it like so:
 ```
 % cmake -DCMAKE_BUILD_TYPE=Release \
         -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
-        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly" \
+        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly;RISCV" \
         -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
         -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
+        -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
         -S llvm-project/llvm -B llvm-build
 % cmake --build llvm-build
 % cmake --install llvm-build --prefix llvm-install
 ```
 
-Running a serial build will be slow. To improve speed, try running a parallel  
-build. That's done by default in Ninja; for make, use the option -j NNN,   
+Running a serial build will be slow. To improve speed, try running a parallel
+build. That's done by default in Ninja; for make, use the option -j NNN,
 where NNN is the number of parallel jobs, e.g. the number of CPUs you have.
 Then, point Halide to it:
 
@@ -153,11 +158,12 @@ Then, point Halide to it:
 ```
 
 Note that you _must_ add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to
-`LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, and adding
-`clang-tools-extra` is only necessary if you plan to contribute code to Halide
-(so that you can run `clang-tidy` on your pull requests). We recommend enabling
-both in all cases to simplify builds. You can disable exception handling (EH)
-and RTTI if you don't want the Python bindings.
+`LLVM_ENABLE_PROJECTS` is only required when using WebAssembly,
+`LLVM_ENABLE_RUNTIMES="compiler-rt"` is only required if building the fuzz
+tests, and adding `clang-tools-extra` is only necessary if you plan to
+contribute code to Halide (so that you can run `clang-tidy` on your pull
+requests). We recommend enabling both in all cases to simplify builds. You can
+disable exception handling (EH) and RTTI if you don't want the Python bindings.
 
 ### Building Halide with make
 
@@ -281,10 +287,10 @@ Subsets of the tests can be selected with `-L` and include `correctness`,
 #### Building LLVM (optional)
 
 Follow these steps if you want to build LLVM yourself. First, download LLVM's
-sources (these instructions use the latest 12.0 release)
+sources (these instructions use the latest 17.0 release)
 
 ```
-D:\> git clone --depth 1 --branch llvmorg-12.0.0 https://github.com/llvm/llvm-project.git
+D:\> git clone --depth 1 --branch release/17.x https://github.com/llvm/llvm-project.git
 ```
 
 For a 64-bit build, run:
@@ -294,7 +300,7 @@ D:\> cmake -G Ninja ^
            -DCMAKE_BUILD_TYPE=Release ^
            -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
            -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon ^
+           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;RISCV ^
            -DLLVM_ENABLE_ASSERTIONS=ON ^
            -DLLVM_ENABLE_EH=ON ^
            -DLLVM_ENABLE_RTTI=ON ^
@@ -309,7 +315,7 @@ D:\> cmake -G Ninja ^
            -DCMAKE_BUILD_TYPE=Release ^
            -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
            -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon ^
+           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;RISCV ^
            -DLLVM_ENABLE_ASSERTIONS=ON ^
            -DLLVM_ENABLE_EH=ON ^
            -DLLVM_ENABLE_RTTI=ON ^
@@ -369,7 +375,7 @@ an older XCode which does not default to libc++.
 # Halide for Hexagon HVX
 
 Halide supports offloading work to Qualcomm Hexagon DSP on Qualcomm Snapdragon
-835 devices or newer. The Hexagon DSP provides a set of 128 byte vector
+845/710 devices or newer. The Hexagon DSP provides a set of 128 byte vector
 instruction extensions - the Hexagon Vector eXtensions (HVX). HVX is well suited
 for image processing, and Halide for Hexagon HVX will generate the appropriate
 HVX vector instructions from a program authored in Halide.
@@ -389,8 +395,8 @@ To build and run an example app using the Hexagon target,
 
 1. Obtain and build trunk LLVM and Clang. (Earlier versions of LLVM may work but
    are not actively tested and thus not recommended.)
-2. Download and install the Hexagon SDK and Hexagon Tools. Hexagon SDK 3.4.1 or
-   later is needed. Hexagon Tools 8.2 or later is needed.
+2. Download and install the Hexagon SDK and Hexagon Tools. Hexagon SDK 4.3.0 or
+   later is needed. Hexagon Tools 8.4 or later is needed.
 3. Build and run an example for Hexagon HVX
 
 ### 1. Obtain and build trunk LLVM and Clang
@@ -400,15 +406,12 @@ branch.)
 
 ### 2. Download and install the Hexagon SDK and Hexagon Tools
 
-Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools
+Go to https://qpm.qualcomm.com/#/main/home
 
-1. Select the Hexagon Series 600 Software and download the 3.4.1 version or
-   later for Linux.
-2. untar the installer
-3. Run the extracted installer to install the Hexagon SDK and Hexagon Tools,
-   selecting Installation of Hexagon SDK into `/location/of/SDK/Hexagon_SDK/3.x`
-   and the Hexagon tools into `/location/of/SDK/Hexagon_Tools/8.x`
-4. Set an environment variable to point to the SDK installation location
+1. Go to Tools, and download Qualcomm Package Manager 3. Install the package manager on your machine.
+2. Run the installed Qualcomm Package Manager and install the Qualcomm Hexagon SDK 5.x (or 4.x).
+   The SDK can be selected from the Qualcomm Hexagon SDK Products.
+3. Set an environment variable to point to the SDK installation location
    ```
    export SDK_LOC=/location/of/SDK
    ```
@@ -422,7 +425,7 @@ To build and run the blur example in Halide/apps/blur on the simulator:
 
 ```
 cd apps/blur
-export HL_HEXAGON_SIM_REMOTE=../../src/runtime/hexagon_remote/bin/v62/hexagon_sim_remote
+export HL_HEXAGON_SIM_REMOTE=../../src/runtime/hexagon_remote/bin/v65/hexagon_sim_remote
 export HL_HEXAGON_TOOLS=$SDK_LOC/Hexagon_Tools/8.x/Tools/
 LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. HL_TARGET=host-hvx make test
 ```
@@ -431,12 +434,12 @@ LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib
 
 To build the example for Android, first ensure that you have Android NDK r19b or
 later installed, and the ANDROID_NDK_ROOT environment variable points to it.
-(Note that Qualcomm Hexagon SDK v3.5.2 includes Android NDK r19c, which is
+(Note that Qualcomm Hexagon SDK v4.3.0 includes Android NDK r19c, which is
 fine.)
 
 Now build and run the blur example using the script to run it on device:
 
 ```
-export HL_HEXAGON_TOOLS=$SDK_LOC/HEXAGON_Tools/8.0/Tools/
+export HL_HEXAGON_TOOLS=$SDK_LOC/HEXAGON_Tools/8.4.11/Tools/
 HL_TARGET=arm-64-android-hvx ./adb_run_on_device.sh
 ```

@@ -41,7 +41,10 @@ std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 std::ostream &operator<<(std::ostream &stream, const MemoryType &);
 
 /** Emit a halide tail strategy in human-readable form */
-std::ostream &operator<<(std::ostream &stream, const TailStrategy &t);
+std::ostream &operator<<(std::ostream &stream, const TailStrategy &);
+
+/** Emit a halide loop partitioning policy in human-readable form */
+std::ostream &operator<<(std::ostream &stream, const Partition &);
 
 /** Emit a halide LoopLevel in human-readable form */
 std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
@@ -54,6 +57,15 @@ namespace Internal {
 
 struct AssociativePattern;
 struct AssociativeOp;
+class Closure;
+struct Interval;
+struct ConstantInterval;
+struct ModulusRemainder;
+enum class IRNodeType;
+
+/** Emit a halide node type on an output stream (such as std::cout) in
+ * human-readable form */
+std::ostream &operator<<(std::ostream &stream, IRNodeType);
 
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */
@@ -85,6 +97,18 @@ std::ostream &operator<<(std::ostream &stream, const LinkageType &);
 
 /** Emit a halide dimension type in human-readable format */
 std::ostream &operator<<(std::ostream &stream, const DimType &);
+
+/** Emit a Closure in human-readable form */
+std::ostream &operator<<(std::ostream &out, const Closure &c);
+
+/** Emit an Interval in human-readable form */
+std::ostream &operator<<(std::ostream &out, const Interval &c);
+
+/** Emit a ConstantInterval in human-readable form */
+std::ostream &operator<<(std::ostream &out, const ConstantInterval &c);
+
+/** Emit a ModulusRemainder in human-readable form */
+std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c);
 
 struct Indentation {
     int indent;
@@ -151,6 +175,7 @@ protected:
     void visit(const FloatImm *) override;
     void visit(const StringImm *) override;
     void visit(const Cast *) override;
+    void visit(const Reinterpret *) override;
     void visit(const Variable *) override;
     void visit(const Add *) override;
     void visit(const Sub *) override;
@@ -192,6 +217,7 @@ protected:
     void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
+    void visit(const HoistedStorage *) override;
 };
 
 }  // namespace Internal

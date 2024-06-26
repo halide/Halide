@@ -11,6 +11,7 @@
 #include "Buffer.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
+#include "LoopPartitioningDirective.h"
 #include "ModulusRemainder.h"
 #include "Parameter.h"
 #include "PrefetchDirective.h"
@@ -32,6 +33,23 @@ struct Cast : public ExprNode<Cast> {
     static Expr make(Type t, Expr v);
 
     static const IRNodeType _node_type = IRNodeType::Cast;
+
+    /** Check if the cast is equivalent to a reinterpret. */
+    bool is_reinterpret() const {
+        return (type.is_int_or_uint() &&
+                value.type().is_int_or_uint() &&
+                type.bits() == value.type().bits());
+    }
+};
+
+/** Reinterpret value as another type, without affecting any of the bits
+ * (on little-endian systems). */
+struct Reinterpret : public ExprNode<Reinterpret> {
+    Expr value;
+
+    static Expr make(Type t, Expr v);
+
+    static const IRNodeType _node_type = IRNodeType::Reinterpret;
 };
 
 /** The sum of two expressions */
@@ -337,8 +355,9 @@ struct Provide : public StmtNode<Provide> {
     std::string name;
     std::vector<Expr> values;
     std::vector<Expr> args;
+    Expr predicate;
 
-    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args);
+    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate);
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };
@@ -354,6 +373,8 @@ struct Allocate : public StmtNode<Allocate> {
     Type type;
     MemoryType memory_type;
     std::vector<Expr> extents;
+
+    // A boolean condition that determines if the allocation needs to be made at all.
     Expr condition;
 
     // These override the code generator dependent malloc and free
@@ -366,18 +387,22 @@ struct Allocate : public StmtNode<Allocate> {
     Expr new_expr;
     std::string free_function;
 
+    // Extra padding elements to allow for overreads. Elements in the padding
+    // have undetermined values, but are guaranteed safe to load.
+    int padding;
+
     Stmt body;
 
     static Stmt make(const std::string &name, Type type, MemoryType memory_type,
                      const std::vector<Expr> &extents,
                      Expr condition, Stmt body,
-                     Expr new_expr = Expr(), const std::string &free_function = std::string());
+                     Expr new_expr = Expr(), const std::string &free_function = std::string(), int padding = 0);
 
     /** A routine to check if the extents are all constants, and if so verify
      * the total size is less than 2^31 - 1. If the result is constant, but
      * overflows, this routine asserts. This returns 0 if the extents are
      * not all constants; otherwise, it returns the total constant allocation
-     * size. */
+     * size. Does not include any padding bytes. */
     static int32_t constant_allocation_size(const std::vector<Expr> &extents, const std::string &name);
     int32_t constant_allocation_size() const;
 
@@ -412,12 +437,13 @@ struct Realize : public StmtNode<Realize> {
     static const IRNodeType _node_type = IRNodeType::Realize;
 };
 
-/** A sequence of statements to be executed in-order. 'rest' may be
- * undefined. Used rest.defined() to find out. */
+/** A sequence of statements to be executed in-order. 'first' is never
+    a Block, so this can be treated as a linked list. */
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     static Stmt make(Stmt first, Stmt rest);
+
     /** Construct zero or more Blocks to invoke a list of statements in order.
      * This method may not return a Block statement if stmts.size() <= 1. */
     static Stmt make(const std::vector<Stmt> &stmts);
@@ -499,16 +525,28 @@ struct Call : public ExprNode<Call> {
         bitwise_or,
         bitwise_xor,
         bool_to_mask,
-        bundle,  // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
+
+        // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
+        bundle,
         call_cached_indirect_function,
         cast_mask,
+
+        // Concatenate bits of the args, with least significant bits as the
+        // first arg (i.e. little-endian)
+        concat_bits,
         count_leading_zeros,
         count_trailing_zeros,
-        declare_box_touched,
         debug_to_file,
+        declare_box_touched,
         div_round_to_zero,
         dynamic_shuffle,
+
+        // Extract some contiguous slice of bits from the argument starting at
+        // the nth bit, counting from the least significant bit, with the number
+        // of bits determined by the return type.
+        extract_bits,
         extract_mask_element,
+        get_user_context,
         gpu_thread_barrier,
         halving_add,
         halving_sub,
@@ -523,46 +561,77 @@ struct Call : public ExprNode<Call> {
         lerp,
         likely,
         likely_if_innermost,
+        load_typed_struct_member,
         make_struct,
         memoize_expr,
         mod_round_to_zero,
         mul_shift_right,
         mux,
         popcount,
-        predicate,
         prefetch,
+        profiling_enable_instance_marker,
         promise_clamped,
         random,
         register_destructor,
-        reinterpret,
         require,
         require_mask,
         return_second,
         rewrite_buffer,
+
+        // Round a floating point value to nearest integer, with ties going to even
+        round,
+
         rounding_halving_add,
-        rounding_halving_sub,
         rounding_mul_shift_right,
         rounding_shift_left,
         rounding_shift_right,
         saturating_add,
         saturating_sub,
+        saturating_cast,
         scatter_gather,
         select_mask,
         shift_left,
         shift_right,
         signed_integer_overflow,
         size_of_halide_buffer_t,
-        sorted_avg,  // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
+
+        // Marks the point in lowering where the outermost skip stages checks
+        // should be introduced.
+        skip_stages_marker,
+
+        // Takes a realization name and a loop variable. Declares that values of
+        // the realization that were stored on earlier loop iterations of the
+        // given loop are potentially loaded in this loop iteration somewhere
+        // after this point. Must occur inside a Realize node and For node of
+        // the given names but outside any corresponding ProducerConsumer
+        // nodes. Communicates to storage folding that sliding window took
+        // place.
+        sliding_window_marker,
+
+        // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
+        sorted_avg,
         strict_float,
         stringify,
         undef,
         unreachable,
         unsafe_promise_clamped,
+
+        // One-sided variants of widening_add, widening_mul, and widening_sub.
+        // arg[0] + widen(arg[1])
+        widen_right_add,
+        // arg[0] * widen(arg[1])
+        widen_right_mul,
+        // arg[0] - widen(arg[1])
+        widen_right_sub,
+
         widening_add,
         widening_mul,
         widening_shift_left,
         widening_shift_right,
         widening_sub,
+
+        get_runtime_vscale,
+
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
@@ -651,6 +720,19 @@ struct Call : public ExprNode<Call> {
         return is_intrinsic() && this->name == get_intrinsic_name(op);
     }
 
+    bool is_intrinsic(std::initializer_list<IntrinsicOp> intrinsics) const {
+        for (IntrinsicOp i : intrinsics) {
+            if (is_intrinsic(i)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool is_tag() const {
+        return is_intrinsic({Call::likely, Call::likely_if_innermost, Call::strict_float});
+    }
+
     /** Returns a pointer to a call node if the expression is a call to
      * one of the requested intrinsics. */
     static const Call *as_intrinsic(const Expr &e, std::initializer_list<IntrinsicOp> intrinsics) {
@@ -665,7 +747,7 @@ struct Call : public ExprNode<Call> {
     }
 
     static const Call *as_tag(const Expr &e) {
-        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::predicate, Call::strict_float});
+        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::strict_float});
     }
 
     bool is_extern() const {
@@ -733,8 +815,13 @@ struct For : public StmtNode<For> {
     ForType for_type;
     DeviceAPI device_api;
     Stmt body;
+    Partition partition_policy;
 
-    static Stmt make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
+    static Stmt make(const std::string &name,
+                     Expr min, Expr extent,
+                     ForType for_type, Partition partition_policy,
+                     DeviceAPI device_api,
+                     Stmt body);
 
     bool is_unordered_parallel() const {
         return Halide::Internal::is_unordered_parallel(for_type);
@@ -793,11 +880,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_interleave() const;
 
-    /** Check if this shuffle can be represented as a broadcast.
-     * For example:
-     * A uint8 shuffle of with 4*n lanes and indices:
-     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
-     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    /** Check if this shuffle can be represented as a repeating pattern that
+     * repeats the same shuffle of the single input vector some number of times.
+     * For example: 0, 3, 1, 1,  0, 3, 1, 1, .....,  0, 3, 1, 1
+     */
     bool is_broadcast() const;
     int broadcast_factor() const;
 
@@ -842,6 +928,21 @@ struct Prefetch : public StmtNode<Prefetch> {
                      Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
+};
+
+/**
+ * Represents a location where storage will be hoisted to for a Func / Realize
+ * node with a given name.
+ *
+ */
+struct HoistedStorage : public StmtNode<HoistedStorage> {
+    std::string name;
+    Stmt body;
+
+    static Stmt make(const std::string &name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::HoistedStorage;
 };
 
 /** Lock all the Store nodes in the body statement.

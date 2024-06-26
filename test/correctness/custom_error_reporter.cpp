@@ -14,7 +14,7 @@ int should_be_evaluated() {
 
 int should_never_be_evaluated() {
     printf("Should never be evaluated\n");
-    exit(-1);
+    exit(1);
     return 0;
 }
 
@@ -44,7 +44,7 @@ public:
 
         if (warnings_occurred != 1 || errors_occurred != 1 || evaluated != 1) {
             printf("There should have been 1 warning and 1 error and 1 evaluated assertion argument\n");
-            exit(-1);
+            exit(1);
         }
 
         // CompileTimeErrorReporter::error() must not return.
@@ -68,5 +68,5 @@ int main(int argc, char **argv) {
     _halide_user_assert(argc == 0) << should_be_evaluated();
 
     printf("CompileTimeErrorReporter::error() must not return.\n");
-    return -1;
+    return 1;
 }

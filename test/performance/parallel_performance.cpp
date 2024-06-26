@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
             if (imf(x, y) != img(x, y)) {
                 printf("imf(%d, %d) = %f\n", x, y, imf(x, y));
                 printf("img(%d, %d) = %f\n", x, y, img(x, y));
-                return -1;
+                return 1;
             }
         }
     }

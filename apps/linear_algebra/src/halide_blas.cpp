@@ -5,28 +5,30 @@
 
 using Halide::Runtime::Buffer;
 
-#define assert_no_error(func)                                           \
-    if (func != 0) {                                                    \
-        std::cerr << "ERROR! Halide kernel returned non-zero value.\n"; \
-    }
+#define assert_no_error(func)                                               \
+    do {                                                                    \
+        if (func != 0) {                                                    \
+            std::cerr << "ERROR! Halide kernel returned non-zero value.\n"; \
+        }                                                                   \
+    } while (0)
 
 namespace {
 
 template<typename T>
-Buffer<T> init_scalar_buffer(T *x) {
-    return Buffer<T>::make_scalar(x);
+Buffer<T, 0> init_scalar_buffer(T *x) {
+    return Buffer<T, 0>::make_scalar(x);
 }
 
 template<typename T>
-Buffer<T> init_vector_buffer(const int N, T *x, const int incx) {
+Buffer<T, 1> init_vector_buffer(const int N, T *x, const int incx) {
     halide_dimension_t shape = {0, N, incx};
-    return Buffer<T>(x, 1, &shape);
+    return Buffer<T, 1>(x, 1, &shape);
 }
 
 template<typename T>
-Buffer<T> init_matrix_buffer(const int M, const int N, T *A, const int lda) {
+Buffer<T, 2> init_matrix_buffer(const int M, const int N, T *A, const int lda) {
     halide_dimension_t shape[] = {{0, M, 1}, {0, N, lda}};
-    return Buffer<T>(A, 2, shape);
+    return Buffer<T, 2>(A, 2, shape);
 }
 
 }  // namespace

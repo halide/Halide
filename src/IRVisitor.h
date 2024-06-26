@@ -34,6 +34,7 @@ protected:
     virtual void visit(const FloatImm *);
     virtual void visit(const StringImm *);
     virtual void visit(const Cast *);
+    virtual void visit(const Reinterpret *);
     virtual void visit(const Variable *);
     virtual void visit(const Add *);
     virtual void visit(const Sub *);
@@ -75,6 +76,7 @@ protected:
     virtual void visit(const Fork *);
     virtual void visit(const Acquire *);
     virtual void visit(const Atomic *);
+    virtual void visit(const HoistedStorage *);
 };
 
 /** A base class for algorithms that walk recursively over the IR
@@ -104,6 +106,7 @@ protected:
     void visit(const FloatImm *) override;
     void visit(const StringImm *) override;
     void visit(const Cast *) override;
+    void visit(const Reinterpret *) override;
     void visit(const Variable *) override;
     void visit(const Add *) override;
     void visit(const Sub *) override;
@@ -145,6 +148,7 @@ protected:
     void visit(const Acquire *) override;
     void visit(const Fork *) override;
     void visit(const Atomic *) override;
+    void visit(const HoistedStorage *) override;
     // @}
 };
 
@@ -174,6 +178,8 @@ private:
             return ((T *)this)->visit((const Broadcast *)node, std::forward<Args>(args)...);
         case IRNodeType::Cast:
             return ((T *)this)->visit((const Cast *)node, std::forward<Args>(args)...);
+        case IRNodeType::Reinterpret:
+            return ((T *)this)->visit((const Reinterpret *)node, std::forward<Args>(args)...);
         case IRNodeType::Variable:
             return ((T *)this)->visit((const Variable *)node, std::forward<Args>(args)...);
         case IRNodeType::Add:
@@ -241,6 +247,7 @@ private:
         case IRNodeType::Evaluate:
         case IRNodeType::Prefetch:
         case IRNodeType::Atomic:
+        case IRNodeType::HoistedStorage:
             internal_error << "Unreachable";
         }
         return ExprRet{};
@@ -258,6 +265,7 @@ private:
         case IRNodeType::StringImm:
         case IRNodeType::Broadcast:
         case IRNodeType::Cast:
+        case IRNodeType::Reinterpret:
         case IRNodeType::Variable:
         case IRNodeType::Add:
         case IRNodeType::Sub:
@@ -316,6 +324,8 @@ private:
             return ((T *)this)->visit((const Prefetch *)node, std::forward<Args>(args)...);
         case IRNodeType::Atomic:
             return ((T *)this)->visit((const Atomic *)node, std::forward<Args>(args)...);
+        case IRNodeType::HoistedStorage:
+            return ((T *)this)->visit((const HoistedStorage *)node, std::forward<Args>(args)...);
         }
         return StmtRet{};
     }

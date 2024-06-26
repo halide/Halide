@@ -11,7 +11,7 @@ set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "
 set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 
 find_package(LLVM ${Halide_REQUIRE_LLVM_VERSION} REQUIRED)
-find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang")
+find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang" "${LLVM_DIR}/../lib/cmake/clang")
 
 set(LLVM_PACKAGE_VERSION "${LLVM_PACKAGE_VERSION}"
     CACHE INTERNAL "LLVM version")
@@ -20,15 +20,31 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
 
-if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
-    message(FATAL_ERROR "LLVM version must be 11.0 or newer")
+if (LLVM_PACKAGE_VERSION VERSION_LESS 16.0)
+    message(FATAL_ERROR "LLVM version must be 16.0 or newer")
 endif ()
 
-if (LLVM_PACKAGE_VERSION VERSION_GREATER 13.0)
-    message(WARNING "Halide is not tested on LLVM versions beyond 13.0")
+if (LLVM_PACKAGE_VERSION VERSION_GREATER 19.0)
+    message(WARNING "Halide is not tested on LLVM versions beyond 19.0")
 endif ()
 
+# LLVM_DEFINITIONS is a space-separated list instead of a more typical
+# CMake semicolon-separated list. For a long time, CMake could handle
+# this transparently but, since LLVM 17, the flag -D_FILE_OFFSET_BITS=64
+# appears on 32-bit Linux. The presence of the `=` here stops CMake
+# from splitting on spaces, instead corrupting the command line by
+# folding the other flags into the value of -D_FILE_OFFSET_BITS=64.
+# For better or worse, since the flag also appears twice, the second
+# `=` is folded into the value of the first and we get errors of the
+# form:
+#
+#   <command-line>: error: token "=" is not valid in preprocessor expressions
+#
+separate_arguments(LLVM_DEFINITIONS NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
+
+# Note, removing -D_GLIBCXX_ASSERTIONS is a workaround for https://reviews.llvm.org/D142279
+list(REMOVE_ITEM Halide_LLVM_DEFS "-D_GLIBCXX_ASSERTIONS")
 
 ##
 # Options for which version of LLVM to use
@@ -53,22 +69,25 @@ endif ()
 # Create options for including or excluding LLVM backends.
 ##
 
-set(active_components mcjit bitwriter linker passes)
-set(known_components AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
-
-# We don't support LLVM10 or below for wasm codegen.
-# TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't
-# support SIMD usefully enough for Halide
-if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
-    list(REMOVE_ITEM known_components WebAssembly)
-endif ()
+set(active_components orcjit bitwriter linker passes)
+set(known_components AArch64 AMDGPU ARM Hexagon NVPTX PowerPC RISCV WebAssembly X86)
 
 foreach (comp IN LISTS known_components)
     string(TOUPPER "TARGET_${comp}" OPTION)
     string(TOUPPER "WITH_${comp}" DEFINE)
 
-    cmake_dependent_option(${OPTION} "Include ${comp} target" ON
-                           "${comp} IN_LIST LLVM_TARGETS_TO_BUILD" OFF)
+    if (comp STREQUAL "RISCV" AND LLVM_PACKAGE_VERSION VERSION_LESS 17.0)
+        # We default the RISCV target to OFF for LLVM versions prior to 17.0;
+        # it's not clear how robust and well-tested Halide's RISCV codegen
+        # is with LLVM16, and a great deal of effort is being put into
+        # improving it in LLVM17... so default to off so that people won't
+        # hurt themselves too badly.
+        cmake_dependent_option(${OPTION} "Include ${comp} target" OFF
+                               "${comp} IN_LIST LLVM_TARGETS_TO_BUILD" OFF)
+    else ()
+        cmake_dependent_option(${OPTION} "Include ${comp} target" ON
+                               "${comp} IN_LIST LLVM_TARGETS_TO_BUILD" OFF)
+    endif ()
     if (${OPTION} OR Halide_SHARED_LLVM)
         message(STATUS "Enabling ${comp} backend")
         list(APPEND Halide_LLVM_DEFS $<BUILD_INTERFACE:${DEFINE}>)
@@ -105,7 +124,7 @@ add_library(Halide_LLVM INTERFACE)
 add_library(Halide::LLVM ALIAS Halide_LLVM)
 
 set_target_properties(Halide_LLVM PROPERTIES EXPORT_NAME LLVM)
-target_include_directories(Halide_LLVM INTERFACE $<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>)
+target_include_directories(Halide_LLVM INTERFACE "$<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>")
 target_compile_definitions(Halide_LLVM INTERFACE ${Halide_LLVM_DEFS})
 
 # Link LLVM libraries to Halide_LLVM, depending on shared, static, or bundled selection.

@@ -4,9 +4,8 @@ namespace {
 
 class OpenCL_Runtime : public Halide::Generator<OpenCL_Runtime> {
 public:
-    Input<Buffer<int32_t>> input{"input", 2};
-
-    Output<Buffer<int32_t>> output{"output", 2};
+    Input<Buffer<int32_t, 2>> input{"input"};
+    Output<Buffer<int32_t, 2>> output{"output"};
 
     void generate() {
         Var x("x"), y("y");

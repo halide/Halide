@@ -31,9 +31,7 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
-            if (!target.has_feature(Target::OpenGLCompute)) {
-                f.vectorize(xi, 4);
-            }
+            f.vectorize(xi, 4);
         } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -49,7 +47,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -67,9 +65,7 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
-            if (!target.has_feature(Target::OpenGLCompute)) {
-                f.vectorize(xi, 4);
-            }
+            f.vectorize(xi, 4);
         } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -86,7 +82,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -101,9 +97,7 @@ int main(int argc, char **argv) {
 
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
-            if (!target.has_feature(Target::OpenGLCompute)) {
-                f.vectorize(xi, 4);
-            }
+            f.vectorize(xi, 4);
         } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -118,7 +112,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 0 : input(x, y);
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -133,9 +127,7 @@ int main(int argc, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
-            if (!target.has_feature(Target::OpenGLCompute)) {
-                f.vectorize(xi, 4);
-            }
+            f.vectorize(xi, 4);
         } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
@@ -150,7 +142,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -193,9 +185,7 @@ int main(int argc, char **argv) {
             }
             if (target.has_gpu_feature()) {
                 gpu.gpu_tile(x, y, xi, yi, 16, 16);
-                if (!target.has_feature(Target::OpenGLCompute)) {
-                    gpu.vectorize(xi, 4);
-                }
+                gpu.vectorize(xi, 4);
             } else if (target.has_feature(Target::HVX)) {
                 gpu.hexagon().vectorize(x, 128);
             } else {
@@ -212,7 +202,7 @@ int main(int argc, char **argv) {
                     if (cpu_output(x, y) != gpu_output(x, y)) {
                         fprintf(stderr, "gpu_output(%d, %d) = %d instead of %d for uint%d -> uint%d\n",
                                 x, y, gpu_output(x, y), cpu_output(x, y), n, w);
-                        return -1;
+                        return 1;
                     }
                 }
             }

@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
             if (im(x, y) != correct) {
                 printf("im(%d, %d) = %d instead of %d\n",
                        x, y, im(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }

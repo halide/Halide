@@ -13,18 +13,17 @@
 
 #include "Argument.h"
 #include "Expr.h"
-#include "ExternalCode.h"
 #include "Function.h"  // for NameMangling
 #include "ModulusRemainder.h"
 
 namespace Halide {
 
-template<typename T>
+template<typename T, int Dims>
 class Buffer;
 struct Target;
 
 /** Enums specifying various kinds of outputs that can be produced from a Halide Pipeline. */
-enum class Output {
+enum class OutputFileType {
     assembly,
     bitcode,
     c_header,
@@ -32,6 +31,8 @@ enum class Output {
     compiler_log,
     cpp_stub,
     featurization,
+    function_info_header,
+    hlpipe,
     llvm_assembly,
     object,
     python_extension,
@@ -40,7 +41,10 @@ enum class Output {
     schedule,
     static_library,
     stmt,
+    conceptual_stmt,
     stmt_html,
+    conceptual_stmt_html,
+    device_code,
 };
 
 /** Type of linkage a function in a lowered Halide module can have.
@@ -48,6 +52,7 @@ enum class Output {
 enum class LinkageType {
     External,              ///< Visible externally.
     ExternalPlusMetadata,  ///< Visible externally. Argument metadata and an argv wrapper are also generated.
+    ExternalPlusArgv,      ///< Visible externally. Argv wrapper is generated but *not* argument metadata.
     Internal,              ///< Not visible externally, similar to 'static' linkage in C.
 };
 
@@ -71,7 +76,7 @@ struct OutputInfo {
     //
     bool is_multi{false};
 };
-std::map<Output, const OutputInfo> get_output_info(const Target &target);
+std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target);
 
 /** Definition of an argument to a LoweredFunc. This is similar to
  * Argument, except it enables passing extra information useful to
@@ -130,13 +135,15 @@ class CompilerLogger;
 
 struct AutoSchedulerResults;
 
+using MetadataNameMap = std::map<std::string, std::string>;
+
 /** A halide module. This represents IR containing lowered function
  * definitions and buffers. */
 class Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
 
 public:
-    Module(const std::string &name, const Target &target);
+    Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map = {});
 
     /** Get the target this module has been lowered for. */
     const Target &target() const;
@@ -158,11 +165,21 @@ public:
     const std::vector<Internal::LoweredFunc> &functions() const;
     std::vector<Internal::LoweredFunc> &functions();
     const std::vector<Module> &submodules() const;
-    const std::vector<ExternalCode> &external_code() const;
     // @}
 
+    /** Tries to locate the offloaded CUDA PTX assembly contained in this Module.
+     * Might return a nullptr in case such buffer is not present in this Module.
+     */
+    Buffer<> get_cuda_ptx_assembly_buffer() const;
+
+    /**
+     * Tries to locate the offloaded (GPU) Device assembly contained in this Module.
+     * This can be any of the GPU kernel sources, etc...
+     */
+    Buffer<> get_device_code_buffer() const;
+
     /** Return the function with the given name. If no such function
-    * exists in this module, assert. */
+     * exists in this module, assert. */
     Internal::LoweredFunc get_function_by_name(const std::string &name) const;
 
     /** Add a declaration to this module. */
@@ -170,12 +187,11 @@ public:
     void append(const Buffer<void> &buffer);
     void append(const Internal::LoweredFunc &function);
     void append(const Module &module);
-    void append(const ExternalCode &external_code);
     // @}
 
     /** Compile a halide Module to variety of outputs, depending on
      * the fields set in output_files. */
-    void compile(const std::map<Output, std::string> &output_files) const;
+    void compile(const std::map<OutputFileType, std::string> &output_files) const;
 
     /** Compile a halide Module to in-memory object code. Currently
      * only supports LLVM based compilation, but should be extended to
@@ -191,7 +207,7 @@ public:
     void remap_metadata_name(const std::string &from, const std::string &to) const;
 
     /** Retrieve the metadata name map. */
-    std::map<std::string, std::string> get_metadata_name_map() const;
+    MetadataNameMap get_metadata_name_map() const;
 
     /** Set the AutoSchedulerResults for the Module. It is an error to call this
      * multiple times for a given Module. */
@@ -199,6 +215,12 @@ public:
 
     /** Set whether this module uses strict floating-point directives anywhere. */
     void set_any_strict_float(bool any_strict_float);
+
+    /** Remember the Stmt during lowing before device-specific offloading. */
+    void set_conceptual_code_stmt(const Internal::Stmt &stmt);
+
+    /** Get the remembered conceptual Stmt, remembered before device-specific offloading. */
+    const Internal::Stmt &get_conceptual_stmt() const;
 };
 
 /** Link a set of modules together into one module. */
@@ -213,15 +235,15 @@ void compile_standalone_runtime(const std::string &object_filename, const Target
  * for a given target. For use with Target::NoRuntime. Standalone runtimes are
  * only compatible with pipelines compiled by the same build of Halide used to
  * call this function. Return a map with just the actual outputs filled in
- * (typically, Output::object and/or Output::static_library).
+ * (typically, OutputFileType::object and/or OutputFileType::static_library).
  */
-std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, const Target &t);
+std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t);
 
 using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
 using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;
 
 void compile_multitarget(const std::string &fn_name,
-                         const std::map<Output, std::string> &output_files,
+                         const std::map<OutputFileType, std::string> &output_files,
                          const std::vector<Target> &targets,
                          const std::vector<std::string> &suffixes,
                          const ModuleFactory &module_factory,

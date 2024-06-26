@@ -3,7 +3,7 @@
 #include <sstream>
 #include <utility>
 
-#include "CodeGen_C.h"
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
@@ -23,9 +23,9 @@ using std::sort;
 using std::string;
 using std::vector;
 
-static ostringstream nil;
-
 namespace {
+
+ostringstream nil;
 
 class CodeGen_D3D12Compute_Dev : public CodeGen_GPU_Dev {
 public:
@@ -62,10 +62,10 @@ public:
 protected:
     friend struct StoragePackUnpack;
 
-    class CodeGen_D3D12Compute_C : public CodeGen_C {
+    class CodeGen_D3D12Compute_C : public CodeGen_GPU_C {
     public:
         CodeGen_D3D12Compute_C(std::ostream &s, const Target &t)
-            : CodeGen_C(s, t) {
+            : CodeGen_GPU_C(s, t) {
             integer_suffix_style = IntegerSuffixStyle::HLSL;
         }
         void add_kernel(Stmt stmt,
@@ -88,7 +88,7 @@ protected:
 
         std::string print_assignment(Type t, const std::string &rhs) override;
 
-        using CodeGen_C::visit;
+        using CodeGen_GPU_C::visit;
         void visit(const Evaluate *op) override;
         void visit(const Min *) override;
         void visit(const Max *) override;
@@ -222,22 +222,18 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type 
 
 namespace {
 string simt_intrinsic(const string &name) {
-    if (ends_with(name, ".__thread_id_x")) {
+    if (ends_with(name, gpu_thread_name(0))) {
         return "tid_in_tgroup.x";
-    } else if (ends_with(name, ".__thread_id_y")) {
+    } else if (ends_with(name, gpu_thread_name(1))) {
         return "tid_in_tgroup.y";
-    } else if (ends_with(name, ".__thread_id_z")) {
+    } else if (ends_with(name, gpu_thread_name(2))) {
         return "tid_in_tgroup.z";
-    } else if (ends_with(name, ".__thread_id_w")) {
-        user_error << "HLSL (SM5.1) does not support more than three dimensions for compute kernel threads.\n";
-    } else if (ends_with(name, ".__block_id_x")) {
+    } else if (ends_with(name, gpu_block_name(0))) {
         return "tgroup_index.x";
-    } else if (ends_with(name, ".__block_id_y")) {
+    } else if (ends_with(name, gpu_block_name(1))) {
         return "tgroup_index.y";
-    } else if (ends_with(name, ".__block_id_z")) {
+    } else if (ends_with(name, gpu_block_name(2))) {
         return "tgroup_index.z";
-    } else if (ends_with(name, ".__block_id_w")) {
-        user_error << "HLSL (SM5.1) does not support more than three dimensions for compute dispatch groups.\n";
     }
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return "";
@@ -252,7 +248,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op)
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name));
+    internal_assert(!function_takes_user_context(op->name)) << op->name;
 
     vector<string> args(op->args.size());
     for (size_t i = 0; i < op->args.size(); i++) {
@@ -301,15 +297,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
     user_assert(loop->for_type != ForType::GPULane)
         << "The D3D12Compute backend does not support the gpu_lanes() scheduling directive.";
 
-    if (!is_gpu_var(loop->name)) {
-        user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside D3D12Compute kernel\n";
-        CodeGen_C::visit(loop);
+    if (!is_gpu(loop->for_type)) {
+        CodeGen_GPU_C::visit(loop);
         return;
     }
-
-    internal_assert((loop->for_type == ForType::GPUBlock) ||
-                    (loop->for_type == ForType::GPUThread))
-        << "kernel loop must be either gpu block or gpu thread\n";
     internal_assert(is_const_zero(loop->min));
 
     stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
@@ -379,8 +370,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
         // directly.
         stream << "pow(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
+    } else if (op->is_intrinsic(Call::round)) {
+        // HLSL's round intrinsic has the correct semantics for our rounding.
+        print_assignment(op->type, "round(" + print_expr(op->args[0]) + ")");
     } else {
-        CodeGen_C::visit(op);
+        CodeGen_GPU_C::visit(op);
     }
 }
 
@@ -590,8 +584,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     string id_index = print_expr(op->index);
 
     // Get the rhs just for the cache.
-    bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name).type == op->type);
+    const auto *alloc = allocations.find(op->name);
+    bool type_cast_needed = !(alloc &&
+                              alloc->type == op->type);
 
     ostringstream rhs;
     if (type_cast_needed) {
@@ -815,7 +810,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, const string &rhs) {
     string rhs_modified = print_reinforced_cast(type, rhs);
-    return CodeGen_C::print_assignment(type, rhs_modified);
+    return CodeGen_GPU_C::print_assignment(type, rhs_modified);
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, const string &value_expr) {
@@ -945,7 +940,6 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op) {
     Type target_type = op->type;
     Type source_type = op->value.type();
-    string value_expr = print_expr(op->value);
 
     string cast_expr = print_cast(target_type, source_type, print_expr(op->value));
 
@@ -964,13 +958,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const FloatImm *op)
     // have seen division-by-zero shader warnings, and we postulated that it
     // could be indirectly related to compiler assumptions on signed integer
     // overflow when float_from_bits() is called, but we don't know for sure
-    return CodeGen_C::visit(op);
+    return CodeGen_GPU_C::visit(op);
 }
 
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
                                           const string &name,
                                           const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_D3D12Compute_Dev::compile " << name << "\n";
+
+    // We need to scalarize/de-predicate any loads/stores, since HLSL does not
+    // support predication.
+    s = scalarize_predicated_loads_stores(s);
+
+    debug(2) << "CodeGen_D3D12Compute_Dev: after removing predication: \n"
+             << s;
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
@@ -1040,10 +1041,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 std::string new_name = unique_name(op->name);
                 replacements[op->name] = new_name;
 
-                std::vector<Expr> new_extents;
-                for (size_t i = 0; i < op->extents.size(); i++) {
-                    new_extents.push_back(mutate(op->extents[i]));
-                }
+                auto new_extents = mutate(op->extents);
                 Stmt new_body = mutate(op->body);
                 Expr new_condition = mutate(op->condition);
                 Expr new_new_expr;
@@ -1053,7 +1051,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 
                 Stmt new_alloc = Allocate::make(new_name, op->type, op->memory_type, new_extents,
                                                 std::move(new_condition), std::move(new_body),
-                                                std::move(new_new_expr), op->free_function);
+                                                std::move(new_new_expr), op->free_function, op->padding);
 
                 allocs.push_back(new_alloc);
                 replacements.erase(op->name);
@@ -1147,7 +1145,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     struct FindThreadGroupSize : public IRVisitor {
         using IRVisitor::visit;
         void visit(const For *loop) override {
-            if (!is_gpu_var(loop->name)) {
+            if (!is_gpu(loop->for_type)) {
                 return loop->body.accept(this);
             }
             if (loop->for_type != ForType::GPUThread) {
@@ -1169,13 +1167,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             loop->body.accept(this);
         }
         int thread_loop_workgroup_index(const string &name) {
-            string ids[] = {".__thread_id_x",
-                            ".__thread_id_y",
-                            ".__thread_id_z",
-                            ".__thread_id_w"};
-            for (auto &id : ids) {
-                if (ends_with(name, id)) {
-                    return (&id - ids);
+            for (int i = 0; i < 3; i++) {
+                if (ends_with(name, gpu_thread_name(i))) {
+                    return i;
                 }
             }
             return -1;
@@ -1228,10 +1222,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     print(s);
     close_scope("kernel " + name);
 
-    for (size_t i = 0; i < args.size(); i++) {
+    for (const auto &arg : args) {
         // Remove buffer arguments from allocation scope
-        if (args[i].is_buffer) {
-            allocations.pop(args[i].name);
+        if (arg.is_buffer) {
+            allocations.pop(arg.name);
         }
     }
 
@@ -1268,7 +1262,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
            "\n"
         << "\n";
 
-    src_stream << "#define halide_unused(x) (void)(x)\n";
+    src_stream << "#define halide_maybe_unused(x) (void)(x)\n";
 
     // Write out the Halide math functions.
     src_stream
@@ -1308,7 +1302,6 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "#define abs_f32     abs    \n"
         << "#define floor_f32   floor  \n"
         << "#define ceil_f32    ceil   \n"
-        << "#define round_f32   round  \n"
         << "#define trunc_f32   trunc  \n"
         // pow() in HLSL has the same semantics as C if
         // x > 0.  Otherwise, we need to emulate C

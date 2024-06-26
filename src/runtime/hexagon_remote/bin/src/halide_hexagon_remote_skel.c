@@ -1,8 +1,12 @@
 #ifndef _HALIDE_HEXAGON_REMOTE_SKEL_H
 #define _HALIDE_HEXAGON_REMOTE_SKEL_H
 #include "halide_hexagon_remote.h"
+__attribute__ ((visibility("default"))) uint32_t halide_hexagon_remote_skel_invoke_qaic_version = 10041;
+
 #ifndef _QAIC_ENV_H
 #define _QAIC_ENV_H
+
+#include <stdio.h>
 
 #ifdef __GNUC__
 #ifdef __clang__
@@ -142,15 +146,16 @@ static __inline void _qaic_memmove(void* dst, void* src, int size) {
 #define _ASSERT(nErr, ff) _TRY(nErr, 0 == (ff) ? AEE_EBADPARM : AEE_SUCCESS)
 
 #ifdef __QAIC_DEBUG__
-#define _ALLOCATE(nErr, pal, size, alignment, pv) _TRY(nErr, _allocator_alloc(pal, __FILE_LINE__, size, alignment, (void**)&pv))
+#define _ALLOCATE(nErr, pal, size, alignment, pv) _TRY(nErr, _allocator_alloc(pal, __FILE_LINE__, size, alignment, (void**)&pv));\
+                                                  _ASSERT(nErr,pv || !(size))
 #else
-#define _ALLOCATE(nErr, pal, size, alignment, pv) _TRY(nErr, _allocator_alloc(pal, 0, size, alignment, (void**)&pv))
+#define _ALLOCATE(nErr, pal, size, alignment, pv) _TRY(nErr, _allocator_alloc(pal, 0, size, alignment, (void**)&pv));\
+                                                  _ASSERT(nErr,pv || !(size))
 #endif
 
 
 #endif // _QAIC_ENV_H
 
-#include "remote.h"
 #ifndef _ALLOCATOR_H
 #define _ALLOCATOR_H
 
@@ -408,7 +413,6 @@ struct Interface {
 
 #ifndef _HALIDE_HEXAGON_REMOTE_SLIM_H
 #define _HALIDE_HEXAGON_REMOTE_SLIM_H
-#include "remote.h"
 #include <stdint.h>
 
 #ifndef __QAIC_SLIM
@@ -418,14 +422,14 @@ struct Interface {
 #define __QAIC_SLIM_EXPORT
 #endif
 
-static const Type types[3];
-static const SequenceType sequenceTypes[1] = {{&(types[1]),0x0,0x4,0x4,0x0}};
-static const Type types[3] = {{0x1,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x1},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8)},{0x8,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x8}};
-static const Parameter parameters[9] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),3,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[2]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0}};
-static const Parameter* const parameterArrays[23] = {(&(parameters[8])),(&(parameters[2])),(&(parameters[2])),(&(parameters[8])),(&(parameters[2])),(&(parameters[2])),(&(parameters[8])),(&(parameters[8])),(&(parameters[2])),(&(parameters[2])),(&(parameters[3])),(&(parameters[4])),(&(parameters[5])),(&(parameters[2])),(&(parameters[0])),(&(parameters[1])),(&(parameters[0])),(&(parameters[0])),(&(parameters[1])),(&(parameters[7])),(&(parameters[7])),(&(parameters[6])),(&(parameters[7]))};
-static const Method methods[9] = {{REMOTE_SCALARS_MAKEX(0,0,0x3,0x1,0x0,0x0),0x8,0x4,5,3,(&(parameterArrays[16])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[13])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[8])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[1])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[21])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[19])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[0])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x20,0x0,8,8,(&(parameterArrays[0])),0x4,0x0}};
+static const Type types[4];
+static const SequenceType sequenceTypes[1] = {{&(types[2]),0x0,0x4,0x4,0x0}};
+static const Type types[4] = {{0x1,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x1},{0x1,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x1},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[1]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8)},{0x8,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x8}};
+static const Parameter parameters[11] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[1]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),3,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[3]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0}};
+static const Parameter* const parameterArrays[23] = {(&(parameters[9])),(&(parameters[10])),(&(parameters[10])),(&(parameters[9])),(&(parameters[10])),(&(parameters[10])),(&(parameters[9])),(&(parameters[9])),(&(parameters[3])),(&(parameters[3])),(&(parameters[4])),(&(parameters[5])),(&(parameters[6])),(&(parameters[3])),(&(parameters[0])),(&(parameters[2])),(&(parameters[0])),(&(parameters[1])),(&(parameters[2])),(&(parameters[8])),(&(parameters[8])),(&(parameters[7])),(&(parameters[8]))};
+static const Method methods[9] = {{REMOTE_SCALARS_MAKEX(0,0,0x3,0x1,0x0,0x0),0x8,0x4,5,3,(&(parameterArrays[16])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[13])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[8])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[8])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[21])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[19])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[0])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x20,0x0,8,8,(&(parameterArrays[0])),0x4,0x0}};
 static const Method* const methodArrays[12] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7]),&(methods[7]),&(methods[8]),&(methods[7])};
-static const char strings[377] = "profiler_set_current_func\0busbwUsagePercentage\0set_performance_mode\0set_thread_priority\0poll_profiler_state\0bwMegabytesPerSec\0set_performance\0release_library\0output_buffers\0mipsPerThread\0input_buffers\0power_hvx_off\0get_symbol_v4\0power_hvx_on\0load_library\0set_latency\0set_bus_bw\0module_ptr\0mipsTotal\0read_size\0set_mips\0poll_log\0threads\0scalars\0sym_ptr\0symbol\0run_v2\0soname\0code\0";
+static const char strings[378] = "profiler_set_current_func\0busbwUsagePercentage\0set_performance_mode\0set_thread_priority\0poll_profiler_state\0bwMegabytesPerSec\0set_performance\0release_library\0output_buffers\0mipsPerThread\0input_buffers\0power_hvx_off\0get_symbol_v4\0power_hvx_on\0load_library\0set_latency\0set_bus_bw\0module_ptr\0mipsTotal\0read_size\0set_mips\0poll_log\0threads\0scalars\0sym_ptr\0symbol\0run_v2\0soname\0code\0";
 static const uint16_t methodStrings[39] = {126,309,173,289,267,108,26,255,259,358,278,351,187,158,335,215,278,367,343,242,365,372,278,88,21,327,318,323,299,68,79,47,63,0,13,142,278,201,229};
 static const uint16_t methodStringsArrays[12] = {19,15,38,37,9,35,26,23,33,31,0,29};
 __QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(halide_hexagon_remote_slim) = {12,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
@@ -434,7 +438,7 @@ extern int adsp_mmap_fd_getinfo(int, uint32_t *);
 #ifdef __cplusplus
 extern "C" {
 #endif
-static __inline int _skel_method(int (*_pfn)(uint32_t), uint32_t _sc, remote_arg* _pra) {
+static __inline int _skel_method(int (*_pfn)(int), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    uint32_t _in0[1];
    uint32_t* _primIn;
@@ -444,11 +448,11 @@ static __inline int _skel_method(int (*_pfn)(uint32_t), uint32_t _sc, remote_arg
    _ASSERT(_nErr, _pra[0].buf.nLen >= 4);
    _primIn = _pra[0].buf.pv;
    _COPY(_in0, 0, _primIn, 0, 4);
-   _TRY(_nErr, _pfn(*_in0));
+   _TRY(_nErr, _pfn((int)*_in0));
    _CATCH(_nErr) {}
    return _nErr;
 }
-static __inline int _skel_method_1(int (*_pfn)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t), uint32_t _sc, remote_arg* _pra) {
+static __inline int _skel_method_1(int (*_pfn)(int, unsigned int, unsigned int, int, unsigned int, unsigned int, int, int), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    uint32_t _in0[1];
    uint32_t _in1[1];
@@ -472,11 +476,11 @@ static __inline int _skel_method_1(int (*_pfn)(uint32_t, uint32_t, uint32_t, uin
    _COPY(_in5, 0, _primIn, 20, 4);
    _COPY(_in6, 0, _primIn, 24, 4);
    _COPY(_in7, 0, _primIn, 28, 4);
-   _TRY(_nErr, _pfn(*_in0, *_in1, *_in2, *_in3, *_in4, *_in5, *_in6, *_in7));
+   _TRY(_nErr, _pfn((int)*_in0, (unsigned int)*_in1, (unsigned int)*_in2, (int)*_in3, (unsigned int)*_in4, (unsigned int)*_in5, (int)*_in6, (int)*_in7));
    _CATCH(_nErr) {}
    return _nErr;
 }
-static __inline int _skel_method_2(int (*_pfn)(uint32_t*, uint32_t*), uint32_t _sc, remote_arg* _pra) {
+static __inline int _skel_method_2(int (*_pfn)(int*, int*), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    uint32_t _rout0[1];
    uint32_t _rout1[1];
@@ -488,13 +492,13 @@ static __inline int _skel_method_2(int (*_pfn)(uint32_t*, uint32_t*), uint32_t _
    _numIn[0] = (REMOTE_SCALARS_INBUFS(_sc) - 0);
    _ASSERT(_nErr, _pra[(_numIn[0] + 0)].buf.nLen >= 8);
    _primROut = _pra[(_numIn[0] + 0)].buf.pv;
-   _TRY(_nErr, _pfn(_rout0, _rout1));
+   _TRY(_nErr, _pfn((int*)_rout0, (int*)_rout1));
    _COPY(_primROut, 0, _rout0, 0, 4);
    _COPY(_primROut, 4, _rout1, 0, 4);
    _CATCH(_nErr) {}
    return _nErr;
 }
-static __inline int _skel_method_3(int (*_pfn)(char*, uint32_t, uint32_t*), uint32_t _sc, remote_arg* _pra) {
+static __inline int _skel_method_3(int (*_pfn)(char*, int, int*), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    char* _rout0[1];
    uint32_t _rout0Len[1];
@@ -515,10 +519,24 @@ static __inline int _skel_method_3(int (*_pfn)(char*, uint32_t, uint32_t*), uint
    _COPY(_rout0Len, 0, _primIn, 0, 4);
    _praIn = (_pra + 1);
    _praROut = (_praIn + _numIn[0] + 1);
-   _ASSERT(_nErr, (int)((_praROut[0].buf.nLen / 1)) >= (int)(_rout0Len[0]));
+   _ASSERT(_nErr, ((_praROut[0].buf.nLen / 1)) >= (size_t)(_rout0Len[0]));
    _rout0[0] = _praROut[0].buf.pv;
-   _TRY(_nErr, _pfn(*_rout0, *_rout0Len, _rout1));
+   _TRY(_nErr, _pfn((char*)*_rout0, (int)*_rout0Len, (int*)_rout1));
    _COPY(_primROut, 0, _rout1, 0, 4);
+   _CATCH(_nErr) {}
+   return _nErr;
+}
+static __inline int _skel_method_4(int (*_pfn)(halide_hexagon_remote_handle_t), uint32_t _sc, remote_arg* _pra) {
+   remote_arg* _praEnd;
+   uint32_t _in0[1];
+   uint32_t* _primIn;
+   int _nErr = 0;
+   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
+   _ASSERT(_nErr, (_pra + ((1 + 0) + (((0 + 0) + 0) + 0))) <= _praEnd);
+   _ASSERT(_nErr, _pra[0].buf.nLen >= 4);
+   _primIn = _pra[0].buf.pv;
+   _COPY(_in0, 0, _primIn, 0, 4);
+   _TRY(_nErr, _pfn((halide_hexagon_remote_handle_t)*_in0));
    _CATCH(_nErr) {}
    return _nErr;
 }
@@ -547,7 +565,7 @@ static __inline int _skel_unpack(_allocator* _al, remote_arg* _praIn, remote_arg
    _ppraIn = &_praIn;
    _ppraROut = &_praROut;
    _COPY(_rout0Len, 0, _primIn, 0, 4);
-   _ASSERT(_nErr, (int)((_praROut[0].buf.nLen / 1)) >= (int)(_rout0Len[0]));
+   _ASSERT(_nErr, ((_praROut[0].buf.nLen / 1)) >= (size_t)(_rout0Len[0]));
    _rout0[0] = _praROut[0].buf.pv;
    _ppraInStart[0] += (_praIn - _praInStart) + 0;
    _ppraROutStart[0] += (_praROut - _praROutStart) +1;
@@ -563,14 +581,14 @@ static __inline int _skel_unpack_1(_allocator* _al, remote_arg* _praIn, remote_a
    _ppraIn = &_praIn;
    _ppraROut = &_praROut;
    _COPY(_in0Len, 0, _primIn, 0, 4);
-   _ASSERT(_nErr, (int)((_praIn[0].buf.nLen / 1)) >= (int)(_in0Len[0]));
+   _ASSERT(_nErr, ((_praIn[0].buf.nLen / 1)) >= (size_t)(_in0Len[0]));
    _in0[0] = _praIn[0].buf.pv;
    _ppraInStart[0] += (_praIn - _praInStart) + 1;
    _ppraROutStart[0] += (_praROut - _praROutStart) +0;
    _CATCH(_nErr) {}
    return _nErr;
 }
-static __inline int _skel_method_4(int (*_pfn)(uint32_t, uint32_t, void*, uint32_t, void*, uint32_t, char*, uint32_t), uint32_t _sc, remote_arg* _pra) {
+static __inline int _skel_method_5(int (*_pfn)(halide_hexagon_remote_handle_t, halide_hexagon_remote_handle_t, const halide_hexagon_remote_buffer*, int, halide_hexagon_remote_buffer*, int, const halide_hexagon_remote_scalar_t*, int), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    uint32_t _in0[1];
    uint32_t _in1[1];
@@ -621,23 +639,23 @@ static __inline int _skel_method_4(int (*_pfn)(uint32_t, uint32_t, void*, uint32
    }
    if(_praHROut == 0)
       (_praHROut = _praHIn + _numInH[0] + 0);
-   _ASSERT(_nErr, (int)((_praIn[0].buf.nLen / 4)) >= (int)(_in2Len[0]));
+   _ASSERT(_nErr, ((_praIn[0].buf.nLen / 4)) >= (size_t)(_in2Len[0]));
    _ALLOCATE(_nErr, _al, (_in2Len[0] * SLIM_IFPTR32(8, 16)), SLIM_IFPTR32(4, 8), _in2[0]);
    for(_ii = 0, _seq_primIn2 = (char*)_praIn[0].buf.pv, _seq_nat2 = (char*)_in2[0];_ii < (int)_in2Len[0];++_ii, _seq_primIn2 = (_seq_primIn2 + 4), _seq_nat2 = (_seq_nat2 + SLIM_IFPTR32(8, 16)))
    {
       _TRY(_nErr, _skel_unpack_1(_al, (_praIn + 1), _ppraIn, (_praROut + 0), _ppraROut, _praHIn, _ppraHIn, _praHROut, _ppraHROut, _seq_primIn2, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2]))));
    }
    _COPY(_rout3Len, 0, _primIn, 12, 4);
-   _ASSERT(_nErr, (int)((_praIn[1].buf.nLen / 4)) >= (int)(_rout3Len[0]));
+   _ASSERT(_nErr, ((_praIn[1].buf.nLen / 4)) >= (size_t)(_rout3Len[0]));
    _ALLOCATE(_nErr, _al, (_rout3Len[0] * SLIM_IFPTR32(8, 16)), SLIM_IFPTR32(4, 8), _rout3[0]);
    for(_ii = 0, _seq_primIn3 = (char*)_praIn[1].buf.pv, _seq_nat3 = (char*)_rout3[0];_ii < (int)_rout3Len[0];++_ii, _seq_primIn3 = (_seq_primIn3 + 4), _seq_nat3 = (_seq_nat3 + SLIM_IFPTR32(8, 16)))
    {
       _TRY(_nErr, _skel_unpack(_al, (_praIn + 2), _ppraIn, (_praROut + 0), _ppraROut, _praHIn, _ppraHIn, _praHROut, _ppraHROut, _seq_primIn3, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat3)[0]), (char**)&(((uint64_t*)_seq_nat3)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat3)[1]), (uint32_t*)&(((uint32_t*)_seq_nat3)[2]))));
    }
    _COPY(_in4Len, 0, _primIn, 16, 4);
-   _ASSERT(_nErr, (int)((_praIn[2].buf.nLen / 8)) >= (int)(_in4Len[0]));
+   _ASSERT(_nErr, ((_praIn[2].buf.nLen / 8)) >= (size_t)(_in4Len[0]));
    _in4[0] = _praIn[2].buf.pv;
-   _TRY(_nErr, _pfn(*_in0, *_in1, *_in2, *_in2Len, *_rout3, *_rout3Len, *_in4, *_in4Len));
+   _TRY(_nErr, _pfn((halide_hexagon_remote_handle_t)*_in0, (halide_hexagon_remote_handle_t)*_in1, (const halide_hexagon_remote_buffer*)*_in2, (int)*_in2Len, (halide_hexagon_remote_buffer*)*_rout3, (int)*_rout3Len, (const halide_hexagon_remote_scalar_t*)*_in4, (int)*_in4Len));
    for(_ii = 0, _seq_nat2 = (char*)_in2[0];_ii < (int)_in2Len[0];++_ii, _seq_nat2 = (_seq_nat2 + SLIM_IFPTR32(8, 16)))
    {
       _TRY(_nErr, _skel_pack_1((_praROutPost + 0), _ppraROutPost, 0, SLIM_IFPTR32((char**)&(((uint32_t*)_seq_nat2)[0]), (char**)&(((uint64_t*)_seq_nat2)[0])), SLIM_IFPTR32((uint32_t*)&(((uint32_t*)_seq_nat2)[1]), (uint32_t*)&(((uint32_t*)_seq_nat2)[2]))));
@@ -650,7 +668,7 @@ static __inline int _skel_method_4(int (*_pfn)(uint32_t, uint32_t, void*, uint32
    _allocator_deinit(_al);
    return _nErr;
 }
-static __inline int _skel_method_5(int (*_pfn)(void), uint32_t _sc, remote_arg* _pra) {
+static __inline int _skel_method_6(int (*_pfn)(void), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    int _nErr = 0;
    _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
@@ -659,7 +677,7 @@ static __inline int _skel_method_5(int (*_pfn)(void), uint32_t _sc, remote_arg* 
    _CATCH(_nErr) {}
    return _nErr;
 }
-static __inline int _skel_method_6(int (*_pfn)(uint32_t, char*, uint32_t, uint32_t*), uint32_t _sc, remote_arg* _pra) {
+static __inline int _skel_method_7(int (*_pfn)(halide_hexagon_remote_handle_t, const char*, int, halide_hexagon_remote_handle_t*), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    uint32_t _in0[1];
    char* _in1[1];
@@ -680,14 +698,14 @@ static __inline int _skel_method_6(int (*_pfn)(uint32_t, char*, uint32_t, uint32
    _COPY(_in0, 0, _primIn, 0, 4);
    _COPY(_in1Len, 0, _primIn, 4, 4);
    _praIn = (_pra + 1);
-   _ASSERT(_nErr, (int)((_praIn[0].buf.nLen / 1)) >= (int)(_in1Len[0]));
+   _ASSERT(_nErr, ((_praIn[0].buf.nLen / 1)) >= (size_t)(_in1Len[0]));
    _in1[0] = _praIn[0].buf.pv;
-   _TRY(_nErr, _pfn(*_in0, *_in1, *_in1Len, _rout2));
+   _TRY(_nErr, _pfn((halide_hexagon_remote_handle_t)*_in0, (const char*)*_in1, (int)*_in1Len, (halide_hexagon_remote_handle_t*)_rout2));
    _COPY(_primROut, 0, _rout2, 0, 4);
    _CATCH(_nErr) {}
    return _nErr;
 }
-static __inline int _skel_method_7(int (*_pfn)(char*, uint32_t, char*, uint32_t, uint32_t*), uint32_t _sc, remote_arg* _pra) {
+static __inline int _skel_method_8(int (*_pfn)(const char*, int, const unsigned char*, int, halide_hexagon_remote_handle_t*), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    char* _in0[1];
    uint32_t _in0Len[1];
@@ -708,12 +726,12 @@ static __inline int _skel_method_7(int (*_pfn)(char*, uint32_t, char*, uint32_t,
    _primROut = _pra[(_numIn[0] + 1)].buf.pv;
    _COPY(_in0Len, 0, _primIn, 0, 4);
    _praIn = (_pra + 1);
-   _ASSERT(_nErr, (int)((_praIn[0].buf.nLen / 1)) >= (int)(_in0Len[0]));
+   _ASSERT(_nErr, ((_praIn[0].buf.nLen / 1)) >= (size_t)(_in0Len[0]));
    _in0[0] = _praIn[0].buf.pv;
    _COPY(_in1Len, 0, _primIn, 4, 4);
-   _ASSERT(_nErr, (int)((_praIn[1].buf.nLen / 1)) >= (int)(_in1Len[0]));
+   _ASSERT(_nErr, ((_praIn[1].buf.nLen / 1)) >= (size_t)(_in1Len[0]));
    _in1[0] = _praIn[1].buf.pv;
-   _TRY(_nErr, _pfn(*_in0, *_in0Len, *_in1, *_in1Len, _rout2));
+   _TRY(_nErr, _pfn((const char*)*_in0, (int)*_in0Len, (const unsigned char*)*_in1, (int)*_in1Len, (halide_hexagon_remote_handle_t*)_rout2));
    _COPY(_primROut, 0, _rout2, 0, 4);
    _CATCH(_nErr) {}
    return _nErr;
@@ -722,29 +740,29 @@ __QAIC_SKEL_EXPORT int __QAIC_SKEL(halide_hexagon_remote_skel_invoke)(uint32_t _
    switch(REMOTE_SCALARS_METHOD(_sc))
    {
       case 0:
-      return _skel_method_7((void*)__QAIC_IMPL(halide_hexagon_remote_load_library), _sc, _pra);
+      return _skel_method_8(__QAIC_IMPL(halide_hexagon_remote_load_library), _sc, _pra);
       case 1:
-      return _skel_method_6((void*)__QAIC_IMPL(halide_hexagon_remote_get_symbol_v4), _sc, _pra);
+      return _skel_method_7(__QAIC_IMPL(halide_hexagon_remote_get_symbol_v4), _sc, _pra);
       case 2:
-      return _skel_method_5((void*)__QAIC_IMPL(halide_hexagon_remote_power_hvx_on), _sc, _pra);
+      return _skel_method_6(__QAIC_IMPL(halide_hexagon_remote_power_hvx_on), _sc, _pra);
       case 3:
-      return _skel_method_5((void*)__QAIC_IMPL(halide_hexagon_remote_power_hvx_off), _sc, _pra);
+      return _skel_method_6(__QAIC_IMPL(halide_hexagon_remote_power_hvx_off), _sc, _pra);
       case 4:
-      return _skel_method_4((void*)__QAIC_IMPL(halide_hexagon_remote_run_v2), _sc, _pra);
+      return _skel_method_5(__QAIC_IMPL(halide_hexagon_remote_run_v2), _sc, _pra);
       case 5:
-      return _skel_method((void*)__QAIC_IMPL(halide_hexagon_remote_release_library), _sc, _pra);
+      return _skel_method_4(__QAIC_IMPL(halide_hexagon_remote_release_library), _sc, _pra);
       case 6:
-      return _skel_method_3((void*)__QAIC_IMPL(halide_hexagon_remote_poll_log), _sc, _pra);
+      return _skel_method_3(__QAIC_IMPL(halide_hexagon_remote_poll_log), _sc, _pra);
       case 7:
-      return _skel_method_2((void*)__QAIC_IMPL(halide_hexagon_remote_poll_profiler_state), _sc, _pra);
+      return _skel_method_2(__QAIC_IMPL(halide_hexagon_remote_poll_profiler_state), _sc, _pra);
       case 8:
-      return _skel_method((void*)__QAIC_IMPL(halide_hexagon_remote_profiler_set_current_func), _sc, _pra);
+      return _skel_method(__QAIC_IMPL(halide_hexagon_remote_profiler_set_current_func), _sc, _pra);
       case 9:
-      return _skel_method((void*)__QAIC_IMPL(halide_hexagon_remote_set_performance_mode), _sc, _pra);
+      return _skel_method(__QAIC_IMPL(halide_hexagon_remote_set_performance_mode), _sc, _pra);
       case 10:
-      return _skel_method_1((void*)__QAIC_IMPL(halide_hexagon_remote_set_performance), _sc, _pra);
+      return _skel_method_1(__QAIC_IMPL(halide_hexagon_remote_set_performance), _sc, _pra);
       case 11:
-      return _skel_method((void*)__QAIC_IMPL(halide_hexagon_remote_set_thread_priority), _sc, _pra);
+      return _skel_method(__QAIC_IMPL(halide_hexagon_remote_set_thread_priority), _sc, _pra);
    }
    return AEE_EUNSUPPORTED;
 }

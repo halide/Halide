@@ -36,14 +36,14 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
         return parse_bitcode_file(sb, context, #mod);                                     \
     }
 
-#define DECLARE_NO_INITMOD(mod)                                                                        \
-    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool = false, bool = false) { \
-        user_error << "Halide was compiled without support for this target\n";                         \
-        return std::unique_ptr<llvm::Module>();                                                        \
-    }                                                                                                  \
-    std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {                        \
-        user_error << "Halide was compiled without support for this target\n";                         \
-        return std::unique_ptr<llvm::Module>();                                                        \
+#define DECLARE_NO_INITMOD(mod)                                                                                         \
+    [[maybe_unused]] std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool = false, bool = false) { \
+        user_error << "Halide was compiled without support for this target\n";                                          \
+        return std::unique_ptr<llvm::Module>();                                                                         \
+    }                                                                                                                   \
+    [[maybe_unused]] std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {                        \
+        user_error << "Halide was compiled without support for this target\n";                                          \
+        return std::unique_ptr<llvm::Module>();                                                                         \
     }
 
 #define DECLARE_CPP_INITMOD_LOOKUP(mod)                                                                     \
@@ -76,12 +76,11 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 // Universal CPP Initmods. Please keep sorted alphabetically.
 DECLARE_CPP_INITMOD(alignment_128)
 DECLARE_CPP_INITMOD(alignment_32)
-DECLARE_CPP_INITMOD(allocation_cache)
 DECLARE_CPP_INITMOD(alignment_64)
+DECLARE_CPP_INITMOD(allocation_cache)
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
-DECLARE_CPP_INITMOD(halide_buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
@@ -91,31 +90,32 @@ DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_get_symbol)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(float16_t)
+DECLARE_CPP_INITMOD(fopen)
+DECLARE_CPP_INITMOD(fopen_lfs)
+DECLARE_CPP_INITMOD(force_include_types)
 DECLARE_CPP_INITMOD(fuchsia_clock)
 DECLARE_CPP_INITMOD(fuchsia_host_cpu_count)
 DECLARE_CPP_INITMOD(fuchsia_yield)
 DECLARE_CPP_INITMOD(gpu_device_selection)
+DECLARE_CPP_INITMOD(halide_buffer_t)
+DECLARE_CPP_INITMOD(hexagon_cache_allocator)
 DECLARE_CPP_INITMOD(hexagon_dma)
+DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(hexagon_host)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_yield)
-DECLARE_CPP_INITMOD(matlab)
-DECLARE_CPP_INITMOD(metadata)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(msan)
 DECLARE_CPP_INITMOD(msan_stubs)
 DECLARE_CPP_INITMOD(opencl)
-DECLARE_CPP_INITMOD(openglcompute)
-DECLARE_CPP_INITMOD(opengl_egl_context)
-DECLARE_CPP_INITMOD(opengl_glx_context)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
-DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(osx_yield)
+DECLARE_CPP_INITMOD(posix_aligned_alloc)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
@@ -124,24 +124,26 @@ DECLARE_CPP_INITMOD(posix_io)
 DECLARE_CPP_INITMOD(posix_print)
 DECLARE_CPP_INITMOD(posix_threads)
 DECLARE_CPP_INITMOD(posix_threads_tsan)
+DECLARE_CPP_INITMOD(posix_timer_profiler)
 DECLARE_CPP_INITMOD(prefetch)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(pseudostack)
 DECLARE_CPP_INITMOD(qurt_allocator)
-DECLARE_CPP_INITMOD(hexagon_cache_allocator)
-DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(qurt_hvx)
 DECLARE_CPP_INITMOD(qurt_hvx_vtcm)
-DECLARE_CPP_INITMOD(qurt_init_fini)
 DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
 DECLARE_CPP_INITMOD(qurt_yield)
 DECLARE_CPP_INITMOD(runtime_api)
-DECLARE_CPP_INITMOD(ssp)
+DECLARE_CPP_INITMOD(timer_profiler)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
+// TODO(https://github.com/halide/Halide/issues/7248)
+// DECLARE_CPP_INITMOD(webgpu)
+DECLARE_CPP_INITMOD(webgpu_dawn)
+DECLARE_CPP_INITMOD(webgpu_emscripten)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
@@ -229,7 +231,16 @@ DECLARE_CPP_INITMOD_LOOKUP(windows_d3d12compute_arm)
 DECLARE_NO_INITMOD(windows_d3d12compute_arm)
 #endif  // WITH_D3D12
 
+#ifdef WITH_VULKAN
+DECLARE_CPP_INITMOD(vulkan)
+DECLARE_CPP_INITMOD(windows_vulkan)
+#else
+DECLARE_NO_INITMOD(vulkan)
+DECLARE_NO_INITMOD(windows_vulkan)
+#endif  // WITH_VULKAN
+
 #ifdef WITH_X86
+DECLARE_LL_INITMOD(x86_amx)
 DECLARE_LL_INITMOD(x86_avx512)
 DECLARE_LL_INITMOD(x86_avx2)
 DECLARE_LL_INITMOD(x86_avx)
@@ -237,6 +248,7 @@ DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
 DECLARE_CPP_INITMOD(x86_cpu_features)
 #else
+DECLARE_NO_INITMOD(x86_amx)
 DECLARE_NO_INITMOD(x86_avx512)
 DECLARE_NO_INITMOD(x86_avx2)
 DECLARE_NO_INITMOD(x86_avx)
@@ -244,14 +256,6 @@ DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_sse41)
 DECLARE_NO_INITMOD(x86_cpu_features)
 #endif  // WITH_X86
-
-#ifdef WITH_MIPS
-DECLARE_LL_INITMOD(mips)
-DECLARE_CPP_INITMOD(mips_cpu_features)
-#else
-DECLARE_NO_INITMOD(mips)
-DECLARE_NO_INITMOD(mips_cpu_features)
-#endif  // WITH_MIPS
 
 #ifdef WITH_POWERPC
 DECLARE_LL_INITMOD(powerpc)
@@ -278,24 +282,58 @@ DECLARE_NO_INITMOD(wasm_math)
 #endif  // WITH_WEBASSEMBLY
 
 #ifdef WITH_RISCV
-//DECLARE_LL_INITMOD(riscv)
+// DECLARE_LL_INITMOD(riscv)
 DECLARE_CPP_INITMOD(riscv_cpu_features)
 #else
-//DECLARE_NO_INITMOD(riscv)
+// DECLARE_NO_INITMOD(riscv)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
+#if LLVM_VERSION >= 180
+        if (target.bits == 32) {
+            if (target.os == Target::OSX) {
+                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:128-n8:16:32-S128");
+            } else if (target.os == Target::IOS) {
+                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:128-n8:16:32-S128");
+            } else if (target.os == Target::Windows) {
+                // For 32-bit MSVC targets, alignment of f80 values is 16 bytes (see https://reviews.llvm.org/D115942)
+                if (!target.has_feature(Target::JIT)) {
+                    return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32-a:0:32-S32");
+                } else {
+                    return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32-a:0:32-S32");
+                }
+            } else {
+                // Linux/Android
+                return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:32-n8:16:32-S128");
+            }
+        } else {  // 64-bit
+            if (target.os == Target::OSX) {
+                return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::IOS) {
+                return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
+                return llvm::DataLayout("e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::Windows) {
+                return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+            } else {
+                return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
+            }
+        }
+#else
         if (target.bits == 32) {
             if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
-            } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
-                return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
             } else if (target.os == Target::Windows) {
-                return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
+                // For 32-bit MSVC targets, alignment of f80 values is 16 bytes (see https://reviews.llvm.org/D115942)
+                if (!target.has_feature(Target::JIT)) {
+                    return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32-a:0:32-S32");
+                } else {
+                    return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32-a:0:32-S32");
+                }
             } else {
                 // Linux/Android
                 return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:32-n8:16:32-S128");
@@ -313,6 +351,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
             }
         }
+#endif
     } else if (target.arch == Target::ARM) {
         if (target.bits == 32) {
             if (target.os == Target::IOS) {
@@ -321,6 +360,17 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64");
             }
         } else {  // 64-bit
+#if LLVM_VERSION >= 190
+            if (target.os == Target::IOS) {
+                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
+            } else if (target.os == Target::OSX) {
+                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
+            } else if (target.os == Target::Windows) {
+                return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128-Fn32");
+            } else {
+                return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32");
+            }
+#else
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
             } else if (target.os == Target::OSX) {
@@ -330,18 +380,21 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             } else {
                 return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128");
             }
-        }
-    } else if (target.arch == Target::MIPS) {
-        if (target.bits == 32) {
-            return llvm::DataLayout("e-m:m-p:32:32-i8:8:32-i16:16:32-i64:64-n32-S64");
-        } else {
-            return llvm::DataLayout("e-m:m-i8:8:32-i16:16:32-i64:64-n32:64-S128");
+#endif
         }
     } else if (target.arch == Target::POWERPC) {
         if (target.bits == 32) {
-            return llvm::DataLayout("e-m:e-i32:32-n32");
+#if LLVM_VERSION >= 170
+            return llvm::DataLayout("E-m:e-p:32:32-Fn32-i64:64-n32");
+#else
+            return llvm::DataLayout("E-m:e-p:32:32-i64:64-n32");
+#endif
         } else {
-            return llvm::DataLayout("e-m:e-i64:64-n32:64");
+#if LLVM_VERSION >= 170
+            return llvm::DataLayout("e-m:e-Fn32-i64:64-n32:64-S128-v256:256:256-v512:512:512");
+#else
+            return llvm::DataLayout("e-m:e-i64:64-n32:64-S128-v256:256:256-v512:512:512");
+#endif
         }
     } else if (target.arch == Target::Hexagon) {
         return llvm::DataLayout(
@@ -349,26 +402,44 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             "-f32:32:32-f64:64:64-v32:32:32-v64:64:64-v512:512:512-v1024:1024:1024-v2048:2048:2048");
     } else if (target.arch == Target::WebAssembly) {
         if (target.bits == 32) {
-            return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32:64-S128");
+            return llvm::DataLayout("e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20");
         } else {
-            return llvm::DataLayout("e-m:e-p:64:64-i64:64-n32:64-S128");
+            return llvm::DataLayout("e-m:e-p:64:64-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20");
         }
     } else if (target.arch == Target::RISCV) {
-        // TODO: Valdidate this data layout is correct for RISCV. Assumption is it is like MIPS.
         if (target.bits == 32) {
             return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32-S128");
         } else {
-            return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n64-S128");
+            return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n32:64-S128");
         }
     } else {
-        internal_error << "Bad target arch: " << target.arch << "\n";
-        return llvm::DataLayout("unreachable");
+        // Return empty data layout. Must be set later.
+        return llvm::DataLayout("");
     }
 }
 
 }  // namespace
 
 namespace Internal {
+
+namespace {
+
+std::optional<llvm::VersionTuple> get_os_version_constraint(const llvm::Triple &triple) {
+    if (!triple.isOSBinFormatMachO()) {
+        return std::nullopt;
+    }
+
+    if (triple.getOS() == llvm::Triple::MacOSX && triple.getArch() == llvm::Triple::x86_64) {
+        // At time of writing (June 2024), this is one version prior
+        // to the oldest version still supported by Apple.
+        return llvm::VersionTuple(11, 0, 0);
+    }
+
+    llvm::VersionTuple t = triple.getMinimumSupportedOSVersion();
+    return t.empty() ? std::nullopt : std::make_optional(t);
+}
+
+}  // namespace
 
 llvm::Triple get_triple_for_target(const Target &target) {
     llvm::Triple triple;
@@ -452,21 +523,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else {
             user_error << "No arm support for this OS\n";
         }
-    } else if (target.arch == Target::MIPS) {
-        // Currently MIPS support is only little-endian.
-        if (target.bits == 32) {
-            triple.setArch(llvm::Triple::mipsel);
-        } else {
-            user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
-            triple.setArch(llvm::Triple::mips64el);
-        }
-
-        if (target.os == Target::Android) {
-            triple.setOS(llvm::Triple::Linux);
-            triple.setEnvironment(llvm::Triple::Android);
-        } else {
-            user_error << "No mips support for this OS\n";
-        }
     } else if (target.arch == Target::POWERPC) {
 #ifdef WITH_POWERPC
         // Only ppc*-unknown-linux-gnu are supported for the time being.
@@ -506,15 +562,24 @@ llvm::Triple get_triple_for_target(const Target &target) {
 
         if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
-            // TODO: Check what options there are here.
-            triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else if (target.os == Target::Android) {
+            triple.setOS(llvm::Triple::Linux);
+            triple.setEnvironment(llvm::Triple::Android);
         } else if (target.os == Target::NoOS) {
             // for baremetal environment
         } else {
             user_error << "No RISCV support for this OS\n";
         }
     } else {
-        internal_error << "Bad target arch: " << target.arch << "\n";
+        // Return default-constructed triple. Must be set later.
+    }
+
+    // Setting a minimum OS version here enables LLVM to include platform
+    // metadata in the MachO object file. Without this, Xcode 15's ld
+    // issues warnings about missing the "platform load command".
+    if (auto version = get_os_version_constraint(triple)) {
+        // llvm::Triple determines the version by parsing the OSName.
+        triple.setOSName((triple.getOSName() + version->getAsString()).str());
     }
 
     return triple;
@@ -545,21 +610,21 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
 
     // Set the layout and triple on the modules before linking, so
     // llvm doesn't complain while combining them.
-    for (size_t i = 0; i < modules.size(); i++) {
+    for (auto &module : modules) {
         if (t.os == Target::Windows &&
-            !Internal::starts_with(modules[i]->getName().str(), "windows_")) {
+            !Internal::starts_with(module->getName().str(), "windows_")) {
             // When compiling for windows, all wchars are
             // 16-bit. Generic modules may have it set to 32-bit. Drop
             // any module flags on the generic modules and use the
             // more correct ones on the windows-specific modules to
             // avoid a conflict. This is safe as long as the generic
             // modules never actually use a wchar.
-            if (auto *module_flags = modules[i]->getModuleFlagsMetadata()) {
-                modules[i]->eraseNamedMetadata(module_flags);
+            if (auto *module_flags = module->getModuleFlagsMetadata()) {
+                module->eraseNamedMetadata(module_flags);
             }
         }
-        modules[i]->setDataLayout(data_layout);
-        modules[i]->setTargetTriple(triple.str());
+        module->setDataLayout(data_layout);
+        module->setTargetTriple(triple.str());
     }
 
     // Link them all together
@@ -578,11 +643,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // The symbols that we might want to call as a user even if not
     // used in the Halide-generated code must remain weak. This is
     // handled automatically by assuming any symbol starting with
-    // "halide_" that is weak will be retained. There are a few
-    // symbols for which this convention is not followed and these are
-    // in this set.
-    const std::set<string> retain = {"__stack_chk_guard",
-                                     "__stack_chk_fail"};
+    // "halide_" that is weak will be retained.
 
     // COMDAT is not supported in MachO object files, hence it does
     // not work on Mac OS or iOS. These sometimes show up in the
@@ -612,6 +673,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
         const std::string f_name = Internal::get_llvm_function_name(f);
+        assert(f_name != "__stack_chk_guard" && f_name != "__stack_chk_fail");
 
         bool is_halide_extern_c_sym = Internal::starts_with(f_name, "halide_");
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
@@ -622,7 +684,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
         if (f.getLinkage() == llvm::GlobalValue::ExternalWeakLinkage) {
             f.setLinkage(llvm::GlobalValue::ExternalLinkage);
         } else {
-            const bool can_strip = !is_halide_extern_c_sym && retain.count(f_name) == 0;
+            const bool can_strip = !is_halide_extern_c_sym;
             if (can_strip || allow_stripping_all_weak_functions) {
                 convert_weak_to_linkonce(f);
             }
@@ -755,7 +817,9 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     // things that are 'alwaysinline' can be included here but are unnecessary.
     vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(std::move(extra_module));
+    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+    modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
     modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
     modules.push_back(get_initmod_halide_buffer_t(c, bits_64, debug));
     modules.push_back(get_initmod_destructors(c, bits_64, debug));
@@ -766,8 +830,8 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     modules.push_back(get_initmod_cache(c, bits_64, debug));
     modules.push_back(get_initmod_to_string(c, bits_64, debug));
     modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
+    modules.push_back(get_initmod_fopen(c, bits_64, debug));
     modules.push_back(get_initmod_device_interface(c, bits_64, debug));
-    modules.push_back(get_initmod_metadata(c, bits_64, debug));
     modules.push_back(get_initmod_float16_t(c, bits_64, debug));
     modules.push_back(get_initmod_errors(c, bits_64, debug));
     modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
@@ -814,10 +878,27 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
     vector<std::unique_ptr<llvm::Module>> modules;
 
+    // Start with the module that defines our struct types. This must be
+    // included first, because when parsing modules, if two structs are
+    // encountered with the same fields, they are deduped, and the first name
+    // wins.
+    //
+    // If in the future these names become unpredictable, an alternative
+    // strategy is to make this module include a global variable of each type we
+    // care about, recover the struct types from those named globals, and then
+    // delete the globals in link_modules.
+    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
+
+    const auto add_allocator = [&]() {
+        modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
+        modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+    };
+
     if (module_type != ModuleGPU) {
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // OS-dependent modules
             if (t.os == Target::Linux) {
+                add_allocator();
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
@@ -836,7 +917,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::WebAssemblyRuntime) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                add_allocator();
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
@@ -851,7 +932,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_fake_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                add_allocator();
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
@@ -866,10 +947,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
             } else if (t.os == Target::Android) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                add_allocator();
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-                if (t.arch == Target::ARM) {
+                if (t.arch == Target::ARM || t.arch == Target::RISCV) {
                     modules.push_back(get_initmod_android_clock(c, bits_64, debug));
                 } else {
                     modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
@@ -884,6 +965,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
+                modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
@@ -897,7 +979,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::IOS) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                add_allocator();
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
@@ -910,6 +992,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
             } else if (t.os == Target::QuRT) {
+                modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_qurt_yield(c, bits_64, debug));
                 if (tsan) {
@@ -917,7 +1000,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_qurt_threads(c, bits_64, debug));
                 }
-                modules.push_back(get_initmod_qurt_init_fini(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // The OS-specific symbols provided by the modules
                 // above are expected to be provided by the containing
@@ -925,11 +1007,18 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // NoRuntime, as OS-agnostic modules like tracing are
                 // still included below.
                 if (t.arch == Target::Hexagon) {
+                    modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
                     modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
+                } else if (t.arch == Target::ARM && t.has_feature(Target::Semihosting)) {
+                    add_allocator();
+                    modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::Fuchsia) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                add_allocator();
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_fuchsia_clock(c, bits_64, debug));
@@ -997,22 +1086,48 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
             }
 
+            // Prefer using fopen_lfs on Linux systems, which calls fopen64() to ensure LFS support.
+            if (t.os == Target::Linux) {
+                modules.push_back(get_initmod_fopen_lfs(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_fopen(c, bits_64, debug));
+            }
+
             modules.push_back(get_initmod_allocation_cache(c, bits_64, debug));
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
-            modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
             // Some environments don't support the atomics the profiler requires.
-            if (t.arch != Target::MIPS && t.os != Target::NoOS && t.os != Target::QuRT) {
-                if (t.os == Target::Windows) {
-                    modules.push_back(get_initmod_windows_profiler(c, bits_64, debug));
+            if (t.os != Target::NoOS && t.os != Target::QuRT) {
+                if (t.has_feature(Target::ProfileByTimer)) {
+                    user_assert(!t.has_feature(Target::Profile)) << "Can only use one of Target::Profile and Target::ProfileByTimer.";
+                    // TODO(zvookin): This should work on all Posix like systems, but needs to be tested.
+                    user_assert(t.os == Target::Linux) << "The timer based profiler currently can only be used on Linux.";
+                    modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
+                    modules.push_back(get_initmod_timer_profiler(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_timer_profiler(c, bits_64, debug));
                 } else {
-                    modules.push_back(get_initmod_profiler(c, bits_64, debug));
+                    if (t.os == Target::Windows) {
+                        modules.push_back(get_initmod_windows_profiler(c, bits_64, debug));
+                    } else {
+                        modules.push_back(get_initmod_profiler(c, bits_64, debug));
+                    }
                 }
             }
 
-            if (t.has_feature(Target::MSAN)) {
+#ifdef HALIDE_INTERNAL_USING_MSAN
+            // If we are building a JIT shared runtime (ie, we are jitting),
+            // and we are compiling with MSAN enabled (detected via preprocessor),
+            // we should always use the real MSAN stubs, even if the Target::MSan
+            // feature has been cleared (because JITModule::make_module() clears it).
+            const bool use_real_msan_runtime = t.has_feature(Target::MSAN) ||
+                                               module_type == ModuleJITShared;
+#else
+            const bool use_real_msan_runtime = t.has_feature(Target::MSAN);
+#endif
+
+            if (use_real_msan_runtime) {
                 modules.push_back(get_initmod_msan(c, bits_64, debug));
             } else {
                 modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
@@ -1035,16 +1150,14 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_arm_no_neon_ll(c));
                 }
             }
-            if (t.arch == Target::MIPS) {
-                modules.push_back(get_initmod_mips_ll(c));
-            }
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_ll(c));
             }
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
                 modules.push_back(get_initmod_hvx_128_ll(c));
-                if (t.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+                if (t.features_any_of({Target::HVX_v65, Target::HVX_v66,
+                                       Target::HVX_v68})) {
                     modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
                                                                 debug));
                 }
@@ -1064,8 +1177,20 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.has_feature(Target::AVX512)) {
                 modules.push_back(get_initmod_x86_avx512_ll(c));
             }
+            if (t.has_feature(Target::AVX512_SapphireRapids)) {
+                modules.push_back(get_initmod_x86_amx_ll(c));
+            }
             if (t.has_feature(Target::Profile)) {
-                user_assert(t.os != Target::WebAssemblyRuntime) << "The profiler cannot be used in a threadless environment.";
+                if (t.os == Target::WebAssemblyRuntime) {
+                    user_assert(t.has_feature(Target::WasmThreads))
+                        << "The profiler requires threads to operate; enable wasm_threads to use this under WebAssembly.";
+                }
+                modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
+            }
+            if (t.has_feature(Target::ProfileByTimer)) {
+                user_assert(!t.has_feature(Target::Profile)) << "Can only use one of Target::Profile and Target::ProfileByTimer.";
+                // TODO(zvookin): This should work on all Posix like systems, but needs to be tested.
+                user_assert(t.os == Target::Linux) << "The timer based profiler currently can only be used on Linux.";
                 modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
             }
             if (t.arch == Target::WebAssembly) {
@@ -1085,9 +1210,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
                 }
-            }
-            if (t.arch == Target::MIPS) {
-                modules.push_back(get_initmod_mips_cpu_features(c, bits_64, debug));
             }
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_cpu_features(c, bits_64, debug));
@@ -1125,23 +1247,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_opencl(c, bits_64, debug));
             }
         }
-        if (t.has_feature(Target::OpenGLCompute)) {
-            modules.push_back(get_initmod_openglcompute(c, bits_64, debug));
-            if (t.os == Target::Android) {
-                // Only platform that supports OpenGL Compute for now.
-                modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-            } else if (t.os == Target::Linux) {
-                if (t.has_feature(Target::EGL)) {
-                    modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_opengl_glx_context(c, bits_64, debug));
-                }
-            } else if (t.os == Target::OSX) {
-                modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
-            } else {
-                // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
-            }
-        }
         if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));
             if (t.arch == Target::ARM) {
@@ -1163,6 +1268,28 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 user_error << "Direct3D 12 can only be used on ARM or X86 architectures.\n";
             }
         }
+        if (t.has_feature(Target::Vulkan)) {
+            if (t.os == Target::Windows) {
+                modules.push_back(get_initmod_windows_vulkan(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_vulkan(c, bits_64, debug));
+            }
+        }
+        if (t.has_feature(Target::WebGPU)) {
+            if (t.os == Target::Windows) {
+                // TOOD: Test on Windows and enable this.
+                // See https://github.com/halide/Halide/issues/7249
+                user_error << "WebGPU runtime not yet supported on Windows.\n";
+            } else {
+                // Select the right WebGPU runtime variant based on the Target's OS:
+                // if we are targeting wasm, use the Emscripten variant; in all other cases, use Dawn variant.
+                if (t.os == Target::WebAssemblyRuntime) {
+                    modules.push_back(get_initmod_webgpu_emscripten(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_webgpu_dawn(c, bits_64, debug));
+                }
+            }
+        }
         if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
@@ -1172,10 +1299,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_hexagon_dma(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_dma_pool(c, bits_64, debug));
         }
-    }
-
-    if (module_type == ModuleAOT && t.has_feature(Target::Matlab)) {
-        modules.push_back(get_initmod_matlab(c, bits_64, debug));
     }
 
     if (module_type == ModuleAOTNoRuntime ||
@@ -1225,9 +1348,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
 
     // For now, the PTX backend does not handle calling functions. So mark all functions
     // AvailableExternally to ensure they are inlined or deleted.
-    for (llvm::Module::iterator iter = modules[0]->begin(); iter != modules[0]->end(); iter++) {
-        llvm::Function &f = *iter;
-
+    for (auto &f : *modules[0]) {
         // This is intended to set all definitions (not extern declarations)
         // to "available externally" which should guarantee they do not exist
         // after the resulting module is finalized to code. That is they must

@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
     ok = ok && test<int32_t>();
 
     if (!ok) {
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

@@ -66,7 +66,7 @@ int cpp_extern_2(int a1, float a2) {
 }  // namespace namespace_shared_outer
 
 int main(int argc, char **argv) {
-    Buffer<uint16_t> in(100, 100);
+    Buffer<uint16_t, 2> in(100, 100);
 
     for (int y = 0; y < in.height(); y++) {
         for (int x = 0; x < in.width(); x++) {
@@ -74,8 +74,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    Buffer<uint16_t> out_native(100, 100);
-    Buffer<uint16_t> out_c(100, 100);
+    Buffer<uint16_t, 2> out_native(100, 100);
+    Buffer<uint16_t, 2> out_c(100, 100);
 
     pipeline_cpp_native(in, out_native);
 

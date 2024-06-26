@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -61,14 +61,13 @@ int main(int argc, char **argv) {
             f.hexagon(y).vectorize(x, 32);
         }
         for (int i = 0; i < 10; i++) {
+            f.update(i).unscheduled();
             if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
                 } else if (target.has_feature(Target::HVX)) {
                     f.update(i).hexagon(y).vectorize(x, 32);
                 }
-            } else {
-                f.update(i);
             }
         }
 
@@ -83,7 +82,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -103,14 +102,13 @@ int main(int argc, char **argv) {
 
         // Schedule the even update steps on the gpu
         for (int i = 0; i < 10; i++) {
+            f.update(i).unscheduled();
             if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
                 } else if (target.has_feature(Target::HVX)) {
                     f.update(i).hexagon(y).vectorize(x, 32);
                 }
-            } else {
-                f.update(i);
             }
         }
 
@@ -125,7 +123,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -146,9 +144,8 @@ int main(int argc, char **argv) {
 
         // Schedule the even update steps on the gpu
         for (int i = 0; i < 10; i++) {
-            if (i & 1) {
-                f.update(i);
-            } else {
+            f.update(i).unscheduled();
+            if ((i & 1) == 0) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
                 } else if (target.has_feature(Target::HVX)) {
@@ -168,7 +165,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }

@@ -106,11 +106,21 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        touches_buffer |= (buffers.count(op->name) > 0);
+        touches_buffer |=
+            (buffers.count(op->name) > 0) ||
+            (buffers.count(op->name + "." + std::to_string(op->value_index)));
+        // Output Tuple params are in the buffers map under their qualified
+        // tuple name, not the Func name.
         return IRMutator::visit(op);
     }
     Stmt visit(const Provide *op) override {
-        touches_buffer |= (buffers.find(op->name) != buffers.end());
+        if (op->values.size() == 1) {
+            touches_buffer |= (buffers.find(op->name) != buffers.end());
+        } else {
+            // It's a Tuple. Just check if the first Tuple component corresponds
+            // to an output buffer. If it does, they all do.
+            touches_buffer |= (buffers.find(op->name + ".0") != buffers.end());
+        }
         return IRMutator::visit(op);
     }
     Expr visit(const Variable *op) override {
@@ -152,7 +162,6 @@ Stmt add_image_checks_inner(Stmt s,
                             const FuncValueBounds &fb,
                             bool will_inject_host_copies) {
 
-    bool no_asserts = t.has_feature(Target::NoAsserts);
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
 
     // First hunt for all the referenced buffers
@@ -267,25 +276,24 @@ Stmt add_image_checks_inner(Stmt s,
         if (param.defined()) {
             // Find the extern users.
             vector<string> extern_users;
-            for (size_t i = 0; i < order.size(); i++) {
-                Function f = env.find(order[i])->second;
+            for (const auto &func_name : order) {
+                Function f = env.find(func_name)->second;
                 if (f.has_extern_definition() &&
                     !f.extern_definition_proxy_expr().defined()) {
                     const vector<ExternFuncArgument> &args = f.extern_arguments();
-                    for (size_t j = 0; j < args.size(); j++) {
-                        if ((args[j].image_param.defined() &&
-                             args[j].image_param.name() == param.name()) ||
-                            (args[j].buffer.defined() &&
-                             args[j].buffer.name() == param.name())) {
-                            extern_users.push_back(order[i]);
+                    for (const auto &arg : args) {
+                        if ((arg.image_param.defined() &&
+                             arg.image_param.name() == param.name()) ||
+                            (arg.buffer.defined() &&
+                             arg.buffer.name() == param.name())) {
+                            extern_users.push_back(func_name);
                         }
                     }
                 }
             }
 
             // Expand the box by the result of the bounds query from each.
-            for (size_t i = 0; i < extern_users.size(); i++) {
-                const string &extern_user = extern_users[i];
+            for (auto &extern_user : extern_users) {
                 Box query_box;
                 Expr query_buf = Variable::make(type_of<struct halide_buffer_t *>(),
                                                 param.name() + ".bounds_query." + extern_user);
@@ -351,7 +359,15 @@ Stmt add_image_checks_inner(Stmt s,
         }
 
         // Check that the region passed in (after applying constraints) is within the region used
-        debug(3) << "In image " << name << " region touched is:\n";
+        if (debug::debug_level() >= 3) {
+            debug(3) << "In image " << name << " region touched is:\n";
+            for (int j = 0; j < dimensions; j++) {
+                debug(3) << "  " << j << ": " << (touched.empty() ? Expr() : touched[j].min)
+                         << " .. "
+                         << (touched.empty() ? Expr() : touched[j].max)
+                         << "\n";
+            }
+        }
 
         for (int j = 0; j < dimensions; j++) {
             string dim = std::to_string(j);
@@ -584,29 +600,26 @@ Stmt add_image_checks_inner(Stmt s,
         }
 
         // Assert all the conditions, and set the new values
-        for (size_t i = 0; i < constraints.size(); i++) {
-            Expr var = constraints[i].first;
+        for (const auto &constraint : constraints) {
+            Expr var = constraint.first;
             const string &name = var.as<Variable>()->name;
             Expr constrained_var = Variable::make(Int(32), name + ".constrained");
 
             std::ostringstream ss;
-            ss << constraints[i].second;
+            ss << constraint.second;
             string constrained_var_str = ss.str();
 
-            lets_constrained.emplace_back(name + ".constrained", constraints[i].second);
+            lets_constrained.emplace_back(name + ".constrained", constraint.second);
 
             // Substituting in complex expressions is not typically a good idea
-            if (constraints[i].second.as<Variable>() ||
-                is_const(constraints[i].second)) {
+            if (constraint.second.as<Variable>() ||
+                is_const(constraint.second)) {
                 replace_with_constrained[name] = constrained_var;
             }
 
-            Expr error = 0;
-            if (!no_asserts) {
-                error = Call::make(Int(32), "halide_error_constraint_violated",
-                                   {name, var, constrained_var_str, constrained_var},
-                                   Call::Extern);
-            }
+            Expr error = Call::make(Int(32), "halide_error_constraint_violated",
+                                    {name, var, constrained_var_str, constrained_var},
+                                    Call::Extern);
 
             // Check the var passed in equals the constrained version (when not in inference mode)
             asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
@@ -662,14 +675,12 @@ Stmt add_image_checks_inner(Stmt s,
         }
     };
 
-    if (!no_asserts) {
-        // Inject the code that checks the host pointers.
-        prepend_stmts(&asserts_host_non_null);
-        prepend_stmts(&asserts_host_alignment);
-        prepend_stmts(&asserts_device_not_dirty);
-        prepend_stmts(&dims_no_overflow_asserts);
-        prepend_lets(&lets_overflow);
-    }
+    // Inject the code that checks the host pointers.
+    prepend_stmts(&asserts_host_non_null);
+    prepend_stmts(&asserts_host_alignment);
+    prepend_stmts(&asserts_device_not_dirty);
+    prepend_stmts(&dims_no_overflow_asserts);
+    prepend_lets(&lets_overflow);
 
     // Replace uses of the var with the constrained versions in the
     // rest of the program. We also need to respect the existence of
@@ -681,15 +692,10 @@ Stmt add_image_checks_inner(Stmt s,
     // all in reverse order compared to execution, as we incrementally
     // prepending code.
 
-    // Inject the code that checks the constraints are correct. We
-    // need these regardless of how NoAsserts is set, because they are
-    // what gets Halide to actually exploit the constraint.
+    // Inject the code that checks the constraints are correct.
     prepend_stmts(&asserts_constrained);
-
-    if (!no_asserts) {
-        prepend_stmts(&asserts_required);
-        prepend_stmts(&asserts_type_checks);
-    }
+    prepend_stmts(&asserts_required);
+    prepend_stmts(&asserts_type_checks);
 
     // Inject the code that returns early for inference mode.
     if (!no_bounds_query) {
@@ -697,9 +703,7 @@ Stmt add_image_checks_inner(Stmt s,
         prepend_stmts(&buffer_rewrites);
     }
 
-    if (!no_asserts) {
-        prepend_stmts(&asserts_proposed);
-    }
+    prepend_stmts(&asserts_proposed);
 
     // Inject the code that defines the proposed sizes.
     prepend_lets(&lets_proposed);
@@ -732,6 +736,36 @@ Stmt add_image_checks(const Stmt &s,
     // bounds inference.
     class Injector : public IRMutator {
         using IRMutator::visit;
+
+        Expr visit(const Variable *op) override {
+            // In the bounds inference lets we skip over, respect any buffer
+            // constraints.
+
+            // Note that in the case where the constraint doesn't hold, this
+            // changes the value of this Expr! This is safe because these lets
+            // are internal names, and no user-provided constraints can depend
+            // on them, so changing their value to use the constraint value
+            // instead of the actual buffer value can't possibly change whether
+            // or not the constraint check is going to pass.
+            const Parameter &p = op->param;
+            if (p.defined() && p.is_buffer()) {
+                for (int i = 0; i < p.dimensions(); i++) {
+                    if (p.min_constraint(i).defined() &&
+                        op->name == p.name() + ".min." + std::to_string(i)) {
+                        return p.min_constraint(i);
+                    }
+                    if (p.extent_constraint(i).defined() &&
+                        op->name == p.name() + ".extent." + std::to_string(i)) {
+                        return p.extent_constraint(i);
+                    }
+                    if (p.stride_constraint(i).defined() &&
+                        op->name == p.name() + ".stride." + std::to_string(i)) {
+                        return p.stride_constraint(i);
+                    }
+                }
+            }
+            return op;
+        }
 
         Stmt visit(const Block *op) override {
             const Evaluate *e = op->first.as<Evaluate>();

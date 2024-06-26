@@ -29,7 +29,7 @@ WEAK void dispatch_threadgroups(mtl_compute_command_encoder *encoder,
 
 #if ARM_COMPILE
     typedef void (*dispatch_threadgroups_method)(objc_id encoder, objc_sel sel,
-                                                 MTLSize * threadgroupsPerGrid, MTLSize * threadsPerThreadgroup);
+                                                 MTLSize *threadgroupsPerGrid, MTLSize *threadsPerThreadgroup);
     dispatch_threadgroups_method method = (dispatch_threadgroups_method)&objc_msgSend;
     (*method)(encoder, sel_getUid("dispatchThreadgroups:threadsPerThreadgroup:"),
               &threadgroupsPerGrid, &threadsPerThreadgroup);

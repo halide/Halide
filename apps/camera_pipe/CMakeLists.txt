@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(camera_pipe)
 
 enable_testing()
 
 # Set up language settings
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -12,11 +12,9 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(camera_pipe.generator camera_pipe_generator.cpp)
-target_link_libraries(camera_pipe.generator
-                      PRIVATE
-                      Halide::Generator
-                      Halide::Tools)
+add_halide_generator(camera_pipe.generator
+                     SOURCES camera_pipe_generator.cpp
+                     LINK_LIBRARIES Halide::Tools)
 
 # Filters
 add_halide_library(camera_pipe FROM camera_pipe.generator)

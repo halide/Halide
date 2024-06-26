@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
         int correct = (256 * 255) / 2;
         if (im(0) != correct) {
             printf("im(0) = %d instead of %d\n", im(0), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
         sum_rows.compute_root().vectorize(i, 4).parallel(j);
         sum_rows.update().parallel(j);
         sum_cols.compute_root().vectorize(j, 4);
-        sum_cols.update();
+        sum_cols.update().unscheduled();
         out.output_buffer().dim(0).set_bounds(0, 256);
 
         Buffer<int> result = out.realize({256});
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 256; i++) {
             if (result(i) != correct(i)) {
                 printf("result(%d) = %d instead of %d\n", i, result(i), correct(i));
-                return -1;
+                return 1;
             }
         }
     }

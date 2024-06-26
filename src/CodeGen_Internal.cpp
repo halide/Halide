@@ -6,155 +6,14 @@
 #include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 #include "Simplify.h"
-#include "Simplify_Internal.h"
+#include "runtime/constants.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
-using std::vector;
 
 using namespace llvm;
-
-namespace {
-
-vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *halide_buffer_t_type, LLVMContext &context) {
-    vector<llvm::Type *> res;
-    for (const auto &v : closure.vars) {
-        res.push_back(llvm_type_of(&context, v.second));
-    }
-    for (const auto &b : closure.buffers) {
-        res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
-        res.push_back(halide_buffer_t_type->getPointerTo());
-    }
-    return res;
-}
-
-}  // namespace
-
-StructType *build_closure_type(const Closure &closure,
-                               llvm::StructType *halide_buffer_t_type,
-                               LLVMContext *context) {
-    StructType *struct_t = StructType::create(*context, "closure_t");
-    struct_t->setBody(llvm_types(closure, halide_buffer_t_type, *context), false);
-    return struct_t;
-}
-
-void pack_closure(llvm::StructType *type,
-                  Value *dst,
-                  const Closure &closure,
-                  const Scope<Value *> &src,
-                  llvm::StructType *halide_buffer_t_type,
-                  IRBuilder<> *builder) {
-    // type, type of dst should be a pointer to a struct of the type returned by build_type
-    int idx = 0;
-    for (const auto &v : closure.vars) {
-        llvm::Type *t = type->elements()[idx];
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-        Value *val = src.get(v.first);
-        val = builder->CreateBitCast(val, t);
-        builder->CreateStore(val, ptr);
-    }
-    for (const auto &b : closure.buffers) {
-        // For buffers we pass through base address (the symbol with
-        // the same name as the buffer), and the .buffer symbol (GPU
-        // code might implicitly need it).
-        // FIXME: This dependence should be explicitly encoded in the IR.
-        {
-            llvm::Type *t = type->elements()[idx];
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-            Value *val = src.get(b.first);
-            val = builder->CreateBitCast(val, t);
-            builder->CreateStore(val, ptr);
-        }
-        {
-            llvm::PointerType *t = halide_buffer_t_type->getPointerTo();
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-            Value *val = nullptr;
-            if (src.contains(b.first + ".buffer")) {
-                val = src.get(b.first + ".buffer");
-                val = builder->CreateBitCast(val, t);
-            } else {
-                val = ConstantPointerNull::get(t);
-            }
-            builder->CreateStore(val, ptr);
-        }
-    }
-}
-
-void unpack_closure(const Closure &closure,
-                    Scope<Value *> &dst,
-                    llvm::StructType *type,
-                    Value *src,
-                    IRBuilder<> *builder) {
-    // type, type of src should be a pointer to a struct of the type returned by build_type
-    int idx = 0;
-    for (const auto &v : closure.vars) {
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-        LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-        dst.push(v.first, load);
-        load->setName(v.first);
-    }
-    for (const auto &b : closure.buffers) {
-        {
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-            dst.push(b.first, load);
-            load->setName(b.first);
-        }
-        {
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-            dst.push(b.first + ".buffer", load);
-            load->setName(b.first + ".buffer");
-        }
-    }
-}
-
-llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
-    if (t.lanes() == 1) {
-        if (t.is_float() && !t.is_bfloat()) {
-            switch (t.bits()) {
-            case 16:
-                return llvm::Type::getHalfTy(*c);
-            case 32:
-                return llvm::Type::getFloatTy(*c);
-            case 64:
-                return llvm::Type::getDoubleTy(*c);
-            default:
-                internal_error << "There is no llvm type matching this floating-point bit width: " << t << "\n";
-                return nullptr;
-            }
-        } else if (t.is_handle()) {
-            return llvm::Type::getInt8PtrTy(*c);
-        } else {
-            return llvm::Type::getIntNTy(*c, t.bits());
-        }
-    } else {
-        llvm::Type *element_type = llvm_type_of(c, t.element_of());
-        return get_vector_type(element_type, t.lanes());
-    }
-}
-
-#if LLVM_VERSION >= 120
-int get_vector_num_elements(llvm::Type *t) {
-    if (t->isVectorTy()) {
-        auto *vt = dyn_cast<llvm::FixedVectorType>(t);
-        internal_assert(vt) << "Called get_vector_num_elements on a scalable vector type\n";
-        return vt->getNumElements();
-    } else {
-        return 1;
-    }
-}
-#else
-int get_vector_num_elements(llvm::Type *t) {
-    if (t->isVectorTy()) {
-        return dyn_cast<llvm::VectorType>(t)->getNumElements();
-    } else {
-        return 1;
-    }
-}
-#endif
 
 llvm::Type *get_vector_element_type(llvm::Type *t) {
     if (t->isVectorTy()) {
@@ -162,20 +21,6 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
     } else {
         return t;
     }
-}
-
-#if LLVM_VERSION >= 120
-llvm::ElementCount element_count(int e) {
-    return llvm::ElementCount::getFixed(e);
-}
-#else
-llvm::ElementCount element_count(int e) {
-    return llvm::ElementCount(e, /*scalable*/ false);
-}
-#endif
-
-llvm::Type *get_vector_type(llvm::Type *t, int n) {
-    return VectorType::get(t, element_count(n));
 }
 
 // Returns true if the given function name is one of the Halide runtime
@@ -195,6 +40,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_device_malloc",
         "halide_device_and_host_malloc",
         "halide_device_sync",
+        "halide_device_sync_global",
         "halide_do_par_for",
         "halide_do_loop_task",
         "halide_do_task",
@@ -205,8 +51,8 @@ bool function_takes_user_context(const std::string &name) {
         "halide_print",
         "halide_profiler_memory_allocate",
         "halide_profiler_memory_free",
-        "halide_profiler_pipeline_start",
-        "halide_profiler_pipeline_end",
+        "halide_profiler_instance_start",
+        "halide_profiler_instance_end",
         "halide_profiler_stack_peak_update",
         "halide_spawn_thread",
         "halide_device_release",
@@ -218,9 +64,10 @@ bool function_takes_user_context(const std::string &name) {
         "halide_memoization_cache_release",
         "halide_cuda_run",
         "halide_opencl_run",
-        "halide_openglcompute_run",
         "halide_metal_run",
         "halide_d3d12compute_run",
+        "halide_vulkan_run",
+        "halide_webgpu_run",
         "halide_msan_annotate_buffer_is_initialized_as_destructor",
         "halide_msan_annotate_buffer_is_initialized",
         "halide_msan_annotate_memory_is_initialized",
@@ -229,6 +76,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_hexagon_initialize_kernels",
         "halide_hexagon_run",
         "halide_hexagon_device_release",
+        "halide_hexagon_get_module_state",
         "halide_hexagon_power_hvx_on",
         "halide_hexagon_power_hvx_on_mode",
         "halide_hexagon_power_hvx_on_perf",
@@ -241,18 +89,18 @@ bool function_takes_user_context(const std::string &name) {
         "halide_vtcm_free",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
-        "halide_openglcompute_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_d3d12compute_initialize_kernels",
+        "halide_vulkan_initialize_kernels",
+        "halide_webgpu_initialize_kernels",
         "halide_get_gpu_device",
         "_halide_buffer_crop",
         "_halide_buffer_retire_crop_after_extern_stage",
         "_halide_buffer_retire_crops_after_extern_stage",
+        "_halide_hexagon_do_par_for",
     };
-    const int num_funcs = sizeof(user_context_runtime_funcs) /
-                          sizeof(user_context_runtime_funcs[0]);
-    for (int i = 0; i < num_funcs; ++i) {
-        if (name == user_context_runtime_funcs[i]) {
+    for (const char *user_context_runtime_func : user_context_runtime_funcs) {
+        if (name == user_context_runtime_func) {
             return true;
         }
     }
@@ -262,10 +110,10 @@ bool function_takes_user_context(const std::string &name) {
 
 bool can_allocation_fit_on_stack(int64_t size) {
     user_assert(size > 0) << "Allocation size should be a positive number\n";
-    return (size <= 1024 * 16);
+    return (size <= (int64_t)Runtime::Internal::Constants::maximum_stack_allocation_bytes);
 }
 
-Expr lower_int_uint_div(const Expr &a, const Expr &b) {
+Expr lower_int_uint_div(const Expr &a, const Expr &b, bool round_to_zero) {
     // Detect if it's a small int division
     internal_assert(a.type() == b.type());
     const int64_t *const_int_divisor = as_const_int(b);
@@ -278,7 +126,16 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
     int shift_amount;
     if (is_const_power_of_two_integer(b, &shift_amount) &&
         (t.is_int() || t.is_uint())) {
-        return a >> make_const(UInt(a.type().bits()), shift_amount);
+        if (round_to_zero) {
+            Expr result = a;
+            // Normally a right-shift isn't right for division rounding to
+            // zero. It does the wrong thing for negative values. Add a fudge so
+            // that a right-shift becomes correct.
+            result += (result >> (t.bits() - 1)) & (b - 1);
+            return result >> shift_amount;
+        } else {
+            return a >> make_const(UInt(a.type().bits()), shift_amount);
+        }
     } else if (const_int_divisor &&
                t.is_int() &&
                (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
@@ -288,15 +145,30 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         int64_t multiplier;
         int shift;
         if (t.bits() == 32) {
-            multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
-            shift = IntegerDivision::table_s32[*const_int_divisor][3];
+            if (round_to_zero) {
+                multiplier = IntegerDivision::table_srz32[*const_int_divisor][2];
+                shift = IntegerDivision::table_srz32[*const_int_divisor][3];
+            } else {
+                multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
+                shift = IntegerDivision::table_s32[*const_int_divisor][3];
+            }
         } else if (t.bits() == 16) {
-            multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
-            shift = IntegerDivision::table_s16[*const_int_divisor][3];
+            if (round_to_zero) {
+                multiplier = IntegerDivision::table_srz16[*const_int_divisor][2];
+                shift = IntegerDivision::table_srz16[*const_int_divisor][3];
+            } else {
+                multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
+                shift = IntegerDivision::table_s16[*const_int_divisor][3];
+            }
         } else {
             // 8 bit
-            multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
-            shift = IntegerDivision::table_s8[*const_int_divisor][3];
+            if (round_to_zero) {
+                multiplier = IntegerDivision::table_srz8[*const_int_divisor][2];
+                shift = IntegerDivision::table_srz8[*const_int_divisor][3];
+            } else {
+                multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
+                shift = IntegerDivision::table_s8[*const_int_divisor][3];
+            }
         }
         Expr num = a;
 
@@ -304,17 +176,28 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         Type num_as_uint_t = num.type().with_code(Type::UInt);
         Expr sign = cast(num_as_uint_t, num >> make_const(UInt(t.bits()), t.bits() - 1));
 
-        // Flip the numerator bits if the mask is high.
-        num = cast(num_as_uint_t, num);
-        num = num ^ sign;
+        // If the numerator is negative, we want to either flip the bits (when
+        // rounding to negative infinity), or negate the numerator (when
+        // rounding to zero).
+        if (round_to_zero) {
+            num = abs(num);
+        } else {
+            // Flip the numerator bits if the mask is high.
+            num = cast(num_as_uint_t, num);
+            num = num ^ sign;
+        }
 
         // Multiply and keep the high half of the
         // result, and then apply the shift.
+        internal_assert(num.type().can_represent(multiplier));
         Expr mult = make_const(num.type(), multiplier);
         num = mul_shift_right(num, mult, shift + num.type().bits());
 
-        // Maybe flip the bits back again.
+        // Maybe flip the bits back or negate again.
         num = cast(a.type(), num ^ sign);
+        if (round_to_zero) {
+            num -= sign;
+        }
 
         return num;
     } else if (const_uint_divisor &&
@@ -348,14 +231,30 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         if (method == 2) {
             // Average with original numerator.
             val = Call::make(val.type(), Call::sorted_avg, {val, num}, Call::PureIntrinsic);
+        } else if (method == 3) {
+            // Average with original numerator, rounding up. This
+            // method exists because this is cheaper than averaging
+            // with the original numerator on x86, where there's an
+            // average-round-up instruction (pavg), but no
+            // average-round-down instruction. Using method 2,
+            // sorted_avg lowers to three instructions on x86.
+            //
+            // On ARM and other architectures with both
+            // average-round-up and average-round-down instructions
+            // there's no reason to prefer either method 2 or method 3
+            // over the other.
+            val = rounding_halving_add(val, num);
+        }
 
-            // Do the final shift
-            if (shift) {
-                val = val >> make_const(UInt(t.bits()), shift);
-            }
+        // Do the final shift
+        if (shift && (method == 2 || method == 3)) {
+            val = val >> make_const(UInt(t.bits()), shift);
         }
 
         return val;
+    } else if (round_to_zero) {
+        // Return the input division unchanged.
+        return Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
     } else {
         return lower_euclidean_div(a, b);
     }
@@ -464,7 +363,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         if (!can_prove(!b_is_const_zero)) {
             b = b | cast(a.type(), b_is_const_zero);
         }
-        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
         q = select(b_is_const_zero, 0, q);
     } else {
         internal_assert(a.type().is_int());
@@ -506,7 +405,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         // If a is negative, add one to it to get the rounding to work out.
         a -= a_neg;
         // Do the C-style division
-        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
         // If a is negative, either add or subtract one, depending on
         // the sign of b, to fix the rounding. This can't overflow,
         // because we move the result towards zero in either case (we
@@ -530,7 +429,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         if (!can_prove(!b_is_const_zero)) {
             b = b | cast(a.type(), b_is_const_zero);
         }
-        q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::PureIntrinsic);
         q = select(b_is_const_zero, make_zero(a.type()), q);
     } else {
         internal_assert(a.type().is_int());
@@ -560,7 +459,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         // If a is negative, add one to get the rounding to work out
         a -= a_neg;
         // Do the mod, avoiding taking mod by zero
-        q = Call::make(a.type(), Call::mod_round_to_zero, {a, (b | b_zero)}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, (b | b_zero)}, Call::PureIntrinsic);
         // If a is negative, we either need to add b - 1 to the
         // result, or -b - 1, depending on the sign of b.
         q += (a_neg & ((b ^ b_neg) + ~b_neg));
@@ -619,11 +518,43 @@ Expr lower_mux(const Call *mux) {
     internal_assert(mux->args.size() >= 2);
     Expr equiv = mux->args.back();
     Expr index = mux->args[0];
+    if (const Broadcast *b = index.as<Broadcast>()) {
+        index = b->value;
+    }
     int num_vals = (int)mux->args.size() - 1;
     for (int i = num_vals - 1; i >= 0; i--) {
         equiv = select(index == make_const(index.type(), i), mux->args[i + 1], equiv);
     }
     return equiv;
+}
+
+// An implementation of rounding to nearest integer with ties to even to use for
+// Halide::round. Written to avoid all use of c standard library functions so
+// that it's cleanly vectorizable and a safe fallback on all platforms.
+Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
+    Type bits_type = x.type().with_code(halide_type_uint);
+    Type int_type = x.type().with_code(halide_type_int);
+
+    // Make one half with the same sign as x
+    Expr sign_bit = reinterpret(bits_type, x) & (cast(bits_type, 1) << (x.type().bits() - 1));
+    Expr one_half = reinterpret(bits_type, cast(x.type(), 0.5f)) | sign_bit;
+    Expr just_under_one_half = reinterpret(x.type(), one_half - 1);
+    one_half = reinterpret(x.type(), one_half);
+    // Do the same for the constant one.
+    Expr one = reinterpret(bits_type, cast(x.type(), 1)) | sign_bit;
+    // Round to nearest, with ties going towards zero
+    Expr ix = cast(int_type, x + just_under_one_half);
+    Expr a = cast(x.type(), ix);
+    // Get the residual
+    Expr diff = a - x;
+    // Make a mask of all ones if the result is odd
+    Expr odd = -cast(bits_type, ix & 1);
+    // Make a mask of all ones if the result was a tie
+    Expr tie = select(diff == one_half, cast(bits_type, -1), cast(bits_type, 0));
+    // If it was a tie, and the result is odd, we should have rounded in the
+    // other direction.
+    Expr correction = reinterpret(x.type(), odd & tie & one);
+    return common_subexpression_elimination(a - correction);
 }
 
 bool get_md_bool(llvm::Metadata *value, bool &result) {
@@ -655,16 +586,15 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     return false;
 }
 
-void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs) {
+void get_target_options(const llvm::Module &module, llvm::TargetOptions &options) {
     bool use_soft_float_abi = false;
     get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
-    get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
-    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
     std::string mabi;
     get_md_string(module.getModuleFlag("halide_mabi"), mabi);
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
+    // FIXME: can this be migrated into `set_function_attributes_from_halide_target_options()`?
     bool per_instruction_fast_math_flags = false;
     get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
 
@@ -676,12 +606,15 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-    options.StackAlignmentOverride = 0;
     options.FunctionSections = true;
     options.UseInitArray = true;
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
+#if LLVM_VERSION >= 190
+    options.MCOptions.X86RelaxRelocations = false;
+#else
     options.RelaxELFRelocations = false;
+#endif
     options.MCOptions.ABIName = mabi;
 }
 
@@ -695,9 +628,14 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
         to.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi ? 1 : 0);
     }
 
-    std::string mcpu;
-    if (get_md_string(from.getModuleFlag("halide_mcpu"), mcpu)) {
-        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::MDString::get(context, mcpu));
+    std::string mcpu_target;
+    if (get_md_string(from.getModuleFlag("halide_mcpu_target"), mcpu_target)) {
+        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", llvm::MDString::get(context, mcpu_target));
+    }
+
+    std::string mcpu_tune;
+    if (get_md_string(from.getModuleFlag("halide_mcpu_tune"), mcpu_tune)) {
+        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", llvm::MDString::get(context, mcpu_tune));
     }
 
     std::string mattrs;
@@ -723,9 +661,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     llvm::TargetOptions options;
-    std::string mcpu = "";
-    std::string mattrs = "";
-    get_target_options(module, options, mcpu, mattrs);
+    get_target_options(module, options);
 
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
@@ -733,29 +669,65 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     bool use_large_code_model = false;
     get_md_bool(module.getModuleFlag("halide_use_large_code_model"), use_large_code_model);
 
+#if LLVM_VERSION >= 180
+    const auto opt_level = llvm::CodeGenOptLevel::Aggressive;
+#else
+    const auto opt_level = llvm::CodeGenOpt::Aggressive;
+#endif
+
+    // Get module mcpu_target and mattrs.
+    std::string mcpu_target;
+    get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
+    std::string mattrs;
+    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
-                                                mcpu, mattrs,
+                                                mcpu_target,
+                                                mattrs,
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
                                                 use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
-                                                llvm::CodeGenOpt::Aggressive);
+                                                opt_level);
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 
-void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
+void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
+    llvm::Module &module = *fn.getParent();
+
+    std::string mcpu_target, mcpu_tune, mattrs, vscale_range;
+    get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
+    get_md_string(module.getModuleFlag("halide_mcpu_tune"), mcpu_tune);
+    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    get_md_string(module.getModuleFlag("halide_vscale_range"), vscale_range);
+
+    fn.addFnAttr("target-cpu", mcpu_target);
+    fn.addFnAttr("tune-cpu", mcpu_tune);
+    fn.addFnAttr("target-features", mattrs);
+
+    // Halide-generated IR is not exception-safe.
+    // No exception should unwind out of Halide functions.
+    // No exception should be thrown within Halide functions.
+    // All functions called by the Halide function must not unwind.
+    fn.setDoesNotThrow();
+
+    // Side-effect-free loops are undefined.
+    // But asserts and external calls *might* abort.
+    fn.setMustProgress();
+
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
-    fn->addFnAttr("reciprocal-estimates", "none");
+    fn.addFnAttr("reciprocal-estimates", "none");
+
+    // If a fixed vscale is asserted, add it as an attribute on the function.
+    if (!vscale_range.empty()) {
+        fn.addFnAttr("vscale_range", vscale_range);
+    }
 }
 
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
-#if LLVM_VERSION >= 130
     SmallVector<GlobalValue *, 4> used_globals;
-#else
-    SmallPtrSet<GlobalValue *, 4> used_globals;
-#endif
     llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
@@ -824,6 +796,35 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
             llvm::ConstantArray::get(ATy, used_array), "llvm.compiler.used");
         new_used->setSection("llvm.metadata");
     }
+}
+
+Expr lower_concat_bits(const Call *op) {
+    internal_assert(op->is_intrinsic(Call::concat_bits));
+    internal_assert(!op->args.empty());
+
+    Expr result = make_zero(op->type);
+    int shift = 0;
+    for (const Expr &e : op->args) {
+        result = result | (cast(result.type(), e) << shift);
+        shift += e.type().bits();
+    }
+    return result;
+}
+
+Expr lower_extract_bits(const Call *op) {
+    Expr e = op->args[0];
+    // Do a shift-and-cast as a uint, which will zero-fill any out-of-range
+    // bits for us.
+    if (!e.type().is_uint()) {
+        e = reinterpret(e.type().with_code(halide_type_uint), e);
+    }
+    e = e >> op->args[1];
+    e = cast(op->type.with_code(halide_type_uint), e);
+    if (op->type != e.type()) {
+        e = reinterpret(op->type, e);
+    }
+    e = simplify(e);
+    return e;
 }
 
 }  // namespace Internal

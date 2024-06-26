@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.22)
+
+project(HelloBaremetal-gen)
+
+if (NOT DEFINED GEN_EXE OR NOT DEFINED GEN_PACKAGE OR NOT DEFINED GEN_NAMESPACE)
+    message(FATAL_ERROR "CMakeVariable GEN_EXE or GEN_PACKAGE or GEN_NAMESPACE is not set")
+endif()
+
+# Set up C++ language settings
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_EXTENSIONS NO)
+
+set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+
+find_package(Halide REQUIRED)  # We need Halide::Generator
+
+# Build generator
+add_halide_generator(${GEN_EXE}
+                     SOURCES ${SRC_DIR}/add_generator.cpp
+                     PACKAGE_NAME ${GEN_PACKAGE}
+                     PACKAGE_NAMESPACE ${GEN_NAMESPACE})

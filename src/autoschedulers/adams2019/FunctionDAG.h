@@ -27,6 +27,8 @@ using std::string;
 using std::unique_ptr;
 using std::vector;
 
+struct Adams2019Params;
+
 // First we have various utility classes.
 
 // An optional rational type used when analyzing memory dependencies.
@@ -127,7 +129,7 @@ class LoadJacobian {
     int64_t c;
 
 public:
-    LoadJacobian(vector<vector<OptionalRational>> &&matrix, int64_t c = 1)
+    explicit LoadJacobian(vector<vector<OptionalRational>> &&matrix, int64_t c = 1)
         : coeffs(matrix), c(c) {
     }
 
@@ -205,7 +207,7 @@ public:
         return result;
     }
 
-    void dump(const char *prefix) const;
+    void dump(std::ostream &os, const char *prefix) const;
 };
 
 // Classes to represent a concrete set of bounds for a Func. A Span is
@@ -402,6 +404,7 @@ struct FunctionDAG {
             // The min and max in their full symbolic glory. We use
             // these in the general case.
             Interval in;
+            bool depends_on_estimate = false;
 
             // Analysis used to accelerate common cases
             bool equals_required = false, equals_union_of_required_with_constants = false;
@@ -478,7 +481,7 @@ struct FunctionDAG {
                 return dependencies[n.id];
             };
 
-            Stage(Halide::Stage s)
+            explicit Stage(Halide::Stage s)
                 : stage(std::move(s)) {
             }
         };
@@ -530,9 +533,9 @@ struct FunctionDAG {
             // used to evaluate this bound more quickly.
             int64_t coeff, constant;
             int64_t consumer_dim;
-            bool affine, uses_max;
+            bool affine, uses_max, depends_on_estimate;
 
-            BoundInfo(const Expr &e, const Node::Stage &consumer);
+            BoundInfo(const Expr &e, const Node::Stage &consumer, bool dependent);
         };
 
         // Memory footprint on producer required by consumer.
@@ -562,17 +565,13 @@ struct FunctionDAG {
 
     // Create the function DAG, and do all the dependency and cost
     // analysis. This is done once up-front before the tree search.
-    FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target);
+    FunctionDAG(const vector<Function> &outputs, const Target &target);
 
-    void dump() const;
-    std::ostream &dump(std::ostream &os) const;
+    void dump(std::ostream &os) const;
 
 private:
     // Compute the featurization for the entire DAG
     void featurize();
-
-    template<typename OS>
-    void dump_internal(OS &os) const;
 
 public:
     // This class uses a lot of internal pointers, so we'll make it uncopyable/unmovable.

@@ -11,7 +11,7 @@ int main(int argc, char *argv[]) {
     f(x) = x;
     g(x, y) = f(x) + select(param, 1, 2);
 
-    //g.gpu_tile(x, y, tx, ty, 8, 8, TailStrategy::GuardWithIf);
+    // g.gpu_tile(x, y, tx, ty, 8, 8, TailStrategy::GuardWithIf);
     g.specialize(param).tile(x, y, tx, ty, 8, 8, TailStrategy::GuardWithIf);
     g.specialize(!param).tile(x, y, tx, ty, 8, 8, TailStrategy::GuardWithIf);
     g.specialize_fail("Unknown");

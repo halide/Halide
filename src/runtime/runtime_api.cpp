@@ -7,8 +7,9 @@
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeOpenCL.h"
-#include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeQurt.h"
+#include "HalideRuntimeVulkan.h"
+#include "HalideRuntimeWebGPU.h"
 #include "cpu_features.h"
 
 // This runtime module will contain extern declarations of the Halide
@@ -17,6 +18,8 @@
 
 // Can be generated via the following:
 // cat src/runtime/runtime_internal.h src/runtime/HalideRuntime*.h | grep "^[^ ][^(]*halide_[^ ]*(" | grep -v '#define' | sed "s/[^(]*halide/halide/" | sed "s/(.*//" | sed "s/^h/    \(void *)\&h/" | sed "s/$/,/" | sort | uniq
+
+extern "C" void halide_unused_force_include_types();
 
 extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_buffer_copy,
@@ -46,11 +49,14 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_device_malloc,
     (void *)&halide_device_release,
     (void *)&halide_device_sync,
+    (void *)&halide_device_sync_global,
+    (void *)&halide_disable_timer_interrupt,
     (void *)&halide_do_par_for,
     (void *)&halide_do_parallel_tasks,
     (void *)&halide_do_task,
     (void *)&halide_do_loop_task,
     (void *)&halide_double_to_string,
+    (void *)&halide_enable_timer_interrupt,
     (void *)&halide_error,
     (void *)&halide_error_access_out_of_bounds,
     (void *)&halide_error_bad_dimensions,
@@ -79,7 +85,11 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_param_too_small_u64,
     (void *)&halide_error_requirement_failed,
     (void *)&halide_error_specialize_fail,
+    (void *)&halide_error_split_factor_not_positive,
     (void *)&halide_error_unaligned_host_ptr,
+    (void *)&halide_error_storage_bound_too_small,
+    (void *)&halide_error_device_crop_failed,
+    (void *)&halide_error_vscale_invalid,
     (void *)&halide_float16_bits_to_double,
     (void *)&halide_float16_bits_to_float,
     (void *)&halide_free,
@@ -93,6 +103,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_hexagon_device_release,
     (void *)&halide_hexagon_get_device_handle,
     (void *)&halide_hexagon_get_device_size,
+    (void *)&halide_hexagon_get_module_state,
     (void *)&halide_hexagon_initialize_kernels,
     (void *)&halide_hexagon_finalize_kernels,
     (void *)&halide_hexagon_power_hvx_off,
@@ -107,7 +118,6 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_join_thread,
     (void *)&halide_load_library,
     (void *)&halide_malloc,
-    (void *)&halide_matlab_call_pipeline,
     (void *)&halide_memoization_cache_cleanup,
     (void *)&halide_memoization_cache_evict,
     (void *)&halide_memoization_cache_lookup,
@@ -151,19 +161,14 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_opencl_set_device_type,
     (void *)&halide_opencl_set_platform_name,
     (void *)&halide_opencl_wrap_cl_mem,
-    (void *)&halide_opengl_create_context,
-    (void *)&halide_opengl_get_proc_address,
-    (void *)&halide_openglcompute_device_interface,
-    (void *)&halide_openglcompute_initialize_kernels,
-    (void *)&halide_openglcompute_finalize_kernels,
-    (void *)&halide_openglcompute_run,
     (void *)&halide_pointer_to_string,
     (void *)&halide_print,
     (void *)&halide_profiler_get_pipeline_state,
     (void *)&halide_profiler_get_state,
+    (void *)&halide_profiler_instance_start,
+    (void *)&halide_profiler_instance_end,
     (void *)&halide_profiler_memory_allocate,
     (void *)&halide_profiler_memory_free,
-    (void *)&halide_profiler_pipeline_start,
     (void *)&halide_profiler_report,
     (void *)&halide_profiler_reset,
     (void *)&halide_profiler_stack_peak_update,
@@ -191,9 +196,10 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_set_trace_file,
     (void *)&halide_shutdown_thread_pool,
     (void *)&halide_shutdown_trace,
-    (void *)&halide_sleep_ms,
+    (void *)&halide_sleep_us,
     (void *)&halide_spawn_thread,
     (void *)&halide_start_clock,
+    (void *)&halide_start_timer_chain,
     (void *)&halide_string_to_string,
     (void *)&halide_trace,
     (void *)&halide_trace_helper,
@@ -205,4 +211,14 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_d3d12compute_finalize_kernels,
     (void *)&halide_d3d12compute_release_context,
     (void *)&halide_d3d12compute_run,
+    (void *)&halide_vulkan_acquire_context,
+    (void *)&halide_vulkan_device_interface,
+    (void *)&halide_vulkan_initialize_kernels,
+    (void *)&halide_vulkan_release_context,
+    (void *)&halide_vulkan_run,
+    (void *)&halide_webgpu_device_interface,
+    (void *)&halide_webgpu_initialize_kernels,
+    (void *)&halide_webgpu_finalize_kernels,
+    (void *)&halide_webgpu_run,
+    (void *)&halide_unused_force_include_types,
 };

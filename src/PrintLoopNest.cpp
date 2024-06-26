@@ -32,13 +32,13 @@ namespace {
 class PrintLoopNest : public IRVisitor {
 public:
     PrintLoopNest(std::ostream &output, const map<string, Function> &e)
-        : out(output), env(e), indent(0) {
+        : out(output), env(e) {
     }
 
 private:
     std::ostream &out;
     const map<string, Function> &env;
-    int indent;
+    int indent = 0;
 
     Scope<Expr> constants;
 
@@ -94,12 +94,16 @@ private:
         Expr min_val = op->min, extent_val = op->extent;
         const Variable *min_var = min_val.as<Variable>();
         const Variable *extent_var = extent_val.as<Variable>();
-        if (min_var && constants.contains(min_var->name)) {
-            min_val = constants.get(min_var->name);
+        if (min_var) {
+            if (const Expr *e = constants.find(min_var->name)) {
+                min_val = *e;
+            }
         }
 
-        if (extent_var && constants.contains(extent_var->name)) {
-            extent_val = constants.get(extent_var->name);
+        if (extent_var) {
+            if (const Expr *e = constants.find(extent_var->name)) {
+                extent_val = *e;
+            }
         }
 
         if (extent_val.defined() && is_const(extent_val) &&
@@ -151,9 +155,8 @@ private:
 
     void visit(const LetStmt *op) override {
         if (is_const(op->value)) {
-            constants.push(op->name, op->value);
+            ScopedBinding<Expr> bind(constants, op->name, op->value);
             op->body.accept(this);
-            constants.pop(op->name);
         } else {
             op->body.accept(this);
         }
@@ -165,15 +168,8 @@ private:
 string print_loop_nest(const vector<Function> &output_funcs) {
     // Do the first part of lowering:
 
-    // Compute an environment
-    map<string, Function> env;
-    for (const Function &f : output_funcs) {
-        populate_environment(f, env);
-    }
-
     // Create a deep-copy of the entire graph of Funcs.
-    vector<Function> outputs;
-    std::tie(outputs, env) = deep_copy(output_funcs, env);
+    auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
 
     // Output functions should all be computed and stored at root.
     for (const Function &f : outputs) {
@@ -190,9 +186,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
 
     // Compute a realization order and determine group of functions which loops
     // are to be fused together
-    vector<string> order;
-    vector<vector<string>> fused_groups;
-    std::tie(order, fused_groups) = realization_order(outputs, env);
+    auto [order, fused_groups] = realization_order(outputs, env);
 
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions

@@ -165,6 +165,26 @@ bool LoopLevel::is_root() const {
     return contents->var_name == root_looplevel_name;
 }
 
+int LoopLevel::get_stage_index() const {
+    return contents->stage_index;
+}
+
+std::string LoopLevel::func_name() const {
+    return contents->func_name;
+}
+
+std::string LoopLevel::var_name() const {
+    return contents->var_name;
+}
+
+bool LoopLevel::is_rvar() const {
+    return contents->is_rvar;
+}
+
+bool LoopLevel::locked() const {
+    return contents->locked;
+}
+
 std::string LoopLevel::to_string() const {
     check_defined_and_locked();
     if (contents->stage_index == -1) {
@@ -213,7 +233,7 @@ typedef std::map<FunctionPtr, FunctionPtr> DeepCopyMap;
 struct FuncScheduleContents {
     mutable RefCount ref_count;
 
-    LoopLevel store_level, compute_level;
+    LoopLevel store_level, compute_level, hoist_storage_level;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
     std::vector<Bound> estimates;
@@ -221,10 +241,12 @@ struct FuncScheduleContents {
     MemoryType memory_type = MemoryType::Auto;
     bool memoized = false;
     bool async = false;
+    // This is an extent of the ring buffer and expected to be a positive integer.
+    Expr ring_buffer;
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
-        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()) {
+        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()), hoist_storage_level(LoopLevel::inlined()) {
     }
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
@@ -332,8 +354,9 @@ FuncSchedule FuncSchedule::deep_copy(
 
     internal_assert(contents.defined()) << "Cannot deep-copy undefined FuncSchedule\n";
     FuncSchedule copy;
-    copy.contents->store_level = contents->store_level;
-    copy.contents->compute_level = contents->compute_level;
+    copy.contents->store_level.set(contents->store_level);
+    copy.contents->compute_level.set(contents->compute_level);
+    copy.contents->hoist_storage_level.set(contents->hoist_storage_level);
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
@@ -341,6 +364,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memoized = contents->memoized;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
+    copy.contents->ring_buffer = contents->ring_buffer;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
@@ -382,6 +406,14 @@ bool &FuncSchedule::async() {
 
 bool FuncSchedule::async() const {
     return contents->async;
+}
+
+Expr &FuncSchedule::ring_buffer() {
+    return contents->ring_buffer;
+}
+
+Expr &FuncSchedule::ring_buffer() const {
+    return contents->ring_buffer;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {
@@ -437,12 +469,20 @@ LoopLevel &FuncSchedule::compute_level() {
     return contents->compute_level;
 }
 
+LoopLevel &FuncSchedule::hoist_storage_level() {
+    return contents->hoist_storage_level;
+}
+
 const LoopLevel &FuncSchedule::store_level() const {
     return contents->store_level;
 }
 
 const LoopLevel &FuncSchedule::compute_level() const {
     return contents->compute_level;
+}
+
+const LoopLevel &FuncSchedule::hoist_storage_level() const {
+    return contents->hoist_storage_level;
 }
 
 void FuncSchedule::accept(IRVisitor *visitor) const {
@@ -487,6 +527,23 @@ void FuncSchedule::mutate(IRMutator *mutator) {
 
 StageSchedule::StageSchedule()
     : contents(new StageScheduleContents) {
+}
+
+StageSchedule::StageSchedule(const std::vector<ReductionVariable> &rvars, const std::vector<Split> &splits,
+                             const std::vector<Dim> &dims, const std::vector<PrefetchDirective> &prefetches,
+                             const FuseLoopLevel &fuse_level, const std::vector<FusedPair> &fused_pairs,
+                             bool touched, bool allow_race_conditions, bool atomic, bool override_atomic_associativity_test)
+    : contents(new StageScheduleContents) {
+    contents->rvars = rvars;
+    contents->splits = splits;
+    contents->dims = dims;
+    contents->prefetches = prefetches;
+    contents->fuse_level = fuse_level;
+    contents->fused_pairs = fused_pairs;
+    contents->touched = touched;
+    contents->allow_race_conditions = allow_race_conditions;
+    contents->atomic = atomic;
+    contents->override_atomic_associativity_test = override_atomic_associativity_test;
 }
 
 StageSchedule StageSchedule::get_copy() const {

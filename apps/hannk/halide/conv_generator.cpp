@@ -43,17 +43,17 @@ public:
     GeneratorParam<int> unroll_reduction_{"unroll_reduction", 4};
 
     // Unsigned 8-bit input tensor, indexed by c, x, y, b.
-    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<Buffer<uint8_t, 4>> input_{"input"};
     Input<uint8_t> input_zero_{"input_zero"};
 
     // A 6D array of filter coefficients indexed by ci % n, co % k, ci / n, co / k, x, y,
     // where n = vector_reduction and k = accum_vector_size (below).
-    Input<Buffer<>> filter_{"filter", 6};
+    Input<Buffer<void, 6>> filter_{"filter"};
     Input<uint8_t> filter_zero_{"filter_zero"};
 
     // A 1D array of 32-bit biases. The bias should be added to the c
     // dimension of the output.
-    Input<Buffer<int32_t>> bias_{"bias", 1};
+    Input<Buffer<int32_t, 1>> bias_{"bias"};
 
     // The stride specifies how the input [x, y] is sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
@@ -70,7 +70,7 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{"output", 4};
+    Output<Buffer<void, 4>> output_{"output"};
 
     void configure() {
         if (use_8bit_multiply(target)) {
@@ -149,10 +149,14 @@ public:
         convolved(c, x, y, b) += i32(input_rdxyc) * i32(filter_rdxyc);
 
         // Saturate and narrow the output.
-        Expr output = multiply_2x_high(convolved(c, x, y, b), output_multiplier_);
-        output = i16_sat(rounding_shift_right(output, output_shift_));
-        output = u8_sat(saturating_add(output, output_zero_));
-        output_(c, x, y, b) = clamp(output, output_min_, output_max_);
+        Expr output;
+        if (output_.type() == halide_type_of<uint8_t>()) {
+            output = quantize_and_relu_u8(convolved(c, x, y, b), output_multiplier_, output_shift_, output_zero_,
+                                          output_min_, output_max_, target);
+        } else {
+            output = quantize_i16(convolved(c, x, y, b), output_multiplier_, output_shift_, target);
+        }
+        output_(c, x, y, b) = output;
 
         // Schedule
         interpret_as_tensor(input_);
@@ -214,7 +218,7 @@ public:
         // In case there are no suitable tile sizes, just make a dummy split so the
         // rest of the schedule still works.
         output_
-            .split(c, co, c, accum_vector_size * min_tile_c, TailStrategy::Predicate)
+            .split(c, co, c, accum_vector_size * min_tile_c, TailStrategy::PredicateStores)
             .split(x, xo, x, 1)
             .reorder(c, x, co, xo, y, b)
             .vectorize(c);
@@ -243,6 +247,12 @@ public:
             .vectorize(rci, vector_reduction)
             .unroll(rci)
             .unroll(x);
+        if (unroll_reduction == vector_reduction) {
+            // TODO: We used to not need this, but currently, it is a massive
+            // savings (e.g. first conv layer of mobilenet drops from 760us to
+            // 540us on ARM, at some point it was 560us on ARM without this).
+            convolved.update().specialize(filter_depth == vector_reduction);
+        }
 
         if (!use_8bit_multiply(target) && get_target().arch == Target::X86) {
             // On x86, widening subtracts eat up a lot of the already scarce
@@ -311,13 +321,13 @@ public:
 // The above generator expects the filter to already be tiled into
 class TileConvFilter : public Generator<TileConvFilter> {
 public:
-    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<Buffer<uint8_t, 4>> input_{"input"};
     Input<uint8_t> input_zero_{"input_zero"};
     Input<uint8_t> output_zero_{"output_zero"};
 
     // 6D array of filter coefficients indexed by ci % n, co % k, ci / n, co / k, x, y,
     // where n = vector_reduction and k = accum_vector_size (below).
-    Output<Buffer<>> output_{"output", 6};
+    Output<Buffer<void, 6>> output_{"output"};
 
     void configure() {
         if (use_8bit_multiply(target)) {

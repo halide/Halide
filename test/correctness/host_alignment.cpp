@@ -74,10 +74,9 @@ public:
                     left = call->args[0];
                     right = call->args[1];
                 }
-                const Call *reinterpret_call = left.as<Call>();
-                if (!reinterpret_call ||
-                    !reinterpret_call->is_intrinsic(Call::reinterpret)) return;
-                Expr name = reinterpret_call->args[0];
+                const Reinterpret *reinterpret = left.as<Reinterpret>();
+                if (!reinterpret) return;
+                Expr name = reinterpret->value;
                 const Variable *V = name.as<Variable>();
                 string name_host_ptr = V->name;
                 int expected_alignment = alignments_needed[name_host_ptr];
@@ -122,7 +121,7 @@ int test() {
     int cnt = count_host_alignment_asserts(f, m);
     if (cnt != 3) {
         printf("Error: expected 3 host alignment assertions in code, but got %d\n", cnt);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

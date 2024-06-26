@@ -7,6 +7,12 @@
 
 namespace Halide {
 
+namespace Internal {
+namespace Autoscheduler {
+struct Adams2019Params;
+}  // namespace Autoscheduler
+}  // namespace Internal
+
 class DefaultCostModel : public CostModel {
 private:
     Internal::Weights weights;
@@ -37,7 +43,7 @@ public:
 
     // Configure the cost model for the algorithm to be scheduled.
     void set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
-                               const MachineParams &params) override;
+                               const Internal::Autoscheduler::Adams2019Params &params) override;
     void set_pipeline_features(const Runtime::Buffer<float> &, int n);
 
     // Enqueue a schedule to be evaluated. The second version of this method returns a buffer of

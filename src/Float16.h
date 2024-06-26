@@ -38,6 +38,13 @@ struct float16_t {
      * positive zero.*/
     float16_t() = default;
 
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    /** Construct a float16_t from compiler's built-in _Float16 type. */
+    explicit float16_t(_Float16 value) {
+        memcpy(&data, &value, sizeof(_Float16));
+    }
+#endif
+
     /// @}
 
     // Use explicit to avoid accidently raising the precision
@@ -47,6 +54,15 @@ struct float16_t {
     explicit operator double() const;
     /** Cast to int */
     explicit operator int() const;
+
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    /** Cast to compiler's built-in _Float16 type. */
+    explicit operator _Float16() const {
+        _Float16 result;
+        memcpy(&result, &data, sizeof(_Float16));
+        return result;
+    }
+#endif
 
     /** Get a new float16_t that represents a special value */
     // @{
@@ -127,7 +143,7 @@ static_assert(sizeof(float16_t) == 2, "float16_t should occupy two bytes");
 }  // namespace Halide
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<Halide::float16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<Halide::float16_t>() {
     return halide_type_t(halide_type_float, 16);
 }
 
@@ -254,7 +270,7 @@ static_assert(sizeof(bfloat16_t) == 2, "bfloat16_t should occupy two bytes");
 }  // namespace Halide
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<Halide::bfloat16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<Halide::bfloat16_t>() {
     return halide_type_t(halide_type_bfloat, 16);
 }
 

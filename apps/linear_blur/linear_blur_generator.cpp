@@ -6,8 +6,8 @@
 namespace {
 
 struct LinearBlur : public Halide::Generator<LinearBlur> {
-    Input<Buffer<float>> input{"input", 3};
-    Output<Buffer<float>> output{"output", 3};
+    Input<Buffer<float, 3>> input{"input"};
+    Output<Buffer<float, 3>> output{"output"};
 
     void generate() {
         Var x("x"), y("y"), c("c");
@@ -17,7 +17,7 @@ struct LinearBlur : public Halide::Generator<LinearBlur> {
         Func srgb = linear_to_srgb::generate(this, {blurred});
         output(x, y, c) = srgb(x, y, c);
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             input.set_estimates({{0, 1536}, {0, 2560}, {0, 4}});
             output.set_estimates({{0, 1536}, {0, 2560}, {0, 4}});
         } else {

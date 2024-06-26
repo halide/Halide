@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
                     if (board1(x, y) != board2(x, y)) {
                         printf("At timestep %d, boards one and two disagree at %d, %d: %d vs %d\n",
                                i, x, y, board1(x, y), board2(x, y));
-                        return -1;
+                        return 1;
                     }
                 }
             }
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
                 if (board1(x, y) != board3(x, y)) {
                     printf("Boards one and three disagree at %d, %d: %d vs %d\n",
                            x, y, board1(x, y), board3(x, y));
-                    return -1;
+                    return 1;
                 }
             }
         }

@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != input(x, y) * 2) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), input(x, y) * 2);
-                return -1;
+                return 1;
             }
         }
     }

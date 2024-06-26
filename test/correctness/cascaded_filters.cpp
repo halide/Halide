@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
     if (err > 0.01f) {
         printf("Error too large: %f!\n", err);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

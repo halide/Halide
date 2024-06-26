@@ -3,14 +3,8 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int call_count[4];
-extern "C" DLLEXPORT int call_counter(int x, int idx) {
+extern "C" HALIDE_EXPORT_SYMBOL int call_counter(int x, int idx) {
     call_count[idx]++;
     return x;
 }
@@ -27,13 +21,13 @@ void check_counts(int a = 0, int b = 0, int c = 0, int d = 0) {
     for (int i = 0; i < 4; i++) {
         if (correct[i] != call_count[i]) {
             printf("call_count[%d] was supposed to be %d but instead is %d\n", i, correct[i], call_count[i]);
-            exit(-1);
+            exit(1);
         }
     }
 }
 
 int main(int argc, char **argv) {
-    Var x;
+    Var x, y;
     Param<bool> toggle1, toggle2;
 
     {
@@ -205,6 +199,73 @@ int main(int argc, char **argv) {
         g.compute_at(h, x);
         h.realize({10});
         check_counts(11);
+    }
+
+    for (int test_case = 0; test_case <= 2; test_case++) {
+        // Test a data-dependent stage skip. Double all values that exist in
+        // rows that do not contain any negative numbers.
+        Func input("input");
+        input(x, y) = select(y % 3 == 0 && x == 37, -1, x);
+
+        Func any_negative("any_negative");
+        const int W = 100, H = 100;
+        RDom r(0, W);
+        any_negative(y) = cast<bool>(false);
+        any_negative(y) = any_negative(y) || (input(r, y) < 0);
+
+        Func doubled("doubled");
+        doubled(x, y) = call_counter(input(x, y) * 2, 0);
+
+        Func output("output");
+        output(x, y) = select(any_negative(y), input(x, y), doubled(x, y));
+
+        input.compute_root();
+
+        if (test_case == 0) {
+            // any_negative(y) is a constant condition over this loop, so 'double' can be skipped.
+            doubled.compute_at(output, y);
+            any_negative.compute_root();
+        } else if (test_case == 1) {
+            // any_negative(y) is not constant here, so 'double' can't be skipped.
+            Var yo, yi;
+            output.split(y, yo, yi, 10);
+            doubled.compute_at(output, yo);
+            any_negative.compute_root();
+        } else {
+            // double is computed outside of the consume node for any_negative,
+            // so the condition can't be lifted because it contains a call that
+            // may change in value.
+            doubled.compute_at(output, y);
+            any_negative.compute_at(output, y);
+        }
+
+        reset_counts();
+        output.realize({W, H});
+        check_counts(test_case == 0 ? 66 * 100 : 100 * 100);
+    }
+
+    {
+        // Check the interation with storage hoisting
+
+        // This Func may or may not be loaded, depending on y
+        Func maybe_loaded("maybe_loaded");
+        maybe_loaded(x, y) = x + y;
+
+        // This Func may or may not be used, depending on y
+        Func maybe_used("maybe_used");
+        maybe_used(x, y) = maybe_loaded(x, y);
+
+        Func output("output");
+        output(x, y) = select(y % 100 == 37, 0, maybe_used(x, y));
+
+        // The allocation condition depends on y, but the actual allocation
+        // happens at the root level.
+        maybe_loaded.compute_at(output, y).hoist_storage_root();
+        maybe_used.compute_at(output, y).hoist_storage_root();
+
+        // This will fail to compile with an undefined symbol if we haven't
+        // handled the condition correctly.
+        output.realize({100, 100});
     }
 
     printf("Success!\n");

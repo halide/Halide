@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     int correct = 26;
     if (in.width() != correct) {
         printf("Width is %d instead of %d\n", in.width(), correct);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

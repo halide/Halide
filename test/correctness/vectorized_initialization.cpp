@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     f(x) = x;
     f(r) = f(r - 1) + f(r + 1);
     f.compute_root().vectorize(x, 4);
-    f.update();
+    f.update().unscheduled();
 
     g(x) = f(x);
     Buffer<int> result = g.realize({4});
@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     if (result(0) != 0 || result(1) != 2 || result(2) != 5 || result(3) != 9) {
         printf("Resulting sequence was: %d %d %d %d instead of 0 2 5 9\n",
                result(0), result(1), result(2), result(3));
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

@@ -4,11 +4,11 @@
 // subsets of a reduction domain using predicates.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_17*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_17 -std=c++11
+// g++ lesson_17*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_17 -std=c++17
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_17
 
 // On os x:
-// g++ lesson_17*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_17 -std=c++11
+// g++ lesson_17*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_17 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_17
 
 // If you have the entire Halide source tree, you can also build it by
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         Var x("x"), y("y");
         circle(x, y) = x + y;
 
-        // Say we want an update that squares the values inside a
+        // Say we want an update that multiplies by two the values inside a
         // circular region centered at (3, 3) with radius of 3. To do
         // this, we first define the minimal bounding box over the
         // circular region using an RDom.

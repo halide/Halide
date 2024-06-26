@@ -81,8 +81,8 @@ public:
     // Dim0: extent = size0, stride = 2
     // Dim1: extent = size1, stride = size0 * 2
     // Dim2: extent = 2, stride = 1 (real followed by imaginary components)
-    Input<Buffer<float>> input{"input", 3};
-    Output<Buffer<float>> output{"output", 3};
+    Input<Buffer<float, 3>> input{"input"};
+    Output<Buffer<float, 3>> output{"output"};
 
     void generate() {
         _halide_user_assert(size0 > 0) << "FFT must be at least 1D\n";

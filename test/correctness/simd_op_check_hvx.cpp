@@ -13,7 +13,7 @@
 // simd_op_check into two tests, simd_op_check.cpp and simd_op_check_hvx.cpp
 // so that the latter is free to do its own thing - for simd_op_check_hvx.cpp
 // to run any tests, all that is needed is that HL_TARGET have a HVX related
-// target feature, i.e. one of HVX, HVX_v62, HVX_v65 and HVX_v66.
+// target feature, i.e. one of HVX, HVX_v62, HVX_v65, HVX_v66 and HVX_v68.
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -23,16 +23,10 @@ public:
     SimdOpCheckHVX(Target t, int w = 768 /*256*3*/, int h = 128)
         : SimdOpCheckTest(t, w, h) {
     }
-    void setup_images() override {
-        for (auto p : image_params) {
-            p.reset();
-            // HVX needs 128 byte alignment
-            constexpr int kHostAlignmentBytes = 128;
-            p.set_host_alignment(kHostAlignmentBytes);
-            Expr min = p.dim(0).min();
-            p.dim(0).set_min((min / 128) * 128);
-        }
+    int image_param_alignment() override {
+        return 128;
     }
+
     void add_tests() override {
         Expr f32_1 = in_f32(x), f32_2 = in_f32(x + 16), f32_3 = in_f32(x + 32);
         Expr f64_1 = in_f64(x), f64_2 = in_f64(x + 16), f64_3 = in_f64(x + 32);
@@ -45,12 +39,14 @@ public:
         Expr u32_1 = in_u32(x), u32_2 = in_u32(x + 16), u32_3 = in_u32(x + 32);
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
-        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_2 < -0.3f), bool_3 = (f32_3 != -0.34f);
 
         constexpr int hvx_width = 128;
 
         int isa_version;
-        if (target.has_feature(Halide::Target::HVX_v66)) {
+        if (target.has_feature(Halide::Target::HVX_v68)) {
+            isa_version = 68;
+        } else if (target.has_feature(Halide::Target::HVX_v66)) {
             isa_version = 66;
         } else if (target.has_feature(Halide::Target::HVX_v65)) {
             isa_version = 65;
@@ -285,9 +281,13 @@ public:
         check("vpacko(v*.w,v*.w)", hvx_width / 2, in_u16(2 * x + 1));
         check("vdeal(v*,v*,r*)", hvx_width / 4, in_u32(2 * x + 1));
 
-        check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(3 * x / 2));
-        check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u16(3 * x / 2));
-        check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(3 * x / 2));
+        check("vdelta(v*,v*)", hvx_width / 1, in_u8(3 * x / 2));
+        check("vdelta(v*,v*)", hvx_width / 2, in_u16(3 * x / 2));
+        check("vdelta(v*,v*)", hvx_width / 2, in_u32(3 * x / 2));
+        check("vdelta(v*,v*)", hvx_width * 3, in_u16(x * 3));
+        check("vdelta(v*,v*)", hvx_width * 3, in_u8(x * 3));
+        check("vdelta(v*,v*)", hvx_width * 4, in_u16(x * 4));
+        check("vdelta(v*,v*)", hvx_width * 4, in_u8(x * 4));
 
         check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(u8_1));
         check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(clamp(u16_1, 0, 63)));
@@ -296,15 +296,21 @@ public:
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(u8_1));
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(clamp(u16_1, 0, 15)));
 
-        // This tests the case of vlut with > 256 elements (thus forcing us to split into
-        // multiple vluts)
-        check("vlut16(v*.b,v*.h,r*)", hvx_width * 3, in_u16(x * 3));
-        check("vlut32(v*.b,v*.b,r*)", hvx_width * 3, in_u8(x * 3));
-
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width / 1, u8_sat(i16_1));
+        check("v*.b = vpacke(v*.h,v*.h)", hvx_width / 1, u8_sat(u16_1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width / 1, i8_sat(i16_1));
         check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width / 2, u16_sat(i32_1));
+        // Due to the unavailability of an unsigned word "min" operation in HVX,
+        // we deinterlave a vector pair and then do a saturating downcast that interleaves
+        // (intrinsic:vsatuwuh). See halide.hexagon.pack_satuh.vuw in hvx_128.ll
+        // for a more detailed explanation.
+        check("v*.uh = vsat(v*.uw,v*.uw)", hvx_width / 2, u16_sat(u32_1));
         check("v*.h = vpack(v*.w,v*.w):sat", hvx_width / 2, i16_sat(i32_1));
+        // Test that bounds-inference instruction selection is working properly.
+        check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width / 1, u8_sat(u16_1 >> 1));
+        check("v*.b = vpack(v*.h,v*.h):sat", hvx_width / 1, i8_sat(u16_1 >> 1));
+        check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width / 2, u16_sat(u32_1 >> 1));
+        check("v*.h = vpack(v*.w,v*.w):sat", hvx_width / 2, i16_sat(u32_1 >> 1));
 
         // vpack doesn't interleave its inputs, which means it doesn't
         // simplify with widening. This is preferable for when the
@@ -459,7 +465,7 @@ public:
         check("vmpyi(v*.h,v*.h)", hvx_width / 2, i16_1 * i16_2);
         check("vmpyio(v*.w,v*.h)", hvx_width / 2, i32_1 * i32(i16_1));
         check("vmpyie(v*.w,v*.uh)", hvx_width / 2, i32_1 * i32(u16_1));
-        check("vmpy(v*.uh,v*.uh)", hvx_width / 2, u32_1 * u32(u16_1));
+        check("vmpyie(v*.w,v*.uh)", hvx_width / 2, u32_1 * u32(u16_1));
         check("vmpyieo(v*.h,v*.h)", hvx_width / 4, i32_1 * i32_2);
         // The inconsistency in the expected instructions here is
         // correct. For bytes, the unsigned value is first, for half
@@ -613,19 +619,16 @@ public:
         check("vrmpy(v*.ub,v*.b)", hvx_width, i16(u8_1)*i8_1 + i16(u8_2)*i8_2 + i16(u8_3)*i8_3 + i16(u8_4)*i8_4);
 #endif
 
-#if 0
-        // Temporarily disabling this vrmpy test because of https://github.com/halide/Halide/issues/4248
         // These should also work with 16 bit results. However, it is
         // only profitable to do so if the interleave simplifies away.
         Expr u8_4x4[] = {
-            in_u8(4*x + 0),
-            in_u8(4*x + 1),
-            in_u8(4*x + 2),
-            in_u8(4*x + 3),
+            in_u8(4 * x + 0),
+            in_u8(4 * x + 1),
+            in_u8(4 * x + 2),
+            in_u8(4 * x + 3),
         };
-        check("vrmpy(v*.ub,r*.b)", hvx_width/2, i16(u8_4x4[0])*127 + i16(u8_4x4[1])*126 + i16(u8_4x4[2])*-125 + i16(u8_4x4[3])*124);
+        check("vrmpy(v*.ub,r*.b)", hvx_width / 2, i16(u8_4x4[0]) * 127 + i16(u8_4x4[1]) * 126 + i16(u8_4x4[2]) * -125 + i16(u8_4x4[3]) * 124);
 
-#endif
         // Make sure it doesn't generate if the operands don't interleave.
         check("vmpa(v*.ub,r*.b)", hvx_width, i16(u8_1) * 127 + i16(u8_2) * -126 + i16(u8_3) * 125 + i16(u8_4) * 124);
 
@@ -699,9 +702,9 @@ public:
         check("v*:*.h += vtmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r3))));
         check("v*:*.w += vtmpy(v*:*.h, r*.b)", hvx_width, sum(i32(in_i16(x + r3))));
         // TODO: This should work, a common stencil
-        //check("v*:*.h += vtmpy(v*:*.b, r*.b)", hvx_width, sum(i16(in_i8(x + r3)) * mux(r3, {1, 2, 1})));
-        //check("v*:*.h += vtmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r3)) * mux(r3, {1, 2, 1})));
-        //check("v*:*.w += vtmpy(v*:*.h, r*.b)", hvx_width, sum(i32(in_i16(x + r3)) * mux(r3, {1, 2, 1})));
+        // check("v*:*.h += vtmpy(v*:*.b, r*.b)", hvx_width, sum(i16(in_i8(x + r3)) * mux(r3, {1, 2, 1})));
+        // check("v*:*.h += vtmpy(v*:*.ub, r*.b)", hvx_width, sum(i16(in_u8(x + r3)) * mux(r3, {1, 2, 1})));
+        // check("v*:*.w += vtmpy(v*:*.h, r*.b)", hvx_width, sum(i32(in_i16(x + r3)) * mux(r3, {1, 2, 1})));
     }
 
 private:
@@ -709,74 +712,14 @@ private:
 };
 
 int main(int argc, char **argv) {
-    Target host = get_host_target();
-    Target hl_target = get_target_from_environment();
-    printf("host is:      %s\n", host.to_string().c_str());
-    printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
-
-    Target t(Target::NoOS, Target::Hexagon, 32);
-    for (const auto &f : {Target::HVX,
-                          Target::HVX_v62,
-                          Target::HVX_v65,
-                          Target::HVX_v66}) {
-        if (hl_target.has_feature(f)) {
-            t.set_feature(f);
-        }
-    }
-    if (t == Target("hexagon-32-noos")) {
-        printf("[SKIP] No HVX target enabled.\n");
-        return 0;
-    }
-
-    SimdOpCheckHVX test_hvx(t);
-
-    if (argc > 1) {
-        test_hvx.filter = argv[1];
-        test_hvx.set_num_threads(1);
-    }
-
-    if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
-        test_hvx.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
-    }
-
-    const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
-    std::cout << "simd_op_check test seed: " << seed << "\n";
-    test_hvx.set_seed(seed);
-
-    // Remove some features like simd_op_check.cpp used to do.
-
-    // TODO: multithreading here is the cause of https://github.com/halide/Halide/issues/3669;
-    // the fundamental issue is that we make one set of ImageParams to construct many
-    // Exprs, then realize those Exprs on arbitrary threads; it is known that sharing
-    // one Func across multiple threads is not guaranteed to be safe, and indeed, TSAN
-    // reports data races, of which some are likely 'benign' (e.g. Function.freeze) but others
-    // are highly suspect (e.g. Function.lock_loop_levels). Since multithreading here
-    // was added just to avoid having this test be the last to finish, the expedient 'fix'
-    // for now is to remove the multithreading. A proper fix could be made by restructuring this
-    // test so that every Expr constructed for testing was guaranteed to share no Funcs
-    // (Function.deep_copy() perhaps). Of course, it would also be desirable to allow Funcs, Exprs, etc
-    // to be usable across multiple threads, but that is a major undertaking that is
-    // definitely not worthwhile for present Halide usage patterns.
-    test_hvx.set_num_threads(1);
-
-    if (argc > 2) {
-        // Don't forget: if you want to run the standard tests to a specific output
-        // directory, you'll need to invoke with the first arg enclosed
-        // in quotes (to avoid it being wildcard-expanded by the shell):
-        //
-        //    correctness_simd_op_check "*" /path/to/output
-        //
-        test_hvx.output_directory = argv[2];
-    }
-    bool success = test_hvx.test_all();
-
-    // Compile a runtime for this target, for use in the static test.
-    compile_standalone_runtime(test_hvx.output_directory + "simd_op_check_runtime.o", test_hvx.target);
-
-    if (!success) {
-        return -1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    return SimdOpCheckTest::main<SimdOpCheckHVX>(
+        argc, argv,
+        {
+            Target("hexagon-32-noos-hvx"),
+            Target("hexagon-32-noos-hvx-hvx_128"),
+            Target("hexagon-32-noos-hvx-hvx_128-hvx_v62"),
+            Target("hexagon-32-noos-hvx-hvx_128-hvx_v65"),
+            Target("hexagon-32-noos-hvx-hvx_128-hvx_v66"),
+            Target("hexagon-32-noos-hvx-hvx_128-hvx_v68"),
+        });
 }

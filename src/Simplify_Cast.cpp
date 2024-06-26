@@ -1,28 +1,25 @@
 #include "Simplify_Internal.h"
 
+#include "IRPrinter.h"
+
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
-    Expr value = mutate(op->value, bounds);
+Expr Simplify::visit(const Cast *op, ExprInfo *info) {
 
-    if (bounds) {
-        if (bounds->min_defined && !op->type.can_represent(bounds->min)) {
-            bounds->min_defined = false;
-            if (!no_overflow(op->type)) {
-                // If the type overflows, this invalidates the max too.
-                bounds->max_defined = false;
-            }
-        }
-        if (bounds->max_defined && !op->type.can_represent(bounds->max)) {
-            if (!no_overflow(op->type)) {
-                bounds->min_defined = false;
-            }
-            bounds->max_defined = false;
-        }
-        if (!op->type.can_represent(bounds->alignment.modulus) ||
-            !op->type.can_represent(bounds->alignment.remainder)) {
-            bounds->alignment = ModulusRemainder();
+    ExprInfo value_info;
+    Expr value = mutate(op->value, &value_info);
+
+    if (info) {
+        if (no_overflow(op->type) && !op->type.can_represent(value_info.bounds)) {
+            // If there's overflow in a no-overflow type (e.g. due to casting
+            // from a UInt(64) to an Int(32)), then forget everything we know
+            // about the Expr. The expression may or may not overflow. We don't
+            // know.
+            *info = ExprInfo{};
+        } else {
+            *info = value_info;
+            info->cast_to(op->type);
         }
     }
 
@@ -34,7 +31,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
         int64_t i = 0;
         uint64_t u = 0;
         if (Call::as_intrinsic(value, {Call::signed_integer_overflow})) {
-            clear_bounds_info(bounds);
+            clear_expr_info(info);
             return make_signed_integer_overflow(op->type);
         } else if (value.type() == op->type) {
             return value;
@@ -43,12 +40,13 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
                    std::isfinite(f)) {
             // float -> int
             // Recursively call mutate just to set the bounds
-            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(f)), bounds);
+            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(f)), info);
         } else if (op->type.is_uint() &&
                    const_float(value, &f) &&
                    std::isfinite(f)) {
             // float -> uint
-            return make_const(op->type, safe_numeric_cast<uint64_t>(f));
+            // Recursively call mutate just to set the bounds
+            return mutate(make_const(op->type, safe_numeric_cast<uint64_t>(f)), info);
         } else if (op->type.is_float() &&
                    const_float(value, &f)) {
             // float -> float
@@ -57,7 +55,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
                    const_int(value, &i)) {
             // int -> int
             // Recursively call mutate just to set the bounds
-            return mutate(make_const(op->type, i), bounds);
+            return mutate(make_const(op->type, i), info);
         } else if (op->type.is_uint() &&
                    const_int(value, &i)) {
             // int -> uint
@@ -65,27 +63,34 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
         } else if (op->type.is_float() &&
                    const_int(value, &i)) {
             // int -> float
-            return make_const(op->type, safe_numeric_cast<double>(i));
+            return mutate(make_const(op->type, safe_numeric_cast<double>(i)), info);
         } else if (op->type.is_int() &&
                    const_uint(value, &u) &&
                    op->type.bits() < value.type().bits()) {
-            // uint -> int
+            // uint -> int narrowing
             // Recursively call mutate just to set the bounds
-            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
+            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), info);
         } else if (op->type.is_int() &&
                    const_uint(value, &u) &&
-                   op->type.bits() >= value.type().bits()) {
-            // uint -> int with less than or equal to the number of bits
-            if (op->type.can_represent(u)) {
+                   op->type.bits() == value.type().bits()) {
+            // uint -> int reinterpret
+            // Recursively call mutate just to set the bounds
+            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), info);
+        } else if (op->type.is_int() &&
+                   const_uint(value, &u) &&
+                   op->type.bits() > value.type().bits()) {
+            // uint -> int widening
+            if (op->type.can_represent(u) || op->type.bits() < 32) {
+                // If the type can represent the value or overflow is well-defined.
                 // Recursively call mutate just to set the bounds
-                return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
+                return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), info);
             } else {
                 return make_signed_integer_overflow(op->type);
             }
         } else if (op->type.is_uint() &&
                    const_uint(value, &u)) {
             // uint -> uint
-            return make_const(op->type, u);
+            return mutate(make_const(op->type, u), info);
         } else if (op->type.is_float() &&
                    const_uint(value, &u)) {
             // uint -> float
@@ -96,7 +101,18 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
             // If this is a cast of a cast of the same type, where the
             // outer cast is narrower, the inner cast can be
             // eliminated.
-            return mutate(Cast::make(op->type, cast->value), bounds);
+            return mutate(Cast::make(op->type, cast->value), info);
+        } else if (cast &&
+                   op->type.is_int_or_uint() &&
+                   cast->type.is_int() &&
+                   cast->value.type().is_int() &&
+                   op->type.bits() >= cast->type.bits() &&
+                   cast->type.bits() >= cast->value.type().bits()) {
+            // Casting from a signed type always sign-extends, so widening
+            // partway to a signed type and the rest of the way to some other
+            // integer type is the same as just widening to that integer type
+            // directly.
+            return mutate(Cast::make(op->type, cast->value), info);
         } else if (cast &&
                    (op->type.is_int() || op->type.is_uint()) &&
                    (cast->type.is_int() || cast->type.is_uint()) &&
@@ -107,10 +123,10 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
             // inner cast's argument, the inner cast can be
             // eliminated. The inner cast is either a sign extend
             // or a zero extend, and the outer cast truncates the extended bits
-            return mutate(Cast::make(op->type, cast->value), bounds);
+            return mutate(Cast::make(op->type, cast->value), info);
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
-            return mutate(Broadcast::make(Cast::make(op->type.with_lanes(broadcast_value->value.type().lanes()), broadcast_value->value), broadcast_value->lanes), bounds);
+            return mutate(Broadcast::make(Cast::make(op->type.with_lanes(broadcast_value->value.type().lanes()), broadcast_value->value), broadcast_value->lanes), info);
         } else if (ramp_value &&
                    op->type.element_of() == Int(64) &&
                    op->value.type().element_of() == Int(32)) {
@@ -120,7 +136,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
                                      Cast::make(op->type.with_lanes(ramp_value->stride.type().lanes()),
                                                 ramp_value->stride),
                                      ramp_value->lanes),
-                          bounds);
+                          info);
         }
     }
 

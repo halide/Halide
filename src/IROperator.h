@@ -8,6 +8,7 @@
  */
 
 #include <cmath>
+#include <map>
 
 #include "Expr.h"
 #include "Tuple.h"
@@ -140,10 +141,16 @@ Expr const_true(int lanes = 1);
  * falses, if a lanes argument is given. */
 Expr const_false(int lanes = 1);
 
-/** Attempt to cast an expression to a smaller type while provably not
- * losing information. If it can't be done, return an undefined
- * Expr. */
-Expr lossless_cast(Type t, Expr e);
+/** Attempt to cast an expression to a smaller type while provably not losing
+ * information. If it can't be done, return an undefined Expr.
+ *
+ * Optionally accepts a map that gives the constant bounds of exprs already
+ * analyzed to avoid redoing work across many calls to lossless_cast. It is not
+ * safe to use this optional map in contexts where the same Expr object may
+ * take on a different value. For example:
+ * (let x = 4 in some_expr_object) + (let x = 5 in the_same_expr_object)).
+ * It is safe to use it after uniquify_variable_names has been run. */
+Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr);
 
 /** Attempt to negate x without introducing new IR and without overflow.
  * If it can't be done, return an undefined Expr. */
@@ -310,15 +317,26 @@ Expr remove_likelies(const Expr &e);
  * all calls to likely() and likely_if_innermost() removed. */
 Stmt remove_likelies(const Stmt &s);
 
+/** Return an Expr that is identical to the input Expr, but with
+ * all calls to promise_clamped() and unsafe_promise_clamped() removed. */
+Expr remove_promises(const Expr &e);
+
+/** Return a Stmt that is identical to the input Stmt, but with
+ * all calls to promise_clamped() and unsafe_promise_clamped() removed. */
+Stmt remove_promises(const Stmt &s);
+
 /** If the expression is a tag helper call, remove it and return
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
 
-/** Expressions tagged with this intrinsic are suggestions that
- * vectorization of loops with guard ifs should be implemented with
- * non-faulting predicated loads and stores, instead of scalarizing
- * an if statement. */
-Expr predicate(Expr e);
+template<typename T>
+struct is_printable_arg {
+    static constexpr bool value = std::is_convertible<T, const char *>::value ||
+                                  std::is_convertible<T, Halide::Expr>::value;
+};
+
+template<typename... Args>
+struct all_are_printable_args : meta_and<is_printable_arg<Args>...> {};
 
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
@@ -340,48 +358,11 @@ Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
-/** Compute widen(a) + widen(b). The result is always signed. */
-Expr widening_add(Expr a, Expr b);
-/** Compute widen(a) * widen(b). a and b may have different signedness. */
-Expr widening_mul(Expr a, Expr b);
-/** Compute widen(a) - widen(b). The result is always signed. */
-Expr widening_sub(Expr a, Expr b);
-/** Compute widen(a) << b. */
-Expr widening_shift_left(Expr a, Expr b);
-Expr widening_shift_left(Expr a, int b);
-/** Compute widen(a) >> b. */
-Expr widening_shift_right(Expr a, Expr b);
-Expr widening_shift_right(Expr a, int b);
-
-/** Compute saturating_add(a, (1 >> min(b, 0)) / 2) << b. When b is positive
- * indicating a left shift, the rounding term is zero. */
-Expr rounding_shift_left(Expr a, Expr b);
-Expr rounding_shift_left(Expr a, int b);
-/** Compute saturating_add(a, (1 << max(b, 0)) / 2) >> b. When b is negative
- * indicating a left shift, the rounding term is zero. */
-Expr rounding_shift_right(Expr a, Expr b);
-Expr rounding_shift_right(Expr a, int b);
-
-/** Compute saturating_narrow(widen(a) + widen(b)) */
-Expr saturating_add(Expr a, Expr b);
-/** Compute saturating_narrow(widen(a) - widen(b)) */
-Expr saturating_sub(Expr a, Expr b);
-
-/** Compute narrow((widen(a) + widen(b)) / 2) */
-Expr halving_add(Expr a, Expr b);
-/** Compute narrow((widen(a) + widen(b) + 1) / 2) */
-Expr rounding_halving_add(Expr a, Expr b);
-/** Compute narrow((widen(a) - widen(b)) / 2) */
-Expr halving_sub(Expr a, Expr b);
-/** Compute narrow((widen(a) - widen(b) + 1) / 2) */
-Expr rounding_halving_sub(Expr a, Expr b);
-
-/** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
-Expr mul_shift_right(Expr a, Expr b, Expr q);
-Expr mul_shift_right(Expr a, Expr b, int q);
-/** Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), q)) */
-Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
-Expr rounding_mul_shift_right(Expr a, Expr b, int q);
+/** Reset the counters used for random-number seeds in random_float/int/uint.
+ * (Note that the counters are incremented for each call, even if a seed is passed in.)
+ * This is used for multitarget compilation to ensure that each subtarget gets
+ * the same sequence of random numbers. */
+void reset_random_counters();
 
 }  // namespace Internal
 
@@ -827,21 +808,32 @@ inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
 /** Equivalent of ternary select(), but taking/returning tuples. If the condition is
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
-Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
-Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
+Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
+Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
 // @}
 
 /** Equivalent of multiway select(), but taking/returning tuples. If the condition is
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
 template<typename... Args>
-inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
-    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
+inline Tuple select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
 }
-
 template<typename... Args>
-inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&...args) {
-    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
+inline Tuple select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&...args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
+}
+// @}
+
+/** select applied to FuncRefs (e.g. select(x < 100, f(x), g(x))) is assumed to
+ * return an Expr. A runtime error is produced if this is applied to
+ * tuple-valued Funcs. In that case you should explicitly cast the second and
+ * third args to Tuple to remove the ambiguity. */
+// @{
+Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value);
+template<typename... Args>
+inline Expr select(const Expr &c0, const FuncRef &v0, const Expr &c1, const FuncRef &v1, Args &&...args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
 }
 // @}
 
@@ -861,6 +853,9 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
 Expr mux(const Expr &id, const std::initializer_list<Expr> &values);
 Expr mux(const Expr &id, const std::vector<Expr> &values);
 Expr mux(const Expr &id, const Tuple &values);
+Expr mux(const Expr &id, const std::initializer_list<FuncRef> &values);
+Tuple mux(const Expr &id, const std::initializer_list<Tuple> &values);
+Tuple mux(const Expr &id, const std::vector<Tuple> &values);
 // @}
 
 /** Return the sine of a floating-point expression. If the argument is
@@ -1020,10 +1015,12 @@ Expr floor(Expr x);
 Expr ceil(Expr x);
 
 /** Return the whole number closest to a floating-point expression. If the
- * argument is not floating-point, it is cast to Float(32). The return value
- * is still in floating point, despite being a whole number. On ties, we
- * follow IEEE754 conventions and round to the nearest even number. Vectorizes
- * cleanly. */
+ * argument is not floating-point, it is cast to Float(32). The return value is
+ * still in floating point, despite being a whole number. On ties, we round
+ * towards the nearest even integer. Note that this is not the same as
+ * std::round in C, which rounds away from zero. On platforms without a native
+ * instruction for this, it is emulated, and may be more expensive than
+ * cast<int>(x + 0.5f) or similar. */
 Expr round(Expr x);
 
 /** Return the integer part of a floating-point expression. If the argument is
@@ -1032,21 +1029,21 @@ Expr round(Expr x);
 Expr trunc(Expr x);
 
 /** Returns true if the argument is a Not a Number (NaN). Requires a
-  * floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_nan(Expr x);
 
 /** Returns true if the argument is Inf or -Inf. Requires a
-  * floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_inf(Expr x);
 
 /** Returns true if the argument is a finite value (ie, neither NaN nor Inf).
-  * Requires a floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * Requires a floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_finite(Expr x);
 
 /** Return the fractional part of a floating-point expression. If the argument
@@ -1059,7 +1056,7 @@ Expr reinterpret(Type t, Expr e);
 
 template<typename T>
 Expr reinterpret(Expr e) {
-    return reinterpret(type_of<T>(), e);
+    return reinterpret(type_of<T>(), std::move(e));
 }
 
 /** Return the bitwise and of two expressions (which need not have the
@@ -1468,6 +1465,16 @@ namespace Internal {
  * context-dependent, because 'value' might be statically bounded at
  * some point in the IR (e.g. due to a containing if statement), but
  * not elsewhere.
+ *
+ * This intrinsic always evaluates to its first argument. If this value is
+ * used by a side-effecting operation and it is outside the range specified
+ * by its second and third arguments, behavior is undefined. The compiler can
+ * therefore assume that the value is within the range given and optimize
+ * accordingly. Note that this permits promise_clamped to evaluate to
+ * something outside of the range, provided that this value is not used.
+ *
+ * Note that this produces an intrinsic that is marked as 'pure' and thus is
+ * allowed to be hoisted, etc.; thus, extra care must be taken with its use.
  **/
 Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 }  // namespace Internal
@@ -1550,6 +1557,137 @@ Expr gather(const Expr &e, Args &&...args) {
     return gather({e, std::forward<Args>(args)...});
 }
 // @}
+
+/** Extract a contiguous subsequence of the bits of 'e', starting at the bit
+ * index given by 'lsb', where zero is the least-significant bit, returning a
+ * value of type 't'. Any out-of-range bits requested are filled with zeros.
+ *
+ * extract_bits is especially useful when one wants to load a small vector of a
+ * wide type, and treat it as a larger vector of a smaller type. For example,
+ * loading a vector of 32 uint8 values from a uint32 Func can be done as
+ * follows:
+\code
+f8(x) = extract_bits<uint8_t>(f32(x/4), 8*(x%4));
+f8.align_bounds(x, 4).vectorize(x, 32);
+\endcode
+ * Note that the align_bounds call is critical so that the narrow Exprs are
+ * aligned to the wider Exprs. This makes the x%4 term collapse to a
+ * constant. If f8 is an output Func, then constraining the min value of x to be
+ * a known multiple of four would also be sufficient, e.g. via:
+\code
+f8.output_buffer().dim(0).set_min(0);
+\endcode
+ *
+ * See test/correctness/extract_concat_bits.cpp for a complete example. */
+// @{
+Expr extract_bits(Type t, const Expr &e, const Expr &lsb);
+
+template<typename T>
+Expr extract_bits(const Expr &e, const Expr &lsb) {
+    return extract_bits(type_of<T>(), e, lsb);
+}
+// @}
+
+/** Given a number of Exprs of the same type, concatenate their bits producing a
+ * single Expr of the same type code of the input but with more bits. The
+ * number of arguments must be a power of two.
+ *
+ * concat_bits is especially useful when one wants to treat a Func containing
+ * values of a narrow type as a Func containing fewer values of a wider
+ * type. For example, the following code reinterprets vectors of 32 uint8 values
+ * as a vector of 8 uint32s:
+ *
+\code
+f32(x) = concat_bits({f8(4*x), f8(4*x + 1), f8(4*x + 2), f8(4*x + 3)});
+f32.vectorize(x, 8);
+\endcode
+ *
+ * See test/correctness/extract_concat_bits.cpp for a complete example.
+ */
+Expr concat_bits(const std::vector<Expr> &e);
+
+/** Below is a collection of intrinsics for fixed-point programming. Most of
+ * them can be expressed via other means, but this is more natural for some, as
+ * it avoids ghost widened intermediates that don't (or shouldn't) actually show
+ * up in codegen, and doesn't rely on pattern-matching inside the compiler to
+ * succeed to get good instruction selection.
+ *
+ * The semantics of each call are defined in terms of a non-existent 'widen' and
+ * 'narrow' operators, which stand in for casts that double or halve the
+ * bit-width of a type respectively.
+ */
+
+/** Compute a + widen(b). */
+Expr widen_right_add(Expr a, Expr b);
+
+/** Compute a * widen(b). */
+Expr widen_right_mul(Expr a, Expr b);
+
+/** Compute a - widen(b). */
+Expr widen_right_sub(Expr a, Expr b);
+
+/** Compute widen(a) + widen(b). */
+Expr widening_add(Expr a, Expr b);
+
+/** Compute widen(a) * widen(b). a and b may have different signedness, in which
+ * case the result is signed. */
+Expr widening_mul(Expr a, Expr b);
+
+/** Compute widen(a) - widen(b). The result is always signed. */
+Expr widening_sub(Expr a, Expr b);
+
+/** Compute widen(a) << b. */
+//@{
+Expr widening_shift_left(Expr a, Expr b);
+Expr widening_shift_left(Expr a, int b);
+//@}
+
+/** Compute widen(a) >> b. */
+//@{
+Expr widening_shift_right(Expr a, Expr b);
+Expr widening_shift_right(Expr a, int b);
+//@}
+
+/** Compute saturating_narrow(widening_add(a, (1 >> min(b, 0)) / 2) << b).
+ * When b is positive indicating a left shift, the rounding term is zero. */
+//@{
+Expr rounding_shift_left(Expr a, Expr b);
+Expr rounding_shift_left(Expr a, int b);
+//@}
+
+/** Compute saturating_narrow(widening_add(a, (1 << max(b, 0)) / 2) >> b).
+ * When b is negative indicating a left shift, the rounding term is zero. */
+//@{
+Expr rounding_shift_right(Expr a, Expr b);
+Expr rounding_shift_right(Expr a, int b);
+//@}
+
+/** Compute saturating_narrow(widen(a) + widen(b)) */
+Expr saturating_add(Expr a, Expr b);
+
+/** Compute saturating_narrow(widen(a) - widen(b)) */
+Expr saturating_sub(Expr a, Expr b);
+
+/** Compute narrow((widen(a) + widen(b)) / 2) */
+Expr halving_add(Expr a, Expr b);
+
+/** Compute narrow((widen(a) + widen(b) + 1) / 2) */
+Expr rounding_halving_add(Expr a, Expr b);
+
+/** Compute narrow((widen(a) - widen(b)) / 2) */
+Expr halving_sub(Expr a, Expr b);
+
+/** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
+//@{
+Expr mul_shift_right(Expr a, Expr b, Expr q);
+Expr mul_shift_right(Expr a, Expr b, int q);
+//@}
+
+/** Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), q)) */
+//@{
+Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
+Expr rounding_mul_shift_right(Expr a, Expr b, int q);
+//@}
 
 }  // namespace Halide
 

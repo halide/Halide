@@ -54,6 +54,9 @@ public:
      * the vector being outermost. */
     ReductionDomain(const std::vector<ReductionVariable> &domain);
 
+    /** Construct a reduction domain from deserialization */
+    ReductionDomain(const std::vector<ReductionVariable> &domain, const Expr &predicate, bool frozen);
+
     /** Return a deep copy of this ReductionDomain. */
     ReductionDomain deep_copy() const;
 

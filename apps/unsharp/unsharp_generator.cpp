@@ -6,8 +6,8 @@ class Unsharp : public Halide::Generator<Unsharp> {
 public:
     GeneratorParam<float> sigma{"sigma", 1.5f};
 
-    Input<Buffer<float>> input{"input", 3};
-    Output<Buffer<float>> output{"output", 3};
+    Input<Buffer<float, 3>> input{"input"};
+    Output<Buffer<float, 3>> output{"output"};
 
     void generate() {
         Var x("x"), y("y"), c("c");
@@ -61,7 +61,7 @@ public:
         }
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             // Some Intel Mac Minis have GPUs that require tile sizes smaller than 32x32
             // for this pipeline because they have too few registers. Drop to 16x16 to
             // avoid unexpected crashes in CI.

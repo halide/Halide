@@ -94,13 +94,14 @@ struct DeviceArgument {
  * produce a vector of DeviceArgument objects. */
 class HostClosure : public Closure {
 public:
-    HostClosure(const Stmt &s, const std::string &loop_variable = "");
+    HostClosure() = default;
 
     /** Get a description of the captured arguments. */
     std::vector<DeviceArgument> arguments();
 
 protected:
     using Internal::Closure::visit;
+
     void visit(const For *loop) override;
     void visit(const Call *op) override;
 };

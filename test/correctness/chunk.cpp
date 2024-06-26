@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
         for (int j = 0; j < 32; j++) {
             if (im(i, j) != 2 * i) {
                 printf("im[%d, %d] = %d (expected %d)\n", i, j, im(i, j), 2 * i);
-                return -1;
+                return 1;
             }
         }
     }

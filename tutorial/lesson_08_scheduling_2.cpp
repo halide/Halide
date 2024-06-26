@@ -1,11 +1,11 @@
 // Halide tutorial lesson 8: Scheduling multi-stage pipelines
 
 // On linux, you can compile and run it like so:
-// g++ lesson_08*.cpp -g -std=c++11 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_08
+// g++ lesson_08*.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_08
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_08
 
 // On os x:
-// g++ lesson_08*.cpp -g -std=c++11 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_08
+// g++ lesson_08*.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_08
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_08
 
 // If you have the entire Halide source tree, you can also build it by
@@ -596,12 +596,8 @@ int main(int argc, char **argv) {
 
         // For every strip of 16 scanlines (this loop is parallel in
         // the Halide version)
-        for (int yo = 0; yo < 160 / 16 + 1; yo++) {
-
-            // 16 doesn't divide 160, so push the last slice upwards
-            // to fit within [0, 159] (see lesson 05).
+        for (int yo = 0; yo < 160 / 16; yo++) {
             int y_base = yo * 16;
-            if (y_base > 160 - 16) y_base = 160 - 16;
 
             // Allocate a two-scanline circular buffer for the producer
             float producer_storage[2][161];

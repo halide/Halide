@@ -4,11 +4,11 @@
 // generate code for any platform from any platform.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_11*.cpp -g -std=c++11 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_11
+// g++ lesson_11*.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_11
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_11
 
 // On os x:
-// g++ lesson_11*.cpp -g -std=c++11 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_11
+// g++ lesson_11*.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_11
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_11
 
 // If you have the entire Halide source tree, you can also build it by
@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
     // toolchain. There are several small examples of this in the
     // Halide repository under the apps folder. See HelloAndroid and
     // HelloiOS here:
-    // https://github.com/halide/Halide/tree/master/apps/
+    // https://github.com/halide/Halide/tree/main/apps/
     printf("Success!\n");
     return 0;
 }

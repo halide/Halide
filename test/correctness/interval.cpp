@@ -9,7 +9,7 @@ void check(Interval result, Interval expected, int line) {
         std::cerr << "Interval test on line " << line << " failed\n"
                   << "  Expected [" << expected.min << ", " << expected.max << "]\n"
                   << "  Got      [" << result.min << ", " << result.max << "]\n";
-        exit(-1);
+        exit(1);
     }
 }
 

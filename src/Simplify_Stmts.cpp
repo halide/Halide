@@ -63,7 +63,11 @@ Stmt Simplify::visit(const IfThenElse *op) {
     if (else_unreachable) {
         return then_case;
     } else if (then_unreachable) {
-        return else_case;
+        if (else_case.defined()) {
+            return else_case;
+        } else {
+            return Evaluate::make(0);
+        }
     }
 
     if (is_no_op(else_case)) {
@@ -199,12 +203,12 @@ Stmt Simplify::visit(const AssertStmt *op) {
 }
 
 Stmt Simplify::visit(const For *op) {
-    ExprInfo min_bounds, extent_bounds;
-    Expr new_min = mutate(op->min, &min_bounds);
+    ExprInfo min_info, extent_info;
+    Expr new_min = mutate(op->min, &min_info);
     if (in_unreachable) {
         return Evaluate::make(new_min);
     }
-    Expr new_extent = mutate(op->extent, &extent_bounds);
+    Expr new_extent = mutate(op->extent, &extent_info);
     if (in_unreachable) {
         return Evaluate::make(new_extent);
     }
@@ -213,32 +217,49 @@ Stmt Simplify::visit(const For *op) {
                                          (in_vector_loop ||
                                           op->for_type == ForType::Vectorized));
 
-    bool bounds_tracked = false;
-    if (min_bounds.min_defined || (min_bounds.max_defined && extent_bounds.max_defined)) {
-        min_bounds.max += extent_bounds.max - 1;
-        min_bounds.max_defined &= extent_bounds.max_defined;
-        min_bounds.alignment = ModulusRemainder{};
-        bounds_tracked = true;
-        bounds_and_alignment_info.push(op->name, min_bounds);
-    }
-
-    Stmt new_body;
-    {
-        // If we're in the loop, the extent must be greater than 0.
-        ScopedFact fact = scoped_truth(0 < new_extent);
-        new_body = mutate(op->body);
-    }
-    if (in_unreachable) {
-        if (extent_bounds.min_defined && extent_bounds.min >= 1) {
-            // If we know the loop executes once, the code that runs this loop is unreachable.
-            return new_body;
-        }
-        in_unreachable = false;
+    Expr extent_positive = mutate(0 < new_extent, nullptr);
+    if (is_const_zero(extent_positive)) {
+        // This loop never runs
         return Evaluate::make(0);
     }
 
-    if (bounds_tracked) {
-        bounds_and_alignment_info.pop(op->name);
+    ExprInfo loop_var_info;
+    // Deduce bounds for the loop var that are true for any code than runs
+    // inside the loop body. Code in the inner loop only runs if the extent is
+    // at least one, so we can throw a max around the extent bounds.
+
+    loop_var_info.bounds =
+        ConstantInterval::make_union(min_info.bounds,
+                                     min_info.bounds + max(extent_info.bounds, 1) - 1);
+    Stmt new_body;
+    {
+        ScopedBinding<ExprInfo> bind_if((loop_var_info.bounds.max_defined ||
+                                         loop_var_info.bounds.min_defined),
+                                        bounds_and_alignment_info,
+                                        op->name,
+                                        loop_var_info);
+
+        // If we're in the loop, the extent must be greater than 0.
+        ScopedFact fact_extent_positive = scoped_truth(extent_positive);
+
+        // The loop variable will never exceed the loop bound.
+        Expr loop_var = Variable::make(Int(32), op->name);
+        Expr new_max = mutate(new_min + new_extent, nullptr);
+        ScopedFact fact_loop_var_less_than_extent = scoped_truth(loop_var < new_max);
+
+        ScopedFact fact_loop_var_ge_than_min = scoped_truth(new_min <= loop_var);
+
+        new_body = mutate(op->body);
+    }
+
+    if (in_unreachable) {
+        // We found that the body of this loop is unreachable when recursively
+        // mutating it, so we can remove the loop. Additionally, if we know the
+        // extent is greater than zero, then the code *outside* the loop must be
+        // unreachable too, because if it weren't, it'd run the unreachable body
+        // at least once.
+        in_unreachable = extent_info.bounds > 0;
+        return Evaluate::make(0);
     }
 
     if (const Acquire *acquire = new_body.as<Acquire>()) {
@@ -250,58 +271,40 @@ Stmt Simplify::visit(const For *op) {
 
     if (is_no_op(new_body)) {
         return new_body;
-    } else if (extent_bounds.max_defined &&
-               extent_bounds.max <= 0) {
+    } else if (extent_info.bounds <= 0) {
         return Evaluate::make(0);
-    } else if (extent_bounds.max_defined &&
-               extent_bounds.max <= 1 &&
+    } else if (extent_info.bounds <= 1 &&
                op->device_api == DeviceAPI::None) {
+        // Loop body runs at most once
         Stmt s = LetStmt::make(op->name, new_min, new_body);
-        if (extent_bounds.min < 1) {
+        if (extent_info.bounds.contains(0)) {
+            // Loop body might not run at all
             s = IfThenElse::make(0 < new_extent, s);
         }
         return mutate(s);
     } else if (!stmt_uses_var(new_body, op->name) && !is_const_zero(op->min)) {
-        return For::make(op->name, make_zero(Int(32)), new_extent, op->for_type, op->device_api, new_body);
+        return For::make(op->name, make_zero(Int(32)), new_extent, op->for_type, op->partition_policy, op->device_api, new_body);
     } else if (op->min.same_as(new_min) &&
                op->extent.same_as(new_extent) &&
                op->body.same_as(new_body)) {
         return op;
     } else {
-        return For::make(op->name, new_min, new_extent, op->for_type, op->device_api, new_body);
+        return For::make(op->name, new_min, new_extent, op->for_type, op->partition_policy, op->device_api, new_body);
     }
 }
 
 Stmt Simplify::visit(const Provide *op) {
     found_buffer_reference(op->name, op->args.size());
 
-    vector<Expr> new_args(op->args.size());
-    vector<Expr> new_values(op->values.size());
-    bool changed = false;
-
     // Mutate the args
-    for (size_t i = 0; i < op->args.size(); i++) {
-        const Expr &old_arg = op->args[i];
-        Expr new_arg = mutate(old_arg, nullptr);
-        if (!new_arg.same_as(old_arg)) {
-            changed = true;
-        }
-        new_args[i] = new_arg;
-    }
+    auto [new_args, changed_args] = mutate_with_changes(op->args);
+    auto [new_values, changed_values] = mutate_with_changes(op->values);
+    Expr new_predicate = mutate(op->predicate, nullptr);
 
-    for (size_t i = 0; i < op->values.size(); i++) {
-        const Expr &old_value = op->values[i];
-        Expr new_value = mutate(old_value, nullptr);
-        if (!new_value.same_as(old_value)) {
-            changed = true;
-        }
-        new_values[i] = new_value;
-    }
-
-    if (!changed) {
+    if (!(changed_args || changed_values) && new_predicate.same_as(op->predicate)) {
         return op;
     } else {
-        return Provide::make(op->name, new_values, new_args);
+        return Provide::make(op->name, new_values, new_args, new_predicate);
     }
 }
 
@@ -314,20 +317,15 @@ Stmt Simplify::visit(const Store *op) {
     ExprInfo index_info;
     Expr index = mutate(op->index, &index_info);
 
-    // If the store is fully out of bounds, drop it.
+    // If the store is fully unconditional and out of bounds, drop it.
     // This should only occur inside branches that make the store unreachable,
     // but perhaps the branch was hard to prove constant true or false. This
     // provides an alternative mechanism to simplify these unreachable stores.
     string alloc_extent_name = op->name + ".total_extent_bytes";
-    if (bounds_and_alignment_info.contains(alloc_extent_name)) {
-        if (index_info.max_defined && index_info.max < 0) {
-            in_unreachable = true;
-            return Evaluate::make(unreachable());
-        }
-        const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
-        if (alloc_info.max_defined && index_info.min_defined) {
-            int index_min_bytes = index_info.min * op->value.type().bytes();
-            if (index_min_bytes > alloc_info.max) {
+    if (is_const_one(op->predicate)) {
+        if (const auto *alloc_info = bounds_and_alignment_info.find(alloc_extent_name)) {
+            if (index_info.bounds < 0 ||
+                index_info.bounds * op->value.type().bytes() > alloc_info->bounds) {
                 in_unreachable = true;
                 return Evaluate::make(unreachable());
             }
@@ -342,6 +340,10 @@ Stmt Simplify::visit(const Store *op) {
 
     const Load *load = value.as<Load>();
     const Broadcast *scalar_pred = predicate.as<Broadcast>();
+    if (scalar_pred && !scalar_pred->value.type().is_scalar()) {
+        // Nested vectorization
+        scalar_pred = nullptr;
+    }
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
@@ -365,33 +367,14 @@ Stmt Simplify::visit(const Allocate *op) {
     std::vector<Expr> new_extents;
     bool all_extents_unmodified = true;
     ExprInfo total_extent_info;
-    total_extent_info.min_defined = true;
-    total_extent_info.max_defined = true;
-    total_extent_info.min = 1;
-    total_extent_info.max = 1;
+    total_extent_info.bounds = ConstantInterval::single_point(op->type.bytes());
     for (size_t i = 0; i < op->extents.size(); i++) {
         ExprInfo extent_info;
         new_extents.push_back(mutate(op->extents[i], &extent_info));
         all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
-        if (extent_info.min_defined) {
-            total_extent_info.min *= extent_info.min;
-        } else {
-            total_extent_info.min_defined = false;
-        }
-        if (extent_info.max_defined) {
-            total_extent_info.max *= extent_info.max;
-        } else {
-            total_extent_info.max_defined = false;
-        }
+        total_extent_info.bounds *= extent_info.bounds;
     }
-    if (total_extent_info.min_defined) {
-        total_extent_info.min *= op->type.bytes();
-        total_extent_info.min -= 1;
-    }
-    if (total_extent_info.max_defined) {
-        total_extent_info.max *= op->type.bytes();
-        total_extent_info.max -= 1;
-    }
+    total_extent_info.bounds -= 1;
 
     ScopedBinding<ExprInfo> b(bounds_and_alignment_info, op->name + ".total_extent_bytes", total_extent_info);
 
@@ -409,7 +392,7 @@ Stmt Simplify::visit(const Allocate *op) {
         // else case must not use it.
         Stmt stmt = Allocate::make(op->name, op->type, op->memory_type,
                                    new_extents, condition, body_if->then_case,
-                                   new_expr, op->free_function);
+                                   new_expr, op->free_function, op->padding);
         return IfThenElse::make(body_if->condition, stmt, body_if->else_case);
     } else if (all_extents_unmodified &&
                body.same_as(op->body) &&
@@ -419,7 +402,7 @@ Stmt Simplify::visit(const Allocate *op) {
     } else {
         return Allocate::make(op->name, op->type, op->memory_type,
                               new_extents, condition, body,
-                              new_expr, op->free_function);
+                              new_expr, op->free_function, op->padding);
     }
 }
 
@@ -567,10 +550,10 @@ Stmt Simplify::visit(const Block *op) {
                equal(if_first->condition, if_next->condition) &&
                is_pure(if_first->condition)) {
         // Two ifs with matching conditions.
-        Stmt then_case = mutate(Block::make(if_first->then_case, if_next->then_case));
+        Stmt then_case = Block::make(if_first->then_case, if_next->then_case);
         Stmt else_case;
         if (if_first->else_case.defined() && if_next->else_case.defined()) {
-            else_case = mutate(Block::make(if_first->else_case, if_next->else_case));
+            else_case = Block::make(if_first->else_case, if_next->else_case);
         } else if (if_first->else_case.defined()) {
             // We already simplified the body of the ifs.
             else_case = if_first->else_case;
@@ -581,7 +564,9 @@ Stmt Simplify::visit(const Block *op) {
         if (if_rest.defined()) {
             result = Block::make(result, if_rest);
         }
-        return result;
+        // We must mutate the entire IfThenElse block without first mutating the
+        // branches to compute reachability accurately.
+        return mutate(result);
     } else if (if_first &&
                if_next &&
                !if_next->else_case.defined() &&
@@ -592,15 +577,18 @@ Stmt Simplify::visit(const Block *op) {
         // the first condition.  The second if can be nested
         // inside the first one, because if it's true the
         // first one must also be true.
-        Stmt then_case = mutate(Block::make(if_first->then_case, if_next));
+        Stmt then_case = Block::make(if_first->then_case, if_next);
         Stmt else_case = if_first->else_case;
         Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
         if (if_rest.defined()) {
             result = Block::make(result, if_rest);
         }
-        return result;
+        // As above, we must mutate the entire IfThenElse block without first
+        // mutating the branches to compute reachability accurately.
+        return mutate(result);
     } else if (if_first &&
                if_next &&
+               !if_next->else_case.defined() &&
                is_pure(if_first->condition) &&
                is_pure(if_next->condition) &&
                is_const_one(mutate(!(if_first->condition && if_next->condition), nullptr))) {
@@ -617,7 +605,7 @@ Stmt Simplify::visit(const Block *op) {
         if (if_rest.defined()) {
             result = Block::make(result, if_rest);
         }
-        return result;
+        return mutate(result);
     } else if (op->first.same_as(first) &&
                op->rest.same_as(rest)) {
         return op;
@@ -627,11 +615,8 @@ Stmt Simplify::visit(const Block *op) {
 }
 
 Stmt Simplify::visit(const Realize *op) {
-    Region new_bounds;
-    bool bounds_changed;
-
     // Mutate the bounds
-    std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds, nullptr);
+    auto [new_bounds, bounds_changed] = mutate_region(this, op->bounds, nullptr);
 
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition, nullptr);
@@ -653,11 +638,8 @@ Stmt Simplify::visit(const Prefetch *op) {
         return body;
     }
 
-    Region new_bounds;
-    bool bounds_changed;
-
     // Mutate the bounds
-    std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds, nullptr);
+    auto [new_bounds, bounds_changed] = mutate_region(this, op->bounds, nullptr);
 
     if (!bounds_changed &&
         body.same_as(op->body) &&
@@ -710,6 +692,15 @@ Stmt Simplify::visit(const Atomic *op) {
         return Atomic::make(op->producer_name,
                             op->mutex_name,
                             std::move(body));
+    }
+}
+
+Stmt Simplify::visit(const HoistedStorage *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return HoistedStorage::make(op->name, body);
     }
 }
 

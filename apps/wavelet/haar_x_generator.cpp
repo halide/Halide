@@ -8,8 +8,8 @@ Halide::Var x("x"), y("y"), c("c");
 
 class haar_x : public Halide::Generator<haar_x> {
 public:
-    Input<Buffer<float>> in_{"in", 2};
-    Output<Buffer<float>> out_{"out", 3};
+    Input<Buffer<float, 2>> in_{"in"};
+    Output<Buffer<float, 3>> out_{"out"};
 
     void generate() {
         Func in = Halide::BoundaryConditions::repeat_edge(in_);

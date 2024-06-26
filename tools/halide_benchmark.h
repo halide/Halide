@@ -122,6 +122,15 @@ struct BenchmarkConfig {
     // Set an absolute upper time limit. Defaults to min_time * 4.
     double max_time{0.1 * 4};
 
+    // Maximum value for the computed iters-per-sample.
+    // We need this for degenerate cases in which we have a
+    // very coarse-grained timer (e.g. some Emscripten/browser environments),
+    // and a very short operation being benchmarked; in these cases,
+    // we can get timings that are effectively zero, which can explode
+    // the predicted next-iter into ~100B or more. It should be unusual
+    // that client code needs to adjust this value.
+    uint64_t max_iters_per_sample{1000000};
+
     // Terminate when the relative difference between the best runtime
     // seen and the third-best runtime seen is no more than
     // this. Controls accuracy. The closer to zero this gets the more
@@ -179,13 +188,31 @@ inline BenchmarkResult benchmark(const std::function<void()> &op, const Benchmar
             total_time += times[i] * iters_per_sample;
         }
         std::sort(times, times + kMinSamples);
-        if (times[0] * iters_per_sample * kMinSamples >= min_time) {
+
+        // Any time result <= to this is considered 'zero' here.
+        const double kTimeEpsilon = 1e-9;
+        if (times[0] < kTimeEpsilon) {
+            // If the fastest time is tiny, then trying to use it to predict next_iters
+            // can just explode into something unpredictably huge, which could take far too
+            // long to complete. Just double iters_per_sample and try again (or terminate if
+            // we're over the max).
+            iters_per_sample *= 2;
+        } else {
+            const double time_factor = std::max(times[0] * kMinSamples, kTimeEpsilon);
+            if (time_factor * iters_per_sample >= min_time) {
+                break;
+            }
+            // Use an estimate based on initial times to converge faster.
+            const double next_iters = std::max(min_time / time_factor,
+                                               iters_per_sample * 2.0);
+            iters_per_sample = (uint64_t)(next_iters + 0.5);
+        }
+
+        // Ensure we never explode beyond the max.
+        if (iters_per_sample >= config.max_iters_per_sample) {
+            iters_per_sample = config.max_iters_per_sample;
             break;
         }
-        // Use an estimate based on initial times to converge faster.
-        double next_iters = std::max(min_time / std::max(times[0] * kMinSamples, 1e-9),
-                                     iters_per_sample * 2.0);
-        iters_per_sample = (uint64_t)(next_iters + 0.5);
     }
 
     // - Keep taking samples until we are accurate enough (even if we run over min_time).

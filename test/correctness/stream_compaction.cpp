@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < result.width(); i++) {
         if (result(i) != next) {
             printf("result(%d) = %d instead of %d\n", i, result(i), next);
-            return -1;
+            return 1;
         } else {
             do {
                 next++;

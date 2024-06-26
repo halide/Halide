@@ -56,7 +56,7 @@ declare <4 x float> @llvm.arm.neon.vrsqrts.v4f32(<4 x float> %x, <4 x float> %y)
 declare <2 x float> @llvm.arm.neon.vrsqrts.v2f32(<2 x float> %x, <2 x float> %y) nounwind readnone;
 
 define weak_odr float @fast_inverse_f32(float %x) nounwind alwaysinline {
-       %vec = insertelement <2 x float> undef, float %x, i32 0
+       %vec = insertelement <2 x float> poison, float %x, i32 0
        %approx = tail call <2 x float> @fast_inverse_f32x2(<2 x float> %vec)
        %result = extractelement <2 x float> %approx, i32 0
        ret float %result
@@ -77,7 +77,7 @@ define weak_odr <4 x float> @fast_inverse_f32x4(<4 x float> %x) nounwind alwaysi
 }
 
 define weak_odr float @fast_inverse_sqrt_f32(float %x) nounwind alwaysinline {
-       %vec = insertelement <2 x float> undef, float %x, i32 0
+       %vec = insertelement <2 x float> poison, float %x, i32 0
        %approx = tail call <2 x float> @fast_inverse_sqrt_f32x2(<2 x float> %vec)
        %result = extractelement <2 x float> %approx, i32 0
        ret float %result

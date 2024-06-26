@@ -43,7 +43,7 @@ SpacesBeforeTrailingComments: 2
 SpacesInAngles: false
 SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
-Standard: c++11
+Standard: c++17
 TabWidth: 8
 UseTab: Never
 ...

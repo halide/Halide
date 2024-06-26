@@ -3,44 +3,34 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
-    ExprInfo a_bounds, b_bounds;
-    Expr a = mutate(op->a, &a_bounds);
-    Expr b = mutate(op->b, &b_bounds);
+Expr Simplify::visit(const Min *op, ExprInfo *info) {
+    ExprInfo a_info, b_info;
+    Expr a = mutate(op->a, &a_info);
+    Expr b = mutate(op->b, &b_info);
 
-    if (bounds) {
-        bounds->min_defined = a_bounds.min_defined && b_bounds.min_defined;
-        bounds->max_defined = a_bounds.max_defined || b_bounds.max_defined;
-        bounds->min = std::min(a_bounds.min, b_bounds.min);
-        if (a_bounds.max_defined && b_bounds.max_defined) {
-            bounds->max = std::min(a_bounds.max, b_bounds.max);
-        } else if (a_bounds.max_defined) {
-            bounds->max = a_bounds.max;
-        } else {
-            bounds->max = b_bounds.max;
-        }
-        bounds->alignment = ModulusRemainder::unify(a_bounds.alignment, b_bounds.alignment);
-        bounds->trim_bounds_using_alignment();
+    if (info) {
+        info->bounds = min(a_info.bounds, b_info.bounds);
+        info->alignment = ModulusRemainder::unify(a_info.alignment, b_info.alignment);
+        info->trim_bounds_using_alignment();
     }
 
     // Early out when the bounds tells us one side or the other is smaller
-    if (a_bounds.max_defined && b_bounds.min_defined && a_bounds.max <= b_bounds.min) {
-        if (const Call *call = a.as<Call>()) {
+    auto strip_likely = [](const Expr &e) {
+        if (const Call *call = e.as<Call>()) {
             if (call->is_intrinsic(Call::likely) ||
                 call->is_intrinsic(Call::likely_if_innermost)) {
                 return call->args[0];
             }
         }
-        return a;
+        return e;
+    };
+
+    // Early out when the bounds tells us one side or the other is smaller
+    if (a_info.bounds >= b_info.bounds) {
+        return strip_likely(b);
     }
-    if (b_bounds.max_defined && a_bounds.min_defined && b_bounds.max <= a_bounds.min) {
-        if (const Call *call = b.as<Call>()) {
-            if (call->is_intrinsic(Call::likely) ||
-                call->is_intrinsic(Call::likely_if_innermost)) {
-                return call->args[0];
-            }
-        }
-        return b;
+    if (b_info.bounds >= a_info.bounds) {
+        return strip_likely(a);
     }
 
     if (may_simplify(op->type)) {
@@ -48,7 +38,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
         // Order commutative operations by node type
         if (should_commute(a, b)) {
             std::swap(a, b);
-            std::swap(a_bounds, b_bounds);
+            std::swap(a_info, b_info);
         }
 
         int lanes = op->type.lanes();
@@ -97,6 +87,11 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(max(x, y), min(z, x)), b) ||
              rewrite(min(max(x, y), min(z, y)), b) ||
 
+             rewrite(min(select(x, min(z, y), w), y), min(select(x, z, w), y)) ||
+             rewrite(min(select(x, min(z, y), w), z), min(select(x, y, w), z)) ||
+             rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
+             rewrite(min(select(x, w, min(z, y)), z), min(select(x, w, y), z)) ||
+
              rewrite(min(intrin(Call::likely, x), x), b) ||
              rewrite(min(x, intrin(Call::likely, x)), a) ||
              rewrite(min(intrin(Call::likely_if_innermost, x), x), b) ||
@@ -127,6 +122,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(x, max(y, x) + c0), a, 0 <= c0) ||
                rewrite(min(max(x, y) + c0, x), b, 0 <= c0) ||
                rewrite(min(max(x, y) + c0, y), b, 0 <= c0) ||
+               rewrite(min(max(x, y + c0), y), y, c0 > 0) ||
 
                (no_overflow_int(op->type) &&
                 (rewrite(min(max(c0 - x, x), c1), b, 2*c1 <= c0 + 1) ||
@@ -187,6 +183,12 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
              rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
 
+             // Hoist shuffles. The Shuffle visitor wants to sink
+             // extract_elements to the leaves, and those count as degenerate
+             // slices, so only hoist shuffles that grab more than one lane.
+             rewrite(min(slice(x, c0, c1, c2), slice(y, c0, c1, c2)), slice(min(x, y), c0, c1, c2), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+             rewrite(min(slice(x, c0, c1, c2), min(slice(y, c0, c1, c2), z)), min(slice(min(x, y), c0, c1, c2), z), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+             rewrite(min(slice(x, c0, c1, c2), min(z, slice(y, c0, c1, c2))), min(slice(min(x, y), c0, c1, c2), z), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
              (no_overflow(op->type) &&
               (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
                rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||
@@ -289,6 +291,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                // Required for nested GuardWithIf tilings
                rewrite(min((min(((y + c0)/c1), x)*c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
                rewrite(min((min(((y + c0)/c1), x)*c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
+               rewrite(min(min(((y + c0)/c1), x)*c1, y), min(x * c1, y), c1 > 0 && c1 <= c0 + 1) ||
 
                rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
                rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
@@ -300,21 +303,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
                false )))) {
 
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         // clang-format on
-    }
-
-    const Shuffle *shuffle_a = a.as<Shuffle>();
-    const Shuffle *shuffle_b = b.as<Shuffle>();
-    if (shuffle_a && shuffle_b &&
-        shuffle_a->is_slice() &&
-        shuffle_b->is_slice()) {
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return hoist_slice_vector<Min>(op);
-        } else {
-            return hoist_slice_vector<Min>(Min::make(a, b));
-        }
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {

@@ -88,7 +88,7 @@ void split_predicate_test() {
         check((x < y) && ((w == 1) || ((x == 10) && (y == z))), expected);
     }
 
-    std::cout << "Split predicate test passed" << std::endl;
+    std::cout << "Split predicate test passed\n";
 }
 
 struct ReductionDomainContents {
@@ -145,6 +145,13 @@ void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainCon
 ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain)
     : contents(new ReductionDomainContents) {
     contents->domain = domain;
+}
+
+ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain, const Expr &predictate, bool frozen)
+    : contents(new ReductionDomainContents) {
+    contents->domain = domain;
+    contents->predicate = predictate;
+    contents->frozen = frozen;
 }
 
 ReductionDomain ReductionDomain::deep_copy() const {

@@ -156,7 +156,13 @@ halide_buffer_t *_halide_buffer_crop(void *user_context,
     dst->device_interface = nullptr;
     dst->device = 0;
     if (src->device_interface) {
-        src->device_interface->device_crop(user_context, src, dst);
+        if (src->device_interface->device_crop(user_context, src, dst) != 0) {
+            // This is uncommon: either a runtime error, or a backend that
+            // doesn't replace the default definition of device_crop. But it
+            // does happen, so let's return a nullptr here, and require the caller
+            // to check the result.
+            return nullptr;
+        }
     }
     return dst;
 }
@@ -168,6 +174,7 @@ halide_buffer_t *_halide_buffer_crop(void *user_context,
 HALIDE_BUFFER_HELPER_ATTRS
 int _halide_buffer_retire_crop_after_extern_stage(void *user_context,
                                                   void *obj) {
+    int result;
     halide_buffer_t **buffers = (halide_buffer_t **)obj;
     halide_buffer_t *crop = buffers[0];
     halide_buffer_t *parent = buffers[1];
@@ -178,15 +185,24 @@ int _halide_buffer_retire_crop_after_extern_stage(void *user_context,
             // stage. It only represents the cropped region, so we
             // can't just give it to the parent.
             if (crop->device_dirty()) {
-                crop->device_interface->copy_to_host(user_context, crop);
+                result = crop->device_interface->copy_to_host(user_context, crop);
+                if (result != 0) {
+                    return result;
+                }
             }
-            crop->device_interface->device_free(user_context, crop);
+            result = crop->device_interface->device_free(user_context, crop);
+            if (result != 0) {
+                return result;
+            }
         } else {
             // We are a crop of an existing device allocation.
             if (crop->device_dirty()) {
                 parent->set_device_dirty();
             }
-            crop->device_interface->device_release_crop(user_context, crop);
+            result = crop->device_interface->device_release_crop(user_context, crop);
+            if (result != 0) {
+                return result;
+            }
         }
     }
     if (crop->host_dirty()) {
@@ -209,8 +225,13 @@ int _halide_buffer_retire_crops_after_extern_stage(void *user_context,
 HALIDE_BUFFER_HELPER_ATTRS
 halide_buffer_t *_halide_buffer_set_bounds(halide_buffer_t *buf,
                                            int dim, int min, int extent) {
-    buf->dim[dim].min = min;
-    buf->dim[dim].extent = extent;
+    // This can be called with the result of _halide_buffer_crop(), which
+    // can return nullptr if an error occurs -- so don't crash, just propagate
+    // the nullptr result to our caller.
+    if (buf != nullptr) {
+        buf->dim[dim].min = min;
+        buf->dim[dim].extent = extent;
+    }
     return buf;
 }
 }

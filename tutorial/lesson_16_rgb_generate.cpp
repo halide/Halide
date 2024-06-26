@@ -6,7 +6,7 @@
 
 // On linux or os x, you can compile and run it like so:
 
-// g++ lesson_16_rgb_generate.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++11 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_16_generate
+// g++ lesson_16_rgb_generate.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_16_generate
 // export LD_LIBRARY_PATH=<path/to/libHalide.so>   # For linux
 // export DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> # For OS X
 // ./lesson_16_generate -g brighten -o . -f brighten_planar      target=host layout=planar
@@ -33,7 +33,7 @@ public:
     // We declare a three-dimensional input image. The first two
     // dimensions will be x, and y, and the third dimension will be
     // the color channel.
-    Input<Buffer<uint8_t>> input{"input", 3};
+    Input<Buffer<uint8_t, 3>> input{"input"};
 
     // We will compile this generator in several ways to accept
     // several different memory layouts for the input and output. This
@@ -56,7 +56,7 @@ public:
     Input<uint8_t> offset{"offset"};
 
     // Declare our outputs
-    Output<Buffer<uint8_t>> brighter{"brighter", 3};
+    Output<Buffer<uint8_t, 3>> brighter{"brighter"};
 
     // Declare our Vars
     Var x, y, c;

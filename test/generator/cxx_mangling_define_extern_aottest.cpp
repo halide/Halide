@@ -11,13 +11,13 @@
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> input(10);
+    Buffer<uint8_t, 1> input(10);
 
     for (int32_t i = 0; i < 10; i++) {
         input(i) = i;
     }
 
-    Buffer<double> result_1(10), result_2(10), result_3(10);
+    Buffer<double, 1> result_1(10), result_2(10), result_3(10);
 
     const void *user_context = nullptr;
     int ptr_arg = 42;

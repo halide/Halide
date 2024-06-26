@@ -246,9 +246,10 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
             return "H";
         case 64:
             return "_J";
+        default:
+            internal_error << "Unexpected integer size: " << type.bits() << ".\n";
+            return "";
         }
-        internal_error << "Unexpected integer size: " << type.bits() << ".\n";
-        return "";
     } else if (type.is_uint()) {
         switch (type.bits()) {
         case 1:
@@ -261,9 +262,10 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
             return "I";
         case 64:
             return "_K";
+        default:
+            internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
+            return "";
         }
-        internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
-        return "";
     } else if (type.is_float()) {
         if (type.bits() == 32) {
             return "M";
@@ -533,7 +535,11 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         case 16:
             return "s";
         case 32:
-            return "i";
+            if (target.arch == Target::Hexagon) {
+                return "l";
+            } else {
+                return "i";
+            }
         case 64:
             if (target.os == Target::OSX ||
                 target.os == Target::IOS ||
@@ -542,9 +548,10 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
             } else {
                 return "l";
             }
+        default:
+            internal_error << "Unexpected integer size: " << type.bits() << ".\n";
+            return "";
         }
-        internal_error << "Unexpected integer size: " << type.bits() << ".\n";
-        return "";
     } else if (type.is_uint()) {
         switch (type.bits()) {
         case 1:
@@ -554,7 +561,11 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         case 16:
             return "t";
         case 32:
-            return "j";
+            if (target.arch == Target::Hexagon) {
+                return "m";
+            } else {
+                return "j";
+            }
         case 64:
             if (target.os == Target::OSX ||
                 target.os == Target::IOS ||
@@ -563,9 +574,10 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
             } else {
                 return "m";
             }
+        default:
+            internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
+            return "";
         }
-        internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
-        return "";
     } else if (type.is_float()) {
         if (type.bits() == 32) {
             return "f";

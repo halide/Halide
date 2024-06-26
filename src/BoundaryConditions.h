@@ -52,13 +52,13 @@ namespace Internal {
 
 inline HALIDE_NO_USER_CODE_INLINE void collect_region(Region &collected_args,
                                                       const Expr &a1, const Expr &a2) {
-    collected_args.push_back(Range(a1, a2));
+    collected_args.emplace_back(a1, a2);
 }
 
 template<typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE void collect_region(Region &collected_args,
                                                       const Expr &a1, const Expr &a2, Args &&...args) {
-    collected_args.push_back(Range(a1, a2));
+    collected_args.emplace_back(a1, a2);
     collect_region(collected_args, std::forward<Args>(args)...);
 }
 
@@ -111,7 +111,7 @@ template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Tuple &value) {
     Region object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
+        object_bounds.emplace_back(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()));
     }
 
     return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
@@ -161,7 +161,7 @@ template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like) {
     Region object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
+        object_bounds.emplace_back(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()));
     }
 
     return repeat_edge(Internal::func_like_to_func(func_like), object_bounds);
@@ -192,7 +192,7 @@ template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like) {
     Region object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
+        object_bounds.emplace_back(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()));
     }
 
     return repeat_image(Internal::func_like_to_func(func_like), object_bounds);
@@ -223,7 +223,7 @@ template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like) {
     Region object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
+        object_bounds.emplace_back(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()));
     }
 
     return mirror_image(Internal::func_like_to_func(func_like), object_bounds);
@@ -258,7 +258,7 @@ template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like) {
     Region object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
+        object_bounds.emplace_back(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()));
     }
 
     return mirror_interior(Internal::func_like_to_func(func_like), object_bounds);

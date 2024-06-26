@@ -29,7 +29,7 @@ public:
     StoreCollector(const std::string &name, int stride, int ms,
                    std::vector<Stmt> &lets, std::vector<Stmt> &ss)
         : store_name(name), store_stride(stride), max_stores(ms),
-          let_stmts(lets), stores(ss), collecting(true) {
+          let_stmts(lets), stores(ss) {
     }
 
 private:
@@ -57,7 +57,7 @@ private:
         return op;
     }
 
-    bool collecting;
+    bool collecting = true;
     // These are lets that we've encountered since the last collected
     // store. If we collect another store, these "potential" lets
     // become lets used by the collected stores.
@@ -275,6 +275,16 @@ private:
         return expr;
     }
 
+    Expr give_up_and_shuffle(const Expr &e) {
+        // Uh-oh, we don't know how to deinterleave this vector expression
+        // Make llvm do it
+        std::vector<int> indices;
+        for (int i = 0; i < new_lanes; i++) {
+            indices.push_back(starting_lane + lane_stride * i);
+        }
+        return Shuffle::make({e}, indices);
+    }
+
     Expr visit(const Variable *op) override {
         if (op->type.is_scalar()) {
             return op;
@@ -302,13 +312,7 @@ private:
                        lane_stride == 3) {
                 return Variable::make(t, op->name + ".lanes_2_of_3", op->image, op->param, op->reduction_domain);
             } else {
-                // Uh-oh, we don't know how to deinterleave this vector expression
-                // Make llvm do it
-                std::vector<int> indices;
-                for (int i = 0; i < new_lanes; i++) {
-                    indices.push_back(starting_lane + lane_stride * i);
-                }
-                return Shuffle::make({op}, indices);
+                return give_up_and_shuffle(op);
             }
         }
     }
@@ -319,6 +323,17 @@ private:
         } else {
             Type t = op->type.with_lanes(new_lanes);
             return Cast::make(t, mutate(op->value));
+        }
+    }
+
+    Expr visit(const Reinterpret *op) override {
+        if (op->type.is_scalar()) {
+            return op;
+        } else if (op->type.bits() != op->value.type().bits()) {
+            return give_up_and_shuffle(op);
+        } else {
+            Type t = op->type.with_lanes(new_lanes);
+            return Reinterpret::make(t, mutate(op->value));
         }
     }
 
@@ -334,11 +349,7 @@ private:
             // can just deinterleave the args.
 
             // Beware of intrinsics for which this is not true!
-            std::vector<Expr> args(op->args.size());
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(op->args[i]);
-            }
-
+            auto args = mutate(op->args);
             return Call::make(t, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         }
@@ -367,6 +378,21 @@ private:
             int idx = i * lane_stride + starting_lane;
             indices.push_back(op->indices[idx]);
         }
+
+        // If this is extracting a single lane, try to recursively deinterleave rather
+        // than leaving behind a shuffle.
+        if (indices.size() == 1) {
+            int index = indices.front();
+            for (const auto &i : op->vectors) {
+                if (index < i.type().lanes()) {
+                    ScopedValue<int> lane(starting_lane, index);
+                    return mutate(i);
+                }
+                index -= i.type().lanes();
+            }
+            internal_error << "extract_lane index out of bounds: " << Expr(op) << " " << index << "\n";
+        }
+
         return Shuffle::make(op->vectors, indices);
     }
 };
@@ -733,16 +759,16 @@ class Interleaver : public IRMutator {
         Expr predicate = Shuffle::make_interleave(predicates);
         Stmt new_store = Store::make(store->name, value, index, store->param, predicate, ModulusRemainder());
 
-        // Continue recursively into the stuff that
-        // collect_strided_stores didn't collect.
-        Stmt stmt = Block::make(new_store, mutate(rest));
-
         // Rewrap the let statements we pulled off.
         while (!let_stmts.empty()) {
             const LetStmt *let = let_stmts.back().as<LetStmt>();
-            stmt = LetStmt::make(let->name, let->value, stmt);
+            new_store = LetStmt::make(let->name, let->value, new_store);
             let_stmts.pop_back();
         }
+
+        // Continue recursively into the stuff that
+        // collect_strided_stores didn't collect.
+        Stmt stmt = Block::make(new_store, mutate(rest));
 
         // Success!
         return stmt;
@@ -810,7 +836,7 @@ void deinterleave_vector_test() {
           Shuffle::make({vec_x, vec_y}, {0, 2, 4, 3, 1, 3}),
           Shuffle::make({vec_x, vec_y}, {4, 6, 2, 7, 2, 4}));
 
-    std::cout << "deinterleave_vector test passed" << std::endl;
+    std::cout << "deinterleave_vector test passed\n";
 }
 
 }  // namespace Internal

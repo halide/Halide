@@ -8,8 +8,8 @@ using namespace Halide;
 
 std::vector<std::string> messages;
 
-extern "C" void halide_print(void *user_context, const char *message) {
-    //printf("%s", message);
+void my_print(JITUserContext *user_context, const char *message) {
+    // printf("%s", message);
     messages.push_back(message);
 }
 
@@ -39,12 +39,12 @@ int main(int argc, char **argv) {
         Func f;
 
         f(x) = print(x * x, "the answer is", 42.0f, "unsigned", cast<uint32_t>(145));
-        f.set_custom_print(halide_print);
+        f.jit_handlers().custom_print = my_print;
         Buffer<int32_t> result = f.realize({10});
 
         for (int32_t i = 0; i < 10; i++) {
             if (result(i) != i * i) {
-                return -1;
+                return 1;
             }
         }
 
@@ -72,12 +72,12 @@ int main(int argc, char **argv) {
 
         // Test a string containing a printf format specifier (It should print it as-is).
         f(x) = print_when(x == 3, x * x, "g", 42.0f, "%s", param);
-        f.set_custom_print(halide_print);
+        f.jit_handlers().custom_print = my_print;
         Buffer<int32_t> result = f.realize({10});
 
         for (int32_t i = 0; i < 10; i++) {
             if (result(i) != i * i) {
-                return -1;
+                return 1;
             }
         }
 
@@ -115,11 +115,11 @@ int main(int argc, char **argv) {
             args.push_back(dn);
         }
         f(x) = print(args);
-        f.set_custom_print(halide_print);
+        f.jit_handlers().custom_print = my_print;
         Buffer<uint64_t> result = f.realize({1});
 
         if (result(0) != 100) {
-            return -1;
+            return 1;
         }
 
         assert(messages.back().size() == 8191);
@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
 
         f(x) = print(e);
 
-        f.set_custom_print(halide_print);
+        f.jit_handlers().custom_print = my_print;
         Buffer<float> imf = f.realize({N});
 
         assert(messages.size() == (size_t)N);
@@ -173,14 +173,14 @@ int main(int argc, char **argv) {
             if (!strcmp(correct, "-nan\n")) strcpy(correct, "nan\n");
             if (messages[i] != correct) {
                 printf("float %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, imf(i));
-                return -1;
+                return 1;
             }
         }
 
         messages.clear();
 
         g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_uint()) << 32) | random_uint()));
-        g.set_custom_print(halide_print);
+        g.jit_handlers().custom_print = my_print;
         Buffer<double> img = g.realize({N});
 
         assert(messages.size() == (size_t)N);
@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
             if (!strcmp(correct, "-nan\n")) strcpy(correct, "nan\n");
             if (messages[i] != correct) {
                 printf("double %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, img(i));
-                return -1;
+                return 1;
             }
         }
     }
@@ -208,7 +208,7 @@ int main(int argc, char **argv) {
 
         // Test a vectorized print.
         f(x) = print(x * 3);
-        f.set_custom_print(halide_print);
+        f.jit_handlers().custom_print = my_print;
         f.vectorize(x, 32);
         if (target.has_feature(Target::HVX)) {
             f.hexagon();
@@ -233,7 +233,7 @@ int main(int argc, char **argv) {
 
         // Test a vectorized print_when.
         f(x) = print_when(x % 2 == 0, x * 3);
-        f.set_custom_print(halide_print);
+        f.jit_handlers().custom_print = my_print;
         f.vectorize(x, 32);
         if (target.has_feature(Target::HVX)) {
             f.hexagon();

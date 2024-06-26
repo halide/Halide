@@ -10,230 +10,20 @@
 
 #include "HalideBuffer.h"
 #include "interpreter/interval.h"
+#include "interpreter/tensor.h"
 #include "util/buffer_util.h"
 #include "util/error_util.h"
+#include "util/small_vector.h"
 
 namespace hannk {
 
-struct QuantizationInfo {
-    std::vector<float> scale;
-    std::vector<int32_t> zero;
-    int32_t dimension = -1;
-
-    bool operator==(const QuantizationInfo &r) const {
-        return dimension == r.dimension && scale == r.scale && zero == r.zero;
-    }
-
-    float uniform_scale() const {
-        assert(scale.size() == 1);
-        return scale[0];
-    }
-
-    int32_t uniform_zero() const {
-        assert(zero.size() == 1);
-        return zero[0];
-    }
-};
-
-inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
-    return s << "{" << q.scale << ", " << q.zero << ", " << q.dimension << "}";
-}
-
-// Storage for a tensor. This can be shared among several tensors aliasing
-// the same memory. All aliases use the strides of the buffer in this storage
-// buffer.
-class TensorStorage {
-    HalideBuffer<void> buffer_;
-
-public:
-    TensorStorage();
-    explicit TensorStorage(HalideBuffer<void> buffer);
-    TensorStorage &operator=(const TensorStorage &) = delete;
-    TensorStorage(TensorStorage &&) = default;
-    TensorStorage &operator=(TensorStorage &&) = default;
-
-    // Grow the bounds of the storage to accommodate a new user.
-    // The type and dimensionality must match the existing storage.
-    void add_use(halide_type_t, const Box &bounds);
-
-    halide_type_t type() const {
-        return buffer_.type();
-    }
-
-    int rank() const {
-        return buffer_.dimensions();
-    }
-
-    template<class T = void>
-    const HalideBuffer<T> &buffer() {
-        return buffer_.as<T>();
-    }
-
-    template<class T = void>
-    const HalideBuffer<const T> &buffer() const {
-        return buffer_.as_const().as<const T>();
-    }
-
-    bool is_allocated() const;
-    void allocate();
-};
-
 class Op;
-class Tensor;
 using OpPtr = std::unique_ptr<Op>;
-using TensorPtr = std::shared_ptr<Tensor>;
 
 template<class T, class... Args>
 std::unique_ptr<T> make_op(Args &&...args) {
-    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+    return std::make_unique<T>(std::forward<Args>(args)...);
 }
-
-class Tensor {
-    std::string name_;
-    HalideBuffer<void> buffer_;
-    QuantizationInfo quantization_;
-    bool is_constant_ = false;
-    bool is_input_ = false;
-    bool is_output_ = false;
-    bool is_dynamic_ = false;
-
-    // Possibly shared storage for this tensor.
-    std::shared_ptr<TensorStorage> storage_;
-    // The offset of this tensor into the storage buffer.
-    SmallVector<int, max_rank> storage_offset_;
-
-    // A list of ops that use this tensor as an output or an input, respectively.
-    std::list<Op *> producers_;
-    std::list<Op *> consumers_;
-
-public:
-    Tensor() = delete;
-    Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization = QuantizationInfo());
-    Tensor(std::string name, halide_type_t type, const Box &bounds, QuantizationInfo quantization = QuantizationInfo());
-    Tensor(const Tensor &copy);
-    Tensor(Tensor &&) = default;
-    Tensor &operator=(const Tensor &) = delete;
-    Tensor &operator=(Tensor &&) = default;
-
-    halide_type_t type() const {
-        return buffer_.type();
-    }
-
-    const std::string &name() const {
-        return name_;
-    }
-
-    Box bounds() const {
-        const int dimensions = buffer_.dimensions();
-
-        Box result;
-        for (int d = 0; d < dimensions; d++) {
-            const auto &dim = buffer_.dim(d);
-            result.emplace_back(dim.min(), dim.max());
-        }
-        return result;
-    }
-
-    Interval bounds(int i) const {
-        const auto &d = buffer_.dim(i);
-        return Interval(d.min(), d.max());
-    }
-
-    int extent(int i) const {
-        return buffer_.dim(i).extent();
-    }
-
-    int number_of_elements() const {
-        return buffer_.number_of_elements();
-    }
-
-    int rank() const {
-        return buffer_.dimensions();
-    }
-
-    const QuantizationInfo &quantization() const {
-        return quantization_;
-    }
-
-    bool is_constant() const {
-        return is_constant_;
-    }
-
-    void set_constant(bool constant = true) {
-        is_constant_ = constant;
-    }
-
-    bool is_dynamic() const {
-        return is_dynamic_;
-    }
-
-    void set_dynamic(bool dynamic = true) {
-        is_dynamic_ = dynamic;
-    }
-
-    bool is_input() const {
-        return is_input_;
-    }
-
-    bool is_output() const {
-        return is_output_;
-    }
-
-    void set_input(bool is_input) {
-        is_input_ = is_input;
-    }
-
-    void set_output(bool is_output) {
-        is_output_ = is_output;
-    }
-
-    template<class T = void>
-    const HalideBuffer<T> &buffer() {
-        return buffer_.as<T>();
-    }
-
-    template<class T = void>
-    const HalideBuffer<const T> &buffer() const {
-        return buffer_.as_const().as<const T>();
-    }
-
-    halide_buffer_t *raw_buffer() {
-        return buffer_.raw_buffer();
-    }
-
-    bool is_allocated() const;
-    void allocate();
-
-    void resize(const Box &new_shape);
-
-    std::shared_ptr<TensorStorage> storage();
-
-    bool is_alias() const;
-    void set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &offset = {});
-
-    void add_consumer(Op *op);
-    void add_producer(Op *op);
-    void remove_consumer(Op *op);
-    void remove_producer(Op *op);
-
-    const std::list<Op *> &producers() const {
-        return producers_;
-    }
-    const std::list<Op *> &consumers() const {
-        return consumers_;
-    }
-
-    void replace_all_consumers_with(const TensorPtr &other);
-
-    void dump(std::ostream &os) const;
-};
-
-// A mapping from old tensors to new tensors, when cloning an op.
-using TensorMap = std::map<const TensorPtr, TensorPtr>;
-
-// Apply a tensor map to a list of tensors. This is used to support
-// cloning ops referring to different tensors.
-const TensorPtr &apply(TensorMap &map, const TensorPtr &t);
 
 // A mapping from an output x to required input coordinates [min, max].
 // [min, max] = (x / inv_stride) * stride + bounds
@@ -465,13 +255,13 @@ public:
 };
 
 class OpVisitor;
+class OpMutator;
 
 class Op {
-private:
+protected:
     std::vector<TensorPtr> inputs_;
     std::vector<TensorPtr> outputs_;
 
-protected:
     Op(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs);
 
 public:
@@ -488,15 +278,40 @@ public:
         }
     }
 
+    // Prepare the op for future execution. The Op can assume that the types and dimensions
+    // of all its input/output Tensors will remain the same after this.
+    // Return false on error.
+    virtual bool prepare() {
+        return true;
+    }
+
     // Execute the op on a given crop.
     virtual void execute() = 0;
 
-    // Clone this op, replacing tensors using the mapping in tensor_map.
-    virtual OpPtr clone(TensorMap &tensor_map) const = 0;
+    // Call the visitor's appropriate methods for this op, and any sub-ops.
+    inline void accept(OpVisitor *v) const {
+        return accept_impl(v);
+    }
 
-    virtual void accept(OpVisitor *v) = 0;
+    // Call the mutator's appropriate methods for this op, and any sub-ops.
+    // The op passed in is owned by the callee, who will return a (possibly) mutated Op
+    // which should be used in place of the original; the callee may also return nullptr,
+    // in which case the original should be deleted from its container.
+    //
+    // Note that this is a static method because we need to pass the op in question
+    // via unique_ptr (since the callee needs to take ownership); we also
+    // need to use the 'naked' pointer to dispatch a virtual method which returns a function pointer,
+    // to avoid any possible UB from order-of-operations (e.g., op->mutate_impl(std::move(op)), which
+    // has undefined order wrt the move vs the virtual lookup).
+    using OpMutatorFn = OpPtr (*)(OpPtr op, OpMutator *m);
+    static inline OpPtr mutate(OpPtr op, OpMutator *m) {
+        OpMutatorFn mutate_fn = op->mutate_impl();
+        return mutate_fn(std::move(op), m);
+    }
 
-    virtual void dump(std::ostream &os) const = 0;
+    virtual void dump(std::ostream &os, int indent = 0) const;
+
+    virtual std::string name() const = 0;
 
     int input_count() const {
         return inputs_.size();
@@ -504,42 +319,36 @@ public:
     int output_count() const {
         return outputs_.size();
     }
-    const TensorPtr &input(int idx) const {
+    const TensorPtr &input(int idx = 0) const {
         return inputs_[idx];
     }
-    const TensorPtr &output(int idx) const {
+    const TensorPtr &output(int idx = 0) const {
         return outputs_[idx];
-    }
-    const TensorPtr &input() const {
-        return input(0);
-    }
-    const TensorPtr &output() const {
-        return output(0);
-    }
-    const TensorPtr &input(int idx) {
-        return inputs_[idx];
-    }
-    const TensorPtr &output(int idx) {
-        return outputs_[idx];
-    }
-    const TensorPtr &input() {
-        return input(0);
-    }
-    const TensorPtr &output() {
-        return output(0);
     }
 
+    // TODO: remove me
     void set_input(int idx, TensorPtr t);
-    void set_output(int idx, TensorPtr t);
-    void set_input(TensorPtr t);
-    void set_output(TensorPtr t);
 
-    // Movable but not copyable.
+    bool is_input(const TensorPtr &t) const;
+    bool is_output(const TensorPtr &t) const;
+
+    std::vector<TensorPtr> inputs() const {
+        return inputs_;
+    }
+    std::vector<TensorPtr> outputs() const {
+        return outputs_;
+    }
+
+    // Neither movable nor copyable.
     Op() = delete;
     Op(const Op &) = delete;
     Op &operator=(const Op &) = delete;
     Op(Op &&) = delete;
     Op &operator=(Op &&) = delete;
+
+private:
+    virtual void accept_impl(OpVisitor *v) const = 0;
+    virtual OpMutatorFn mutate_impl() const = 0;
 };
 
 class OpGroup : public Op {
@@ -550,16 +359,26 @@ public:
         : Op(std::move(inputs), std::move(outputs)), ops_(std::move(ops)) {
     }
 
-    void add(OpPtr to_insert, const Op *before = nullptr);
-    void remove(const Op *op);
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
-
-    void execute();
+    bool prepare() override;
+    void execute() override;
 
     int op_count() const {
         return ops_.size();
     }
+
+    // Extract the given Op from this OpGroup, transferring ownership
+    // to the caller. The OpGroup is left with a null entry, which
+    // is not generally legal; this should only be called on OpGroups
+    // which will be discarded afterwards.
+    OpPtr take_op(int i) {
+        OpPtr result = nullptr;
+        std::swap(ops_[i], result);
+        return result;
+    }
+
+    // TODO: remove me
     Op *op(int i) {
         return ops_[i].get();
     }
@@ -567,9 +386,22 @@ public:
         return ops_[i].get();
     }
 
-    OpPtr clone(TensorMap &tensor_map) const;
-    void accept(OpVisitor *v);
-    void dump(std::ostream &os) const;
+    void dump(std::ostream &os, int indent = 0) const override;
+
+    std::string name() const override {
+        return "OpGroup";
+    }
+
+    // Neither movable nor copyable.
+    OpGroup() = delete;
+    OpGroup(const OpGroup &) = delete;
+    OpGroup &operator=(const OpGroup &) = delete;
+    OpGroup(OpGroup &&) = delete;
+    OpGroup &operator=(OpGroup &&) = delete;
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 }  // namespace hannk

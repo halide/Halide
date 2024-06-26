@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(blur)
 
 enable_testing()
 
 # Set up language settings
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -13,8 +13,7 @@ find_package(Halide REQUIRED)
 find_package(OpenMP)
 
 # Generator
-add_executable(blur.generator halide_blur_generator.cpp)
-target_link_libraries(blur.generator PRIVATE Halide::Generator)
+add_halide_generator(blur.generator SOURCES halide_blur_generator.cpp)
 
 # Filters
 add_halide_library(halide_blur FROM blur.generator)

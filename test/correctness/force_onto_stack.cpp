@@ -1,28 +1,28 @@
 #include "Halide.h"
 using namespace Halide;
 
-void *my_malloc(void *user_context, size_t x) {
+void *my_malloc(JITUserContext *user_context, size_t x) {
     printf("There was not supposed to be a heap allocation\n");
-    exit(-1);
+    exit(1);
     return nullptr;
 }
 
-void my_free(void *user_context, void *ptr) {
+void my_free(JITUserContext *user_context, void *ptr) {
 }
 
 bool errored = false;
-void my_error(void *user_context, const char *msg) {
+void my_error(JITUserContext *user_context, const char *msg) {
     errored = true;
     char expected[] = "Bounds given for f in x (from 0 to 7) do not cover required region (from 0 to 9)";
     if (strncmp(expected, msg, sizeof(expected) - 1)) {
         printf("Unexpected error: '%s'\n", msg);
-        exit(-1);
+        exit(1);
     }
 }
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 
@@ -42,23 +42,25 @@ int main(int argc, char **argv) {
         f.compute_at(g, xo).bound_extent(x, 8).vectorize(x);
 
         // Check there's no malloc when the bound is good
-        g.set_custom_allocator(&my_malloc, &my_free);
+        g.jit_handlers().custom_malloc = my_malloc;
+        g.jit_handlers().custom_free = my_free;
         p.set(5);
         g.realize({20});
-        g.set_custom_allocator(nullptr, nullptr);
+        g.jit_handlers().custom_malloc = nullptr;
+        g.jit_handlers().custom_free = nullptr;
 
         // Check there was an assertion failure of the appropriate type when the bound is violated
-        g.set_error_handler(&my_error);
+        g.jit_handlers().custom_error = my_error;
         p.set(10);
         g.realize({20});
 
         if (!errored) {
             printf("There was supposed to be an error\n");
-            return -1;
+            return 1;
         }
     }
 
-    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
+    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate, TailStrategy::PredicateLoads}) {
         // Another way in which a larger static allocation is
         // preferable to a smaller dynamic one is when you compute
         // something at a split guarded by an if. In the very last
@@ -77,7 +79,8 @@ int main(int argc, char **argv) {
         // nasty thing), so we'll add a bound.
         f.bound_extent(x, 8);
 
-        g.set_custom_allocator(&my_malloc, &my_free);
+        g.jit_handlers().custom_malloc = my_malloc;
+        g.jit_handlers().custom_free = my_free;
         g.realize({20});
     }
 

@@ -2,6 +2,7 @@
 #include "HalideRuntime.h"
 #include "multitarget.h"
 #include <atomic>
+#include <cmath>
 #include <string>
 #include <tuple>
 
@@ -32,9 +33,7 @@ std::pair<std::string, bool> get_env_variable(char const *env_var_name) {
 }
 
 bool use_noboundsquery_feature() {
-    std::string value;
-    bool read;
-    std::tie(value, read) = get_env_variable("HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE");
+    auto [value, read] = get_env_variable("HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE");
     if (!read) {
         return false;
     }
@@ -59,14 +58,16 @@ int my_can_use_target_features(int count, const uint64_t *features) {
 
 int main(int argc, char **argv) {
     const int W = 32, H = 32;
-    Buffer<uint32_t> output(W, H);
+    Buffer<uint32_t, 2> output(W, H);
+    auto random_float_output = Buffer<float, 0>::make_scalar();
+    auto random_int_output = Buffer<int32_t, 0>::make_scalar();
 
     halide_set_error_handler(my_error_handler);
     halide_set_custom_can_use_target_features(my_can_use_target_features);
 
-    if (HalideTest::multitarget(output) != 0) {
+    if (HalideTest::multitarget(output, random_float_output, random_int_output) != 0) {
         printf("Error at multitarget\n");
-        return -1;
+        return 1;
     }
 
     // Verify output.
@@ -76,36 +77,57 @@ int main(int argc, char **argv) {
             const uint32_t actual = output(x, y);
             if (actual != expected) {
                 printf("Error at %d, %d: expected %x, got %x\n", x, y, expected, actual);
-                return -1;
+                return 1;
             }
         }
+    }
+    printf("Saw %x for no_bounds_query=%d\n", output(0, 0), use_noboundsquery_feature());
+
+    // We expect the "random" result to be the same for both subtargets.
+    {
+        const int32_t expected = -1000221372;
+        const int32_t actual = random_int_output();
+        if (actual != expected) {
+            printf("Error for random_int_output: expected %d, got %d\n", expected, actual);
+            return 1;
+        }
+        printf("Saw %d for random_int_output() w/ no_bounds_query=%d\n", actual, use_noboundsquery_feature());
+    }
+
+    {
+        const float expected = 0.827175f;
+        const float actual = random_float_output();
+        if (fabs(actual - expected) > 0.000001f) {
+            printf("Error for random_float_output: expected %f, got %f\n", expected, actual);
+            return 1;
+        }
+        printf("Saw %f for random_float_output() w/ no_bounds_query=%d\n", actual, use_noboundsquery_feature());
     }
 
     // halide_can_use_target_features() should be called exactly once, with the
     // result cached; call this a few more times to verify.
     for (int i = 0; i < 10; ++i) {
-        if (HalideTest::multitarget(output) != 0) {
+        if (HalideTest::multitarget(output, random_float_output, random_int_output) != 0) {
             printf("Error at multitarget\n");
-            return -1;
+            return 1;
         }
     }
     if (can_use_count != 1) {
         printf("Error: halide_can_use_target_features was called %d times!\n", (int)can_use_count);
-        return -1;
+        return 1;
     }
 
     {
         // Verify that the multitarget wrapper code propagates nonzero error
         // results back to the caller properly.
-        Buffer<uint8_t> bad_type(W, H);
-        int result = HalideTest::multitarget(bad_type);
+        Buffer<uint8_t, 2> bad_type(W, H);
+        int result = HalideTest::multitarget(bad_type, random_float_output, random_int_output);
         if (result != halide_error_code_bad_type) {
             printf("Error: expected to fail with halide_error_code_bad_type (%d) but actually got %d!\n", (int)halide_error_code_bad_type, result);
-            return -1;
+            return 1;
         }
     }
 
-    printf("Saw %x for no_bounds_query=%d\n", output(0, 0), use_noboundsquery_feature());
     printf("Success!\n");
     return 0;
 }

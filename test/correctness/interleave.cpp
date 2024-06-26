@@ -40,7 +40,7 @@ void check_interleave_count(Func f, int correct) {
     if (c < correct) {
         printf("Func %s should have interleaved >= %d times but interleaved %d times instead.\n",
                f.name().c_str(), correct, c);
-        exit(-1);
+        exit(1);
     }
 }
 
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
                 float delta = result(x) - correct;
                 if (delta > 0.01 || delta < -0.01) {
                     printf("result(%d) = %f instead of %f\n", x, result(x), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
                 float delta = buff3(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
                     printf("result(%d) = %f instead of %f\n", x, buff3(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
                 float delta = buff4(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
                     printf("result(%d) = %f instead of %f\n", x, buff4(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -252,7 +252,7 @@ int main(int argc, char **argv) {
                 float delta = buff5(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
                     printf("result(%d) = %f instead of %f\n", x, buff5(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -342,7 +342,7 @@ int main(int argc, char **argv) {
                             if (out(x, y) != ref(x, y)) {
                                 printf("result(%d, %d) = %d instead of %d\n",
                                        x, y, out(x, y), ref(x, y));
-                                return -1;
+                                return 1;
                             }
                         }
                     }
@@ -393,7 +393,7 @@ int main(int argc, char **argv) {
                     int correct = 5 * y + x;
                     if (result7(x, y) != correct) {
                         printf("result(%d) = %d instead of %d\n", x, result7(x, y), correct);
-                        return -1;
+                        return 1;
                     }
                 }
             }

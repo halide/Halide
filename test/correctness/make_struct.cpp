@@ -11,19 +11,13 @@ struct struct_t {
     const char *d;
 };
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT int check_struct(struct_t *s) {
+extern "C" HALIDE_EXPORT_SYMBOL int check_struct(struct_t *s) {
     if (s->a != 3.0 ||
         s->b != 1234567 ||
         s->c != 1234 ||
         strcmp(s->d, "Test global string\n")) {
         printf("Unexpected struct values: %f %d %d %s\n", s->a, s->b, s->c, s->d);
-        exit(-1);
+        exit(1);
     }
     return 0;
 }

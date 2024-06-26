@@ -45,16 +45,16 @@ void test_expr(T value) {
     Expr e = make_const(t, value);
     if (e.type() != t) {
         std::cerr << "constant of type " << t << " returned expr of type " << e.type() << "\n";
-        exit(-1);
+        exit(1);
     }
     T nvalue = T(0);
     if (!scalar_from_constant_expr<T>(e, &nvalue)) {
         std::cerr << "constant of type " << t << " failed scalar_from_constant_expr with value " << value << "\n";
-        exit(-1);
+        exit(1);
     }
     if (nvalue != value) {
         std::cerr << "Roundtrip failed for type " << t << ": input " << value << " output " << nvalue << "\n";
-        exit(-1);
+        exit(1);
     }
 }
 

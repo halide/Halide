@@ -14,7 +14,7 @@ public:
 };
 
 int trace_min, trace_extent;
-int my_trace(void *user_context, const halide_trace_event_t *e) {
+int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     if (e->event == 2) {
         trace_min = e->coordinates[0];
         trace_extent = e->coordinates[1];
@@ -44,11 +44,11 @@ int main(int argc, char **argv) {
         m.functions()[0].body.accept(&checker);
         if (checker.result) {
             printf("Lowered code contained a select\n");
-            return -1;
+            return 1;
         }
 
         p.set(3);
-        h.set_custom_trace(my_trace);
+        h.jit_handlers().custom_trace = my_trace;
         Buffer<int> result = h.realize({10});
 
         for (int i = 0; i < 10; i++) {
@@ -56,14 +56,14 @@ int main(int argc, char **argv) {
             if (result(i) != correct) {
                 printf("result(%d) = %d instead of %d\n",
                        i, result(i), correct);
-                return -1;
+                return 1;
             }
         }
 
         // Bounds of f should be [-p, 10+2*p] rounded outwards
         if (trace_min != -4 || trace_extent != 18) {
             printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
-            return -1;
+            return 1;
         }
 
         // Increasing p by one should have no effect
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
         h.realize(result);
         if (trace_min != -4 || trace_extent != 18) {
             printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
-            return -1;
+            return 1;
         }
 
         // But increasing it again should cause a jump of two in the bounds computed.
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
         h.realize(result);
         if (trace_min != -6 || trace_extent != 22) {
             printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
-            return -1;
+            return 1;
         }
     }
 
@@ -107,11 +107,11 @@ int main(int argc, char **argv) {
         m.functions()[0].body.accept(&checker);
         if (checker.result) {
             printf("Lowered code contained a select\n");
-            return -1;
+            return 1;
         }
 
         p.set(3);
-        h.set_custom_trace(my_trace);
+        h.jit_handlers().custom_trace = my_trace;
         Buffer<int> result = h.realize({10});
 
         for (int i = 0; i < 10; i++) {
@@ -119,14 +119,14 @@ int main(int argc, char **argv) {
             if (result(i) != correct) {
                 printf("result(%d) = %d instead of %d\n",
                        i, result(i), correct);
-                return -1;
+                return 1;
             }
         }
 
         // Now the min/max should stick to odd numbers
         if (trace_min != -3 || trace_extent != 16) {
             printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
-            return -1;
+            return 1;
         }
 
         // Increasing p by one should have no effect
@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
         h.realize(result);
         if (trace_min != -5 || trace_extent != 20) {
             printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
-            return -1;
+            return 1;
         }
 
         // But increasing it again should cause a jump of two in the bounds computed.
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
         h.realize(result);
         if (trace_min != -5 || trace_extent != 20) {
             printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
-            return -1;
+            return 1;
         }
     }
 
@@ -162,7 +162,7 @@ int main(int argc, char **argv) {
         g.compute_root().align_extent(x, 32).trace_realizations();
 
         p.set(3);
-        h.set_custom_trace(my_trace);
+        h.jit_handlers().custom_trace = my_trace;
         Buffer<int> result = h.realize({10});
 
         for (int i = 0; i < 10; i++) {
@@ -170,14 +170,14 @@ int main(int argc, char **argv) {
             if (result(i) != correct) {
                 printf("result(%d) = %d instead of %d\n",
                        i, result(i), correct);
-                return -1;
+                return 1;
             }
         }
 
         // Now the min/max should stick to odd numbers
         if (trace_min != -3 || trace_extent != 32) {
             printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
-            return -1;
+            return 1;
         }
 
         // Increasing p by one should have no effect
@@ -185,7 +185,7 @@ int main(int argc, char **argv) {
         h.realize(result);
         if (trace_min != -4 || trace_extent != 32) {
             printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
-            return -1;
+            return 1;
         }
 
         // But increasing it again should cause a jump of two in the bounds computed.
@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
         h.realize(result);
         if (trace_min != -5 || trace_extent != 32) {
             printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
-            return -1;
+            return 1;
         }
     }
 

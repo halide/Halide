@@ -13,16 +13,22 @@ namespace Internal {
 namespace IntegerDivision {
 extern const int64_t table_u8[256][4];
 extern const int64_t table_s8[256][4];
+extern const int64_t table_srz8[256][4];
 extern const int64_t table_u16[256][4];
 extern const int64_t table_s16[256][4];
+extern const int64_t table_srz16[256][4];
 extern const int64_t table_u32[256][4];
 extern const int64_t table_s32[256][4];
+extern const int64_t table_srz32[256][4];
 extern const int64_t table_runtime_u8[256][4];
 extern const int64_t table_runtime_s8[256][4];
+extern const int64_t table_runtime_srz8[256][4];
 extern const int64_t table_runtime_u16[256][4];
 extern const int64_t table_runtime_s16[256][4];
+extern const int64_t table_runtime_srz16[256][4];
 extern const int64_t table_runtime_u32[256][4];
 extern const int64_t table_runtime_s32[256][4];
+extern const int64_t table_runtime_srz32[256][4];
 }  // namespace IntegerDivision
 }  // namespace Internal
 }  // namespace Halide

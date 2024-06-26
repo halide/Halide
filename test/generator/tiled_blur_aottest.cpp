@@ -44,16 +44,16 @@ int my_halide_trace(void *user_context, const halide_trace_event_t *ev) {
     return 0;
 }
 
-Buffer<uint8_t> buffer_factory_planar(int w, int h, int c) {
-    return Buffer<uint8_t>(w, h, c);
+Buffer<uint8_t, 3> buffer_factory_planar(int w, int h, int c) {
+    return Buffer<uint8_t, 3>(w, h, c);
 }
 
-Buffer<uint8_t> buffer_factory_interleaved(int w, int h, int c) {
-    return Buffer<uint8_t>::make_interleaved(w, h, c);
+Buffer<uint8_t, 3> buffer_factory_interleaved(int w, int h, int c) {
+    return Buffer<uint8_t, 3>::make_interleaved(w, h, c);
 }
 
-void test(Buffer<uint8_t> (*factory)(int w, int h, int c)) {
-    Buffer<uint8_t> input = factory(W, H, 3);
+void test(Buffer<uint8_t, 3> (*factory)(int w, int h, int c)) {
+    Buffer<uint8_t, 3> input = factory(W, H, 3);
     input.for_each_element([&](int x, int y, int c) {
         // Just an arbitrary color pattern with enough variation to notice the brighten + blur
         if (c == 0) {
@@ -64,7 +64,7 @@ void test(Buffer<uint8_t> (*factory)(int w, int h, int c)) {
             input(x, y, c) = (uint8_t)((x * 5) + (y * 2));
         }
     });
-    Buffer<uint8_t> output = factory(W, H, 3);
+    Buffer<uint8_t, 3> output = factory(W, H, 3);
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
     tiled_blur(input, output);

@@ -27,6 +27,9 @@ WEAK int halide_start_clock(void *user_context) {
 }
 
 WEAK int64_t halide_current_time_ns(void *user_context) {
+    // It is an error to call halide_current_time_ns() if halide_start_clock() has never been called
+    halide_debug_assert(user_context, halide_reference_clock_inited);
+
     int64_t clock;
     QueryPerformanceCounter(&clock);
     clock -= halide_reference_clock;
@@ -34,7 +37,11 @@ WEAK int64_t halide_current_time_ns(void *user_context) {
     return (int64_t)(ns_per_tick * clock);
 }
 
-WEAK void halide_sleep_ms(void *user_context, int ms) {
-    Sleep(ms);
+WEAK void halide_sleep_us(void *user_context, int us) {
+    // Unfortunately you can't sleep on windows in microsecond amounts. The
+    // below call results in calling Sleep(0) for times less than 1 ms, which is
+    // documented to yield the rest of the time slice. If there is no other
+    // thread waiting to run, it may get rescheduled immediately.
+    Sleep(us / 1000);
 }
 }

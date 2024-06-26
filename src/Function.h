@@ -12,12 +12,14 @@
 #include "Definition.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
+#include "Reduction.h"
 #include "Schedule.h"
 
 namespace Halide {
 
 struct ExternFuncArgument;
-
+class Parameter;
+class Tuple;
 class Var;
 
 /** An enum to specify calling convention for extern stages. */
@@ -30,7 +32,6 @@ enum class NameMangling {
 namespace Internal {
 
 struct Call;
-class Parameter;
 
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
@@ -57,8 +58,39 @@ public:
     /** Construct a new function with the given name */
     explicit Function(const std::string &n);
 
+    /** Construct a new function with the given name,
+     * with a requirement that it can only represent Expr(s) of the given type(s),
+     * and must have exactly the give nnumber of dimensions.
+     * required_types.empty() means there are no constraints on the type(s).
+     * required_dims == AnyDims means there are no constraints on the dimensions. */
+    explicit Function(const std::vector<Type> &required_types, int required_dims, const std::string &n);
+
     /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
     explicit Function(const FunctionPtr &);
+
+    /** Update a function with deserialized data */
+    void update_with_deserialization(const std::string &name,
+                                     const std::string &origin_name,
+                                     const std::vector<Halide::Type> &output_types,
+                                     const std::vector<Halide::Type> &required_types,
+                                     int required_dims,
+                                     const std::vector<std::string> &args,
+                                     const FuncSchedule &func_schedule,
+                                     const Definition &init_def,
+                                     const std::vector<Definition> &updates,
+                                     const std::string &debug_file,
+                                     const std::vector<Parameter> &output_buffers,
+                                     const std::vector<ExternFuncArgument> &extern_arguments,
+                                     const std::string &extern_function_name,
+                                     NameMangling name_mangling,
+                                     DeviceAPI device_api,
+                                     const Expr &extern_proxy_expr,
+                                     bool trace_loads,
+                                     bool trace_stores,
+                                     bool trace_realizations,
+                                     const std::vector<std::string> &trace_tags,
+                                     bool no_profiling,
+                                     bool frozen);
 
     /** Get a handle on the halide function contents that this Function
      * represents. */
@@ -86,15 +118,15 @@ public:
      * reduction domain */
     void define(const std::vector<std::string> &args, std::vector<Expr> values);
 
-    /** Add an update definition to this function. It must already
-     * have a pure definition but not an update definition, and the
-     * length of args must match the length of args used in the pure
-     * definition. 'value' must depend on some reduction domain, and
-     * may contain variables from that domain as well as pure
-     * variables. Any pure variables must also appear as Variables in
-     * the args array, and they must have the same name as the pure
+    /** Add an update definition to this function. It must already have a pure
+     * definition but not an update definition, and the length of args must
+     * match the length of args used in the pure definition. 'value' may depend
+     * on some reduction domain may contain variables from that domain as well
+     * as pure variables. A reduction domain may also be introduced by passing
+     * it as the last argument. Any pure variables must also appear as Variables
+     * in the args array, and they must have the same name as the pure
      * definition's argument in the same index. */
-    void define_update(const std::vector<Expr> &args, std::vector<Expr> values);
+    void define_update(const std::vector<Expr> &args, std::vector<Expr> values, const ReductionDomain &rdom = ReductionDomain{});
 
     /** Accept a visitor to visit all of the definitions and arguments
      * of this function. */
@@ -125,15 +157,24 @@ public:
     int dimensions() const;
 
     /** Get the number of outputs. */
-    int outputs() const {
-        return (int)output_types().size();
-    }
+    int outputs() const;
 
     /** Get the types of the outputs. */
     const std::vector<Type> &output_types() const;
 
+    /** Get the type constaints on the outputs (if any). */
+    const std::vector<Type> &required_types() const;
+
+    /** Get the dimensionality constaints on the outputs (if any). */
+    int required_dimensions() const;
+
     /** Get the right-hand-side of the pure definition. Returns an
-     * empty vector if there is no pure definition. */
+     * empty vector if there is no pure definition.
+     *
+     * Warning: Any Vars in the Exprs are not qualified with the Func name, so
+     * the Exprs may contain names which collide with names provided by
+     * unique_name.
+     */
     const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition? */
@@ -251,6 +292,12 @@ public:
      * cannot be mutated further. */
     void lock_loop_levels();
 
+    /** Mark the function as too small for meaningful profiling. */
+    void do_not_profile();
+
+    /** Check if the function is marked as one that should not be profiled. */
+    bool should_not_profile() const;
+
     /** Mark function as frozen, which means it cannot accept new
      * definitions. */
     void freeze();
@@ -292,12 +339,30 @@ public:
 
     /** Return true iff the name matches one of the Function's pure args. */
     bool is_pure_arg(const std::string &name) const;
+
+    /** If the Function has type requirements, check that the given argument
+     * is compatible with them. If not, assert-fail. (If there are no type requirements, do nothing.) */
+    void check_types(const Expr &e) const;
+    void check_types(const Tuple &t) const;
+    void check_types(const Type &t) const;
+    void check_types(const std::vector<Expr> &exprs) const;
+    void check_types(const std::vector<Type> &types) const;
+
+    /** If the Function has dimension requirements, check that the given argument
+     * is compatible with them. If not, assert-fail. (If there are no dimension requirements, do nothing.) */
+    void check_dims(int dims) const;
+
+    /** Define the output buffers. If the Function has types specified, this can be called at
+     * any time. If not, it can only be called for a Function with a pure definition. */
+    void create_output_buffers(const std::vector<Type> &types, int dims) const;
 };
 
 /** Deep copy an entire Function DAG. */
 std::pair<std::vector<Function>, std::map<std::string, Function>> deep_copy(
     const std::vector<Function> &outputs,
     const std::map<std::string, Function> &env);
+
+extern std::atomic<int> random_variable_counter;
 
 }  // namespace Internal
 }  // namespace Halide

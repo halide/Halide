@@ -9,6 +9,8 @@
         _Z?6Halide* ;
         _Z??6Halide* ;
         _Z???6Halide* ;
+        # non-virtual thunks
+        _ZThn???_N6Halide* ;
 
     local: *;
 };

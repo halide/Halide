@@ -19,6 +19,51 @@ namespace {
 using std::string;
 using std::vector;
 
+class PartiallyCancelDifferences : public IRMutator {
+    using IRMutator::visit;
+
+    // Symbols used by rewrite rules
+    IRMatcher::Wild<0> x;
+    IRMatcher::Wild<1> y;
+    IRMatcher::Wild<2> z;
+    IRMatcher::WildConst<0> c0;
+    IRMatcher::WildConst<1> c1;
+
+    Expr visit(const Sub *op) override {
+
+        Expr a = mutate(op->a), b = mutate(op->b);
+
+        // Partially cancel terms in correlated differences of
+        // various kinds to get tighter bounds.  We assume any
+        // correlated term has already been pulled leftmost by
+        // solve_expression.
+        if (op->type == Int(32)) {
+            auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
+            if (
+                // Differences of quasi-affine functions
+                rewrite((x + y) / c0 - (x + z) / c0, ((x % c0) + y) / c0 - ((x % c0) + z) / c0) ||
+                rewrite(x / c0 - (x + z) / c0, 0 - ((x % c0) + z) / c0) ||
+                rewrite((x + y) / c0 - x / c0, ((x % c0) + y) / c0) ||
+
+                // truncated cones have a constant upper or lower
+                // bound that isn't apparent when expressed in the
+                // form in the LHS below
+                rewrite(min(x, c0) - max(x, c1), min(min(c0 - x, x - c1), fold(min(0, c0 - c1)))) ||
+                rewrite(max(x, c0) - min(x, c1), max(max(c0 - x, x - c1), fold(max(0, c0 - c1)))) ||
+                rewrite(min(x, y) - max(x, z), min(min(x, y) - max(x, z), 0)) ||
+                rewrite(max(x, y) - min(x, z), max(max(x, y) - min(x, z), 0)) ||
+
+                rewrite(min(x + c0, y) - select(z, min(x, y) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
+                rewrite(min(y, x + c0) - select(z, min(y, x) + c1, x), select(z, (max(min(y - x, c0), 0) - c1), min(y - x, c0)), c0 > 0) ||
+
+                false) {
+                return rewrite.result;
+            }
+        }
+        return a - b;
+    }
+};
+
 class SimplifyCorrelatedDifferences : public IRMutator {
     using IRMutator::visit;
 
@@ -129,47 +174,29 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         return s;
     }
 
-    class PartiallyCancelDifferences : public IRMutator {
-        using IRMutator::visit;
-
-        // Symbols used by rewrite rules
-        IRMatcher::Wild<0> x;
-        IRMatcher::Wild<1> y;
-        IRMatcher::Wild<2> z;
-        IRMatcher::WildConst<0> c0;
-        IRMatcher::WildConst<1> c1;
-
-        Expr visit(const Sub *op) override {
-
-            Expr a = mutate(op->a), b = mutate(op->b);
-
-            // Partially cancel terms in correlated differences of
-            // various kinds to get tighter bounds.  We assume any
-            // correlated term has already been pulled leftmost by
-            // solve_expression.
-            if (op->type == Int(32)) {
-                auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
-                if (
-                    // Differences of quasi-affine functions
-                    rewrite((x + y) / c0 - (x + z) / c0, ((x % c0) + y) / c0 - ((x % c0) + z) / c0) ||
-                    rewrite(x / c0 - (x + z) / c0, 0 - ((x % c0) + z) / c0) ||
-                    rewrite((x + y) / c0 - x / c0, ((x % c0) + y) / c0) ||
-
-                    // truncated cones have a constant upper or lower
-                    // bound that isn't apparent when expressed in the
-                    // form in the LHS below
-                    rewrite(min(x, c0) - max(x, c1), min(min(c0 - x, x - c1), fold(min(0, c0 - c1)))) ||
-                    rewrite(max(x, c0) - min(x, c1), max(max(c0 - x, x - c1), fold(max(0, c0 - c1)))) ||
-                    rewrite(min(x, y) - max(x, z), min(min(x, y) - max(x, z), 0)) ||
-                    rewrite(max(x, y) - min(x, z), max(max(x, y) - min(x, z), 0)) ||
-
-                    false) {
-                    return rewrite.result;
+    // Add the names of any free variables in an expr to the provided set
+    void track_free_vars(const Expr &e, std::set<std::string> *vars) {
+        class TrackFreeVars : public IRVisitor {
+            using IRVisitor::visit;
+            void visit(const Variable *op) override {
+                if (!scope.contains(op->name)) {
+                    vars->insert(op->name);
                 }
             }
-            return a - b;
-        }
-    };
+            void visit(const Let *op) override {
+                ScopedBinding<> bind(scope, op->name);
+                IRVisitor::visit(op);
+            }
+
+        public:
+            std::set<std::string> *vars;
+            Scope<> scope;
+            TrackFreeVars(std::set<std::string> *vars)
+                : vars(vars) {
+            }
+        } tracker(vars);
+        e.accept(&tracker);
+    }
 
     Expr cancel_correlated_subexpression(Expr e, const Expr &a, const Expr &b, bool correlated) {
         auto ma = is_monotonic(a, loop_var, monotonic);
@@ -180,17 +207,19 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && !correlated) ||
             (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && !correlated)) {
 
+            std::set<std::string> vars;
+            track_free_vars(e, &vars);
+
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                if (expr_uses_var(e, it->name)) {
-                    if (!it->may_substitute) {
-                        // We have to stop here. Can't continue
-                        // because there might be an outer let with
-                        // the same name that we *can* substitute in,
-                        // and then inner uses will get the wrong
-                        // value.
-                        break;
-                    }
+                if (!it->may_substitute && vars.count(it->name)) {
+                    // We have to stop here. Can't continue
+                    // because there might be an outer let with
+                    // the same name that we *can* substitute in,
+                    // and then inner uses will get the wrong
+                    // value.
+                    break;
                 }
+                track_free_vars(it->value, &vars);
                 e = Let::make(it->name, it->value, e);
             }
             e = common_subexpression_elimination(e);
@@ -280,6 +309,10 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 
 Stmt simplify_correlated_differences(const Stmt &stmt) {
     return SimplifyCorrelatedDifferences().mutate(stmt);
+}
+
+Expr bound_correlated_differences(const Expr &expr) {
+    return PartiallyCancelDifferences().mutate(expr);
 }
 
 }  // namespace Internal

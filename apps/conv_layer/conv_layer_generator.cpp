@@ -6,11 +6,10 @@ using namespace Halide;
 
 class ConvolutionLayer : public Halide::Generator<ConvolutionLayer> {
 public:
-    Input<Buffer<float>> input{"input", 4};
-    Input<Buffer<float>> filter{"filter", 4};
-    Input<Buffer<float>> bias{"bias", 1};
-
-    Output<Buffer<float>> relu{"relu", 4};
+    Input<Buffer<float, 4>> input{"input"};
+    Input<Buffer<float, 4>> filter{"filter"};
+    Input<Buffer<float, 1>> bias{"bias"};
+    Output<Buffer<float, 4>> relu{"relu"};
 
     void generate() {
         const int N = 5, CI = 128, CO = 128, W = 100, H = 80;
@@ -50,7 +49,7 @@ public:
 
         bias.dim(0).set_bounds(0, CO).set_stride(1);
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             input.dim(0).set_estimate(0, CI);
             input.dim(1).set_estimate(0, W + 2);
             input.dim(2).set_estimate(0, H + 2);

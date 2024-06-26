@@ -39,6 +39,13 @@ public:
         }
     }
 
+#if (TFLITE_VERSION_MAJOR >= 3) || (TFLITE_VERSION_MAJOR >= 2 && TFLITE_VERSION_MINOR >= 6)
+    std::pair<TfLiteDelegatePtr, int> CreateRankedTfLiteDelegate(const ToolParams &params) const final {
+        auto ptr = CreateTfLiteDelegate(params);
+        return std::make_pair(std::move(ptr), params.GetPosition<bool>("use_hannk"));
+    }
+#endif
+
     std::string GetName() const final {
         return "HANNK";
     }

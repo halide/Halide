@@ -10,6 +10,7 @@
 #include "tensorflow/lite/builtin_ops.h"
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/c_api.h"
+#include "tensorflow/lite/context_util.h"
 #include "util/error_util.h"
 
 // Use a List-Of-X approach here to ensure that places we handle ops are kept in sync
@@ -53,6 +54,8 @@
 namespace hannk {
 namespace {
 
+using tflite::TfLiteIntArrayView;
+
 constexpr char kDelegateName[] = "HannkDelegate";
 constexpr int kDelegateVersion = 1;
 
@@ -90,9 +93,11 @@ bool IsConstantTensor(const TfLiteTensor &tensor) {
     return tensor.allocation_type == kTfLiteMmapRo;
 }
 
+#ifndef NDEBUG
 bool IsDynamicTensor(const TfLiteTensor &tensor) {
     return tensor.allocation_type == kTfLiteDynamic;
 }
+#endif
 
 void SetTensorToDynamic(TfLiteContext *context, int tensor_id) {
     TfLiteTensor &tensor = context->tensors[tensor_id];
@@ -228,7 +233,9 @@ TensorPtr ConvertTfLiteTensor(const TfLiteTensor &tensor) {
         HalideBuffer<void> buffer(type, const_cast<void *>(read_only_data), shape);
         assert(tensor.bytes == buffer.size_in_bytes());
 
-        return std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
+        auto p = std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
+        p->set_constant();
+        return p;
     }
 
     // Create an "unallocated" Buffer, which points to null.
@@ -245,14 +252,13 @@ public:
     }
 
     // Init() will be called exactly once per instance.
-    TfLiteStatus Init(TfLiteContext *context,
-                      const TfLiteDelegateParams *params) {
+    TfLiteStatus Init(TfLiteContext *context, const TfLiteDelegateParams *params) {
         if (options_.verbosity >= 1) {
             HLOG(INFO) << "Delegate " << (void *)this << " Init\n";
         }
 
         if (interpreter_ != nullptr) {
-            TF_LITE_KERNEL_LOG(context, "Init must not be called twice.");
+            context->ReportError(context, "Init must not be called twice.");
             return kTfLiteDelegateError;
         }
 
@@ -290,7 +296,6 @@ public:
                 continue;
             }
             auto t = GetTensorById(context, tensor_id);
-            t->set_input(true);
             inputs.push_back(t);
             if (options_.verbosity >= 2) {
                 HLOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
@@ -308,7 +313,6 @@ public:
                 HLOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
             }
             auto t = GetTensorById(context, tensor_id);
-            t->set_output(true);
             outputs.push_back(t);
         }
 
@@ -328,13 +332,13 @@ public:
                 #undef KNOWN_OP
 
             default:
-                TF_LITE_KERNEL_LOG(context, "Op not supported: %d", op_type);
+                context->ReportError(context, "Op not supported: %d", op_type);
                 return kTfLiteDelegateError;
             }
             // clang-format on
 
             if (op == nullptr) {
-                TF_LITE_KERNEL_LOG(context, "Op factory returned null: %s", op_type);
+                context->ReportError(context, "Op factory returned null: %s", op_type);
                 return kTfLiteDelegateError;
             }
             ops.push_back(std::move(op));
@@ -355,19 +359,47 @@ public:
         assert(model_ != nullptr);
 
         if (interpreter_ != nullptr) {
-            TF_LITE_KERNEL_LOG(context, "Calling Prepare() multiple times");
+            context->ReportError(context, "Calling Prepare() multiple times");
             return kTfLiteDelegateError;
         }
 
-        interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_)));
+        // All inputs and outputs that aren't dynamic are marked as 'external',
+        // so that we can share memory between TFLite and Hannk. (Note that the
+        // TFLite Tensors haven't been allocated yet; we must update the host
+        // pointers in Eval.)
+        const auto set_external = [this, context](int tensor_id) {
+            assert(tensor_id != kTfLiteOptionalTensor);
+            auto t = GetTensorById(context, tensor_id);
+            if (!t->is_dynamic()) {
+                t->set_external();
+            }
+        };
 
-        for (int i = 0; i < node->outputs->size; i++) {
-            const int tensor_id = node->outputs->data[i];
+        // Mark all inputs and outputs as 'external'; we'll rely on TFLite
+        // to allocate the memory for these, and our internal hannk Tensors
+        // will shadow that memory, to save both space & copying time.
+        for (int tensor_id : TfLiteIntArrayView(node->inputs)) {
+            set_external(tensor_id);
+        }
+        for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
+            set_external(tensor_id);
+        }
+
+        InterpreterOptions options;
+        options.verbosity = options_.verbosity;
+        interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_), std::move(options)));
+        if (!interpreter_->prepare()) {
+            context->ReportError(context, "hannk::Interpreter::prepare() failed");
+            return kTfLiteDelegateError;
+        }
+
+        for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
             if (tensor_id == kTfLiteOptionalTensor) {
                 continue;
             }
             auto t = GetTensorById(context, tensor_id);
             if (t && t->is_dynamic()) {
+                assert(!t->is_external());
                 if (options_.verbosity >= 2) {
                     HLOG(INFO) << "SetTensorToDynamic " << tensor_id;
                 }
@@ -386,46 +418,52 @@ public:
         }
 
         if (interpreter_ == nullptr) {
-            TF_LITE_KERNEL_LOG(context, "interpreter_ is not built in Eval");
+            context->ReportError(context, "interpreter_ is not built in Eval");
             return kTfLiteDelegateError;
         }
 
-        // Copy the non-constant Tensor inputs. TODO: avoid this by sharing pointers.
-        for (int i = 0; i < node->inputs->size; i++) {
-            const int tensor_id = node->inputs->data[i];
-            if (tensor_id == kTfLiteOptionalTensor) {
-                continue;
-            }
-            assert(tensor_id >= 0 && tensor_id < (int)context->tensors_size);
-            const TfLiteTensor &tensor = context->tensors[tensor_id];
+        const auto set_host = [this, context](int tensor_id) {
+            assert(tensor_id != kTfLiteOptionalTensor);
             auto t = GetTensorById(context, tensor_id);
-            assert(t->is_constant() == IsConstantTensor(tensor));
-            if (t->is_constant()) {
-                continue;
+            if (t->is_external()) {
+                assert(!t->is_dynamic());
+                TfLiteTensor &tensor = context->tensors[tensor_id];
+                // TODO: should this be upgraded to a runtime-check-and-return-error?
+                const auto &old_buf = t->buffer();
+                assert(old_buf.size_in_bytes() == tensor.bytes);
+                // We must reset it every time, as the tensor's data pointer
+                // can vary between calls in some scenatrios.
+                const auto *raw_buf = old_buf.raw_buffer();
+                HalideBuffer<void> buf(raw_buf->type, tensor.data.data, raw_buf->dimensions, raw_buf->dim);
+                t->set_external_buffer(std::move(buf));
             }
-            assert(t->is_input() && !t->is_constant() && t->is_allocated());
-            auto buf = t->buffer();
-            assert(buf.size_in_bytes() == tensor.bytes);
-            memcpy(buf.data(), tensor.data.data, tensor.bytes);
+        };
+
+        for (int tensor_id : TfLiteIntArrayView(node->inputs)) {
+            set_host(tensor_id);
+        }
+        for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
+            set_host(tensor_id);
         }
 
         // TODO: execute needs to return an error code.
         interpreter_->execute();
 
-        // Copy the Tensor outputs. TODO: avoid this by sharing pointers.
-        for (int i = 0; i < node->outputs->size; i++) {
-            const int tensor_id = node->outputs->data[i];
-            if (tensor_id == kTfLiteOptionalTensor) {
-                continue;
-            }
-            assert(tensor_id >= 0 && tensor_id < (int)context->tensors_size);
-            TfLiteTensor &tensor = context->tensors[tensor_id];
-            assert(!IsConstantTensor(tensor));
+        // Dynamic tensors can't share their memory, because we didn't
+        // necessarily know the size until the pipeline was executed,
+        // so we need to resize the TFLite tensor and copy the data
+        // back over. This is regrettable, but dynamic tensors tend to
+        // to be uncommon.
+        for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
+            assert(tensor_id != kTfLiteOptionalTensor);
             auto t = GetTensorById(context, tensor_id);
-            assert(t->is_output() && !t->is_constant() && t->is_allocated());
             if (t->is_dynamic()) {
-                HCHECK(IsDynamicTensor(tensor));
+                TfLiteTensor &tensor = context->tensors[tensor_id];
+                assert(IsDynamicTensor(tensor));
                 const Box b = t->bounds();
+                if (options_.verbosity >= 2) {
+                    HLOG(INFO) << "ResizeTensor " << tensor_id << " to " << b;
+                }
                 TfLiteIntArray *new_size = TfLiteIntArrayCreate((int)b.size());
                 for (size_t i = 0; i < b.size(); i++) {
                     new_size->data[b.size() - i - 1] = b[i].extent();
@@ -433,16 +471,16 @@ public:
                 // (Note that ResizeTensor takes ownership of new_size, even if an error is returned.)
                 auto status = context->ResizeTensor(context, &tensor, new_size);
                 if (status != kTfLiteOk) {
-                    TF_LITE_KERNEL_LOG(context, "ResizeTensor() failed:", status);
+                    context->ReportError(context, "ResizeTensor() failed:", status);
                     return status;
                 }
-            }
-            auto buf = t->buffer();
-            assert(tensor.data.data != nullptr);
-            assert(buf.data() != nullptr);
-            assert(buf.size_in_bytes() == tensor.bytes);
+                auto buf = t->buffer();
+                assert(tensor.data.data != nullptr);
+                assert(buf.data() != nullptr);
+                assert(buf.size_in_bytes() == tensor.bytes);
 
-            memcpy(tensor.data.data, buf.data(), tensor.bytes);
+                memcpy(tensor.data.data, buf.data(), tensor.bytes);
+            }
         }
 
         // Eval() could be called again with the same graph -- don't destroy the interpreter_ yet.
@@ -549,11 +587,11 @@ private:
     }
 
     OpPtr BuildGreater(TfLiteContext *context, TfLiteNode *node) {
-        return BuildBinary(context, node, BinaryOp::Less, true);
+        return BuildBinary(context, node, BinaryOp::LessEqual, true);
     }
 
     OpPtr BuildGreaterEqual(TfLiteContext *context, TfLiteNode *node) {
-        return BuildBinary(context, node, BinaryOp::LessEqual, true);
+        return BuildBinary(context, node, BinaryOp::Less, true);
     }
 
     OpPtr BuildEqual(TfLiteContext *context, TfLiteNode *node) {
@@ -625,8 +663,8 @@ private:
             params->dilation_height_factor,
         }};
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<Conv2DOp>(input, filter, bias, output, stride,
-                                 dilation_factor, padding, activation);
+        return make_op<ConvOp>(input, filter, bias, output, stride,
+                               dilation_factor, padding, activation);
     }
 
     OpPtr BuildDepthwiseConv2d(TfLiteContext *context, TfLiteNode *node) {
@@ -657,7 +695,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<FullyConnectedOp>(input, filter, bias, output, activation);
+        return lower_tflite_fullyconnected(input, filter, bias, output, activation);
     }
 
     OpPtr BuildPad(TfLiteContext *context, TfLiteNode *node) {
@@ -675,12 +713,18 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteGatherParams *params = (const TfLiteGatherParams *)(node->builtin_data);
         int axis = params->axis;
+        int batch_dims = params->batch_dims;
         if (axis < 0) {
             axis += input->rank();
         }
         axis = input->rank() - 1 - axis;
-        return make_op<GatherOp>(input, indices, output, axis);
+        return make_op<GatherOp>(input, indices, output, axis, batch_dims);
     }
+
+    // TODO: support GATHER_ND once we find a testcase for it
+    // OpPtr BuildGatherNd(TfLiteContext *context, TfLiteNode *node) {
+    //     return BuildGather(context, node);
+    // }
 
     OpPtr BuildReshape(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
@@ -693,6 +737,7 @@ private:
             if (params) {
                 HalideBuffer<int32_t> shape_data(const_cast<int32_t *>(params->shape), params->num_dimensions);
                 shape_tensor = std::make_shared<Tensor>(input->name() + "_shape", shape_data);
+                shape_tensor->set_constant();
             }
         }
         return make_op<ReshapeOp>(input, shape_tensor, output);
@@ -708,13 +753,15 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteSoftmaxParams *params = (const TfLiteSoftmaxParams *)(node->builtin_data);
-        return make_op<SoftmaxOp>(input, output, params->beta);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<SoftmaxOp>(input, output, params->beta, axis);
     }
 
     OpPtr BuildL2Normalization(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<L2NormalizationOp>(input, output);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<L2NormalizationOp>(input, output, axis);
     }
 
     OpPtr BuildUnary(TfLiteContext *context, TfLiteNode *node, UnaryOp::Operator type) {
@@ -751,7 +798,14 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto indices = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<ReductionOp>(input, indices, output, ReductionOp::Mean);
+#ifndef NDEBUG
+        const TfLiteReducerParams *params = (const TfLiteReducerParams *)(node->builtin_data);
+        const bool keep_dims = params ? params->keep_dims : false;
+        // TODO: I have yet to find any examples of keep_dims == false in the wild.
+        // If/when we do, handle it appropriately.
+        assert(keep_dims == true);
+#endif
+        return make_op<ReductionOp>(ReductionOp::Mean, input, indices, output);
     }
 
     OpPtr BuildSpaceToDepth(TfLiteContext *context, TfLiteNode *node) {
@@ -1306,8 +1360,24 @@ class NodeSupport {
         if (!InputsHaveCorrectTypes({ANY, I32})) {
             return false;
         }
+        const TfLiteGatherParams *params = (const TfLiteGatherParams *)(node_->builtin_data);
+        if (params->batch_dims != 0) {
+            // TODO: we don't support other values for this yet, but we should.
+            return false;
+        }
         return true;
     }
+
+    // TODO: support GATHER_ND once we find a testcase for it
+    // bool IsNodeSupported_GatherNd() const {
+    //     if (!IsVersionOK(1, 2)) {
+    //         return false;
+    //     }
+    //     if (!InputsHaveCorrectTypes({ANY, I32})) {
+    //         return false;
+    //     }
+    //     return true;
+    // }
 
     bool IsNodeSupported_Conv2d() const {
         if (!IsVersionOK(1, 2)) {
@@ -1342,7 +1412,10 @@ class NodeSupport {
         if (!IsVersionOK(1, 1)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({U8, U8, I32_OR_NONE})) {
+        if (!(InputsHaveCorrectTypes({U8, U8, I32_OR_NONE}) && OutputsHaveCorrectTypes({U8})) &&
+            // Not sure if this combination is actually expected, but models in the wild
+            // require it, so we'll support it
+            !(InputsHaveCorrectTypes({U8, U8, I32_OR_NONE}) && OutputsHaveCorrectTypes({I16}))) {
             return false;
         }
         const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node_->builtin_data);

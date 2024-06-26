@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
 
     if (times[0] < times[1]) {
         printf("Using async() was slower!\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

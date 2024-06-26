@@ -10,6 +10,7 @@
 #include "ApplySplit.h"
 #include "Argument.h"
 #include "Associativity.h"
+#include "Callable.h"
 #include "CodeGen_LLVM.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
@@ -59,12 +60,20 @@ Func::Func(const string &name)
     : func(unique_name(name)) {
 }
 
+Func::Func(const Type &required_type, int required_dims, const string &name)
+    : func({required_type}, required_dims, unique_name(name)) {
+}
+
+Func::Func(const std::vector<Type> &required_types, int required_dims, const string &name)
+    : func(required_types, required_dims, unique_name(name)) {
+}
+
 Func::Func()
-    : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
+    : func(unique_name('f')) {
 }
 
 Func::Func(const Expr &e)
-    : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
+    : func(unique_name('f')) {
     (*this)(_) = e;
 }
 
@@ -188,13 +197,33 @@ void Func::define_extern(const std::string &function_name,
 }
 
 /** Get the types of the buffers returned by an extern definition. */
-const std::vector<Type> &Func::output_types() const {
-    return func.output_types();
+const Type &Func::type() const {
+    const auto &types = defined() ? func.output_types() : func.required_types();
+    if (types.empty()) {
+        user_error << "Can't call Func::type on Func \"" << name()
+                   << "\" because it is undefined or has no type requirements.\n";
+    } else if (types.size() > 1) {
+        user_error << "Can't call Func::type on Func \"" << name()
+                   << "\" because it returns a Tuple.\n";
+    }
+    return types[0];
+}
+
+const std::vector<Type> &Func::types() const {
+    const auto &types = defined() ? func.output_types() : func.required_types();
+    user_assert(!types.empty())
+        << "Can't call Func::types on Func \"" << name()
+        << "\" because it is undefined or has no type requirements.\n";
+    return types;
 }
 
 /** Get the number of outputs this function has. */
 int Func::outputs() const {
-    return func.outputs();
+    const auto &types = defined() ? func.output_types() : func.required_types();
+    user_assert(!types.empty())
+        << "Can't call Func::outputs on Func \"" << name()
+        << "\" because it is undefined or has no type requirements.\n";
+    return (int)types.size();
 }
 
 /** Get the name of the extern function called for an extern
@@ -204,21 +233,20 @@ const std::string &Func::extern_function_name() const {
 }
 
 int Func::dimensions() const {
-    if (!defined()) {
-        return 0;
-    }
-    return func.dimensions();
+    const int dims = defined() ? func.dimensions() : func.required_dimensions();
+    user_assert(dims != AnyDims)
+        << "Can't call Func::dimensions on Func \"" << name()
+        << "\" because it is undefined or has no dimension requirements.\n";
+    return dims;
 }
 
 FuncRef Func::operator()(vector<Var> args) const {
-    int placeholder_pos, count;
-    std::tie(placeholder_pos, count) = add_implicit_vars(args);
+    auto [placeholder_pos, count] = add_implicit_vars(args);
     return FuncRef(func, args, placeholder_pos, count);
 }
 
 FuncRef Func::operator()(vector<Expr> args) const {
-    int placeholder_pos, count;
-    std::tie(placeholder_pos, count) = add_implicit_vars(args);
+    auto [placeholder_pos, count] = add_implicit_vars(args);
     return FuncRef(func, args, placeholder_pos, count);
 }
 
@@ -234,7 +262,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
         placeholder_pos = (int)(iter - args.begin());
         int i = 0;
         iter = args.erase(iter);
-        while ((int)args.size() < dimensions()) {
+        // It's important to use func.dimensions() here, *not* this->dimensions(),
+        // since the latter can return the Func's required dimensions rather than its actual dimensions.
+        while ((int)args.size() < func.dimensions()) {
             Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
@@ -242,9 +272,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
         }
     }
 
-    if (defined() && args.size() != (size_t)dimensions()) {
+    if (defined() && args.size() != (size_t)func.dimensions()) {
         user_error << "Func \"" << name() << "\" was called with "
-                   << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+                   << args.size() << " arguments, but was defined with " << func.dimensions() << "\n";
     }
 
     return {placeholder_pos, count};
@@ -265,7 +295,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
         placeholder_pos = (int)(iter - args.begin());
         int i = 0;
         iter = args.erase(iter);
-        while ((int)args.size() < dimensions()) {
+        // It's important to use func.dimensions() here, *not* this->dimensions(),
+        // since the latter can return the Func's required dimensions rather than its actual dimensions.
+        while ((int)args.size() < func.dimensions()) {
             Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
@@ -273,9 +305,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
         }
     }
 
-    if (defined() && args.size() != (size_t)dimensions()) {
+    if (defined() && args.size() != (size_t)func.dimensions()) {
         user_error << "Func \"" << name() << "\" was called with "
-                   << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+                   << args.size() << " arguments, but was defined with " << func.dimensions() << "\n";
     }
 
     return {placeholder_pos, count};
@@ -343,20 +375,94 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
              rhs_checker.has_self_reference ||
              rhs_checker.has_rvar);
 }
+
+void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
+    // Splits with a 'blend' tail strategy do a load and then a store of values
+    // outside of the region to be computed, so for each split using a 'blend'
+    // tail strategy, verify that there aren't any parallel vars that stem from
+    // the same original dimension, so that this load and store doesn't race
+    // with a true computation of that value happening in some other thread.
+
+    // Note that we only need to check vars in the same dimension, because
+    // allocation bounds inference is done per-dimension and allocates padding
+    // based on the values actually accessed by the lowered code (i.e. it covers
+    // the blend region). So for example, an access beyond the end of a scanline
+    // can't overflow onto the next scanline. Halide will allocate padding, or
+    // throw a bounds error if it's an input or output.
+
+    if (sched.allow_race_conditions()) {
+        return;
+    }
+
+    std::set<std::string> parallel;
+    for (const auto &dim : sched.dims()) {
+        if (is_unordered_parallel(dim.for_type)) {
+            parallel.insert(dim.var);
+        }
+    }
+
+    // Process the splits in reverse order to figure out which root vars have a
+    // parallel child.
+    for (auto it = sched.splits().rbegin(); it != sched.splits().rend(); it++) {
+        if (it->is_fuse()) {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->inner);
+                parallel.insert(it->old_var);
+            }
+        } else if (it->is_rename() || it->is_purify()) {
+            if (parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        } else {
+            if (parallel.count(it->inner) || parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        }
+    }
+
+    // Now propagate back to all children of the identified root vars, to assert
+    // that none of them use a blending tail strategy.
+    for (auto it = sched.splits().begin(); it != sched.splits().end(); it++) {
+        if (it->is_fuse()) {
+            if (parallel.count(it->inner) || parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        } else if (it->is_rename() || it->is_purify()) {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->outer);
+            }
+        } else {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->inner);
+                parallel.insert(it->old_var);
+                if (it->tail == TailStrategy::ShiftInwardsAndBlend ||
+                    it->tail == TailStrategy::RoundUpAndBlend) {
+                    user_error << "Tail strategy " << it->tail
+                               << " may not be used to split " << it->old_var
+                               << " because other vars stemming from the same original "
+                               << "Var or RVar are marked as parallel."
+                               << "This could cause a race condition.\n";
+                }
+            }
+        }
+    }
+}
+
 }  // namespace
 
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
+    definition.schedule().touched() = true;
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, var.name())) {
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
             found = true;
-            dims[i].for_type = t;
+            dim.for_type = t;
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition,
             // unless it is flagged explicitly or is a associative atomic operation.
-            if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
+            if (!dim.is_pure() && var.is_rvar && is_parallel(t)) {
                 if (!definition.schedule().allow_race_conditions() &&
                     definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
@@ -370,9 +476,9 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                             // its identity for each value in the definition if it is a Tuple
                             const auto &prover_result = prove_associativity(func_name, args, values);
 
-                            user_assert(prover_result.associative())
+                            user_assert(prover_result.associative() && prover_result.commutative())
                                 << "Failed to call atomic() on " << name()
-                                << " since it can't prove associativity of the operator.\n";
+                                << " since it can't prove associativity or commutativity of the operator.\n";
                             internal_assert(prover_result.size() == values.size());
                         }
                     }
@@ -385,7 +491,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     << " condition resulting in incorrect output."
                     << " It is possible to parallelize this by using the"
                     << " atomic() method if the operation is associative,"
-                    << " or set override_associativity_test to true in the atomic method "
+                    << " or set override_associativity_test to true in the atomic method"
                     << " if you are certain that the operation is associative."
                     << " It is also possible to override this error using"
                     << " the allow_race_conditions() method. Use allow_race_conditions()"
@@ -406,15 +512,20 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                    << " in vars for function\n"
                    << dump_argument_list();
     }
+
+    if (is_unordered_parallel(t)) {
+        check_for_race_conditions_in_split_with_blend(definition.schedule());
+    }
 }
 
 void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
+    definition.schedule().touched() = true;
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, var.name())) {
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
             found = true;
-            dims[i].device_api = device_api;
+            dim.device_api = device_api;
         }
     }
 
@@ -664,15 +775,29 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
 }  // anonymous namespace
 
 Func Stage::rfactor(const RVar &r, const Var &v) {
+    definition.schedule().touched() = true;
     return rfactor({{r, v}});
 }
 
 Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
 
+    definition.schedule().touched() = true;
+
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
+
+    // Figure out which pure vars were used in this update definition.
+    std::set<string> pure_vars_used;
+    internal_assert(args.size() == dim_vars.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        if (const Internal::Variable *var = args[i].as<Variable>()) {
+            if (var->name == dim_vars[i].name()) {
+                pure_vars_used.insert(var->name);
+            }
+        }
+    }
 
     // Check whether the operator is associative and determine the operator and
     // its identity for each value in the definition if it is a Tuple
@@ -874,7 +999,9 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         val = substitute_self_reference(val, func_name, intm.function(), vars_rename);
         update_vals[i] = val;
     }
-    intm(update_args) = Tuple(update_vals);
+    // There may not actually be a reference to the RDom in the args or values,
+    // so we use Function::define_update, which lets pass pass an explicit RDom.
+    intm.function().define_update(update_args, update_vals, intm_rdom.domain());
 
     // Determine the dims and schedule of the update definition of the
     // intermediate Func. We copy over the schedule from the original
@@ -898,16 +1025,20 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 
     // Determine the dims of the new update definition
 
+    // The new update definition needs all the pure vars of the Func, but the
+    // one we're rfactoring may not have used them all. Add any missing ones to
+    // the dims list.
+
     // Add pure Vars from the original init definition to the dims list
     // if they are not already in the list
     for (const Var &v : dim_vars) {
-        const auto &iter = std::find_if(dims.begin(), dims.end(),
-                                        [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
-        if (iter == dims.end()) {
-            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
+        if (!pure_vars_used.count(v.name())) {
+            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
+            // Insert it just before Var::outermost
             dims.insert(dims.end() - 1, d);
         }
     }
+
     // Then, we need to remove lifted RVars from the dims list
     for (const string &rv : rvars_removed) {
         remove(rv);
@@ -945,7 +1076,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         }
 
         if (!prover_result.xs[i].var.empty()) {
-            Expr prev_val = Call::make(intm.output_types()[i], func_name,
+            Expr prev_val = Call::make(intm.types()[i], func_name,
                                        f_store_args, Call::CallType::Halide,
                                        FunctionPtr(), i);
             replacements.emplace(prover_result.xs[i].var, prev_val);
@@ -971,14 +1102,22 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
              << outer << " and " << inner << " with factor of " << factor << "\n";
     vector<Dim> &dims = definition.schedule().dims();
 
+    definition.schedule().touched() = true;
+
+    user_assert(inner != outer) << "In schedule for " << name()
+                                << ", can't split " << old << " into "
+                                << outer << " and " << inner
+                                << " because the new Vars have the same name.\n"
+                                << dump_argument_list();
+
     // Check that the new names aren't already in the dims list.
-    for (size_t i = 0; i < dims.size(); i++) {
+    for (auto &dim : dims) {
         string new_names[2] = {inner, outer};
-        for (int j = 0; j < 2; j++) {
-            if (var_name_match(dims[i].var, new_names[j]) && new_names[j] != old) {
+        for (const auto &new_name : new_names) {
+            if (var_name_match(dim.var, new_name) && new_name != old) {
                 user_error << "In schedule for " << name()
-                           << ", can't create var " << new_names[j]
-                           << " using a split or tile, because " << new_names[j]
+                           << ", can't create var " << new_name
+                           << " using a split or tile, because " << new_name
                            << " is already used in this Func's schedule elsewhere.\n"
                            << dump_argument_list();
             }
@@ -1045,6 +1184,34 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
             << "Use TailStrategy::GuardWithIf instead.";
     }
 
+    bool predicate_loads_ok = !exact;
+    if (predicate_loads_ok && tail == TailStrategy::PredicateLoads) {
+        // If it's the outermost split in this dimension, PredicateLoads
+        // is OK. Otherwise we can't prove it's safe.
+        std::set<string> inner_vars;
+        for (const Split &s : definition.schedule().splits()) {
+            if (s.is_split()) {
+                inner_vars.insert(s.inner);
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_rename() || s.is_purify()) {
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_fuse()) {
+                if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
+                    inner_vars.insert(s.old_var);
+                }
+            }
+        }
+        predicate_loads_ok = !inner_vars.count(old_name);
+        user_assert(predicate_loads_ok || tail != TailStrategy::PredicateLoads)
+            << "Can't use TailStrategy::PredicateLoads for splitting " << old_name
+            << " in the definition of " << name() << ". "
+            << "PredicateLoads may not be used to split a Var stemming from the inner Var of a prior split.";
+    }
+
     if (tail == TailStrategy::Auto) {
         // Select a tail strategy
         if (exact) {
@@ -1098,6 +1265,11 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
         }
     }
 
+    if (tail == TailStrategy::ShiftInwardsAndBlend ||
+        tail == TailStrategy::RoundUpAndBlend) {
+        check_for_race_conditions_in_split_with_blend(definition.schedule());
+    }
+
     if (!definition.is_init()) {
         user_assert(tail != TailStrategy::ShiftInwards)
             << "When splitting Var " << old_name
@@ -1108,7 +1280,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     if (exact) {
         user_assert(tail == TailStrategy::GuardWithIf || tail == TailStrategy::Predicate)
             << "When splitting Var " << old_name
-            << " the tail strategy must be GuardWithIf, Predicate or Auto. "
+            << " the tail strategy must be GuardWithIf, Predicate, or Auto. "
             << "Anything else may change the meaning of the algorithm\n";
     }
 
@@ -1118,6 +1290,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
 }
 
 Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
+    definition.schedule().touched() = true;
     if (old.is_rvar) {
         user_assert(outer.is_rvar) << "Can't split RVar " << old.name() << " into Var " << outer.name() << "\n";
         user_assert(inner.is_rvar) << "Can't split RVar " << old.name() << " into Var " << inner.name() << "\n";
@@ -1130,6 +1303,7 @@ Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVa
 }
 
 Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused) {
+    definition.schedule().touched() = true;
     if (!fused.is_rvar) {
         user_assert(!outer.is_rvar) << "Can't fuse Var " << fused.name()
                                     << " from RVar " << outer.name() << "\n";
@@ -1178,6 +1352,10 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
             } else {
                 dims[i].dim_type = DimType::PureVar;
             }
+            // We just changed the dim_type without checking the
+            // for_type. Redundantly re-set the for type on the fused var just
+            // to trigger validation of the existing for_type.
+            set_dim_type(fused, dims[i].for_type);
         }
     }
 
@@ -1213,6 +1391,8 @@ protected:
 Stage Stage::specialize(const Expr &condition) {
     user_assert(condition.type().is_bool()) << "Argument passed to specialize must be of type bool\n";
 
+    definition.schedule().touched() = true;
+
     // The condition may not depend on Vars or RVars
     Internal::CheckForFreeVars check;
     condition.accept(&check);
@@ -1244,6 +1424,9 @@ void Stage::specialize_fail(const std::string &message) {
     const vector<Specialization> &specializations = definition.specializations();
     user_assert(specializations.empty() || specializations.back().failure_message.empty())
         << "Only one specialize_fail() may be defined per Stage.";
+
+    definition.schedule().touched() = true;
+
     (void)definition.add_specialization(const_true());
     Specialization &s = definition.specializations().back();
     s.failure_message = message;
@@ -1385,6 +1568,8 @@ void Stage::remove(const string &var) {
 }
 
 Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
+    definition.schedule().touched() = true;
+
     if (old_var.is_rvar) {
         user_assert(new_var.is_rvar)
             << "In schedule for " << name()
@@ -1474,11 +1659,13 @@ Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
 }
 
 Stage &Stage::allow_race_conditions() {
+    definition.schedule().touched() = true;
     definition.schedule().allow_race_conditions() = true;
     return *this;
 }
 
 Stage &Stage::atomic(bool override_associativity_test) {
+    definition.schedule().touched() = true;
     definition.schedule().atomic() = true;
     definition.schedule().override_atomic_associativity_test() = override_associativity_test;
     return *this;
@@ -1543,6 +1730,56 @@ Stage &Stage::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail
     return *this;
 }
 
+Stage &Stage::partition(const VarOrRVar &var, Partition policy) {
+    definition.schedule().touched() = true;
+    bool found = false;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
+            found = true;
+            dim.partition_policy = policy;
+        }
+    }
+    user_assert(found)
+        << "In schedule for " << name()
+        << ", could not find var " << var.name()
+        << " to set loop partition policy.\n"
+        << dump_argument_list();
+    return *this;
+}
+
+Stage &Stage::never_partition(const std::vector<VarOrRVar> &vars) {
+    for (const auto &v : vars) {
+        partition(v, Partition::Never);
+    }
+    return *this;
+}
+
+Stage &Stage::never_partition_all() {
+    definition.schedule().touched() = true;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        dim.partition_policy = Partition::Never;
+    }
+    return *this;
+}
+
+Stage &Stage::always_partition(const std::vector<VarOrRVar> &vars) {
+    for (const auto &v : vars) {
+        partition(v, Partition::Always);
+    }
+    return *this;
+}
+
+Stage &Stage::always_partition_all() {
+    definition.schedule().touched() = true;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        dim.partition_policy = Partition::Always;
+    }
+    return *this;
+}
+
 Stage &Stage::tile(const VarOrRVar &x, const VarOrRVar &y,
                    const VarOrRVar &xo, const VarOrRVar &yo,
                    const VarOrRVar &xi, const VarOrRVar &yi,
@@ -1602,6 +1839,7 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
 }
 
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
+    definition.schedule().touched() = true;
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
@@ -1666,6 +1904,11 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     }
 
     dims_old.swap(dims);
+
+    // We're not allowed to reorder Var::outermost inwards (rfactor assumes it's
+    // the last one).
+    user_assert(dims.back().var == Var::outermost().name())
+        << "Var::outermost() may not be reordered inside any other var.\n";
 
     return *this;
 }
@@ -1840,19 +2083,22 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
     return *this;
 }
 
-Stage &Stage::prefetch(const Func &f, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
-    PrefetchDirective prefetch = {f.name(), var.name(), std::move(offset), strategy, Parameter()};
+Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    definition.schedule().touched() = true;
+    PrefetchDirective prefetch = {f.name(), at.name(), from.name(), std::move(offset), strategy, Parameter()};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
-Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
-    PrefetchDirective prefetch = {param.name(), var.name(), std::move(offset), strategy, param};
+Stage &Stage::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    definition.schedule().touched() = true;
+    PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
 Stage &Stage::compute_with(LoopLevel loop_level, const map<string, LoopAlignStrategy> &align) {
+    definition.schedule().touched() = true;
     loop_level.lock();
     user_assert(!loop_level.is_inlined() && !loop_level.is_root())
         << "Undefined loop level to compute with\n";
@@ -1900,12 +2146,9 @@ Stage &Stage::compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrate
     return compute_with(LoopLevel(s.function, var, s.stage_index), align);
 }
 
-/** Attempt to get the source file and line where this stage was
- * defined by parsing the process's own debug symbols. Returns an
- * empty string if no debug symbols were found or the debug
- * symbols were not understood. Works on OS X and Linux only. */
-std::string Stage::source_location() const {
-    return definition.source_location();
+void Stage::unscheduled() {
+    user_assert(!definition.schedule().touched()) << "Stage::unscheduled called on an update definition with a schedule\n";
+    definition.schedule().touched() = true;
 }
 
 void Func::invalidate_cache() {
@@ -1957,7 +2200,9 @@ Func create_clone_wrapper(Function wrapped_fn, const string &wrapper_name) {
     // Fix up any self-references in the clone.
     FunctionPtr self_reference = wrapper.function().get_contents();
     self_reference.weaken();
-    remapping.emplace(wrapped_fn.get_contents(), self_reference);
+    // remapping might already contain a strong self-reference from the deep
+    // copy, so we want to use operator[], not emplace or insert.
+    remapping[wrapped_fn.get_contents()] = self_reference;
     wrapper.function().substitute_calls(remapping);
     return wrapper;
 }
@@ -2167,6 +2412,12 @@ Func &Func::async() {
     return *this;
 }
 
+Func &Func::ring_buffer(Expr extent) {
+    invalidate_cache();
+    func.schedule().ring_buffer() = std::move(extent);
+    return *this;
+}
+
 Stage Func::specialize(const Expr &c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0).specialize(c);
@@ -2216,6 +2467,36 @@ Func &Func::vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tai
 Func &Func::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func, func.definition(), 0).unroll(var, factor, tail);
+    return *this;
+}
+
+Func &Func::partition(const VarOrRVar &var, Partition policy) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).partition(var, policy);
+    return *this;
+}
+
+Func &Func::never_partition(const std::vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).never_partition(vars);
+    return *this;
+}
+
+Func &Func::never_partition_all() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).never_partition_all();
+    return *this;
+}
+
+Func &Func::always_partition(const std::vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).always_partition(vars);
+    return *this;
+}
+
+Func &Func::always_partition_all() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).always_partition_all();
     return *this;
 }
 
@@ -2528,15 +2809,15 @@ Func &Func::hexagon(const VarOrRVar &x) {
     return *this;
 }
 
-Func &Func::prefetch(const Func &f, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
+Func &Func::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func, func.definition(), 0).prefetch(f, var, std::move(offset), strategy);
+    Stage(func, func.definition(), 0).prefetch(f, at, from, std::move(offset), strategy);
     return *this;
 }
 
-Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
+Func &Func::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func, func.definition(), 0).prefetch(param, var, std::move(offset), strategy);
+    Stage(func, func.definition(), 0).prefetch(param, at, from, std::move(offset), strategy);
     return *this;
 }
 
@@ -2591,9 +2872,9 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, dim.name())) {
-            dims[i].alignment = alignment;
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.alignment = alignment;
             return *this;
         }
     }
@@ -2604,14 +2885,31 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     return *this;
 }
 
+Func &Func::bound_storage(const Var &dim, const Expr &bound) {
+    invalidate_cache();
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.bound = bound;
+            return *this;
+        }
+    }
+    user_error << "In schedule for " << name()
+               << ", could not find var " << dim.name()
+               << " to bound the storage of.\n"
+               << dump_dim_list(func.schedule().storage_dims());
+    return *this;
+}
+
 Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, dim.name())) {
-            dims[i].fold_factor = factor;
-            dims[i].fold_forward = fold_forward;
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.fold_factor = factor;
+            d.fold_forward = fold_forward;
             return *this;
         }
     }
@@ -2687,6 +2985,24 @@ Func &Func::store_root() {
     return store_at(LoopLevel::root());
 }
 
+Func &Func::hoist_storage(LoopLevel loop_level) {
+    invalidate_cache();
+    func.schedule().hoist_storage_level() = std::move(loop_level);
+    return *this;
+}
+
+Func &Func::hoist_storage(const Func &f, const RVar &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage(const Func &f, const Var &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage_root() {
+    return hoist_storage(LoopLevel::root());
+}
+
 Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
 }
@@ -2715,6 +3031,11 @@ Func &Func::add_trace_tag(const std::string &trace_tag) {
     return *this;
 }
 
+Func &Func::no_profiling() {
+    func.do_not_profile();
+    return *this;
+}
+
 void Func::debug_to_file(const string &filename) {
     invalidate_cache();
     func.debug_file() = filename;
@@ -2735,12 +3056,11 @@ Func::operator Stage() const {
 namespace {
 class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
-    int count;
+    int count = 0;
 
-    CountImplicitVars(const vector<Expr> &e)
-        : count(0) {
-        for (size_t i = 0; i < e.size(); i++) {
-            e[i].accept(this);
+    CountImplicitVars(const vector<Expr> &exprs) {
+        for (const auto &e : exprs) {
+            e.accept(this);
         }
     }
 
@@ -2774,21 +3094,21 @@ FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos
     }
 }
 
-vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
-    vector<Expr> a = args;
+vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &exprs) const {
+    vector<Expr> result = args;
 
-    for (size_t i = 0; i < a.size(); i++) {
-        user_assert(a[i].defined())
+    for (size_t i = 0; i < result.size(); i++) {
+        user_assert(result[i].defined())
             << "Argument " << (i + 1) << " in call to \"" << func.name() << "\" is undefined.\n";
     }
-    for (size_t i = 0; i < e.size(); i++) {
-        user_assert(e[i].defined())
+    for (size_t i = 0; i < exprs.size(); i++) {
+        user_assert(exprs[i].defined())
             << "Value " << (i + 1) << " in definition of \"" << func.name() << "\" is undefined.\n";
     }
 
-    CountImplicitVars count(e);
-    for (size_t i = 0; i < a.size(); i++) {
-        a[i].accept(&count);
+    CountImplicitVars count(exprs);
+    for (const auto &e : exprs) {
+        e.accept(&count);
     }
 
     if (count.count > 0) {
@@ -2806,9 +3126,9 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
 
             Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
 
-            vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
+            vector<Expr>::iterator iter = result.begin() + implicit_placeholder_pos;
             for (int i = 0; i < count.count; i++) {
-                iter = a.insert(iter, Var::implicit(i));
+                iter = result.insert(iter, Var::implicit(i));
                 iter++;
             }
         }
@@ -2818,8 +3138,8 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     for (int i = 0; i < count.count; i++) {
         Var v = Var::implicit(i);
         bool found = false;
-        for (size_t j = 0; j < a.size(); j++) {
-            if (const Variable *arg = a[j].as<Variable>()) {
+        for (auto &e : result) {
+            if (const Variable *arg = e.as<Variable>()) {
                 if (arg->name == v.name()) {
                     found = true;
                 }
@@ -2831,7 +3151,7 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
             << " contain the placeholder symbol '_'.\n";
     }
 
-    return a;
+    return result;
 }
 
 Stage FuncRef::operator=(const Expr &e) {
@@ -2873,9 +3193,11 @@ Stage FuncRef::operator=(const FuncRef &e) {
     }
 }
 
+namespace {
+
 // Inject a suitable base-case definition given an update
 // definition. This is a helper for FuncRef::operator+= and co.
-Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Tuple &e) {
+Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const vector<Expr> &rhs, int init_val) {
     Func f(func);
 
     if (func.has_pure_definition()) {
@@ -2894,24 +3216,32 @@ Func define_base_case(const Internal::Function &func, const vector<Expr> &a, con
         }
     }
 
-    f(pure_args) = e;
+    const auto &required_types = func.required_types();
+    internal_assert(required_types.empty() || required_types.size() == rhs.size());
+
+    vector<Expr> init_values(rhs.size());
+    for (size_t i = 0; i < rhs.size(); ++i) {
+        // If we have required types, cast the init_val to that type instead of the rhs type
+        const Type &t = required_types.empty() ? rhs[i].type() : required_types[i];
+        init_values[i] = cast(t, init_val);
+    }
+
+    f(pure_args) = Tuple(init_values);
     return f;
 }
 
-Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Expr &e) {
-    return define_base_case(func, a, Tuple(e));
-}
+}  // namespace
 
 template<typename BinaryOp>
 Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
+    // Don't do this: we want to allow the RHS to be implicitly cast to the type of LHS.
+    // func.check_types(e);
+
     internal_assert(e.size() > 1);
 
-    vector<Expr> init_values(e.size());
-    for (int i = 0; i < (int)init_values.size(); ++i) {
-        init_values[i] = cast(e[i].type(), init_val);
-    }
-    vector<Expr> expanded_args = args_with_implicit_vars(e.as_vector());
-    FuncRef self_ref = define_base_case(func, expanded_args, Tuple(init_values))(expanded_args);
+    const vector<Expr> &rhs = e.as_vector();
+    const vector<Expr> expanded_args = args_with_implicit_vars(rhs);
+    FuncRef self_ref = define_base_case(func, expanded_args, rhs, init_val)(expanded_args);
 
     vector<Expr> values(e.size());
     for (int i = 0; i < (int)values.size(); ++i) {
@@ -2922,8 +3252,12 @@ Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
 
 template<typename BinaryOp>
 Stage FuncRef::func_ref_update(Expr e, int init_val) {
-    vector<Expr> expanded_args = args_with_implicit_vars({e});
-    FuncRef self_ref = define_base_case(func, expanded_args, cast(e.type(), init_val))(expanded_args);
+    // Don't do this: we want to allow the RHS to be implicitly cast to the type of LHS.
+    // func.check_types(e);
+
+    const vector<Expr> rhs = {e};
+    const vector<Expr> expanded_args = args_with_implicit_vars(rhs);
+    FuncRef self_ref = define_base_case(func, expanded_args, rhs, init_val)(expanded_args);
     return self_ref = BinaryOp()(Expr(self_ref), e);
 }
 
@@ -3085,56 +3419,51 @@ FuncTupleElementRef::operator Expr() const {
     return Internal::Call::make(func_ref.function(), args, idx);
 }
 
-Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
-                          const ParamMap &param_map) {
+Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
-    return pipeline().realize(std::move(sizes), target, param_map);
+    return pipeline().realize(std::move(sizes), target);
 }
 
-Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size, w_size}, target, param_map);
-}
-
-Realization Func::realize(int x_size, int y_size, int z_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size}, target, param_map);
-}
-
-Realization Func::realize(int x_size, int y_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize({x_size, y_size}, target, param_map);
+Realization Func::realize(JITUserContext *context,
+                          std::vector<int32_t> sizes,
+                          const Target &target) {
+    user_assert(defined()) << "Can't realize undefined Func.\n";
+    return pipeline().realize(context, std::move(sizes), target);
 }
 
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
-                              const Target &target,
-                              const ParamMap &param_map) {
+                              const Target &target) {
+    infer_input_bounds(nullptr, sizes, target);
+}
+
+void Func::infer_input_bounds(JITUserContext *context,
+                              const std::vector<int32_t> &sizes,
+                              const Target &target) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         Buffer<> im(func.output_types()[i], nullptr, sizes);
         outputs[i] = std::move(im);
     }
-    Realization r(outputs);
-    infer_input_bounds(r, target, param_map);
+    Realization r(std::move(outputs));
+    infer_input_bounds(context, r, target);
 }
 
 OutputImageParam Func::output_buffer() const {
-    user_assert(defined())
-        << "Can't access output buffer of undefined Func.\n";
-    user_assert(func.output_buffers().size() == 1)
+    const auto &ob = func.output_buffers();
+
+    user_assert(ob.size() == 1)
         << "Can't call Func::output_buffer on Func \"" << name()
         << "\" because it returns a Tuple.\n";
-    return OutputImageParam(func.output_buffers()[0], Argument::OutputBuffer, *this);
+    return OutputImageParam(ob[0], Argument::OutputBuffer, *this);
 }
 
 vector<OutputImageParam> Func::output_buffers() const {
-    user_assert(defined())
-        << "Can't access output buffers of undefined Func.\n";
+    const auto &ob = func.output_buffers();
 
-    vector<OutputImageParam> bufs(func.output_buffers().size());
+    vector<OutputImageParam> bufs(ob.size());
     for (size_t i = 0; i < bufs.size(); i++) {
-        bufs[i] = OutputImageParam(func.output_buffers()[i], Argument::OutputBuffer, *this);
+        bufs[i] = OutputImageParam(ob[i], Argument::OutputBuffer, *this);
     }
     return bufs;
 }
@@ -3155,16 +3484,11 @@ vector<Argument> Func::infer_arguments() const {
     return Pipeline(*this).infer_arguments();
 }
 
-std::string Func::source_location() const {
-    user_assert(defined()) << "A Func with no definition has no source_location\n";
-    return func.definition().source_location();
-}
-
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
     return pipeline().compile_to_module(args, fn_name, target);
 }
 
-void Func::compile_to(const map<Output, string> &output_files,
+void Func::compile_to(const map<OutputFileType, string> &output_files,
                       const vector<Argument> &args,
                       const string &fn_name,
                       const Target &target) {
@@ -3260,30 +3584,12 @@ void Func::compile_to_assembly(const string &filename, const vector<Argument> &a
 
 // JIT-related code
 
-void Func::set_error_handler(void (*handler)(void *, const char *)) {
-    pipeline().set_error_handler(handler);
+namespace {
+template<typename A, typename B>
+void set_handler(A &a, B b) {
+    a = (A)b;
 }
-
-void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
-                                void (*cust_free)(void *, void *)) {
-    pipeline().set_custom_allocator(cust_malloc, cust_free);
-}
-
-void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
-    pipeline().set_custom_do_par_for(cust_do_par_for);
-}
-
-void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
-    pipeline().set_custom_do_task(cust_do_task);
-}
-
-void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *)) {
-    pipeline().set_custom_trace(trace_fn);
-}
-
-void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
-    pipeline().set_custom_print(cust_print);
-}
+}  // namespace
 
 void Func::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     pipeline().add_custom_lowering_pass(pass, std::move(deleter));
@@ -3297,22 +3603,38 @@ const vector<CustomLoweringPass> &Func::custom_lowering_passes() {
     return pipeline().custom_lowering_passes();
 }
 
-const Internal::JITHandlers &Func::jit_handlers() {
+JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Pipeline::RealizationArg outputs, const Target &target,
-                   const ParamMap &param_map) {
-    pipeline().realize(std::move(outputs), target, param_map);
+void Func::realize(Pipeline::RealizationArg outputs,
+                   const Target &target) {
+    pipeline().realize(std::move(outputs), target);
 }
 
-void Func::infer_input_bounds(Pipeline::RealizationArg outputs, const Target &target,
-                              const ParamMap &param_map) {
-    pipeline().infer_input_bounds(std::move(outputs), target, param_map);
+void Func::realize(JITUserContext *context,
+                   Pipeline::RealizationArg outputs,
+                   const Target &target) {
+    pipeline().realize(context, std::move(outputs), target);
+}
+
+void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
+                              const Target &target) {
+    pipeline().infer_input_bounds(std::move(outputs), target);
+}
+
+void Func::infer_input_bounds(JITUserContext *context,
+                              Pipeline::RealizationArg outputs,
+                              const Target &target) {
+    pipeline().infer_input_bounds(context, std::move(outputs), target);
 }
 
 void Func::compile_jit(const Target &target) {
     pipeline().compile_jit(target);
+}
+
+Callable Func::compile_to_callable(const std::vector<Argument> &args, const Target &target) {
+    return pipeline().compile_to_callable(args, target);
 }
 
 }  // namespace Halide

@@ -1,4 +1,3 @@
-; Note that this is only used for LLVM 8.0+
 define weak_odr <16 x i8>  @paddusbx16(<16 x i8> %a0, <16 x i8> %a1) nounwind alwaysinline {
   %1 = add <16 x i8> %a0, %a1
   %2 = icmp ugt <16 x i8> %a0, %1
@@ -6,7 +5,6 @@ define weak_odr <16 x i8>  @paddusbx16(<16 x i8> %a0, <16 x i8> %a1) nounwind al
   ret <16 x i8> %3
 }
 
-; Note that this is only used for LLVM 8.0+
 define weak_odr <8 x i16> @padduswx8(<8 x i16> %a0, <8 x i16> %a1) nounwind alwaysinline {
   %1 = add <8 x i16> %a0, %a1
   %2 = icmp ugt <8 x i16> %a0, %1
@@ -14,7 +12,6 @@ define weak_odr <8 x i16> @padduswx8(<8 x i16> %a0, <8 x i16> %a1) nounwind alwa
   ret <8 x i16> %3
 }
 
-; Note that this is only used for LLVM 8.0+
 define weak_odr <16 x i8> @psubusbx16(<16 x i8> %a0, <16 x i8> %a1) nounwind alwaysinline {
   %1 = icmp ugt <16 x i8> %a0, %a1
   %2 = select <16 x i1> %1, <16 x i8> %a0, <16 x i8> %a1
@@ -22,7 +19,6 @@ define weak_odr <16 x i8> @psubusbx16(<16 x i8> %a0, <16 x i8> %a1) nounwind alw
   ret <16 x i8> %3
 }
 
-; Note that this is only used for LLVM 8.0+
 define weak_odr <8 x i16> @psubuswx8(<8 x i16> %a0, <8 x i16> %a1) nounwind alwaysinline {
   %1 = icmp ugt <8 x i16> %a0, %a1
   %2 = select <8 x i1> %1, <8 x i16> %a0, <8 x i16> %a1
@@ -30,51 +26,45 @@ define weak_odr <8 x i16> @psubuswx8(<8 x i16> %a0, <8 x i16> %a1) nounwind alwa
   ret <8 x i16> %3
 }
 
-; Note that this is only used for LLVM 6.0+
-define weak_odr <16 x i8>  @pavgbx16(<16 x i8> %a, <16 x i8> %b) nounwind alwaysinline {
-  %1 = zext <16 x i8> %a to <16 x i32>
-  %2 = zext <16 x i8> %b to <16 x i32>
-  %3 = add nuw nsw <16 x i32> %1, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
-  %4 = add nuw nsw <16 x i32> %3, %2
-  %5 = lshr <16 x i32> %4, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
-  %6 = trunc <16 x i32> %5 to <16 x i8>
-  ret <16 x i8> %6
-}
-
-; Note that this is only used for LLVM 6.0+
-define weak_odr <8 x i16>  @pavgwx8(<8 x i16> %a, <8 x i16> %b) nounwind alwaysinline {
-  %1 = zext <8 x i16> %a to <8 x i32>
-  %2 = zext <8 x i16> %b to <8 x i32>
-  %3 = add nuw nsw <8 x i32> %1, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
-  %4 = add nuw nsw <8 x i32> %3, %2
-  %5 = lshr <8 x i32> %4, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
-  %6 = trunc <8 x i32> %5 to <8 x i16>
-  ret <8 x i16> %6
-}
-
 declare <16 x i8> @llvm.x86.sse2.packsswb.128(<8 x i16>, <8 x i16>)
 declare <16 x i8> @llvm.x86.sse2.packuswb.128(<8 x i16>, <8 x i16>)
 declare <8 x i16> @llvm.x86.sse2.packssdw.128(<4 x i32>, <4 x i32>)
 
 define weak_odr <16 x i8>  @packsswbx16(<16 x i16> %arg) nounwind alwaysinline {
-  %1 = shufflevector <16 x i16> %arg, <16 x i16> undef, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
-  %2 = shufflevector <16 x i16> %arg, <16 x i16> undef, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
+  %1 = shufflevector <16 x i16> %arg, <16 x i16> poison, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %2 = shufflevector <16 x i16> %arg, <16 x i16> poison, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
   %3 = tail call <16 x i8> @llvm.x86.sse2.packsswb.128(<8 x i16> %1, <8 x i16> %2)
   ret <16 x i8> %3
 }
 
 define weak_odr <16 x i8>  @packuswbx16(<16 x i16> %arg) nounwind alwaysinline {
-  %1 = shufflevector <16 x i16> %arg, <16 x i16> undef, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
-  %2 = shufflevector <16 x i16> %arg, <16 x i16> undef, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
+  %1 = shufflevector <16 x i16> %arg, <16 x i16> poison, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %2 = shufflevector <16 x i16> %arg, <16 x i16> poison, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
   %3 = tail call <16 x i8> @llvm.x86.sse2.packuswb.128(<8 x i16> %1, <8 x i16> %2)
   ret <16 x i8> %3
 }
 
 define weak_odr <8 x i16>  @packssdwx8(<8 x i32> %arg) nounwind alwaysinline {
-  %1 = shufflevector <8 x i32> %arg, <8 x i32> undef, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
-  %2 = shufflevector <8 x i32> %arg, <8 x i32> undef, <4 x i32> < i32 4, i32 5, i32 6, i32 7>
+  %1 = shufflevector <8 x i32> %arg, <8 x i32> poison, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+  %2 = shufflevector <8 x i32> %arg, <8 x i32> poison, <4 x i32> < i32 4, i32 5, i32 6, i32 7>
   %3 = tail call <8 x i16> @llvm.x86.sse2.packssdw.128(<4 x i32> %1, <4 x i32> %2)
   ret <8 x i16> %3
+}
+
+define weak_odr <4 x i32> @wmul_pmaddwd_sse2(<4 x i16> %a, <4 x i16> %b) nounwind alwaysinline {
+  %1 = zext <4 x i16> %a to <4 x i32>
+  %2 = zext <4 x i16> %b to <4 x i32>
+  %3 = bitcast <4 x i32> %1 to <8 x i16>
+  %4 = bitcast <4 x i32> %2 to <8 x i16>
+  %res = call <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16> %3, <8 x i16> %4)
+  ret <4 x i32> %res
+}
+
+declare <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16>, <8 x i16>) nounwind readnone
+
+define weak_odr <4 x i32> @hadd_pmadd_i16_sse2(<8 x i16> %a) nounwind alwaysinline {
+  %res = call <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16> %a, <8 x i16> <i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1>)
+  ret <4 x i32> %res
 }
 
 define weak_odr <4 x float> @sqrt_f32x4(<4 x float> %x) nounwind uwtable readnone alwaysinline {
@@ -109,7 +99,7 @@ define weak_odr <2 x double> @abs_f64x2(<2 x double> %x) nounwind uwtable readno
 
 declare <4 x float> @llvm.x86.sse.rcp.ss(<4 x float>) nounwind readnone
 define weak_odr float @fast_inverse_f32(float %x) nounwind uwtable readnone alwaysinline {
-  %vec = insertelement <4 x float> undef, float %x, i32 0
+  %vec = insertelement <4 x float> poison, float %x, i32 0
   %approx = tail call <4 x float> @llvm.x86.sse.rcp.ss(<4 x float> %vec)
   %result = extractelement <4 x float> %approx, i32 0
   ret float %result
@@ -125,7 +115,7 @@ define weak_odr <4 x float> @fast_inverse_f32x4(<4 x float> %x) nounwind uwtable
 declare <4 x float> @llvm.x86.sse.rsqrt.ss(<4 x float>) nounwind readnone
 
 define weak_odr float @fast_inverse_sqrt_f32(float %x) nounwind uwtable readnone alwaysinline {
-  %vec = insertelement <4 x float> undef, float %x, i32 0
+  %vec = insertelement <4 x float> poison, float %x, i32 0
   %approx = tail call <4 x float> @llvm.x86.sse.rsqrt.ss(<4 x float> %vec)
   %result = extractelement <4 x float> %approx, i32 0
   ret float %result
@@ -147,7 +137,12 @@ define weak_odr <4 x float> @fast_inverse_sqrt_f32x4(<4 x float> %x) nounwind uw
 ; -- A version without stack spills tends to confuse the x86-32 code generator
 ; and cause it to fail via running out of registers.
 define weak_odr void @x86_cpuid_halide(i32* %info) nounwind uwtable {
-  call void asm sideeffect inteldialect "xchg ebx, esi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, dword ptr $$4 $0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg ebx, esi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* %info)
+  call void asm sideeffect inteldialect "xchg ebx, esi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, dword ptr $$4 $0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg ebx, esi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* elementtype(i32) %info)
+  ret void
+}
 
+; Same, but ensure that we save/restore the full 64 bits of rbx/rsi.
+define weak_odr void @x64_cpuid_halide(i32* %info) nounwind uwtable {
+  call void asm sideeffect inteldialect "xchg rbx, rsi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, dword ptr $$4 $0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg rbx, rsi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* elementtype(i32) %info)
   ret void
 }

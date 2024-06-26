@@ -7,15 +7,15 @@
  * pipeline.
  */
 
+#include <initializer_list>
 #include <map>
+#include <memory>
 #include <vector>
 
-#include "ExternalCode.h"
 #include "IROperator.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
-#include "ParamMap.h"
 #include "Realization.h"
 #include "Target.h"
 #include "Tuple.h"
@@ -23,36 +23,47 @@
 namespace Halide {
 
 struct Argument;
+class Callable;
 class Func;
 struct PipelineContents;
 
-/** A struct representing the machine parameters to generate the auto-scheduled
- * code for. */
-struct MachineParams {
-    /** Maximum level of parallelism avalaible. */
-    int parallelism;
-    /** Size of the last-level cache (in bytes). */
-    uint64_t last_level_cache_size;
-    /** Indicates how much more expensive is the cost of a load compared to
-     * the cost of an arithmetic operation at last level cache. */
-    float balance;
+/** Special the Autoscheduler to be used (if any), along with arbitrary
+ * additional arguments specific to the given Autoscheduler.
+ *
+ * The 'name' field specifies the type of Autoscheduler
+ * to be used (e.g. Adams2019, Mullapudi2016). If this is an empty string,
+ * no autoscheduling will be done; if not, it mustbe the name of a known Autoscheduler.
+ *
+ * At this time, well-known autoschedulers include:
+ *  "Mullapudi2016" -- heuristics-based; the first working autoscheduler; currently built in to libHalide
+ *                     see http://graphics.cs.cmu.edu/projects/halidesched/
+ *  "Adams2019"     -- aka "the ML autoscheduler"; currently located in apps/autoscheduler
+ *                     see https://halide-lang.org/papers/autoscheduler2019.html
+ *  "Li2018"        -- aka "the gradient autoscheduler"; currently located in apps/gradient_autoscheduler.
+ *                     see https://people.csail.mit.edu/tzumao/gradient_halide
+ *
+ * The key/value pairs in 'extra' are defined on a per-autoscheduler basis.
+ * An autoscheduler can have any number of required or optional keys.
+ */
+struct AutoschedulerParams {
+    std::string name;
+    std::map<std::string, std::string> extra;
 
-    explicit MachineParams(int parallelism, uint64_t llc, float balance)
-        : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {
+    AutoschedulerParams() = default;
+    /*not-explicit*/ AutoschedulerParams(const std::string &name)
+        : name(name) {
+    }
+    AutoschedulerParams(const std::string &name, const std::map<std::string, std::string> &extra)
+        : name(name), extra(extra) {
     }
 
-    /** Default machine parameters for generic CPU architecture. */
-    static MachineParams generic();
-
-    /** Convert the MachineParams into canonical string form. */
     std::string to_string() const;
-
-    /** Reconstruct a MachineParams from canonical string form. */
-    explicit MachineParams(const std::string &s);
 };
 
 namespace Internal {
 class IRMutator;
+struct JITCache;
+struct JITCallArgs;
 }  // namespace Internal
 
 /**
@@ -81,16 +92,15 @@ struct CustomLoweringPass {
 struct JITExtern;
 
 struct AutoSchedulerResults {
-    std::string scheduler_name;          // name of the autoscheduler used
-    Target target;                       // Target specified to the autoscheduler
-    std::string machine_params_string;   // MachineParams specified to the autoscheduler (in string form)
-    std::string schedule_source;         // The C++ source code of the generated schedule
-    std::vector<uint8_t> featurization;  // The featurization of the pipeline (if any)
+    Target target;                             // Target specified to the autoscheduler
+    AutoschedulerParams autoscheduler_params;  // The autoscheduler used, along with its params
+    std::string schedule_source;               // The C++ source code of the generated schedule
+    std::vector<uint8_t> featurization;        // The featurization of the pipeline (if any)
 };
 
 class Pipeline;
 
-using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const MachineParams &, AutoSchedulerResults *outputs)>;
+using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const AutoschedulerParams &, AutoSchedulerResults *outputs)>;
 
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */
@@ -111,18 +121,18 @@ public:
         RealizationArg(halide_buffer_t *buf)
             : buf(buf) {
         }
-        template<typename T, int D>
-        RealizationArg(Runtime::Buffer<T, D> &dst)
+        template<typename T, int Dims>
+        RealizationArg(Runtime::Buffer<T, Dims> &dst)
             : buf(dst.raw_buffer()) {
         }
-        template<typename T>
-        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T> &dst)
+        template<typename T, int Dims>
+        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T, Dims> &dst)
             : buf(dst.raw_buffer()) {
         }
-        template<typename T, typename... Args,
+        template<typename T, int Dims, typename... Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
-        RealizationArg(Buffer<T> &a, Args &&...args) {
-            buffer_list.reset(new std::vector<Buffer<>>({a, args...}));
+        RealizationArg(Buffer<T, Dims> &a, Args &&...args)
+            : buffer_list(std::make_unique<std::vector<Buffer<>>>(std::initializer_list<Buffer<>>{a, std::forward<Args>(args)...})) {
         }
         RealizationArg(RealizationArg &&from) = default;
 
@@ -139,26 +149,27 @@ public:
 private:
     Internal::IntrusivePtr<PipelineContents> contents;
 
-    struct JITCallArgs;  // Opaque structure to optimize away dynamic allocation in this path.
-
-    // For the three method below, precisely one of the first two args should be non-null
-    void prepare_jit_call_arguments(RealizationArg &output, const Target &target, const ParamMap &param_map,
-                                    void *user_context, bool is_bounds_inference, JITCallArgs &args_result);
+    void prepare_jit_call_arguments(RealizationArg &output, const Target &target,
+                                    JITUserContext **user_context, bool is_bounds_inference, Internal::JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
     static std::map<std::string, AutoSchedulerFn> &get_autoscheduler_map();
 
-    static std::string &get_default_autoscheduler_name();
-
     static AutoSchedulerFn find_autoscheduler(const std::string &autoscheduler_name);
 
-    int call_jit_code(const Target &target, const JITCallArgs &args);
+    int call_jit_code(const Internal::JITCallArgs &args);
 
     // Get the value of contents->jit_target, but reality-check that the contents
     // sensibly match the value. Return Target() if not jitted.
     Target get_compiled_jit_target() const;
+
+    static Internal::JITCache compile_jit_cache(const Module &module,
+                                                std::vector<Argument> args,
+                                                const std::vector<Internal::Function> &outputs,
+                                                const std::map<std::string, JITExtern> &jit_externs,
+                                                const Target &target_arg);
 
 public:
     /** Make an undefined Pipeline object. */
@@ -172,37 +183,24 @@ public:
      * outputs. Schedules the Funcs compute_root(). */
     Pipeline(const std::vector<Func> &outputs);
 
+    /** Make a pipeline from deserialization. */
+    Pipeline(const std::vector<Func> &outputs, const std::vector<Internal::Stmt> &requirements);
+
     std::vector<Argument> infer_arguments(const Internal::Stmt &body);
 
     /** Get the Funcs this pipeline outputs. */
     std::vector<Func> outputs() const;
 
-    /** Generate a schedule for the pipeline using the currently-default autoscheduler. */
-    AutoSchedulerResults auto_schedule(const Target &target,
-                                       const MachineParams &arch_params = MachineParams::generic());
+    /** Get the requirements of this pipeline. */
+    std::vector<Internal::Stmt> requirements() const;
 
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
-    AutoSchedulerResults auto_schedule(const std::string &autoscheduler_name,
-                                       const Target &target,
-                                       const MachineParams &arch_params = MachineParams::generic());
+    AutoSchedulerResults apply_autoscheduler(const Target &target,
+                                             const AutoschedulerParams &autoscheduler_params) const;
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
     static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler);
-
-    /** Globally set the default autoscheduler method to use whenever
-     * autoscheduling any Pipeline when no name is specified. If the autoscheduler_name isn't in the
-     * current table of known autoschedulers, assert-fail.
-     *
-     * At this time, well-known autoschedulers include:
-     *  "Mullapudi2016" -- heuristics-based; the first working autoscheduler; currently built in to libHalide
-     *                     see http://graphics.cs.cmu.edu/projects/halidesched/
-     *  "Adams2019"     -- aka "the ML autoscheduler"; currently located in apps/autoscheduler
-     *                     see https://halide-lang.org/papers/autoscheduler2019.html
-     *  "Li2018"        -- aka "the gradient autoscheduler"; currently located in apps/gradient_autoscheduler.
-     *                     see https://people.csail.mit.edu/tzumao/gradient_halide
-     */
-    static void set_default_autoscheduler_name(const std::string &autoscheduler_name);
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */
@@ -212,7 +210,7 @@ public:
      * Deduces target files based on filenames specified in
      * output_files map.
      */
-    void compile_to(const std::map<Output, std::string> &output_files,
+    void compile_to(const std::map<OutputFileType, std::string> &output_files,
                     const std::vector<Argument> &args,
                     const std::string &fn_name,
                     const Target &target);
@@ -347,101 +345,13 @@ public:
      */
     void compile_jit(const Target &target = get_jit_target_from_environment());
 
-    /** Set the error handler function that be called in the case of
-     * runtime errors during halide pipelines. If you are compiling
-     * statically, you can also just define your own function with
-     * signature
-     \code
-     extern "C" void halide_error(void *user_context, const char *);
-     \endcode
-     * This will clobber Halide's version.
+    /** Eagerly jit compile the function to machine code and return a callable
+     * struct that behaves like a function pointer. The calling convention
+     * will exactly match that of an AOT-compiled version of this Func
+     * with the same Argument list.
      */
-    void set_error_handler(void (*handler)(void *, const char *));
-
-    /** Set a custom malloc and free for halide to use. Malloc should
-     * return 32-byte aligned chunks of memory, and it should be safe
-     * for Halide to read slightly out of bounds (up to 8 bytes before
-     * the start or beyond the end). If compiling statically, routines
-     * with appropriate signatures can be provided directly
-    \code
-     extern "C" void *halide_malloc(void *, size_t)
-     extern "C" void halide_free(void *, void *)
-     \endcode
-     * These will clobber Halide's versions. See HalideRuntime.h
-     * for declarations.
-     */
-    void set_custom_allocator(void *(*malloc)(void *, size_t),
-                              void (*free)(void *, void *));
-
-    /** Set a custom task handler to be called by the parallel for
-     * loop. It is useful to set this if you want to do some
-     * additional bookkeeping at the granularity of parallel
-     * tasks. The default implementation does this:
-     \code
-     extern "C" int halide_do_task(void *user_context,
-                                   int (*f)(void *, int, uint8_t *),
-                                   int idx, uint8_t *state) {
-         return f(user_context, idx, state);
-     }
-     \endcode
-     * If you are statically compiling, you can also just define your
-     * own version of the above function, and it will clobber Halide's
-     * version.
-     *
-     * If you're trying to use a custom parallel runtime, you probably
-     * don't want to call this. See instead \ref Func::set_custom_do_par_for .
-    */
-    void set_custom_do_task(
-        int (*custom_do_task)(void *, int (*)(void *, int, uint8_t *),
-                              int, uint8_t *));
-
-    /** Set a custom parallel for loop launcher. Useful if your app
-     * already manages a thread pool. The default implementation is
-     * equivalent to this:
-     \code
-     extern "C" int halide_do_par_for(void *user_context,
-                                      int (*f)(void *, int, uint8_t *),
-                                      int min, int extent, uint8_t *state) {
-         int exit_status = 0;
-         parallel for (int idx = min; idx < min+extent; idx++) {
-             int job_status = halide_do_task(user_context, f, idx, state);
-             if (job_status) exit_status = job_status;
-         }
-         return exit_status;
-     }
-     \endcode
-     *
-     * However, notwithstanding the above example code, if one task
-     * fails, we may skip over other tasks, and if two tasks return
-     * different error codes, we may select one arbitrarily to return.
-     *
-     * If you are statically compiling, you can also just define your
-     * own version of the above function, and it will clobber Halide's
-     * version.
-     */
-    void set_custom_do_par_for(
-        int (*custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
-                                 int, uint8_t *));
-
-    /** Set custom routines to call when tracing is enabled. Call this
-     * on the output Func of your pipeline. This then sets custom
-     * routines for the entire pipeline, not just calls to this
-     * Func.
-     *
-     * If you are statically compiling, you can also just define your
-     * own versions of the tracing functions (see HalideRuntime.h),
-     * and they will clobber Halide's versions. */
-    void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
-
-    /** Set the function called to print messages from the runtime.
-     * If you are compiling statically, you can also just define your
-     * own function with signature
-     \code
-     extern "C" void halide_print(void *user_context, const char *);
-     \endcode
-     * This will clobber Halide's version.
-     */
-    void set_custom_print(void (*handler)(void *, const char *));
+    Callable compile_to_callable(const std::vector<Argument> &args,
+                                 const Target &target = get_jit_target_from_environment());
 
     /** Install a set of external C functions or Funcs to satisfy
      * dependencies introduced by HalideExtern and define_extern
@@ -454,8 +364,9 @@ public:
     const std::map<std::string, JITExtern> &get_jit_externs();
 
     /** Get a struct containing the currently set custom functions
-     * used by JIT. */
-    const Internal::JITHandlers &jit_handlers();
+     * used by JIT. This can be mutated. Changes will take effect the
+     * next time this Pipeline is realized. */
+    JITHandlers &jit_handlers();
 
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of
@@ -484,28 +395,15 @@ public:
     const std::vector<CustomLoweringPass> &custom_lowering_passes();
 
     /** See Func::realize */
-    // @{
-    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
-    Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
-    Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
-    Realization realize(int x_size, int y_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target());
 
-    // Making this a template function is a trick: `{intliteral}` is a valid scalar initializer
-    // in C++, but we want it to match the vector call, not the (deprecated) scalar one.
-    template<typename T, typename = typename std::enable_if<std::is_same<T, int>::value>::type>
-    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
-    HALIDE_ALWAYS_INLINE Realization realize(T x_size, const Target &target = Target(),
-                                             const ParamMap &param_map = ParamMap::empty_map()) {
-        return realize(std::vector<int32_t>{x_size}, target, param_map);
-    }
-    // @}
+    /** Same as above, but takes a custom user-provided context to be
+     * passed to runtime functions. A nullptr context is legal, and is
+     * equivalent to calling the variant of realize that does not take
+     * a context. */
+    Realization realize(JITUserContext *context,
+                        std::vector<int32_t> sizes = {},
+                        const Target &target = Target());
 
     /** Evaluate this Pipeline into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
@@ -516,8 +414,15 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    void realize(RealizationArg output, const Target &target = Target(),
-                 const ParamMap &param_map = ParamMap::empty_map());
+    void realize(RealizationArg output, const Target &target = Target());
+
+    /** Same as above, but takes a custom user-provided context to be
+     * passed to runtime functions. A nullptr context is legal, and
+     * is equivalent to calling the variant of realize that does not
+     * take a context. */
+    void realize(JITUserContext *context,
+                 RealizationArg output,
+                 const Target &target = Target());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -526,11 +431,19 @@ public:
      * ImageParams. */
     // @{
     void infer_input_bounds(const std::vector<int32_t> &sizes,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     void infer_input_bounds(RealizationArg output,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
+    // @}
+
+    /** Variants of infer_inputs_bounds that take a custom user context */
+    // @{
+    void infer_input_bounds(JITUserContext *context,
+                            const std::vector<int32_t> &sizes,
+                            const Target &target = get_jit_target_from_environment());
+    void infer_input_bounds(JITUserContext *context,
+                            RealizationArg output,
+                            const Target &target = get_jit_target_from_environment());
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:
@@ -558,17 +471,20 @@ public:
      * with the remaining arguments, and return
      * halide_error_code_requirement_failed. Requirements are checked
      * in the order added. */
-    void add_requirement(const Expr &condition, std::vector<Expr> &error);
+    // @{
+    void add_requirement(const Expr &condition, const std::vector<Expr> &error_args);
+
+    template<typename... Args,
+             typename = typename std::enable_if<Internal::all_are_printable_args<Args...>::value>::type>
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
+        std::vector<Expr> collected_args;
+        Internal::collect_print_args(collected_args, std::forward<Args>(error_args)...);
+        add_requirement(condition, collected_args);
+    }
+    // @}
 
     /** Generate begin_pipeline and end_pipeline tracing calls for this pipeline. */
     void trace_pipeline();
-
-    template<typename... Args>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...args) {
-        std::vector<Expr> collected_args;
-        Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
-        add_requirement(condition, collected_args);
-    }
 
 private:
     std::string generate_function_name() const;

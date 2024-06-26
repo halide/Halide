@@ -7,9 +7,11 @@
 #include <utility>
 
 #include "Halide.h"
+#include "ParamParser.h"
 
 namespace Halide {
 namespace Internal {
+namespace Autoscheduler {
 
 using std::make_pair;
 using std::map;
@@ -19,6 +21,18 @@ using std::string;
 using std::vector;
 
 namespace {
+
+struct ArchParams {
+    /** Maximum level of parallelism avalaible. */
+    int parallelism = 16;
+
+    /** Size of the last-level cache (in bytes). */
+    uint64_t last_level_cache_size = 16 * 1024 * 1024;
+
+    /** Indicates how much more expensive is the cost of a load compared to
+     * the cost of an arithmetic operation at last level cache. */
+    float balance = 40;
+};
 
 // Substitute parameter estimates into the exprs describing the box bounds.
 void substitute_estimates_box(Box &box) {
@@ -72,9 +86,9 @@ string get_sanitized_name(string name) {
     if (isdigit(name[0])) {
         name = "_" + name;
     }
-    for (size_t i = 0; i < name.size(); ++i) {
-        if (!isalnum(name[i])) {
-            name[i] = '_';
+    for (char &c : name) {
+        if (!isalnum(c)) {
+            c = '_';
         }
     }
     return name;
@@ -485,9 +499,21 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
                         curr_scope.push(dims[d].var, simple_bounds);
                     }
 
+                    // Extract all exprs associated with the definition
+                    class GetAllExprs : public IRMutator {
+                    public:
+                        std::vector<Expr> exprs;
+                        using IRMutator::mutate;
+                        Expr mutate(const Expr &e) override {
+                            exprs.push_back(e);
+                            return e;
+                        }
+                    } get_all_exprs;
+                    def.mutate(&get_all_exprs);
+
                     // Find the regions required for each value of the current function stage,
                     // update the region map, and add them to the queue.
-                    for (const auto &val : def.values()) {
+                    for (const auto &val : get_all_exprs.exprs) {
                         // Substitute the parameter estimates into the expression and get
                         // the regions required for the expression.
                         Expr subs_val = substitute_var_estimates(val);
@@ -574,7 +600,7 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
         concrete_regions[f_reg.first] = concrete_box;
     }
 
-    regions_required_cache[query].push_back(RegionsRequired(bounds, concrete_regions));
+    regions_required_cache[query].emplace_back(bounds, concrete_regions);
     return concrete_regions;
 }
 
@@ -811,18 +837,27 @@ struct AutoSchedule {
                 }
             }
 
-            for (const auto &s : f.second) {
-                internal_assert(!s.second.empty());
+            const int num_stages = func.updates().size() + 1;
+            for (int stage = 0; stage < num_stages; stage++) {
                 schedule_ss << "    " << fname;
-                if (s.first > 0) {
-                    schedule_ss << ".update(" << std::to_string(s.first - 1) << ")";
+                if (stage > 0) {
+                    schedule_ss << ".update(" << (stage - 1) << ")";
                 }
-                for (size_t i = 0; i < s.second.size(); ++i) {
-                    schedule_ss << "\n        ." << s.second[i];
+                auto it = f.second.find(stage);
+                if (it != f.second.end()) {
+                    const vector<string> &schedules = it->second;
+                    internal_assert(!schedules.empty());
+                    for (const std::string &s : schedules) {
+                        internal_assert(!s.empty());
+                        schedule_ss << "\n        ." << s;
+                    }
+                } else {
+                    if (stage > 0) {
+                        schedule_ss << ".unscheduled()";
+                    }
                 }
                 schedule_ss << ";\n";
             }
-
             schedule_ss << "}\n";
         }
 
@@ -1052,7 +1087,7 @@ struct Partitioner {
     const map<string, Box> &pipeline_bounds;
     // Parameters of the machine model that is used for estimating the cost of each
     // group in the pipeline.
-    const MachineParams &arch_params;
+    const ArchParams &arch_params;
     // Dependency analysis of the pipeline. This support queries on regions
     // accessed and computed for producing some regions of some functions.
     DependenceAnalysis &dep_analysis;
@@ -1063,7 +1098,7 @@ struct Partitioner {
     const vector<Function> &outputs;
 
     Partitioner(const map<string, Box> &_pipeline_bounds,
-                const MachineParams &_arch_params,
+                const ArchParams &_arch_params,
                 const vector<Function> &_outputs,
                 DependenceAnalysis &_dep_analysis,
                 RegionCosts &_costs);
@@ -1303,7 +1338,7 @@ void Partitioner::disp_pipeline_costs() {
 // Construct a partitioner and build the pipeline graph on which the grouping
 // algorithm operates.
 Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
-                         const MachineParams &_arch_params,
+                         const ArchParams &_arch_params,
                          const vector<Function> &_outputs,
                          DependenceAnalysis &_dep_analysis,
                          RegionCosts &_costs)
@@ -1324,7 +1359,7 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
         for (int s = 0; s < num_stages; s++) {
             FStage stg(f.second, s);
             Group g(stg, {stg});
-            groups.insert(make_pair(stg, g));
+            groups.emplace(stg, g);
         }
     }
 
@@ -1632,7 +1667,7 @@ void Partitioner::group(Partitioner::Level level) {
         Cost pre_merge = get_pipeline_cost();
 
         fixpoint = true;
-        vector<pair<string, string>> cand;
+        vector<pair<string, string>> candidates;
         for (const pair<const FStage, Group> &g : groups) {
             bool is_output = false;
             for (const Function &f : outputs) {
@@ -1670,10 +1705,10 @@ void Partitioner::group(Partitioner::Level level) {
                 if ((num_children == 1) && (level == Partitioner::Level::FastMem)) {
                     const string &prod_name = prod_f.name();
                     const string &cons_name = (*child_groups.begin());
-                    cand.emplace_back(prod_name, cons_name);
+                    candidates.emplace_back(prod_name, cons_name);
                 } else if ((level == Partitioner::Level::Inline) && prod_f.is_pure()) {
                     const string &prod_name = prod_f.name();
-                    cand.emplace_back(prod_name, "");
+                    candidates.emplace_back(prod_name, "");
                 }
             }
         }
@@ -1681,11 +1716,11 @@ void Partitioner::group(Partitioner::Level level) {
         debug(3) << "\n============================\n"
                  << "Current grouping candidates:\n"
                  << "============================\n";
-        for (size_t i = 0; i < cand.size(); ++i) {
-            debug(3) << "{" << cand[i].first << ", " << cand[i].second << "}\n";
+        for (auto &c : candidates) {
+            debug(3) << "{" << c.first << ", " << c.second << "}\n";
         }
 
-        vector<pair<GroupingChoice, GroupConfig>> best = choose_candidate_grouping(cand, level);
+        vector<pair<GroupingChoice, GroupConfig>> best = choose_candidate_grouping(candidates, level);
         if (best.empty()) {
             continue;
         } else {
@@ -1911,8 +1946,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     Box out_tile_extent;
     if (g.output.stage_num == 0) {
         const vector<string> &args = g.output.func.args();
-        for (size_t d = 0; d < args.size(); d++) {
-            const auto &iter = tile_bounds.find(args[d]);
+        for (const auto &arg : args) {
+            const auto &iter = tile_bounds.find(arg);
             if (iter != tile_bounds.end()) {
                 out_tile_extent.push_back(iter->second);
             } else {
@@ -2444,10 +2479,13 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
         // storage dimension of the func.
         //
         // TODO: Check if the warning is necessary.
-        if (vec_dim_index > 0) {
-            user_warning << "Outer dim vectorization of var \"" << vec_dim_name
-                         << "\" in function \"" << f_handle.name() << "\"\n";
-        }
+        //
+        // Disabled: this isn't really user actionable, and is just noise.
+        //
+        // if (vec_dim_index > 0) {
+        //     user_warning << "Outer dim vectorization of var \"" << vec_dim_name
+        //                  << "\" in function \"" << f_handle.name() << "\"\n";
+        // }
     }
 }
 
@@ -2587,7 +2625,7 @@ class FindVarsUsingVar : public IRVisitor {
 public:
     Scope<> vars;
 
-    FindVarsUsingVar(const string &var) {
+    explicit FindVarsUsingVar(const string &var) {
         vars.push(var);
     }
 };
@@ -2776,9 +2814,12 @@ void Partitioner::generate_group_cpu_schedule(
         }
     }
 
-    if (can_prove(def_par < arch_params.parallelism)) {
-        user_warning << "Insufficient parallelism for " << f_handle.name() << "\n";
-    }
+    // Silenced: the user can't really do anything about it,
+    // and it triggers on things like tiny lookup tables
+    //
+    // if (can_prove(def_par < arch_params.parallelism)) {
+    //     user_warning << "Insufficient parallelism for " << f_handle.name() << "\n";
+    // }
 
     // Find the level at which group members will be computed.
     int tile_inner_index = dims.size() - outer_dims.size() - 1;
@@ -2981,6 +3022,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
             if (iter != allocation_bounds.end()) {
                 call_alloc_reg = iter->second;
             } else {
+                internal_assert(pipeline_bounds.count(call.first)) << "Pipeline_bounds is missing " << call.first << "\n";
                 call_alloc_reg = get_element(pipeline_bounds, call.first);
             }
             Expr current_stride = find_max_access_stride(dep_vars.vars, call.first,
@@ -3164,7 +3206,7 @@ bool inline_unbounded(const vector<Function> &outputs,
 // outputs. This applies the schedules and returns a string representation of
 // the schedules. The target architecture is specified by 'target'.
 string generate_schedules(const vector<Function> &outputs, const Target &target,
-                          const MachineParams &arch_params) {
+                          const ArchParams &arch_params) {
     // Make an environment map which is used throughout the auto scheduling process.
     map<string, Function> env;
     for (const Function &f : outputs) {
@@ -3354,6 +3396,16 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     debug(2) << "Generating CPU schedule...\n";
     part.generate_cpu_schedule(target, sched);
 
+    // Ensure that all update stages are "touched" so we get no warnings/errors
+    for (const auto &f : sched.func_schedules) {
+        const Function &func = get_element(sched.env, f.first);
+        const int num_update_stages = func.updates().size();
+        for (int stage = 0; stage < num_update_stages; stage++) {
+            Definition def = get_stage_definition(func, stage + 1);
+            def.schedule().touched() = true;
+        }
+    }
+
     std::ostringstream oss;
     oss << sched;
     string sched_string = oss.str();
@@ -3370,28 +3422,35 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }
 
 struct Mullapudi2016 {
-    void operator()(const Pipeline &pipeline, const Target &target, const MachineParams &arch_params, AutoSchedulerResults *outputs) {
+    void operator()(const Pipeline &pipeline, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *outputs) {
+        internal_assert(params_in.name == "Mullapudi2016");
+
         AutoSchedulerResults results;
         results.target = target;
-        results.machine_params_string = arch_params.to_string();
+        results.autoscheduler_params = params_in;
 
-        user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                    target.arch == Target::POWERPC || target.arch == Target::MIPS)
-            << "The Mullapudi2016 autoscheduler is not supported for the target: " << target.to_string();
-        results.scheduler_name = "Mullapudi2016";
         std::vector<Function> pipeline_outputs;
         for (const Func &f : pipeline.outputs()) {
             pipeline_outputs.push_back(f.function());
         }
-        results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);
-        // this autoscheduler has no featurization
 
-        *outputs = results;
+        ArchParams arch_params;
+        {
+            ParamParser parser(params_in.extra);
+            parser.parse("parallelism", &arch_params.parallelism);
+            parser.parse("last_level_cache_size", &arch_params.last_level_cache_size);
+            parser.parse("balance", &arch_params.balance);
+            parser.finish();
+        }
+        results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);
+        results.autoscheduler_params = params_in;
+        // this autoscheduler has no featurization
+        *outputs = std::move(results);
     }
 };
 
 REGISTER_AUTOSCHEDULER(Mullapudi2016)
 
+}  // namespace Autoscheduler
 }  // namespace Internal
-
 }  // namespace Halide

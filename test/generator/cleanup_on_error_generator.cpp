@@ -4,7 +4,7 @@ namespace {
 
 class CleanupOnError : public Halide::Generator<CleanupOnError> {
 public:
-    Output<Buffer<int32_t>> output{"output", 1};
+    Output<Buffer<int32_t, 1>> output{"output"};
 
     void generate() {
         Var x;

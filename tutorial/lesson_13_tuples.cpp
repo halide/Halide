@@ -4,11 +4,11 @@
 // values.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_13*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_13 -std=c++11
+// g++ lesson_13*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_13 -std=c++17
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_13
 
 // On os x:
-// g++ lesson_13*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_13 -std=c++11
+// g++ lesson_13*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_13 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_13
 
 // If you have the entire Halide source tree, you can also build it by
@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
 
     // You can construct a Tuple by passing multiple Exprs to the
     // Tuple constructor as we did above. Perhaps more elegantly, you
-    // can also take advantage of C++11 initializer lists and just
+    // can also take advantage of initializer lists and just
     // enclose your Exprs in braces:
     Func multi_valued_2;
     multi_valued_2(x, y) = {x + y, sin(x * y)};

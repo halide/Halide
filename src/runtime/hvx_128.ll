@@ -1,11 +1,11 @@
+
 declare void @llvm.trap() noreturn nounwind
 
 declare <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32>)
 declare <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32>)
 declare <64 x i32> @llvm.hexagon.V6.vshuffvdd.128B(<32 x i32>, <32 x i32>, i32)
 declare <64 x i32> @llvm.hexagon.V6.vdealvdd.128B(<32 x i32>, <32 x i32>, i32)
-declare <32 x i32> @llvm.hexagon.V6.vasrwhsat.128B(<32 x i32>, <32 x i32>, i32)
-declare <32 x i32> @llvm.hexagon.V6.vsathub.128B(<32 x i32>, <32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vsatuwuh.128B(<32 x i32>, <32 x i32>)
 
 define weak_odr <64 x i32> @halide.hexagon.interleave.vw(<64 x i32> %arg) nounwind uwtable readnone alwaysinline {
   %e = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %arg)
@@ -143,18 +143,6 @@ define private <64 x i32> @vaslw.acc.dv.128B(<64 x i32> %a, <64 x i32> %l, i32 %
   %s_hi = call <32 x i32> @llvm.hexagon.V6.vaslw.acc.128B(<32 x i32> %a_hi, <32 x i32> %l_hi, i32 %r)
   %s = call <64 x i32> @llvm.hexagon.V6.vcombine.128B(<32 x i32> %s_hi, <32 x i32> %s_lo)
   ret <64 x i32> %s
-}
-
-define weak_odr <64 x i32> @halide.hexagon.mul.vuw.vuh(<64 x i32> %a, <64 x i16> %b) nounwind uwtable readnone alwaysinline {
-  %a_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %a)
-  %a_hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %a)
-  %a_e = call <32 x i32> @llvm.hexagon.V6.vshufeh.128B(<32 x i32> %a_hi, <32 x i32> %a_lo)
-  %a_o = call <32 x i32> @llvm.hexagon.V6.vshufoh.128B(<32 x i32> %a_hi, <32 x i32> %a_lo)
-  %b_32 = bitcast <64 x i16> %b to <32 x i32>
-  %ab_e = call <64 x i32> @llvm.hexagon.V6.vmpyuhv.128B(<32 x i32> %a_e, <32 x i32> %b_32)
-  %ab_o = call <64 x i32> @llvm.hexagon.V6.vmpyuhv.128B(<32 x i32> %a_o, <32 x i32> %b_32)
-  %ab = call <64 x i32> @vaslw.acc.dv.128B(<64 x i32> %ab_e, <64 x i32> %ab_o, i32 16)
-  ret <64 x i32> %ab
 }
 
 define weak_odr <64 x i32> @halide.hexagon.mul.vuw.vuw(<64 x i32> %a, <64 x i32> %b) nounwind uwtable readnone alwaysinline {
@@ -366,6 +354,52 @@ define weak_odr <64 x i16> @halide.hexagon.trunc_satuh.vw(<64 x i32> %arg) nounw
   ret <64 x i16> %r
 }
 
+declare <32 x i32> @llvm.hexagon.V6.vpackeb.128B(<32 x i32>, <32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vminuh.128B(<32 x i32>, <32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.lvsplath.128B(i32)
+
+; We do not have saturating downcasts of unsigned 16bit types. So, we expand these
+; in bitcode here.
+; Note: pack_satub.vuh doesnt interleave its input.
+define weak_odr <128 x i8> @halide.hexagon.pack_satub.vuh(<64 x i32> %arg) nounwind uwtable readnone alwaysinline {
+  %max = call <32 x i32> @llvm.hexagon.V6.lvsplath.128B(i32 255)
+  %lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %arg)
+  %hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %arg)
+  %lo_sat = call <32 x i32> @llvm.hexagon.V6.vminuh.128B(<32 x i32> %lo, <32 x i32> %max)
+  %hi_sat = call <32 x i32> @llvm.hexagon.V6.vminuh.128B(<32 x i32> %hi, <32 x i32> %max)
+  %r_32 = call <32 x i32> @llvm.hexagon.V6.vpackeb.128B(<32 x i32> %hi_sat, <32 x i32> %lo_sat)
+  %r = bitcast <32 x i32> %r_32 to <128 x i8>
+  ret <128 x i8> %r
+}
+
+; We cannot use the same strategy for halide.hexagon.pack_satuh.vuw as we did for halide.hexagon.pack_satub.vuh
+; because HVX doesn't have a native min intrinsic for unsigned words like it does for unsigned half-words.
+; Doing a signed min of an unsigned word with 65535 will make unsigned words > INT32_MAX become negative
+; numbers does yielding the wrong result of 0 on subsequent saturation instead of 65535.
+; Instead, we deinterleave the input double vector first and then use trunc_satuh.vuw. The latter is natively
+; supported by the vsat instruction (vsatuwuh intrinsic). This is also the reason we don't have to
+; provide halide.hexagon.trunc_satuh.vuw in the way that we had to provide halide.hexagon.trunc_satub.vuh below.
+define weak_odr <64 x i16> @halide.hexagon.pack_satuh.vuw(<64 x i32> %arg) nounwind uwtable readnone alwaysinline {
+  %lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %arg)
+  %hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %arg)
+  %deal_dv = call <64 x i32> @llvm.hexagon.V6.vdealvdd.128B(<32 x i32> %hi, <32 x i32> %lo, i32 -4)
+  %e = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %deal_dv)
+  %o = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %deal_dv)
+  %r_32 = call <32 x i32> @llvm.hexagon.V6.vsatuwuh.128B(<32 x i32> %o, <32 x i32> %e)
+  %r = bitcast <32 x i32> %r_32 to <64 x i16>
+  ret <64 x i16> %r
+}
+
+declare <32 x i32> @llvm.hexagon.V6.vasruhubsat.128B(<32 x i32>, <32 x i32>, i32)
+; This is the same as halide.hexagon.pack_satub.vuh except it interleaves its input.
+define weak_odr <128 x i8> @halide.hexagon.trunc_satub.vuh(<64 x i32> %arg) nounwind uwtable readnone alwaysinline {
+  %e = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %arg)
+  %o = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %arg)
+  %r_32 = call <32 x i32> @llvm.hexagon.V6.vasruhubsat.128B(<32 x i32> %o, <32 x i32> %e, i32 0)
+  %r = bitcast <32 x i32> %r_32 to <128 x i8>
+  ret <128 x i8> %r
+}
+
 declare void @llvm.hexagon.V6.vgathermh.128B(i8*, i32, i32, <32 x i32>)
 declare void @llvm.hexagon.V6.vgathermw.128B(i8*, i32, i32, <32 x i32>)
 
@@ -423,7 +457,7 @@ define weak_odr void @halide.hexagon.vscatter_acc.w.w(i8* %buf_ptr, i32 %size, <
 }
 
 define weak_odr void @halide.hexagon.scatter.release(i8* %ptr) nounwind uwtable {
-  call void asm sideeffect "vmem($0 + #0):scatter_release\0A; v1 = vmem($0 + #0)\0A", "=*m,*m,~{v1}"(i8* %ptr, i8* %ptr)
+  call void asm sideeffect "vmem($0 + #0):scatter_release\0A; v1 = vmem($0 + #0)\0A", "=*m,*m,~{v1}"(i8* elementtype(i8) %ptr, i8* elementtype(i8) %ptr)
   ret void
 }
 

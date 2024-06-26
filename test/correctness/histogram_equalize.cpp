@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
         int correct = (in.width() * in.height()) / 16;
         if (out_hist[i] < correct / 2 || out_hist[i] > 2 * correct) {
             printf("Expected histogram entries of ~ %d\n", correct);
-            return -1;
+            return 1;
         }
     }
 

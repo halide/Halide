@@ -104,6 +104,45 @@ int halide_metal_acquire_context(void *user_context, id<MTLDevice> *device_ret,
 int halide_metal_release_context(void *user_context) {
     return 0;
 }
+#elif defined(TEST_WEBGPU)
+
+struct gpu_context {
+    WGPUInstance instance = nullptr;
+    WGPUAdapter adapter = nullptr;
+    WGPUDevice device = nullptr;
+    WGPUBuffer staging_buffer = nullptr;
+} webgpu_context;
+
+bool init_context() {
+    return create_webgpu_context(&webgpu_context.instance, &webgpu_context.adapter, &webgpu_context.device, &webgpu_context.staging_buffer);
+}
+
+void destroy_context() {
+    destroy_webgpu_context(webgpu_context.instance, webgpu_context.adapter, webgpu_context.device, webgpu_context.staging_buffer);
+    webgpu_context.instance = nullptr;
+    webgpu_context.adapter = nullptr;
+    webgpu_context.device = nullptr;
+    webgpu_context.staging_buffer = nullptr;
+}
+
+extern "C" int halide_webgpu_acquire_context(void *user_context,
+                                             WGPUInstance *instance_ret,
+                                             WGPUAdapter *adapter_ret,
+                                             WGPUDevice *device_ret,
+                                             WGPUBuffer *staging_buffer_ret,
+                                             bool create) {
+    *instance_ret = webgpu_context.instance;
+    *adapter_ret = webgpu_context.adapter;
+    *device_ret = webgpu_context.device;
+    *staging_buffer_ret = webgpu_context.staging_buffer;
+    return 0;
+}
+
+extern "C" int halide_webgpu_release_context(void *user_context) {
+    return 0;
+}
+
+#define HAS_MULTIPLE_CONTEXTS true
 #else
 // Just use the default implementation of acquire/release.
 bool init_context() {
@@ -123,7 +162,7 @@ bool run_test() {
     // Everything else is a normal Halide program. The GPU runtime will call
     // the above acquire/release functions to get the context instead of using
     // its own internal context.
-    Buffer<float> input(W, H);
+    Buffer<float, 2> input(W, H);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             input(x, y) = (float)(x * y);
@@ -132,7 +171,7 @@ bool run_test() {
 
     input.set_host_dirty(true);
 
-    Buffer<float> output(W, H);
+    Buffer<float, 2> output(W, H);
 
     acquire_release(input, output);
 
@@ -168,14 +207,17 @@ bool run_test() {
 }
 
 int main(int argc, char **argv) {
+#if defined(TEST_VULKAN)
+    printf("[SKIP] Vulkan doesn't implement a custom context for this test.\n");
+#else
     if (!run_test()) {
-        return -1;
+        return 1;
     }
 
     if (!run_test()) {
-        return -1;
+        return 1;
     }
-
+#endif
     return 0;
 }
 

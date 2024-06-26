@@ -9,25 +9,36 @@
 namespace hannk {
 
 struct InterpreterOptions {
-    // Whether to dump information during scheduling.
-    bool verbose = false;
+    // Verbosity level. 0 = None.
+    int verbosity = 0;
 
     // Whether to enable tracing.
     bool trace = false;
 };
 
 class Interpreter {
-    std::unique_ptr<OpGroup> model_;
-
-    void init(InterpreterOptions options);
+    OpPtr model_;
+    std::unique_ptr<char[]> tensor_storage_arena_;
+    InterpreterOptions options_;
+    bool prepared_ = false;
 
 public:
-    explicit Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options = InterpreterOptions());
+    explicit Interpreter(OpPtr m, InterpreterOptions options = InterpreterOptions());
     ~Interpreter();
 
     // Return the Tensor in the current Model with the given name.
     // If none with that name, return null. Tensor is still owned by the Model.
     TensorPtr get_tensor(const std::string &name);
+
+    // Must call prepare() exactly once, before any calls to execute().
+    // This performs various transformations on the ops, and allows
+    // ops chance to prepare for execution; this is a good
+    // time for the op to prepare and cache anything that might be used
+    // repeatedly if execute() is called multiple times. (Note that an op may have
+    // prepare() called on it, but then later get discarded by a transform.)
+    //
+    // Returns false if an error occurs, in which case execute() should not be called.
+    [[nodiscard]] bool prepare();
 
     void execute();
 

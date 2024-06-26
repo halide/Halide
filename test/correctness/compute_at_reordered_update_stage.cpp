@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
             const int expected = x + y;
             if (actual != expected) {
                 printf("out(%d, %d) = %d instead of %d\n", x, y, actual, expected);
-                return -1;
+                return 1;
             }
         }
     }

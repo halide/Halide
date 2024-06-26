@@ -32,14 +32,14 @@ install(TARGETS Halide Halide_Generator Halide_LanguageOptions
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 if (TARGET Halide_Adams2019)
-    install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016
-            EXPORT Halide_Targets
+    install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021
+            EXPORT Halide_Interfaces
             LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
             NAMELINK_COMPONENT Halide_Development)
 endif ()
 
 # Halide_LLVM
-foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
+foreach (dep IN ITEMS Halide_LLVM Halide_wabt Halide_flatbuffers)
     if (TARGET ${dep})
         install(TARGETS ${dep} EXPORT Halide_Targets)
     endif ()
@@ -51,7 +51,7 @@ endforeach ()
 
 target_sources(Halide_RunGenMain INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/RunGenMain.cpp>)
 
-install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain
+install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain Halide_ThreadPool
         EXPORT Halide_Interfaces
         INCLUDES DESTINATION ${Halide_INSTALL_TOOLSDIR})
 
@@ -79,15 +79,23 @@ else ()
     set(rbase $ORIGIN)
 endif ()
 
-if (TARGET Halide_Adams2019)
-    set(autoscheduler_utils retrain_cost_model featurization_to_sample get_host_target weightsdir_to_weightsfile)
-    if (NOT CMAKE_INSTALL_RPATH)
-        set_target_properties(${autoscheduler_utils} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
-    endif ()
-    install(TARGETS ${autoscheduler_utils}
+foreach (util IN ITEMS adams2019_retrain_cost_model
+                       adams2019_weightsdir_to_weightsfile
+                       anderson2021_retrain_cost_model
+                       anderson2021_weightsdir_to_weightsfile
+                       featurization_to_sample
+                       get_host_target)
+    if (TARGET ${util})
+        if (NOT CMAKE_INSTALL_RPATH)
+            set_target_properties(${util} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+        endif ()
+        install(
+            TARGETS ${util}
             EXPORT Halide_Interfaces
-            COMPONENT Halide_Development)
-endif ()
+            COMPONENT Halide_Development
+        )
+    endif ()
+endforeach ()
 
 ##
 # READMEs and other top-level documentation
@@ -96,10 +104,12 @@ endif ()
 install(FILES
         ${Halide_SOURCE_DIR}/README_cmake.md
         ${Halide_SOURCE_DIR}/README.md
+        ${Halide_SOURCE_DIR}/README_python.md
         ${Halide_SOURCE_DIR}/README_rungen.md
         ${Halide_SOURCE_DIR}/README_webassembly.md
+        ${Halide_SOURCE_DIR}/LICENSE.txt
         COMPONENT Halide_Documentation
-        TYPE DATA)
+        TYPE DOC)
 
 ##
 # Tools
@@ -116,12 +126,9 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tools/
         PATTERN "build_halide_h.cpp" EXCLUDE
         PATTERN "find_inverse.cpp" EXCLUDE)
 
-install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
+install(PROGRAMS ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/adams2019_autotune_loop.sh
+                 ${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021/anderson2021_autotune_loop.sh
         DESTINATION ${Halide_INSTALL_TOOLSDIR}
-        PERMISSIONS
-        OWNER_READ OWNER_WRITE OWNER_EXECUTE
-        GROUP_READ GROUP_EXECUTE
-        WORLD_READ WORLD_EXECUTE
         COMPONENT Halide_Development)
 
 ##
@@ -130,7 +137,7 @@ install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
 
 if (WITH_TUTORIALS)
     install(DIRECTORY ${Halide_SOURCE_DIR}/tutorial
-            TYPE DATA
+            TYPE DOC
             COMPONENT Halide_Documentation
             FILES_MATCHING
             PATTERN "*.cpp"
@@ -187,6 +194,12 @@ write_basic_package_version_file(HalideHelpersConfigVersion.cmake
                                  COMPATIBILITY SameMajorVersion
                                  ARCH_INDEPENDENT)
 
+# Compute a hint to make it easier to find HalideHelpers from find_package(Halide)
+# This is read by configure_file below.
+file(RELATIVE_PATH HalideHelpers_HINT
+     "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_CMAKEDIR}"
+     "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_HELPERSDIR}")
+
 configure_file(common/HalideConfig.cmake HalideConfig.cmake @ONLY)
 configure_file(common/HalideHelpersConfig.cmake HalideHelpersConfig.cmake @ONLY)
 
@@ -200,7 +213,9 @@ install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfig.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfigVersion.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
+        ${Halide_SOURCE_DIR}/cmake/FindHalide_WebGPU.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
+        ${Halide_SOURCE_DIR}/cmake/TargetExportScript.cmake
         DESTINATION ${Halide_INSTALL_HELPERSDIR}
         COMPONENT Halide_Development)
 
@@ -209,7 +224,7 @@ install(FILES
 ##
 
 if (WITH_DOCS)
-    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html/
+    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html
             TYPE DOC
             COMPONENT Halide_Documentation)
 endif ()
@@ -246,6 +261,11 @@ cpack_add_component(Halide_Runtime
 cpack_add_component(Halide_Development
                     DISPLAY_NAME "Halide development"
                     DESCRIPTION "Static Halide libraries and CMake development files"
+                    DEPENDS Halide_Runtime)
+
+cpack_add_component(Halide_Python
+                    DISPLAY_NAME "Python bindings"
+                    DESCRIPTION "Python package providing bindings to Halide"
                     DEPENDS Halide_Runtime)
 
 cpack_add_component(Halide_Documentation

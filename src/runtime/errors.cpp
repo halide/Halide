@@ -276,4 +276,36 @@ WEAK int halide_error_buffer_is_null(void *user_context, const char *routine) {
     return halide_error_code_buffer_is_null;
 }
 
+WEAK int halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
+                                              int provided_size, int required_size) {
+    error(user_context)
+        << "The explicit allocation bound (" << provided_size
+        << ") of dimension " << var_name << " of " << func_name
+        << " is too small to store the required region ("
+        << required_size << ").";
+    return halide_error_code_storage_bound_too_small;
+}
+
+WEAK int halide_error_device_crop_failed(void *user_context) {
+    error(user_context) << "Buffer could not be cropped (runtime error or unimplemented device option).\n";
+    return halide_error_code_device_crop_failed;
+}
+
+WEAK int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor) {
+    error(user_context) << "In schedule for func " << func_name
+                        << ", the factor used to split the variable " << orig
+                        << " into " << outer << " and " << inner << " is " << factor_str
+                        << ". This evaluated to " << factor << ", which is not strictly positive. "
+                        << "Consider using max(" << factor_str << ", 1) instead.";
+    return halide_error_code_split_factor_not_positive;
+}
+
+WEAK int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale) {
+    error(user_context)
+        << "The function " << func_name
+        << " is compiled with the assumption that vscale of Scalable Vector is " << compiletime_vscale
+        << ". However, the detected runtime vscale is " << runtime_vscale << ".";
+    return halide_error_code_vscale_invalid;
+}
+
 }  // extern "C"

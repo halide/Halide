@@ -41,7 +41,7 @@ public:
     GeneratorParam<LoopLevel> output_compute_at{"output_compute_at", LoopLevel::inlined()};
 
     // Inputs and outputs
-    Input<Func> deinterleaved{"deinterleaved", Int(16), 3};
+    Input<Func> deinterleaved{"deinterleaved", UInt(16), 3};
     Output<Func> output{"output", Int(16), 3};
 
     // Defines outputs using inputs
@@ -140,7 +140,10 @@ public:
         b = interleave_y(interleave_x(b_gr, b_r),
                          interleave_x(b_b, b_gb));
 
-        output(x, y, c) = mux(c, {r(x, y), g(x, y), b(x, y)});
+        // It's possible that some of the final additions of
+        // correction terms underflowed, so reinterpret the output as
+        // signed.
+        output(x, y, c) = cast<int16_t>(mux(c, {r(x, y), g(x, y), b(x, y)}));
 
         // These are the stencil stages we want to schedule
         // separately. Everything else we'll just inline.
@@ -151,7 +154,7 @@ public:
     void schedule() {
         Pipeline p(output);
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             // blank
         } else if (get_target().has_gpu_feature()) {
             Var xi, yi;
@@ -213,17 +216,16 @@ public:
     // currently allow 8-bit computations
     GeneratorParam<Type> result_type{"result_type", UInt(8)};
 
-    Input<Buffer<uint16_t>> input{"input", 2};
-    Input<Buffer<float>> matrix_3200{"matrix_3200", 2};
-    Input<Buffer<float>> matrix_7000{"matrix_7000", 2};
+    Input<Buffer<uint16_t, 2>> input{"input"};
+    Input<Buffer<float, 2>> matrix_3200{"matrix_3200"};
+    Input<Buffer<float, 2>> matrix_7000{"matrix_7000"};
     Input<float> color_temp{"color_temp"};
     Input<float> gamma{"gamma"};
     Input<float> contrast{"contrast"};
     Input<float> sharpen_strength{"sharpen_strength"};
     Input<int> blackLevel{"blackLevel"};
     Input<int> whiteLevel{"whiteLevel"};
-
-    Output<Buffer<uint8_t>> processed{"processed", 3};
+    Output<Buffer<uint8_t, 3>> processed{"processed"};
 
     void generate();
 
@@ -268,7 +270,7 @@ Func CameraPipe::color_correct(Func input) {
     Expr val = (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
     matrix(x, y) = cast<int16_t>(val * 256.0f);  // Q8.8 fixed point
 
-    if (!auto_schedule) {
+    if (!using_autoscheduler()) {
         matrix.compute_root();
         if (get_target().has_gpu_feature()) {
             matrix.gpu_single_thread();
@@ -329,7 +331,7 @@ Func CameraPipe::apply_curve(Func input) {
     // makeLUT add guard band outside of (minRaw, maxRaw]:
     curve(x) = select(x <= minRaw, 0, select(x > maxRaw, 255, val));
 
-    if (!auto_schedule) {
+    if (!using_autoscheduler()) {
         // It's a LUT, compute it once ahead of time.
         curve.compute_root();
         if (get_target().has_gpu_feature()) {
@@ -368,7 +370,7 @@ Func CameraPipe::sharpen(Func input) {
     // Convert the sharpening strength to 2.5 fixed point. This allows sharpening in the range [0, 4].
     Func sharpen_strength_x32("sharpen_strength_x32");
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
-    if (!auto_schedule) {
+    if (!using_autoscheduler()) {
         sharpen_strength_x32.compute_root();
         if (get_target().has_gpu_feature()) {
             sharpen_strength_x32.gpu_single_thread();
@@ -405,10 +407,9 @@ void CameraPipe::generate() {
     // shift things inwards to give us enough padding on the
     // boundaries so that we don't need to check bounds. We're going
     // to make a 2560x1920 output image, just like the FCam pipe, so
-    // shift by 16, 12. We also convert it to be signed, so we can deal
-    // with values that fall below 0 during processing.
+    // shift by 16, 12.
     Func shifted;
-    shifted(x, y) = cast<int16_t>(input(x + 16, y + 12));
+    shifted(x, y) = input(x + 16, y + 12);
 
     Func denoised = hot_pixel_suppression(shifted);
 
@@ -438,12 +439,12 @@ void CameraPipe::generate() {
     processed.set_estimates({{0, 2592}, {0, 1968}, {0, 3}});
 
     // Schedule
-    if (auto_schedule) {
+    if (using_autoscheduler()) {
         // nothing
     } else if (get_target().has_gpu_feature()) {
 
         // We can generate slightly better code if we know the output is even-sized
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             // TODO: The autoscheduler really ought to be able to
             // accommodate bounds on the output Func.
             Expr out_width = processed.width();
@@ -529,7 +530,7 @@ void CameraPipe::generate() {
         denoised
             .compute_at(processed, yi)
             .store_at(processed, yo)
-            .prefetch(input, y, 2)
+            .prefetch(input, y, y, 2)
             .fold_storage(y, 4)
             .tile(x, y, x, y, xi, yi, 2 * vec, 2)
             .vectorize(xi)

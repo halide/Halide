@@ -9,7 +9,7 @@ using namespace Halide;
 const int tolerance = 3 * sizeof(int);
 std::set<size_t> custom_malloc_sizes;
 
-void *my_malloc(void *user_context, size_t x) {
+void *my_malloc(JITUserContext *user_context, size_t x) {
     custom_malloc_sizes.insert(x);
     void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
@@ -17,7 +17,7 @@ void *my_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
-void my_free(void *user_context, void *ptr) {
+void my_free(JITUserContext *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
@@ -43,14 +43,8 @@ bool check_expected_mallocs(const std::vector<size_t> &expected) {
     return true;
 }
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // An extern stage that copies input -> output
-extern "C" DLLEXPORT int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
     } else {
@@ -60,7 +54,7 @@ extern "C" DLLEXPORT int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t
 }
 
 // An extern stage accesses the input in a non-monotonic way in the y dimension.
-extern "C" DLLEXPORT int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
 
@@ -96,7 +90,7 @@ extern "C" DLLEXPORT int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t
 }
 
 bool error_occurred;
-void expected_error(void *, const char *msg) {
+void expected_error(JITUserContext *, const char *msg) {
     // Emitting "error.*:" to stdout or stderr will cause CMake to report the
     // test as a failure on Windows, regardless of error code returned,
     // hence the abbreviation to "err".
@@ -106,7 +100,7 @@ void expected_error(void *, const char *msg) {
 
 void realize_and_expect_error(Func f, int w, int h) {
     error_occurred = false;
-    f.set_error_handler(expected_error);
+    f.jit_handlers().custom_error = expected_error;
     f.realize({w, h});
     if (!error_occurred) {
         printf("Expected an error!\n");
@@ -116,11 +110,17 @@ void realize_and_expect_error(Func f, int w, int h) {
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 
     Var x, y, c;
+
+    // Every allocation in this test wants to go through the custom allocator above.
+    JITHandlers handlers;
+    handlers.custom_malloc = my_malloc;
+    handlers.custom_free = my_free;
+    Internal::JITSharedRuntime::set_default_handlers(handlers);
 
     {
         Func f, g;
@@ -131,13 +131,11 @@ int main(int argc, char **argv) {
 
         // Should be able to fold storage in y and c
 
-        g.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = g.realize({100, 1000, 3});
 
         size_t expected_size = 101 * 4 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -152,13 +150,11 @@ int main(int argc, char **argv) {
         // Make sure that storage folding doesn't happen if there are
         // multiple producers of the folded buffer.
 
-        g.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = g.realize({100, 1000, 3});
 
         size_t expected_size = 101 * 1002 * 3 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -175,13 +171,11 @@ int main(int argc, char **argv) {
         // automatic storage folding refused to fold this (the case
         // above).
 
-        g.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = g.realize({100, 1000});
 
         size_t expected_size = 101 * 3 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -197,13 +191,11 @@ int main(int argc, char **argv) {
         // allocation.
         g.compute_at(f, x).store_root();
 
-        f.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = f.realize({1000, 1000});
 
         if (!custom_malloc_sizes.empty()) {
             printf("There should not have been a heap allocation\n");
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -211,7 +203,7 @@ int main(int argc, char **argv) {
                 int correct = (2 * x) * (2 * y) + (2 * x + 1) * (2 * y + 1);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -230,13 +222,11 @@ int main(int argc, char **argv) {
 
         g.compute_at(f, x).store_root();
 
-        f.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = f.realize({1000, 1000});
 
         if (!custom_malloc_sizes.empty()) {
             printf("There should not have been a heap allocation\n");
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -244,7 +234,7 @@ int main(int argc, char **argv) {
                 int correct = x * (2 * y) + (x + 3) * (2 * y + 1);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -264,13 +254,11 @@ int main(int argc, char **argv) {
 
         g.compute_at(f, x).store_root();
 
-        f.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = f.realize({1000, 1000});
 
         size_t expected_size = 2 * 1000 * 4 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -278,7 +266,7 @@ int main(int argc, char **argv) {
                 int correct = (2 * x) * y + (2 * x + 1) * (y + 3);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -300,13 +288,11 @@ int main(int argc, char **argv) {
         // correct to fold if we know the output height is a multiple
         // of the split factor.
 
-        f.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = f.realize({1000, 1000});
 
         size_t expected_size = 1000 * 8 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -314,7 +300,7 @@ int main(int argc, char **argv) {
                 int correct = x * y;
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -335,13 +321,11 @@ int main(int argc, char **argv) {
         // (e.g. if memory usage is a concern.)
         g.compute_at(f, x).store_root().fold_storage(y, 3);
 
-        f.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = f.realize({1000, 1000});
 
         size_t expected_size = 2 * 1000 * 3 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -349,7 +333,7 @@ int main(int argc, char **argv) {
                 int correct = (2 * x) * y + (2 * x + 1) * (y + 2);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -365,13 +349,11 @@ int main(int argc, char **argv) {
 
         g.compute_at(f, x).store_root();
 
-        f.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = f.realize({1000, 1000});
 
         size_t expected_size = 1000 * 2 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -379,7 +361,7 @@ int main(int argc, char **argv) {
                 int correct = (x) * (y / 2) + (x) * (y / 2 + 1);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -397,15 +379,13 @@ int main(int argc, char **argv) {
         h.compute_at(f, y).store_root().fold_storage(y, 4);
         g.compute_at(f, y).store_root().fold_storage(y, 2);
 
-        f.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = f.realize({1000, 1000});
 
         // Halide allocates one extra scalar, so we account for that.
         size_t expected_size_g = 1000 * 4 * sizeof(int) + sizeof(int);
         size_t expected_size_h = 1000 * 2 * sizeof(int) + sizeof(int);
         if (!check_expected_mallocs({expected_size_g, expected_size_h})) {
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -415,7 +395,7 @@ int main(int argc, char **argv) {
                 auto correct_f = [=](int x, int y) { return correct_g(x, y / 2) + correct_g(x, y / 2 + 1); };
                 if (im(x, y) != correct_f(x, y)) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct_f(x, y));
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -436,8 +416,6 @@ int main(int argc, char **argv) {
         // Make sure we can explicitly fold something with an outer
         // loop.
 
-        g.set_custom_allocator(my_malloc, my_free);
-
         Buffer<int> im = g.realize({100, 1000, 3});
 
         size_t expected_size;
@@ -447,7 +425,7 @@ int main(int argc, char **argv) {
             expected_size = 101 * 3 * sizeof(int);
         }
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
     }
 

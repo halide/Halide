@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < out.width(); i++) {
         if (out(i + OUTOFF) != expected[i]) {
             printf("Unexpected output: %d != %d\n", out(i + OUTOFF), expected[i]);
-            return -1;
+            return 1;
         }
     }
 

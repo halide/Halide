@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     Buffer<float> in(100);
     in.for_each_element([&](int x) { in(x) = x * 2.0f; });
 
-    f(x) = in(x)*3;
+    f(x) = in(x) * 3;
     g(x) = f(x) * 2;
 
     Var xo, xi;
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
         float correct = i * 2 * 3 * 2;
         if (result(i) != correct) {
             printf("result(%d) = %f instead of %f\n", i, result(i), correct);
-            return -1;
+            return 1;
         }
     }
 

@@ -28,12 +28,6 @@ protected:
     void visit(const Free *) override;
     // @}
 
-    /** It can be convenient for backends to assume there is extra
-     * padding beyond the end of a buffer to enable faster
-     * loads/stores. This function gets the padding required by the
-     * implementing target. */
-    virtual int allocation_padding(Type type) const;
-
     /** A struct describing heap or stack allocations. */
     struct Allocation {
         /** The memory */
@@ -102,8 +96,8 @@ private:
      * When the allocation can be freed call 'free_allocation', and
      * when it goes out of scope call 'destroy_allocation'. */
     Allocation create_allocation(const std::string &name, Type type, MemoryType memory_type,
-                                 const std::vector<Expr> &extents,
-                                 const Expr &condition, const Expr &new_expr, std::string free_function);
+                                 const std::vector<Expr> &extents, const Expr &condition,
+                                 const Expr &new_expr, std::string free_function, int padding);
 
     /** Free an allocation previously allocated with
      * create_allocation */

@@ -11,7 +11,6 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::ostringstream;
 using std::string;
 using std::vector;
 
@@ -39,36 +38,9 @@ class DebugToFile : public IRMutator {
             // what we're doing (e.g. so we trigger a copy-back from a
             // device pointer).
             Expr num_elements = 1;
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                num_elements *= op->bounds[i].extent;
+            for (const auto &bound : op->bounds) {
+                num_elements *= bound.extent;
             }
-
-            int type_code = 0;
-            Type t = op->types[0];
-            if (t == Float(32)) {
-                type_code = 0;
-            } else if (t == Float(64)) {
-                type_code = 1;
-            } else if (t == UInt(8) || t == UInt(1)) {
-                type_code = 2;
-            } else if (t == Int(8)) {
-                type_code = 3;
-            } else if (t == UInt(16)) {
-                type_code = 4;
-            } else if (t == Int(16)) {
-                type_code = 5;
-            } else if (t == UInt(32)) {
-                type_code = 6;
-            } else if (t == Int(32)) {
-                type_code = 7;
-            } else if (t == UInt(64)) {
-                type_code = 8;
-            } else if (t == Int(64)) {
-                type_code = 9;
-            } else {
-                user_error << "Type " << t << " not supported for debug_to_file\n";
-            }
-            args.emplace_back(type_code);
 
             Expr buf = Variable::make(Handle(), f.name() + ".buffer");
             args.push_back(buf);
@@ -124,7 +96,7 @@ class AddDummyRealizations : public IRMutator {
         Stmt s = IRMutator::visit(op);
         for (const Function &out : outputs) {
             if (op->name == out.name()) {
-                std::vector<Range> output_bounds;
+                vector<Range> output_bounds;
                 for (int i = 0; i < out.dimensions(); i++) {
                     string dim = std::to_string(i);
                     Expr min = Variable::make(Int(32), out.name() + ".min." + dim);

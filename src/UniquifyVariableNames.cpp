@@ -99,15 +99,14 @@ class UniquifyVariableNames : public IRMutator {
             extent.same_as(op->extent)) {
             return op;
         } else {
-            return For::make(new_name, min, extent, op->for_type, op->device_api, body);
+            return For::make(new_name, min, extent, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 
     Expr visit(const Variable *op) override {
-        if (renaming.contains(op->name)) {
-            string new_name = renaming.get(op->name);
-            if (new_name != op->name) {
-                return Variable::make(op->type, new_name);
+        if (const string *new_name = renaming.find(op->name)) {
+            if (*new_name != op->name) {
+                return Variable::make(op->type, *new_name);
             }
         }
         return op;
@@ -131,20 +130,25 @@ class FindFreeVars : public IRVisitor {
         }
     }
 
+    template<typename T>
+    void visit_let(const T *op) {
+        vector<ScopedBinding<>> frame;
+        decltype(op->body) body;
+        do {
+            op->value.accept(this);
+            frame.emplace_back(scope, op->name);
+            body = op->body;
+            op = body.template as<T>();
+        } while (op);
+        body.accept(this);
+    }
+
     void visit(const Let *op) override {
-        op->value.accept(this);
-        {
-            ScopedBinding<> bind(scope, op->name);
-            op->body.accept(this);
-        }
+        visit_let(op);
     }
 
     void visit(const LetStmt *op) override {
-        op->value.accept(this);
-        {
-            ScopedBinding<> bind(scope, op->name);
-            op->body.accept(this);
-        }
+        visit_let(op);
     }
 
     void visit(const For *op) override {
@@ -243,7 +247,7 @@ void uniquify_variable_names_test() {
           {{x, Let::make(y.name(), 3, y)},
            {x_1, Let::make(y.name(), 4, y)}});
 
-    std::cout << "uniquify_variable_names test passed" << std::endl;
+    std::cout << "uniquify_variable_names test passed\n";
 }
 
 }  // namespace Internal

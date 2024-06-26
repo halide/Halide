@@ -41,20 +41,15 @@ def main():
     # of compilation, and also the llvm bitcode we generate at the
     # end.
 
-    # If you'd prefer to read C code, the compile_to_c method emits C
-    # code that implements the Halide pipeline. It can't compile
-    # as-is without you also implementing some support functions, but
-    # it can be helpful for understanding what the Halide pipeline is
-    # doing. You pass it the name of the file, a list of arguments
-    # the generated function should take (none in this case), and the
-    # name of the generated function. Have a look inside gradient.cpp
-    # after compiling and running this lesson.
-    gradient.compile_to_c("gradient.cpp", [], "gradient")
+    # Halide will also output an HTML version of this output, which
+    # supports syntax highlighting and code-folding, so it can be
+    # nicer to read for large pipelines. Open gradient.stmt.html" with your
+    # browser after running this tutorial.
+    gradient.compile_to_lowered_stmt("gradient.stmt.html", [], hl.StmtOutputFormat.HTML)
 
-    # Using these two tricks -- setting HL_DEBUG_CODEGEN and calling
-    # compile_to_c -- you can usually figure out what code Halide is
-    # generating. In the next lesson we'll see how to snoop on Halide
-    # at runtime.
+    # You can usually figure out what code Halide is generating using
+    # this pseudocode. In the next lesson we'll see how to snoop on
+    # Halide at runtime.
 
     print("Success!")
     return 0

@@ -23,8 +23,6 @@ using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
 template<typename T>
 using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
-bool may_subtile();
-
 // Given a multi-dimensional box of dimensionality d, generate a list
 // of candidate tile sizes for it, logarithmically spacing the sizes
 // using the given factor. If 'allow_splits' is false, every dimension
@@ -129,7 +127,7 @@ struct LoopNest {
 
     // Do a recursive walk over the loop nest computing features to feed the cost model.
     void compute_features(const FunctionDAG &dag,
-                          const MachineParams &params,
+                          const Adams2019Params &params,
                           const StageMap<Sites> &sites,
                           int64_t instances,
                           int64_t parallelism,
@@ -157,7 +155,7 @@ struct LoopNest {
     const Bound &get_bounds(const FunctionDAG::Node *f) const;
 
     // Recursively print a loop nest representation to stderr
-    void dump(string prefix, const LoopNest *parent) const;
+    void dump(std::ostream &os, string prefix, const LoopNest *parent) const;
 
     // Does this loop nest access the given Func
     bool calls(const FunctionDAG::Node *f) const;
@@ -186,10 +184,10 @@ struct LoopNest {
     void inline_func(const FunctionDAG::Node *f);
 
     // Compute a Func at this site.
-    void compute_here(const FunctionDAG::Node *f, bool tileable, int v);
+    void compute_here(const FunctionDAG::Node *f, bool tileable, int v, const Adams2019Params &params);
 
     // Parallelize this loop according to the given tiling.
-    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params,
+    IntrusivePtr<const LoopNest> parallelize_in_tiles(const Adams2019Params &params,
                                                       const vector<int64_t> &tiling,
                                                       const LoopNest *parent) const;
 
@@ -197,7 +195,7 @@ struct LoopNest {
     // this loop nest.
     std::vector<IntrusivePtr<const LoopNest>> compute_in_tiles(const FunctionDAG::Node *f,
                                                                const LoopNest *parent,
-                                                               const MachineParams &params,
+                                                               const Adams2019Params &params,
                                                                int v,
                                                                bool in_realization) const;
 

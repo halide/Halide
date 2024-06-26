@@ -25,6 +25,11 @@ inline Expr f32(Expr e) {
     return cast(t, std::move(e));
 }
 
+inline Expr f16(Expr e) {
+    Type t = Float(16, e.type().lanes());
+    return cast(t, std::move(e));
+}
+
 inline Expr bf16(Expr e) {
     Type t = BFloat(16, e.type().lanes());
     return cast(t, std::move(e));

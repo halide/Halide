@@ -1,14 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // An extern stage that translates.
-extern "C" DLLEXPORT int copy_and_check_strides(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int copy_and_check_strides(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         for (int i = 0; i < 2; i++) {
             in->dim[i].min = out->dim[i].min;

@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
             int d = b + c;
             if (im(x, y) != d) {
                 printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), d);
-                return -1;
+                return 1;
             }
         }
     }

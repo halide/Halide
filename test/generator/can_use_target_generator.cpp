@@ -4,7 +4,7 @@ namespace {
 
 class CanUseTarget : public Halide::Generator<CanUseTarget> {
 public:
-    Output<Buffer<uint32_t>> output{"output", 2};
+    Output<Buffer<uint32_t, 2>> output{"output"};
 
     // Current really just a placeholder: can_use_target_aottest.cpp just
     // needs to test the runtime itself, not the generator function.

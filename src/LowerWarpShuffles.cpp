@@ -149,8 +149,8 @@ class DetermineAllocStride : public IRVisitor {
         } else if (const Variable *var = e.as<Variable>()) {
             if (var->name == lane_var) {
                 return 1;
-            } else if (dependent_vars.contains(var->name)) {
-                return dependent_vars.get(var->name);
+            } else if (const Expr *e = dependent_vars.find(var->name)) {
+                return *e;
             } else {
                 return 0;
             }
@@ -368,6 +368,7 @@ class LowerWarpShuffles : public IRMutator {
     };
     Scope<AllocInfo> allocation_info;
     Scope<Interval> bounds;
+    int cuda_cap;
 
     Stmt visit(const For *op) override {
         ScopedBinding<Interval>
@@ -434,7 +435,7 @@ class LowerWarpShuffles : public IRMutator {
                 allocation_info.pop(alloc->name);
                 body = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
                                       {new_size}, alloc->condition,
-                                      body, alloc->new_expr, alloc->free_function);
+                                      body, alloc->new_expr, alloc->free_function, alloc->padding);
             }
             allocations.clear();
 
@@ -450,12 +451,12 @@ class LowerWarpShuffles : public IRMutator {
                 const Allocate *alloc = s.as<Allocate>();
                 body = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
                                       alloc->extents, alloc->condition,
-                                      body, alloc->new_expr, alloc->free_function);
+                                      body, alloc->new_expr, alloc->free_function, alloc->padding);
             }
             allocations.clear();
 
             return For::make(op->name, op->min, warp_size,
-                             op->for_type, op->device_api, body);
+                             op->for_type, op->partition_policy, op->device_api, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -474,8 +475,9 @@ class LowerWarpShuffles : public IRMutator {
         if ((lt && equal(lt->a, this_lane) && is_const(lt->b)) ||
             (le && equal(le->a, this_lane) && is_const(le->b))) {
             Expr condition = mutate(op->condition);
-            internal_assert(bounds.contains(this_lane_name));
-            Interval interval = bounds.get(this_lane_name);
+            const Interval *in = bounds.find(this_lane_name);
+            internal_assert(in);
+            Interval interval = *in;
             interval.max = lt ? simplify(lt->b - 1) : le->b;
             ScopedBinding<Interval> bind(bounds, this_lane_name, interval);
             Stmt then_case = mutate(op->then_case);
@@ -487,10 +489,10 @@ class LowerWarpShuffles : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        if (allocation_info.contains(op->name)) {
+        if (const auto *alloc = allocation_info.find(op->name)) {
             Expr idx = mutate(op->index);
             Expr value = mutate(op->value);
-            Expr stride = allocation_info.get(op->name).stride;
+            Expr stride = alloc->stride;
             internal_assert(stride.defined() && warp_size.defined());
 
             // Reduce the index to an index in my own stripe. We have
@@ -562,6 +564,20 @@ class LowerWarpShuffles : public IRMutator {
 
         internal_assert(may_use_warp_shuffle) << name << ", " << idx << ", " << lane << "\n";
 
+        // We must add .sync after volta architecture:
+        // https://docs.nvidia.com/cuda/volta-tuning-guide/index.html
+        string sync_suffix = "";
+        if (cuda_cap >= 70) {
+            sync_suffix = ".sync";
+        }
+
+        auto shfl_args = [&](const std::vector<Expr> &args) {
+            if (cuda_cap >= 70) {
+                return args;
+            }
+            return std::vector({args[1], args[2], args[3]});
+        };
+
         string intrin_suffix;
         if (shuffle_type.is_float()) {
             intrin_suffix = ".f32";
@@ -578,12 +594,12 @@ class LowerWarpShuffles : public IRMutator {
         lane = solve_expression(lane, this_lane_name).result;
 
         Expr shuffled;
-
+        Expr membermask = (int)0xffffffff;
         if (expr_match(this_lane + wild, lane, result)) {
             // We know that 0 <= lane + wild < warp_size by how we
             // constructed it, so we can just do a shuffle down.
-            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl.down" + intrin_suffix,
-                                   {base_val, result[0], 31}, Call::PureExtern);
+            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".down" + intrin_suffix,
+                                   shfl_args({membermask, base_val, result[0], 31}), Call::PureExtern);
             shuffled = down;
         } else if (expr_match((this_lane + wild) % wild, lane, result) &&
                    is_const_power_of_two_integer(result[1], &bits) &&
@@ -593,10 +609,10 @@ class LowerWarpShuffles : public IRMutator {
             // intermediate registers than using a general gather for
             // this.
             Expr mask = (1 << bits) - 1;
-            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl.down" + intrin_suffix,
-                                   {base_val, result[0], mask}, Call::PureExtern);
-            Expr up = Call::make(shuffle_type, "llvm.nvvm.shfl.up" + intrin_suffix,
-                                 {base_val, (1 << bits) - result[0], 0}, Call::PureExtern);
+            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".down" + intrin_suffix,
+                                   shfl_args({membermask, base_val, result[0], mask}), Call::PureExtern);
+            Expr up = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".up" + intrin_suffix,
+                                 shfl_args({membermask, base_val, (1 << bits) - result[0], 0}), Call::PureExtern);
             Expr cond = (this_lane >= (1 << bits) - result[0]);
             Expr equiv = select(cond, up, down);
             shuffled = simplify(equiv, true, bounds);
@@ -609,8 +625,8 @@ class LowerWarpShuffles : public IRMutator {
             // could hypothetically be used for boundary conditions.
             Expr mask = simplify(((31 & ~(warp_size - 1)) << 8) | 31);
             // The idx variant can do a general gather. Use it for all other cases.
-            shuffled = Call::make(shuffle_type, "llvm.nvvm.shfl.idx" + intrin_suffix,
-                                  {base_val, lane, mask}, Call::PureExtern);
+            shuffled = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".idx" + intrin_suffix,
+                                  shfl_args({membermask, base_val, lane, mask}), Call::PureExtern);
         }
         // TODO: There are other forms, like butterfly and clamp, that
         // don't need to use the general gather
@@ -624,9 +640,9 @@ class LowerWarpShuffles : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        if (allocation_info.contains(op->name)) {
+        if (const auto *alloc = allocation_info.find(op->name)) {
             Expr idx = mutate(op->index);
-            Expr stride = allocation_info.get(op->name).stride;
+            Expr stride = alloc->stride;
 
             // Break the index into lane and stripe components
             Expr lane = simplify(reduce_expr(idx / stride, warp_size, bounds), true, bounds);
@@ -651,7 +667,9 @@ class LowerWarpShuffles : public IRMutator {
     }
 
 public:
-    LowerWarpShuffles() = default;
+    LowerWarpShuffles(int cuda_cap)
+        : cuda_cap(cuda_cap) {
+    }
 };
 
 class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
@@ -714,7 +732,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         } else {
             debug(3) << "Successfully hoisted shuffle out of for loop\n";
         }
-        return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
     }
 
     Stmt visit(const Store *op) override {
@@ -804,22 +822,29 @@ class LowerWarpShufflesInEachKernel : public IRMutator {
     Stmt visit(const For *op) override {
         if (op->device_api == DeviceAPI::CUDA && has_lane_loop(op)) {
             Stmt s = op;
-            s = LowerWarpShuffles().mutate(s);
+            s = LowerWarpShuffles(cuda_cap).mutate(s);
             s = HoistWarpShuffles().mutate(s);
             return simplify(s);
         } else {
             return IRMutator::visit(op);
         }
     }
+
+    int cuda_cap;
+
+public:
+    LowerWarpShufflesInEachKernel(int cuda_cap)
+        : cuda_cap(cuda_cap) {
+    }
 };
 
 }  // namespace
 
-Stmt lower_warp_shuffles(Stmt s) {
+Stmt lower_warp_shuffles(Stmt s, const Target &t) {
     s = hoist_loop_invariant_values(s);
     s = SubstituteInLaneVar().mutate(s);
     s = simplify(s);
-    s = LowerWarpShufflesInEachKernel().mutate(s);
+    s = LowerWarpShufflesInEachKernel(t.get_cuda_capability_lower_bound()).mutate(s);
     return s;
 };
 

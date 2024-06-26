@@ -134,7 +134,7 @@ typedef struct stDmaWrapper_DmaTransferSetup {
     void *pTcmDataBuf;
     /// Virtual address of the DDR Frame buffer .
     void *pFrameBuf;
-    //UBWC Format
+    // UBWC Format
     uint16 bIsFmtUbwc;
     /// Should the intermediate buffer be padded. This only apply for 8bit format sucha NV12, NV12-4R
     uint16 bUse16BitPaddingInL2;

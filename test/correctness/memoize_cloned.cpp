@@ -2,14 +2,8 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int call_count;
-extern "C" DLLEXPORT int call_counter(int x) {
+extern "C" HALIDE_EXPORT_SYMBOL int call_counter(int x) {
     call_count++;
     return x;
 }
@@ -45,6 +39,8 @@ int main(int argc, char **argv) {
         printf("call_count was supposed to be 1024 * 32: %d\n", call_count);
         return 1;
     }
+
+    Internal::JITSharedRuntime::release_all();
 
     printf("Success!\n");
     return 0;

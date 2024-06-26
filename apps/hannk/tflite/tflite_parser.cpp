@@ -98,7 +98,7 @@ public:
                 shape.push_back(t->shape()->Get(shape_size - 1 - i));
             }
         }
-        //HCHECK(t->shape()) << "Dynamic shapes not supported.";
+        // HCHECK(t->shape()) << "Dynamic shapes not supported.";
 
         halide_type_t type = parse_type(t->type());
 
@@ -126,13 +126,15 @@ public:
                 HalideBuffer<void> buffer(type, const_cast<void *>(data), shape);
                 assert(tflite_buffer->size() == buffer.size_in_bytes());
 
-                return make_op<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
+                auto p = std::make_shared<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
+                p->set_constant();
+                return p;
             }
         }
 
         // Create an "unallocated" Buffer, which points to null.
         HalideBuffer<void> buffer(type, nullptr, shape);
-        return make_op<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
+        return std::make_shared<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
     }
 
     OpPtr parse_binary(const tflite::Operator *op, BinaryOp::Operator type, bool swap_operands = false) {
@@ -213,8 +215,8 @@ public:
         TensorPtr filter = tensors_[op->inputs()->Get(1)];
         TensorPtr bias = tensors_[op->inputs()->Get(2)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<Conv2DOp>(input, filter, bias, output, stride,
-                                 dilation_factor, padding, activation);
+        return make_op<ConvOp>(input, filter, bias, output, stride,
+                               dilation_factor, padding, activation);
     }
 
     OpPtr parse_depthwise_conv2D(const tflite::Operator *op) {
@@ -250,7 +252,7 @@ public:
         TensorPtr filter = tensors_[op->inputs()->Get(1)];
         TensorPtr bias = tensors_[op->inputs()->Get(2)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<FullyConnectedOp>(input, filter, bias, output, activation);
+        return lower_tflite_fullyconnected(input, filter, bias, output, activation);
     }
 
     OpPtr parse_pad(const tflite::Operator *op) {
@@ -272,11 +274,12 @@ public:
             shape_tensor = tensors_[op->inputs()->Get(1)];
         } else if (options) {
             size_t size = options->new_shape()->size();
-            HalideBuffer<int32_t> shape_data(size);
+            HalideBuffer<int32_t, 1> shape_data(size);
             for (size_t i = 0; i < size; i++) {
                 shape_data(i) = options->new_shape()->Get(i);
             }
             shape_tensor = std::make_shared<Tensor>(input->name() + "_shape", shape_data);
+            shape_tensor->set_constant();
         }
         return make_op<ReshapeOp>(input, shape_tensor, output);
     }
@@ -291,6 +294,7 @@ public:
         const tflite::GatherOptions *options =
             op->builtin_options_as_GatherOptions();
         int axis = options->axis();
+        int batch_dims = options->batch_dims();
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr indices = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
@@ -298,7 +302,7 @@ public:
             axis += input->rank();
         }
         axis = input->rank() - 1 - axis;
-        return make_op<GatherOp>(input, indices, output, axis);
+        return make_op<GatherOp>(input, indices, output, axis, batch_dims);
     }
 
     OpPtr parse_space_to_depth(const tflite::Operator *op) {
@@ -355,20 +359,29 @@ public:
         float beta = options->beta();
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<SoftmaxOp>(input, output, beta);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<SoftmaxOp>(input, output, beta, axis);
     }
 
     OpPtr parse_l2_normalization(const tflite::Operator *op) {
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<L2NormalizationOp>(input, output);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<L2NormalizationOp>(input, output, axis);
     }
 
     OpPtr parse_reduction(const tflite::Operator *op, ReductionOp::Operator reduction_op) {
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr indices = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<ReductionOp>(input, indices, output, reduction_op);
+#ifndef NDEBUG
+        const tflite::ReducerOptions *options = op->builtin_options_as_ReducerOptions();
+        const bool keep_dims = options ? options->keep_dims() : false;
+        // TODO: I have yet to find any examples of keep_dims == false in the wild.
+        // If/when we do, handle it appropriately.
+        assert(keep_dims == true);
+#endif
+        return make_op<ReductionOp>(reduction_op, input, indices, output);
     }
 
     OpPtr parse_unary(const tflite::Operator *op, UnaryOp::Operator type) {
@@ -434,10 +447,13 @@ public:
             return parse_fully_connected(op);
         case tflite::BuiltinOperator_GATHER:
             return parse_gather(op);
+        // TODO: support GATHER_ND once we find a testcase for it
+        // case tflite::BuiltinOperator_GATHER_ND:
+        //     return parse_gather_nd(op);
         case tflite::BuiltinOperator_GREATER:
-            return parse_binary(op, BinaryOp::Less, true);
-        case tflite::BuiltinOperator_GREATER_EQUAL:
             return parse_binary(op, BinaryOp::LessEqual, true);
+        case tflite::BuiltinOperator_GREATER_EQUAL:
+            return parse_binary(op, BinaryOp::Less, true);
         case tflite::BuiltinOperator_L2_NORMALIZATION:
             return parse_l2_normalization(op);
         case tflite::BuiltinOperator_LESS:
@@ -508,12 +524,10 @@ public:
 
         std::vector<TensorPtr> inputs;
         for (int i : *subgraph->inputs()) {
-            tensors_[i]->set_input(true);
             inputs.push_back(tensors_[i]);
         }
         std::vector<TensorPtr> outputs;
         for (int i : *subgraph->outputs()) {
-            tensors_[i]->set_output(true);
             outputs.push_back(tensors_[i]);
         }
 

@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(interpolate)
 
 enable_testing()
 
 # Set up language settings
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(interpolate.generator interpolate_generator.cpp)
-target_link_libraries(interpolate.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(interpolate.generator SOURCES interpolate_generator.cpp)
 
 # Filters
 add_halide_library(interpolate FROM interpolate.generator)

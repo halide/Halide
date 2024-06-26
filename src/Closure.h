@@ -8,14 +8,12 @@
 #include <map>
 #include <string>
 
+#include "Buffer.h"
 #include "IR.h"
 #include "IRVisitor.h"
 #include "Scope.h"
 
 namespace Halide {
-
-template<typename T>
-class Buffer;
 
 namespace Internal {
 
@@ -66,10 +64,16 @@ public:
 
 protected:
     void found_buffer_ref(const std::string &name, Type type,
-                          bool read, bool written, const Halide::Buffer<void> &image);
+                          bool read, bool written, const Halide::Buffer<> &image);
 
 public:
     Closure() = default;
+
+    // Movable but not copyable.
+    Closure(const Closure &) = delete;
+    Closure &operator=(const Closure &) = delete;
+    Closure(Closure &&) = default;
+    Closure &operator=(Closure &&) = default;
 
     /** Traverse a statement and find all references to external
      * symbols.
@@ -77,14 +81,26 @@ public:
      * When the closure encounters a read or write to 'foo', it
      * assumes that the host pointer is found in the symbol table as
      * 'foo.host', and any halide_buffer_t pointer is found under
-     * 'foo.buffer'. */
-    Closure(const Stmt &s, const std::string &loop_variable = "");
+     * 'foo.buffer'.
+     *
+     * Calling this multiple times (on multiple statements) is legal
+     * (and will produce a unified closure).
+     **/
+    void include(const Stmt &s, const std::string &loop_variable = "");
 
-    /** External variables referenced. */
+    /** External variables referenced. There's code that assumes iterating over
+     * this repeatedly gives a consistent order, so don't swap out the data type
+     * for something non-deterministic. */
     std::map<std::string, Type> vars;
 
     /** External allocations referenced. */
     std::map<std::string, Buffer> buffers;
+
+    /** Pack a closure into a struct. */
+    Expr pack_into_struct() const;
+
+    /** Unpack a closure around a Stmt, putting all the names in scope. */
+    Stmt unpack_from_struct(const Expr &, const Stmt &) const;
 };
 
 }  // namespace Internal

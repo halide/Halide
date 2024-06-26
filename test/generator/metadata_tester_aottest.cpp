@@ -6,8 +6,12 @@
 #include <map>
 #include <string>
 
+#include "metadata_tester.function_info.h"
 #include "metadata_tester.h"
+#include "metadata_tester_ucon.function_info.h"
 #include "metadata_tester_ucon.h"
+
+namespace {
 
 using namespace Halide::Runtime;
 
@@ -27,10 +31,6 @@ inline std::ostream &operator<<(std::ostream &o, const halide_type_t &type) {
     return o;
 }
 
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return (((int)code) << 8) | bits;
-}
-
 struct typed_scalar {
     halide_type_t type;
     halide_scalar_value_t value;
@@ -42,36 +42,36 @@ struct typed_scalar {
     bool operator==(const typed_scalar &that) const {
         if (this->type != that.type) {
             std::cerr << "Mismatched types\n";
-            exit(-1);
+            exit(1);
         }
-        switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
-        case halide_type_code(halide_type_float, 32):
+        switch (type.element_of().as_u32()) {
+        case halide_type_t(halide_type_float, 32).as_u32():
             return value.u.f32 == that.value.u.f32;
-        case halide_type_code(halide_type_float, 64):
+        case halide_type_t(halide_type_float, 64).as_u32():
             return value.u.f64 == that.value.u.f64;
-        case halide_type_code(halide_type_int, 8):
+        case halide_type_t(halide_type_int, 8).as_u32():
             return value.u.i8 == that.value.u.i8;
-        case halide_type_code(halide_type_int, 16):
+        case halide_type_t(halide_type_int, 16).as_u32():
             return value.u.i16 == that.value.u.i16;
-        case halide_type_code(halide_type_int, 32):
+        case halide_type_t(halide_type_int, 32).as_u32():
             return value.u.i32 == that.value.u.i32;
-        case halide_type_code(halide_type_int, 64):
+        case halide_type_t(halide_type_int, 64).as_u32():
             return value.u.i64 == that.value.u.i64;
-        case halide_type_code(halide_type_uint, 1):
+        case halide_type_t(halide_type_uint, 1).as_u32():
             return value.u.b == that.value.u.b;
-        case halide_type_code(halide_type_uint, 8):
+        case halide_type_t(halide_type_uint, 8).as_u32():
             return value.u.u8 == that.value.u.u8;
-        case halide_type_code(halide_type_uint, 16):
+        case halide_type_t(halide_type_uint, 16).as_u32():
             return value.u.u16 == that.value.u.u16;
-        case halide_type_code(halide_type_uint, 32):
+        case halide_type_t(halide_type_uint, 32).as_u32():
             return value.u.u32 == that.value.u.u32;
-        case halide_type_code(halide_type_uint, 64):
+        case halide_type_t(halide_type_uint, 64).as_u32():
             return value.u.u64 == that.value.u.u64;
-        case halide_type_code(halide_type_handle, 64):
+        case halide_type_t(halide_type_handle, 64).as_u32():
             return value.u.handle == that.value.u.handle;
         default:
             std::cerr << "Unsupported type\n";
-            exit(-1);
+            exit(1);
             break;
         }
     }
@@ -81,46 +81,46 @@ struct typed_scalar {
     }
 
     friend std::ostream &operator<<(std::ostream &o, const typed_scalar &s) {
-        switch (halide_type_code((halide_type_code_t)s.type.code, s.type.bits)) {
-        case halide_type_code(halide_type_float, 32):
+        switch (s.type.element_of().as_u32()) {
+        case halide_type_t(halide_type_float, 32).as_u32():
             o << s.value.u.f32;
             break;
-        case halide_type_code(halide_type_float, 64):
+        case halide_type_t(halide_type_float, 64).as_u32():
             o << s.value.u.f64;
             break;
-        case halide_type_code(halide_type_int, 8):
+        case halide_type_t(halide_type_int, 8).as_u32():
             o << (int)s.value.u.i8;
             break;
-        case halide_type_code(halide_type_int, 16):
+        case halide_type_t(halide_type_int, 16).as_u32():
             o << s.value.u.i16;
             break;
-        case halide_type_code(halide_type_int, 32):
+        case halide_type_t(halide_type_int, 32).as_u32():
             o << s.value.u.i32;
             break;
-        case halide_type_code(halide_type_int, 64):
+        case halide_type_t(halide_type_int, 64).as_u32():
             o << s.value.u.i64;
             break;
-        case halide_type_code(halide_type_uint, 1):
+        case halide_type_t(halide_type_uint, 1).as_u32():
             o << (s.value.u.b ? "true" : "false");
             break;
-        case halide_type_code(halide_type_uint, 8):
+        case halide_type_t(halide_type_uint, 8).as_u32():
             o << (int)s.value.u.u8;
             break;
-        case halide_type_code(halide_type_uint, 16):
+        case halide_type_t(halide_type_uint, 16).as_u32():
             o << s.value.u.u16;
             break;
-        case halide_type_code(halide_type_uint, 32):
+        case halide_type_t(halide_type_uint, 32).as_u32():
             o << s.value.u.u32;
             break;
-        case halide_type_code(halide_type_uint, 64):
+        case halide_type_t(halide_type_uint, 64).as_u32():
             o << s.value.u.u64;
             break;
-        case halide_type_code(halide_type_handle, 64):
+        case halide_type_t(halide_type_handle, 64).as_u32():
             o << (uint64_t)s.value.u.handle;
             break;
         default:
             std::cerr << "Unsupported type\n";
-            exit(-1);
+            exit(1);
             break;
         }
         return o;
@@ -131,7 +131,7 @@ struct typed_scalar {
     do {                                                                                               \
         if ((exp) != (act)) {                                                                          \
             std::cerr << #exp << " == " << #act << ": Expected " << exp << ", Actual " << act << "\n"; \
-            exit(-1);                                                                                  \
+            exit(1);                                                                                   \
         }                                                                                              \
     } while (0);
 
@@ -149,7 +149,7 @@ struct typed_scalar {
             EXPECT_EQ(etype, atype);                                             \
         } else {                                                                 \
             std::cerr << "One null, one non-null\n";                             \
-            exit(-1);                                                            \
+            exit(1);                                                             \
         }                                                                        \
     } while (0);
 
@@ -194,8 +194,8 @@ void match_argument(const halide_filter_argument_t &e, const halide_filter_argum
 }
 
 template<typename Type>
-Buffer<Type> make_image() {
-    Buffer<Type> im(kSize, kSize, 3);
+Buffer<Type, 3> make_image() {
+    Buffer<Type, 3> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -206,22 +206,22 @@ Buffer<Type> make_image() {
     return im;
 }
 
-void verify(const Buffer<uint8_t> &input,
-            const Buffer<float> &output0,
-            const Buffer<float> &output1,
-            const Buffer<float> &output_scalar,
-            const Buffer<float> &output_array0,
-            const Buffer<float> &output_array1,
-            const Buffer<float> &untyped_output_buffer,
-            const Buffer<float> &tupled_output_buffer0,
-            const Buffer<int32_t> &tupled_output_buffer1) {
+void verify(const Buffer<uint8_t, 3> &input,
+            const Buffer<float, 3> &output0,
+            const Buffer<float, 3> &output1,
+            const Buffer<float, 0> &output_scalar,
+            const Buffer<float, 3> &output_array0,
+            const Buffer<float, 3> &output_array1,
+            const Buffer<float, 3> &untyped_output_buffer,
+            const Buffer<float, 3> &tupled_output_buffer0,
+            const Buffer<int32_t, 3> &tupled_output_buffer1) {
     if (output_scalar.dimensions() != 0) {
         std::cerr << "output_scalar should be zero-dimensional\n";
-        exit(-1);
+        exit(1);
     }
     if (output_scalar() != 1234.25f) {
         std::cerr << "output_scalar value is wrong (" << output_scalar() << "\n";
-        exit(-1);
+        exit(1);
     }
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
@@ -232,27 +232,27 @@ void verify(const Buffer<uint8_t> &input,
                 const float actual1 = output1(x, y, c);
                 if (expected0 != actual0) {
                     std::cerr << "img0[" << x << "," << y << "," << c << "] = " << actual0 << ", expected " << expected0 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (expected1 != actual1) {
                     std::cerr << "img1[" << x << "," << y << "," << c << "] = " << actual1 << ", expected " << expected1 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (output_array0(x, y, c) != 1.5f) {
                     std::cerr << "output_array0[" << x << "," << y << "," << c << "] = " << output_array0(x, y, c) << ", expected " << 1.5f << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (output_array1(x, y, c) != 3.0f) {
                     std::cerr << "output_array1[" << x << "," << y << "," << c << "] = " << output_array1(x, y, c) << ", expected " << 2.0f << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (untyped_output_buffer(x, y, c) != expected1) {
                     std::cerr << "untyped_output_buffer[" << x << "," << y << "," << c << "] = " << untyped_output_buffer(x, y, c) << ", expected " << expected1 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (tupled_output_buffer0(x, y, c) != expected1) {
                     std::cerr << "tupled_output_buffer0[" << x << "," << y << "," << c << "] = " << tupled_output_buffer0(x, y, c) << ", expected " << expected1 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
             }
         }
@@ -367,7 +367,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
         !strstr(md.target, "wasm") &&
         !strstr(md.target, "arm")) {
         std::cerr << "Expected x86 or arm, Actual " << md.target << "\n";
-        exit(-1);
+        exit(1);
     }
 
     // Not static, since we free make_scalar() results each time
@@ -1353,35 +1353,96 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
     }
 }
 
+template<size_t arg_count>
+constexpr size_t count_buffers(const std::array<::HalideFunctionInfo::ArgumentInfo, arg_count> args) {
+    size_t buffer_count = 0;
+    for (const auto a : args) {
+        if (a.kind == HalideFunctionInfo::InputBuffer || a.kind == HalideFunctionInfo::OutputBuffer) {
+            buffer_count++;
+        }
+    }
+    return buffer_count;
+}
+
+// clang-format off
+constexpr char arginfo_to_sigchar(::HalideFunctionInfo::ArgumentInfo arg) {
+    if (arg.kind == HalideFunctionInfo::InputBuffer) {
+        return '@';
+    } else if (arg.kind == HalideFunctionInfo::OutputBuffer) {
+        return '#';
+    } else {
+
+        #define HANDLE_CASE(CODE, BITS, CHAR)        \
+            case halide_type_t(CODE, BITS).as_u32(): \
+                return (CHAR);
+
+        switch (arg.type.as_u32()) {
+            HANDLE_CASE(halide_type_bfloat, 16, '!')
+            HANDLE_CASE(halide_type_float, 16, 'e')
+            HANDLE_CASE(halide_type_float, 32, 'f')
+            HANDLE_CASE(halide_type_float, 64, 'd')
+            HANDLE_CASE(halide_type_int, 8, 'b')
+            HANDLE_CASE(halide_type_int, 16, 'h')
+            HANDLE_CASE(halide_type_int, 32, 'i')
+            HANDLE_CASE(halide_type_int, 64, 'q')
+            HANDLE_CASE(halide_type_uint, 1, '?')
+            HANDLE_CASE(halide_type_uint, 8, 'B')
+            HANDLE_CASE(halide_type_uint, 16, 'H')
+            HANDLE_CASE(halide_type_uint, 32, 'I')
+            HANDLE_CASE(halide_type_uint, 64, 'Q')
+            HANDLE_CASE(halide_type_handle, 64, 'P')
+        }
+
+        #undef HANDLE_CASE
+    }
+
+    // Shouldn't ever get here, but if we do, we'll fail at *compile* time
+    abort();
+}
+// clang-format on
+
+template<size_t arg_count, size_t... Indices>
+constexpr std::array<char, arg_count + 1> compute_signature_impl(const std::array<::HalideFunctionInfo::ArgumentInfo, arg_count> args,
+                                                                 std::index_sequence<Indices...>) {
+    return {arginfo_to_sigchar(args[Indices])..., 0};
+}
+
+template<size_t arg_count>
+constexpr auto compute_signature(const std::array<::HalideFunctionInfo::ArgumentInfo, arg_count> args) {
+    return compute_signature_impl(args, std::make_index_sequence<arg_count>{});
+}
+
+}  // namespace
+
 int main(int argc, char **argv) {
     void *user_context = nullptr;
 
     int result;
 
-    Buffer<uint8_t> input = make_image<uint8_t>();
-    Buffer<float> input_array[2] = {make_image<float>(), make_image<float>()};
+    Buffer<uint8_t, 3> input = make_image<uint8_t>();
+    Buffer<float, 3> input_array[2] = {make_image<float>(), make_image<float>()};
     // TODO: there is no runtime type for float16, so we'll declare this using a halide_type_t
     const halide_type_t halide_type_float16 = halide_type_t(halide_type_float, 16, 1);
     Buffer<> input_f16 = Buffer<>(halide_type_float16, kSize);
 
-    Buffer<float> output0(kSize, kSize, 3);
-    Buffer<float> output1(kSize, kSize, 3);
-    Buffer<float> typed_output_buffer(kSize, kSize, 3);
-    Buffer<float> type_only_output_buffer(kSize, kSize, 3);
-    Buffer<float> dim_only_output_buffer(kSize, kSize, 3);
-    Buffer<float> untyped_output_buffer(kSize, kSize, 3);
-    Buffer<float> tupled_output_buffer0(kSize, kSize, 3);
-    Buffer<int32_t> tupled_output_buffer1(kSize, kSize, 3);
-    Buffer<float> output_scalar = Buffer<float>::make_scalar();
-    Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array2[4] = {{kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array3[2] = {Buffer<float>::make_scalar(), Buffer<float>::make_scalar()};
-    Buffer<float> output_array4[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array5[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array6[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array7[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array8[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array9[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output0(kSize, kSize, 3);
+    Buffer<float, 3> output1(kSize, kSize, 3);
+    Buffer<float, 3> typed_output_buffer(kSize, kSize, 3);
+    Buffer<float, 3> type_only_output_buffer(kSize, kSize, 3);
+    Buffer<float, 3> dim_only_output_buffer(kSize, kSize, 3);
+    Buffer<float, 3> untyped_output_buffer(kSize, kSize, 3);
+    Buffer<float, 3> tupled_output_buffer0(kSize, kSize, 3);
+    Buffer<int32_t, 3> tupled_output_buffer1(kSize, kSize, 3);
+    Buffer<float, 0> output_scalar = Buffer<float>::make_scalar();
+    Buffer<float, 3> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array2[4] = {{kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 0> output_array3[2] = {Buffer<float>::make_scalar(), Buffer<float>::make_scalar()};
+    Buffer<float, 3> output_array4[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array5[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array6[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array7[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array8[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array9[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
 
     result = metadata_tester(
         input,                                                                   // Input<Func>
@@ -1509,16 +1570,36 @@ int main(int argc, char **argv) {
     verify(input, output0, output1, output_scalar, output_array[0], output_array[1], untyped_output_buffer, tupled_output_buffer0, tupled_output_buffer1);
 
     check_metadata(*metadata_tester_metadata(), false);
-    if (!strcmp(metadata_tester_metadata()->name, "metadata_tester_metadata")) {
-        std::cerr << "Expected name metadata_tester_metadata\n";
-        exit(-1);
+    if (strcmp(metadata_tester_metadata()->name, "metadata_tester")) {
+        std::cerr << "Expected name metadata_tester, got " << metadata_tester_metadata()->name << "\n";
+        exit(1);
     }
 
     check_metadata(*metadata_tester_ucon_metadata(), true);
-    if (!strcmp(metadata_tester_ucon_metadata()->name, "metadata_tester_ucon_metadata")) {
-        std::cerr << "Expected name metadata_tester_ucon_metadata\n";
-        exit(-1);
+    if (strcmp(metadata_tester_ucon_metadata()->name, "metadata_tester_ucon")) {
+        std::cerr << "Expected name metadata_tester_ucon, got " << metadata_tester_ucon_metadata()->name << "\n";
+        exit(1);
     }
+
+    constexpr auto sig = compute_signature(metadata_tester_argument_info());
+    if (strcmp(&sig[0], "@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+        // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
+        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &sig[0] << "\n";
+        exit(1);
+    }
+
+    constexpr auto usig = compute_signature(metadata_tester_ucon_argument_info());
+    if (strcmp(&usig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+        // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
+        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &usig[0] << "\n";
+        exit(1);
+    }
+
+    constexpr size_t count = count_buffers(metadata_tester_argument_info());
+    static_assert(count == 58, "Incorrect buffer count for metadata_tester_argument_info");
+
+    constexpr size_t ucount = count_buffers(metadata_tester_ucon_argument_info());
+    static_assert(ucount == 58, "Incorrect buffer count for metadata_tester_ucon_argument_info");
 
     std::cout << "Success!\n";
     return 0;

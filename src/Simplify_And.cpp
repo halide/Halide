@@ -3,7 +3,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const And *op, ExprInfo *bounds) {
+Expr Simplify::visit(const And *op, ExprInfo *info) {
     if (falsehoods.count(op)) {
         return const_false(op->type.lanes());
     }
@@ -56,6 +56,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
          rewrite(x && !x, false) ||
          rewrite(!x && x, false) ||
          rewrite(y <= x && x < y, false) ||
+         rewrite(y < x && x < y, false) ||
          rewrite(x != c0 && x == c1, b, c0 != c1) ||
          rewrite(x == c0 && x == c1, false, c0 != c1) ||
          // Note: In the predicate below, if undefined overflow
@@ -108,7 +109,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
         rewrite(x <= y && x <= z, x <= min(y, z)) ||
         rewrite(y <= x && z <= x, max(y, z) <= x)) {
 
-        return mutate(rewrite.result, bounds);
+        return mutate(rewrite.result, info);
     }
 
     if (a.same_as(op->a) &&

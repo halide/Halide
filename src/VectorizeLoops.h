@@ -20,7 +20,7 @@ namespace Internal {
  * them into single statements that operate on vectors. The loops in
  * question must have constant extent.
  */
-Stmt vectorize_loops(const Stmt &s, const std::map<std::string, Function> &env, const Target &t);
+Stmt vectorize_loops(const Stmt &s, const std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

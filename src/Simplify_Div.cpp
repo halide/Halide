@@ -3,112 +3,51 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
-    ExprInfo a_bounds, b_bounds;
-    Expr a = mutate(op->a, &a_bounds);
-    Expr b = mutate(op->b, &b_bounds);
+Expr Simplify::visit(const Div *op, ExprInfo *info) {
+    ExprInfo a_info, b_info;
+    Expr a = mutate(op->a, &a_info);
+    Expr b = mutate(op->b, &b_info);
 
-    if (bounds && no_overflow_int(op->type)) {
-        bounds->min = INT64_MAX;
-        bounds->max = INT64_MIN;
+    if (info) {
+        if (op->type.is_int_or_uint()) {
+            // ConstantInterval division is integer division, so we can't use
+            // this code path for floats.
+            info->bounds = a_info.bounds / b_info.bounds;
+            info->alignment = a_info.alignment / b_info.alignment;
+            info->trim_bounds_using_alignment();
+            info->cast_to(op->type);
 
-        // Enumerate all possible values for the min and max and take the extreme values.
-        if (a_bounds.min_defined && b_bounds.min_defined && b_bounds.min != 0) {
-            int64_t v = div_imp(a_bounds.min, b_bounds.min);
-            bounds->min = std::min(bounds->min, v);
-            bounds->max = std::max(bounds->max, v);
-        }
-
-        if (a_bounds.min_defined && b_bounds.max_defined && b_bounds.max != 0) {
-            int64_t v = div_imp(a_bounds.min, b_bounds.max);
-            bounds->min = std::min(bounds->min, v);
-            bounds->max = std::max(bounds->max, v);
-        }
-
-        if (a_bounds.max_defined && b_bounds.max_defined && b_bounds.max != 0) {
-            int64_t v = div_imp(a_bounds.max, b_bounds.max);
-            bounds->min = std::min(bounds->min, v);
-            bounds->max = std::max(bounds->max, v);
-        }
-
-        if (a_bounds.max_defined && b_bounds.min_defined && b_bounds.min != 0) {
-            int64_t v = div_imp(a_bounds.max, b_bounds.min);
-            bounds->min = std::min(bounds->min, v);
-            bounds->max = std::max(bounds->max, v);
-        }
-
-        const bool b_positive = b_bounds.min_defined && b_bounds.min > 0;
-        const bool b_negative = b_bounds.max_defined && b_bounds.max < 0;
-
-        if ((b_positive && !b_bounds.max_defined) ||
-            (b_negative && !b_bounds.min_defined)) {
-            // Take limit as b -> +/- infinity
-            int64_t v = 0;
-            bounds->min = std::min(bounds->min, v);
-            bounds->max = std::max(bounds->max, v);
-        }
-
-        bounds->min_defined = ((a_bounds.min_defined && b_positive) ||
-                               (a_bounds.max_defined && b_negative));
-        bounds->max_defined = ((a_bounds.max_defined && b_positive) ||
-                               (a_bounds.min_defined && b_negative));
-
-        // That's as far as we can get knowing the sign of the
-        // denominator. For bounded numerators, we additionally know
-        // that div can't make anything larger in magnitude, so we can
-        // take the intersection with that.
-        if (a_bounds.max_defined && a_bounds.min_defined) {
-            int64_t v = std::max(a_bounds.max, -a_bounds.min);
-            if (bounds->min_defined) {
-                bounds->min = std::max(bounds->min, -v);
-            } else {
-                bounds->min = -v;
+            // Bounded numerator divided by constantish bounded denominator can
+            // sometimes collapse things to a constant at this point. This
+            // mostly happens when the denominator is a constant and the
+            // numerator span is small (e.g. [23, 29]/10 = 2), but there are
+            // also cases with a bounded denominator (e.g. [5, 7]/[4, 5] = 1).
+            if (info->bounds.is_single_point()) {
+                if (op->type.can_represent(info->bounds.min)) {
+                    return make_const(op->type, info->bounds.min);
+                } else {
+                    // Even though this is 'no-overflow-int', if the result
+                    // we calculate can't fit into the destination type,
+                    // we're better off returning an overflow condition than
+                    // a known-wrong value. (Note that no_overflow_int() should
+                    // only be true for signed integers.)
+                    internal_assert(no_overflow_int(op->type));
+                    clear_expr_info(info);
+                    return make_signed_integer_overflow(op->type);
+                }
             }
-            if (bounds->max_defined) {
-                bounds->max = std::min(bounds->max, v);
-            } else {
-                bounds->max = v;
-            }
-            bounds->min_defined = bounds->max_defined = true;
+        } else {
+            // TODO: Tracking constant integer bounds of floating point values
+            // isn't so useful right now, but if we want integer bounds for
+            // floating point division later, here's the place to put it.
+            clear_expr_info(info);
         }
-
-        // Bounded numerator divided by constantish
-        // denominator can sometimes collapse things to a
-        // constant at this point
-        if (bounds->min_defined &&
-            bounds->max_defined &&
-            bounds->max == bounds->min) {
-            if (op->type.can_represent(bounds->min)) {
-                return make_const(op->type, bounds->min);
-            } else {
-                // Even though this is 'no-overflow-int', if the result
-                // we calculate can't fit into the destination type,
-                // we're better off returning an overflow condition than
-                // a known-wrong value. (Note that no_overflow_int() should
-                // only be true for signed integers.)
-                internal_assert(op->type.is_int());
-                clear_bounds_info(bounds);
-                return make_signed_integer_overflow(op->type);
-            }
-        }
-        // Code downstream can use min/max in calculated-but-unused arithmetic
-        // that can lead to UB (and thus, flaky failures under ASAN/UBSAN)
-        // if we leave them set to INT64_MAX/INT64_MIN; normalize to zero to avoid this.
-        if (!bounds->min_defined) {
-            bounds->min = 0;
-        }
-        if (!bounds->max_defined) {
-            bounds->max = 0;
-        }
-        bounds->alignment = a_bounds.alignment / b_bounds.alignment;
-        bounds->trim_bounds_using_alignment();
     }
 
     bool denominator_non_zero =
         (no_overflow_int(op->type) &&
-         ((b_bounds.min_defined && b_bounds.min > 0) ||
-          (b_bounds.max_defined && b_bounds.max < 0) ||
-          (b_bounds.alignment.remainder != 0)));
+         (!b_info.bounds.contains(0) ||
+          b_info.alignment.remainder != 0));
 
     if (may_simplify(op->type)) {
 
@@ -126,8 +65,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
             return rewrite.result;
         }
 
-        int a_mod = a_bounds.alignment.modulus;
-        int a_rem = a_bounds.alignment.remainder;
+        int a_mod = a_info.alignment.modulus;
+        int a_rem = a_info.alignment.remainder;
 
         // clang-format off
         if (EVAL_IN_LAMBDA
@@ -143,6 +82,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((x * c0) / c1, x / fold(c1 / c0),                          c1 % c0 == 0 && c0 > 0 && c1 / c0 != 0) ||
                // Pull out terms that are a multiple of the denominator
                rewrite((x * c0) / c1, x * fold(c0 / c1),                          c0 % c1 == 0 && c1 > 0) ||
+               rewrite(min((x * c0), c1) / c2, min(x * fold(c0 / c2), fold(c1 / c2)), c0 % c2 == 0 && c2 > 0) ||
+               rewrite(max((x * c0), c1) / c2, max(x * fold(c0 / c2), fold(c1 / c2)), c0 % c2 == 0 && c2 > 0) ||
 
                rewrite((x * c0 + y) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
                rewrite((x * c0 - y) / c0, x + (0 - y) / c0) ||
@@ -270,7 +211,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                        c2 > 0 && c0 % c2 == 0) ||
                // A very specific pattern that comes up in bounds in upsampling code.
                rewrite((x % 2 + c0) / 2, x % 2 + fold(c0 / 2), c0 % 2 == 1))))) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         // clang-format on
     }

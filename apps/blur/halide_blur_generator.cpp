@@ -28,8 +28,8 @@ public:
     GeneratorParam<int> tile_x{"tile_x", 32};  // X tile.
     GeneratorParam<int> tile_y{"tile_y", 8};   // Y tile.
 
-    Input<Buffer<uint16_t>> input{"input", 2};
-    Output<Buffer<uint16_t>> blur_y{"blur_y", 2};
+    Input<Buffer<uint16_t, 2>> input{"input"};
+    Output<Buffer<uint16_t, 2>> blur_y{"blur_y"};
 
     void generate() {
         Func blur_x("blur_x");
@@ -87,7 +87,7 @@ public:
 
             blur_y.compute_root()
                 .hexagon()
-                .prefetch(input, y, 2)
+                .prefetch(input, y, y, 2)
                 .split(y, y, yi, 128)
                 .parallel(y)
                 .vectorize(x, vector_size * 2);

@@ -38,8 +38,8 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     Expr total_size_hi = make_zero(UInt(64));
 
     Expr low_mask = make_const(UInt(64), (uint64_t)(0xffffffff));
-    for (size_t i = 0; i < extents.size(); i++) {
-        Expr next_extent = cast(UInt(32), max(0, extents[i]));
+    for (const auto &extent : extents) {
+        Expr next_extent = cast(UInt(32), max(0, extent));
 
         // Update total_size >> 32. This math can't overflow due to
         // the loop invariant:
@@ -74,22 +74,15 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     return codegen(total_size);
 }
 
-int CodeGen_Posix::allocation_padding(Type type) const {
-    // We potentially load 3 scalar values past the end of the
-    // buffer, so pad the allocation with an extra instance of the
-    // scalar type.
-    return 3 * type.bytes();
-}
-
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, MemoryType memory_type,
                                                            const std::vector<Expr> &extents, const Expr &condition,
-                                                           const Expr &new_expr, std::string free_function) {
+                                                           const Expr &new_expr, std::string free_function, int padding) {
     Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);
     if (constant_bytes > 0) {
         constant_bytes *= type.bytes();
-        stack_bytes = constant_bytes;
+        stack_bytes = constant_bytes + padding * type.bytes();
 
         if (stack_bytes > target.maximum_buffer_size()) {
             const string str_max_size = target.has_large_buffers() ? "2^63 - 1" : "2^31 - 1";
@@ -117,8 +110,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // Add the requested padding to the allocation size. If the
         // allocation is on the stack, we can just read past the top
         // of the stack, so we only need this for heap allocations.
-        Value *padding = ConstantInt::get(llvm_size->getType(), allocation_padding(type));
-        llvm_size = builder->CreateAdd(llvm_size, padding);
+        Value *padding_bytes = ConstantInt::get(llvm_size->getType(), padding * type.bytes());
+        llvm_size = builder->CreateAdd(llvm_size, padding_bytes);
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,
                                           ConstantInt::get(llvm_size->getType(), 0));
@@ -221,20 +214,50 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         // Even if we're reusing a stack slot, we need to call
         // pseudostack_alloc to potentially reallocate.
-        llvm::Function *malloc_fn = module->getFunction("pseudostack_alloc");
-        internal_assert(malloc_fn) << "Could not find pseudostack_alloc in module\n";
-        malloc_fn->setReturnDoesNotAlias();
+        llvm::Function *alloc_fn = module->getFunction("pseudostack_alloc");
+        internal_assert(alloc_fn) << "Could not find pseudostack_alloc in module\n";
+        alloc_fn->setReturnDoesNotAlias();
 
-        llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
+        llvm::Function::arg_iterator arg_iter = alloc_fn->arg_begin();
         ++arg_iter;  // skip the user context *
         slot = builder->CreatePointerCast(slot, arg_iter->getType());
         ++arg_iter;  // skip the pointer to the stack slot
-        llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
+        llvm::Type *size_type = arg_iter->getType();
+        llvm_size = builder->CreateIntCast(llvm_size, size_type, false);
         Value *args[3] = {get_user_context(), slot, llvm_size};
-        Value *call = builder->CreateCall(malloc_fn, args);
+        Value *call = builder->CreateCall(alloc_fn, args);
+        llvm::Type *ptr_type = llvm_type_of(type)->getPointerTo();
+        call = builder->CreatePointerCast(call, ptr_type);
 
-        // Fix the type to avoid pointless bitcasts later
-        allocation.ptr = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());
+        // Figure out how much we need to allocate on the real stack
+        Value *returned_non_null = builder->CreateIsNotNull(call);
+
+        BasicBlock *here_bb = builder->GetInsertBlock();
+        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+        BasicBlock *need_alloca_bb = BasicBlock::Create(*context, "then_bb", function);
+
+        builder->CreateCondBr(returned_non_null, after_bb, need_alloca_bb, very_likely_branch);
+        builder->SetInsertPoint(need_alloca_bb);
+
+        // Allocate it. It's zero most of the time.
+        AllocaInst *alloca_inst = builder->CreateAlloca(i8_t->getPointerTo(), llvm_size);
+        // Give it the right alignment
+        alloca_inst->setAlignment(llvm::Align(native_vector_bits() / 8));
+
+        // Set the pseudostack slot ptr to the right thing so we reuse
+        // this pointer next time around.
+        Value *stack_ptr = builder->CreatePointerCast(alloca_inst, ptr_type);
+        Value *slot_ptr_ptr = builder->CreatePointerCast(slot, ptr_type->getPointerTo());
+        builder->CreateStore(stack_ptr, slot_ptr_ptr);
+
+        builder->CreateBr(after_bb);
+        builder->SetInsertPoint(after_bb);
+
+        PHINode *phi = builder->CreatePHI(ptr_type, 2);
+        phi->addIncoming(stack_ptr, need_alloca_bb);
+        phi->addIncoming(call, here_bb);
+
+        allocation.ptr = phi;
         allocation.pseudostack_slot = slot;
     } else {
         if (new_expr.defined()) {
@@ -319,8 +342,8 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
 }
 
 string CodeGen_Posix::get_allocation_name(const std::string &n) {
-    if (allocations.contains(n)) {
-        return allocations.get(n).name;
+    if (const auto *alloc = allocations.find(n)) {
+        return alloc->name;
     } else {
         return n;
     }
@@ -334,7 +357,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 
     Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->memory_type,
                                               alloc->extents, alloc->condition,
-                                              alloc->new_expr, alloc->free_function);
+                                              alloc->new_expr, alloc->free_function, alloc->padding);
     sym_push(alloc->name, allocation.ptr);
 
     codegen(alloc->body);

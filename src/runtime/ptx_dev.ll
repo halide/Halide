@@ -156,19 +156,6 @@ define weak_odr double @ceil_f64(double %x) nounwind uwtable readnone alwaysinli
        ret double %y
 }
 
-declare float @__nv_nearbyintf(float) nounwind readnone
-declare double @__nv_nearbyint(double) nounwind readnone
-
-define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @__nv_nearbyintf(float %x) nounwind readnone
-       ret float %y
-}
-
-define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call double @__nv_nearbyint(double %x) nounwind readnone
-       ret double %y
-}
-
 declare float @__nv_truncf(float) nounwind readnone
 declare double @__nv_trunc(double) nounwind readnone
 

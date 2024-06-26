@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 16; i++) {
         if (r(i) != i) {
             std::cout << "Error at " << i << ": " << r(i) << std::endl;
-            return -1;
+            return 1;
         }
     }
 

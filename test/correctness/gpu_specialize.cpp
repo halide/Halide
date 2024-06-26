@@ -4,8 +4,13 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
+    Halide::Target target = get_jit_target_from_environment();
+    if (!target.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+    if (target.has_feature(Target::Vulkan) && ((target.os == Target::IOS) || target.os == Target::OSX)) {
+        printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK doesn't support dynamically allocated shared mem)!\n");
         return 0;
     }
 
@@ -57,12 +62,12 @@ int main(int argc, char **argv) {
                 if (out1(x, y) != correct) {
                     printf("out1(%d, %d) = %d instead of %d\n",
                            x, y, out1(x, y), correct);
-                    return -1;
+                    return 1;
                 }
                 if (out2(x, y) != correct) {
                     printf("out2(%d, %d) = %d instead of %d\n",
                            x, y, out2(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -93,7 +98,7 @@ int main(int argc, char **argv) {
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

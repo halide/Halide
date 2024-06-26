@@ -47,7 +47,7 @@ void test(Target t) {
                     }
                     if (out(x, y) != correct) {
                         printf("out(%d, %d) = %d instead of %d\n", x, y, (int)(out(x, y)), (int)(correct));
-                        exit(-1);
+                        exit(1);
                     }
                 }
             }
@@ -58,7 +58,7 @@ void test(Target t) {
             std::basic_regex<char> regex("dp[24]a[.lo]*[us]32[.][us]32");
             if (!std::regex_search((const char *)buf.begin(), (const char *)buf.end(), regex)) {
                 printf("Did not find use of dp2a or dp4a in compiled code. Rerun test with HL_DEBUG_CODEGEN=1 to debug\n");
-                exit(-1);
+                exit(1);
             }
         }
     }

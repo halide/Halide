@@ -1,3 +1,5 @@
+#include "Deinterleave.h"
+#include "IROperator.h"
 #include "Simplify_Internal.h"
 
 namespace Halide {
@@ -5,18 +7,21 @@ namespace Internal {
 
 using std::vector;
 
-Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
-    if (op->is_extract_element() &&
-        (op->vectors[0].as<Ramp>() ||
-         op->vectors[0].as<Broadcast>())) {
-        // Extracting a single lane of a ramp or broadcast
-        if (const Ramp *r = op->vectors[0].as<Ramp>()) {
-            return mutate(r->base + op->indices[0] * r->stride, bounds);
-        } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
-            return mutate(b->value, bounds);
-        } else {
-            internal_error << "Unreachable";
-            return Expr();
+Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
+    if (op->is_extract_element()) {
+        int index = op->indices[0];
+        internal_assert(index >= 0);
+        for (const Expr &vector : op->vectors) {
+            if (index < vector.type().lanes()) {
+                if (vector.as<Variable>()) {
+                    // If we try to extract_lane of a variable, we'll just get
+                    // the same shuffle back.
+                    break;
+                } else {
+                    return extract_lane(mutate(vector, info), index);
+                }
+            }
+            index -= vector.type().lanes();
         }
     }
 
@@ -24,20 +29,17 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     vector<Expr> new_vectors;
     bool changed = false;
     for (const Expr &vector : op->vectors) {
-        ExprInfo v_bounds;
-        Expr new_vector = mutate(vector, &v_bounds);
+        ExprInfo v_info;
+        Expr new_vector = mutate(vector, &v_info);
         if (!vector.same_as(new_vector)) {
             changed = true;
         }
-        if (bounds) {
+        if (info) {
             if (new_vectors.empty()) {
-                *bounds = v_bounds;
+                *info = v_info;
             } else {
-                bounds->min_defined &= v_bounds.min_defined;
-                bounds->max_defined &= v_bounds.max_defined;
-                bounds->min = std::min(bounds->min, v_bounds.min);
-                bounds->max = std::max(bounds->max, v_bounds.max);
-                bounds->alignment = ModulusRemainder::unify(bounds->alignment, v_bounds.alignment);
+                info->bounds = ConstantInterval::make_union(info->bounds, v_info.bounds);
+                info->alignment = ModulusRemainder::unify(info->alignment, v_info.alignment);
             }
         }
         new_vectors.push_back(new_vector);
@@ -136,7 +138,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 }
             }
             if (can_collapse) {
-                return mutate(Ramp::make(r->base, r->stride / terms, r->lanes * terms), bounds);
+                return mutate(Ramp::make(r->base, r->stride / terms, r->lanes * terms), info);
             }
         }
 
@@ -187,7 +189,34 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 }
             }
         }
+
+        // Try to collapse an interleave of a series of extract_bits into a vector reinterpret.
+        if (const Call *extract = new_vectors[0].as<Call>()) {
+            if (extract->is_intrinsic(Call::extract_bits) &&
+                is_const_zero(extract->args[1])) {
+                int n = (int)new_vectors.size();
+                Expr base = extract->args[0];
+                bool can_collapse = base.type().bits() == n * op->type.bits();
+                for (int i = 1; can_collapse && i < n; i++) {
+                    const Call *c = new_vectors[i].as<Call>();
+                    if (!(c->is_intrinsic(Call::extract_bits) &&
+                          is_const(c->args[1], i * op->type.bits()) &&
+                          equal(base, c->args[0]))) {
+                        can_collapse = false;
+                    }
+                }
+                if (can_collapse) {
+                    return Reinterpret::make(op->type, base);
+                }
+            }
+        }
+
     } else if (op->is_concat()) {
+        // Bypass concat of a single vector (identity shuffle)
+        if (new_vectors.size() == 1) {
+            return new_vectors[0];
+        }
+
         // Try to collapse a concat of ramps into a single ramp.
         const Ramp *r = new_vectors[0].as<Ramp>();
         if (r) {
@@ -240,7 +269,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
             if (cast->type.bits() > cast->value.type().bits()) {
                 return mutate(Cast::make(cast->type.with_lanes(op->type.lanes()),
                                          Shuffle::make({cast->value}, op->indices)),
-                              bounds);
+                              info);
             }
         }
     }
@@ -288,48 +317,6 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         return Shuffle::make(new_vectors, op->indices);
     }
 }
-
-template<typename T>
-Expr Simplify::hoist_slice_vector(Expr e) {
-    const T *op = e.as<T>();
-    internal_assert(op);
-
-    const Shuffle *shuffle_a = op->a.template as<Shuffle>();
-    const Shuffle *shuffle_b = op->b.template as<Shuffle>();
-
-    internal_assert(shuffle_a && shuffle_b &&
-                    shuffle_a->is_slice() &&
-                    shuffle_b->is_slice());
-
-    if (shuffle_a->indices != shuffle_b->indices) {
-        return e;
-    }
-
-    const std::vector<Expr> &slices_a = shuffle_a->vectors;
-    const std::vector<Expr> &slices_b = shuffle_b->vectors;
-    if (slices_a.size() != slices_b.size()) {
-        return e;
-    }
-
-    for (size_t i = 0; i < slices_a.size(); i++) {
-        if (slices_a[i].type() != slices_b[i].type()) {
-            return e;
-        }
-    }
-
-    vector<Expr> new_slices;
-    for (size_t i = 0; i < slices_a.size(); i++) {
-        new_slices.push_back(T::make(slices_a[i], slices_b[i]));
-    }
-
-    return Shuffle::make(new_slices, shuffle_a->indices);
-}
-
-template Expr Simplify::hoist_slice_vector<Add>(Expr);
-template Expr Simplify::hoist_slice_vector<Sub>(Expr);
-template Expr Simplify::hoist_slice_vector<Mul>(Expr);
-template Expr Simplify::hoist_slice_vector<Min>(Expr);
-template Expr Simplify::hoist_slice_vector<Max>(Expr);
 
 }  // namespace Internal
 }  // namespace Halide

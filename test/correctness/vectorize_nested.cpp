@@ -23,7 +23,7 @@ int vectorize_2d_round_up() {
         return 3 * x + y;
     };
     if (check_image(result, cmp_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -50,7 +50,7 @@ int vectorize_2d_guard_with_if_and_predicate() {
             return 3 * x + y;
         };
         if (check_image(result, cmp_func)) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -78,7 +78,7 @@ int vectorize_2d_inlined_with_update() {
         return x + 2 * y + 45;
     };
     if (check_image(result, cmp_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -104,7 +104,7 @@ int vectorize_2d_with_inner_for() {
         return 3 * x + y + 7 * c;
     };
     if (check_image(result, cmp_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -129,7 +129,7 @@ int vectorize_2d_with_compute_at_vectorized() {
         return 6 * x + 3 + 2 * y;
     };
     if (check_image(result, cmp_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -157,7 +157,7 @@ int vectorize_2d_with_compute_at() {
         return 6 * x + 3 + 2 * y;
     };
     if (check_image(result, cmp_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -186,12 +186,35 @@ int vectorize_all_d() {
         return 3 * x + y;
     };
     if (check_image(result, cmp_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
 }
 
+int vectorize_lets_order() {
+    const int width = 128;
+    const int height = 128;
+
+    Var x("x"), y("y"), yo("yo"), yi("yi"), yoi("yoi"), yoio("yoio"), yoii("yoii");
+    Func f("f");
+    f(x, y) = x + y;
+    f.split(y, yo, yi, 8, TailStrategy::Auto)
+        .split(yo, yo, yoi, 4, TailStrategy::RoundUp)
+        .vectorize(yoi)
+        .vectorize(yi)
+        .split(yoi, yoio, yoii, 2, TailStrategy::Auto);
+    Buffer<int> result = f.realize({width, height});
+
+    auto cmp_func = [](int x, int y) {
+        return x + y;
+    };
+    if (check_image(result, cmp_func)) {
+        return 1;
+    }
+
+    return 0;
+}
 int vectorize_inner_of_scalarization() {
     ImageParam in(UInt(8), 2);
 
@@ -241,13 +264,13 @@ int vectorize_inner_of_scalarization() {
     if (is_x_loop_found) {
         std::cerr << "Found scalarized loop for " << x << "\n";
 
-        return -1;
+        return 1;
     }
 
     if (!is_y_loop_found) {
         std::cerr << "Expected to find scalarized loop for " << y << "\n";
 
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -256,42 +279,47 @@ int vectorize_inner_of_scalarization() {
 int main(int argc, char **argv) {
     if (vectorize_2d_round_up()) {
         printf("vectorize_2d_round_up failed\n");
-        return -1;
+        return 1;
     }
 
     if (vectorize_2d_guard_with_if_and_predicate()) {
         printf("vectorize_2d_guard_with_if failed\n");
-        return -1;
+        return 1;
     }
 
     if (vectorize_2d_inlined_with_update()) {
         printf("vectorize_2d_inlined_with_update failed\n");
-        return -1;
+        return 1;
     }
 
     if (vectorize_2d_with_inner_for()) {
         printf("vectorize_2d_with_inner_for failed\n");
-        return -1;
+        return 1;
     }
 
     if (vectorize_2d_with_compute_at()) {
         printf("vectorize_2d_with_compute_at failed\n");
-        return -1;
+        return 1;
     }
 
     if (vectorize_2d_with_compute_at_vectorized()) {
         printf("vectorize_2d_with_compute_at_vectorized failed\n");
-        return -1;
+        return 1;
     }
 
     if (vectorize_all_d()) {
         printf("vectorize_all_d failed\n");
-        return -1;
+        return 1;
+    }
+
+    if (vectorize_lets_order()) {
+        printf("vectorize_lets_order failed\n");
+        return 1;
     }
 
     if (vectorize_inner_of_scalarization()) {
         printf("vectorize_inner_of_scalarization failed\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

@@ -18,17 +18,17 @@ public:
     template<typename T2>
     using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> transpose_A_ = {"transpose_A", false};
-    GeneratorParam<bool> transpose_B_ = {"transpose_B", false};
+    GeneratorParam<bool> transpose_A_{"transpose_A", false};
+    GeneratorParam<bool> transpose_B_{"transpose_B", false};
 
     // Standard ordering of parameters in GEMM functions.
-    Input<T> a_ = {"a_", 1};
-    Input<Buffer<T>> A_ = {"A_", 2};
-    Input<Buffer<T>> B_ = {"B_", 2};
-    Input<T> b_ = {"b_", 1};
-    Input<Buffer<T>> C_ = {"C_", 2};
+    Input<T> a_{"a_", 1};
+    Input<Buffer<T, 2>> A_{"A_"};
+    Input<Buffer<T, 2>> B_{"B_"};
+    Input<T> b_{"b_", 1};
+    Input<Buffer<T, 2>> C_{"C_"};
 
-    Output<Buffer<T>> result_ = {"result", 2};
+    Output<Buffer<T, 2>> result_{"result"};
 
     void generate() {
         // Matrices are interpreted as column-major by default. The
@@ -41,8 +41,8 @@ public:
         const int vec = std::max(4, natural_vector_size(a_.type()));
         const int s = vec * 2;
 
-        Input<Buffer<T>> *A_in = &A_;
-        Input<Buffer<T>> *B_in = &B_;
+        Input<Buffer<T, 2>> *A_in = &A_;
+        Input<Buffer<T, 2>> *B_in = &B_;
 
         // If they're both transposed, then reverse the order and transpose the result instead.
         const bool transpose_AB = (bool)transpose_A_ && (bool)transpose_B_;

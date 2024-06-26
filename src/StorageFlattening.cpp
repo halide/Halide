@@ -1,6 +1,7 @@
 #include "StorageFlattening.h"
 
 #include "Bounds.h"
+#include "CSE.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
@@ -8,6 +9,8 @@
 #include "IRPrinter.h"
 #include "Parameter.h"
 #include "Scope.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 #include <sstream>
 
@@ -23,6 +26,35 @@ using std::vector;
 
 namespace {
 
+class ExpandExpr : public IRMutator {
+    using IRMutator::visit;
+    const Scope<Expr> &scope;
+
+    Expr visit(const Variable *var) override {
+        if (const Expr *e = scope.find(var->name)) {
+            // Mutate the expression, so lets can get replaced recursively.
+            Expr expr = mutate(*e);
+            debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
+            return expr;
+        } else {
+            return var;
+        }
+    }
+
+public:
+    ExpandExpr(const Scope<Expr> &s)
+        : scope(s) {
+    }
+};
+
+// Perform all the substitutions in a scope
+Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
+    ExpandExpr ee(scope);
+    Expr result = ee.mutate(e);
+    debug(4) << "Expanded " << e << " into " << result << "\n";
+    return result;
+}
+
 class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const map<string, pair<Function, int>> &e,
@@ -35,12 +67,43 @@ public:
     }
 
 private:
+    struct HoistedAllocationInfo {
+        string name;
+        Type type;
+        MemoryType memory_type;
+        vector<Expr> extents;
+        Expr condition;
+
+        HoistedAllocationInfo(const string &name, Type type,
+                              MemoryType memory_type,
+                              const vector<Expr> &extents, Expr condition)
+            : name(name),
+              type(type),
+              memory_type(memory_type),
+              extents(extents),
+              condition(std::move(condition)) {
+        }
+    };
+
+    struct HoistedStorageData {
+        string name;
+        vector<HoistedAllocationInfo> hoisted_allocations;
+        vector<pair<string, Interval>> loop_vars;
+        Scope<Expr> scope;
+
+        HoistedStorageData(const string &n)
+            : name(n) {
+        }
+    };
+
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
     set<string> textures;
     const Target &target;
     Scope<> realizations;
     bool in_gpu = false;
+    vector<HoistedStorageData> hoisted_storages;
+    map<string, int> hoisted_storages_map;
 
     Expr make_shape_var(string name, const string &field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
@@ -106,6 +169,27 @@ private:
 
     using IRMutator::visit;
 
+    Stmt visit(const HoistedStorage *op) override {
+        hoisted_storages.emplace_back(op->name);
+        // Record index in the stack.
+        hoisted_storages_map[op->name] = hoisted_storages.size() - 1;
+        Stmt body = mutate(op->body);
+        internal_assert(!hoisted_storages.back().hoisted_allocations.empty()) << "Couldn't find a matching Realize node for Hoisted storage " << op->name << "\n";
+        const auto &alloc_info = hoisted_storages.back().hoisted_allocations.front();
+        vector<Expr> extents = alloc_info.extents;
+        for (int i = 1; i < (int)hoisted_storages.back().hoisted_allocations.size(); i++) {
+            const auto &ai = hoisted_storages.back().hoisted_allocations[i];
+            internal_assert(ai.extents.size() == alloc_info.extents.size());
+            for (int j = 0; j < (int)extents.size(); j++) {
+                extents[j] = Max::make(extents[j], ai.extents[j]);
+            }
+        }
+        body = Allocate::make(alloc_info.name, alloc_info.type, alloc_info.memory_type, extents, alloc_info.condition, body);
+        hoisted_storages_map.erase(op->name);
+        hoisted_storages.pop_back();
+        return body;
+    }
+
     Stmt visit(const Realize *op) override {
         realizations.push(op->name);
 
@@ -117,10 +201,9 @@ private:
         Stmt body = mutate(op->body);
 
         // Compute the size
-        vector<Expr> extents;
+        vector<Expr> extents(op->bounds.size());
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            extents.push_back(op->bounds[i].extent);
-            extents[i] = mutate(extents[i]);
+            extents[i] = mutate(op->bounds[i].extent);
         }
         Expr condition = mutate(op->condition);
 
@@ -132,16 +215,33 @@ private:
         // also affects the device allocation in some backends).
         vector<Expr> allocation_extents(extents.size());
         vector<int> storage_permutation;
+        vector<Stmt> bound_asserts;
+        bool is_ring_buffered = false;
         {
             auto iter = env.find(op->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
             Function f = iter->second.first;
+            is_ring_buffered = f.schedule().ring_buffer().defined();
             const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
             const vector<string> &args = f.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j] == storage_dims[i].var) {
                         storage_permutation.push_back((int)j);
+                        Expr bound = storage_dims[i].bound;
+                        if (bound.defined()) {
+                            if (can_prove(extents[j] > bound)) {
+                                user_error << "Explicit storage bound (" << bound << ") for variable " << args[j] << " of function " << op->name << " is smaller than required (" << extents[j] << ")\n";
+                            }
+                            Expr bound_too_small_error =
+                                Call::make(Int(32),
+                                           "halide_error_storage_bound_too_small",
+                                           {StringImm::make(op->name), StringImm::make(args[j]), bound, extents[j]},
+                                           Call::Extern);
+                            Stmt size_to_small_check = AssertStmt::make(extents[j] <= bound, bound_too_small_error);
+                            bound_asserts.push_back(size_to_small_check);
+                            extents[j] = bound;
+                        }
                         Expr alignment = storage_dims[i].alignment;
                         if (alignment.defined()) {
                             allocation_extents[j] = ((extents[j] + alignment - 1) / alignment) * alignment;
@@ -151,6 +251,10 @@ private:
                     }
                 }
                 internal_assert(storage_permutation.size() == i + 1);
+            }
+            if (is_ring_buffered) {
+                storage_permutation.push_back(storage_dims.size());
+                allocation_extents[storage_dims.size()] = extents[storage_dims.size()];
             }
         }
 
@@ -180,15 +284,66 @@ private:
         builder.host = Variable::make(Handle(), op->name);
         builder.type = op->types[0];
         builder.dimensions = dims;
+
         for (int i = 0; i < dims; i++) {
             builder.mins.push_back(min_var[i]);
             builder.extents.push_back(extent_var[i]);
             builder.strides.push_back(stride_var[i]);
         }
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
+        if (hoisted_storages_map.count(op->name) > 0) {
+            HoistedStorageData &hoisted_storage_data = hoisted_storages[hoisted_storages_map[op->name]];
 
-        // Make the allocation node
-        stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
+            auto expand_and_bound = [&](Expr e) {
+                // Iterate from innermost outwards
+                for (auto it = hoisted_storages.rbegin(); it != hoisted_storages.rend(); it++) {
+                    e = expand_expr(e, it->scope);
+                    if (it->name == op->name) {
+                        break;
+                    }
+                }
+
+                e = simplify(common_subexpression_elimination(e));
+                // Find bounds of expression using the intervals of the loop variables. The loop variables may depend on
+                // the other loop variables, so we just call bounds_of_expr_in_scope for each loop variable separately
+                // in a reverse order.
+                for (auto it = hoisted_storage_data.loop_vars.rbegin(); it != hoisted_storage_data.loop_vars.rend(); ++it) {
+                    Scope<Interval> one_loop_var;
+                    one_loop_var.push(it->first, it->second);
+                    Interval bounds = bounds_of_expr_in_scope(e, one_loop_var);
+                    e = bounds.max;
+                }
+
+                return e;
+            };
+
+            vector<Expr> bounded_extents;
+            for (const auto &e : allocation_extents) {
+                Expr expanded_extent = expand_and_bound(e);
+                user_assert(expanded_extent.defined() &&
+                            !expanded_extent.same_as(Interval::pos_inf()))
+                    << "Couldn't infer the upper bound for the storage size of " << op->name << ", consider using bound_storage.\n";
+                bounded_extents.push_back(expanded_extent);
+            }
+
+            Expr expanded_condition = expand_and_bound(condition);
+            if (!expanded_condition.defined() ||
+                expanded_condition.same_as(Interval::pos_inf())) {
+                expanded_condition = const_true();
+            }
+
+            HoistedAllocationInfo hoisted_alloc(op->name, op->types[0], op->memory_type, bounded_extents, expanded_condition);
+
+            hoisted_storage_data.hoisted_allocations.push_back(hoisted_alloc);
+        } else {
+            // Make the allocation node
+            stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
+        }
+
+        // Wrap it into storage bound asserts.
+        if (!bound_asserts.empty()) {
+            stmt = Block::make(Block::make(bound_asserts), stmt);
+        }
 
         // Compute the strides
         for (int i = (int)op->bounds.size() - 1; i > 0; i--) {
@@ -209,6 +364,7 @@ private:
             stmt = LetStmt::make(min_name[i - 1], op->bounds[i - 1].min, stmt);
             stmt = LetStmt::make(extent_name[i - 1], extents[i - 1], stmt);
         }
+
         return stmt;
     }
 
@@ -238,6 +394,7 @@ private:
         }
 
         Expr value = mutate(op->values[0]);
+        Expr predicate = mutate(op->predicate);
         if (in_gpu && textures.count(op->name)) {
             Expr buffer_var =
                 Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer", output_buf);
@@ -251,10 +408,14 @@ private:
             args.push_back(value);
             Expr store = Call::make(value.type(), Call::image_store,
                                     args, Call::Intrinsic);
-            return Evaluate::make(store);
+            Stmt result = Evaluate::make(store);
+            if (!is_const_one(op->predicate)) {
+                result = IfThenElse::make(predicate, result);
+            }
+            return result;
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
-            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder());
+            return Store::make(op->name, value, idx, output_buf, predicate, ModulusRemainder());
         }
     }
 
@@ -283,8 +444,7 @@ private:
 
                 // Create image_load("name", name.buffer, x - x_min, x_extent,
                 // y - y_min, y_extent, ...).  Extents can be used by
-                // successive passes. OpenGL, for example, uses them
-                // for coordinate normalization.
+                // successive passes.
                 vector<Expr> args(2);
                 args[0] = op->name;
                 args[1] = buffer_var;
@@ -335,8 +495,8 @@ private:
 
         auto iter = env.find(op->name);
         if (iter != env.end()) {
-            // Order the <min, extent> args based on the storage dims (i.e. innermost
-            // dimension should be first in args)
+            // Order the <min, extent> args based on the storage dims
+            // (i.e. innermost dimension should be first in args)
             vector<int> storage_permutation;
             {
                 Function f = iter->second.first;
@@ -375,13 +535,36 @@ private:
     }
 
     Stmt visit(const For *op) override {
-        bool old_in_gpu = in_gpu;
-        if (op->for_type == ForType::GPUBlock ||
-            op->for_type == ForType::GPUThread) {
-            in_gpu = true;
+        Expr expanded_min = op->min;
+        Expr expanded_extent = op->extent;
+        // Iterate from innermost outwards
+        for (auto it = hoisted_storages.rbegin(); it != hoisted_storages.rend(); it++) {
+            expanded_min = simplify(expand_expr(expanded_min, it->scope));
+            expanded_extent = expand_expr(expanded_extent, it->scope);
+            Interval loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
+            it->loop_vars.emplace_back(op->name, loop_bounds);
         }
+
+        ScopedValue<bool> old_in_gpu(in_gpu, in_gpu || is_gpu(op->for_type));
         Stmt stmt = IRMutator::visit(op);
-        in_gpu = old_in_gpu;
+
+        for (auto &p : hoisted_storages) {
+            p.loop_vars.pop_back();
+        }
+
+        return stmt;
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        if (!hoisted_storages.empty()) {
+            hoisted_storages.back().scope.push(op->name, op->value);
+        }
+
+        Stmt stmt = IRMutator::visit(op);
+
+        if (!hoisted_storages.empty()) {
+            hoisted_storages.back().scope.pop(op->name);
+        }
         return stmt;
     }
 };
@@ -419,13 +602,9 @@ class PromoteToMemoryType : public IRMutator {
     Stmt visit(const Allocate *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
-            vector<Expr> extents;
-            for (const Expr &e : op->extents) {
-                extents.push_back(mutate(e));
-            }
-            return Allocate::make(op->name, t, op->memory_type, extents,
+            return Allocate::make(op->name, t, op->memory_type, mutate(op->extents),
                                   mutate(op->condition), mutate(op->body),
-                                  mutate(op->new_expr), op->free_function);
+                                  mutate(op->new_expr), op->free_function, op->padding);
         } else {
             return IRMutator::visit(op);
         }
@@ -438,7 +617,6 @@ Stmt storage_flattening(Stmt s,
                         const vector<Function> &outputs,
                         const map<string, Function> &env,
                         const Target &target) {
-    // The OpenGL backend requires loop mins to be zero'd at this point.
     s = zero_gpu_loop_mins(s);
 
     // Make an environment that makes it easier to figure out which
@@ -454,9 +632,9 @@ Stmt storage_flattening(Stmt s,
             tuple_env[p.first] = {p.second, 0};
         }
     }
-
     s = FlattenDimensions(tuple_env, outputs, target).mutate(s);
     s = PromoteToMemoryType().mutate(s);
+
     return s;
 }
 

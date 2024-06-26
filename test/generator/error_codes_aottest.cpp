@@ -7,13 +7,13 @@
 
 void my_halide_error(void *user_context, const char *msg) {
     // Silently drop the error
-    //printf("%s\n", msg);
+    // printf("%s\n", msg);
 }
 
 void check(int result, int correct) {
     if (result != correct) {
         printf("The exit status was %d instead of %d\n", result, correct);
-        exit(-1);
+        exit(1);
     }
 }
 
@@ -125,6 +125,9 @@ int main(int argc, char **argv) {
     correct = halide_error_code_requirement_failed;
     check(result, correct);
     in.dim = shape;
+
+    free(in.host);
+    free(out.host);
 
     printf("Success!\n");
     return 0;

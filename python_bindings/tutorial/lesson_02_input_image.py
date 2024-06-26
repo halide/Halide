@@ -8,7 +8,7 @@
 
 import halide as hl
 import numpy as np
-import imageio
+import halide.imageio
 import os.path
 
 
@@ -21,7 +21,7 @@ def main():
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
 
     # We create a hl.Buffer object to wrap the numpy array
-    input = hl.Buffer(imageio.imread(image_path))
+    input = hl.Buffer(halide.imageio.imread(image_path))
     assert input.type() == hl.UInt(8)
 
     # Next we define our hl.Func object that represents our one pipeline
@@ -87,7 +87,7 @@ def main():
 
     # Save the output for inspection. It should look like a bright parrot.
     # python3-imageio versions <2.5 expect a numpy array
-    imageio.imsave("brighter.png", np.asanyarray(output_image))
+    halide.imageio.imwrite("brighter.png", np.asanyarray(output_image))
     print("Created brighter.png result file.")
 
     print("Success!")

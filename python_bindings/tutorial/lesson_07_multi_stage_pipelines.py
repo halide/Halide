@@ -10,7 +10,7 @@
 
 import halide as hl
 
-import imageio
+import halide.imageio
 import numpy as np
 import os.path
 
@@ -25,7 +25,7 @@ def main():
     # first horizontally, and then vertically.
     if True:
         # Take a color 8-bit input
-        input = hl.Buffer(imageio.imread(image_path))
+        input = hl.Buffer(halide.imageio.imread(image_path))
         assert input.type() == hl.UInt(8)
 
         # Upgrade it to 16-bit, so we can do math without it overflowing.
@@ -84,7 +84,7 @@ def main():
         # shorter than the input image.
 
         # python3-imageio versions <2.5 expect a numpy array
-        imageio.imsave("blurry_parrot_1.png", np.asanyarray(result))
+        halide.imageio.imwrite("blurry_parrot_1.png", np.asanyarray(result))
         print("Created blurry_parrot_1.png")
 
         # This is usually the fastest way to deal with boundaries:
@@ -94,7 +94,7 @@ def main():
     # The same pipeline, with a boundary condition on the input.
     if True:
         # Take a color 8-bit input
-        input = hl.Buffer(imageio.imread(image_path))
+        input = hl.Buffer(halide.imageio.imread(image_path))
         assert input.type() == hl.UInt(8)
 
         # This time, we'll wrap the input in a hl.Func that prevents
@@ -155,7 +155,7 @@ def main():
         # input.
 
         # python3-imageio versions <2.5 expect a numpy array
-        imageio.imsave("blurry_parrot_2.png", np.asanyarray(result))
+        halide.imageio.imwrite("blurry_parrot_2.png", np.asanyarray(result))
         print("Created blurry_parrot_2.png")
 
     print("Success!")

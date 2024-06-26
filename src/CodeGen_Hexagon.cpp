@@ -42,7 +42,8 @@ protected:
 
     void init_module() override;
 
-    std::string mcpu() const override;
+    std::string mcpu_target() const override;
+    std::string mcpu_tune() const override;
     std::string mattrs() const override;
     int isa_version;
     bool use_soft_float_abi() const override;
@@ -68,12 +69,6 @@ protected:
     void visit(const Select *) override;
     void visit(const Allocate *) override;
     ///@}
-
-    /** We ask for an extra vector on each allocation to enable fast
-     * clamped ramp loads. */
-    int allocation_padding(Type type) const override {
-        return CodeGen_Posix::allocation_padding(type) + native_vector_bits() / 8;
-    }
 
     /** Call an LLVM intrinsic, potentially casting the operands to
      * match the type of the function. */
@@ -122,15 +117,20 @@ private:
      * list of its extents and its size. Fires a runtime assert
      * (halide_error) if the size overflows 2^31 -1, the maximum
      * positive number an int32_t can hold. */
-    llvm::Value *codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
+    llvm::Value *codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, int padding);
 
     /** Generate a LUT (8/16 bit, max_index < 256) lookup using vlut instructions. */
     llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
+
+    /** Wrapper to create a vector populated with a constant value in each lane. */
+    Value *create_vector(llvm::Type *ty, int val);
 };
 
 CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
     : CodeGen_Posix(t) {
-    if (target.has_feature(Halide::Target::HVX_v66)) {
+    if (target.has_feature(Halide::Target::HVX_v68)) {
+        isa_version = 68;
+    } else if (target.has_feature(Halide::Target::HVX_v66)) {
         isa_version = 66;
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
         isa_version = 65;
@@ -223,8 +223,8 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                 }
             }
         } else if (const Variable *op = e.as<Variable>()) {
-            if (monotonic_vectors.contains(op->name)) {
-                return monotonic_vectors.get(op->name);
+            if (const auto *p = monotonic_vectors.find(op->name)) {
+                return *p;
             }
         } else if (const Let *op = e.as<Let>()) {
             auto v = get_extreme_lanes(op->value);
@@ -277,7 +277,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                                    const_true(op->type.lanes()), op->alignment);
 
             return Call::make(op->type, Call::if_then_else,
-                              {condition, load, make_zero(op->type)}, Call::Intrinsic);
+                              {condition, load}, Call::PureIntrinsic);
         } else {
             // It's a predicated vector gather. Just scalarize. We'd
             // prefer to keep it in a loop, but that would require
@@ -287,7 +287,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
             Expr load = Load::make(op->type, op->name, index, op->image, op->param,
                                    const_true(op->type.lanes()), op->alignment);
             return Call::make(op->type, Call::if_then_else,
-                              {predicate, load, make_zero(op->type)}, Call::Intrinsic);
+                              {predicate, load}, Call::PureIntrinsic);
         }
     }
 
@@ -305,66 +305,12 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
             Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(lanes), op->alignment);
             return IfThenElse::make(scalar_pred->value, unpredicated_store);
+        }
+
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
+            return op;
         } else {
-            string value_name = unique_name("scalarized_store_value");
-            string index_name = unique_name("scalarized_store_index");
-            string predicate_name = unique_name("scalarized_store_predicate");
-
-            const Ramp *index_ramp = index.as<Ramp>();
-
-            // Store entire vectors to the stack
-            vector<Stmt> stmts;
-            Expr predicate_mask = select(predicate, make_one(UInt(8, lanes)), make_zero(UInt(8, lanes)));
-            stmts.emplace_back(Store::make(predicate_name, predicate_mask, Ramp::make(0, 1, lanes),
-                                           Parameter(), const_true(lanes),
-                                           ModulusRemainder()));
-            stmts.emplace_back(Store::make(value_name, value, Ramp::make(0, 1, lanes),
-                                           Parameter(), const_true(lanes),
-                                           ModulusRemainder()));
-            if (!index_ramp) {
-                stmts.emplace_back(Store::make(index_name, index, Ramp::make(0, 1, lanes),
-                                               Parameter(), const_true(lanes),
-                                               ModulusRemainder()));
-            }
-
-            // Then load each element one by one in a loop and do a conditional scalar store
-            string lane_name = unique_name('t');
-            Expr lane_var = Variable::make(Int(32), lane_name);
-
-            Expr pred_i = Load::make(UInt(8), predicate_name, lane_var,
-                                     Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-            Expr value_i = Load::make(value.type().element_of(), value_name, lane_var,
-                                      Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-            Expr index_i;
-            if (index_ramp) {
-                index_i = index_ramp->base + lane_var * index_ramp->stride;
-            } else {
-                index_i = Load::make(Int(32), index_name, lane_var,
-                                     Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-            }
-
-            Stmt store_lanes = Store::make(op->name, value_i, index_i,
-                                           op->param, const_true(),
-                                           ModulusRemainder());
-            store_lanes = IfThenElse::make(pred_i != 0, store_lanes);
-            store_lanes = For::make(lane_name, 0, lanes,
-                                    ForType::Serial, DeviceAPI::None, store_lanes);
-            stmts.emplace_back(std::move(store_lanes));
-
-            Stmt result = Block::make(stmts);
-
-            // Wrap with allocate nodes
-
-            result = Allocate::make(predicate_name, UInt(8), MemoryType::Stack,
-                                    {predicate.type().lanes()}, const_true(), result);
-            if (!index_ramp) {
-                result = Allocate::make(index_name, Int(32), MemoryType::Stack,
-                                        {index.type().lanes()}, const_true(), result);
-            }
-            result = Allocate::make(value_name, value.type().element_of(), MemoryType::Stack,
-                                    {value.type().lanes()}, const_true(), result);
-
-            return result;
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
         }
     }
 };
@@ -418,7 +364,7 @@ private:
                 body = acquire_hvx_context(body, target);
                 body = substitute("uses_hvx", true, body);
                 Stmt new_for = For::make(op->name, op->min, op->extent, op->for_type,
-                                         op->device_api, body);
+                                         op->partition_policy, op->device_api, body);
                 Stmt prolog =
                     IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
                 Stmt epilog =
@@ -463,7 +409,7 @@ private:
                 //   halide_qurt_unlock
                 // }
                 s = For::make(op->name, op->min, op->extent, op->for_type,
-                              op->device_api, body);
+                              op->partition_policy, op->device_api, body);
             }
 
             uses_hvx = old_uses_hvx;
@@ -485,6 +431,30 @@ private:
     }
     Expr visit(const Call *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
+
+        if (op->name == "halide_do_par_for") {
+            // If we see a call to halide_do_par_for() at this point, it should mean that
+            // this statement was produced via HexagonOffload calling lower_parallel_tasks()
+            // explicitly; in this case, we won't see any parallel For statements, since they've
+            // all been transformed into closures already. To mirror the pattern above,
+            // we need to wrap the halide_do_par_for() call with an unlock/lock pair, but
+            // that's hard to do in Halide IR (we'd need to produce a Stmt to enforce the ordering,
+            // and the resulting Stmt can't easily be substituted for the Expr here). Rather than
+            // make fragile assumptions about the structure of the IR produced by lower_parallel_tasks(),
+            // we'll use a trick: we'll define a WEAK_INLINE function, _halide_hexagon_do_par_for,
+            // which simply encapsulates the unlock()/do_par_for()/lock() sequences, and swap out
+            // the call here. Since it is inlined, and since uses_hvx_var gets substituted at the end,
+            // we end up with LLVM IR that properly includes (or omits) the unlock/lock pair depending
+            // on the final value of uses_hvx_var in this scope.
+
+            internal_assert(op->call_type == Call::Extern);
+            internal_assert(op->args.size() == 4);
+
+            std::vector<Expr> args = op->args;
+            args.push_back(cast<int>(uses_hvx_var));
+
+            return Call::make(Int(32), "_halide_hexagon_do_par_for", args, Call::Extern);
+        }
         return op;
     }
 
@@ -509,50 +479,55 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     Stmt body = f.body;
 
-    debug(1) << "Unpredicating loads and stores...\n";
+    debug(1) << "Hexagon: Unpredicating loads and stores...\n";
     // Replace dense vector predicated loads with sloppy scalarized
     // predicates, and scalarize predicated stores
     body = sloppy_unpredicate_loads_and_stores(body);
-
-    debug(2) << "Lowering after unpredicating loads/stores:\n"
+    debug(2) << "Hexagon: Lowering after unpredicating loads/stores:\n"
              << body << "\n\n";
 
     if (is_hvx_v65_or_later()) {
         // Generate vscatter-vgathers before optimize_hexagon_shuffles.
-        debug(1) << "Looking for vscatter-vgather...\n";
+        debug(1) << "Hexagon: Looking for vscatter-vgather...\n";
         body = scatter_gather_generator(body);
+        debug(2) << "Hexagon: Lowering after vscatter-vgather:\n"
+                 << body << "\n\n";
     }
 
-    debug(1) << "Optimizing shuffles...\n";
+    debug(1) << "Hexagon: Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
     const int lut_alignment = 64;
     body = optimize_hexagon_shuffles(body, lut_alignment);
-    debug(2) << "Lowering after optimizing shuffles:\n"
+    debug(2) << "Hexagon: Lowering after optimizing shuffles:\n"
              << body << "\n\n";
 
-    debug(1) << "Aligning loads for HVX....\n";
-    body = align_loads(body, target.natural_vector_size(Int(8)));
+    debug(1) << "Hexagon: Aligning loads for HVX....\n";
+    body = align_loads(body, target.natural_vector_size(Int(8)), 8);
     body = common_subexpression_elimination(body);
     // Don't simplify here, otherwise it will re-collapse the loads we
     // want to carry across loop iterations.
-    debug(2) << "Lowering after aligning loads:\n"
+    debug(2) << "Hexagon: Lowering after aligning loads:\n"
              << body << "\n\n";
 
-    debug(1) << "Carrying values across loop iterations...\n";
+    debug(1) << "Hexagon: Carrying values across loop iterations...\n";
     // Use at most 16 vector registers for carrying values.
     body = loop_carry(body, 16);
     body = simplify(body);
-    debug(2) << "Lowering after forwarding stores:\n"
+    debug(2) << "Hexagon: Lowering after forwarding stores:\n"
              << body << "\n\n";
 
     // Optimize the IR for Hexagon.
-    debug(1) << "Optimizing Hexagon instructions...\n";
+    debug(1) << "Hexagon: Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body, target);
+    debug(2) << "Hexagon: Lowering after optimizing Hexagon instructions:\n"
+             << body << "\n\n";
 
-    debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
+    debug(1) << "Hexagon: Adding calls to qurt_hvx_lock, if necessary...\n";
     body = inject_hvx_lock_unlock(body, target);
+    debug(2) << "Hexagon: Lowering after adding calls to qurt_hvx_lock:\n"
+             << body << "\n\n";
 
-    debug(1) << "Hexagon function body:\n";
+    debug(1) << "Hexagon: function body for " << simple_name << " :\n";
     debug(1) << body << "\n";
 
     body.accept(this);
@@ -1019,8 +994,8 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
 Value *CodeGen_Hexagon::create_bitcast(Value *v, llvm::Type *ty) {
     if (BitCastInst *c = dyn_cast<BitCastInst>(v)) {
         return create_bitcast(c->getOperand(0), ty);
-    } else if (isa<UndefValue>(v)) {
-        return UndefValue::get(ty);
+    } else if (isa<PoisonValue>(v)) {
+        return PoisonValue::get(ty);
     } else if (v->getType() != ty) {
         v = builder->CreateBitCast(v, ty);
     }
@@ -1199,7 +1174,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 i -= a_elements;
             }
         }
-        return shuffle_vectors(b, UndefValue::get(b->getType()), shifted_indices);
+        return shuffle_vectors(b, shifted_indices);
     }
 
     // Try to rewrite shuffles that only access the elements of a.
@@ -1280,8 +1255,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
         return CodeGen_Posix::shuffle_vectors(a, b, indices);
-    } else if (stride == 2) {
-        internal_assert(start == 0 || start == 1);
+    } else if (stride == 2 && (start == 0 || start == 1)) {
         // For stride 2 shuffles, we can use vpack or vdeal.
         // It's hard to use call_intrin here. We'll just slice and
         // concat manually.
@@ -1323,10 +1297,8 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
         return concat_vectors(ret);
     }
 
-    // TODO: There are more HVX permute instructions that could be
-    // implemented here, such as vdelta/vrdelta.
-
-    return vlut(concat_vectors({a, b}), indices);
+    // Use a general delta operation.
+    return vdelta(concat_vectors({a, b}), indices);
 }
 
 Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
@@ -1419,16 +1391,14 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
                     // The first native LUT, use vlut.
                     result_i = call_intrin_cast(native_result_ty, vlut,
                                                 {idx_i, lut_slices[j], mask[0]});
-                    result_i =
-                        call_intrin_cast(native_result_ty, vlut_acc,
-                                         {result_i, idx_i, lut_slices[j], mask[1]});
+                    result_i = call_intrin_cast(native_result_ty, vlut_acc,
+                                                {result_i, idx_i, lut_slices[j], mask[1]});
                 } else if (max_index >= pass_index * native_lut_elements / lut_passes) {
                     // Not the first native LUT, accumulate the LUT
                     // with the previous result.
-                    for (int m = 0; m < 2; m++) {
-                        result_i =
-                            call_intrin_cast(native_result_ty, vlut_acc,
-                                             {result_i, idx_i, lut_slices[j], mask[m]});
+                    for (Value *v : mask) {
+                        result_i = call_intrin_cast(native_result_ty, vlut_acc,
+                                                    {result_i, idx_i, lut_slices[j], v});
                     }
                 }
             }
@@ -1534,9 +1504,16 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         native_vector_bits() / element_ty->getScalarSizeInBits();
     int result_elements = indices.size();
 
-    // If the input is not a vector of 8 bit elements, replicate the
-    // indices and cast the LUT.
-    if (element_bits != 8) {
+    if (element_bits == 1) {
+        // If this is a vector of booleans, convert it to a vector of ints,
+        // do the shuffle, and convert back.
+        llvm::Type *new_lut_ty = get_vector_type(i8_t, lut_elements);
+        Value *i8_lut = builder->CreateIntCast(lut, new_lut_ty, true);
+        Value *result = vdelta(i8_lut, indices);
+        return builder->CreateIntCast(result, lut_ty, true);
+    } else if (element_bits != 8) {
+        // If the input is not a vector of 8 bit elements, replicate the
+        // indices and cast the LUT.
         int replicate = element_bits / 8;
         internal_assert(replicate != 0);
         llvm::Type *new_lut_ty = get_vector_type(i8_t, lut_elements * replicate);
@@ -1636,10 +1613,10 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     return vlut(lut, indices);
 }
 
-Value *create_vector(llvm::Type *ty, int val) {
+Value *CodeGen_Hexagon::create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
     Constant *value = ConstantInt::get(scalar_ty, val);
-    return ConstantVector::getSplat(element_count(get_vector_num_elements(ty)), value);
+    return get_splat(get_vector_num_elements(ty), value);
 }
 
 Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_index) {
@@ -1782,7 +1759,7 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
             fn = fn2;
         }
     }
-    fn->addFnAttr(llvm::Attribute::ReadNone);
+    function_does_not_access_memory(fn);
     fn->addFnAttr(llvm::Attribute::NoUnwind);
     return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
                                       fn, std::move(args));
@@ -1805,14 +1782,16 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
             fn = fn2;
         }
     }
-    fn->addFnAttr(llvm::Attribute::ReadNone);
+    function_does_not_access_memory(fn);
     fn->addFnAttr(llvm::Attribute::NoUnwind);
     return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
                                       fn, std::move(args));
 }
 
-string CodeGen_Hexagon::mcpu() const {
-    if (target.has_feature(Halide::Target::HVX_v66)) {
+string CodeGen_Hexagon::mcpu_target() const {
+    if (target.has_feature(Halide::Target::HVX_v68)) {
+        return "hexagonv68";
+    } else if (target.has_feature(Halide::Target::HVX_v66)) {
         return "hexagonv66";
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
         return "hexagonv65";
@@ -1821,14 +1800,19 @@ string CodeGen_Hexagon::mcpu() const {
     }
 }
 
+string CodeGen_Hexagon::mcpu_tune() const {
+    return mcpu_target();
+}
+
 string CodeGen_Hexagon::mattrs() const {
-    std::stringstream attrs;
-    attrs << "+hvx-length128b";
-    attrs << ",+long-calls";
+    std::vector<std::string> attrs = {
+        "+hvx-length128b",
+        "+long-calls",
+    };
     if (target.has_feature(Target::HVX)) {
-        attrs << ",+hvxv" << isa_version;
+        attrs.push_back("+hvxv" + std::to_string(isa_version));
     }
-    return attrs.str();
+    return join_strings(attrs, ",");
 }
 
 bool CodeGen_Hexagon::use_soft_float_abi() const {
@@ -1876,6 +1860,12 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             return;
         }
 
+        // v68 has vector support for single-precision float.
+        if (target.has_feature(Halide::Target::HVX_v68) &&
+            op->type.is_float() && op->type.bits() == 32) {
+            CodeGen_Posix::visit(op);
+            return;
+        }
         internal_error << "Unhandled HVX multiply " << op->a.type() << "*"
                        << op->b.type() << "\n"
                        << Expr(op) << "\n";
@@ -1961,23 +1951,31 @@ void CodeGen_Hexagon::visit(const Call *op) {
         internal_assert((op->args.size() == 4) || (op->args.size() == 6))
             << "Hexagon only supports 1D or 2D prefetch\n";
 
-        vector<llvm::Value *> args;
-        args.push_back(
-            codegen_buffer_pointer(codegen(op->args[0]), op->type, op->args[1]));
+        const int elem_size = op->type.bytes();
+        const Expr &base_address = op->args[0];
+        const Expr &base_offset = op->args[1];
+        const Expr &extent0 = op->args[2];
+        const Expr &stride0 = op->args[3];
 
-        Expr extent_0_bytes = op->args[2] * op->args[3] * op->type.bytes();
-        args.push_back(codegen(extent_0_bytes));
-
-        llvm::Function *prefetch_fn = nullptr;
-        if (op->args.size() ==
-            4) {  // 1D prefetch: {base, offset, extent0, stride0}
-            prefetch_fn = module->getFunction("_halide_prefetch");
-        } else {  // 2D prefetch: {base, offset, extent0, stride0, extent1, stride1}
-            prefetch_fn = module->getFunction("_halide_prefetch_2d");
-            args.push_back(codegen(op->args[4]));
-            Expr stride_1_bytes = op->args[5] * op->type.bytes();
-            args.push_back(codegen(stride_1_bytes));
+        Expr width_bytes = extent0 * stride0 * elem_size;
+        Expr height, stride_bytes;
+        if (op->args.size() == 6) {
+            const Expr &extent1 = op->args[4];
+            const Expr &stride1 = op->args[5];
+            height = extent1;
+            stride_bytes = stride1 * elem_size;
+        } else {
+            height = 1;
+            stride_bytes = 1;
         }
+
+        vector<llvm::Value *> args;
+        args.push_back(codegen_buffer_pointer(codegen(base_address), op->type, base_offset));
+        args.push_back(codegen(width_bytes));
+        args.push_back(codegen(height));
+        args.push_back(codegen(stride_bytes));
+
+        llvm::Function *prefetch_fn = module->getFunction("_halide_prefetch_2d");
         internal_assert(prefetch_fn);
 
         // The first argument is a pointer, which has type i8*. We
@@ -1986,7 +1984,9 @@ void CodeGen_Hexagon::visit(const Call *op) {
         llvm::Type *ptr_type = prefetch_fn->getFunctionType()->params()[0];
         args[0] = builder->CreateBitCast(args[0], ptr_type);
 
-        value = builder->CreateCall(prefetch_fn, args);
+        builder->CreateCall(prefetch_fn, args);
+
+        value = codegen(cast(op->type, 0));
         return;
     }
 
@@ -2099,14 +2099,15 @@ void CodeGen_Hexagon::visit(const Select *op) {
         // Implement scalar conditions on vector values with if-then-else.
         value = codegen(Call::make(op->type, Call::if_then_else,
                                    {op->condition, op->true_value, op->false_value},
-                                   Call::Intrinsic));
+                                   Call::PureIntrinsic));
     } else {
         CodeGen_Posix::visit(op);
     }
 }
 
 Value *CodeGen_Hexagon::codegen_cache_allocation_size(
-    const std::string &name, Type type, const std::vector<Expr> &extents) {
+    const std::string &name, Type type,
+    const std::vector<Expr> &extents, int padding) {
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(32));
@@ -2122,8 +2123,8 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(
     Expr total_size_hi = make_zero(UInt(32));
 
     Expr low_mask = make_const(UInt(32), (uint32_t)(0xfffff));
-    for (size_t i = 0; i < extents.size(); i++) {
-        Expr next_extent = cast(UInt(32), extents[i]);
+    for (const auto &extent : extents) {
+        Expr next_extent = cast(UInt(32), extent);
 
         // Update total_size >> 24. This math can't overflow due to
         // the loop invariant:
@@ -2138,6 +2139,9 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(
         // is still an 8-bit number.
         overflow = overflow | (total_size_hi >> 24);
     }
+    int padding_bytes = padding * type.bytes();
+    overflow = overflow | (total_size + padding_bytes < total_size);
+    total_size += padding_bytes;
 
     Expr max_size = make_const(UInt(32), target.maximum_buffer_size());
     Expr size_check = (overflow == 0) && (total_size <= max_size);
@@ -2176,7 +2180,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
             llvm_size = codegen(Expr(constant_bytes));
         } else {
             llvm_size = codegen_cache_allocation_size(alloc->name, alloc->type,
-                                                      alloc->extents);
+                                                      alloc->extents, alloc->padding);
         }
 
         // Only allocate memory if the condition is true, otherwise 0.
@@ -2251,10 +2255,9 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         codegen(alloc->body);
 
         // If there was no early free, free it now.
-        if (allocations.contains(alloc->name)) {
-            Allocation alloc_obj = allocations.get(alloc->name);
-            internal_assert(alloc_obj.destructor);
-            trigger_destructor(alloc_obj.destructor_function, alloc_obj.destructor);
+        if (const Allocation *alloc_obj = allocations.find(alloc->name)) {
+            internal_assert(alloc_obj->destructor);
+            trigger_destructor(alloc_obj->destructor_function, alloc_obj->destructor);
 
             allocations.pop(alloc->name);
             sym_pop(alloc->name);
@@ -2266,16 +2269,16 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         }
         // Calculate size of allocation.
         Expr size = alloc->type.bytes();
-        for (size_t i = 0; i < alloc->extents.size(); i++) {
-            size *= alloc->extents[i];
+        for (const auto &extent : alloc->extents) {
+            size *= extent;
         }
-        size += allocation_padding(alloc->type);
+        size += alloc->padding * alloc->type.bytes();
         Expr new_expr =
             Call::make(Handle(), "halide_vtcm_malloc", {size}, Call::Extern);
         string free_function = "halide_vtcm_free";
         Stmt new_alloc = Allocate::make(
             alloc->name, alloc->type, alloc->memory_type, alloc->extents,
-            alloc->condition, alloc->body, new_expr, free_function);
+            alloc->condition, alloc->body, new_expr, free_function, alloc->padding);
         new_alloc.accept(this);
     } else {
         // For all other memory types

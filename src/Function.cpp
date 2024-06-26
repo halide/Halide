@@ -30,6 +30,7 @@ typedef map<FunctionPtr, FunctionPtr> DeepCopyMap;
 struct FunctionContents;
 
 namespace {
+
 // Weaken all the references to a particular Function to break
 // reference cycles. Also count the number of references found.
 class WeakenFunctionPtrs : public IRMutator {
@@ -58,12 +59,29 @@ public:
         : func(f) {
     }
 };
+
 }  // namespace
 
 struct FunctionContents {
     std::string name;
     std::string origin_name;
     std::vector<Type> output_types;
+
+    /** Optional type constraints on the Function:
+     * - If empty, there are no constraints.
+     * - If size == 1, the Func is only allowed to have values of Expr with that type
+     * - If size > 1, the Func is only allowed to have values of Tuple with those types
+     *
+     * Note that when this is nonempty, then output_types should match
+     * required_types for all defined Functions.
+     */
+    std::vector<Type> required_types;
+
+    /** Optional dimension constraints on the Function:
+     * - If required_dims == AnyDims, there are no constraints.
+     * - Otherwise, the Function's dimensionality must exactly match required_dims.
+     */
+    int required_dims = AnyDims;
 
     // The names of the dimensions of the Function. Corresponds to the
     // LHS of the pure definition if there is one. Is also the initial
@@ -91,6 +109,8 @@ struct FunctionContents {
 
     bool trace_loads = false, trace_stores = false, trace_realizations = false;
     std::vector<string> trace_tags;
+
+    bool no_profiling = false;
 
     bool frozen = false;
 
@@ -228,8 +248,8 @@ struct CheckVars : public IRGraphVisitor {
         }
 
         // Is it a pure argument?
-        for (size_t i = 0; i < pure_args.size(); i++) {
-            if (var->name == pure_args[i]) {
+        for (auto &pure_arg : pure_args) {
+            if (var->name == pure_arg) {
                 return;
             }
         }
@@ -281,10 +301,11 @@ public:
     }
 };
 
-// A counter to use in tagging random variables
-std::atomic<int> rand_counter{0};
-
 }  // namespace
+
+// A counter to use in tagging random variables.
+// Note that this will be reset by Internal::reset_random_counters().
+std::atomic<int> random_variable_counter = 0;
 
 Function::Function(const FunctionPtr &ptr)
     : contents(ptr) {
@@ -306,9 +327,146 @@ Function::Function(const std::string &n) {
     contents->origin_name = n;
 }
 
+Function::Function(const std::vector<Type> &required_types, int required_dims, const std::string &n)
+    : Function(n) {
+    user_assert(required_dims >= AnyDims);
+    contents->required_types = required_types;
+    contents->required_dims = required_dims;
+}
+
+void Function::update_with_deserialization(const std::string &name,
+                                           const std::string &origin_name,
+                                           const std::vector<Halide::Type> &output_types,
+                                           const std::vector<Halide::Type> &required_types,
+                                           int required_dims,
+                                           const std::vector<std::string> &args,
+                                           const FuncSchedule &func_schedule,
+                                           const Definition &init_def,
+                                           const std::vector<Definition> &updates,
+                                           const std::string &debug_file,
+                                           const std::vector<Parameter> &output_buffers,
+                                           const std::vector<ExternFuncArgument> &extern_arguments,
+                                           const std::string &extern_function_name,
+                                           NameMangling name_mangling,
+                                           DeviceAPI device_api,
+                                           const Expr &extern_proxy_expr,
+                                           bool trace_loads,
+                                           bool trace_stores,
+                                           bool trace_realizations,
+                                           const std::vector<std::string> &trace_tags,
+                                           bool no_profiling,
+                                           bool frozen) {
+    contents->name = name;
+    contents->origin_name = origin_name;
+    contents->output_types = output_types;
+    contents->required_types = required_types;
+    contents->required_dims = required_dims;
+    contents->args = args;
+    contents->func_schedule = func_schedule;
+    contents->init_def = init_def;
+    contents->updates = updates;
+    contents->debug_file = debug_file;
+    contents->output_buffers = output_buffers;
+    contents->extern_arguments = extern_arguments;
+    contents->extern_function_name = extern_function_name;
+    contents->extern_mangling = name_mangling;
+    contents->extern_function_device_api = device_api;
+    contents->extern_proxy_expr = extern_proxy_expr;
+    contents->trace_loads = trace_loads;
+    contents->trace_stores = trace_stores;
+    contents->trace_realizations = trace_realizations;
+    contents->trace_tags = trace_tags;
+    contents->no_profiling = no_profiling;
+    contents->frozen = frozen;
+}
+
+namespace {
+
+template<typename T>
+struct PrintTypeList {
+    const std::vector<T> &list_;
+
+    explicit PrintTypeList(const std::vector<T> &list)
+        : list_(list) {
+    }
+
+    friend std::ostream &operator<<(std::ostream &s, const PrintTypeList &self) {
+        const size_t n = self.list_.size();
+        if (n != 1) {
+            s << "(";
+        }
+        const char *comma = "";
+        for (const auto &t : self.list_) {
+            if constexpr (std::is_same<Type, T>::value) {
+                s << comma << t;
+            } else {
+                s << comma << t.type();
+            }
+            comma = ", ";
+        }
+        if (n != 1) {
+            s << ")";
+        }
+        return s;
+    }
+};
+
+bool types_match(const std::vector<Type> &types, const std::vector<Expr> &exprs) {
+    size_t n = types.size();
+    if (n != exprs.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < n; i++) {
+        if (types[i] != exprs[i].type()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+void Function::check_types(const Expr &e) const {
+    check_types(std::vector<Expr>{e});
+}
+
+void Function::check_types(const Tuple &t) const {
+    check_types(t.as_vector());
+}
+
+void Function::check_types(const Type &t) const {
+    check_types(std::vector<Type>{t});
+}
+
+void Function::check_types(const std::vector<Expr> &exprs) const {
+    if (!contents->required_types.empty()) {
+        user_assert(types_match(contents->required_types, exprs))
+            << "Func \"" << name() << "\" is constrained to only hold values of type " << PrintTypeList(contents->required_types)
+            << " but is defined with values of type " << PrintTypeList(exprs) << ".\n";
+    }
+}
+
+void Function::check_types(const std::vector<Type> &types) const {
+    if (!contents->required_types.empty()) {
+        user_assert(contents->required_types == types)
+            << "Func \"" << name() << "\" is constrained to only hold values of type " << PrintTypeList(contents->required_types)
+            << " but is defined with values of type " << PrintTypeList(types) << ".\n";
+    }
+}
+
+void Function::check_dims(int dims) const {
+    if (contents->required_dims != AnyDims) {
+        user_assert(contents->required_dims == dims)
+            << "Func \"" << name() << "\" is constrained to have exactly " << contents->required_dims
+            << " dimensions, but is defined with " << dims << " dimensions.\n";
+    }
+}
+
+namespace {
+
 // Return deep-copy of ExternFuncArgument 'src'
-ExternFuncArgument deep_copy_extern_func_argument_helper(
-    const ExternFuncArgument &src, DeepCopyMap &copied_map) {
+ExternFuncArgument deep_copy_extern_func_argument_helper(const ExternFuncArgument &src,
+                                                         DeepCopyMap &copied_map) {
     ExternFuncArgument copy;
     copy.arg_type = src.arg_type;
     copy.buffer = src.buffer;
@@ -330,9 +488,13 @@ ExternFuncArgument deep_copy_extern_func_argument_helper(
     return copy;
 }
 
+}  // namespace
+
 void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const {
-    internal_assert(copy.defined() && contents.defined())
-        << "Cannot deep-copy undefined Function\n";
+    internal_assert(copy.defined())
+        << "Cannot deep-copy to undefined Function\n";
+    internal_assert(contents.defined())
+        << "Cannot deep-copy from undefined Function\n";
 
     // Add reference to this Function's deep-copy to the map in case of
     // self-reference, e.g. self-reference in an Definition.
@@ -353,6 +515,7 @@ void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const
     copy->trace_stores = contents->trace_stores;
     copy->trace_realizations = contents->trace_realizations;
     copy->trace_tags = contents->trace_tags;
+    copy->no_profiling = contents->no_profiling;
     copy->frozen = contents->frozen;
     copy->output_buffers = contents->output_buffers;
     copy->func_schedule = contents->func_schedule.deep_copy(copied_map);
@@ -391,8 +554,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func with extern definition cannot be given a pure definition.\n";
     user_assert(!name().empty()) << "A Func may not have an empty name.\n";
-    for (size_t i = 0; i < values.size(); i++) {
-        user_assert(values[i].defined())
+    for (auto &value : values) {
+        user_assert(value.defined())
             << "In pure definition of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of definition.\n";
     }
@@ -431,7 +594,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     // Tag calls to random() with the free vars
-    int tag = rand_counter++;
+    int tag = random_variable_counter++;
     vector<VarOrRVar> free_vars;
     free_vars.reserve(args.size());
     for (const auto &arg : args) {
@@ -456,6 +619,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func is already defined.\n";
 
+    check_types(values);
+    check_dims((int)args.size());
     contents->args = args;
 
     std::vector<Expr> init_def_args;
@@ -467,10 +632,10 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     ReductionDomain rdom;
     contents->init_def = Definition(init_def_args, values, rdom, true);
 
-    for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], ForType::Serial, DeviceAPI::None, DimType::PureVar};
+    for (const auto &arg : args) {
+        Dim d = {arg, ForType::Serial, DeviceAPI::None, DimType::PureVar};
         contents->init_def.schedule().dims().push_back(d);
-        StorageDim sd = {args[i]};
+        StorageDim sd = {arg};
         contents->func_schedule.storage_dims().push_back(sd);
     }
 
@@ -485,17 +650,35 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         contents->output_types[i] = values[i].type();
     }
 
-    for (size_t i = 0; i < values.size(); i++) {
+    if (!contents->required_types.empty()) {
+        // Just a reality check; mismatches here really should have been caught earlier
+        internal_assert(contents->required_types == contents->output_types);
+    }
+    if (contents->required_dims != AnyDims) {
+        // Just a reality check; mismatches here really should have been caught earlier
+        internal_assert(contents->required_dims == (int)args.size());
+    }
+
+    if (contents->output_buffers.empty()) {
+        create_output_buffers(contents->output_types, (int)args.size());
+    }
+}
+
+void Function::create_output_buffers(const std::vector<Type> &types, int dims) const {
+    internal_assert(contents->output_buffers.empty());
+    internal_assert(!types.empty() && dims != AnyDims);
+
+    for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
-        if (values.size() > 1) {
+        if (types.size() > 1) {
             buffer_name += '.' + std::to_string((int)i);
         }
-        Parameter output(values[i].type(), true, args.size(), buffer_name);
+        Parameter output(types[i], true, dims, buffer_name);
         contents->output_buffers.push_back(output);
     }
 }
 
-void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
+void Function::define_update(const vector<Expr> &_args, vector<Expr> values, const ReductionDomain &rdom) {
     int update_idx = static_cast<int>(contents->updates.size());
 
     user_assert(!name().empty())
@@ -507,8 +690,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         << "Func " << name() << " cannot be given a new update definition, "
         << "because it has already been realized or used in the definition of another Func.\n";
 
-    for (size_t i = 0; i < values.size(); i++) {
-        user_assert(values[i].defined())
+    for (auto &value : values) {
+        user_assert(value.defined())
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of update.\n";
     }
@@ -584,6 +767,23 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     for (const auto &value : values) {
         value.accept(&check);
     }
+    if (!check.reduction_domain.defined()) {
+        // Use the provided one
+        check.reduction_domain = rdom;
+    } else if (rdom.defined()) {
+        // This is an internal error because the ability to pass an explicit
+        // RDom is not exposed to the front-end. At the time of writing this is
+        // only used by rfactor.
+        internal_assert(rdom.same_as(check.reduction_domain))
+            << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
+            << "Explicit reduction domain passed to Function::define_update, "
+            << "but another reduction domain was referred to by the args or values.\n"
+            << "Explicit reduction domain passed:\n"
+            << RDom(rdom) << "\n"
+            << "Found reduction domain:\n"
+            << RDom(check.reduction_domain) << "\n";
+    }
+
     if (check.reduction_domain.defined()) {
         check.unbound_reduction_vars_ok = true;
         check.reduction_domain.predicate().accept(&check);
@@ -621,7 +821,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             free_vars.emplace_back(RVar(check.reduction_domain, i));
         }
     }
-    int tag = rand_counter++;
+    int tag = random_variable_counter++;
     for (auto &arg : args) {
         arg = lower_random(arg, free_vars, tag);
     }
@@ -652,12 +852,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // First add any reduction domain
     if (check.reduction_domain.defined()) {
-        for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
+        for (const auto &rvar : check.reduction_domain.domain()) {
             // Is this RVar actually pure (safe to parallelize and
             // reorder)? It's pure if one value of the RVar can never
             // access from the same memory that another RVar is
             // writing to.
-            const ReductionVariable &rvar = check.reduction_domain.domain()[i];
             const string &v = rvar.var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
@@ -704,6 +903,8 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Var> &args,
                              NameMangling mangling,
                              DeviceAPI device_api) {
+    check_types(types);
+    check_dims((int)args.size());
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
@@ -715,9 +916,9 @@ void Function::define_extern(const std::string &function_name,
 
     std::vector<string> arg_names;
     std::vector<Expr> arg_exprs;
-    for (size_t i = 0; i < args.size(); i++) {
-        arg_names.push_back(args[i].name());
-        arg_exprs.push_back(args[i]);
+    for (const auto &arg : args) {
+        arg_names.push_back(arg.name());
+        arg_exprs.push_back(arg);
     }
     contents->args = arg_names;
     contents->extern_function_name = function_name;
@@ -745,13 +946,14 @@ void Function::define_extern(const std::string &function_name,
     contents->func_schedule.storage_dims().clear();
     contents->init_def.schedule().dims().clear();
     for (size_t i = 0; i < args.size(); i++) {
-        contents->func_schedule.storage_dims().push_back(StorageDim{arg_names[i]});
-        contents->init_def.schedule().dims().push_back(
-            Dim{arg_names[i], ForType::Extern, DeviceAPI::None, DimType::PureVar});
+        StorageDim sd = {arg_names[i]};
+        contents->func_schedule.storage_dims().push_back(sd);
+        Dim d = {arg_names[i], ForType::Extern, DeviceAPI::None, DimType::PureVar};
+        contents->init_def.schedule().dims().push_back(d);
     }
     // Add the dummy outermost dim
-    contents->init_def.schedule().dims().push_back(
-        Dim{Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar});
+    Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
+    contents->init_def.schedule().dims().push_back(d);
 }
 
 void Function::accept(IRVisitor *visitor) const {
@@ -789,11 +991,23 @@ bool Function::is_pure_arg(const std::string &name) const {
 }
 
 int Function::dimensions() const {
-    return args().size();
+    return (int)args().size();
+}
+
+int Function::outputs() const {
+    return (int)output_types().size();
 }
 
 const std::vector<Type> &Function::output_types() const {
     return contents->output_types;
+}
+
+const std::vector<Type> &Function::required_types() const {
+    return contents->required_types;
+}
+
+int Function::required_dimensions() const {
+    return contents->required_dims;
 }
 
 const std::vector<Expr> &Function::values() const {
@@ -814,6 +1028,18 @@ const FuncSchedule &Function::schedule() const {
 }
 
 const std::vector<Parameter> &Function::output_buffers() const {
+    if (!contents->output_buffers.empty()) {
+        return contents->output_buffers;
+    }
+
+    // If types and dims are already specified, we can go ahead and create
+    // the output buffer(s) even if the Function has no pure definition yet.
+    if (!contents->required_types.empty() && contents->required_dims != AnyDims) {
+        create_output_buffers(contents->required_types, contents->required_dims);
+        return contents->output_buffers;
+    }
+
+    user_error << "Can't access output buffer(s) of undefined Func \"" << name() << "\".\n";
     return contents->output_buffers;
 }
 
@@ -937,19 +1163,19 @@ const std::vector<std::string> &Function::get_trace_tags() const {
     return contents->trace_tags;
 }
 
-void Function::freeze() {
-    contents->frozen = true;
-}
-
 void Function::lock_loop_levels() {
     auto &schedule = contents->func_schedule;
     schedule.compute_level().lock();
     schedule.store_level().lock();
+    schedule.hoist_storage_level().lock();
     // If store_level is inlined, use the compute_level instead.
     // (Note that we deliberately do *not* do the same if store_level
     // is undefined.)
     if (schedule.store_level().is_inlined()) {
         schedule.store_level() = schedule.compute_level();
+    }
+    if (schedule.hoist_storage_level().is_inlined()) {
+        schedule.hoist_storage_level() = schedule.store_level();
     }
     if (contents->init_def.defined()) {
         contents->init_def.schedule().fuse_level().level.lock();
@@ -960,6 +1186,16 @@ void Function::lock_loop_levels() {
     }
 }
 
+void Function::do_not_profile() {
+    contents->no_profiling = true;
+}
+bool Function::should_not_profile() const {
+    return contents->no_profiling;
+}
+
+void Function::freeze() {
+    contents->frozen = true;
+}
 bool Function::frozen() const {
     return contents->frozen;
 }

@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
             if (fabs(result(i) - ref[i]) > 0.0001f) {
                 printf("result(%d) = %f instead of %f\n",
                        i, result(i), ref[i]);
-                return -1;
+                return 1;
             }
         }
     }
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
             if (correct[i] != result(i)) {
                 printf("result(%d) = %d instead of %d\n",
                        i, result(i), correct[i]);
-                return -1;
+                return 1;
             }
         }
     }
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
             if (ref[i] != result(i)) {
                 printf("fibonacci(%d) = %d instead of %d\n",
                        i, result(i), ref[i]);
-                return -1;
+                return 1;
             }
         }
     }
@@ -148,7 +148,7 @@ int main(int argc, char **argv) {
                 if (fabs(ref(x, y) - result(x, y)) > 0.0001f) {
                     printf("integral image at (%d, %d) = %f instead of %f\n",
                            x, y, result(x, y), ref(x, y));
-                    return -1;
+                    return 1;
                 }
             }
         }

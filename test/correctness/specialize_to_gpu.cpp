@@ -4,6 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+#ifdef WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
+    printf("[SKIP] Serialization won't preserve GPU buffers, skipping.\n");
+    return 0;
+#endif
+
     if (!get_jit_target_from_environment().has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
@@ -45,7 +50,7 @@ int main(int argc, char **argv) {
         uint32_t err = evaluate<uint32_t>(sum(abs(out(r) - reference(r))));
         if (err) {
             printf("Incorrect results for test %d\n", i);
-            return -1;
+            return 1;
         }
     }
 

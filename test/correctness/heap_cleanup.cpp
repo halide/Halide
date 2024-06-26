@@ -9,7 +9,7 @@ using namespace Halide;
 std::atomic<int> malloc_count{0};
 std::atomic<int> free_count{0};
 
-void *my_malloc(void *user_context, size_t x) {
+void *my_malloc(JITUserContext *user_context, size_t x) {
     malloc_count++;
     void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
@@ -17,19 +17,19 @@ void *my_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
-void my_free(void *user_context, void *ptr) {
+void my_free(JITUserContext *user_context, void *ptr) {
     free_count++;
     free(((void **)ptr)[-1]);
 }
 
 bool error_occurred = false;
-void my_error_handler(void *user_context, const char *) {
+void my_error_handler(JITUserContext *user_context, const char *) {
     error_occurred = true;
 }
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 
@@ -49,8 +49,9 @@ int main(int argc, char **argv) {
     int g_size = 100000;
     g.bound(x, 0, g_size);
 
-    h.set_custom_allocator(my_malloc, my_free);
-    h.set_error_handler(my_error_handler);
+    h.jit_handlers().custom_malloc = my_malloc;
+    h.jit_handlers().custom_free = my_free;
+    h.jit_handlers().custom_error = my_error_handler;
 
     Buffer<int> im = h.realize({g_size + 100});
 

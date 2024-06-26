@@ -3,9 +3,15 @@
 #include <iostream>
 #include <random>
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
 #include "util/model_runner.h"
 
+#if HANNK_BUILD_TFLITE
 #include "delegate/hannk_delegate.h"
+#endif
 #include "halide_benchmark.h"
 #include "interpreter/interpreter.h"
 #include "tflite/tflite_parser.h"
@@ -13,9 +19,11 @@
 #include "util/error_util.h"
 #include "util/file_util.h"
 
+#if HANNK_BUILD_TFLITE
 // IMPORTANT: use only the TFLite C API here.
 #include "tensorflow/lite/c/c_api.h"
 #include "tensorflow/lite/c/common.h"
+#endif
 
 namespace hannk {
 namespace {
@@ -25,6 +33,7 @@ std::chrono::duration<double> bench(std::function<void()> f) {
     return std::chrono::duration<double>(result.wall_time);
 }
 
+#if HANNK_BUILD_TFLITE
 halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
     switch (t) {
     case kTfLiteBool:
@@ -137,6 +146,7 @@ public:
         }
     }
 };
+#endif
 
 static const char *const RunNames[ModelRunner::kNumRuns] = {
     "TfLite",
@@ -146,6 +156,70 @@ static const char *const RunNames[ModelRunner::kNumRuns] = {
 };
 
 }  // namespace
+
+int FlagProcessor::handle_nonflag(const std::string &s) {
+    // just ignore it
+    return 0;
+}
+
+int FlagProcessor::handle_unknown_flag(const std::string &s) {
+    std::cerr << "Unknown flag '" << s << "'\n";
+    return -1;
+}
+
+int FlagProcessor::handle_missing_value(const std::string &s) {
+    std::cerr << "Missing value for flag '" << s << "'\n";
+    return -1;
+}
+
+int FlagProcessor::process(int argc, char **argv) const {
+    int r;
+    for (int i = 1; i < argc; i++) {
+        std::string flag = argv[i];
+        if (flag[0] != '-') {
+            r = nonflag_handler(flag);
+            if (r != 0) {
+                return r;
+            } else {
+                continue;
+            }
+        }
+        flag = flag.substr(1);
+        if (flag[0] == '-') {
+            flag = flag.substr(1);
+        }
+
+        std::string value;
+        auto eq = flag.find('=');
+        if (eq != std::string::npos) {
+            value = flag.substr(eq + 1);
+            flag = flag.substr(0, eq);
+        } else if (i + 1 < argc) {
+            value = argv[++i];
+        } else {
+            r = missing_value_handler(flag);
+            if (r != 0) {
+                return r;
+            } else {
+                continue;
+            }
+        }
+        auto it = flag_handlers.find(flag);
+        if (it == flag_handlers.end()) {
+            r = unknown_flag_handler(flag);
+            if (r != 0) {
+                return r;
+            } else {
+                continue;
+            }
+        }
+        r = it->second(value);
+        if (r != 0) {
+            return r;
+        }
+    }
+    return 0;
+}
 
 void SeedTracker::reset(int seed) {
     next_seed_ = seed;
@@ -166,6 +240,7 @@ int SeedTracker::seed_for_name(const std::string &name) {
     return seed_here;
 }
 
+#if HANNK_BUILD_TFLITE
 /*static*/ void TfLiteModelRunner::ErrorReporter(void *user_data, const char *format, va_list args) {
     TfLiteModelRunner *self = (TfLiteModelRunner *)user_data;
     if (self->verbose_output_) {
@@ -177,7 +252,7 @@ int SeedTracker::seed_for_name(const std::string &name) {
         vsnprintf(buffer, sizeof(buffer), format, args_copy);
         va_end(args_copy);
 
-        *self->verbose_output_ << format;
+        *self->verbose_output_ << buffer;
     }
 }
 
@@ -272,10 +347,15 @@ TfLiteModelRunner::~TfLiteModelRunner() {
         TfLiteModelDelete(tf_model_);
     }
 }
+#endif
 
 ModelRunner::ModelRunner() {
     for (int i = 0; i < kNumRuns; i++) {
+#if HANNK_BUILD_TFLITE
         do_run[i] = true;
+#else
+        do_run[i] = (i == kHannk);
+#endif
     }
 #if defined(__arm__) || defined(__aarch64__)
     // TFLite on Arm devices generally uses the rounding-shift instructions,
@@ -297,10 +377,11 @@ void ModelRunner::set_seed(int seed) {
 }
 
 void ModelRunner::status() {
-    std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
-    std::cout << "Using threads: " << threads << "\n";
+    if (verbosity > 0) {
+        std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
+        std::cout << "Using threads: " << threads << "\n";
 
-    {
+#if HANNK_BUILD_TFLITE
         std::string tf_ver = TfLiteVersion();
         std::cout << "Using TFLite version: " << tf_ver << "\n";
         std::string expected = std::to_string(TFLITE_VERSION_MAJOR) + "." + std::to_string(TFLITE_VERSION_MINOR) + ".";
@@ -308,6 +389,9 @@ void ModelRunner::status() {
             std::cerr << "*** WARNING: compare_vs_tflite has been tested against TFLite v" << expected << "x, "
                       << "but is using " << tf_ver << "; results may be inaccurate or wrong.\n";
         }
+#else
+        std::cout << "Built without TFLite support.\n";
+#endif
     }
 }
 
@@ -316,10 +400,18 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
 
     std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
     if (verbosity) {
+        std::cout << "Model after parsing:\n";
         model->dump(std::cout);
     }
 
-    Interpreter interpreter(std::move(model));
+    InterpreterOptions options;
+    options.verbosity = verbosity;
+    Interpreter interpreter(std::move(model), std::move(options));
+    if (!interpreter.prepare()) {
+        std::cerr << "hannk::Interpreter::prepare() failed\n";
+        // TODO: probably better form to return an error here, but for now, this is fine.
+        exit(1);
+    }
 
     // Fill in the inputs with pseudorandom data (save the seeds for later).
     for (TensorPtr t : interpreter.inputs()) {
@@ -361,10 +453,11 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
     return result;
 }
 
+#if HANNK_BUILD_TFLITE
 ModelRunner::RunResult ModelRunner::run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate) {
     RunResult result;
 
-    TfLiteModelRunner tfrunner(buffer, threads, seed_tracker_, &std::cout, delegate);
+    TfLiteModelRunner tfrunner(buffer, threads, seed_tracker_, verbosity >= 1 ? &std::cout : nullptr, delegate);
 
     // Execute once, to prime the pump
     tfrunner.run_once();
@@ -381,8 +474,9 @@ ModelRunner::RunResult ModelRunner::run_in_tflite(const std::vector<char> &buffe
 
     return result;
 }
+#endif
 
-bool ModelRunner::compare_results(const std::string &msg, const RunResult &a, const RunResult &b) {
+bool ModelRunner::compare_results(const std::string &name_a, const std::string &name_b, const RunResult &a, const RunResult &b) {
     bool all_matched = true;
     HCHECK(a.outputs.size() == b.outputs.size());
     for (size_t i = 0; i < a.outputs.size(); ++i) {
@@ -398,14 +492,12 @@ bool ModelRunner::compare_results(const std::string &msg, const RunResult &a, co
         CompareBuffersOptions options;
         options.close_thresh = std::ceil((1ull << tflite_buf.type().bits) * tolerance);
         options.max_diffs_to_log = 8;
-        std::cout << msg;
+        options.verbose = !csv_output;
         CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
         if (r.ok) {
             if (verbosity >= 2) {
-                std::cout << "MATCHING output " << i << " is:\n";
+                std::cout << "Comparing " << name_a << " vs " << name_b << ": MATCHING output " << i << " is:\n";
                 dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);
-            } else {
-                std::cout << "OK!\n";
             }
         } else {
             all_matched = false;
@@ -414,20 +506,151 @@ bool ModelRunner::compare_results(const std::string &msg, const RunResult &a, co
     return all_matched;
 };
 
+int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &files_to_process) {
+    int seed = time(nullptr);
+
+    FlagProcessor fp;
+
+    fp.nonflag_handler = [&files_to_process](const std::string &value) -> int {
+        // Assume it's a file.
+        files_to_process.push_back(value);
+        return 0;
+    };
+
+    fp.flag_handlers = FlagProcessor::FnMap{
+        {"benchmark", [this](const std::string &value) {
+             this->do_benchmark = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"compare", [this](const std::string &value) {
+             this->do_compare_results = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"csv", [this](const std::string &value) {
+             this->csv_output = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"enable", [this](const std::string &value) {
+             for (int i = 0; i < ModelRunner::kNumRuns; i++) {
+                 this->do_run[i] = false;
+             }
+             for (char c : value) {
+                 switch (c) {
+                 case 'h':
+                     this->do_run[ModelRunner::kHannk] = true;
+                     break;
+#if HANNK_BUILD_TFLITE
+                 case 't':
+                     this->do_run[ModelRunner::kTfLite] = true;
+                     break;
+                 case 'x':
+                     this->do_run[ModelRunner::kExternalDelegate] = true;
+                     break;
+                 case 'i':
+                     this->do_run[ModelRunner::kInternalDelegate] = true;
+                     break;
+#else
+                 case 't':
+                 case 'x':
+                 case 'i':
+                    std::cerr << "Unsupported option to --enable (TFLite is not enabled in this build): " << c << "\n";
+                    return -1;
+                    break;
+#endif
+                 default:
+                     std::cerr << "Unknown option to --enable: " << c << "\n";
+                     return -1;
+                 }
+             }
+             return 0;
+         }},
+        {"external_delegate_path", [this](const std::string &value) {
+             this->external_delegate_path = value;
+             return 0;
+         }},
+        {"keep_going", [this](const std::string &value) {
+             this->keep_going = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"seed", [&seed](const std::string &value) {
+             seed = std::stoi(value);
+             return 0;
+         }},
+        {"threads", [this](const std::string &value) {
+             this->threads = std::stoi(value);
+             return 0;
+         }},
+        {"tolerance", [this](const std::string &value) {
+             this->tolerance = std::stof(value);
+             return 0;
+         }},
+        {"verbose", [this](const std::string &value) {
+             this->verbosity = std::stoi(value);
+             return 0;
+         }},
+    };
+
+    int r = fp.process(argc, argv);
+    if (r != 0) {
+        return r;
+    }
+
+    if (this->threads <= 0) {
+#ifdef _WIN32
+        char *num_cores = getenv("NUMBER_OF_PROCESSORS");
+        this->threads = num_cores ? atoi(num_cores) : 8;
+#else
+        this->threads = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+    }
+
+    this->set_seed(seed);
+    return 0;
+}
+
 void ModelRunner::run(const std::string &filename) {
-    std::cout << "Processing " << filename << " ...\n";
-
-    const std::vector<char> buffer = read_entire_file(filename);
-
     std::map<WhichRun, RunResult> results;
 
-    std::vector<WhichRun> active_runs;
-    for (int i = 0; i < kNumRuns; i++) {
-        if (do_run[i]) {
-            active_runs.push_back((WhichRun)i);
+    if (run_count == 0) {
+        run_count++;
+
+        for (int i = 0; i < kNumRuns; i++) {
+            if (do_run[i]) {
+                active_runs.push_back((WhichRun)i);
+            }
+        }
+
+        if (csv_output) {
+            // Output column headers
+            std::cout << "Filename";
+            if (do_benchmark) {
+                for (WhichRun i : active_runs) {
+                    std::cout << ',' << RunNames[i] << "_time_us";
+                }
+            }
+            if (do_compare_results && do_run[kTfLite]) {
+                for (WhichRun i : active_runs) {
+                    if (i == kTfLite) {
+                        continue;
+                    }
+                    std::cout << ',' << RunNames[i] << "_matches_tflite";
+                }
+            }
+            std::cout << "\n";
         }
     }
 
+    if (csv_output) {
+        // Try to print just the filename rather than a full pathname
+        const auto n = filename.rfind('/');
+        std::cout << (n == std::string::npos ? filename : filename.substr(n + 1));
+    } else {
+        std::cout << "Processing " << filename << " ...\n";
+    }
+
+    const std::vector<char> buffer = read_entire_file(filename);
+
+#if HANNK_BUILD_TFLITE
     const auto exec_tflite = [this, &buffer]() {
         return run_in_tflite(buffer);
     };
@@ -453,56 +676,55 @@ void ModelRunner::run(const std::string &filename) {
         {kExternalDelegate, exec_hannk_external_delegate},
         {kInternalDelegate, exec_hannk_internal_delegate},
     };
+#endif
 
-    std::cout << '\n';
     for (WhichRun i : active_runs) {
-        std::cout << "Executing in " << RunNames[i] << " ...\n";
+#if HANNK_BUILD_TFLITE
         results[i] = execs.at(i)();
+#else
+        if (i != kHannk) {
+            std::cerr << "Only kHannk is available in this build.\n";
+            exit(1);
+        }
+        results[i] = run_in_hannk(buffer);
+#endif
     }
 
     // ----- Log benchmark times
     if (do_benchmark) {
-
-        std::cout << '\n';
         for (WhichRun i : active_runs) {
-            std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us"
-                      << "\n";
-        }
-
-        std::cout << '\n';
-        for (WhichRun i : active_runs) {
-            if (i == kTfLite) {
-                continue;
+            const auto t = std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count();
+            if (csv_output) {
+                std::cout << ',' << t;
+            } else {
+                std::cout << RunNames[i] << " Time: " << t << " us\n";
             }
-            double ratio = (results[i].time / results[kTfLite].time);
-            std::cout << RunNames[i] << " = " << ratio * 100.0 << "% of " << RunNames[kTfLite];
-            if (ratio > 1.0) {
-                std::cout << "  *** " << RunNames[i] << " IS SLOWER";
-            }
-            std::cout << "\n";
         }
     }
 
     // ----- Now compare the outputs
     if (do_compare_results && do_run[kTfLite]) {
-        std::cout << '\n';
-
         bool all_matched = true;
         for (WhichRun i : active_runs) {
             if (i == kTfLite) {
                 continue;
             }
-            std::ostringstream msg;
-            msg << "Comparing " << RunNames[kTfLite] << " vs " << RunNames[i] << ":";
-            if (!compare_results(msg.str(), results[kTfLite], results[i])) {
+            const bool matched = compare_results(RunNames[kTfLite], RunNames[i], results[kTfLite], results[i]);
+            if (csv_output) {
+                std::cout << ',' << (matched ? '1' : '0');
+            }
+            if (!matched) {
                 all_matched = false;
             }
         }
 
-        if (!all_matched) {
-            std::cerr << "Some runs exceeded the error threshold!\n";
+        if (!all_matched && !keep_going) {
             exit(1);
         }
+    }
+
+    if (csv_output) {
+        std::cout << "\n";
     }
 }
 

@@ -127,7 +127,7 @@ void *desc_pool_get(void *user_context) {
 
 void desc_pool_put(void *user_context, void *desc) {
     ScopedMutexLock lock(&hexagon_desc_mutex);
-    halide_assert(user_context, desc);
+    halide_abort_if_false(user_context, desc);
     pdesc_pool temp = dma_desc_pool;
     while (temp != nullptr) {
         if (temp->descriptor == desc) {
@@ -163,7 +163,7 @@ void desc_pool_free(void *user_context) {
 
 // User ptovided Image format to DMA format conversion.
 inline t_eDmaFmt halide_hexagon_get_dma_format(void *user_context, const halide_hexagon_image_fmt_t format) {
-    //A giant switch case to match image formats to dma formats
+    // A giant switch case to match image formats to dma formats
     switch (format) {
     case halide_hexagon_fmt_NV12:
         return eDmaFmt_NV12;
@@ -219,31 +219,32 @@ int halide_hexagon_dma_wrapper(void *user_context, struct halide_buffer_t *src,
 
     // Assert if buffer dimensions do not fulfill the format requirements
     if (dev->fmt == eDmaFmt_RawData) {
-        halide_assert(user_context, src->dimensions <= 3);
+        halide_abort_if_false(user_context, src->dimensions <= 3);
     }
 
     if ((dev->fmt == eDmaFmt_NV12_Y) ||
         (dev->fmt == eDmaFmt_P010_Y) ||
         (dev->fmt == eDmaFmt_TP10_Y) ||
         (dev->fmt == eDmaFmt_NV124R_Y)) {
-        halide_assert(user_context, src->dimensions == 2);
+        halide_abort_if_false(user_context, src->dimensions == 2);
     }
 
     if ((dev->fmt == eDmaFmt_NV12_UV) ||
         (dev->fmt == eDmaFmt_P010_UV) ||
         (dev->fmt == eDmaFmt_TP10_UV) ||
         (dev->fmt == eDmaFmt_NV124R_UV)) {
-        halide_assert(user_context, src->dimensions == 3);
-        halide_assert(user_context, src->dim[0].stride == 2);
-        halide_assert(user_context, src->dim[2].stride == 1);
-        halide_assert(user_context, src->dim[2].min == 0);
-        halide_assert(user_context, src->dim[2].extent == 2);
+        halide_abort_if_false(user_context, src->dimensions == 3);
+        halide_abort_if_false(user_context, src->dim[0].stride == 2);
+        halide_abort_if_false(user_context, src->dim[2].stride == 1);
+        halide_abort_if_false(user_context, src->dim[2].min == 0);
+        halide_abort_if_false(user_context, src->dim[2].extent == 2);
     }
 
     t_StDmaWrapper_RoiAlignInfo stWalkSize = {
         static_cast<uint16>(dst->dim[0].extent * dst->dim[0].stride),
         static_cast<uint16>(dst->dim[1].extent)};
     int nRet = nDmaWrapper_GetRecommendedWalkSize(dev->fmt, dev->is_ubwc, &stWalkSize);
+    // TODO: are we deliberately ignoring this error?
 
     int roi_stride = nDmaWrapper_GetRecommendedIntermBufStride(dev->fmt, &stWalkSize, dev->is_ubwc);
     int roi_width = stWalkSize.u16W;
@@ -258,7 +259,7 @@ int halide_hexagon_dma_wrapper(void *user_context, struct halide_buffer_t *src,
     }
 
     // Assert if destination stride is a multipe of recommended stride
-    halide_assert(user_context, ((dst->dim[1].stride % roi_stride) == 0));
+    halide_abort_if_false(user_context, ((dst->dim[1].stride % roi_stride) == 0));
 
     // Return nullptr if descriptor is not allocated
     void *desc_addr = desc_pool_get(user_context);
@@ -348,10 +349,10 @@ int halide_hexagon_dma_wrapper(void *user_context, struct halide_buffer_t *src,
     }
 
     desc_pool_put(user_context, desc_addr);
-    nRet = halide_hexagon_free_to_dma_pool(user_context, dma_engine, dev->dma_engine);
-    if (nRet != halide_error_code_success) {
-        debug(user_context) << "halide_hexagon_free_from_dma_pool error:" << nRet << "\n";
-        return nRet;
+    if (auto result = halide_hexagon_free_to_dma_pool(user_context, dma_engine, dev->dma_engine);
+        result != halide_error_code_success) {
+        debug(user_context) << "halide_hexagon_free_from_dma_pool error:" << result << "\n";
+        return result;
     }
     return halide_error_code_success;
 }
@@ -371,7 +372,7 @@ WEAK int halide_hexagon_dma_device_malloc(void *user_context, halide_buffer_t *b
     }
 
     size_t size = buf->size_in_bytes();
-    halide_assert(user_context, size != 0);
+    halide_abort_if_false(user_context, size != 0);
 
     void *mem = halide_malloc(user_context, size);
     if (!mem) {
@@ -379,9 +380,8 @@ WEAK int halide_hexagon_dma_device_malloc(void *user_context, halide_buffer_t *b
         return halide_error_code_out_of_memory;
     }
 
-    int err = halide_hexagon_dma_device_wrap_native(user_context, buf,
-                                                    reinterpret_cast<uint64_t>(mem));
-    if (err != 0) {
+    if (auto result = halide_hexagon_dma_device_wrap_native(user_context, buf, reinterpret_cast<uint64_t>(mem));
+        result != halide_error_code_success) {
         halide_free(user_context, mem);
         return halide_error_code_device_malloc_failed;
     }
@@ -396,20 +396,20 @@ WEAK int halide_hexagon_dma_device_free(void *user_context, halide_buffer_t *buf
 
     dma_device_handle *dev = (dma_device_handle *)buf->device;
     void *mem = dev->buffer;
-    halide_hexagon_dma_device_detach_native(user_context, buf);
+    auto result = halide_hexagon_dma_device_detach_native(user_context, buf);
 
     halide_free(user_context, mem);
 
     // This is to match what the default implementation of halide_device_free does.
     buf->set_device_dirty(false);
-    return halide_error_code_success;
+    return result;
 }
 
 WEAK int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engine) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_allocate_engine (user_context: " << user_context << ")\n";
 
-    halide_assert(user_context, dma_engine);
+    halide_abort_if_false(user_context, dma_engine);
     debug(user_context) << "    dma_allocate_dma_engine -> ";
     *dma_engine = halide_hexagon_allocate_dma_resource(user_context);
     debug(user_context) << "        " << dma_engine << "\n";
@@ -426,26 +426,26 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
         << "Hexagon: halide_hexagon_dma_deallocate_engine (user_context: " << user_context
         << ", dma_engine: " << dma_engine << ")\n";
 
-    halide_assert(user_context, dma_engine);
+    halide_abort_if_false(user_context, dma_engine);
 
     // Its safe to free descriptors here, even on 1st engine of multi-engines deallocation, since its called outside of pipeline
     // If descriptors are needed on pipeline re-entry, the pool will also re-populate
     desc_pool_free(user_context);
 
     // Free DMA Resources
-    int err = halide_hexagon_free_dma_resource(user_context, dma_engine);
-    debug(user_context) << "Hexagon:     dma_free_dma_pool done\n";
-    if (err != 0) {
+    if (auto result = halide_hexagon_free_dma_resource(user_context, dma_engine);
+        result != halide_error_code_success) {
         debug(user_context) << "Hexagon: Free DMA/Cache Pool failed.\n";
-        return halide_error_code_generic_error;
+        return result;
     }
+    debug(user_context) << "Hexagon:     dma_free_dma_pool done\n";
     return halide_error_code_success;
 }
 
 namespace {
 
 inline int dma_prepare_for_copy(void *user_context, struct halide_buffer_t *buf, void *dma_engine, bool is_ubwc, t_eDmaFmt fmt, bool is_write) {
-    halide_assert(user_context, dma_engine);
+    halide_abort_if_false(user_context, dma_engine);
     dma_device_handle *dev = reinterpret_cast<dma_device_handle *>(buf->device);
     dev->dma_engine = dma_engine;
     dev->is_ubwc = is_ubwc;
@@ -486,7 +486,7 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_unprepare (user_context: " << user_context
         << ", buf: " << *buf << ")\n";
-    //TODO Now that FinishFrame is called by Hexagon DMA Pool Module, need to check if this function is redundant
+    // TODO Now that FinishFrame is called by Hexagon DMA Pool Module, need to check if this function is redundant
     return halide_error_code_success;
 }
 
@@ -494,19 +494,18 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
                                         const struct halide_device_interface_t *dst_device_interface,
                                         struct halide_buffer_t *dst) {
 
-    halide_assert(user_context, dst_device_interface == nullptr ||
-                                    dst_device_interface == &hexagon_dma_device_interface);
+    halide_abort_if_false(user_context, dst_device_interface == nullptr ||
+                                            dst_device_interface == &hexagon_dma_device_interface);
 
     if (src->device_dirty() &&
         src->device_interface != &hexagon_dma_device_interface) {
-        halide_assert(user_context, dst_device_interface == &hexagon_dma_device_interface);
+        halide_abort_if_false(user_context, dst_device_interface == &hexagon_dma_device_interface);
         // If the source is not hexagon_dma or host memory, ask the source
         // device interface to copy to dst host memory first.
         debug(user_context) << "Hexagon: src->device_interface != &hexagon_dma_device_interface\n";
-        int err = src->device_interface->impl->buffer_copy(user_context, src, nullptr, dst);
-        if (err) {
-            error(user_context) << "Hexagon: halide_hexagon_dma_buffer_copy (not DMA) failed: " << err << "\n";
-            return err;
+        if (auto result = src->device_interface->impl->buffer_copy(user_context, src, nullptr, dst);
+            result != halide_error_code_success) {
+            return result;
         }
         // Now just copy from src to host
         src = dst;
@@ -515,24 +514,21 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
     bool from_host = !src->device_dirty() && src->host != nullptr;
     bool to_host = !dst_device_interface;
 
-    halide_assert(user_context, from_host || src->device);
-    halide_assert(user_context, to_host || dst->device);
+    halide_abort_if_false(user_context, from_host || src->device);
+    halide_abort_if_false(user_context, to_host || dst->device);
 
-    halide_assert(user_context, (!from_host && to_host) || (from_host && !to_host));
+    halide_abort_if_false(user_context, (!from_host && to_host) || (from_host && !to_host));
 
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_buffer_copy (user_context: " << user_context
         << ", src: " << src << ", dst: " << dst << "\n"
         << ", DMA Read: " << to_host << ", DMA Write: " << from_host << ")\n";
 
-    int nRet;
     if (dst_device_interface == &hexagon_dma_device_interface) {
-        nRet = halide_hexagon_dma_wrapper(user_context, dst, src);
+        return halide_hexagon_dma_wrapper(user_context, dst, src);
     } else {
-        nRet = halide_hexagon_dma_wrapper(user_context, src, dst);
+        return halide_hexagon_dma_wrapper(user_context, src, dst);
     }
-
-    return nRet;
 }
 
 WEAK int halide_hexagon_dma_copy_to_device(void *user_context, halide_buffer_t *buf) {
@@ -564,7 +560,7 @@ WEAK int halide_hexagon_dma_device_crop(void *user_context,
 
     const dma_device_handle *src_dev = (dma_device_handle *)src->device;
     dma_device_handle *dst_dev = malloc_device_handle();
-    halide_assert(user_context, dst_dev);
+    halide_abort_if_false(user_context, dst_dev);
     dst_dev->buffer = src_dev->buffer;
     dst_dev->offset_wrx = src_dev->offset_wrx + dst->dim[0].min - src->dim[0].min;
     dst_dev->offset_wry = src_dev->offset_wry + dst->dim[1].min - src->dim[1].min;
@@ -588,7 +584,7 @@ WEAK int halide_hexagon_dma_device_slice(void *user_context,
         << "Hexagon: halide_hexagon_dma_device_slice (user_context: " << user_context
         << " src: " << *src << " dst: " << *dst << ")\n";
 
-    halide_assert(user_context, 0);
+    halide_abort_if_false(user_context, 0);
 
     error(user_context) << "Hexagon: halide_hexagon_dma_device_slice not implemented\n";
     return halide_error_code_generic_error;
@@ -599,7 +595,7 @@ WEAK int halide_hexagon_dma_device_release_crop(void *user_context, struct halid
         << "Hexagon: halide_hexagon_dma_device_release_crop (user_context: " << user_context
         << " buf: " << *buf << ")\n";
 
-    halide_assert(user_context, buf->device);
+    halide_abort_if_false(user_context, buf->device);
     free((dma_device_handle *)buf->device);
     buf->device = 0;
 
@@ -620,7 +616,7 @@ WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide
         << "Hexagon: halide_hexagon_dma_device_wrap_native (user_context: " << user_context
         << " buf: " << *buf << " handle: " << handle << ")\n";
 
-    halide_assert(user_context, buf->device == 0);
+    halide_abort_if_false(user_context, buf->device == 0);
     if (buf->device != 0) {
         error(user_context) << "Hexagon: halide_hexagon_dma_device_wrap_native buffer already has a device\n";
         return halide_error_code_device_wrap_native_failed;
@@ -630,7 +626,7 @@ WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide
     buf->device_interface->impl->use_module();
 
     dma_device_handle *dev = malloc_device_handle();
-    halide_assert(user_context, dev);
+    halide_abort_if_false(user_context, dev);
     dev->buffer = reinterpret_cast<uint8_t *>(handle);
     dev->dma_engine = nullptr;
     dev->frame_width = buf->dim[0].extent * buf->dim[0].stride;
@@ -650,7 +646,7 @@ WEAK int halide_hexagon_dma_device_detach_native(void *user_context, struct hali
         error(user_context) << "Hexagon: halide_hexagon_dma_device_detach_native buffer without a device\n";
         return halide_error_code_device_detach_native_failed;
     }
-    halide_assert(user_context, buf->device_interface == &hexagon_dma_device_interface);
+    halide_abort_if_false(user_context, buf->device_interface == &hexagon_dma_device_interface);
     dma_device_handle *dev = (dma_device_handle *)buf->device;
     free(dev);
     buf->device_interface->impl->release_module();
@@ -684,31 +680,45 @@ WEAK int halide_hexagon_dma_device_release(void *user_context) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_device_release (user_context: " << user_context << ")\n";
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_hexagon_dma_power_mode_voting(void *user_context, halide_hexagon_power_mode_t cornercase) {
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_power_voting (user_context: " << user_context << ")\n";
+    uint32 val;
     switch (cornercase) {
     case halide_hexagon_power_low_2:
-        return nDmaWrapper_PowerVoting(PW_SVS2);
+        val = PW_SVS2;
+        break;
     case halide_hexagon_power_low:
-        return nDmaWrapper_PowerVoting(PW_SVS);
+        val = PW_SVS;
+        break;
     case halide_hexagon_power_low_plus:
-        return nDmaWrapper_PowerVoting(PW_SVS_L1);
+        val = PW_SVS_L1;
+        break;
     case halide_hexagon_power_nominal:
-        return nDmaWrapper_PowerVoting(PW_NORMAL);
+        val = PW_NORMAL;
+        break;
     case halide_hexagon_power_nominal_plus:
-        return nDmaWrapper_PowerVoting(PW_NORMAL_L1);
+        val = PW_NORMAL_L1;
+        break;
     case halide_hexagon_power_turbo:
-        return nDmaWrapper_PowerVoting(PW_TURBO);
+        val = PW_TURBO;
+        break;
     case halide_hexagon_power_default:
-        return nDmaWrapper_PowerVoting(~PW_SVS);
+        val = ~PW_SVS;
+        break;
     default:
         error(user_context) << "Hexagon: halide_hexagon_dma_power_voting power mode (" << cornercase << ") not found\n";
         return halide_error_code_generic_error;
     }
+    int nRet = nDmaWrapper_PowerVoting(val);
+    if (nRet != QURT_EOK) {
+        error(user_context) << "Hexagon: nDmaWrapper_PowerVoting() failed";
+        return halide_error_code_generic_error;
+    }
+    return halide_error_code_success;
 }
 
 }  // extern "C" linkage

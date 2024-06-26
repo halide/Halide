@@ -3,12 +3,14 @@
 
 /** \file
  * Override Halide's CUDA hooks so that the Halide code called from PyTorch uses
- * the correct GPU device and stream.
+ * the correct GPU device and stream. This header should be included once in
+ * the PyTorch/C++ binding source file (see apps/HelloPyTorch/setup.py for an
+ * example).
  */
 
-#ifdef HL_PT_CUDA
 #include "HalideRuntimeCuda.h"
 #include "cuda.h"
+#include "cuda_runtime.h"
 
 namespace Halide {
 namespace PyTorch {
@@ -35,7 +37,7 @@ int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create 
     } else {
         *ctx = nullptr;
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
@@ -45,7 +47,7 @@ int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) 
     } else {
         *stream = 0;
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 int halide_get_gpu_device(void *user_context) {
@@ -58,7 +60,5 @@ int halide_get_gpu_device(void *user_context) {
 }
 
 }  // extern "C"
-
-#endif  // HL_PT_CUDA
 
 #endif /* end of include guard: HL_PYTORCH_CUDA_HELPERS_H */

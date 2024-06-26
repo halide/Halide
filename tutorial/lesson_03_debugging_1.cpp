@@ -3,11 +3,11 @@
 // This lesson demonstrates how to inspect what the Halide compiler is producing.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_03*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_03 -std=c++11
+// g++ lesson_03*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_03 -std=c++17
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_03
 
 // On os x:
-// g++ lesson_03*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_03 -std=c++11
+// g++ lesson_03*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_03 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_03
 
 // If you have the entire Halide source tree, you can also build it by
@@ -53,9 +53,9 @@ int main(int argc, char **argv) {
 
     // Halide will also output an HTML version of this output, which
     // supports syntax highlighting and code-folding, so it can be
-    // nicer to read for large pipelines. Open gradient.html with your
+    // nicer to read for large pipelines. Open gradient.stmt.html" with your
     // browser after running this tutorial.
-    gradient.compile_to_lowered_stmt("gradient.html", {}, HTML);
+    gradient.compile_to_lowered_stmt("gradient.stmt.html", {}, HTML);
 
     // You can usually figure out what code Halide is generating using
     // this pseudocode. In the next lesson we'll see how to snoop on

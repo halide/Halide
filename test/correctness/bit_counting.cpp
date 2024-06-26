@@ -84,7 +84,7 @@ int test_bit_counting(const Target &target) {
             printf("Popcount of %u [0b%s] returned %d (should be %d)\n",
                    input(i), bits_string.c_str(), popcount_result(i),
                    local_popcount(input(i)));
-            return -1;
+            return 1;
         }
     }
 
@@ -99,7 +99,7 @@ int test_bit_counting(const Target &target) {
             printf("Ctlz of %u [0b%s] returned %d (should be %d)\n",
                    input(i), bits_string.c_str(), ctlz_result(i),
                    local_count_leading_zeros(input(i)));
-            return -1;
+            return 1;
         }
     }
 
@@ -114,7 +114,7 @@ int test_bit_counting(const Target &target) {
             printf("Cttz of %u [0b%s] returned %d (should be %d)\n",
                    input(i), bits_string.c_str(), cttz_result(i),
                    local_count_trailing_zeros(input(i)));
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -123,8 +123,8 @@ int test_bit_counting(const Target &target) {
 int main() {
     Target target = get_jit_target_from_environment();
 
-    if (test_bit_counting<uint16_t>(target) != 0) return -1;
-    if (test_bit_counting<uint32_t>(target) != 0) return -1;
+    if (test_bit_counting<uint16_t>(target) != 0) return 1;
+    if (test_bit_counting<uint32_t>(target) != 0) return 1;
 
     printf("Success!\n");
     return 0;

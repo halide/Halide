@@ -59,6 +59,18 @@ private:
         }
     }
 
+    Expr visit(const Reinterpret *op) override {
+        Expr value = mutate(op->value);
+        if (!value.defined()) {
+            return Expr();
+        }
+        if (value.same_as(op->value)) {
+            return op;
+        } else {
+            return Reinterpret::make(op->type, std::move(value));
+        }
+    }
+
     Expr visit(const Add *op) override {
         return mutate_binary_operator(op);
     }
@@ -324,7 +336,7 @@ private:
             body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, min, extent, op->for_type, op->device_api, body);
+            return For::make(op->name, min, extent, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 
@@ -415,14 +427,16 @@ private:
                 << "  Condition " << i << ": " << values_predicates[i] << "\n";
         }
 
+        Expr new_pred = mutate(op->predicate);
+
         if (predicate.defined()) {
-            Stmt stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args));
+            Stmt stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args, new_pred));
             predicate = Expr();
             return stmt;
-        } else if (!changed) {
+        } else if (!changed && new_pred.same_as(op->predicate)) {
             return op;
         } else {
-            return Provide::make(op->name, new_values, new_args);
+            return Provide::make(op->name, new_values, new_args, new_pred);
         }
     }
 
@@ -458,7 +472,8 @@ private:
             return op;
         } else {
             return Allocate::make(op->name, op->type, op->memory_type,
-                                  new_extents, condition, body, new_expr, op->free_function);
+                                  new_extents, condition, body, new_expr,
+                                  op->free_function, op->padding);
         }
     }
 

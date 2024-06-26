@@ -37,44 +37,9 @@ struct Target;
 
 namespace Internal {
 
-/** The llvm type of a struct containing all of the externally referenced state of a Closure. */
-llvm::StructType *build_closure_type(const Closure &closure, llvm::StructType *halide_buffer_t_type, llvm::LLVMContext *context);
-
-/** Emit code that builds a struct containing all the externally
- * referenced state. Requires you to pass it a type and struct to fill in,
- * a scope to retrieve the llvm values from and a builder to place
- * the packing code. */
-void pack_closure(llvm::StructType *type,
-                  llvm::Value *dst,
-                  const Closure &closure,
-                  const Scope<llvm::Value *> &src,
-                  llvm::StructType *halide_buffer_t_type,
-                  llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder);
-
-/** Emit code that unpacks a struct containing all the externally
- * referenced state into a symbol table. Requires you to pass it a
- * state struct type and value, a scope to fill, and a builder to place the
- * unpacking code. */
-void unpack_closure(const Closure &closure,
-                    Scope<llvm::Value *> &dst,
-                    llvm::StructType *type,
-                    llvm::Value *src,
-                    llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder);
-
-/** Get the llvm type equivalent to a given halide type */
-llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
-
-/** Get the number of elements in an llvm vector type, or return 1 if
- * it's not a vector type. */
-int get_vector_num_elements(llvm::Type *);
-
 /** Get the scalar type of an llvm vector type. Returns the argument
  * if it's not a vector type. */
 llvm::Type *get_vector_element_type(llvm::Type *);
-
-llvm::ElementCount element_count(int e);
-
-llvm::Type *get_vector_type(llvm::Type *, int);
 
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
@@ -95,7 +60,7 @@ std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &a, const Expr &b,
  * Can introduce mulhi_shr and sorted_avg intrinsics as well as those from the
  * lower_euclidean_ operation -- div_round_to_zero or mod_round_to_zero. */
 ///@{
-Expr lower_int_uint_div(const Expr &a, const Expr &b);
+Expr lower_int_uint_div(const Expr &a, const Expr &b, bool round_to_zero = false);
 Expr lower_int_uint_mod(const Expr &a, const Expr &b);
 ///@}
 
@@ -116,8 +81,18 @@ Expr lower_signed_shift_right(const Expr &a, const Expr &b);
 /** Reduce a mux intrinsic to a select tree */
 Expr lower_mux(const Call *mux);
 
-/** Given an llvm::Module, set llvm:TargetOptions, cpu and attr information */
-void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);
+/** Reduce bit extraction and concatenation to bit ops */
+///@{
+Expr lower_extract_bits(const Call *c);
+Expr lower_concat_bits(const Call *c);
+///@}
+
+/** An vectorizable implementation of Halide::round that doesn't depend on any
+ * standard library being present. */
+Expr lower_round_to_nearest_ties_to_even(const Expr &);
+
+/** Given an llvm::Module, set llvm:TargetOptions information */
+void get_target_options(const llvm::Module &module, llvm::TargetOptions &options);
 
 /** Given two llvm::Modules, clone target options from one to the other */
 void clone_target_options(const llvm::Module &from, llvm::Module &to);
@@ -125,8 +100,8 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to);
 /** Given an llvm::Module, get or create an llvm:TargetMachine */
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module);
 
-/** Set the appropriate llvm Function attributes given a Target. */
-void set_function_attributes_for_target(llvm::Function *, const Target &);
+/** Set the appropriate llvm Function attributes given the Halide Target. */
+void set_function_attributes_from_halide_target_options(llvm::Function &);
 
 /** Save a copy of the llvm IR currently represented by the module as
  * data in the __LLVM,__bitcode section. Emulates clang's

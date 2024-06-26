@@ -27,7 +27,7 @@ int calling_clone_no_op_test() {
             Func temp = f.clone_in(g);
             if (clone.name() != temp.name()) {
                 std::cerr << "Expect " << clone.name() << "; got " << temp.name() << " instead\n";
-                return -1;
+                return 1;
             }
         }
     }
@@ -44,7 +44,7 @@ int calling_clone_no_op_test() {
         Func clone2 = d.clone_in({g, f, e});
         if (clone1.name() != clone2.name()) {
             std::cerr << "Expect " << clone1.name() << "; got " << clone2.name() << " instead\n";
-            return -1;
+            return 1;
         }
     }
 
@@ -64,22 +64,18 @@ int func_clone_test() {
     // Check the call graphs.
     // Expect 'g' to call 'clone', 'clone' to call nothing, and 'f' not
     // in the final IR.
-    Module m = g.compile_to_module({});
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {g.name(), {clone.name()}},
         {clone.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
-        return -1;
+    if (check_call_graphs(g, expected) != 0) {
+        return 1;
     }
 
     Buffer<int> im = g.realize({200, 200});
     auto func = [](int x, int y) { return x; };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -100,10 +96,6 @@ int multiple_funcs_sharing_clone_test() {
     // Expect 'g1' and 'g2' to call 'f_clone', 'g3' to call 'f',
     // f_clone' to call nothing, 'f' to call nothing
     Pipeline p({g1, g2, g3});
-    Module m = p.compile_to_module({}, "");
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {g1.name(), {f_clone.name()}},
         {g2.name(), {f_clone.name()}},
@@ -111,8 +103,8 @@ int multiple_funcs_sharing_clone_test() {
         {f_clone.name(), {}},
         {f.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
-        return -1;
+    if (check_call_graphs(p, expected) != 0) {
+        return 1;
     }
 
     Realization r = p.realize({200, 200});
@@ -121,13 +113,13 @@ int multiple_funcs_sharing_clone_test() {
     Buffer<int> img3 = r[2];
     auto func = [](int x, int y) { return x; };
     if (check_image(img1, func)) {
-        return -1;
+        return 1;
     }
     if (check_image(img2, func)) {
-        return -1;
+        return 1;
     }
     if (check_image(img3, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -156,57 +148,35 @@ int update_defined_after_clone_test() {
     f.compute_root();
     clone.compute_root().vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
 
-    {
-        param.set(true);
-
-        // Check the call graphs.
-        // Expect initialization of 'g' to call 'clone' and its update to call
-        // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {g.name(), {clone.name(), g.name()}},
-            {clone.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g.realize({200, 200});
-        auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
-        };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    // Check the call graphs.
+    // Expect initialization of 'g' to call 'clone' and its update to call
+    // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
+    CallGraphs expected = {
+        {g.name(), {clone.name(), g.name()}},
+        {clone.name(), {}},
+    };
+    if (check_call_graphs(g, expected) != 0) {
+        return 1;
     }
 
-    {
-        param.set(false);
+    param.set(false);
+    Buffer<int> im = g.realize({200, 200});
+    auto func = [](int x, int y) {
+        return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
+    };
+    if (check_image(im, func)) {
+        return 1;
+    }
 
-        // Check the call graphs.
-        // Expect initialization of 'g' to call 'clone' and its update to call
-        // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {g.name(), {clone.name(), g.name()}},
-            {clone.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
+    for (bool param_value : {false, true}) {
+        param.set(param_value);
 
         Buffer<int> im = g.realize({200, 200});
         auto func = [](int x, int y) {
             return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
-            return -1;
+            return 1;
         }
     }
 
@@ -236,10 +206,6 @@ int clone_depend_on_mutated_func_test() {
 
     // Check the call graphs.
     Pipeline p({d, e, f});
-    Module m = p.compile_to_module({}, "");
-    CheckCalls check;
-    m.functions().front().body.accept(&check);
-
     CallGraphs expected = {
         {e.name(), {a.name()}},
         {a.name(), {}},
@@ -250,8 +216,8 @@ int clone_depend_on_mutated_func_test() {
         {b.name(), {a_clone_in_b.name()}},
         {a_clone_in_b.name(), {}},
     };
-    if (check_call_graphs(check.calls, expected) != 0) {
-        return -1;
+    if (check_call_graphs(p, expected) != 0) {
+        return 1;
     }
 
     Realization r = p.realize({25, 25});
@@ -261,15 +227,15 @@ int clone_depend_on_mutated_func_test() {
 
     auto func_d = [](int x, int y) { return x + y + 6; };
     if (check_image(img_d, func_d)) {
-        return -1;
+        return 1;
     }
     auto func_e = [](int x, int y) { return x + y + 2; };
     if (check_image(img_e, func_e)) {
-        return -1;
+        return 1;
     }
     auto func_f = [](int x, int y) { return x + y + 7; };
     if (check_image(img_f, func_f)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -298,10 +264,6 @@ int clone_on_clone_test() {
 
     // Check the call graphs.
     Pipeline p({c, d, e, f});
-    Module m = p.compile_to_module({}, "");
-    CheckCalls check;
-    m.functions().front().body.accept(&check);
-
     CallGraphs expected = {
         {e.name(), {b.name(), a_clone_in_b_e_in_e.name()}},
         {c.name(), {b.name()}},
@@ -313,8 +275,8 @@ int clone_on_clone_test() {
         {b_clone_in_d_f.name(), {a.name()}},
         {a.name(), {}},
     };
-    if (check_call_graphs(check.calls, expected) != 0) {
-        return -1;
+    if (check_call_graphs(p, expected) != 0) {
+        return 1;
     }
 
     Realization r = p.realize({25, 25});
@@ -325,19 +287,19 @@ int clone_on_clone_test() {
 
     auto func_c = [](int x, int y) { return x + y + 3; };
     if (check_image(img_c, func_c)) {
-        return -1;
+        return 1;
     }
     auto func_d = [](int x, int y) { return x + y + 4; };
     if (check_image(img_d, func_d)) {
-        return -1;
+        return 1;
     }
     auto func_e = [](int x, int y) { return 2 * x + 2 * y + 1; };
     if (check_image(img_e, func_e)) {
-        return -1;
+        return 1;
     }
     auto func_f = [](int x, int y) { return 2 * x + 2 * y + 2; };
     if (check_image(img_f, func_f)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -371,37 +333,37 @@ int clone_reduction_test() {
 int main(int argc, char **argv) {
     printf("Running calling clone no op test\n");
     if (calling_clone_no_op_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running func clone test\n");
     if (func_clone_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running multiple funcs sharing clone test\n");
     if (multiple_funcs_sharing_clone_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running update is defined after clone test\n");
     if (update_defined_after_clone_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running clone depend on mutated func test\n");
     if (clone_depend_on_mutated_func_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running clone on clone test\n");
     if (clone_on_clone_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running clone reduction test\n");
     if (clone_reduction_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

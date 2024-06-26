@@ -21,8 +21,8 @@ E/halide_native( 6146): ANativeWindow buffer locked but its size was 1920 x
 1440, expected 1440 x 1080
 
 This application builds for multiple native ABIs. (At present armeabi,
-armeabi-v7a, arm64-v8a, mips, x86_64, and x86 are supported. mips64 is not
-presently working.) Halide code is generated for each architecture.
+armeabi-v7a, arm64-v8a, x86_64, and x86 are supported.) Halide code is
+generated for each architecture.
 
 This build is meant to use Android command line tools. (An IDE is not required.)
 In order to build, the following will be required:
@@ -65,10 +65,10 @@ application.
 
 Pay attention to the list of platforms supported by your Halide installation.
 They are listed in jni/Application.mk APP_ABI variable and in build.gradle archs
-map. For example, if your Halide installation was built without mips support or
-without arm64-v8a, remove them from APP_ABI and archs. Both list and map should
-match, otherwise you will be getting compilation errors complaining about a
-missing halide_generated.h file:
+map. For example, if your Halide installation was built without arm64-v8a,
+remove it from APP_ABI and archs. Both list and map should match, otherwise
+you will be getting compilation errors complaining about a missing
+halide_generated.h file:
 
 ```
 :ndkBuild FAILED

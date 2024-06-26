@@ -4,11 +4,11 @@
 // reusable components called generators.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_15*.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++11 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_15_generate
+// g++ lesson_15*.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_15_generate
 // bash lesson_15_generators_usage.sh
 
 // On os x:
-// g++ lesson_15*.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++11 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_15_generate
+// g++ lesson_15*.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_15_generate
 // bash lesson_15_generators_usage.sh
 
 // If you have the entire Halide source tree, you can also build it by
@@ -32,10 +32,10 @@ public:
     // member variables. They'll appear in the signature of our generated
     // function in the same order as we declare them.
     Input<uint8_t> offset{"offset"};
-    Input<Buffer<uint8_t>> input{"input", 2};
+    Input<Buffer<uint8_t, 2>> input{"input"};
 
     // We also declare the Outputs as public member variables.
-    Output<Buffer<uint8_t>> brighter{"brighter", 2};
+    Output<Buffer<uint8_t, 2>> brighter{"brighter"};
 
     // Typically you declare your Vars at this scope as well, so that
     // they can be used in any helper methods you add later.
@@ -97,12 +97,12 @@ public:
 
     // We'll use the same Inputs as before:
     Input<uint8_t> offset{"offset"};
-    Input<Buffer<uint8_t>> input{"input", 2};
+    Input<Buffer<uint8_t, 2>> input{"input"};
 
     // And a similar Output. Note that we don't specify a type for the Buffer:
     // at compile-time, we must specify an explicit type via the "output.type"
     // GeneratorParam (which is implicitly defined for this Output).
-    Output<Buffer<>> output{"output", 2};
+    Output<Buffer<void, 2>> output{"output"};
 
     // And we'll declare our Vars here as before.
     Var x, y;
@@ -155,7 +155,7 @@ public:
         if (rotation != Rotation::None) {
             rotated
                 .compute_at(output, y)
-                .vectorize(x, natural_vector_size(rotated.output_types()[0]));
+                .vectorize(x, natural_vector_size(rotated.types()[0]));
         }
     }
 };

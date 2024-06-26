@@ -6,13 +6,7 @@
 
 using namespace Halide::Runtime;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT int extern_stage(halide_buffer_t *input, int addend, halide_buffer_t *output) {
+extern "C" HALIDE_EXPORT_SYMBOL int extern_stage(halide_buffer_t *input, int addend, halide_buffer_t *output) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
         for (int d = 0; d < 2; d++) {
@@ -39,10 +33,10 @@ extern "C" DLLEXPORT int extern_stage(halide_buffer_t *input, int addend, halide
 int main(int argc, char **argv) {
     const int width = 100;
     const int height = 200;
-    Buffer<int> input(width, height);
+    Buffer<int, 2> input(width, height);
     input.fill([](int x, int y) { return rand() % 256; });
     int addend = 20;
-    Buffer<int> output(width, height);
+    Buffer<int, 2> output(width, height);
 
     extern_output(input, addend, output);
 
@@ -52,7 +46,7 @@ int main(int argc, char **argv) {
         if (actual != correct) {
             printf("output(%d, %d) = %d instead of %d %d\n",
                    x, y, actual, correct, input(x, y));
-            exit(-1);
+            exit(1);
         }
     });
 

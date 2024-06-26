@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
         if (s.count != 0) {
             std::cerr << "There were conditionals in the lowered code: \n"
                       << m.functions().front().body << "\n";
-            return -1;
+            return 1;
         }
 
         // Also check the output is correct
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
             if (im(x) != correct) {
                 printf("im(%d) = %d instead of %d\n",
                        x, im(x), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
         if (s.count != 0) {
             std::cerr << "There were selects in the lowered code: \n"
                       << m.functions().front().body << "\n";
-            return -1;
+            return 1;
         }
 
         // Also check the output is correct
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n",
                            x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
             if (s.count != 0) {
                 std::cerr << "There were selects in the lowered code: \n"
                           << m.functions().front().body << "\n";
-                return -1;
+                return 1;
             }
             hist_result = hist.realize({256});
         }
@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
             if (hist_result(i) != true_hist_result(i)) {
                 printf("hist(%d) = %d instead of %d\n",
                        i, hist_result(i), true_hist_result(i));
-                return -1;
+                return 1;
             }
         }
     }
@@ -173,7 +173,7 @@ int main(int argc, char **argv) {
         if (s.count != 0) {
             std::cerr << "There were selects or ifs in the lowered code: \n"
                       << m.functions().front().body << "\n";
-            return -1;
+            return 1;
         }
     }
 
@@ -212,12 +212,12 @@ int main(int argc, char **argv) {
         if (s.count_select != 0) {
             std::cerr << "There were selects in the lowered code: \n"
                       << m.functions().front().body << "\n";
-            return -1;
+            return 1;
         }
         if (s.count_if != 1) {
             std::cerr << "There should be 1 if in the lowered code: \n"
                       << m.functions().front().body << "\n";
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -229,7 +229,7 @@ int main(int argc, char **argv) {
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n",
                            x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

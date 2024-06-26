@@ -47,22 +47,22 @@ int main(int argc, char **argv) {
         int b = Buffer<int>(result[1])();
         if (a != (N * (N + 1)) / 2 || b != N * (N + 1)) {
             printf("Incorrect output: %d %d\n", a, b);
-            return -1;
+            return 1;
         }
 
         if (!checker.vector_reduces) {
             printf("Expected VectorReduce nodes\n");
-            return -1;
+            return 1;
         }
 
         if (!checker.atomics) {
             printf("Expected atomic nodes\n");
-            return -1;
+            return 1;
         }
 
         if (checker.mutexes) {
             printf("Did not expect mutexes\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
         float mag = a * a + b * b;
         if (mag <= 0.9 || mag >= 1.1) {
             printf("Should have been magnitude one: %f + %f i\n", a, b);
-            return -1;
+            return 1;
         }
     }
 

@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
 
     if (t2 > t1) {
         printf("Half should not have been slower than float\n");
-        return -1;
+        return 1;
     }
 
     f32_out.copy_to_host();
@@ -70,11 +70,11 @@ int main(int argc, char **argv) {
     for (int i = 0; i < size; i++) {
         if (f32_out(i) != 4.0f) {
             printf("f32_out(%d) = %f instead of 4\n", i, f32_out(i));
-            return -1;
+            return 1;
         }
         if (f16_out(i) != float16_t(4.0f)) {
             printf("f16_out(%d) = %f instead of 4\n", i, (float)f16_out(i));
-            return -1;
+            return 1;
         }
     }
 

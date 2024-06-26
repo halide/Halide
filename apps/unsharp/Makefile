@@ -10,11 +10,11 @@ $(GENERATOR_BIN)/unsharp.generator: unsharp_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/unsharp.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)
-	$< -g unsharp -f unsharp -o $(BIN)/$* target=$*-no_runtime auto_schedule=false
+	$< -g unsharp -f unsharp -o $(BIN)/$* target=$*-no_runtime
 
 $(BIN)/%/unsharp_auto_schedule.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)
-	$< -g unsharp -f unsharp_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	$< -g unsharp -f unsharp_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)

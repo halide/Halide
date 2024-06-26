@@ -12,7 +12,7 @@ using std::vector;
 
 namespace {
 
-/** A code generator that emits mips code from a given Halide stmt. */
+/** A code generator that emits PowerPC code from a given Halide stmt. */
 class CodeGen_PowerPC : public CodeGen_Posix {
 public:
     /** Create a powerpc code generator. Processor features can be
@@ -22,7 +22,8 @@ public:
 protected:
     void init_module() override;
 
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -116,7 +117,7 @@ void CodeGen_PowerPC::init_module() {
         }
 
         auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
@@ -141,7 +142,7 @@ void CodeGen_PowerPC::visit(const Max *op) {
     return CodeGen_Posix::visit(op);
 }
 
-string CodeGen_PowerPC::mcpu() const {
+string CodeGen_PowerPC::mcpu_target() const {
     if (target.bits == 32) {
         return "ppc32";
     } else {
@@ -155,29 +156,21 @@ string CodeGen_PowerPC::mcpu() const {
     }
 }
 
+string CodeGen_PowerPC::mcpu_tune() const {
+    return mcpu_target();
+}
+
 string CodeGen_PowerPC::mattrs() const {
-    string features;
-    string separator;
-    string enable;
-
-    features += "+altivec";
-    separator = ",";
-
-    enable = target.has_feature(Target::VSX) ? "+" : "-";
-    features += separator + enable + "vsx";
-    separator = ",";
-
-    enable = target.has_feature(Target::POWER_ARCH_2_07) ? "+" : "-";
-    features += separator + enable + "power8-altivec";
-    separator = ",";
-
-    // These move instructions are defined in POWER ISA 2.06 but we do
-    // not check for 2.06 currently.  So disable this for anything
-    // lower than ISA 2.07
-    features += separator + enable + "direct-move";
-    separator = ",";
-
-    return features;
+    std::vector<std::string> attrs = {
+        "+altivec",
+        target.has_feature(Target::VSX) ? "+vsx" : "-vsx",
+        target.has_feature(Target::POWER_ARCH_2_07) ? "+power8-altivec" : "-power8-altivec",
+        // These move instructions are defined in POWER ISA 2.06 but we do
+        // not check for 2.06 currently.  So disable this for anything
+        // lower than ISA 2.07
+        target.has_feature(Target::POWER_ARCH_2_07) ? "+direct-move" : "-direct-move",
+    };
+    return join_strings(attrs, ",");
 }
 
 bool CodeGen_PowerPC::use_soft_float_abi() const {

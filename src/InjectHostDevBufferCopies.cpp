@@ -76,8 +76,8 @@ class FindBufferUsage : public IRVisitor {
                 op->args[i].accept(this);
             }
         } else if (op->is_intrinsic(Call::debug_to_file)) {
-            internal_assert(op->args.size() == 3);
-            if (is_buffer_var(op->args[2])) {
+            internal_assert(op->args.size() == 2);
+            if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
                 devices_writing.insert(current_device_api);
             }
@@ -693,7 +693,7 @@ class InjectBufferCopies : public IRMutator {
             }
 
             return Allocate::make(op->name, op->type, op->memory_type, op->extents,
-                                  condition, body, op->new_expr, op->free_function);
+                                  condition, body, op->new_expr, op->free_function, op->padding);
         }
     }
 

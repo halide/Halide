@@ -15,9 +15,9 @@ using namespace Halide::Tools;
 
 double t;
 
-Buffer<uint16_t> blur(Buffer<uint16_t> in) {
-    Buffer<uint16_t> tmp(in.width() - 8, in.height());
-    Buffer<uint16_t> out(in.width() - 8, in.height() - 2);
+Buffer<uint16_t, 2> blur(Buffer<uint16_t, 2> in) {
+    Buffer<uint16_t, 2> tmp(in.width() - 8, in.height());
+    Buffer<uint16_t, 2> out(in.width() - 8, in.height() - 2);
 
     t = benchmark(10, 1, [&]() {
         for (int y = 0; y < tmp.height(); y++)
@@ -32,8 +32,8 @@ Buffer<uint16_t> blur(Buffer<uint16_t> in) {
     return out;
 }
 
-Buffer<uint16_t> blur_fast(Buffer<uint16_t> in) {
-    Buffer<uint16_t> out(in.width() - 8, in.height() - 2);
+Buffer<uint16_t, 2> blur_fast(Buffer<uint16_t, 2> in) {
+    Buffer<uint16_t, 2> out(in.width() - 8, in.height() - 2);
 
     t = benchmark(10, 1, [&]() {
 #ifdef __SSE2__
@@ -133,8 +133,8 @@ Buffer<uint16_t> blur_fast(Buffer<uint16_t> in) {
 
 #include "halide_blur.h"
 
-Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
-    Buffer<uint16_t> out(in.width() - 8, in.height() - 2);
+Buffer<uint16_t, 2> blur_halide(Buffer<uint16_t, 2> in) {
+    Buffer<uint16_t, 2> out(in.width() - 8, in.height() - 2);
 
     // Call it once to initialize the halide runtime stuff
     halide_blur(in, out);
@@ -162,7 +162,7 @@ int main(int argc, char **argv) {
     const int width = is_hexagon ? 648 : 2568;
     const int height = is_hexagon ? 482 : 1922;
 
-    Buffer<uint16_t> input(width, height);
+    Buffer<uint16_t, 2> input(width, height);
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
@@ -170,13 +170,13 @@ int main(int argc, char **argv) {
         }
     }
 
-    Buffer<uint16_t> blurry = blur(input);
+    Buffer<uint16_t, 2> blurry = blur(input);
     double slow_time = t;
 
-    Buffer<uint16_t> speedy = blur_fast(input);
+    Buffer<uint16_t, 2> speedy = blur_fast(input);
     double fast_time = t;
 
-    Buffer<uint16_t> halide = blur_halide(input);
+    Buffer<uint16_t, 2> halide = blur_halide(input);
     double halide_time = t;
 
     printf("times: %f %f %f\n", slow_time, fast_time, halide_time);

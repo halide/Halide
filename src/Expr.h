@@ -33,6 +33,7 @@ enum class IRNodeType {
     StringImm,
     Broadcast,
     Cast,
+    Reinterpret,
     Variable,
     Add,
     Sub,
@@ -73,7 +74,8 @@ enum class IRNodeType {
     IfThenElse,
     Evaluate,
     Prefetch,
-    Atomic
+    Atomic,
+    HoistedStorage
 };
 
 constexpr IRNodeType StrongestExprNodeType = IRNodeType::VectorReduce;
@@ -296,6 +298,11 @@ struct Expr : public Internal::IRHandle {
     Expr(bfloat16_t x)
         : IRHandle(Internal::FloatImm::make(BFloat(16), (double)x)) {
     }
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    explicit Expr(_Float16 x)
+        : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {
+    }
+#endif
     Expr(float x)
         : IRHandle(Internal::FloatImm::make(Float(32), x)) {
     }
@@ -379,6 +386,10 @@ enum class MemoryType {
      * intermediate buffers. Necessary for vgather-vscatter instructions
      * on Hexagon */
     VTCM,
+
+    /** AMX Tile register for X86. Any data that would be used in an AMX matrix
+     * multiplication must first be loaded into an AMX tile register. */
+    AMXTile,
 };
 
 namespace Internal {
@@ -408,6 +419,9 @@ bool is_unordered_parallel(ForType for_type);
 
 /** Returns true if for_type executes for loop iterations in parallel. */
 bool is_parallel(ForType for_type);
+
+/** Returns true if for_type is GPUBlock, GPUThread, or GPULane. */
+bool is_gpu(ForType for_type);
 
 /** A reference-counted handle to a statement node. */
 struct Stmt : public IRHandle {

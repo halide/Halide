@@ -19,6 +19,9 @@ const int32_t kSize = 16;
 
 using Halide::Runtime::Buffer;
 
+// Note that real_buffer() is 3D (with the 3rd dimension having extent 0)
+// because the fft is written generically to require 3D inputs, even when they are real.
+// Hence, the resulting buffer must be accessed with buf(i, j, 0).
 Buffer<float, 3> real_buffer(int32_t y_size = kSize) {
     return Buffer<float, 3>::make_interleaved(kSize, y_size, 1);
 }
@@ -61,7 +64,7 @@ int main(int argc, char **argv) {
         auto in = real_buffer();
         for (int j = 0; j < kSize; j++) {
             for (int i = 0; i < kSize; i++) {
-                in(i, j) = signal_1d[i] + signal_1d[j];
+                in(i, j, 0) = signal_1d[i] + signal_1d[j];
             }
         }
 
@@ -155,7 +158,7 @@ int main(int argc, char **argv) {
 
         for (size_t j = 0; j < kSize; j++) {
             for (size_t i = 0; i < kSize; i++) {
-                float sample = out(i, j);
+                float sample = out(i, j, 0);
                 float expected = cos(2 * kPi * (i / 16.0f + .125f));
                 if (fabs(sample - expected) > .001) {
                     std::cerr << "fft_inverse_c2r mismatch at (" << i << ", " << j << ") " << sample << " vs. " << expected << "\n";

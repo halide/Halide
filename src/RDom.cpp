@@ -126,9 +126,16 @@ public:
 };
 }  // namespace
 
+void RDom::validate_min_extent(const Expr &min, const Expr &extent) {
+    user_assert(lossless_cast(Int(32), min).defined())
+        << "RDom min cannot be represented as an int32: " << min;
+    user_assert(lossless_cast(Int(32), extent).defined())
+        << "RDom extent cannot be represented as an int32: " << extent;
+}
+
 void RDom::initialize_from_region(const Region &region, string name) {
     if (name.empty()) {
-        name = make_entity_name(this, "Halide:.*:RDom", 'r');
+        name = unique_name('r');
     }
 
     std::vector<ReductionVariable> vars;
@@ -257,7 +264,7 @@ std::ostream &operator<<(std::ostream &stream, const RDom &dom) {
     }
     stream << ")";
     Expr pred = simplify(dom.domain().predicate());
-    if (!equal(const_true(), pred)) {
+    if (!is_const_one(pred)) {
         stream << " where (\n  " << pred << ")";
     }
     stream << "\n";

@@ -7,8 +7,8 @@ HalideExtern_2(int, an_extern_func, int, int);
 
 class Pipeline : public Halide::Generator<Pipeline> {
 public:
-    Input<Buffer<uint16_t>> input{"input", 2};
-    Output<Buffer<uint16_t>> output{"output", 2};
+    Input<Buffer<uint16_t, 2>> input{"input"};
+    Output<Buffer<uint16_t, 2>> output{"output"};
 
     void generate() {
         Var x, y;

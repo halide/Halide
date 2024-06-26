@@ -17,7 +17,7 @@
 
 namespace Halide {
 
-template<typename T>
+template<typename T, int Dims>
 class Buffer;
 class OutputImageParam;
 
@@ -40,7 +40,7 @@ class RVar {
 public:
     /** An empty reduction variable. */
     RVar()
-        : _name(Internal::make_entity_name(this, "Halide:.*:RVar", 'r')) {
+        : _name(Internal::unique_name('r')) {
     }
 
     /** Construct an RVar with the given name */
@@ -195,11 +195,13 @@ class RDom {
 
     void init_vars(const std::string &name);
 
+    void validate_min_extent(const Expr &min, const Expr &extent);
     void initialize_from_region(const Region &region, std::string name = "");
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE void initialize_from_region(Region &region, const Expr &min, const Expr &extent, Args &&...args) {
-        region.push_back({min, extent});
+        validate_min_extent(min, extent);
+        region.emplace_back(min, extent);
         initialize_from_region(region, std::forward<Args>(args)...);
     }
 
@@ -227,11 +229,11 @@ public:
      * a given Buffer or ImageParam. Has the same dimensionality as
      * the argument. */
     // @{
-    RDom(const Buffer<void> &);
+    RDom(const Buffer<void, -1> &);
     RDom(const OutputImageParam &);
-    template<typename T>
-    HALIDE_NO_USER_CODE_INLINE RDom(const Buffer<T> &im)
-        : RDom(Buffer<void>(im)) {
+    template<typename T, int Dims>
+    HALIDE_NO_USER_CODE_INLINE RDom(const Buffer<T, Dims> &im)
+        : RDom(Buffer<void, -1>(im)) {
     }
     // @}
 
@@ -311,7 +313,7 @@ public:
      *
      \code
      for (int r.y = 14; r.y < 20; r.y++) {
-       f[r.x, r.y] += 1;
+       f[10, r.y] += 1;
      }
      \endcode
      *

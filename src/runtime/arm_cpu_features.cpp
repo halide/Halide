@@ -22,6 +22,9 @@ WEAK CpuFeatures halide_get_cpu_features() {
 
     // TODO: add runtime detection for ARMDotProd extension
     // https://github.com/halide/Halide/issues/4727
+
+    // TODO: add runtime detection for ARMFp16 extension
+    // https://github.com/halide/Halide/issues/6106
     return features;
 }
 

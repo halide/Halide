@@ -49,8 +49,8 @@ class FindImageInputs : public IRVisitor {
                 }
             }
         }
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
+        for (const auto &arg : call->args) {
+            arg.accept(this);
         }
     }
 
@@ -78,6 +78,11 @@ class ExprCost : public IRVisitor {
     void visit(const Cast *op) override {
         op->value.accept(this);
         arith += 1;
+    }
+
+    void visit(const Reinterpret *op) override {
+        op->value.accept(this);
+        // `Reinterpret` is a no-op and does *not* incur any cost.
     }
 
     template<typename T>
@@ -152,11 +157,13 @@ class ExprCost : public IRVisitor {
 
     void visit(const Call *call) override {
         if (call->is_intrinsic(Call::if_then_else)) {
-            internal_assert(call->args.size() == 3);
+            internal_assert(call->args.size() == 2 || call->args.size() == 3);
 
             int64_t current_arith = arith, current_memory = memory;
             arith = 0, memory = 0;
-            call->args[2].accept(this);
+            if (call->args.size() == 3) {
+                call->args[2].accept(this);
+            }
 
             // Check if this if_then_else is because of tracing or print_when.
             // If it is, we should only take into account the cost of computing
@@ -214,32 +221,26 @@ class ExprCost : public IRVisitor {
                 user_warning << "Unknown extern call " << call->name << "\n";
             }
         } else if (call->is_intrinsic()) {
-            // TODO: Improve the cost model. In some architectures (e.g. ARM or
-            // NEON), count_leading_zeros should be as cheap as bitwise ops.
-            // div_round_to_zero and mod_round_to_zero can also get fairly expensive.
-            if (call->is_intrinsic(Call::reinterpret) || call->is_intrinsic(Call::bitwise_and) ||
-                call->is_intrinsic(Call::bitwise_not) || call->is_intrinsic(Call::bitwise_xor) ||
-                call->is_intrinsic(Call::bitwise_or) || call->is_intrinsic(Call::shift_left) ||
-                call->is_intrinsic(Call::shift_right) || call->is_intrinsic(Call::div_round_to_zero) ||
-                call->is_intrinsic(Call::mod_round_to_zero) || call->is_intrinsic(Call::undef) ||
-                call->is_intrinsic(Call::mux)) {
-                arith += 1;
-            } else if (call->is_intrinsic(Call::abs) || call->is_intrinsic(Call::absd) ||
-                       call->is_intrinsic(Call::lerp) || call->is_intrinsic(Call::random) ||
-                       call->is_intrinsic(Call::count_leading_zeros) ||
-                       call->is_intrinsic(Call::count_trailing_zeros)) {
+            if (call->is_intrinsic({Call::lerp,
+                                    Call::div_round_to_zero,
+                                    Call::mod_round_to_zero,
+                                    Call::random})) {
+                // It's an expensive arithmetic intrinsic
                 arith += 5;
-            } else if (Call::as_tag(call)) {
-                // Tags do not result in actual operations.
+            } else if (Call::as_tag(call) ||
+                       call->is_intrinsic({Call::promise_clamped,
+                                           Call::unsafe_promise_clamped,
+                                           Call::undef})) {
+                // These intrinsics entail no actual work
             } else {
-                // For other intrinsics, use 1 for the arithmetic cost.
+                // For other intrinsics (e.g. bitwise ops, fixed-point math),
+                // use 1 for the arithmetic cost.
                 arith += 1;
-                user_warning << "Unhandled intrinsic call " << call->name << "\n";
             }
         }
 
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
+        for (const auto &arg : call->args) {
+            arg.accept(this);
         }
     }
 
@@ -316,8 +317,8 @@ Expr get_func_value_size(const Function &f) {
     Expr size = 0;
     const vector<Type> &types = f.output_types();
     internal_assert(!types.empty());
-    for (size_t i = 0; i < types.size(); i++) {
-        size += types[i].bytes();
+    for (auto type : types) {
+        size += type.bytes();
     }
     return simplify(size);
 }
@@ -369,7 +370,7 @@ Expr get_func_value_size(const Function &f) {
 
 Cost compute_expr_cost(Expr expr) {
     // TODO: Handle likely
-    //expr = LikelyExpression().mutate(expr);
+    // expr = LikelyExpression().mutate(expr);
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
@@ -378,7 +379,7 @@ Cost compute_expr_cost(Expr expr) {
 
 map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
     // TODO: Handle likely
-    //expr = LikelyExpression().mutate(expr);
+    // expr = LikelyExpression().mutate(expr);
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
@@ -506,7 +507,7 @@ RegionCosts::stage_detailed_load_costs(const string &func, int stage,
 
     if (curr_f.has_extern_definition()) {
         // TODO(psuriana): We need a better cost for extern function
-        //load_costs.emplace(func, Int(64).max());
+        // load_costs.emplace(func, Int(64).max());
         load_costs.emplace(func, Expr());
     } else {
         Definition def = get_stage_definition(curr_f, stage);

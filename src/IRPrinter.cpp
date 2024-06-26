@@ -5,9 +5,15 @@
 
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
+#include "Closure.h"
+#include "ConstantInterval.h"
+#include "Expr.h"
 #include "IROperator.h"
+#include "Interval.h"
 #include "Module.h"
+#include "ModulusRemainder.h"
 #include "Target.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -28,11 +34,8 @@ ostream &operator<<(ostream &out, const Type &type) {
         out << "float";
         break;
     case Type::Handle:
-        if (type.handle_type) {
-            out << "(" << type.handle_type->inner_name.name << " *)";
-        } else {
-            out << "(void *)";
-        }
+        // ensure that 'const' (etc) qualifiers are emitted when appropriate
+        out << "(" << type_to_c_type(type, false) << ")";
         break;
     case Type::BFloat:
         out << "bfloat";
@@ -46,7 +49,6 @@ ostream &operator<<(ostream &out, const Type &type) {
     }
     return out;
 }
-
 ostream &operator<<(ostream &stream, const Expr &ir) {
     if (!ir.defined()) {
         stream << "(undefined)";
@@ -58,7 +60,17 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
 }
 
 ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
-    return stream << "buffer " << buffer.name() << " = {...}\n";
+    bool include_data = Internal::ends_with(buffer.name(), "_gpu_source_kernels");
+    stream << "buffer " << buffer.name() << " = {";
+    if (include_data) {
+        std::string str((const char *)buffer.data(), buffer.size_in_bytes());
+        stream << "\n"
+               << str << "\n";
+    } else {
+        stream << "...";
+    }
+    stream << "}\n";
+    return stream;
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
@@ -90,9 +102,6 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::OpenCL:
         out << "<OpenCL>";
         break;
-    case DeviceAPI::OpenGLCompute:
-        out << "<OpenGLCompute>";
-        break;
     case DeviceAPI::Metal:
         out << "<Metal>";
         break;
@@ -104,6 +113,12 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
         break;
     case DeviceAPI::D3D12Compute:
         out << "<D3D12Compute>";
+        break;
+    case DeviceAPI::Vulkan:
+        out << "<Vulkan>";
+        break;
+    case DeviceAPI::WebGPU:
+        out << "<WebGPU>";
         break;
     }
     return out;
@@ -135,6 +150,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::VTCM:
         out << "VTCM";
         break;
+    case MemoryType::AMXTile:
+        out << "AMXTile";
+        break;
     }
     return out;
 }
@@ -150,11 +168,38 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
     case TailStrategy::Predicate:
         out << "Predicate";
         break;
+    case TailStrategy::PredicateLoads:
+        out << "PredicateLoads";
+        break;
+    case TailStrategy::PredicateStores:
+        out << "PredicateStores";
+        break;
     case TailStrategy::ShiftInwards:
         out << "ShiftInwards";
         break;
     case TailStrategy::RoundUp:
         out << "RoundUp";
+        break;
+    case TailStrategy::ShiftInwardsAndBlend:
+        out << "ShiftInwardsAndBlend";
+        break;
+    case TailStrategy::RoundUpAndBlend:
+        out << "RoundUpAndBlend";
+        break;
+    }
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const Partition &p) {
+    switch (p) {
+    case Partition::Auto:
+        out << "Auto";
+        break;
+    case Partition::Never:
+        out << "Never";
+        break;
+    case Partition::Always:
+        out << "Always";
         break;
     }
     return out;
@@ -182,12 +227,12 @@ void IRPrinter::test() {
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
     Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1, Parameter(), const_true(), ModulusRemainder());
-    Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, DeviceAPI::Host, store);
+    Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, Partition::Auto, DeviceAPI::Host, store);
     vector<Expr> args(1);
     args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
     Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true(), ModulusRemainder(3, 5));
-    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized, DeviceAPI::Host, store2);
+    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized, Partition::Auto, DeviceAPI::Host, store2);
 
     Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
     Stmt consumer = ProducerConsumer::make_consume("buf", for_loop2);
@@ -223,6 +268,66 @@ void IRPrinter::test() {
                        << source.str();
     }
     std::cout << "IRPrinter test passed\n";
+}
+
+std::ostream &operator<<(std::ostream &stream, IRNodeType type) {
+#define CASE(e)         \
+    case IRNodeType::e: \
+        stream << #e;   \
+        break;
+    switch (type) {
+        CASE(IntImm)
+        CASE(UIntImm)
+        CASE(FloatImm)
+        CASE(StringImm)
+        CASE(Broadcast)
+        CASE(Cast)
+        CASE(Reinterpret)
+        CASE(Variable)
+        CASE(Add)
+        CASE(Sub)
+        CASE(Mod)
+        CASE(Mul)
+        CASE(Div)
+        CASE(Min)
+        CASE(Max)
+        CASE(EQ)
+        CASE(NE)
+        CASE(LT)
+        CASE(LE)
+        CASE(GT)
+        CASE(GE)
+        CASE(And)
+        CASE(Or)
+        CASE(Not)
+        CASE(Select)
+        CASE(Load)
+        CASE(Ramp)
+        CASE(Call)
+        CASE(Let)
+        CASE(Shuffle)
+        CASE(VectorReduce)
+        // Stmts
+        CASE(LetStmt)
+        CASE(AssertStmt)
+        CASE(ProducerConsumer)
+        CASE(For)
+        CASE(Acquire)
+        CASE(Store)
+        CASE(Provide)
+        CASE(Allocate)
+        CASE(Free)
+        CASE(Realize)
+        CASE(Block)
+        CASE(Fork)
+        CASE(IfThenElse)
+        CASE(Evaluate)
+        CASE(Prefetch)
+        CASE(Atomic)
+        CASE(HoistedStorage)
+    }
+#undef CASE
+    return stream;
 }
 
 ostream &operator<<(ostream &stream, const AssociativePattern &p) {
@@ -280,25 +385,25 @@ ostream &operator<<(ostream &out, const ForType &type) {
 ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
     switch (op) {
     case VectorReduce::Add:
-        out << "Add";
+        out << "add";
         break;
     case VectorReduce::SaturatingAdd:
-        out << "SaturatingAdd";
+        out << "saturating_add";
         break;
     case VectorReduce::Mul:
-        out << "Mul";
+        out << "mul";
         break;
     case VectorReduce::Min:
-        out << "Min";
+        out << "min";
         break;
     case VectorReduce::Max:
-        out << "Max";
+        out << "max";
         break;
     case VectorReduce::And:
-        out << "And";
+        out << "and";
         break;
     case VectorReduce::Or:
-        out << "Or";
+        out << "or";
         break;
     }
     return out;
@@ -345,6 +450,9 @@ ostream &operator<<(ostream &stream, const LoweredFunc &function) {
 
 std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
     switch (type) {
+    case LinkageType::ExternalPlusArgv:
+        stream << "external_plus_argv";
+        break;
     case LinkageType::ExternalPlusMetadata:
         stream << "external_plus_metadata";
         break;
@@ -377,6 +485,66 @@ std::ostream &operator<<(std::ostream &out, const DimType &t) {
         out << "ImpureRVar";
         break;
     }
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const Closure &c) {
+    for (const auto &v : c.vars) {
+        out << "var: " << v.first << "\n";
+    }
+    for (const auto &b : c.buffers) {
+        out << "buffer: " << b.first << " " << b.second.size;
+        if (b.second.read) {
+            out << " (read)";
+        }
+        if (b.second.write) {
+            out << " (write)";
+        }
+        if (b.second.memory_type == MemoryType::GPUTexture) {
+            out << " <texture>";
+        }
+        out << " dims=" << (int)b.second.dimensions;
+        out << "\n";
+    }
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const Interval &in) {
+    out << "[";
+    if (in.has_lower_bound()) {
+        out << in.min;
+    } else {
+        out << "-inf";
+    }
+    out << ", ";
+    if (in.has_upper_bound()) {
+        out << in.max;
+    } else {
+        out << "inf";
+    }
+    out << "]";
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ConstantInterval &in) {
+    out << "[";
+    if (in.min_defined) {
+        out << in.min;
+    } else {
+        out << "-inf";
+    }
+    out << ", ";
+    if (in.max_defined) {
+        out << in.max;
+    } else {
+        out << "inf";
+    }
+    out << "]";
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
+    out << "(mod: " << c.modulus << " rem: " << c.remainder << ")";
     return out;
 }
 
@@ -438,8 +606,7 @@ void IRPrinter::visit(const FloatImm *op) {
 
 void IRPrinter::visit(const StringImm *op) {
     stream << "\"";
-    for (size_t i = 0; i < op->value.size(); i++) {
-        unsigned char c = op->value[i];
+    for (unsigned char c : op->value) {
         if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
             stream << c;
         } else {
@@ -471,6 +638,12 @@ void IRPrinter::visit(const StringImm *op) {
 
 void IRPrinter::visit(const Cast *op) {
     stream << op->type << "(";
+    print(op->value);
+    stream << ")";
+}
+
+void IRPrinter::visit(const Reinterpret *op) {
+    stream << "reinterpret<" << op->type << ">(";
     print(op->value);
     stream << ")";
 }
@@ -805,7 +978,16 @@ void IRPrinter::visit(const Store *op) {
 }
 
 void IRPrinter::visit(const Provide *op) {
-    stream << get_indent() << op->name << "(";
+    stream << get_indent();
+    const bool has_pred = !is_const_one(op->predicate);
+    if (has_pred) {
+        stream << "predicate (";
+        print_no_parens(op->predicate);
+        stream << ")\n";
+        indent++;
+        stream << get_indent();
+    }
+    stream << op->name << "(";
     print_list(op->args);
     stream << ") = ";
     if (op->values.size() > 1) {
@@ -817,14 +999,25 @@ void IRPrinter::visit(const Provide *op) {
     }
 
     stream << "\n";
+    if (has_pred) {
+        indent--;
+    }
 }
 
 void IRPrinter::visit(const Allocate *op) {
     ScopedBinding<> bind(known_type, op->name);
     stream << get_indent() << "allocate " << op->name << "[" << op->type;
-    for (size_t i = 0; i < op->extents.size(); i++) {
+    bool first = true;
+    for (const auto &extent : op->extents) {
         stream << " * ";
-        print(op->extents[i]);
+        if (first && op->padding) {
+            stream << "(";
+            first = false;
+        }
+        print(extent);
+    }
+    if (op->padding) {
+        stream << " + " << op->padding << ")";
     }
     stream << "]";
     if (op->memory_type != MemoryType::Auto) {
@@ -893,7 +1086,7 @@ void IRPrinter::visit(const Prefetch *op) {
         indent++;
         stream << get_indent();
     }
-    stream << "prefetch " << op->name << "(";
+    stream << "prefetch " << op->name << ", " << op->prefetch.at << ", " << op->prefetch.from << ", (";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
         print_no_parens(op->bounds[i].min);
@@ -993,10 +1186,6 @@ void IRPrinter::visit(const Shuffle *op) {
                << ", " << op->slice_stride()
                << ", " << op->indices.size()
                << ")";
-    } else if (op->is_broadcast()) {
-        stream << "broadcast(";
-        print_list(op->vectors);
-        stream << ", " << op->broadcast_factor() << ")";
     } else {
         stream << "shuffle(";
         print_list(op->vectors);
@@ -1014,19 +1203,32 @@ void IRPrinter::visit(const Shuffle *op) {
 void IRPrinter::visit(const VectorReduce *op) {
     stream << "("
            << op->type
-           << ")vector_reduce("
-           << op->op
-           << ", "
+           << ")vector_reduce_" << op->op << "("
            << op->value
            << ")";
 }
 
 void IRPrinter::visit(const Atomic *op) {
     if (op->mutex_name.empty()) {
-        stream << get_indent() << "atomic {\n";
+        stream << get_indent() << "atomic ("
+               << op->producer_name << ") {\n";
     } else {
-        stream << get_indent() << "atomic (";
-        stream << op->mutex_name;
+        stream << get_indent() << "atomic ("
+               << op->producer_name << ", "
+               << op->mutex_name << ") {\n";
+    }
+    indent += 2;
+    print(op->body);
+    indent -= 2;
+    stream << get_indent() << "}\n";
+}
+
+void IRPrinter::visit(const HoistedStorage *op) {
+    if (op->name.empty()) {
+        stream << get_indent() << "hoisted_storage {\n";
+    } else {
+        stream << get_indent() << "hoisted_storage (";
+        stream << op->name;
         stream << ") {\n";
     }
     indent += 2;

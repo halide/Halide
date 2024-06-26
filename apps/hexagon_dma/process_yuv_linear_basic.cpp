@@ -117,10 +117,10 @@ inline int process_pipeline(T const &type, const int width, const int height,
     }
 
     // Setup Halide input buffer with the test buffer
-    Halide::Runtime::Buffer<T> input_validation(data_in, width, height, 2);
-    Halide::Runtime::Buffer<T> input(nullptr, width, (3 * height) / 2);
-    Halide::Runtime::Buffer<T> input_y = input.cropped(1, 0, height);            // Luma plane only
-    Halide::Runtime::Buffer<T> input_uv = input.cropped(1, height, height / 2);  // Chroma plane only, with reduced height
+    Halide::Runtime::Buffer<T, 3> input_validation(data_in, width, height, 2);
+    Halide::Runtime::Buffer<T, 2> input(nullptr, width, (3 * height) / 2);
+    Halide::Runtime::Buffer<T, 2> input_y = input.cropped(1, 0, height);            // Luma plane only
+    Halide::Runtime::Buffer<T, 2> input_uv = input.cropped(1, height, height / 2);  // Chroma plane only, with reduced height
 
     // describe the UV interleaving for 4:2:0 format
     input_uv.embed(2, 0);
@@ -130,9 +130,9 @@ inline int process_pipeline(T const &type, const int width, const int height,
     input_uv.raw_buffer()->dim[0].extent = width / 2;
 
     // Setup Halide output buffer
-    Halide::Runtime::Buffer<T> output(width, (3 * height) / 2);
-    Halide::Runtime::Buffer<T> output_y = output.cropped(1, 0, height);              // Luma plane only
-    Halide::Runtime::Buffer<T> output_uv = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
+    Halide::Runtime::Buffer<T, 2> output(width, (3 * height) / 2);
+    Halide::Runtime::Buffer<T, 2> output_y = output.cropped(1, 0, height);              // Luma plane only
+    Halide::Runtime::Buffer<T, 2> output_uv = output.cropped(1, height, (height / 2));  // Chroma plane only, with reduced height
 
     // describe the UV interleaving for 4:2:0 format
     output_uv.embed(2, 0);

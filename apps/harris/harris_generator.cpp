@@ -12,8 +12,8 @@ Expr sum3x3(Func f, Var x, Var y) {
 
 class Harris : public Halide::Generator<Harris> {
 public:
-    Input<Buffer<float>> input{"input", 3};
-    Output<Buffer<float>> output{"output", 2};
+    Input<Buffer<float, 3>> input{"input"};
+    Output<Buffer<float, 2>> output{"output"};
 
     void generate() {
         Var x("x"), y("y"), c("c");
@@ -72,7 +72,7 @@ public:
         }
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             Var xi("xi"), yi("yi");
             if (get_target().has_gpu_feature()) {
                 // 0.253ms on a 2060 RTX
