@@ -2378,7 +2378,10 @@ private:
     void generate_body(const Module &m) {
         stream << "<body>\n";
         stream << "  <div id='page-container'>\n";
+        generate_toolbar(m);
+        stream << "     <div id='content'>\n";
         generate_visualization_panes(m);
+        stream << "     </div>\n";
         stream << "  </div>\n";
 #if INLINE_TEMPLATES
         stream << "<script>\n"
@@ -2391,6 +2394,37 @@ private:
         stream << "<script src='file://" << (dir / "html_template_StmtToHTML.js").string() << "'></script>\n";
 #endif
         stream << "</body>";
+    }
+
+    void generate_toolbar(const Module &m) {
+        stream << "<div id='toolbar'>\n";
+
+        // IR settings
+        stream << "<form id='form-ir-settings' name='form-ir-settings'>IR:\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-ir-wrap' checked />Wrap</label>\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-ir-line-nums' checked />Line numbers</label>\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-ir-costs' checked />Costs</label>\n";
+        stream << "</form>\n";
+
+        // Which panes to show
+        stream << "<form id='form-panes' name='form-panes'>Panes:\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-ir' checked />Show IR</label>\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-assembly' checked />Show Assembly</label>\n";
+        Buffer<> device_code_buf = m.get_device_code_buffer();
+        if (device_code_buf.defined()) {
+            stream << "   <label><input type='checkbox' name='checkbox-show-device-code' checked />Show Device Code</label>\n";
+        }
+        stream << "</form>\n";
+
+        // Color theme
+        stream << "<form id='form-theme' name='form-theme'>Theme:\n";
+        stream << "    <label><input type='radio' name='theme' value='auto' checked />Auto</label>\n";
+        stream << "    <label><input type='radio' name='theme' value='classic-light' />Classic Light</label>\n";
+        stream << "    <label><input type='radio' name='theme' value='gruvbox-dark' />Gruvbox Dark</label>\n";
+        stream << "<label><input type='radio' name='theme' value='gruvbox-light' />Gruvbox Light</label>\n";
+
+        stream << "</form>\n";
+        stream << "</div>\n";
     }
 
     // Generate the three visualization panes

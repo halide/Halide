@@ -157,7 +157,11 @@ function collapseTab(index) {  // eslint-disable-line no-unused-vars
             resizer = resizer.nextElementSibling.nextElementSibling;
         }
         if (resizer !== null) {
-            let colRightBtn = resizer.firstElementChild.firstElementChild.nextElementSibling.firstElementChild;
+            let colRightBtn = resizer
+                .firstElementChild
+                .firstElementChild
+                .nextElementSibling
+                .firstElementChild;
             colRightBtn.classList.toggle('active');
         }
     }
@@ -194,11 +198,75 @@ function scrollToDeviceCode(lno) {  // eslint-disable-line no-unused-vars
             behavior : "smooth"
         });
 
-        line.style.backgroundColor = 'lightgray';
+        line.style.backgroundColor = 'var(--bg_visual_green)';
         setTimeout(function() {
-            line.style.backgroundColor = 'transparent';
+            line.style.backgroundColor = null;
         }, 1000);
     } else {
         console.error("Jump to device code references line number " + lno + ", which is out or range of the " + lineSpans.length + " lines.");
     }
 }
+
+function setTheme(theme) {
+    console.log(theme);
+}
+
+function initToolbar() {
+
+    /* IR Settings */
+    function make_toggler(ckbx, attr, inv) {
+        if (ckbx === null || ckbx === undefined) return;
+        ckbx.addEventListener('change', function() {
+            if (ckbx.checked ^ inv) {
+                document.body.setAttribute(attr, "true")
+            } else {
+                document.body.setAttribute(attr, "false")
+            }
+        });
+        if (ckbx.checked ^ inv) {
+            document.body.setAttribute(attr, "true")
+        } else {
+            document.body.setAttribute(attr, "false")
+        }
+    }
+    make_toggler(document.getElementsByName("checkbox-show-ir-line-nums")[0], "data-show-line-nums", false);
+    make_toggler(document.getElementsByName("checkbox-show-ir-costs")[0], "data-hide-cost", true);
+    make_toggler(document.getElementsByName("checkbox-show-ir-wrap")[0], "data-wrap", false);
+
+    /* Hiding panes */
+    make_toggler(document.getElementsByName("checkbox-show-ir")[0], "data-show-ir", false);
+    make_toggler(document.getElementsByName("checkbox-show-assembly")[0], "data-show-assembly", false);
+    make_toggler(document.getElementsByName("checkbox-show-device-code")[0], "data-show-device-code", false);
+
+    /* Theme toggling */
+    var themeRadios = document.getElementById("form-theme").theme;
+
+    var radioButtonAuto = themeRadios[0];
+    const darkModePreference = window.matchMedia("(prefers-color-scheme: dark)");
+    function updateAutoTheme() {
+        console.log("update auto theme");
+        if (radioButtonAuto.checked) {
+            if(darkModePreference.matches) {
+                document.body.setAttribute("data-theme", "gruvbox-dark");
+            } else {
+                document.body.setAttribute("data-theme", "classic-light");
+            }
+        }
+    }
+    radioButtonAuto.addEventListener('change', function() {
+        updateAutoTheme();
+    });
+    updateAutoTheme();
+    darkModePreference.addEventListener("change", e => updateAutoTheme());
+    darkModePreference.addListener(e => updateAutoTheme());
+
+    for (var i = 1; i < themeRadios.length; i++) {
+        themeRadios[i].addEventListener('change', function() {
+            document.body.setAttribute("data-theme", this.value);
+        });
+        if (themeRadios[i].checked) {
+            document.body.setAttribute("data-theme", themeRadios[i].value);
+        }
+    }
+}
+initToolbar();

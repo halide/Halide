@@ -4,7 +4,7 @@
 <script type="module" name="hl">
   const shj = await import('https://cdn.jsdelivr.net/gh/speed-highlight/core/dist/index.js');
   var asmRules = {}
-  asmRules["sub"] = [
+  asmRules["default"] = [
     {
       type: 'cmnt',
       match: /(;|#).*/gm
@@ -15,12 +15,12 @@
     {
       // value (ex: "$0x1")
       type: 'num',
-      match: /\$-?[\da-fA-F]*\b/g
+      match: /\$-?(0x)?[\da-fA-F]*\b/g
     },
     {
       // offsets (ex: "0x201(%reg)")
-      type: 'func',
-      match: /\b-?[\da-fA-F]+\b/g
+      type: 'offset',
+      match: /-?[\da-fA-F]+\b/g
     },
     {
       type: 'kwd',
@@ -36,29 +36,30 @@
     },
     {
       // lock instruction (ex: "mov")
-      type: 'kwd',
+      type: 'instruction',
       match: /^\t*lock( |\t)+[a-z][a-z\d]*\b/gm,
     },
     {
       // instruction (ex: "mov")
-      type: 'kwd',
+      type: 'instruction',
       match: /^\t*[a-z][a-z\d]*\b/gm,
     },
     {
       // registers
       match: /%[a-z\d]+/g,
-      type: 'var'
+      type: 'register'
     },
     {
       // assembler directives
       match: /\t*\.[a-z\d]+\b/g,
-      type: 'kwd'
+      type: 'asm-directive'
     },
     {
       // labels
       match: /\.L[A-Za-z\d_]+:?/g,
-      type: 'class'
+      type: 'label'
     }
   ];
-  shj.highlightElement(document.getElementById("assemblyContent"), asmRules, undefined, {hideLineNumbers: true});
+  shj.loadLanguage("asm", asmRules)
+  shj.highlightElement(document.getElementById("assemblyContent"), "asm", undefined, {hideLineNumbers: true});
 </script>
