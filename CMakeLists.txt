@@ -7,6 +7,17 @@ project(Halide
 enable_testing()
 
 ##
+# Disable find_package(Halide) inside the build
+##
+
+file(CONFIGURE OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideConfig.cmake"
+     CONTENT [[set(Halide_FOUND 1)
+               set(Halide_VERSION @Halide_VERSION@)]])
+
+file(CONFIGURE OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideHelpersConfig.cmake"
+     CONTENT "set(HalideHelpers_FOUND 1)\n")
+
+##
 # Set up project-wide properties
 ##
 
