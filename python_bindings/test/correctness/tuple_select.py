@@ -72,7 +72,7 @@ def test_tuple_select():
         # fmt: on
     except hl.HalideError as e:
         assert (
-            "select() may not mix Expr and Tuple for the condition elements."
+            "select() on Tuples may not mix Expr and Tuple for the condition elements."
             in str(e)
         )
     else:
