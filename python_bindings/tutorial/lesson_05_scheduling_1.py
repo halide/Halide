@@ -75,8 +75,8 @@ def main():
         output = gradient.realize([4, 4])
 
         print("Equivalent C:")
-        for yy in range(4):
-            for xx in range(4):
+        for xx in range(4):
+            for yy in range(4):
                 print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
