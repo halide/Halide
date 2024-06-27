@@ -207,10 +207,6 @@ function scrollToDeviceCode(lno) {  // eslint-disable-line no-unused-vars
     }
 }
 
-function setTheme(theme) {
-    console.log(theme);
-}
-
 function initToolbar() {
 
     /* IR Settings */
