@@ -60,7 +60,7 @@ Target complete_arm_target(Target t) {
 
     for (int i = 0; i < num_arm_v8_features - 1; i++) {
         if (t.has_feature(arm_v8_features[i])) {
-            t.set_feature(arm_v8_features[i+1]);
+            t.set_feature(arm_v8_features[i + 1]);
         }
     }
 
