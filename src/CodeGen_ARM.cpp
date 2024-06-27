@@ -2448,7 +2448,7 @@ string CodeGen_ARM::mcpu_target() const {
             if (target.has_feature(Target::ARM64e)) {
                 return "apple-a12";
             } else {
-                return "cyclone";  // aka Apple A7
+                return "apple-a7";
             }
         } else if (target.os == Target::OSX) {
             return "apple-m1";
