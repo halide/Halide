@@ -1386,7 +1386,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 15> intersection_features = {{
+    const std::array<Feature, 16> intersection_features = {{
         ARMv7s,
         ARMv81a,
         ARM64e,
