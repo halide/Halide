@@ -356,6 +356,14 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
     m.compile(single_output(filename, m, fmt == HTML ? OutputFileType::stmt_html : OutputFileType::stmt));
 }
 
+void Pipeline::compile_to_conceptual_stmt(const string &filename,
+                                          const vector<Argument> &args,
+                                          StmtOutputFormat fmt,
+                                          const Target &target) {
+    Module m = compile_to_module(args, "", target);
+    m.compile(single_output(filename, m, fmt == HTML ? OutputFileType::conceptual_stmt_html : OutputFileType::conceptual_stmt));
+}
+
 void Pipeline::compile_to_static_library(const string &filename_prefix,
                                          const vector<Argument> &args,
                                          const std::string &fn_name,

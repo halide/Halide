@@ -288,6 +288,11 @@ void define_func(py::module &m) {
                 },
                 py::arg("filename"), py::arg("arguments"), py::arg("fmt") = Text, py::arg("target") = Target())
             .def(
+                "compile_to_conceptual_stmt", [](Func &f, const std::string &filename, const std::vector<Argument> &args, StmtOutputFormat fmt, const Target &target) {
+                    f.compile_to_conceptual_stmt(filename, args, fmt, to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("fmt") = Text, py::arg("target") = Target())
+            .def(
                 "compile_to_file", [](Func &f, const std::string &filename_prefix, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
                     f.compile_to_file(filename_prefix, args, fn_name, to_aot_target(target));
                 },

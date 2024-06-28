@@ -1,11 +1,65 @@
 <script src='http://code.jquery.com/jquery-1.10.2.js'></script>
 
 <!-- Assembly Code links (Speed Highlight) -->
-<script type="module">
-  import { highlightAll } from 'https://cdn.jsdelivr.net/gh/speed-highlight/core/dist/index.js';
-  import 'https://cdn.jsdelivr.net/gh/speed-highlight/core/dist/languages/asm.js';
-  highlightAll({hideLineNumbers: true});
+<script type="module" name="hl">
+  const shj = await import('https://cdn.jsdelivr.net/gh/speed-highlight/core/dist/index.js');
+  var asmRules = {}
+  asmRules["default"] = [
+    {
+      type: 'cmnt',
+      match: /(;|#).*/gm
+    },
+    {
+      expand: 'str'
+    },
+    {
+      // value (ex: "$0x1")
+      type: 'num',
+      match: /\$-?(0x)?[\da-fA-F]*\b/g
+    },
+    {
+      // offsets (ex: "0x201(%reg)")
+      type: 'offset',
+      match: /-?[\da-fA-F]+\b/g
+    },
+    {
+      type: 'kwd',
+      // ex: "section .data"
+      match: /^[a-z]+\s+[a-z.]+\b/gm,
+      sub: [
+        {
+          // keyword (ex: "section")
+          type: 'func',
+          match: /^[a-z]+/g
+        }
+      ]
+    },
+    {
+      // lock instruction (ex: "mov")
+      type: 'instruction',
+      match: /^\t*lock( |\t)+[a-z][a-z\d]*\b/gm,
+    },
+    {
+      // instruction (ex: "mov")
+      type: 'instruction',
+      match: /^\t*[a-z][a-z\d]*\b/gm,
+    },
+    {
+      // registers
+      match: /%[a-z\d]+/g,
+      type: 'register'
+    },
+    {
+      // assembler directives
+      match: /\t*\.[a-z\d]+\b/g,
+      type: 'asm-directive'
+    },
+    {
+      // labels
+      match: /\.L[A-Za-z\d_]+:?/g,
+      type: 'label'
+    }
+  ];
+  shj.loadLanguage("asm", asmRules)
+  shj.highlightElement(document.getElementById("assemblyContent"), "asm", undefined, {hideLineNumbers: true});
 </script>
-
-<style type='text/css'>
-</style>
