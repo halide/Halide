@@ -194,21 +194,21 @@ check_no_runtime()
     -f my_first_generator_basic \
     -e object,c_header\
     -o . \
-    target=host-x86-64-no_runtime
+    target=x86-64-linux-no_runtime
 
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_sse41 \
     -e object,c_header\
     -o . \
-    target=host-x86-64-sse41-no_runtime
+    target=x86-64-linux-sse41-no_runtime
 
 ./lesson_15_generate \
     -g my_first_generator \
     -f my_first_generator_avx \
     -e object,c_header\
     -o . \
-    target=host-x86-64-avx-no_runtime
+    target=x86-64-linux-avx-no_runtime
 
 # These files don't contain the runtime
 check_no_runtime my_first_generator_basic.o
@@ -223,7 +223,7 @@ check_symbol     my_first_generator_avx.o my_first_generator_avx
     -r halide_runtime_x86 \
     -e object,c_header\
     -o . \
-    target=host-x86-64
+    target=x86-64-linux
 check_runtime halide_runtime_x86.o
 
 # Linking the standalone runtime with the three generated object files
