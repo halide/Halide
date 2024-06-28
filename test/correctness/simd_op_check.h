@@ -121,6 +121,7 @@ public:
                  Target::ARMFp16,
                  Target::ARMv7s,
                  Target::ARMv81a,
+                 Target::ARM64e,
                  Target::AVX,
                  Target::AVX2,
                  Target::AVX512,
