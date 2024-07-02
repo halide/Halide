@@ -1093,7 +1093,7 @@ public:
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
-        int extents[] = {first, (int)rest...};
+        int extents[] = {first, (int)std::forward<Args>(rest)...};
         buf.type = t;
         buf.host = (uint8_t *)const_cast<void *>(data);
         constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
@@ -1107,7 +1107,7 @@ public:
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
     explicit Buffer(T *data, int first, Args &&...rest) {
-        int extents[] = {first, (int)rest...};
+        int extents[] = {first, (int)std::forward<Args>(rest)...};
         buf.type = static_halide_type();
         buf.host = (uint8_t *)const_cast<typename std::remove_const<T>::type *>(data);
         constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
@@ -2058,9 +2058,8 @@ private:
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE
-        storage_T *
-        address_of(Args... args) const {
+    HALIDE_ALWAYS_INLINE storage_T *
+    address_of(Args... args) const {
         if (T_is_void) {
             return (storage_T *)(this->buf.host) + offset_of(0, args...) * type().bytes();
         } else {
@@ -2136,9 +2135,8 @@ public:
 
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    HALIDE_ALWAYS_INLINE
-        not_void_T &
-        operator()(int first, Args... rest) {
+    HALIDE_ALWAYS_INLINE not_void_T &
+    operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 1 + (int)(sizeof...(rest));
@@ -2210,17 +2208,17 @@ private:
             if (innermost_strides_are_one) {
                 Ptr end = ptr + t[0].extent;
                 while (ptr != end) {
-                    f(*ptr++, (*ptrs++)...);
+                    std::forward<Fn>(f)(*ptr++, (*ptrs++)...);
                 }
             } else {
                 for (std::ptrdiff_t i = t[0].extent; i != 0; i--) {
-                    f(*ptr, (*ptrs)...);
+                    std::forward<Fn>(f)(*ptr, (*ptrs)...);
                     advance_ptrs(t[0].stride, ptr, ptrs...);
                 }
             }
         } else {
             for (std::ptrdiff_t i = t[d].extent; i != 0; i--) {
-                for_each_value_helper(f, d - 1, innermost_strides_are_one, t, ptr, ptrs...);
+                for_each_value_helper(std::forward<Fn>(f), d - 1, innermost_strides_are_one, t, ptr, ptrs...);
                 advance_ptrs(t[d].stride, ptr, ptrs...);
             }
         }
@@ -2302,20 +2300,20 @@ private:
                 (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA(alloc_size);
             // Move the preparatory code into a non-templated helper to
             // save code size.
-            const halide_buffer_t *buffers[] = {&buf, (&other_buffers.buf)...};
+            const halide_buffer_t *buffers[] = {&buf, (&std::forward<Args>(other_buffers).buf)...};
             auto [new_dims, innermost_strides_are_one] = Buffer<>::for_each_value_prep(t, buffers);
             if (new_dims > 0) {
-                Buffer<>::for_each_value_helper(f, new_dims - 1,
+                Buffer<>::for_each_value_helper(std::forward<Fn>(f), new_dims - 1,
                                                 innermost_strides_are_one,
                                                 t,
-                                                data(), (other_buffers.data())...);
+                                                data(), (std::forward<Args>(other_buffers).data())...);
                 return;
             }
             // else fall thru
         }
 
         // zero-dimensional case
-        f(*data(), (*other_buffers.data())...);
+        std::forward<Fn>(f)(*data(), (*std::forward<Args>(other_buffers).data())...);
     }
     // @}
 
@@ -2337,15 +2335,13 @@ public:
     // @{
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
     HALIDE_ALWAYS_INLINE const Buffer<T, Dims, InClassDimStorage> &for_each_value(Fn &&f, Args &&...other_buffers) const {
-        for_each_value_impl(f, std::forward<Args>(other_buffers)...);
+        for_each_value_impl(std::forward<Fn>(f), std::forward<Args>(other_buffers)...);
         return *this;
     }
 
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
-    HALIDE_ALWAYS_INLINE
-        Buffer<T, Dims, InClassDimStorage> &
-        for_each_value(Fn &&f, Args &&...other_buffers) {
-        for_each_value_impl(f, std::forward<Args>(other_buffers)...);
+    HALIDE_ALWAYS_INLINE Buffer<T, Dims, InClassDimStorage> &for_each_value(Fn &&f, Args &&...other_buffers) {
+        for_each_value_impl(std::forward<Fn>(f), std::forward<Args>(other_buffers)...);
         return *this;
     }
     // @}
@@ -2363,7 +2359,7 @@ private:
              typename... Args,
              typename = decltype(std::declval<Fn>()(std::declval<Args>()...))>
     HALIDE_ALWAYS_INLINE static void for_each_element_variadic(int, int, const for_each_element_task_dim *, Fn &&f, Args... args) {
-        f(args...);
+        std::forward<Fn>(f)(args...);
     }
 
     /** If the above overload is impossible, we add an outer loop over
@@ -2416,7 +2412,7 @@ private:
              typename Fn,
              typename = typename std::enable_if<(d < 0)>::type>
     HALIDE_ALWAYS_INLINE static void for_each_element_array_helper(double, const for_each_element_task_dim *t, Fn &&f, int *pos) {
-        f(pos);
+        std::forward<Fn>(f)(pos);
     }
 
     /** A run-time-recursive version (instead of
@@ -2427,7 +2423,7 @@ private:
     template<typename Fn>
     static void for_each_element_array(int d, const for_each_element_task_dim *t, Fn &&f, int *pos) {
         if (d == -1) {
-            f(pos);
+            std::forward<Fn>(f)(pos);
         } else if (d == 0) {
             // Once the dimensionality gets small enough, dispatch to
             // a compile-time-recursive version for better codegen of
@@ -2540,15 +2536,13 @@ public:
     // @{
     template<typename Fn>
     HALIDE_ALWAYS_INLINE const Buffer<T, Dims, InClassDimStorage> &for_each_element(Fn &&f) const {
-        for_each_element_impl(f);
+        for_each_element_impl(std::forward<Fn>(f));
         return *this;
     }
 
     template<typename Fn>
-    HALIDE_ALWAYS_INLINE
-        Buffer<T, Dims, InClassDimStorage> &
-        for_each_element(Fn &&f) {
-        for_each_element_impl(f);
+    HALIDE_ALWAYS_INLINE Buffer<T, Dims, InClassDimStorage> &for_each_element(Fn &&f) {
+        for_each_element_impl(std::forward<Fn>(f));
         return *this;
     }
     // @}
