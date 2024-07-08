@@ -57,7 +57,7 @@ using std::vector;
 
 namespace {
 
-#if defined(_M_AMD64)
+#if defined(_M_IX86) || defined(_M_AMD64)
 
 void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
@@ -77,7 +77,7 @@ void cpuid(int info[4], int infoType, int extra) {
 
 #endif
 
-#if defined(__x86_64__) || defined(__i386__) || defined(_M_AMD64)
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_IX86) || defined(_M_AMD64)
 
 enum class VendorSignatures {
     Unknown,
