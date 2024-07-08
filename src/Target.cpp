@@ -254,7 +254,7 @@ Target calculate_host_target() {
 
 #ifdef _MSC_VER
 
-// Magic value from: https://github.com/dotnet/runtime/blob/7e977dcbe5efaeec2c75ed0c3e200c85b2e55522/src/native/minipal/cpufeatures.c#L19
+    // Magic value from: https://github.com/dotnet/runtime/blob/7e977dcbe5efaeec2c75ed0c3e200c85b2e55522/src/native/minipal/cpufeatures.c#L19
 #define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
 
     // This is the strategy used by Google's cpuinfo library for
