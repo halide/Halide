@@ -46,20 +46,31 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
         return std::unique_ptr<llvm::Module>();                                                                         \
     }
 
+#define DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, bits)              \
+    do {                                                        \
+        if (debug) {                                            \
+            return get_initmod_##mod##_##bits##_debug(context); \
+        } else {                                                \
+            return get_initmod_##mod##_##bits(context);         \
+        }                                                       \
+    } while(0)
+
 #define DECLARE_CPP_INITMOD_LOOKUP(mod)                                                                     \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
         if (bits_64) {                                                                                      \
-            if (debug) {                                                                                    \
-                return get_initmod_##mod##_64_debug(context);                                               \
-            } else {                                                                                        \
-                return get_initmod_##mod##_64(context);                                                     \
-            }                                                                                               \
+            DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 64);                                                       \
         } else {                                                                                            \
-            if (debug) {                                                                                    \
-                return get_initmod_##mod##_32_debug(context);                                               \
-            } else {                                                                                        \
-                return get_initmod_##mod##_32(context);                                                     \
-            }                                                                                               \
+            DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 32);                                                       \
+        }                                                                                                   \
+    }
+
+#define DECLARE_CPP_INITMOD_LOOKUP_64(mod)                                                                  \
+    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
+        if (bits_64) {                                                                                      \
+            DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 64);                                                       \
+        } else {                                                                                            \
+            internal_error << "No support for 32-bit initmod: " #mod ;                                      \
+            return nullptr;  /* appease warnings */                                                         \
         }                                                                                                   \
     }
 
@@ -69,6 +80,11 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     DECLARE_INITMOD(mod##_32)       \
     DECLARE_INITMOD(mod##_64)       \
     DECLARE_CPP_INITMOD_LOOKUP(mod)
+
+#define DECLARE_CPP_INITMOD_64(mod)   \
+    DECLARE_INITMOD(mod##_64_debug)   \
+    DECLARE_INITMOD(mod##_64)         \
+    DECLARE_CPP_INITMOD_LOOKUP_64(mod)
 
 #define DECLARE_LL_INITMOD(mod) \
     DECLARE_INITMOD(mod##_ll)
@@ -198,7 +214,7 @@ DECLARE_LL_INITMOD(aarch64)
 DECLARE_CPP_INITMOD(aarch64_cpu_features)
 DECLARE_CPP_INITMOD(linux_aarch64_cpu_features)
 DECLARE_CPP_INITMOD(osx_aarch64_cpu_features)
-DECLARE_CPP_INITMOD(windows_aarch64_cpu_features_arm)
+DECLARE_CPP_INITMOD_64(windows_aarch64_cpu_features_arm)
 #else
 DECLARE_NO_INITMOD(aarch64)
 DECLARE_NO_INITMOD(aarch64_cpu_features)

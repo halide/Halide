@@ -21,6 +21,9 @@
 #endif
 
 #ifdef _MSC_VER
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <intrin.h>
 #endif  // _MSC_VER
 
@@ -54,13 +57,14 @@ using std::vector;
 
 namespace {
 
-#ifdef _MSC_VER
-static void cpuid(int info[4], int infoType, int extra) {
+#if defined(_M_AMD64)
+
+void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
 }
-#else
 
-#if defined(__x86_64__) || defined(__i386__)
+#elif defined(__x86_64__) || defined(__i386__)
+
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
@@ -70,10 +74,10 @@ void cpuid(int info[4], int infoType, int extra) {
         : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
         : "0"(infoType), "2"(extra));
 }
-#endif
+
 #endif
 
-#if defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_AMD64)
 
 enum class VendorSignatures {
     Unknown,
@@ -210,7 +214,7 @@ Target calculate_host_target() {
 #if __riscv
     Target::Arch arch = Target::RISCV;
 #else
-#if defined(__arm__) || defined(__aarch64__)
+#if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC)
     Target::Arch arch = Target::ARM;
 
 #ifdef __APPLE__
@@ -246,6 +250,28 @@ Target calculate_host_target() {
     if (hwcaps2 & HWCAP2_SVE2) {
         initial_features.push_back(Target::SVE2);
     }
+#endif
+
+#ifdef _MSC_VER
+
+// Magic value from: https://github.com/dotnet/runtime/blob/7e977dcbe5efaeec2c75ed0c3e200c85b2e55522/src/native/minipal/cpufeatures.c#L19
+#define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
+
+    // This is the strategy used by Google's cpuinfo library for
+    // detecting fp16 arithmetic support on Windows.
+    if (!IsProcessorFeaturePresent(PF_FLOATING_POINT_EMULATED) &&
+        IsProcessorFeaturePresent(PF_ARM_FMAC_INSTRUCTIONS_AVAILABLE)) {
+        initial_features.push_back(Target::ARMFp16);
+    }
+
+    if (IsProcessorFeaturePresent(PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE)) {
+        initial_features.push_back(Target::ARMDotProd);
+    }
+
+    if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
+        initial_features.push_back(Target::SVE);
+    }
+
 #endif
 
 #else
