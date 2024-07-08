@@ -53,7 +53,7 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
         } else {                                                \
             return get_initmod_##mod##_##bits(context);         \
         }                                                       \
-    } while(0)
+    } while (0)
 
 #define DECLARE_CPP_INITMOD_LOOKUP(mod)                                                                     \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
@@ -69,8 +69,8 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
         if (bits_64) {                                                                                      \
             DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 64);                                                       \
         } else {                                                                                            \
-            internal_error << "No support for 32-bit initmod: " #mod ;                                      \
-            return nullptr;  /* appease warnings */                                                         \
+            internal_error << "No support for 32-bit initmod: " #mod;                                       \
+            return nullptr; /* appease warnings */                                                          \
         }                                                                                                   \
     }
 
@@ -81,9 +81,9 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     DECLARE_INITMOD(mod##_64)       \
     DECLARE_CPP_INITMOD_LOOKUP(mod)
 
-#define DECLARE_CPP_INITMOD_64(mod)   \
-    DECLARE_INITMOD(mod##_64_debug)   \
-    DECLARE_INITMOD(mod##_64)         \
+#define DECLARE_CPP_INITMOD_64(mod) \
+    DECLARE_INITMOD(mod##_64_debug) \
+    DECLARE_INITMOD(mod##_64)       \
     DECLARE_CPP_INITMOD_LOOKUP_64(mod)
 
 #define DECLARE_LL_INITMOD(mod) \
