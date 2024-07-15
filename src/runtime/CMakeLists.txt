@@ -230,18 +230,18 @@ foreach (i IN LISTS RUNTIME_CPP)
             if (LLVM_PACKAGE_VERSION VERSION_LESS 19.0)
                 if (j EQUAL 32)
                     # generic 32-bit code
-                    set(TARGET "wasm32-unknown-unknown-unknown")
+                    set(TARGET "le32-unknown-nacl-unknown")
                 else ()
                     # generic 64-bit code
-                    set(TARGET "wasm64-unknown-unknown-unknown")
+                    set(TARGET "le64-unknown-unknown-unknown")
                 endif ()
             else ()
                 if (j EQUAL 32)
                     # generic 32-bit code
-                    set(TARGET "le32-unknown-unknown-unknown")
+                    set(TARGET "wasm32-unknown-unknown-unknown")
                 else ()
                     # generic 64-bit code
-                    set(TARGET "le64-unknown-unknown-unknown")
+                    set(TARGET "wasm64-unknown-unknown-unknown")
                 endif ()
             endif ()
         endif ()
