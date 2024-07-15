@@ -688,6 +688,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"arm_fp16", Target::ARMFp16},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     {"rvv", Target::RVV},
+    {"armv8a", Target::ARMv8a},
     {"armv81a", Target::ARMv81a},
     {"armv82a", Target::ARMv82a},
     {"armv83a", Target::ARMv83a},
@@ -1267,6 +1268,9 @@ int Target::get_vulkan_capability_lower_bound() const {
 }
 
 int Target::get_arm_v8_lower_bound() const {
+    if (has_feature(Target::ARMv8a)) {
+        return 80;
+    }
     if (has_feature(Target::ARMv81a)) {
         return 81;
     }
@@ -1500,7 +1504,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
-    const std::array<Feature, 32> union_features = {{
+    const std::array<Feature, 33> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
@@ -1531,6 +1535,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         VulkanV12,
         VulkanV13,
 
+        ARMv8a,
         ARMv81a,
         ARMv82a,
         ARMv83a,
@@ -1690,6 +1695,9 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
     // Same trick as above for CUDA
     int arm_v8_capability = (int)std::min((unsigned)arm_v8_a, (unsigned)arm_v8_b);
+    if (arm_v8_capability < 80) {
+        output.features.reset(ARMv8a);
+    }
     if (arm_v8_capability < 81) {
         output.features.reset(ARMv81a);
     }

@@ -179,6 +179,7 @@ void define_enums(py::module &m) {
         .value("ARMFp16", Target::Feature::ARMFp16)
         .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)
         .value("RVV", Target::Feature::RVV)
+        .value("ARMv8a", Target::Feature::ARMv8a)
         .value("ARMv81a", Target::Feature::ARMv81a)
         .value("ARMv82a", Target::Feature::ARMv82a)
         .value("ARMv83a", Target::Feature::ARMv83a)

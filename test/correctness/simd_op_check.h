@@ -120,6 +120,7 @@ public:
                  Target::ARMDotProd,
                  Target::ARMFp16,
                  Target::ARMv7s,
+                 Target::ARMv8a,
                  Target::ARMv81a,
                  Target::ARMv82a,
                  Target::ARMv83a,

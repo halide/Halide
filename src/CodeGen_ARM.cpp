@@ -45,7 +45,7 @@ namespace {
 //
 // v8r has no relation to anything.
 Target complete_arm_target(Target t) {
-    constexpr int num_arm_v8_features = 9;
+    constexpr int num_arm_v8_features = 10;
     static const Target::Feature arm_v8_features[num_arm_v8_features] = {
         Target::ARMv89a,
         Target::ARMv88a,
@@ -56,6 +56,7 @@ Target complete_arm_target(Target t) {
         Target::ARMv83a,
         Target::ARMv82a,
         Target::ARMv81a,
+        Target::ARMv8a,
     };
 
     for (int i = 0; i < num_arm_v8_features - 1; i++) {
@@ -2499,6 +2500,9 @@ string CodeGen_ARM::mattrs() const {
     std::vector<std::string_view> attrs;
     if (target.has_feature(Target::ARMFp16)) {
         attrs.emplace_back("+fullfp16");
+    }
+    if (target.has_feature(Target::ARMv8a)) {
+        attrs.emplace_back("+v8a");
     }
     if (target.has_feature(Target::ARMv81a)) {
         attrs.emplace_back("+v8.1a");

@@ -154,6 +154,7 @@ struct Target {
         ARMFp16 = halide_target_feature_arm_fp16,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         RVV = halide_target_feature_rvv,
+        ARMv8a = halide_target_feature_armv8a,
         ARMv81a = halide_target_feature_armv81a,
         ARMv82a = halide_target_feature_armv82a,
         ARMv83a = halide_target_feature_armv83a,
