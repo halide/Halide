@@ -343,6 +343,10 @@ struct Target {
      * features are set. */
     int get_vulkan_capability_lower_bound() const;
 
+    /** Get the minimum ARM v8.x capability found as an integer. Returns
+     * -1 if no ARM v8.x features are set. */
+    int get_arm_v8_lower_bound() const;
+
     /** Was libHalide compiled with support for this target? */
     bool supported() const;
 

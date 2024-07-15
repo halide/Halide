@@ -1266,6 +1266,37 @@ int Target::get_vulkan_capability_lower_bound() const {
     return 10;
 }
 
+int Target::get_arm_v8_lower_bound() const {
+    if (has_feature(Target::ARMv81a)) {
+        return 81;
+    }
+    if (has_feature(Target::ARMv82a)) {
+        return 82;
+    }
+    if (has_feature(Target::ARMv83a)) {
+        return 83;
+    }
+    if (has_feature(Target::ARMv84a)) {
+        return 84;
+    }
+    if (has_feature(Target::ARMv85a)) {
+        return 85;
+    }
+    if (has_feature(Target::ARMv86a)) {
+        return 86;
+    }
+    if (has_feature(Target::ARMv87a)) {
+        return 87;
+    }
+    if (has_feature(Target::ARMv88a)) {
+        return 88;
+    }
+    if (has_feature(Target::ARMv89a)) {
+        return 89;
+    }
+    return -1;
+}
+
 bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
@@ -1469,7 +1500,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
-    const std::array<Feature, 23> union_features = {{
+    const std::array<Feature, 32> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
@@ -1490,19 +1521,16 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         CUDACapability75,
         CUDACapability80,
         CUDACapability86,
+
         HVX_v62,
         HVX_v65,
         HVX_v66,
         HVX_v68,
+
         VulkanV10,
         VulkanV12,
         VulkanV13,
-    }};
-    // clang-format on
 
-    // clang-format off
-    const std::array<Feature, 23> intersection_features = {{
-        ARMv7s,
         ARMv81a,
         ARMv82a,
         ARMv83a,
@@ -1512,6 +1540,12 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         ARMv87a,
         ARMv88a,
         ARMv89a,
+    }};
+    // clang-format on
+
+    // clang-format off
+    const std::array<Feature, 23> intersection_features = {{
+        ARMv7s,
         AVX,
         AVX2,
         AVX512,
@@ -1648,6 +1682,40 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
     if (hvx_version < 68) {
         output.features.reset(HVX_v68);
+    }
+
+    // Pick tight lower bound for ARM capability. Use fall-through to clear redundant features
+    int arm_v8_a = get_arm_v8_lower_bound();
+    int arm_v8_b = other.get_arm_v8_lower_bound();
+
+    // Same trick as above for CUDA
+    int arm_v8_capability = (int)std::min((unsigned)arm_v8_a, (unsigned)arm_v8_b);
+    if (arm_v8_capability < 81) {
+        output.features.reset(ARMv81a);
+    }
+    if (arm_v8_capability < 82) {
+        output.features.reset(ARMv82a);
+    }
+    if (arm_v8_capability < 83) {
+        output.features.reset(ARMv83a);
+    }
+    if (arm_v8_capability < 84) {
+        output.features.reset(ARMv84a);
+    }
+    if (arm_v8_capability < 85) {
+        output.features.reset(ARMv85a);
+    }
+    if (arm_v8_capability < 86) {
+        output.features.reset(ARMv86a);
+    }
+    if (arm_v8_capability < 87) {
+        output.features.reset(ARMv87a);
+    }
+    if (arm_v8_capability < 88) {
+        output.features.reset(ARMv88a);
+    }
+    if (arm_v8_capability < 89) {
+        output.features.reset(ARMv89a);
     }
 
     result = output;
