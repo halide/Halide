@@ -21,8 +21,34 @@
 #endif
 
 #ifdef _MSC_VER
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <intrin.h>
+#include <windows.h>
 #endif  // _MSC_VER
+
+#ifdef __APPLE__
+#include <mach/machine.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#endif
+
+#if defined(__linux__) && (defined(__arm__) || defined(__aarch64__))
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#ifndef HWCAP_ASIMDHP
+#define HWCAP_ASIMDHP 0
+#endif
+#ifndef HWCAP_ASIMDDP
+#define HWCAP_ASIMDDP 0
+#endif
+#ifndef HWCAP_SVE
+#define HWCAP_SVE 0
+#endif
+#ifndef HWCAP2_SVE2
+#define HWCAP2_SVE2 0
+#endif
+#endif
 
 namespace Halide {
 
@@ -31,13 +57,14 @@ using std::vector;
 
 namespace {
 
-#ifdef _MSC_VER
-static void cpuid(int info[4], int infoType, int extra) {
+#if defined(_M_IX86) || defined(_M_AMD64)
+
+void cpuid(int info[4], int infoType, int extra) {
     __cpuidex(info, infoType, extra);
 }
-#else
 
-#if defined(__x86_64__) || defined(__i386__)
+#elif defined(__x86_64__) || defined(__i386__)
+
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
@@ -47,10 +74,10 @@ void cpuid(int info[4], int infoType, int extra) {
         : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
         : "0"(infoType), "2"(extra));
 }
-#endif
+
 #endif
 
-#if defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_IX86) || defined(_M_AMD64)
 
 enum class VendorSignatures {
     Unknown,
@@ -143,6 +170,29 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
 
 #endif  // defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
 
+#ifdef __APPLE__
+
+template<typename T>
+std::optional<T> getsysctl(const char *name) {
+    T value;
+    size_t size = sizeof(value);
+    if (sysctlbyname(name, &value, &size, nullptr, 0)) {
+        return std::nullopt;
+    }
+    return std::make_optional(value);
+}
+
+bool sysctl_is_set(const char *name) {
+    return getsysctl<int>(name).value_or(0);
+}
+
+bool is_armv7s() {
+    return getsysctl<cpu_type_t>("hw.cputype") == CPU_TYPE_ARM &&
+           getsysctl<cpu_subtype_t>("hw.cpusubtype") == CPU_SUBTYPE_ARM_V7S;
+}
+
+#endif  // __APPLE__
+
 Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
 #ifdef __linux__
@@ -164,8 +214,66 @@ Target calculate_host_target() {
 #if __riscv
     Target::Arch arch = Target::RISCV;
 #else
-#if defined(__arm__) || defined(__aarch64__)
+#if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC)
     Target::Arch arch = Target::ARM;
+
+#ifdef __APPLE__
+    if (is_armv7s()) {
+        initial_features.push_back(Target::ARMv7s);
+    }
+
+    if (sysctl_is_set("hw.optional.arm.FEAT_DotProd")) {
+        initial_features.push_back(Target::ARMDotProd);
+    }
+
+    if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
+        initial_features.push_back(Target::ARMFp16);
+    }
+#endif
+
+#ifdef __linux__
+    unsigned long hwcaps = getauxval(AT_HWCAP);
+    unsigned long hwcaps2 = getauxval(AT_HWCAP2);
+
+    if (hwcaps & HWCAP_ASIMDDP) {
+        initial_features.push_back(Target::ARMDotProd);
+    }
+
+    if (hwcaps & HWCAP_ASIMDHP) {
+        initial_features.push_back(Target::ARMFp16);
+    }
+
+    if (hwcaps & HWCAP_SVE) {
+        initial_features.push_back(Target::SVE);
+    }
+
+    if (hwcaps2 & HWCAP2_SVE2) {
+        initial_features.push_back(Target::SVE2);
+    }
+#endif
+
+#ifdef _MSC_VER
+
+    // Magic value from: https://github.com/dotnet/runtime/blob/7e977dcbe5efaeec2c75ed0c3e200c85b2e55522/src/native/minipal/cpufeatures.c#L19
+#define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
+
+    // This is the strategy used by Google's cpuinfo library for
+    // detecting fp16 arithmetic support on Windows.
+    if (!IsProcessorFeaturePresent(PF_FLOATING_POINT_EMULATED) &&
+        IsProcessorFeaturePresent(PF_ARM_FMAC_INSTRUCTIONS_AVAILABLE)) {
+        initial_features.push_back(Target::ARMFp16);
+    }
+
+    if (IsProcessorFeaturePresent(PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE)) {
+        initial_features.push_back(Target::ARMDotProd);
+    }
+
+    if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
+        initial_features.push_back(Target::SVE);
+    }
+
+#endif
+
 #else
 #if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
     Target::Arch arch = Target::POWERPC;
