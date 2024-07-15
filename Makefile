@@ -1068,7 +1068,8 @@ RUNTIME_TRIPLE_WIN_X86_32 = "i386-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_X86_64 = "x86_64-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_ARM_32 = "arm-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_ARM_64 = "aarch64-unknown-windows-unknown"
-RUNTIME_TRIPLE_WIN_GENERIC_64 = "le64-unknown-windows-unknown"
+# TODO: was le64 here, not sure if this is correct or not
+RUNTIME_TRIPLE_WIN_GENERIC_64 = "x86_64-unknown-windows-unknown"
 
 # `-fno-threadsafe-statics` is very important here (note that it allows us to use a 'modern' C++
 # standard but still skip threadsafe guards for static initialization in our runtime code)
