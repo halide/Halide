@@ -238,10 +238,10 @@ foreach (i IN LISTS RUNTIME_CPP)
             else ()
                 if (j EQUAL 32)
                     # generic 32-bit code
-                    set(TARGET "wasm32-unknown-unknown-unknown")
+                    set(TARGET "i386-unknown-unknown-unknown")
                 else ()
                     # generic 64-bit code
-                    set(TARGET "wasm64-unknown-unknown-unknown")
+                    set(TARGET "x86_64-unknown-unknown-unknown")
                 endif ()
             endif ()
         endif ()

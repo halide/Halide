@@ -1053,9 +1053,9 @@ $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 .SECONDARY:
 
 # Compile generic 32- or 64-bit code
-# (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
-RUNTIME_TRIPLE_32 = "wasm32-unknown-unknown-unknown"
-RUNTIME_TRIPLE_64 = "wasm64-unknown-unknown-unknown"
+# (The 'x86_64' is a red herring. This is just a generic 32-bit little-endian target.)
+RUNTIME_TRIPLE_32 = "i386-unknown-unknown-unknown"
+RUNTIME_TRIPLE_64 = "x86_64-unknown-unknown-unknown"
 
 # Windows requires special handling.  The generic windows_* modules must have -fpic elided
 # and (for 64 bit) must set wchar to be 2 bytes.  The windows_*_x86 and windows_*_arm
