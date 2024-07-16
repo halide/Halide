@@ -180,11 +180,10 @@ WEAK void sampling_profiler_thread(void *) {
 
 namespace {
 
-template<typename T>
-void sync_compare_max_and_swap(T *ptr, T val) {
+void sync_compare_max_and_swap(uintptr_t *ptr, uintptr_t val) {
     using namespace Halide::Runtime::Internal::Synchronization;
 
-    T old_val = *ptr;
+    uintptr_t old_val = *ptr;
     while (val > old_val) {
         if (atomic_cas_strong_sequentially_consistent(ptr, &old_val, &val)) {
             return;
@@ -350,7 +349,11 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
     // Update per-func memory stats
     for (int i = 0; i < instance->pipeline_stats->num_funcs; ++i) {
         if (f_values[i] != 0) {
-            sync_compare_max_and_swap(&(instance->funcs[i]).stack_peak, f_values[i]);
+            // On 32-bit platforms we don't want to use 64-bit
+            // atomics. Fortunately on these platforms memory usage fits into
+            // 32-bit integers.
+            sync_compare_max_and_swap((uintptr_t *)(&(instance->funcs[i]).stack_peak),
+                                      (uintptr_t)(f_values[i]));
         }
     }
 }
@@ -382,15 +385,15 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
 
     // Update per-instance memory stats
     atomic_add_fetch_sequentially_consistent(&instance->num_allocs, 1);
-    atomic_add_fetch_sequentially_consistent(&instance->memory_total, incr);
-    uint64_t p_mem_current = atomic_add_fetch_sequentially_consistent(&instance->memory_current, incr);
-    sync_compare_max_and_swap(&instance->memory_peak, p_mem_current);
+    atomic_add_fetch_sequentially_consistent((uintptr_t *)(&instance->memory_total), (uintptr_t)incr);
+    uint64_t p_mem_current = atomic_add_fetch_sequentially_consistent((uintptr_t *)(&instance->memory_current), (uintptr_t)incr);
+    sync_compare_max_and_swap((uintptr_t *)(&instance->memory_peak), (uintptr_t)p_mem_current);
 
     // Update per-func memory stats
     atomic_add_fetch_sequentially_consistent(&func->num_allocs, 1);
-    atomic_add_fetch_sequentially_consistent(&func->memory_total, incr);
-    uint64_t f_mem_current = atomic_add_fetch_sequentially_consistent(&func->memory_current, incr);
-    sync_compare_max_and_swap(&func->memory_peak, f_mem_current);
+    atomic_add_fetch_sequentially_consistent((uintptr_t *)(&func->memory_total), (uintptr_t)incr);
+    uint64_t f_mem_current = atomic_add_fetch_sequentially_consistent((uintptr_t *)(&func->memory_current), (uintptr_t)incr);
+    sync_compare_max_and_swap((uintptr_t *)(&func->memory_peak), (uintptr_t)f_mem_current);
 }
 
 WEAK void halide_profiler_memory_free(void *user_context,
@@ -418,10 +421,10 @@ WEAK void halide_profiler_memory_free(void *user_context,
     // unless user specifically calls halide_profiler_reset().
 
     // Update per-pipeline memory stats
-    atomic_sub_fetch_sequentially_consistent(&instance->memory_current, decr);
+    atomic_sub_fetch_sequentially_consistent((uintptr_t *)(&instance->memory_current), (uintptr_t)decr);
 
     // Update per-func memory stats
-    atomic_sub_fetch_sequentially_consistent(&func->memory_current, decr);
+    atomic_sub_fetch_sequentially_consistent((uintptr_t *)(&func->memory_current), (uintptr_t)decr);
 }
 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
