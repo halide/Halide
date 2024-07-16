@@ -562,14 +562,62 @@ target_compile_definitions(Halide PUBLIC
                            HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
                            HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
 
-if (TARGET Halide_wabt)
-    target_link_libraries(Halide PRIVATE Halide_wabt)
-    target_compile_definitions(Halide PRIVATE WITH_WABT)
-endif ()
+##
+# WasmExecutor backend selection
+##
 
-if (TARGET V8::V8)
-    target_link_libraries(Halide PRIVATE V8::V8)
-    target_compile_definitions(Halide PRIVATE WITH_V8)
+if (TARGET_WEBASSEMBLY)
+    include(FetchContent)
+
+    set(Halide_WASM_BACKEND "wabt"
+        CACHE STRING "Which backend to use for Halide's WASM testing.")
+    set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;OFF")
+
+    if (Halide_WASM_BACKEND STREQUAL "wabt")
+        set(WABT_VER 1.0.33)
+
+        message(STATUS "Fetching WABT ${WABT_VER}...")
+        FetchContent_Declare(wabt
+                             GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
+                             GIT_TAG ${WABT_VER}
+                             GIT_SHALLOW TRUE)
+
+        # configuration for wabt
+        set(WITH_EXCEPTIONS ${Halide_ENABLE_EXCEPTIONS})
+        set(BUILD_TESTS OFF)
+        set(BUILD_TOOLS OFF)
+        set(BUILD_LIBWASM OFF)
+        set(USE_INTERNAL_SHA256 ON)
+        FetchContent_MakeAvailable(wabt)
+
+        set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+        # Disable this very-noisy warning in GCC
+        target_compile_options(wabt
+                               PRIVATE
+                               $<$<CXX_COMPILER_ID:GNU>:-Wno-alloca-larger-than>)
+
+        # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
+        # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,
+        # but perhaps we could do better (esp. if wabt was smarter about what it exposed?)
+        add_library(Halide_wabt INTERFACE)
+        target_sources(Halide_wabt INTERFACE $<BUILD_LOCAL_INTERFACE:$<TARGET_OBJECTS:wabt>>)
+        target_include_directories(Halide_wabt
+                                   SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
+                                   INTERFACE
+                                   $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>/include
+                                   $<BUILD_INTERFACE:${wabt_BINARY_DIR}>/include)
+        set_target_properties(Halide_wabt PROPERTIES EXPORT_NAME wabt)
+
+        target_link_libraries(Halide PRIVATE Halide_wabt)
+        target_compile_definitions(Halide PRIVATE WITH_WABT)
+    elseif (Halide_WASM_BACKEND STREQUAL "V8")
+        find_package(V8 REQUIRED)
+        target_link_libraries(Halide PRIVATE V8::V8)
+        target_compile_definitions(Halide PRIVATE WITH_V8)
+    elseif (Halide_WASM_BACKEND)
+        message(FATAL_ERROR "Unknown Halide_WASM_BACKEND `${Halide_WASM_BACKEND}`")
+    endif ()
 endif ()
 
 ##

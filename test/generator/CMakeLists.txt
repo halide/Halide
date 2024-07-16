@@ -12,6 +12,100 @@ else()
     set(_USING_WASM 0)
 endif()
 
+function(add_wasm_executable TARGET)
+    set(options)
+    set(oneValueArgs)
+    set(multiValueArgs SRCS DEPS INCLUDES OPTIONS ENABLE_IF)
+    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
+        return()
+    endif ()
+
+    # Conceptually, we want something like this:
+    # add_executable(${TARGET} ${args_SRCS})
+    # if (args_INCLUDES)
+    #     target_include_directories("${TARGET}" PRIVATE ${args_INCLUDES})
+    # endif()
+    # if (args_DEPS)
+    #     target_link_libraries(${TARGET} PRIVATE ${args_DEPS})
+    # endif ()
+
+    find_program(EMCC emcc REQUIRED HINTS "$ENV{EMSDK}/upstream/emscripten")
+
+    # TODO: this is currently hardcoded to settings that are sensible for most of Halide's
+    # internal purposes. Consider adding ways to customize this as appropriate.
+    set(EMCC_FLAGS
+        -O3
+        -std=c++17
+        -Wall
+        -Wcast-qual
+        -Werror
+        -Wignored-qualifiers
+        -Wno-comment
+        -Wno-psabi
+        -Wno-unknown-warning-option
+        -Wno-unused-function
+        -Wsign-compare
+        -Wsuggest-override
+        -s ASSERTIONS=1
+        -s ALLOW_MEMORY_GROWTH=1
+        -s ENVIRONMENT=node
+        -s STACK_SIZE=98304
+        ${args_OPTIONS}
+    )
+
+    if ("${Halide_TARGET}" MATCHES "webgpu")
+        set(EMCC_FLAGS
+            ${EMCC_FLAGS}
+            -s USE_WEBGPU=1
+            -s ASYNCIFY
+        )
+    endif ()
+
+    set(SRCS)
+    foreach (S IN LISTS args_SRCS)
+        list(APPEND SRCS "${CMAKE_CURRENT_SOURCE_DIR}/${S}")
+    endforeach ()
+
+    set(INCLUDES)
+    foreach (I IN LISTS args_INCLUDES)
+        list(APPEND INCLUDES "-I${I}")
+    endforeach ()
+
+    set(DEPS)
+    foreach (D IN LISTS args_DEPS)
+        list(APPEND DEPS $<TARGET_FILE:${D}>)
+    endforeach ()
+
+    add_custom_command(OUTPUT "${TARGET}.wasm" "${TARGET}.js"
+                       COMMAND ${EMCC} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js"
+                       DEPENDS ${SRCS} ${DEPS}
+                       VERBATIM)
+
+    add_custom_target("${TARGET}" ALL
+                      DEPENDS "${TARGET}.wasm" "${TARGET}.js")
+
+endfunction()
+
+function(add_wasm_halide_test TARGET)
+    set(options)
+    set(oneValueArgs)
+    set(multiValueArgs GROUPS ENABLE_IF)
+    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
+        return()
+    endif ()
+
+    find_package(NodeJS 16.13 REQUIRED)
+    add_halide_test(
+        "${TARGET}"
+        GROUPS ${args_GROUPS}
+        COMMAND "${NodeJS_EXECUTABLE}" "${Halide_SOURCE_DIR}/tools/launch_wasm_test.js" "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.js" "${Halide_TARGET}"
+    )
+endfunction()
+
 # Emit two halide_library targets, one with the default backend with the given name,
 # and (optionally) one with the C++ backend with the name NAME_cpp. (The CPP one defaults to being
 # emitted, but can be skipped if OMIT_C_BACKEND is specified.)
