@@ -1094,8 +1094,7 @@ RUNTIME_CXX_FLAGS = \
     -Wno-unknown-warning-option \
     -Wno-unused-function \
     -Wvla \
-    -Wsign-compare \
-    -Wno-sync-alignment
+    -Wsign-compare
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
