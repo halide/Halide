@@ -236,11 +236,10 @@ foreach (i IN LISTS RUNTIME_CPP)
                     set(TARGET "le64-unknown-unknown-unknown")
                 endif ()
             else ()
+                # don't be fooled: arm/aarch64 are just generic 32/64-bit targets for our purposes here
                 if (j EQUAL 32)
-                    # generic 32-bit code
                     set(TARGET "arm-unknown-unknown-gnueabihf")
                 else ()
-                    # generic 64-bit code
                     set(TARGET "aarch64-unknown-unknown-unknown")
                 endif ()
             endif ()

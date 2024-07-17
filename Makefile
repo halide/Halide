@@ -1053,7 +1053,7 @@ $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 .SECONDARY:
 
 # Compile generic 32- or 64-bit code
-# (The 'arm' is a red herring. This is just a generic 32-bit little-endian target.)
+# Don't be fooled: arm/aarch64 are just generic 32/64-bit targets for our purposes here
 RUNTIME_TRIPLE_32 = "arm-unknown-unknown-gnueabihf"
 RUNTIME_TRIPLE_64 = "aarch64-unknown-unknown-unknown"
 
