@@ -35,43 +35,36 @@ ALWAYS_INLINE uintptr_t atomic_and_fetch_release(uintptr_t *addr, uintptr_t val)
 
 template<typename T>
 ALWAYS_INLINE T atomic_fetch_add_acquire_release(T *addr, T val) {
-    static_assert(sizeof(T) == 4);
     return __sync_fetch_and_add(addr, val);
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
 ALWAYS_INLINE T atomic_fetch_add_sequentially_consistent(T *addr, TV val) {
-    static_assert(sizeof(T) == 4);
     return __sync_fetch_and_add(addr, val);
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
 ALWAYS_INLINE T atomic_fetch_sub_sequentially_consistent(T *addr, TV val) {
-    static_assert(sizeof(T) == 4);
     return __sync_fetch_and_sub(addr, val);
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
 ALWAYS_INLINE T atomic_fetch_or_sequentially_consistent(T *addr, TV val) {
-    static_assert(sizeof(T) == 4);
     return __sync_fetch_and_or(addr, val);
 }
 
 template<typename T>
 ALWAYS_INLINE T atomic_add_fetch_sequentially_consistent(T *addr, T val) {
-    static_assert(sizeof(T) == 4);
     return __sync_add_and_fetch(addr, val);
 }
 
 template<typename T>
 ALWAYS_INLINE T atomic_sub_fetch_sequentially_consistent(T *addr, T val) {
-    static_assert(sizeof(T) == 4);
     return __sync_sub_and_fetch(addr, val);
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
 ALWAYS_INLINE bool cas_strong_sequentially_consistent_helper(T *addr, TV *expected, TV *desired) {
-    static_assert(sizeof(T) == 4);
     TV oldval = *expected;
     TV gotval = __sync_val_compare_and_swap(addr, oldval, *desired);
     *expected = gotval;
@@ -106,13 +99,11 @@ ALWAYS_INLINE bool atomic_cas_weak_acquire_relaxed(uintptr_t *addr, uintptr_t *e
 
 template<typename T>
 ALWAYS_INLINE T atomic_fetch_and_release(T *addr, T val) {
-    static_assert(sizeof(T) == 4);
     return __sync_fetch_and_and(addr, val);
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
 ALWAYS_INLINE T atomic_fetch_and_sequentially_consistent(T *addr, TV val) {
-    static_assert(sizeof(T) == 4);
     return __sync_fetch_and_and(addr, val);
 }
 
@@ -130,7 +121,6 @@ ALWAYS_INLINE void atomic_load_acquire(T *addr, T *val) {
 template<typename T>
 ALWAYS_INLINE T atomic_exchange_acquire(T *addr, T val) {
     // Despite the name, this is really just an exchange operation with acquire ordering.
-    static_assert(sizeof(T) == 4);
     return __sync_lock_test_and_set(addr, val);
 }
 
@@ -140,20 +130,17 @@ ALWAYS_INLINE uintptr_t atomic_or_fetch_relaxed(uintptr_t *addr, uintptr_t val) 
 
 template<typename T>
 ALWAYS_INLINE void atomic_store_relaxed(T *addr, T *val) {
-    static_assert(sizeof(T) == 4);
     *addr = *val;
 }
 
 template<typename T>
 ALWAYS_INLINE void atomic_store_release(T *addr, T *val) {
-    static_assert(sizeof(T) == 4);
     *addr = *val;
     __sync_synchronize();
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
 ALWAYS_INLINE void atomic_store_sequentially_consistent(T *addr, TV *val) {
-    static_assert(sizeof(T) == 4);
     *addr = *val;
     __sync_synchronize();
 }
