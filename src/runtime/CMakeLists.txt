@@ -217,31 +217,17 @@ foreach (i IN LISTS RUNTIME_CPP)
                     # unfortunately, clang doesn't automatically set this flag even though the
                     # ABI is msvc on windows
                     set(fshort-wchar -fshort-wchar)
-                    if (LLVM_PACKAGE_VERSION VERSION_LESS 19.0)
-                        set(TARGET "le64-unknown-windows-unknown")
-                    else ()
-                        # TODO: was le64 here, not sure if this is correct or not
-                        set(TARGET "aarch64-unknown-windows-unknown")
-                    endif ()
+                    # TODO: was le64 here, not sure if this is correct or not
+                    set(TARGET "aarch64-unknown-windows-unknown")
                 endif ()
             endif()
         # Everything else
         else()
-            if (LLVM_PACKAGE_VERSION VERSION_LESS 19.0)
-                if (j EQUAL 32)
-                    # generic 32-bit code
-                    set(TARGET "le32-unknown-nacl-unknown")
-                else ()
-                    # generic 64-bit code
-                    set(TARGET "le64-unknown-unknown-unknown")
-                endif ()
+            # don't be fooled: arm/aarch64 are just generic 32/64-bit targets for our purposes here
+            if (j EQUAL 32)
+                set(TARGET "arm-unknown-unknown-gnueabihf")
             else ()
-                # don't be fooled: arm/aarch64 are just generic 32/64-bit targets for our purposes here
-                if (j EQUAL 32)
-                    set(TARGET "arm-unknown-unknown-gnueabihf")
-                else ()
-                    set(TARGET "aarch64-unknown-unknown-unknown")
-                endif ()
+                set(TARGET "aarch64-unknown-unknown-unknown")
             endif ()
         endif ()
 
