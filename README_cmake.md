@@ -67,12 +67,13 @@ we strongly suggest reading through the [CMake documentation][cmake-docs] first.
 
 ## Installing CMake
 
-Halide requires at least version 3.22, which was released in November 2021.
-Fortunately, getting a recent version of CMake couldn't be easier, and there are
-multiple good options on any system to do so. Generally, one should always have
-the most recent version of CMake installed system-wide. CMake is committed to
-backwards compatibility and even the most recent release can build projects over
-a decade old.
+Halide requires at least version 3.28, which is included in Ubuntu 24.04 LTS,
+available on macOS through Homebrew, and via `winget` on Windows 11. Even if
+you're running an older system, getting a recent version of CMake couldn't be
+easier, and there are multiple good options to do so. Generally, one should
+always have the most recent version of CMake installed system-wide. CMake is
+committed to backwards compatibility and even the most recent release can
+build projects over a decade old.
 
 ### Cross-platform
 
@@ -81,7 +82,8 @@ This might be the most convenient method since Python 3 is an optional
 dependency for Halide, anyway.
 
 ```
-$ pip3 install --upgrade cmake
+$ python3 -m pip install -U pip setuptools[core] wheel
+$ python3 -m pip install -U cmake
 ```
 
 See the [PyPI website][pypi-cmake] for more details.
@@ -90,13 +92,15 @@ See the [PyPI website][pypi-cmake] for more details.
 
 On Windows, there are three primary methods for installing an up-to-date CMake:
 
-1. If you have Visual Studio 2019 installed, you can get CMake 3.17 through the
-   Visual Studio installer. This is the recommended way of getting CMake if you
-   are able to use Visual Studio 2019. See Microsoft's
-   [documentation][vs2019-cmake-docs] for more details.
-2. If you use [Chocolatey][chocolatey], its [CMake package][choco-cmake] is kept
+1. If you have Visual Studio 2022 installed, you can get CMake 3.28
+   through the Visual Studio installer. This is the recommended way of 
+   getting CMake if you  are able to use Visual Studio 2022. See Microsoft's
+   [documentation][vs-cmake-docs] for more details.
+2. Windows' [built-in package manager] can install the latest CMake version
+   easily via `winget install Kitware.CMake`.
+3. If you use [Chocolatey][chocolatey], its [CMake package][choco-cmake] is kept
    up to date. It should be as simple as `choco install cmake`.
-3. Otherwise, you should install CMake from [Kitware's website][cmake-download].
+4. Otherwise, you should install CMake from [Kitware's website][cmake-download].
 
 ### macOS
 
@@ -116,15 +120,14 @@ is also a viable option.
 
 There are a few good ways to install a modern CMake on Ubuntu:
 
-1. If you're on Ubuntu Linux 22.04 (Jammy Jellyfish), then simply running
-   `sudo apt install cmake` will get you CMake 3.22.
+1. If you're on Ubuntu Linux 24.04 (Jammy Jellyfish), then simply running
+   `sudo apt install cmake` will get you CMake 3.28.
 2. If you are on an older Ubuntu release or would like to use the newest CMake,
    try installing via the snap store: `snap install cmake`. Be sure you do not
    already have `cmake` installed via APT. The snap package automatically stays
    up to date.
 3. For older versions of Debian, Ubuntu, Mint, and derivatives, Kitware provides
-   an [APT repository][cmake-apt] with up-to-date releases. Note that this is
-   still useful for Ubuntu 20.04 because it will remain up to date.
+   an [APT repository][cmake-apt] with up-to-date releases.
 4. If all else fails, you might need to build CMake from source (eg. on old
    Ubuntu versions running on ARM). In that case, follow the directions posted
    on [Kitware's website][cmake-from-source].
@@ -139,7 +142,7 @@ use the APT repository. On WSL 2, all methods are available.
 
 We generally recommend using a package manager to fetch Halide's dependencies.
 Except where noted, we recommend using [vcpkg][vcpkg] on Windows,
-[Homebrew][homebrew] on macOS, and APT on Ubuntu 20.04 LTS.
+[Homebrew][homebrew] on macOS, and APT on Ubuntu 24.04 LTS.
 
 Only LLVM and Clang are _absolutely_ required to build Halide. Halide always
 supports three LLVM versions: the current major version, the previous major
@@ -149,9 +152,10 @@ yourself.
 
 However, to run all of the tests and apps, an extended set is needed. This
 includes [lld][lld], [Python 3][python], [libpng][libpng], [libjpeg][libjpeg],
-[Doxygen][doxygen], [OpenBLAS][openblas], [ATLAS][atlas], and [Eigen3][eigen].
-While not required to build any part of Halide, we find that [Ninja][ninja] is
-the best backend build tool across all platforms.
+[Doxygen][doxygen], [OpenBLAS][openblas], [ATLAS][atlas], [Eigen3][eigen],
+[FlatBuffers][flatbuffers], [pybind11][pybind11], and [wabt][wabt]. While not
+required to build any part of Halide, we find that [Ninja][ninja] is the best
+backend build tool across all platforms.
 
 Note that CMake has many special variables for overriding the locations of
 packages and executables. A partial list can be found in the
@@ -164,30 +168,40 @@ activate it _before_ configuring Halide.
 
 ### Windows
 
-We assume you have vcpkg installed at `D:\vcpkg`. Follow the instructions in the
-[vcpkg README][vcpkg] to install. Start by installing LLVM.
+We assume you have vcpkg installed at `D:\vcpkg`. Further, this directory
+should be set in the environment variable as `VCPKG_ROOT` and be present in
+the `PATH`. We also assume Halide is cloned at `D:\Halide`.
+
+Follow the instructions in the [vcpkg README][vcpkg] to install.
+
+Halide provides a `vcpkg.json` file for managing sets of dependencies. They
+will be installed when using the toolchain file to build Halide. For example:
 
 ```
-D:\vcpkg> .\vcpkg install llvm[target-all,enable-assertions,clang-tools-extra]:x64-windows
-D:\vcpkg> .\vcpkg install llvm[target-all,enable-assertions,clang-tools-extra]:x86-windows
+D:\Halide> cmake -G Ninja -S . -B build ^ 
+    --toolchain %VCPKG_ROOT%\scripts\buildsystems\vcpkg.json
 ```
 
-This will also install Clang and LLD. The `enable-assertions` option is not
-strictly necessary but will make debugging during development much smoother.
-These builds will take a long time and a lot of disk space. After they are
-built, it is safe to delete the intermediate build files and caches in
-`D:\vcpkg\buildtrees` and `%APPDATA%\local\vcpkg`.
+Then vcpkg will download, build, and install the core dependency set for
+building Halide.
 
-Then install the other libraries:
+If you want to develop Halide and run the tests, you will need to pass
+`-DVCPKG_MANIFEST_FEATURES=developer` to get the full set of dependencies.
 
-```
-D:\vcpkg> .\vcpkg install libpng:x64-windows libjpeg-turbo:x64-windows openblas:x64-windows eigen3:x64-windows
-D:\vcpkg> .\vcpkg install libpng:x86-windows libjpeg-turbo:x86-windows openblas:x86-windows eigen3:x86-windows
-```
+If you prefer to use a pre-built version of LLVM, pass
+`-DVCPKG_OVERLAY_PORTS=cmake/vcpkg`, which will disable vcpkg's LLVM port. In
+this case, you will need to include the path containing the LLVM install tree
+in `CMAKE_PREFIX_PATH`.
 
 To build the documentation, you will need to install [Doxygen][doxygen]. This
-can be done either through [Chocolatey][choco-doxygen] or from the [Doxygen
-website][doxygen-download].
+is easiest to do via
+
+```
+> winget install doxygen
+```
+
+You may also use [Chocolatey][choco-doxygen] or download directly from the
+[Doxygen website][doxygen-download].
 
 ```
 > choco install doxygen
@@ -211,13 +225,15 @@ globally or in a [virtual environment][venv] by running
 from the root of the repository.
 
 If you would like to use [Ninja][ninja], note that it is installed alongside
-CMake when using the Visual Studio 2019 installer. Alternatively, you can
-install via [Chocolatey][choco-ninja] or place the [pre-built
-binary][ninja-download] from their website in the PATH.
+CMake when using the Visual Studio 2022 installer. Alternatively, you can
+install via winget:
 
 ```
-> choco install ninja
+> winget install Ninja-build.Ninja
 ```
+
+One can also use [Chocolatey][choco-ninja] or place
+the [pre-built binary][ninja-download] from their website in the PATH.
 
 ### macOS
 
@@ -236,7 +252,7 @@ $ pip3 install -r python_bindings/requirements.txt
 
 ### Ubuntu
 
-Finally, on Ubuntu 20.04 LTS, you should install the following packages (this
+Finally, on Ubuntu 24.04 LTS, you should install the following packages (this
 includes the Python module dependencies):
 
 ```
@@ -275,7 +291,9 @@ D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary
 Then, assuming that vcpkg is installed to `D:\vcpkg`, simply run:
 
 ```
-> cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=D:\vcpkg\scripts\buildsystems\vcpkg.cmake -S . -B build
+> cmake -G Ninja -S . -B build ^
+    --toolchain %VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake ^
+    -DCMAKE_BUILD_TYPE=Release
 > cmake --build .\build
 ```
 
@@ -288,9 +306,8 @@ Otherwise, if you wish to create a Visual Studio based build system, you can
 configure with:
 
 ```
-> cmake -G "Visual Studio 16 2019" -Thost=x64 -A x64 ^
-        -DCMAKE_TOOLCHAIN_FILE=D:\vcpkg\scripts\buildsystems\vcpkg.cmake ^
-        -S . -B build
+> cmake -G "Visual Studio 16 2019" -Thost=x64 -A x64 -S . -B build ^
+        --toolchain %VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
 > cmake --build .\build --config Release -j %NUMBER_OF_PROCESSORS%
 ```
 
@@ -302,13 +319,12 @@ is available in the [CMake User Interaction Guide][cmake-user-interaction].
 The process is similar for 32-bit:
 
 ```
-> cmake -G "Visual Studio 16 2019" -Thost=x64 -A Win32 ^
-        -DCMAKE_TOOLCHAIN_FILE=D:\vcpkg\scripts\buildsystems\vcpkg.cmake ^
-        -S . -B build
+> cmake -G "Visual Studio 16 2019" -Thost=x64 -A Win32 -S . -B build ^
+        --toolchain %VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
 > cmake --build .\build --config Release -j %NUMBER_OF_PROCESSORS%
 ```
 
-In both cases, the `-Thost=x64` flag ensures that the correct host tools are
+In both cases, the `-Thost=x64` flag ensures that the 64-bit host tools are
 used.
 
 **Note:** due to limitations in MSBuild, incremental builds using the VS
@@ -322,8 +338,8 @@ The instructions here are straightforward. Assuming your environment is set up
 correctly, just run:
 
 ```
-dev@host:~/Halide$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -S . -B build
-dev@host:~/Halide$ cmake --build ./build
+dev@host:~/Halide$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
+dev@host:~/Halide$ cmake --build build
 ```
 
 If you omit `-G Ninja`, a Makefile-based generator will likely be used instead.
@@ -431,29 +447,6 @@ apply when `WITH_TESTS=ON`:
 | `WITH_TEST_WARNING`       | `ON`    | enable the expected-warning tests |
 | `WITH_TEST_PERFORMANCE`   | `ON`    | enable performance testing        |
 | `WITH_TEST_GENERATOR`     | `ON`    | enable the AOT generator tests    |
-
-The following options enable/disable various LLVM backends (they correspond to
-LLVM component names):
-
-| Option               | Default              | Description                         |
-|----------------------|----------------------|-------------------------------------|
-| `TARGET_AARCH64`     | `ON`, _if available_ | Enable the AArch64 backend          |
-| `TARGET_AMDGPU`      | `ON`, _if available_ | Enable the AMD GPU backend          |
-| `TARGET_ARM`         | `ON`, _if available_ | Enable the ARM backend              |
-| `TARGET_HEXAGON`     | `ON`, _if available_ | Enable the Hexagon backend          |
-| `TARGET_NVPTX`       | `ON`, _if available_ | Enable the NVidia PTX backend       |
-| `TARGET_POWERPC`     | `ON`, _if available_ | Enable the PowerPC backend          |
-| `TARGET_RISCV`       | `ON`, _if available_ | Enable the RISC V backend           |
-| `TARGET_WEBASSEMBLY` | `ON`, _if available_ | Enable the WebAssembly backend.     |
-| `TARGET_X86`         | `ON`, _if available_ | Enable the x86 (and x86_64) backend |
-
-The following options enable/disable various Halide-specific backends:
-
-| Option                | Default | Description                            |
-|-----------------------|---------|----------------------------------------|
-| `TARGET_OPENCL`       | `ON`    | Enable the OpenCL-C backend            |
-| `TARGET_METAL`        | `ON`    | Enable the Metal backend               |
-| `TARGET_D3D12COMPUTE` | `ON`    | Enable the Direct3D 12 Compute backend |
 
 The following options are WebAssembly-specific. They only apply when
 `TARGET_WEBASSEMBLY=ON`:
@@ -1429,6 +1422,6 @@ guidelines you should follow when writing a new app.
 [vcvarsall]:
   https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=vs-2019#vcvarsall-syntax
 [venv]: https://docs.python.org/3/tutorial/venv.html
-[vs2019-cmake-docs]:
-  https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio?view=vs-2019
+[vs-cmake-docs]:
+  https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio?view=msvc-170
 [win32]: https://cmake.org/cmake/help/latest/variable/WIN32.html
