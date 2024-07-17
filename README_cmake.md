@@ -67,12 +67,13 @@ we strongly suggest reading through the [CMake documentation][cmake-docs] first.
 
 ## Installing CMake
 
-Halide requires at least version 3.22, which was released in November 2021.
-Fortunately, getting a recent version of CMake couldn't be easier, and there are
-multiple good options on any system to do so. Generally, one should always have
-the most recent version of CMake installed system-wide. CMake is committed to
-backwards compatibility and even the most recent release can build projects over
-a decade old.
+Halide requires at least version 3.28, which is included in Ubuntu 24.04 LTS,
+available on macOS through Homebrew, and via `winget` on Windows 11. Even if
+you're running an older system, getting a recent version of CMake couldn't be
+easier, and there are multiple good options to do so. Generally, one should
+always have the most recent version of CMake installed system-wide. CMake is
+committed to backwards compatibility and even the most recent release can
+build projects over a decade old.
 
 ### Cross-platform
 
@@ -81,7 +82,8 @@ This might be the most convenient method since Python 3 is an optional
 dependency for Halide, anyway.
 
 ```
-$ pip3 install --upgrade cmake
+$ python3 -m pip install -U pip setuptools[core] wheel
+$ python3 -m pip install -U cmake
 ```
 
 See the [PyPI website][pypi-cmake] for more details.
@@ -90,13 +92,15 @@ See the [PyPI website][pypi-cmake] for more details.
 
 On Windows, there are three primary methods for installing an up-to-date CMake:
 
-1. If you have Visual Studio 2019 installed, you can get CMake 3.17 through the
-   Visual Studio installer. This is the recommended way of getting CMake if you
-   are able to use Visual Studio 2019. See Microsoft's
-   [documentation][vs2019-cmake-docs] for more details.
-2. If you use [Chocolatey][chocolatey], its [CMake package][choco-cmake] is kept
+1. If you have Visual Studio 2022 installed, you can get CMake 3.28
+   through the Visual Studio installer. This is the recommended way of 
+   getting CMake if you  are able to use Visual Studio 2022. See Microsoft's
+   [documentation][vs-cmake-docs] for more details.
+2. Windows' [built-in package manager][winget] can install the latest CMake 
+   version easily via `winget install Kitware.CMake`.
+3. If you use [Chocolatey][chocolatey], its [CMake package][choco-cmake] is kept
    up to date. It should be as simple as `choco install cmake`.
-3. Otherwise, you should install CMake from [Kitware's website][cmake-download].
+4. Otherwise, you should install CMake from [Kitware's website][cmake-download].
 
 ### macOS
 
@@ -116,15 +120,14 @@ is also a viable option.
 
 There are a few good ways to install a modern CMake on Ubuntu:
 
-1. If you're on Ubuntu Linux 22.04 (Jammy Jellyfish), then simply running
-   `sudo apt install cmake` will get you CMake 3.22.
+1. If you're on Ubuntu Linux 24.04 (Jammy Jellyfish), then simply running
+   `sudo apt install cmake` will get you CMake 3.28.
 2. If you are on an older Ubuntu release or would like to use the newest CMake,
    try installing via the snap store: `snap install cmake`. Be sure you do not
    already have `cmake` installed via APT. The snap package automatically stays
    up to date.
 3. For older versions of Debian, Ubuntu, Mint, and derivatives, Kitware provides
-   an [APT repository][cmake-apt] with up-to-date releases. Note that this is
-   still useful for Ubuntu 20.04 because it will remain up to date.
+   an [APT repository][cmake-apt] with up-to-date releases.
 4. If all else fails, you might need to build CMake from source (eg. on old
    Ubuntu versions running on ARM). In that case, follow the directions posted
    on [Kitware's website][cmake-from-source].
@@ -139,7 +142,7 @@ use the APT repository. On WSL 2, all methods are available.
 
 We generally recommend using a package manager to fetch Halide's dependencies.
 Except where noted, we recommend using [vcpkg][vcpkg] on Windows,
-[Homebrew][homebrew] on macOS, and APT on Ubuntu 20.04 LTS.
+[Homebrew][homebrew] on macOS, and APT on Ubuntu 24.04 LTS.
 
 Only LLVM and Clang are _absolutely_ required to build Halide. Halide always
 supports three LLVM versions: the current major version, the previous major
@@ -147,11 +150,12 @@ version, and trunk. The LLVM and Clang versions must match exactly. For most
 users, we recommend using a binary release of LLVM rather than building it
 yourself.
 
-However, to run all of the tests and apps, an extended set is needed. This
+However, to run all the tests and apps, an extended set is needed. This
 includes [lld][lld], [Python 3][python], [libpng][libpng], [libjpeg][libjpeg],
-[Doxygen][doxygen], [OpenBLAS][openblas], [ATLAS][atlas], and [Eigen3][eigen].
-While not required to build any part of Halide, we find that [Ninja][ninja] is
-the best backend build tool across all platforms.
+[Doxygen][doxygen], [OpenBLAS][openblas], [ATLAS][atlas], [Eigen3][eigen],
+[FlatBuffers][flatbuffers], [pybind11][pybind11], and [wabt][wabt]. While not
+required to build any part of Halide, we find that [Ninja][ninja] is the best
+backend build tool across all platforms.
 
 Note that CMake has many special variables for overriding the locations of
 packages and executables. A partial list can be found in the
@@ -164,30 +168,40 @@ activate it _before_ configuring Halide.
 
 ### Windows
 
-We assume you have vcpkg installed at `D:\vcpkg`. Follow the instructions in the
-[vcpkg README][vcpkg] to install. Start by installing LLVM.
+We assume you have vcpkg installed at `D:\vcpkg`. Further, this directory
+should be set in the environment variable as `VCPKG_ROOT` and be present in
+the `PATH`. We also assume Halide is cloned at `D:\Halide`.
+
+Follow the instructions in the [vcpkg README][vcpkg] to install.
+
+Halide provides a `vcpkg.json` file for managing sets of dependencies. They
+will be installed when using the toolchain file to build Halide. For example:
 
 ```
-D:\vcpkg> .\vcpkg install llvm[target-all,enable-assertions,clang-tools-extra]:x64-windows
-D:\vcpkg> .\vcpkg install llvm[target-all,enable-assertions,clang-tools-extra]:x86-windows
+D:\Halide> cmake -G Ninja -S . -B build ^ 
+    --toolchain %VCPKG_ROOT%\scripts\buildsystems\vcpkg.json
 ```
 
-This will also install Clang and LLD. The `enable-assertions` option is not
-strictly necessary but will make debugging during development much smoother.
-These builds will take a long time and a lot of disk space. After they are
-built, it is safe to delete the intermediate build files and caches in
-`D:\vcpkg\buildtrees` and `%APPDATA%\local\vcpkg`.
+Then vcpkg will download, build, and install the core dependency set for
+building Halide.
 
-Then install the other libraries:
+If you want to develop Halide and run the tests, you will need to pass
+`-DVCPKG_MANIFEST_FEATURES=developer` to get the full set of dependencies.
 
-```
-D:\vcpkg> .\vcpkg install libpng:x64-windows libjpeg-turbo:x64-windows openblas:x64-windows eigen3:x64-windows
-D:\vcpkg> .\vcpkg install libpng:x86-windows libjpeg-turbo:x86-windows openblas:x86-windows eigen3:x86-windows
-```
+If you prefer to use a pre-built version of LLVM, pass
+`-DVCPKG_OVERLAY_PORTS=cmake/vcpkg`, which will disable vcpkg's LLVM port. In
+this case, you will need to include the path containing the LLVM install tree
+in `CMAKE_PREFIX_PATH`.
 
 To build the documentation, you will need to install [Doxygen][doxygen]. This
-can be done either through [Chocolatey][choco-doxygen] or from the [Doxygen
-website][doxygen-download].
+is easiest to do via
+
+```
+> winget install doxygen
+```
+
+You may also use [Chocolatey][choco-doxygen] or download directly from the
+[Doxygen website][doxygen-download].
 
 ```
 > choco install doxygen
@@ -211,13 +225,15 @@ globally or in a [virtual environment][venv] by running
 from the root of the repository.
 
 If you would like to use [Ninja][ninja], note that it is installed alongside
-CMake when using the Visual Studio 2019 installer. Alternatively, you can
-install via [Chocolatey][choco-ninja] or place the [pre-built
-binary][ninja-download] from their website in the PATH.
+CMake when using the Visual Studio 2022 installer. Alternatively, you can
+install via winget:
 
 ```
-> choco install ninja
+> winget install Ninja-build.Ninja
 ```
+
+One can also use [Chocolatey][choco-ninja] or place
+the [pre-built binary][ninja-download] from their website in the PATH.
 
 ### macOS
 
@@ -236,7 +252,7 @@ $ pip3 install -r python_bindings/requirements.txt
 
 ### Ubuntu
 
-Finally, on Ubuntu 20.04 LTS, you should install the following packages (this
+Finally, on Ubuntu 24.04 LTS, you should install the following packages (this
 includes the Python module dependencies):
 
 ```
@@ -275,7 +291,9 @@ D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary
 Then, assuming that vcpkg is installed to `D:\vcpkg`, simply run:
 
 ```
-> cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=D:\vcpkg\scripts\buildsystems\vcpkg.cmake -S . -B build
+> cmake -G Ninja -S . -B build ^
+    --toolchain %VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake ^
+    -DCMAKE_BUILD_TYPE=Release
 > cmake --build .\build
 ```
 
@@ -288,9 +306,8 @@ Otherwise, if you wish to create a Visual Studio based build system, you can
 configure with:
 
 ```
-> cmake -G "Visual Studio 16 2019" -Thost=x64 -A x64 ^
-        -DCMAKE_TOOLCHAIN_FILE=D:\vcpkg\scripts\buildsystems\vcpkg.cmake ^
-        -S . -B build
+> cmake -G "Visual Studio 16 2019" -Thost=x64 -A x64 -S . -B build ^
+        --toolchain %VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
 > cmake --build .\build --config Release -j %NUMBER_OF_PROCESSORS%
 ```
 
@@ -302,13 +319,12 @@ is available in the [CMake User Interaction Guide][cmake-user-interaction].
 The process is similar for 32-bit:
 
 ```
-> cmake -G "Visual Studio 16 2019" -Thost=x64 -A Win32 ^
-        -DCMAKE_TOOLCHAIN_FILE=D:\vcpkg\scripts\buildsystems\vcpkg.cmake ^
-        -S . -B build
+> cmake -G "Visual Studio 16 2019" -Thost=x64 -A Win32 -S . -B build ^
+        --toolchain %VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
 > cmake --build .\build --config Release -j %NUMBER_OF_PROCESSORS%
 ```
 
-In both cases, the `-Thost=x64` flag ensures that the correct host tools are
+In both cases, the `-Thost=x64` flag ensures that the 64-bit host tools are
 used.
 
 **Note:** due to limitations in MSBuild, incremental builds using the VS
@@ -322,8 +338,8 @@ The instructions here are straightforward. Assuming your environment is set up
 correctly, just run:
 
 ```
-dev@host:~/Halide$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -S . -B build
-dev@host:~/Halide$ cmake --build ./build
+dev@host:~/Halide$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
+dev@host:~/Halide$ cmake --build build
 ```
 
 If you omit `-G Ninja`, a Makefile-based generator will likely be used instead.
@@ -388,56 +404,63 @@ Halide reads and understands several options that can configure the build. The
 following are the most consequential and control how Halide is actually
 compiled.
 
-| Option                                   | Default               | Description                                                                                       |
-|------------------------------------------|-----------------------|---------------------------------------------------------------------------------------------------|
-| [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.              |
-| `Halide_BUNDLE_STATIC`                   | `OFF`                 | When building Halide as a static library, merge static library dependencies into libHalide.a.     |
-| `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                     |
-| `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                   |
-| `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                            |
-| `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension) |
+| Option                                   | Default | Description                                                                                       |
+|------------------------------------------|---------|---------------------------------------------------------------------------------------------------|
+| [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`    | Standard CMake variable that chooses whether to build as a static or shared library.              |
+| `Halide_ENABLE_EXCEPTIONS`               | `ON`    | Enable exceptions when building Halide                                                            |
+| `Halide_ENABLE_RTTI`                     | `ON`    | Enable RTTI when building Halide                                                                  |
+| `Halide_LLVM_SHARED_LIBS`                | `OFF`   | Link to the shared version of LLVM. Not available on Windows.                                     |
+| `Halide_TARGET`                          | _empty_ | The default target triple to use for `add_halide_library` (and the generator tests, by extension) |
 
-The following options are _advanced_ and should not be required in typical workflows. Generally, these are used by
-Halide's own CI infrastructure, or as escape hatches for third-party packagers.
+The following options are _advanced_ and should not be required in typical
+workflows. Generally, these are used by Halide's CI infrastructure or its 
+developers, or as escape hatches for downstream packagers.
 
-| Option                      | Default                                                            | Description                                                                              |
-|-----------------------------|--------------------------------------------------------------------|------------------------------------------------------------------------------------------|
-| `Halide_CLANG_TIDY_BUILD`   | `OFF`                                                              | Used internally to generate fake compile jobs for runtime files when running clang-tidy. |
-| `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                      |
-| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            |
-| `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version).   |
+| Option                                     | Default                                                            | Description                                                                                   |
+|--------------------------------------------|--------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| `Halide_BUILD_HEXAGON_REMOTE_RUNTIME`      | `OFF`                                                              | Build the hexagon remote runtime for offloading to Hexagon. Requires the Hexagon SDK.         |         
+| `Halide_BUNDLE_STATIC`                     | `OFF`                                                              | When building Halide as a static library, merge static library dependencies into libHalide.a. |
+| `Halide_CCACHE_BUILD`                      | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                           |
+| `Halide_CCACHE_PARAMS`                     | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                                 |
+| `Halide_CLANG_TIDY_BUILD`                  | `OFF`                                                              | Used internally to generate fake compile jobs for runtime files when running clang-tidy.      |
+| `Halide_SOVERSION_OVERRIDE`                | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version).        |
+| `WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING` | `OFF`                                                              | Intercept JIT compilation with a serialization roundtrip, for test only                       |
 
-The following options are only available when building Halide directly, ie. not
-through the [`add_subdirectory`][add_subdirectory] or
-[`FetchContent`][fetchcontent] mechanisms. They control whether non-essential
-targets (like tests and documentation) are built.
+The following options control whether non-essential targets (like tests 
+and documentation) are built. All are disabled by default when including 
+Halide via [`add_subdirectory`][add_subdirectory]
+or [`FetchContent`][fetchcontent].
 
-| Option                 | Default | Description                                                      |
-|------------------------|---------|------------------------------------------------------------------|
-| `WITH_TESTS`           | `ON`    | Enable building unit and integration tests                       |
-| `WITH_PYTHON_BINDINGS` | `ON`    | Enable building Python 3.x bindings                              |
-| `WITH_DOCS`            | `OFF`   | Enable building the documentation via Doxygen                    |
-| `WITH_UTILS`           | `ON`    | Enable building various utilities including the trace visualizer |
-| `WITH_TUTORIALS`       | `ON`    | Enable building the tutorials                                    |
+| Option                 | Default | Description                                                                      |
+|------------------------|---------|----------------------------------------------------------------------------------|
+| `WITH_AUTOSCHEDULERS`  | `ON`    | Enable building the Halide autoschedulers. Requires `BUILD_SHARED_LIBS`.         |
+| `WITH_DOCS`            | `OFF`   | Enable building the documentation via Doxygen                                    |
+| `WITH_PACKAGING`       | `ON`    | Enable Halide's CMake package installation rules.                                |
+| `WITH_PYTHON_BINDINGS` | `ON`    | Enable building Python 3.x bindings (not the package). Requires pybind11.        |
+| `WITH_SERIALIZATION`   | `ON`    | Include experimental (de)serialization code for Halide IR. Requires flatbuffers. |
+| `WITH_TESTS`           | `ON`    | Enable building unit and integration tests                                       |
+| `WITH_TUTORIALS`       | `ON`    | Enable building the tutorials                                                    |
+| `WITH_UTILS`           | `ON`    | Enable building various utilities including the trace visualizer                 |
 
 The following options control whether to build certain test subsets. They only
 apply when `WITH_TESTS=ON`:
 
-| Option                    | Default | Description                       |
-|---------------------------|---------|-----------------------------------|
-| `WITH_TEST_AUTO_SCHEDULE` | `ON`    | enable the auto-scheduling tests  |
-| `WITH_TEST_CORRECTNESS`   | `ON`    | enable the correctness tests      |
-| `WITH_TEST_ERROR`         | `ON`    | enable the expected-error tests   |
-| `WITH_TEST_WARNING`       | `ON`    | enable the expected-warning tests |
-| `WITH_TEST_PERFORMANCE`   | `ON`    | enable performance testing        |
-| `WITH_TEST_GENERATOR`     | `ON`    | enable the AOT generator tests    |
+| Option                    | Default                | Description                                         |
+|---------------------------|------------------------|-----------------------------------------------------|
+| `WITH_TEST_AUTO_SCHEDULE` | `ON`                   | enable the auto-scheduling tests                    |
+| `WITH_TEST_CORRECTNESS`   | `ON`                   | enable the correctness tests                        |
+| `WITH_TEST_ERROR`         | `ON`                   | enable the expected-error tests                     |
+| `WITH_TEST_FUZZ`          | detects fuzz sanitizer | enable fuzz testing Halide via Clang fuzz sanitizer |
+| `WITH_TEST_WARNING`       | `ON`                   | enable the expected-warning tests                   |
+| `WITH_TEST_PERFORMANCE`   | `ON`                   | enable performance testing                          |
+| `WITH_TEST_GENERATOR`     | `ON`                   | enable the AOT generator tests                      |
+| `WITH_TEST_RUNTIME`       | `ON`                   | enable the runtime tests (Clang/GCC only)           |
 
-The following options are WebAssembly-specific. They only apply when
-`TARGET_WEBASSEMBLY=ON`:
+The following option is WebAssembly-specific.
 
-| Option                | Default | Description                                                                              |
-|-----------------------|---------|------------------------------------------------------------------------------------------|
-| `Halide_WASM_BACKEND` | `wabt`  | Select the backend for WASM testing. Can be `wabt`, `V8` or a false value such as `OFF`. |
+| Option                | Default | Description                                                                               |
+|-----------------------|---------|-------------------------------------------------------------------------------------------|
+| `Halide_WASM_BACKEND` | `wabt`  | Select the backend for WASM testing. Can be `wabt`, `V8`, or a false value such as `OFF`. |
 
 ### Find module options
 
@@ -464,18 +487,10 @@ detailed in the main README.md). When building LLVM (and any other `CONFIG`
 packages) manually, it is a common mistake to point CMake to a _build tree_
 rather than an _install tree_. Doing so often produces inscrutable errors.
 
-When using CMake 3.18 or above, some of Halide's tests will search for CUDA
-using the [`FindCUDAToolkit`][findcudatoolkit] module. If it doesn't find your
-CUDA installation automatically, you can point it to it by setting:
-
-| Variable           | Description                                       |
-|--------------------|---------------------------------------------------|
-| `CUDAToolkit_ROOT` | Path to the directory containing `bin/nvcc[.exe]` |
-| `CUDA_PATH`        | _Environment_ variable, same as above.            |
-
-If the CMake version is lower than 3.18, the deprecated [`FindCUDA`][findcuda]
-module will be used instead. It reads the variable `CUDA_TOOLKIT_ROOT_DIR`
-instead of `CUDAToolkit_ROOT` above.
+Halide's tests search for CUDA using the [`FindCUDAToolkit`][findcudatoolkit]
+module. If it doesn't find your CUDA installation automatically, you can point
+it in the right direction by setting `CUDAToolkit_ROOT` to the directory 
+containing `bin/nvcc[.exe]`.
 
 Halide also searches for `libpng` and `libjpeg-turbo` through the
 [`FindPNG`][findpng] and [`FindJPEG`][findjpeg] modules, respectively. They can
@@ -497,7 +512,7 @@ following variable.
 | `DOXYGEN_EXECUTABLE` | Path to the Doxygen executable. |
 
 When compiling for an OpenCL target, Halide uses the [`FindOpenCL`][findopencl]
-target to locate the libraries and include paths. These can be overridden by
+module to locate the libraries and include paths. These can be overridden by
 setting the following variables:
 
 | Variable              | Description                                           |
@@ -521,10 +536,6 @@ in all its examples. To learn more about CMake, consult the
 [documentation][cmake-docs] and engage with the community on the [CMake
 Discourse][cmake-discourse].
 
-Note: previous releases bundled a `halide.cmake` module that was meant to be
-[`include()`][include]-ed into your project. This has been removed. Please
-upgrade to the new package config module.
-
 ## A basic CMake project
 
 There are two main ways to use Halide in your application: as a **JIT compiler**
@@ -546,7 +557,7 @@ find_package(Halide REQUIRED)
 ```
 
 The [`cmake_minimum_required`][cmake_minimum_required] command is required to be
-the first command executed in a CMake program. It disables all of the deprecated
+the first command executed in a CMake program. It disables the deprecated
 behavior ("policies" in CMake lingo) from earlier versions. The
 [`project`][project] command sets the name of the project (and has arguments for
 versioning, language support, etc.) and is required by CMake to be called
@@ -567,7 +578,8 @@ installation directory to [`CMAKE_PREFIX_PATH`][cmake_prefix_path] at the CMake
 command line.
 
 ```console
-dev@ubuntu:~/myproj$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/path/to/Halide-install" -S . -B build
+dev@ubuntu:~/myproj$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="/path/to/Halide-install"
 ```
 
 ## JIT mode
@@ -590,15 +602,14 @@ Using Halide in AOT mode is more complicated so we'll walk through it step by
 step. Note that this only applies to Halide generators, so it might be useful to
 re-read the [tutorial][halide-generator-tutorial] on generators. Assume (like in
 the tutorial) that you have a source file named `my_generators.cpp` and that in
-it you have generator classes `MyFirstGenerator` and `MySecondGenerator` with
+it, you have generator classes `MyFirstGenerator` and `MySecondGenerator` with
 registered names `my_first_generator` and `my_second_generator` respectively.
 
 Then the first step is to add a **generator executable** to your build:
 
 ```cmake
 # ... same project setup as before ...
-add_executable(my_generators my_generators.cpp)
-target_link_libraries(my_generators PRIVATE Halide::Generator)
+add_halide_generator(my_generators SOURCES my_generators.cpp)
 ```
 
 Using the generator executable, we can add a Halide library corresponding to
@@ -739,11 +750,11 @@ try the static libs first then fall back to the shared libs.
 
 Variables that control package loading:
 
-| Variable             | Description                                                                                                                                                                   |
-|----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Halide_SHARED_LIBS` | override `BUILD_SHARED_LIBS` when loading the Halide package via `find_package`. Has no effect when using Halide via `add_subdirectory` as a Git or `FetchContent` submodule. |
-| `Halide_RUNTIME_NO_THREADS` | skip linking of Threads library to runtime. Should be set if your toolchain does not support it (e.g. baremetal). |
-| `Halide_RUNTIME_NO_DL_LIBS` | skip linking of DL library to runtime. Should be set if your toolchain does not support it (e.g. baremetal). |
+| Variable                    | Description                                                                                                                                                                   |
+|-----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Halide_SHARED_LIBS`        | override `BUILD_SHARED_LIBS` when loading the Halide package via `find_package`. Has no effect when using Halide via `add_subdirectory` as a Git or `FetchContent` submodule. |
+| `Halide_RUNTIME_NO_THREADS` | skip linking of Threads library to runtime. Should be set if your toolchain does not support it (e.g. baremetal).                                                             |
+| `Halide_RUNTIME_NO_DL_LIBS` | skip linking of DL library to runtime. Should be set if your toolchain does not support it (e.g. baremetal).                                                                  |
 
 Variables set by the package:
 
@@ -954,7 +965,7 @@ and [apps/hannk](https://github.com/halide/Halide/tree/main/apps/hannk) for a co
 
 If `PYSTUB` is specified, then a Python Extension will be built that
 wraps the Generator with CPython glue to allow use of the Generator
-Python 3.x. The result will be a a shared library of the form
+Python 3.x. The result will be a shared library of the form
 `<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python
 version and platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.).
 See `README_python.md` for examples of use.
@@ -1081,7 +1092,7 @@ using [`install(FILES)`][install-files] and the
 # Contributing CMake code to Halide
 
 When contributing new CMake code to Halide, keep in mind that the minimum
-version is 3.22. Therefore, it is possible (and indeed required) to use modern
+version is 3.28. Therefore, it is possible (and indeed required) to use modern
 CMake best practices.
 
 Like any large and complex system with a dedication to preserving backwards
@@ -1128,24 +1139,25 @@ The following are some common mistakes that lead to subtly broken builds.
 
 ### Prohibited commands list
 
-As mentioned above, using directory properties is brittle and they are therefore
-_not allowed_. The following functions may not appear in any new CMake code.
+As mentioned above, using directory properties is brittle, and they are
+therefore _not allowed_. The following functions may not appear in any new 
+CMake code.
 
-| Command                             | Alternative                                                                                        |
-|-------------------------------------|----------------------------------------------------------------------------------------------------|
-| `add_compile_definitions`           | Use [`target_compile_definitions`][target_compile_definitions]                                     |
-| `add_compile_options`               | Use [`target_compile_options`][target_compile_options]                                             |
-| `add_definitions`                   | Use [`target_compile_definitions`][target_compile_definitions]                                     |
-| `add_link_options`                  | Use [`target_link_options`][target_link_options], but prefer not to use either                     |
-| `get_directory_property`            | Use cache variables or target properties                                                           |
-| `get_property(... DIRECTORY)`       | Use cache variables or target properties                                                           |
-| `include_directories`               | Use [`target_include_directories`][target_include_directories]                                     |
-| `link_directories`                  | Use [`target_link_libraries`][target_link_libraries]                                               |
-| `link_libraries`                    | Use [`target_link_libraries`][target_link_libraries]                                               |
-| `remove_definitions`                | [Generator expressions][cmake-genex] in [`target_compile_definitions`][target_compile_definitions] |
-| `set_directory_properties`          | Use cache variables or target properties                                                           |
-| `set_property(... DIRECTORY)`       | Use cache variables or target properties                                                           |
-| `target_link_libraries(target lib)` | Use [`target_link_libraries`][target_link_libraries] _with a visibility specifier_ (eg. `PRIVATE`) |
+| Command                             | Alternative                                                                                                                       |
+|-------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `add_compile_definitions`           | Use [`target_compile_definitions`][target_compile_definitions]                                                                    |
+| `add_compile_options`               | Use [`target_compile_options`][target_compile_options]                                                                            |
+| `add_definitions`                   | Use [`target_compile_definitions`][target_compile_definitions]                                                                    |
+| `add_link_options`                  | Use [`target_link_options`][target_link_options], but prefer not to use either                                                    |
+| `get_directory_property`            | Use cache variables or target properties                                                                                          |
+| `get_property(... DIRECTORY)`       | Use cache variables or target properties                                                                                          |
+| `include_directories`               | Use [`target_sources`][target_sources] with the `FILE_SET` argument or [`target_include_directories`][target_include_directories] |
+| `link_directories`                  | Use [`target_link_libraries`][target_link_libraries]                                                                              |
+| `link_libraries`                    | Use [`target_link_libraries`][target_link_libraries]                                                                              |
+| `remove_definitions`                | [Generator expressions][cmake-genex] in [`target_compile_definitions`][target_compile_definitions]                                |
+| `set_directory_properties`          | Use cache variables or target properties                                                                                          |
+| `set_property(DIRECTORY ...)`       | Use cache variables or target properties. Custom properties on Halide's source root are allowed.                                  |
+| `target_link_libraries(target lib)` | Use [`target_link_libraries`][target_link_libraries] _with a visibility specifier_ (eg. `PRIVATE`)                                |
 
 As an example, it was once common practice to write code similar to this:
 
@@ -1166,39 +1178,52 @@ does not provide a way to _propagate_ the include directory to consumers of
 ```cmake
 # CORRECT
 add_library(my_lib source1.cpp ...)
-target_include_directories(my_lib PUBLIC $<BUILD_INTERFACE:include>)
+target_sources(
+    my_lib PUBLIC
+    FILE_SET HEADERS
+    BASE_DIRS include
+    FILES include/source1.h
+)
 ```
 
 This is better in many ways. It only affects the target in question. It
-propagates the include path to the targets linking to it (via `PUBLIC`). It also
-does not incorrectly export the host-filesystem-specific include path when
-installing or packaging the target (via `$<BUILD_INTERFACE>`).
+propagates the include path to the targets linking to it (via `PUBLIC`). It
+also sets up the public headers for installation and the library for export.
 
 If common properties need to be grouped together, use an INTERFACE target
-(better) or write a function (worse). There are also several functions that are
-disallowed for other reasons:
+(better) or write a function (worse).
 
-| Command                         | Reason                                                                            | Alternative                                                                            |
-|---------------------------------|-----------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| `aux_source_directory`          | Interacts poorly with incremental builds and Git                                  | List source files explicitly                                                           |
-| `build_command`                 | CTest internal function                                                           | Use CTest build-and-test mode via [`CMAKE_CTEST_COMMAND`][cmake_ctest_command]         |
-| `cmake_host_system_information` | Usually misleading information.                                                   | Inspect [toolchain][cmake-toolchains] variables and use generator expressions.         |
-| `cmake_policy(... OLD)`         | OLD policies are deprecated by definition.                                        | Instead, fix the code to work with the new policy.                                     |
-| `create_test_sourcelist`        | We use our own unit testing solution                                              | See the [adding tests](#adding-tests) section.                                         |
-| `define_property`               | Adds unnecessary complexity                                                       | Use a cache variable. Exceptions under special circumstances.                          |
-| `enable_language`               | Halide is C/C++ only                                                              | [`FindCUDAToolkit`][findcudatoolkit] or [`FindCUDA`][findcuda], appropriately guarded. |
-| `file(GLOB ...)`                | Interacts poorly with incremental builds and Git                                  | List source files explicitly. Allowed if not globbing for source files.                |
-| `fltk_wrap_ui`                  | Halide does not use FLTK                                                          | None                                                                                   |
-| `include_external_msproject`    | Halide must remain portable                                                       | Write a CMake package config file or find module.                                      |
-| `include_guard`                 | Use of recursive inclusion is not allowed                                         | Write (recursive) functions.                                                           |
-| `include_regular_expression`    | Changes default dependency checking behavior                                      | None                                                                                   |
-| `load_cache`                    | Superseded by [`FetchContent`][fetchcontent]/[`ExternalProject`][externalproject] | Use aforementioned modules                                                             |
-| `macro`                         | CMake macros are not hygienic and are therefore error-prone                       | Use functions instead.                                                                 |
-| `site_name`                     | Privacy: do not want leak host name information                                   | Provide a cache variable, generate a unique name.                                      |
-| `variable_watch`                | Debugging helper                                                                  | None. Not needed in production.                                                        |
+There are also several functions that are disallowed for other reasons:
 
-Lastly, do not introduce any dependencies via [`find_package`][find_package]
-without broader approval. Confine dependencies to the `dependencies/` subtree.
+| Command                         | Reason                                           | Alternative                                                                              |
+|---------------------------------|--------------------------------------------------|------------------------------------------------------------------------------------------|
+| `aux_source_directory`          | Interacts poorly with incremental builds and Git | List source files explicitly                                                             |
+| `build_command`                 | CTest internal function                          | Use CTest build-and-test mode via [`CMAKE_CTEST_COMMAND`][cmake_ctest_command]           |
+| `cmake_policy(... OLD)`         | OLD policies are deprecated by definition.       | Instead, fix the code to work with the new policy.                                       |
+| `create_test_sourcelist`        | We use our own unit testing solution             | See the [adding tests](#adding-tests) section.                                           |
+| `fltk_wrap_ui`                  | Halide does not use FLTK                         | None                                                                                     |
+| `include_external_msproject`    | Halide must remain portable                      | Write a CMake package config file or find module.                                        |
+| `include_regular_expression`    | Changes default dependency checking behavior     | None                                                                                     |
+| `load_cache`                    | More precise alternatives exist                  | Use a toolchain file or pass needed variables to an [`ExternalProject`][externalproject] |
+| `site_name`                     | Privacy: do not want leak host name information  | Provide a cache variable, generate a unique name.                                        |
+| `variable_watch`                | Debugging helper                                 | None. Not needed in production.                                                          |
+
+Some other functions are merely strongly discouraged and require in-source 
+justification to use.
+
+| Command                         | Reason                                                      | Alternative                                                                    |
+|---------------------------------|-------------------------------------------------------------|--------------------------------------------------------------------------------|
+| `cmake_host_system_information` | Usually misleading information.                             | Inspect [toolchain][cmake-toolchains] variables and use generator expressions. |
+| `define_property`               | Adds unnecessary complexity                                 | Use a cache variable. Exceptions under special circumstances.                  |
+| `enable_language`               | Halide prefers not to use optional languages.               | [`FindCUDAToolkit`][findcudatoolkit] appropriately guarded.                    |
+| `file(GLOB ...)`                | Interacts poorly with incremental builds and Git            | List source files explicitly. Permissible if not globbing source tree.         |
+| `include_guard`                 | Use of recursive inclusion is not allowed                   | Write (recursive) functions, avoid global state, write idempotent modules.     |
+| `macro`                         | CMake macros are not hygienic and are therefore error-prone | Use functions or blocks instead.                                               |
+
+Lastly, do not introduce any new dependencies without broader approval. If 
+you do introduce a new dependency, use `find_package` in the main build, 
+update `cmake/dependencies.cmake` with `FetchContent` configuration, and
+update `vcpkg.json` appropriately, too.
 
 ### Prohibited variables list
 
@@ -1358,6 +1383,7 @@ guidelines you should follow when writing a new app.
 [findpng]: https://cmake.org/cmake/help/latest/module/FindPNG.html
 [findpython3]: https://cmake.org/cmake/help/latest/module/FindPython3.html
 [findx11]: https://cmake.org/cmake/help/latest/module/FindX11.html
+[flatbuffers]: https://github.com/google/flatbuffers
 [halide-generator-tutorial]:
   https://halide-lang.org/tutorials/tutorial_lesson_15_generators.html
 [halide-tutorials]: https://halide-lang.org/tutorials/tutorial_introduction.html
@@ -1388,6 +1414,7 @@ guidelines you should follow when writing a new app.
   https://cmake.org/cmake/help/latest/variable/PROJECT_SOURCE_DIR.html
 [project_binary_dir]:
   https://cmake.org/cmake/help/latest/variable/PROJECT_BINARY_DIR.html
+[pybind11]: https://github.com/pybind/pybind11
 [pypi-cmake]: https://pypi.org/project/cmake/
 [python]: https://www.python.org/downloads/
 [target-file]:
@@ -1402,10 +1429,14 @@ guidelines you should follow when writing a new app.
   https://cmake.org/cmake/help/latest/command/target_link_libraries.html
 [target_link_options]:
   https://cmake.org/cmake/help/latest/command/target_link_options.html
+[target_sources]:
+  https://cmake.org/cmake/help/latest/command/target_sources.html
 [vcpkg]: https://github.com/Microsoft/vcpkg
 [vcvarsall]:
   https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=vs-2019#vcvarsall-syntax
 [venv]: https://docs.python.org/3/tutorial/venv.html
-[vs2019-cmake-docs]:
-  https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio?view=vs-2019
+[vs-cmake-docs]:
+  https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio?view=msvc-170
+[wabt]: https://github.com/WebAssembly/wabt
 [win32]: https://cmake.org/cmake/help/latest/variable/WIN32.html
+[winget]: https://winget.run

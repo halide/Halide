@@ -122,35 +122,37 @@ this means versions 18, 17, and 16 are supported, but 15 is not. The commands
 If your OS does not have packages for LLVM, you can find binaries for it at
 http://llvm.org/releases/download.html. Download an appropriate package and then
 either install it, or at least put the `bin` subdirectory in your path. (This
-works well on OS X and Ubuntu.)
+works well on macOS and Ubuntu.)
 
 If you want to build it yourself, first check it out from GitHub:
 
 ```
-% git clone --depth 1 --branch llvmorg-16.0.6 https://github.com/llvm/llvm-project.git
+% git clone --depth 1 --branch llvmorg-18.1.8 https://github.com/llvm/llvm-project.git
 ```
 
-(If you want to build LLVM 17.x, use branch `release/17.x`; for current trunk,
-use `main`)
+If you want a different version than 18.1.8, pick a different branch.
 
 Then build it like so:
 
 ```
-% cmake -DCMAKE_BUILD_TYPE=Release \
+% cmake -G Ninja -S llvm-project/llvm -B llvm-build \
+        -DCMAKE_BUILD_TYPE=Release \
         -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
-        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly;RISCV" \
-        -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
-        -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
         -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
-        -S llvm-project/llvm -B llvm-build
+        -DLLVM_TARGETS_TO_BUILD="AArch64;AMDGPU;ARM;Hexagon;NVPTX;PowerPC;RISCV;WebAssembly;X86" \
+        -DLLVM_BUILD_32_BITS=OFF \
+        -DLLVM_ENABLE_ASSERTIONS=ON \
+        -DLLVM_ENABLE_EH=ON \
+        -DLLVM_ENABLE_RTTI=ON \
+        -DLLVM_ENABLE_TERMINFO=OFF \
+        -DLLVM_ENABLE_ZLIB=OFF \
+        -DLLVM_ENABLE_ZSTD=OFF
 % cmake --build llvm-build
 % cmake --install llvm-build --prefix llvm-install
 ```
 
-Running a serial build will be slow. To improve speed, try running a parallel
-build. That's done by default in Ninja; for make, use the option -j NNN,
-where NNN is the number of parallel jobs, e.g. the number of CPUs you have.
-Then, point Halide to it:
+We strongly recommend using CMake's Ninja generator (as shown above) for
+speed.
 
 ```
 % export LLVM_ROOT=$PWD/llvm-install
@@ -165,16 +167,16 @@ contribute code to Halide (so that you can run `clang-tidy` on your pull
 requests). We recommend enabling both in all cases to simplify builds. You can
 disable exception handling (EH) and RTTI if you don't want the Python bindings.
 
-### Building Halide with make
+### Building Halide
 
 With `LLVM_CONFIG` set (or `llvm-config` in your path), you should be able to
 just run `make` in the root directory of the Halide source tree.
 `make run_tests` will run the JIT test suite, and `make test_apps` will make
 sure all the apps compile and run (but won't check their output).
 
-There is no `make install`. If you want to make an install package, use CMake.
+There is no `make install`. If you want to build the Halide package, use CMake.
 
-### Building Halide out-of-tree with make
+### Building Halide out-of-tree
 
 If you wish to build Halide in a separate directory, you can do that like so:
 
@@ -185,7 +187,7 @@ If you wish to build Halide in a separate directory, you can do that like so:
 
 # Building Halide with CMake
 
-### MacOS and Linux
+## MacOS and Linux
 
 Follow the above instructions to build LLVM or acquire a suitable binary
 release. Then change directory to the Halide repository and run:
@@ -202,9 +204,9 @@ multiple system-wide versions installed, you can specify the version with
 `Halide_REQUIRE_LLVM_VERSION`. Remove `-G Ninja` if you prefer to build with a
 different generator.
 
-### Windows
+## Windows
 
-We suggest building with Visual Studio 2019. Your mileage may vary with earlier
+We suggest building with Visual Studio 2022. Your mileage may vary with earlier
 versions. Be sure to install the "C++ CMake tools for Windows" in the Visual
 Studio installer. For older versions of Visual Studio, do not install the CMake
 tools, but instead acquire CMake and Ninja from their respective project
@@ -215,16 +217,16 @@ to `D:\Halide`. We also assume that your shell environment is set up correctly.
 For a 64-bit build, run:
 
 ```
-D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
+D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" amd64
 ```
 
 For a 32-bit build, run:
 
 ```
-D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64_x86
+D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" amd64_x86
 ```
 
-#### Managing dependencies with vcpkg
+### Managing dependencies with vcpkg
 
 The best way to get compatible dependencies on Windows is to use
 [vcpkg](https://github.com/Microsoft/vcpkg). Install it like so:
@@ -232,25 +234,84 @@ The best way to get compatible dependencies on Windows is to use
 ```
 D:\> git clone https://github.com/Microsoft/vcpkg.git
 D:\> cd vcpkg
-D:\> .\bootstrap-vcpkg.bat
+D:\vcpkg> .\bootstrap-vcpkg.bat -disableMetrics
 D:\vcpkg> .\vcpkg integrate install
 ...
 CMake projects should use: "-DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake"
 ```
 
-Then install the libraries. For a 64-bit build, run:
+Vcpkg will read [vcpkg.json](./vcpkg.json) to determine the set of dependencies
+when configuring Halide. To produce a build with all supported targets, set
 
 ```
-D:\vcpkg> .\vcpkg install libpng:x64-windows libjpeg-turbo:x64-windows llvm[target-all,clang-tools-extra]:x64-windows
+-DVCPKG_MANIFEST_FEATURES="target-all"
 ```
 
-To support 32-bit builds, also run:
+when configuring Halide. Downstream projects that want to use `Halide::ImageIO`
+should add `libpng` and `libjpeg-turbo` to _their_ list of dependencies.
+
+To use a system-provided LLVM, set
+`-DVCPKG_OVERLAY_PORTS=/path/to/Halide/cmake/vcpkg`.
+
+### Building LLVM manually (optional)
+
+Follow these steps if you want to build LLVM yourself. First, download LLVM's
+sources (these instructions use the latest 17.0 release)
 
 ```
-D:\vcpkg> .\vcpkg install libpng:x86-windows libjpeg-turbo:x86-windows llvm[target-all,clang-tools-extra]:x86-windows
+D:\> git clone --depth 1 --branch llvmorg-18.1.8 https://github.com/llvm/llvm-project.git
 ```
 
-#### Building Halide
+For a 64-bit build, run:
+
+```
+D:\> cmake -G Ninja -S llvm-project\llvm -B llvm-build ^
+           -DCMAKE_BUILD_TYPE=Release ^
+           -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
+           -DLLVM_ENABLE_RUNTIMES=compiler-rt ^
+           -DLLVM_TARGETS_TO_BUILD="AArch64;AMDGPU;ARM;Hexagon;NVPTX;PowerPC;RISCV;WebAssembly;X86" ^
+           -DLLVM_BUILD_32_BITS=OFF ^
+           -DLLVM_ENABLE_ASSERTIONS=ON ^
+           -DLLVM_ENABLE_EH=ON ^
+           -DLLVM_ENABLE_RTTI=ON ^
+           -DLLVM_ENABLE_TERMINFO=OFF ^
+           -DLLVM_ENABLE_ZLIB=OFF ^
+           -DLLVM_ENABLE_ZSTD=OFF
+```
+
+For a 32-bit build, work inside the `amd64_x86` environment from `vcvars` and run:
+
+```
+D:\> cmake -G Ninja -S llvm-project\llvm -B llvm32-build ^
+           -DCMAKE_BUILD_TYPE=Release ^
+           -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
+           -DLLVM_ENABLE_RUNTIMES=compiler-rt ^
+           -DLLVM_TARGETS_TO_BUILD="AArch64;AMDGPU;ARM;Hexagon;NVPTX;PowerPC;RISCV;WebAssembly;X86" ^
+           -DLLVM_BUILD_32_BITS=ON ^
+           -DLLVM_ENABLE_ASSERTIONS=ON ^
+           -DLLVM_ENABLE_EH=ON ^
+           -DLLVM_ENABLE_RTTI=ON ^
+           -DLLVM_ENABLE_TERMINFO=OFF ^
+           -DLLVM_ENABLE_ZLIB=OFF ^
+           -DLLVM_ENABLE_ZSTD=OFF
+```
+
+Finally, run:
+
+```
+D:\> cmake --build llvm-build --config Release
+D:\> cmake --install llvm-build --prefix llvm-install
+```
+
+You can substitute `Debug` for `Release` in the above `cmake` commands if you
+want a debug build. Make sure to add `-DLLVM_DIR=D:/llvm-install/lib/cmake/llvm`
+to the Halide CMake command to override `vcpkg`'s LLVM.
+
+**MSBuild:** If you want to build LLVM with MSBuild instead of Ninja, use
+`-G "Visual Studio 16 2019" -Thost=x64 -A x64` or
+`-G "Visual Studio 16 2019" -Thost=x64 -A Win32` in place of `-G Ninja`.
+
+### Building Halide
 
 Create a separate build tree and call CMake with vcpkg's toolchain. This will
 build in either 32-bit or 64-bit depending on the environment script (`vcvars`)
@@ -284,61 +345,7 @@ D:\Halide\build> ctest -C Release
 Subsets of the tests can be selected with `-L` and include `correctness`,
 `python`, `error`, and the other directory names under `/tests`.
 
-#### Building LLVM (optional)
-
-Follow these steps if you want to build LLVM yourself. First, download LLVM's
-sources (these instructions use the latest 17.0 release)
-
-```
-D:\> git clone --depth 1 --branch release/17.x https://github.com/llvm/llvm-project.git
-```
-
-For a 64-bit build, run:
-
-```
-D:\> cmake -G Ninja ^
-           -DCMAKE_BUILD_TYPE=Release ^
-           -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
-           -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;RISCV ^
-           -DLLVM_ENABLE_ASSERTIONS=ON ^
-           -DLLVM_ENABLE_EH=ON ^
-           -DLLVM_ENABLE_RTTI=ON ^
-           -DLLVM_BUILD_32_BITS=OFF ^
-           -S llvm-project\llvm -B llvm-build
-```
-
-For a 32-bit build, run:
-
-```
-D:\> cmake -G Ninja ^
-           -DCMAKE_BUILD_TYPE=Release ^
-           -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
-           -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;RISCV ^
-           -DLLVM_ENABLE_ASSERTIONS=ON ^
-           -DLLVM_ENABLE_EH=ON ^
-           -DLLVM_ENABLE_RTTI=ON ^
-           -DLLVM_BUILD_32_BITS=ON ^
-           -S llvm-project\llvm -B llvm32-build
-```
-
-Finally, run:
-
-```
-D:\> cmake --build llvm-build --config Release
-D:\> cmake --install llvm-build --prefix llvm-install
-```
-
-You can substitute `Debug` for `Release` in the above `cmake` commands if you
-want a debug build. Make sure to add `-DLLVM_DIR=D:/llvm-install/lib/cmake/llvm`
-to the Halide CMake command to override `vcpkg`'s LLVM.
-
-**MSBuild:** If you want to build LLVM with MSBuild instead of Ninja, use
-`-G "Visual Studio 16 2019" -Thost=x64 -A x64` or
-`-G "Visual Studio 16 2019" -Thost=x64 -A Win32` in place of `-G Ninja`.
-
-#### If all else fails...
+## If all else fails...
 
 Do what the build-bots do: https://buildbot.halide-lang.org/master/#/builders
 
