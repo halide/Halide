@@ -238,7 +238,7 @@ foreach (i IN LISTS RUNTIME_CPP)
             else ()
                 if (j EQUAL 32)
                     # generic 32-bit code
-                    set(TARGET "arm-unknown-unknown-unknown")
+                    set(TARGET "arm-unknown-unknown-unknown-gnueabihf")
                 else ()
                     # generic 64-bit code
                     set(TARGET "aarch64-unknown-unknown-unknown")
