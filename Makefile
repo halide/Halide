@@ -1053,9 +1053,9 @@ $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 .SECONDARY:
 
 # Compile generic 32- or 64-bit code
-# (The 'x86_64' is a red herring. This is just a generic 32-bit little-endian target.)
-RUNTIME_TRIPLE_32 = "i386-unknown-unknown-unknown"
-RUNTIME_TRIPLE_64 = "x86_64-unknown-unknown-unknown"
+# (The 'arm' is a red herring. This is just a generic 32-bit little-endian target.)
+RUNTIME_TRIPLE_32 = "arm-unknown-unknown-unknown"
+RUNTIME_TRIPLE_64 = "aarch64-unknown-unknown-unknown"
 
 # Windows requires special handling.  The generic windows_* modules must have -fpic elided
 # and (for 64 bit) must set wchar to be 2 bytes.  The windows_*_x86 and windows_*_arm
@@ -1069,7 +1069,7 @@ RUNTIME_TRIPLE_WIN_X86_64 = "x86_64-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_ARM_32 = "arm-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_ARM_64 = "aarch64-unknown-windows-unknown"
 # TODO: was le64 here, not sure if this is correct or not
-RUNTIME_TRIPLE_WIN_GENERIC_64 = "x86_64-unknown-windows-unknown"
+RUNTIME_TRIPLE_WIN_GENERIC_64 = "aarch64-unknown-windows-unknown"
 
 # `-fno-threadsafe-statics` is very important here (note that it allows us to use a 'modern' C++
 # standard but still skip threadsafe guards for static initialization in our runtime code)
