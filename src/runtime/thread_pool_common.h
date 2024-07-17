@@ -721,13 +721,13 @@ struct halide_semaphore_impl_t {
 
 WEAK int halide_default_semaphore_init(halide_semaphore_t *s, int n) {
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
-    Halide::Runtime::Internal::Synchronization::atomic_store_release(&sem->value, &n);
+    __atomic_store(&sem->value, &n, __ATOMIC_RELEASE);
     return n;
 }
 
 WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
     halide_semaphore_impl_t *sem = (halide_semaphore_impl_t *)s;
-    int old_val = Halide::Runtime::Internal::Synchronization::atomic_fetch_add_acquire_release(&sem->value, n);
+    int old_val = __atomic_fetch_add(&sem->value, n, __ATOMIC_ACQ_REL);
     // TODO(abadams|zvookin): Is this correct if an acquire can be for say count of 2 and the releases are 1 each?
     if (old_val == 0 && n != 0) {  // Don't wake if nothing released.
         // We may have just made a job runnable
@@ -747,11 +747,16 @@ WEAK bool halide_default_semaphore_try_acquire(halide_semaphore_t *s, int n) {
     // Decrement and get new value
     int expected;
     int desired;
-    Halide::Runtime::Internal::Synchronization::atomic_load_acquire(&sem->value, &expected);
+
+    __atomic_load(&sem->value, &expected, __ATOMIC_ACQUIRE);
+    // TODO: why are these necessary?
+    __sync_synchronize();
+    expected = sem->value;
+
     do {
         desired = expected - n;
     } while (desired >= 0 &&
-             !Halide::Runtime::Internal::Synchronization::atomic_cas_weak_relacq_relaxed(&sem->value, &expected, &desired));
+             !__atomic_compare_exchange(&sem->value, &expected, &desired, true, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED));
     return desired >= 0;
 }
 

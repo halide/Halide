@@ -3,7 +3,6 @@
 #include "device_interface.h"
 #include "gpu_context_common.h"
 #include "printer.h"
-#include "runtime_atomics.h"
 #include "scoped_spin_lock.h"
 
 #include "mini_webgpu.h"
@@ -170,8 +169,6 @@ public:
     // Wait for all error callbacks in this scope to fire.
     // Returns the error code (or success).
     halide_error_code_t wait() {
-        using namespace Halide::Runtime::Internal::Synchronization;
-
         if (callbacks_remaining == 0) {
             error(user_context) << "no outstanding error scopes\n";
             return halide_error_code_internal_error;
@@ -182,7 +179,7 @@ public:
         wgpuDevicePopErrorScope(device, error_callback, this);
 
         // Wait for the error callbacks to fire.
-        while (atomic_fetch_or_sequentially_consistent(&callbacks_remaining, 0) > 0) {
+        while (__atomic_fetch_or(&callbacks_remaining, 0, __ATOMIC_SEQ_CST) > 0) {
             wgpuDeviceTick(device);
         }
 
@@ -204,8 +201,6 @@ private:
     static void error_callback(WGPUErrorType type,
                                char const *message,
                                void *userdata) {
-        using namespace Halide::Runtime::Internal::Synchronization;
-
         ErrorScope *context = (ErrorScope *)userdata;
         switch (type) {
         case WGPUErrorType_NoError:
@@ -227,7 +222,7 @@ private:
             context->error_code = halide_error_code_generic_error;
         }
 
-        atomic_fetch_add_sequentially_consistent(&context->callbacks_remaining, -1);
+        __atomic_fetch_add(&context->callbacks_remaining, -1, __ATOMIC_SEQ_CST);
     }
 };
 

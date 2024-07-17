@@ -1,5 +1,4 @@
 #include "HalideRuntime.h"
-#include "runtime_atomics.h"
 #include "runtime_internal.h"
 
 extern "C" {
@@ -47,15 +46,13 @@ WEAK __attribute__((destructor)) void halide_allocator_cleanup() {
 }  // namespace Halide
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
-    using namespace Halide::Runtime::Internal::Synchronization;
-
     const size_t alignment = ::halide_internal_malloc_alignment();
 
     if (x <= buffer_size) {
         for (int i = 0; i < num_buffers; ++i) {
             int expected = 0;
             int desired = 1;
-            if (atomic_cas_strong_sequentially_consistent(&buf_is_used[i], &expected, &desired)) {
+            if (__atomic_compare_exchange(&buf_is_used[i], &expected, &desired, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
                 if (mem_buf[i] == nullptr) {
                     mem_buf[i] = aligned_malloc(alignment, buffer_size);
                 }

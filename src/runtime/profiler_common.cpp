@@ -1,6 +1,5 @@
 #include "HalideRuntime.h"
 #include "printer.h"
-#include "runtime_atomics.h"
 #include "scoped_mutex_lock.h"
 
 // Note: The profiler thread may out-live any valid user_context, or
@@ -182,11 +181,9 @@ namespace {
 
 template<typename T>
 void sync_compare_max_and_swap(T *ptr, T val) {
-    using namespace Halide::Runtime::Internal::Synchronization;
-
     T old_val = *ptr;
     while (val > old_val) {
-        if (atomic_cas_strong_sequentially_consistent(ptr, &old_val, &val)) {
+        if (__atomic_compare_exchange(ptr, &old_val, &val, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
             return;
         }
     }
@@ -359,8 +356,6 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
                                           halide_profiler_instance_state *instance,
                                           int func_id,
                                           uint64_t incr) {
-    using namespace Halide::Runtime::Internal::Synchronization;
-
     // It's possible to have 'incr' equal to zero if the allocation is not
     // executed conditionally.
     if (incr == 0) {
@@ -381,15 +376,15 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     // halide_profiler_reset().
 
     // Update per-instance memory stats
-    atomic_add_fetch_sequentially_consistent(&instance->num_allocs, 1);
-    atomic_add_fetch_sequentially_consistent(&instance->memory_total, incr);
-    uint64_t p_mem_current = atomic_add_fetch_sequentially_consistent(&instance->memory_current, incr);
+    __atomic_add_fetch(&instance->num_allocs, 1, __ATOMIC_SEQ_CST);
+    __atomic_add_fetch(&instance->memory_total, incr, __ATOMIC_SEQ_CST);
+    uint64_t p_mem_current = __atomic_add_fetch(&instance->memory_current, incr, __ATOMIC_SEQ_CST);
     sync_compare_max_and_swap(&instance->memory_peak, p_mem_current);
 
     // Update per-func memory stats
-    atomic_add_fetch_sequentially_consistent(&func->num_allocs, 1);
-    atomic_add_fetch_sequentially_consistent(&func->memory_total, incr);
-    uint64_t f_mem_current = atomic_add_fetch_sequentially_consistent(&func->memory_current, incr);
+    __atomic_add_fetch(&func->num_allocs, 1, __ATOMIC_SEQ_CST);
+    __atomic_add_fetch(&func->memory_total, incr, __ATOMIC_SEQ_CST);
+    uint64_t f_mem_current = __atomic_add_fetch(&func->memory_current, incr, __ATOMIC_SEQ_CST);
     sync_compare_max_and_swap(&func->memory_peak, f_mem_current);
 }
 
@@ -397,8 +392,6 @@ WEAK void halide_profiler_memory_free(void *user_context,
                                       halide_profiler_instance_state *instance,
                                       int func_id,
                                       uint64_t decr) {
-    using namespace Halide::Runtime::Internal::Synchronization;
-
     // It's possible to have 'decr' equal to zero if the allocation is not
     // executed conditionally.
     if (decr == 0) {
@@ -418,10 +411,10 @@ WEAK void halide_profiler_memory_free(void *user_context,
     // unless user specifically calls halide_profiler_reset().
 
     // Update per-pipeline memory stats
-    atomic_sub_fetch_sequentially_consistent(&instance->memory_current, decr);
+    __atomic_sub_fetch(&instance->memory_current, decr, __ATOMIC_SEQ_CST);
 
     // Update per-func memory stats
-    atomic_sub_fetch_sequentially_consistent(&func->memory_current, decr);
+    __atomic_sub_fetch(&func->memory_current, decr, __ATOMIC_SEQ_CST);
 }
 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
@@ -724,15 +717,13 @@ __attribute__((destructor))
 #endif
 WEAK void
 halide_profiler_shutdown() {
-    using namespace Halide::Runtime::Internal::Synchronization;
-
     halide_profiler_state *s = halide_profiler_get_state();
     if (!s->sampling_thread) {
         return;
     }
 
     int one = 1;
-    atomic_store_relaxed(&(s->shutdown), &one);
+    __atomic_store(&(s->shutdown), &one, __ATOMIC_RELAXED);
 
 #if TIMER_PROFILING
     // Wait for timer interrupt to fire and notice things are shutdown.
