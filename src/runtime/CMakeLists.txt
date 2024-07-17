@@ -173,6 +173,7 @@ set(RUNTIME_CXX_FLAGS
     -Wvla
     -Wsign-compare
     -Wimplicit-fallthrough
+    -Wno-sync-alignment
 )
 
 option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
