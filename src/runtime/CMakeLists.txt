@@ -218,16 +218,16 @@ foreach (i IN LISTS RUNTIME_CPP)
                     # ABI is msvc on windows
                     set(fshort-wchar -fshort-wchar)
                     # TODO: was le64 here, not sure if this is correct or not
-                    set(TARGET "aarch64-unknown-windows-unknown")
+                    set(TARGET "x86_64-unknown-windows-unknown")
                 endif ()
             endif()
         # Everything else
         else()
-            # don't be fooled: arm/aarch64 are just generic 32/64-bit targets for our purposes here
+            # don't be fooled: i386/x86_64 are just generic 32/64-bit targets for our purposes here
             if (j EQUAL 32)
-                set(TARGET "arm-unknown-unknown-gnueabihf")
+                set(TARGET "i386-unknown-unknown-unknown")
             else ()
-                set(TARGET "aarch64-unknown-unknown-unknown")
+                set(TARGET "x86_64-unknown-unknown-unknown")
             endif ()
         endif ()
 
