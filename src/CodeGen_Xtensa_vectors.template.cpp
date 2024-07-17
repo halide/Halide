@@ -1059,6 +1059,40 @@ HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_convert_u1_to_i16(const nat
 }
 
 template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f16 aligned_load<native_vector_f16, float16_t, VECTOR_WIDTH_F16>(const void *base, int32_t offset) {
+    native_vector_f16 r;
+
+    const native_vector_f16 *__restrict ptr = (const native_vector_f16 *)((const float16_t *)base + offset);
+    IVP_LVNXF16_IP(r, ptr, 0);
+
+    return r;
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f16_x2 aligned_load<native_vector_f16_x2, float16_t, 2 * VECTOR_WIDTH_F16>(const void *base, int32_t offset) {
+    native_vector_f16 r1, r2;
+
+    const native_vector_f16 *__restrict ptr = (const native_vector_f16 *)((const float16_t *)base + offset);
+    r1 = IVP_LVNXF16_I(ptr, 0);
+    r2 = IVP_LVNXF16_I(ptr, 128);
+
+    return native_vector_f16_x2(native_vector_f16_x2::from_native_vector, r1, r2);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void aligned_store<native_vector_f16, float16_t, VECTOR_WIDTH_F16>(const native_vector_f16 &a, void *base, int32_t offset) {
+    native_vector_f16 *ptr = (native_vector_f16 *)((float16_t *)base + offset);
+    IVP_SVNXF16_I(a, ptr, 0);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void aligned_store<native_vector_f16_x2, float16_t, 2 * VECTOR_WIDTH_F16>(const native_vector_f16_x2 &a, void *base, int32_t offset) {
+    native_vector_f16 *ptr = (native_vector_f16 *)((float16_t *)base + offset);
+    IVP_SVNXF16_I(a.native_vector[0], ptr, 0);
+    IVP_SVNXF16_I(a.native_vector[1], ptr, 128);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x4_t load<int8x4_t, int8_t, 4>(const void *base, int32_t offset) {
     return *((const int8x4_t *)((const int8_t *)base + offset));
 }
