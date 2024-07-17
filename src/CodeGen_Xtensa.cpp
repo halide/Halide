@@ -98,6 +98,7 @@ CodeGen_Xtensa::CodeGen_Xtensa(ostream &s, const Target &t, OutputKind k, const 
           {"halide_xtensa_abs_i8", "IVP_ABS2NX8"},
           {"halide_xtensa_abs_i16", "IVP_ABSNX16"},
           {"halide_xtensa_abs_i32", "IVP_ABSN_2X32"},
+          {"halide_xtensa_abs_f16", "IVP_ABSNXF16"},
           {"halide_xtensa_abs_f32", "IVP_ABSN_2XF32"},
           {"halide_xtensa_sat_add_i16", "IVP_ADDSNX16"},
           {"halide_xtensa_sat_sub_i16", "IVP_SUBSNX16"},

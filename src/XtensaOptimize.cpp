@@ -1027,6 +1027,7 @@ private:
             {"halide_xtensa_abs_i8", abs(wild_i8x)},
             {"halide_xtensa_abs_i16", abs(wild_i16x)},
             {"halide_xtensa_abs_i32", abs(wild_i32x)},
+            {"halide_xtensa_abs_f16", abs(wild_f16x)},
             {"halide_xtensa_abs_f32", abs(wild_f32x)},
 
             {"halide_xtensa_avg_u8", halving_add(wild_u8x, wild_u8x)},
