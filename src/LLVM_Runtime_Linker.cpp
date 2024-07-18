@@ -715,6 +715,10 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
                 convert_weak_to_linkonce(f);
             }
         }
+        // Ensure it isn't hidden.
+        if (is_halide_extern_c_sym) {
+            f.setVisibility(llvm::GlobalValue::DefaultVisibility);
+        }
 
         // Windows requires every symbol that's going to get merged
         // has a comdat that specifies how. The linkage type alone
