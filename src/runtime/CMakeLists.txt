@@ -224,11 +224,11 @@ foreach (i IN LISTS RUNTIME_CPP)
             endif()
         # Everything else
         else()
-            # don't be fooled: i386/x86_64 are just generic 32/64-bit targets for our purposes here
+            # don't be fooled: these are just generic 32/64-bit targets for our purposes here
             if (j EQUAL 32)
-                set(TARGET "i386-unknown-unknown-unknown")
+                set(TARGET "wasm32-unknown-unknown-unknown")
             else ()
-                set(TARGET "x86_64-unknown-unknown-unknown")
+                set(TARGET "wasm64-unknown-unknown-unknown")
             endif ()
         endif ()
 
