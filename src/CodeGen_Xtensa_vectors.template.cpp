@@ -1074,7 +1074,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f16_x2 aligned_load<nativ
 
     const native_vector_f16 *__restrict ptr = (const native_vector_f16 *)((const float16_t *)base + offset);
     r1 = IVP_LVNXF16_I(ptr, 0);
-    r2 = IVP_LVNXF16_I(ptr, 128);
+    r2 = IVP_LVNXF16_I(ptr, sizeof(native_vector_f16));
 
     return native_vector_f16_x2(native_vector_f16_x2::from_native_vector, r1, r2);
 }
@@ -1089,7 +1089,7 @@ template<>
 HALIDE_ALWAYS_INLINE void aligned_store<native_vector_f16_x2, float16_t, 2 * VECTOR_WIDTH_F16>(const native_vector_f16_x2 &a, void *base, int32_t offset) {
     native_vector_f16 *ptr = (native_vector_f16 *)((float16_t *)base + offset);
     IVP_SVNXF16_I(a.native_vector[0], ptr, 0);
-    IVP_SVNXF16_I(a.native_vector[1], ptr, 128);
+    IVP_SVNXF16_I(a.native_vector[1], ptr, sizeof(native_vector_f16));
 }
 
 template<>
