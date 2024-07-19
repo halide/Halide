@@ -1063,16 +1063,21 @@ public:
         add_custom_lowering_pass(pass, [pass]() { delete_lowering_pass<T>(pass); });
     }
 
-    /** Add a custom pass to be used during lowering, with the
-     * function that will be called to delete it also passed in. Set
-     * it to nullptr if you wish to retain ownership of the object. */
+    /** Add a custom pass to be used during lowering, which may be just an
+     * IRMutator, or a more general CustomPass. The second argument is the
+     * function that will be called to delete it if you wish to pass ownership
+     * to Halide. Set it to nullptr if you wish to retain ownership of the
+     * object. */
+    // @{
     void add_custom_lowering_pass(Internal::IRMutator *pass, std::function<void()> deleter);
+    void add_custom_lowering_pass(CustomPass *pass, std::function<void()> deleter);
+    // @}
 
     /** Remove all previously-set custom lowering passes */
     void clear_custom_lowering_passes();
 
     /** Get the custom lowering passes. */
-    const std::vector<CustomLoweringPass> &custom_lowering_passes();
+    const std::vector<CustomPassPtr> &custom_lowering_passes();
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of

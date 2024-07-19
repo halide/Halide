@@ -135,7 +135,7 @@ void lower_impl(const vector<Function> &output_funcs,
                 const LinkageType linkage_type,
                 const vector<Stmt> &requirements,
                 bool trace_pipeline,
-                const vector<IRMutator *> &custom_passes,
+                const vector<CustomPass *> &custom_passes,
                 Module &result_module) {
     auto time_start = std::chrono::high_resolution_clock::now();
 
@@ -458,13 +458,11 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
-    if (!custom_passes.empty()) {
-        for (size_t i = 0; i < custom_passes.size(); i++) {
-            debug(1) << "Running custom lowering pass " << i << "...\n";
-            s = custom_passes[i]->mutate(s);
-            debug(1) << "Lowering after custom pass " << i << ":\n"
-                     << s << "\n\n";
-        }
+    for (auto *p : custom_passes) {
+        debug(1) << "Running custom lowering pass " << p->name() << "...\n";
+        s = p->run(outputs, env, s, t);
+        debug(1) << "Lowering after custom pass " << p->name() << ":\n"
+                 << s << "\n\n";
     }
 
     // Make a copy of the Stmt code, before we lower anything to less human-readable code.
@@ -615,7 +613,7 @@ Module lower(const vector<Function> &output_funcs,
              const LinkageType linkage_type,
              const vector<Stmt> &requirements,
              bool trace_pipeline,
-             const vector<IRMutator *> &custom_passes) {
+             const vector<CustomPass *> &custom_passes) {
     Module result_module{strip_namespaces(pipeline_name), t};
     run_with_large_stack([&]() {
         lower_impl(output_funcs, pipeline_name, t, args, linkage_type, requirements, trace_pipeline, custom_passes, result_module);
@@ -628,7 +626,7 @@ Stmt lower_main_stmt(const std::vector<Function> &output_funcs,
                      const Target &t,
                      const std::vector<Stmt> &requirements,
                      bool trace_pipeline,
-                     const std::vector<IRMutator *> &custom_passes) {
+                     const std::vector<CustomPass *> &custom_passes) {
     // We really ought to start applying for appellation d'origine contrôlée
     // status on types representing arguments in the Halide compiler.
     vector<InferredArgument> inferred_args = infer_arguments(Stmt(), output_funcs);

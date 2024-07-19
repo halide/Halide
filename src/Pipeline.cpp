@@ -7,11 +7,13 @@
 #include "Deserialization.h"
 #include "FindCalls.h"
 #include "Func.h"
+#include "IRMutator.h"
 #include "IRVisitor.h"
 #include "InferArguments.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Module.h"
+#include "PerformanceLinters.h"
 #include "Pipeline.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
@@ -136,7 +138,7 @@ struct PipelineContents {
     InferredArgument user_context_arg;
 
     /** A set of custom passes to use when lowering this Func. */
-    vector<CustomLoweringPass> custom_lowering_passes;
+    vector<CustomPassPtr> custom_lowering_passes;
 
     /** The inferred arguments. Also the arguments to the main
      * function in the jit_module above. The two must be updated
@@ -550,8 +552,14 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         // We can avoid relowering and just reuse the existing module.
         debug(2) << "Reusing old module\n";
     } else {
-        vector<IRMutator *> custom_passes;
-        for (const CustomLoweringPass &p : contents->custom_lowering_passes) {
+        vector<CustomPass *> custom_passes;
+
+        auto default_linters = get_default_linters(target);
+        for (const auto &p : default_linters) {
+            custom_passes.push_back(p.get());
+        }
+
+        for (const CustomPassPtr &p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
 
@@ -731,8 +739,41 @@ const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
 
 void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     user_assert(defined()) << "Pipeline is undefined\n";
+
+    class CustomPassFromIRMutator : public CustomPass {
+        IRMutator *mutator;
+        std::function<void()> deleter;
+
+    public:
+        virtual std::string name() override {
+            return "Anonymous IRMutator";
+        }
+        virtual Stmt run(const std::vector<Function> &outputs,
+                         const std::map<std::string, Function> &env,
+                         const Stmt &stmt,
+                         const Target &target) override {
+            return mutator->mutate(stmt);
+        };
+
+        CustomPassFromIRMutator(IRMutator *m, std::function<void()> d)
+            : mutator(m), deleter(d) {
+        }
+
+        ~CustomPassFromIRMutator() {
+            if (deleter) {
+                deleter();
+            }
+            mutator = nullptr;
+        }
+    };
+
+    add_custom_lowering_pass(new CustomPassFromIRMutator(pass, std::move(deleter)));
+}
+
+void Pipeline::add_custom_lowering_pass(CustomPass *pass, std::function<void()> deleter) {
+    user_assert(defined()) << "Pipeline is undefined\n";
     contents->invalidate_cache();
-    CustomLoweringPass p = {pass, std::move(deleter)};
+    CustomPassPtr p = {pass, std::move(deleter)};
     contents->custom_lowering_passes.push_back(p);
 }
 
@@ -743,7 +784,7 @@ void Pipeline::clear_custom_lowering_passes() {
     contents->clear_custom_lowering_passes();
 }
 
-const vector<CustomLoweringPass> &Pipeline::custom_lowering_passes() {
+const vector<CustomPassPtr> &Pipeline::custom_lowering_passes() {
     user_assert(defined()) << "Pipeline is undefined\n";
     return contents->custom_lowering_passes;
 }

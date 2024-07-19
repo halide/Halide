@@ -537,6 +537,7 @@ SOURCE_FILES = \
   ParallelRVar.cpp \
   Parameter.cpp \
   PartitionLoops.cpp \
+  PerformanceLinters.cpp \
   Pipeline.cpp \
   Prefetch.cpp \
   PrintLoopNest.cpp \
@@ -740,6 +741,7 @@ HEADER_FILES = \
   Param.h \
   Parameter.h \
   PartitionLoops.h \
+  PerformanceLinters.h \
   Pipeline.h \
   Prefetch.h \
   Profiling.h \

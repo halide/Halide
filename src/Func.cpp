@@ -3606,7 +3606,7 @@ void Func::clear_custom_lowering_passes() {
     pipeline().clear_custom_lowering_passes();
 }
 
-const vector<CustomLoweringPass> &Func::custom_lowering_passes() {
+const vector<CustomPassPtr> &Func::custom_lowering_passes() {
     return pipeline().custom_lowering_passes();
 }
 

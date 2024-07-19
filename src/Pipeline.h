@@ -83,9 +83,19 @@ void delete_lowering_pass(T *pass) {
 }
 }  // namespace
 
+class CustomPass {
+public:
+    virtual std::string name() = 0;
+    virtual Internal::Stmt run(const std::vector<Internal::Function> &outputs,
+                               const std::map<std::string, Internal::Function> &env,
+                               const Internal::Stmt &stmt,
+                               const Target &target) = 0;
+    virtual ~CustomPass(){};
+};
+
 /** A custom lowering pass. See Pipeline::add_custom_lowering_pass. */
-struct CustomLoweringPass {
-    Internal::IRMutator *pass;
+struct CustomPassPtr {
+    CustomPass *pass = nullptr;
     std::function<void()> deleter;
 };
 
@@ -391,16 +401,21 @@ public:
         add_custom_lowering_pass(pass, [pass]() { delete_lowering_pass<T>(pass); });
     }
 
-    /** Add a custom pass to be used during lowering, with the
-     * function that will be called to delete it also passed in. Set
-     * it to nullptr if you wish to retain ownership of the object. */
+    /** Add a custom pass to be used during lowering, which may be just an
+     * IRMutator, or a more general CustomPass. The second argument is the
+     * function that will be called to delete it if you wish to pass ownership
+     * to Halide. Set it to nullptr if you wish to retain ownership of the
+     * object. */
+    // @{
     void add_custom_lowering_pass(Internal::IRMutator *pass, std::function<void()> deleter);
+    void add_custom_lowering_pass(CustomPass *pass, std::function<void()> deleter);
+    // @}
 
     /** Remove all previously-set custom lowering passes */
     void clear_custom_lowering_passes();
 
     /** Get the custom lowering passes. */
-    const std::vector<CustomLoweringPass> &custom_lowering_passes();
+    const std::vector<CustomPassPtr> &custom_lowering_passes();
 
     /** See Func::realize */
     Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target());
