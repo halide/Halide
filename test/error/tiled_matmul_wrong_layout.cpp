@@ -77,9 +77,8 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool 
         Buffer<int32_t> out(col, row);
         result.realize(out);
 
-        bool should_continue = true;
-        for (int j = 0; j < row && should_continue; ++j) {
-            for (int i = 0; i < col && should_continue; ++i) {
+        for (int j = 0; j < row; ++j) {
+            for (int i = 0; i < col; ++i) {
                 int32_t val = 0;
                 for (int k = 0; k < acc; ++k) {
                     val += static_cast<int32_t>(A_buf(k, j)) * static_cast<int32_t>(B_buf(k % 4, i, k / 4));
