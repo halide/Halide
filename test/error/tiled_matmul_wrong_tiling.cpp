@@ -35,6 +35,7 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool 
 
     Func mm("matmul");
     mm(x, y) = cast<int32_t>(0);
+    // Tiling is set to 8
     mm(x, y) += cast<int32_t>(A_buf(r, y)) * cast<int32_t>(B_buf(r % 8, x, r / 8));
 
     Var rxi("rxi"), ryi("ryi");

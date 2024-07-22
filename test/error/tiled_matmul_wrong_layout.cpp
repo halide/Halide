@@ -28,6 +28,7 @@ template<typename LhsInt8, typename RhsInt8>
 bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool validate) {
     Target target("x86-64-linux-avx512_sapphirerapids");
     Buffer<LhsInt8> A_buf(acc, row);
+    // Each tile in B is padded with another 4 bytes.
     Buffer<RhsInt8> B_buf(8, col, acc / 4);
 
     Var x("x"), y("y");
