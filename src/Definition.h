@@ -49,7 +49,7 @@ public:
 
     /** Construct a Definition with deserialized data. */
     Definition(bool is_init, const Expr &predicate, const std::vector<Expr> &args, const std::vector<Expr> &values,
-               const StageSchedule &schedule, const std::vector<Specialization> &specializations, const std::string &source_location);
+               const StageSchedule &schedule, const std::vector<Specialization> &specializations);
 
     /** Construct an undefined Definition object. */
     Definition();
@@ -123,12 +123,6 @@ public:
     std::vector<Specialization> &specializations();
     const Specialization &add_specialization(Expr condition);
     // @}
-
-    /** Attempt to get the source file and line where this definition
-     * was made using DWARF introspection. Returns an empty string if
-     * no debug symbols were found or the debug symbols were not
-     * understood. Works on OS X and Linux only. */
-    std::string source_location() const;
 };
 
 struct Specialization {

@@ -253,6 +253,17 @@ public:
             for (int w = 2; w <= 4; w++) {
                 check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2) + 16384) >> 15));
                 check("pmulhrsw", 4 * w, i16_sat((i32(i16_1) * i32(i16_2) + 16384) >> 15));
+                // Should be able to use the non-saturating form of pmulhrsw,
+                // because the second arg can't be -32768, so the i16_sat
+                // doesn't actually need to saturate.
+                check("pmulhrsw", 4 * w, i16_sat((i32(i16_1) * i32(i16_2 / 2) + 16384) >> 15));
+
+                // Should be able to use pmulhrsw despite the shift being too
+                // small, because there are enough bits of headroom to shift
+                // left one of the args:
+                check("pmulhrsw", 4 * w, i16_sat((i32(i16_1) * i32(i16_2 / 2) + 8192) >> 14));
+                check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2 / 3) + 8192) >> 14));
+
                 check("pabsb", 8 * w, abs(i8_1));
                 check("pabsw", 4 * w, abs(i16_1));
                 check("pabsd", 2 * w, abs(i32_1));

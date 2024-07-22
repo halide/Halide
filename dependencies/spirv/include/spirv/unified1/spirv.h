@@ -2574,3 +2574,4 @@ inline void SpvHasResultAndType(SpvOp opcode, bool *hasResult, bool *hasResultTy
 #endif /* SPV_ENABLE_UTILITY_CODE */
 
 #endif
+

@@ -79,6 +79,9 @@ public:
     VkPhysicalDevice current_physical_device() const {
         return this->physical_device;
     }
+    VkPhysicalDeviceLimits current_physical_device_limits() const {
+        return this->physical_device_limits;
+    }
     const VkAllocationCallbacks *callbacks() const {
         return this->alloc_callbacks;
     }

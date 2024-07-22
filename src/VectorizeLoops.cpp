@@ -380,6 +380,13 @@ class PredicateLoadStore : public IRMutator {
         return pred;
     }
 
+    Stmt visit(const Atomic *op) override {
+        // We don't support codegen for vectorized predicated atomic stores, so
+        // just bail out.
+        valid = false;
+        return op;
+    }
+
     Expr visit(const Load *op) override {
         valid = valid && ((op->predicate.type().lanes() == lanes) || (op->predicate.type().is_scalar() && !expr_uses_var(op->index, var)));
         if (!valid) {

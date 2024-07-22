@@ -196,7 +196,7 @@ public:
         : contents(new Internal::BufferContents) {
         contents->buf = std::move(buf);
         if (name.empty()) {
-            contents->name = Internal::make_entity_name(this, "Halide:.*:Buffer<.*>", 'b');
+            contents->name = Internal::unique_name('b');
         } else {
             contents->name = name;
         }

@@ -24,7 +24,7 @@ halide_vulkan_memory_allocator *WEAK cached_allocator = nullptr;
 // Cached instance related handles for device resources
 VkInstance WEAK cached_instance = nullptr;
 VkDevice WEAK cached_device = nullptr;
-VkCommandPool WEAK cached_command_pool = 0;
+VkCommandPool WEAK cached_command_pool = VkInvalidCommandPool;
 VkQueue WEAK cached_queue = nullptr;
 VkPhysicalDevice WEAK cached_physical_device = nullptr;
 uint32_t WEAK cached_queue_family_index = 0;
@@ -42,7 +42,7 @@ public:
     VulkanMemoryAllocator *allocator = nullptr;
     VkInstance instance = nullptr;
     VkDevice device = nullptr;
-    VkCommandPool command_pool = 0;
+    VkCommandPool command_pool = VkInvalidCommandPool;
     VkPhysicalDevice physical_device = nullptr;
     VkQueue queue = nullptr;
     uint32_t queue_family_index = 0;  // used for operations requiring queue family
@@ -88,27 +88,52 @@ int vk_find_compute_capability(void *user_context, int *major, int *minor) {
     VkPhysicalDevice physical_device = nullptr;
     uint32_t queue_family_index = 0;
 
+    if (!lib_vulkan) {
+        // If the Vulkan loader can't be found, we want to return compute
+        // capability of (0, 0) ... this is not considered an error. So we
+        // should be very careful about looking for Vulkan without tripping
+        // any errors in the rest of this runtime.
+        void *sym = halide_vulkan_get_symbol(user_context, "vkCreateInstance");
+        if (!sym) {
+            *major = *minor = 0;
+            return halide_error_code_success;
+        }
+    }
+
+    if (vkCreateInstance == nullptr) {
+        vk_load_vulkan_loader_functions(user_context);
+        if (vkCreateInstance == nullptr) {
+            debug(user_context) << "  no valid vulkan loader library was found ...\n";
+            *major = *minor = 0;
+            return halide_error_code_success;
+        }
+    }
+
     StringTable requested_layers;
     vk_get_requested_layers(user_context, requested_layers);
 
+    // Attempt to find a suitable instance that can support the requested layers
     const VkAllocationCallbacks *alloc_callbacks = halide_vulkan_get_allocation_callbacks(user_context);
     int status = vk_create_instance(user_context, requested_layers, &instance, alloc_callbacks);
     if (status != halide_error_code_success) {
         debug(user_context) << "  no valid vulkan runtime was found ...\n";
-        *major = 0;
-        *minor = 0;
+        *major = *minor = 0;
         return 0;
     }
 
     if (vkCreateDevice == nullptr) {
-        vk_load_vulkan_functions(instance);
+        vk_load_vulkan_functions(user_context, instance);
+        if (vkCreateDevice == nullptr) {
+            debug(user_context) << "  no valid vulkan runtime was found ...\n";
+            *major = *minor = 0;
+            return halide_error_code_success;
+        }
     }
 
     status = vk_select_device_for_context(user_context, &instance, &device, &physical_device, &queue_family_index);
     if (status != halide_error_code_success) {
         debug(user_context) << "  no valid vulkan device was found ...\n";
-        *major = 0;
-        *minor = 0;
+        *major = *minor = 0;
         return 0;
     }
 
@@ -425,6 +450,14 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
 
     debug(user_context) << " vk_create_context (user_context: " << user_context << ")\n";
 
+    if (vkCreateInstance == nullptr) {
+        vk_load_vulkan_loader_functions(user_context);
+        if (vkCreateInstance == nullptr) {
+            error(user_context) << "Vulkan: Failed to resolve loader library methods to create instance!\n";
+            return halide_error_code_symbol_not_found;
+        }
+    }
+
     StringTable requested_layers;
     uint32_t requested_layer_count = vk_get_requested_layers(user_context, requested_layers);
     debug(user_context) << "  requested " << requested_layer_count << " layers for instance!\n";
@@ -440,7 +473,11 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
     }
 
     if (vkCreateDevice == nullptr) {
-        vk_load_vulkan_functions(*instance);
+        vk_load_vulkan_functions(user_context, *instance);
+        if (vkCreateDevice == nullptr) {
+            error(user_context) << "Vulkan: Failed to resolve API library methods to create device!\n";
+            return halide_error_code_symbol_not_found;
+        }
     }
 
     error_code = vk_select_device_for_context(user_context, instance, device, physical_device, queue_family_index);
@@ -467,6 +504,32 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
         return error_code;
     }
 
+    return halide_error_code_success;
+}
+
+// Destroys the context and all associated resources (used by halide_vulkan_device_release)
+// NOTE: This should be called inside an acquire_context/release_context scope
+int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
+                       VkInstance instance, VkDevice device, VkPhysicalDevice physical_device,
+                       VkCommandPool command_pool, VkQueue queue) {
+
+    debug(user_context)
+        << "vk_destroy_context (user_context: " << user_context << ")\n";
+
+    if (device != nullptr) {
+        vkDeviceWaitIdle(device);
+    }
+    if ((command_pool != VkInvalidCommandPool) && (allocator != nullptr)) {
+        vk_destroy_command_pool(user_context, allocator, command_pool);
+        vk_destroy_shader_modules(user_context, allocator);
+        vk_destroy_memory_allocator(user_context, allocator);
+    }
+    if (device != nullptr) {
+        vkDestroyDevice(device, nullptr);
+    }
+    if (instance != nullptr) {
+        vkDestroyInstance(instance, nullptr);
+    }
     return halide_error_code_success;
 }
 

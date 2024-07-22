@@ -91,7 +91,6 @@ set(HEADER_FILES
     InlineReductions.h
     IntegerDivisionTable.h
     Interval.h
-    Introspection.h
     IntrusivePtr.h
     IR.h
     IREquality.h
@@ -262,7 +261,6 @@ set(SOURCE_FILES
     InlineReductions.cpp
     IntegerDivisionTable.cpp
     Interval.cpp
-    Introspection.cpp
     IR.cpp
     IREquality.cpp
     IRMatch.cpp
@@ -563,11 +561,6 @@ target_compile_definitions(Halide PUBLIC
 target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 add_dependencies(Halide HalideIncludes)
 
-option(Halide_WITH_INTROSPECTION "Enable use of debugging symbols for default Func, Var, etc. names" ON)
-if (Halide_WITH_INTROSPECTION)
-    target_compile_definitions(Halide PRIVATE WITH_INTROSPECTION)
-endif ()
-
 if (TARGET Halide_wabt)
     target_link_libraries(Halide PRIVATE Halide_wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
@@ -624,10 +617,12 @@ if (TARGET_VULKAN)
 endif()
 
 if (TARGET_SPIRV)
-    # Our vendored SPIRV headers are only used internally; users do not need
-    # them installed.
+    find_package(
+        SPIRV-Headers 1.5.5 REQUIRED
+        HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
+    )
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:Halide::SPIRV>")
+    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
 endif ()
 
 option(TARGET_WEBGPU "Include WebGPU target" ON)

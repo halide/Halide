@@ -712,11 +712,6 @@ function(_Halide_add_targets_to_runtime TARGET)
 endfunction()
 
 function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
-    if ("${ARGN}" MATCHES "vulkan")
-        find_package(Vulkan REQUIRED)
-        target_link_libraries(${TARGET} ${VISIBILITY} Vulkan::Vulkan)
-    endif ()
-
     if ("${ARGN}" MATCHES "metal")
         find_library(FOUNDATION_LIBRARY Foundation REQUIRED)
         find_library(METAL_LIBRARY Metal REQUIRED)

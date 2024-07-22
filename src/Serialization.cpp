@@ -1163,7 +1163,10 @@ Offset<Serialize::Definition> Serializer::serialize_definition(FlatBufferBuilder
     for (const auto &specialization : definition.specializations()) {
         specializations_serialized.push_back(serialize_specialization(builder, specialization));
     }
-    const auto source_location_serialized = serialize_string(builder, definition.source_location());
+    // This always relied on Introspection working, so an empty string was always valid.
+    // Rather than change the serialization format for a compiler-dependent value, we'll
+    // just always use an empty string now.
+    const auto source_location_serialized = serialize_string(builder, "");
     return Serialize::CreateDefinition(builder, is_init,
                                        predicate_serialized.first, predicate_serialized.second,
                                        builder.CreateVector(values_types), builder.CreateVector(values_serialized),

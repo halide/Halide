@@ -205,7 +205,7 @@ Once Python is installed, you can install the Python module dependencies either
 globally or in a [virtual environment][venv] by running
 
 ```
-> pip3 install -r .\python_bindings\requirements.txt
+> pip3 install -r requirements.txt
 ```
 
 from the root of the repository.

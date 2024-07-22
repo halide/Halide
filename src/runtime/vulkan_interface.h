@@ -37,24 +37,69 @@ namespace Vulkan {
 
 // --------------------------------------------------------------------------
 
-// Halide device interface struct for runtime specific funtion table
+// Halide device interface struct for runtime specific function table
 extern WEAK halide_device_interface_t vulkan_device_interface;
 
 // --------------------------------------------------------------------------
 
+// The default implementation of halide_vulkan_get_symbol attempts to load
+// the Vulkan loader shared library/DLL, and then get the symbol from it.
+WEAK void *lib_vulkan = nullptr;
+
+extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *name) {
+    // Only try to load the library if the library isn't already
+    // loaded, or we can't load the symbol from the process already.
+    void *symbol = halide_get_library_symbol(lib_vulkan, name);
+    if (symbol) {
+        return symbol;
+    }
+
+    const char *lib_names[] = {
+#ifdef WINDOWS
+        "vulkan-1.dll",
+#else
+        "libvulkan.so.1",
+        "libvulkan.1.dylib",
+#endif
+    };
+    for (auto &lib_name : lib_names) {
+        lib_vulkan = halide_load_library(lib_name);
+        if (lib_vulkan) {
+            debug(user_context) << "    Loaded Vulkan loader library: " << lib_name << "\n";
+            break;
+        } else {
+            debug(user_context) << "    Missing Vulkan loader library: " << lib_name << "\n";
+        }
+    }
+
+    return halide_get_library_symbol(lib_vulkan, name);
+}
+
+// Declare all the function pointers for the Vulkan API methods that will be resolved dynamically
 // clang-format off
 #define VULKAN_FN(fn) WEAK PFN_##fn fn; 
+VULKAN_FN(vkCreateInstance)
+VULKAN_FN(vkGetInstanceProcAddr)
 #include "vulkan_functions.h"
 #undef VULKAN_FN
 // clang-format on
 
-void WEAK vk_load_vulkan_functions(VkInstance instance) {
+// Get the function pointers from the Vulkan loader to create an Instance (to find all available driver implementations)
+void WEAK vk_load_vulkan_loader_functions(void *user_context) {
+    debug(user_context) << "    vk_load_vulkan_loader_functions (user_context: " << user_context << ")\n";
+#define VULKAN_FN(fn) fn = (PFN_##fn)halide_vulkan_get_symbol(user_context, #fn);
+    VULKAN_FN(vkCreateInstance)
+    VULKAN_FN(vkGetInstanceProcAddr)
+#undef VULKAN_FN
+}
+
+// Get the function pointers from the Vulkan instance for the resolved driver API methods.
+void WEAK vk_load_vulkan_functions(void *user_context, VkInstance instance) {
+    debug(user_context) << "    vk_load_vulkan_functions (user_context: " << user_context << ")\n";
 #define VULKAN_FN(fn) fn = (PFN_##fn)vkGetInstanceProcAddr(instance, #fn);
 #include "vulkan_functions.h"
 #undef VULKAN_FN
 }
-
-// --
 
 // --------------------------------------------------------------------------
 

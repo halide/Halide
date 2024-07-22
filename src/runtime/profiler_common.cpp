@@ -10,7 +10,16 @@
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, nullptr, nullptr, nullptr};
+    static halide_profiler_state s = {
+        {{0}},    // The mutex
+        nullptr,  // pipeline stats
+        nullptr,  // sampling thread
+        nullptr,  // running instances
+        nullptr,  // get_remote_profiler_state callback
+        1000,     // Sampling rate in us
+        0         // Flag that tells us to shutdown when it turns to 1
+    };
+
     return &s;
 }
 
@@ -19,10 +28,25 @@ extern "C" void halide_start_timer_chain();
 extern "C" void halide_disable_timer_interrupt();
 extern "C" void halide_enable_timer_interrupt();
 #endif
+
+WEAK void halide_profiler_lock(struct halide_profiler_state *state) {
+#if TIMER_PROFILING
+    halide_disable_timer_interrupt();
+#endif
+    halide_mutex_lock(&state->lock);
+}
+
+WEAK void halide_profiler_unlock(struct halide_profiler_state *state) {
+#if TIMER_PROFILING
+    halide_enable_timer_interrupt();
+#endif
+    halide_mutex_unlock(&state->lock);
+}
 }
 
 namespace Halide {
 namespace Runtime {
+
 namespace Internal {
 
 class LockProfiler {
@@ -31,16 +55,10 @@ class LockProfiler {
 public:
     explicit LockProfiler(halide_profiler_state *s)
         : state(s) {
-#if TIMER_PROFILING
-        halide_disable_timer_interrupt();
-#endif
-        halide_mutex_lock(&state->lock);
+        halide_profiler_lock(s);
     }
     ~LockProfiler() {
-        halide_mutex_unlock(&state->lock);
-#if TIMER_PROFILING
-        halide_enable_timer_interrupt();
-#endif
+        halide_profiler_unlock(state);
     }
 };
 
@@ -64,7 +82,6 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     }
     p->next = s->pipelines;
     p->name = pipeline_name;
-    p->first_func_id = s->first_free_id;
     p->num_funcs = num_funcs;
     p->runs = 0;
     p->time = 0;
@@ -91,60 +108,48 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
         p->funcs[i].active_threads_numerator = 0;
         p->funcs[i].active_threads_denominator = 0;
     }
-    s->first_free_id += num_funcs;
     s->pipelines = p;
     return p;
 }
 
-WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time, int active_threads) {
-    halide_profiler_pipeline_stats *p_prev = nullptr;
-    for (halide_profiler_pipeline_stats *p = s->pipelines; p;
-         p = (halide_profiler_pipeline_stats *)(p->next)) {
-        if (func_id >= p->first_func_id && func_id < p->first_func_id + p->num_funcs) {
-            if (p_prev) {
-                // Bubble the pipeline to the top to speed up future queries.
-                p_prev->next = (halide_profiler_pipeline_stats *)(p->next);
-                p->next = s->pipelines;
-                s->pipelines = p;
-            }
-            halide_profiler_func_stats *f = p->funcs + func_id - p->first_func_id;
-            f->time += time;
-            f->active_threads_numerator += active_threads;
-            f->active_threads_denominator += 1;
-            p->time += time;
-            p->samples++;
-            p->active_threads_numerator += active_threads;
-            p->active_threads_denominator += 1;
-            return;
-        }
-        p_prev = p;
-    }
-    // Someone must have called reset_state while a kernel was running. Do nothing.
+WEAK void update_running_instance(halide_profiler_instance_state *instance, uint64_t time) {
+    halide_profiler_func_stats *f = instance->funcs + instance->current_func;
+    f->time += time;
+    f->active_threads_numerator += instance->active_threads;
+    f->active_threads_denominator += 1;
+    instance->samples++;
+    instance->active_threads_numerator += instance->active_threads;
+    instance->active_threads_denominator += 1;
+    instance->billed_time += time;
 }
 
 extern "C" WEAK int halide_profiler_sample(struct halide_profiler_state *s, uint64_t *prev_t) {
-    int func, active_threads;
+    if (!s->instances) {
+        // No Halide code is currently running
+        return 0;
+    }
+    halide_profiler_instance_state *instance = s->instances;
+
     if (s->get_remote_profiler_state) {
         // Execution has disappeared into remote code running
         // on an accelerator (e.g. Hexagon DSP)
-        s->get_remote_profiler_state(&func, &active_threads);
-    } else {
-        func = s->current_func;
-        active_threads = s->active_threads;
+
+        // It shouldn't be possible to get into a state where multiple
+        // pipelines are being profiled and one or both of them uses
+        // get_remote_profiler_state.
+        halide_debug_assert(nullptr, s->instances->next == nullptr);
+
+        s->get_remote_profiler_state(&(instance->current_func), &(instance->active_threads));
     }
+
     uint64_t t_now = halide_current_time_ns(nullptr);
-    if (func == halide_profiler_please_stop) {
-#if TIMER_PROFILING
-        s->sampling_thread = nullptr;
-#endif
-        return -1;
-    } else if (func >= 0) {
-        // Assume all time since I was last awake is due to
-        // the currently running func.
-        bill_func(s, func, t_now - *prev_t, active_threads);
+    uint64_t dt = t_now - *prev_t;
+    while (instance) {
+        update_running_instance(instance, dt);
+        instance = instance->next;
     }
     *prev_t = t_now;
-    return s->sleep_time;
+    return 0;
 }
 
 WEAK void sampling_profiler_thread(void *) {
@@ -153,19 +158,17 @@ WEAK void sampling_profiler_thread(void *) {
     // grab the lock
     halide_mutex_lock(&s->lock);
 
-    while (s->current_func != halide_profiler_please_stop) {
-        uint64_t t1 = halide_current_time_ns(nullptr);
-        uint64_t t = t1;
-        while (true) {
-            int sleep_ms = halide_profiler_sample(s, &t);
-            if (sleep_ms < 0) {
-                break;
-            }
-            // Release the lock, sleep, reacquire.
-            halide_mutex_unlock(&s->lock);
-            halide_sleep_ms(nullptr, sleep_ms);
-            halide_mutex_lock(&s->lock);
+    uint64_t t1 = halide_current_time_ns(nullptr);
+    uint64_t t = t1;
+    while (!s->shutdown || s->instances) {
+        int err = halide_profiler_sample(s, &t);
+        if (err < 0) {
+            break;
         }
+        // Release the lock, sleep, reacquire.
+        halide_mutex_unlock(&s->lock);
+        halide_sleep_us(nullptr, s->sleep_time);
+        halide_mutex_lock(&s->lock);
     }
 
     halide_mutex_unlock(&s->lock);
@@ -209,43 +212,135 @@ WEAK halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const ch
     return nullptr;
 }
 
-// Returns a token identifying this pipeline instance.
-WEAK int halide_profiler_pipeline_start(void *user_context,
+// Populates the instance state struct
+WEAK int halide_profiler_instance_start(void *user_context,
                                         const char *pipeline_name,
                                         int num_funcs,
-                                        const uint64_t *func_names) {
-    halide_profiler_state *s = halide_profiler_get_state();
+                                        const uint64_t *func_names,
+                                        halide_profiler_instance_state *instance) {
+    // Tell the instance where we stashed the per-func state - just after the
+    // instance itself.
 
+    // First check that the layout agrees with the amount of stack space
+    // allocated in the pipeline
+    static_assert((sizeof(halide_profiler_func_stats) & 7) == 0);
+    halide_profiler_func_stats *funcs = (halide_profiler_func_stats *)(instance + 1);
+
+    // Zero initialize the instance and func state
+    memset(instance, 0, (uint8_t *)(funcs + num_funcs) - (uint8_t *)instance);
+
+    instance->funcs = funcs;
+
+    halide_profiler_state *s = halide_profiler_get_state();
+    {
+        LockProfiler lock(s);
+
+        // Push this instance onto the running instances list
+        if (s->instances) {
+            s->instances->prev_next = &(instance->next);
+
+            // If there was something already running using the remote polling
+            // method, we can't profile something else at the same time.
+            if (s->get_remote_profiler_state) {
+                error(user_context) << "Cannot profile pipeline " << pipeline_name
+                                    << " while pipeline " << s->instances->pipeline_stats->name
+                                    << " is running, because it is running on a device.";
+                return halide_error_code_cannot_profile_pipeline;
+            }
+        }
+        instance->next = s->instances;
+        instance->prev_next = &(s->instances);
+        s->instances = instance;
+
+        // Find or create the pipeline statistics for this pipeline.
+        halide_profiler_pipeline_stats *p =
+            find_or_create_pipeline(pipeline_name, num_funcs, func_names);
+        if (!p) {
+            // Allocating space to track the statistics failed.
+            return halide_error_out_of_memory(user_context);
+        }
+
+        // Tell the instance the pipeline to which it belongs.
+        instance->pipeline_stats = p;
+
+        if (!s->sampling_thread) {
+#if TIMER_PROFILING
+            halide_start_clock(user_context);
+            halide_start_timer_chain();
+            s->sampling_thread = (halide_thread *)1;
+#else
+            halide_start_clock(user_context);
+            s->sampling_thread = halide_spawn_thread(sampling_profiler_thread, nullptr);
+#endif
+        }
+    }
+
+    instance->start_time = halide_current_time_ns(user_context);
+
+    return 0;
+}
+
+WEAK int halide_profiler_instance_end(void *user_context, halide_profiler_instance_state *instance) {
+    uint64_t end_time = halide_current_time_ns(user_context);
+    halide_profiler_state *s = halide_profiler_get_state();
     LockProfiler lock(s);
 
-    if (!s->sampling_thread) {
-#if TIMER_PROFILING
-        halide_start_clock(user_context);
-        halide_start_timer_chain();
-        s->sampling_thread = (halide_thread *)1;
-#else
-        halide_start_clock(user_context);
-        s->sampling_thread = halide_spawn_thread(sampling_profiler_thread, nullptr);
-#endif
+    if (instance->should_collect_statistics) {
+
+        uint64_t true_duration = end_time - instance->start_time;
+        halide_profiler_pipeline_stats *p = instance->pipeline_stats;
+
+        // Retire the instance, accumulating statistics onto the statistics for this
+        // pipeline. Fields related to memory usages are tracked in the pipeline stats
+        p->samples += instance->samples;
+        p->time += true_duration;
+        p->active_threads_numerator += instance->active_threads_numerator;
+        p->active_threads_denominator += instance->active_threads_denominator;
+        p->memory_total += instance->memory_total;
+        p->memory_peak = max(p->memory_peak, instance->memory_peak);
+        p->num_allocs += instance->num_allocs;
+        p->runs++;
+
+        // Compute an adjustment factor to account for the fact that the billed
+        // time is not equal to the duration between start and end calls. We
+        // could avoid this by just making sure there is a sampling event a the
+        // start and end of the pipeline, but this would overcount whatever the
+        // last value of current_func is at the end of the pipeline, and is
+        // likely to undercount time spent in the first func in a
+        // pipeline. Sampling events need to happen independently (in the random
+        // variable sense) of any changes in current_func.
+        double adjustment = 1;
+        if (instance->billed_time > 0) {
+            adjustment = (double)true_duration / instance->billed_time;
+        }
+
+        for (int f = 0; f < p->num_funcs; f++) {
+            halide_profiler_func_stats *func = p->funcs + f;
+            const halide_profiler_func_stats *instance_func = instance->funcs + f;
+            // clang-tidy wants me to use a c standard library function to do
+            // the rounding below, but those aren't guaranteed to be available
+            // when compiling the runtime.
+            func->time += (uint64_t)(instance_func->time * adjustment + 0.5);  // NOLINT
+            func->active_threads_numerator += instance_func->active_threads_numerator;
+            func->active_threads_denominator += instance_func->active_threads_denominator;
+            func->num_allocs += instance_func->num_allocs;
+            func->stack_peak = max(func->stack_peak, instance_func->stack_peak);
+            func->memory_peak = max(func->memory_peak, instance_func->memory_peak);
+            func->memory_total += instance_func->memory_total;
+        }
     }
 
-    halide_profiler_pipeline_stats *p =
-        find_or_create_pipeline(pipeline_name, num_funcs, func_names);
-    if (!p) {
-        // Allocating space to track the statistics failed.
-        return halide_error_out_of_memory(user_context);
+    // Remove myself from the doubly-linked list
+    *(instance->prev_next) = instance->next;
+    if (instance->next) {
+        instance->next->prev_next = instance->prev_next;
     }
-    p->runs++;
-
-    return p->first_func_id;
+    return 0;
 }
 
 WEAK void halide_profiler_stack_peak_update(void *user_context,
-                                            void *pipeline_state,
+                                            halide_profiler_instance_state *instance,
                                             uint64_t *f_values) {
-    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
-    halide_abort_if_false(user_context, p_stats != nullptr);
-
     // Note: Update to the counter is done without grabbing the state's lock to
     // reduce lock contention. One potential issue is that other call that frees the
     // pipeline and function stats structs may be running in parallel. However, the
@@ -253,15 +348,15 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
     // unless user specifically calls halide_profiler_reset().
 
     // Update per-func memory stats
-    for (int i = 0; i < p_stats->num_funcs; ++i) {
+    for (int i = 0; i < instance->pipeline_stats->num_funcs; ++i) {
         if (f_values[i] != 0) {
-            sync_compare_max_and_swap(&(p_stats->funcs[i]).stack_peak, f_values[i]);
+            sync_compare_max_and_swap(&(instance->funcs[i]).stack_peak, f_values[i]);
         }
     }
 }
 
 WEAK void halide_profiler_memory_allocate(void *user_context,
-                                          void *pipeline_state,
+                                          halide_profiler_instance_state *instance,
                                           int func_id,
                                           uint64_t incr) {
     using namespace Halide::Runtime::Internal::Synchronization;
@@ -272,34 +367,34 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
         return;
     }
 
-    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
-    halide_abort_if_false(user_context, p_stats != nullptr);
+    halide_abort_if_false(user_context, instance != nullptr);
     halide_abort_if_false(user_context, func_id >= 0);
-    halide_abort_if_false(user_context, func_id < p_stats->num_funcs);
+    halide_abort_if_false(user_context, func_id < instance->pipeline_stats->num_funcs);
 
-    halide_profiler_func_stats *f_stats = &p_stats->funcs[func_id];
+    halide_profiler_func_stats *func = &instance->funcs[func_id];
 
     // Note: Update to the counter is done without grabbing the state's lock to
-    // reduce lock contention. One potential issue is that other call that frees the
-    // pipeline and function stats structs may be running in parallel. However, the
-    // current desctructor (called on profiler shutdown) does not free the structs
-    // unless user specifically calls halide_profiler_reset().
+    // reduce lock contention. One potential issue is that another call that
+    // frees the pipeline and function stats structs may be running in
+    // parallel. However, the current destructor (called on profiler shutdown)
+    // does not free the structs unless user specifically calls
+    // halide_profiler_reset().
 
-    // Update per-pipeline memory stats
-    atomic_add_fetch_sequentially_consistent(&p_stats->num_allocs, 1);
-    atomic_add_fetch_sequentially_consistent(&p_stats->memory_total, incr);
-    uint64_t p_mem_current = atomic_add_fetch_sequentially_consistent(&p_stats->memory_current, incr);
-    sync_compare_max_and_swap(&p_stats->memory_peak, p_mem_current);
+    // Update per-instance memory stats
+    atomic_add_fetch_sequentially_consistent(&instance->num_allocs, 1);
+    atomic_add_fetch_sequentially_consistent(&instance->memory_total, incr);
+    uint64_t p_mem_current = atomic_add_fetch_sequentially_consistent(&instance->memory_current, incr);
+    sync_compare_max_and_swap(&instance->memory_peak, p_mem_current);
 
     // Update per-func memory stats
-    atomic_add_fetch_sequentially_consistent(&f_stats->num_allocs, 1);
-    atomic_add_fetch_sequentially_consistent(&f_stats->memory_total, incr);
-    uint64_t f_mem_current = atomic_add_fetch_sequentially_consistent(&f_stats->memory_current, incr);
-    sync_compare_max_and_swap(&f_stats->memory_peak, f_mem_current);
+    atomic_add_fetch_sequentially_consistent(&func->num_allocs, 1);
+    atomic_add_fetch_sequentially_consistent(&func->memory_total, incr);
+    uint64_t f_mem_current = atomic_add_fetch_sequentially_consistent(&func->memory_current, incr);
+    sync_compare_max_and_swap(&func->memory_peak, f_mem_current);
 }
 
 WEAK void halide_profiler_memory_free(void *user_context,
-                                      void *pipeline_state,
+                                      halide_profiler_instance_state *instance,
                                       int func_id,
                                       uint64_t decr) {
     using namespace Halide::Runtime::Internal::Synchronization;
@@ -310,12 +405,11 @@ WEAK void halide_profiler_memory_free(void *user_context,
         return;
     }
 
-    halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
-    halide_abort_if_false(user_context, p_stats != nullptr);
+    halide_abort_if_false(user_context, instance != nullptr);
     halide_abort_if_false(user_context, func_id >= 0);
-    halide_abort_if_false(user_context, func_id < p_stats->num_funcs);
+    halide_abort_if_false(user_context, func_id < instance->pipeline_stats->num_funcs);
 
-    halide_profiler_func_stats *f_stats = &p_stats->funcs[func_id];
+    halide_profiler_func_stats *func = &instance->funcs[func_id];
 
     // Note: Update to the counter is done without grabbing the state's lock to
     // reduce lock contention. One potential issue is that other call that frees the
@@ -324,10 +418,10 @@ WEAK void halide_profiler_memory_free(void *user_context,
     // unless user specifically calls halide_profiler_reset().
 
     // Update per-pipeline memory stats
-    atomic_sub_fetch_sequentially_consistent(&p_stats->memory_current, decr);
+    atomic_sub_fetch_sequentially_consistent(&instance->memory_current, decr);
 
     // Update per-func memory stats
-    atomic_sub_fetch_sequentially_consistent(&f_stats->memory_current, decr);
+    atomic_sub_fetch_sequentially_consistent(&func->memory_current, decr);
 }
 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
@@ -360,7 +454,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
-        float t = p->time / 1000000.0f;
+        float total_time = p->time / 1000000.0f;
         if (!p->runs) {
             continue;
         }
@@ -368,10 +462,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         bool serial = p->active_threads_numerator == p->active_threads_denominator;
         float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10);
         sstr << p->name << "\n"
-             << " total time: " << t << " ms"
+             << " total time: " << total_time << " ms"
              << "  samples: " << p->samples
              << "  runs: " << p->runs
-             << "  time/run: " << t / p->runs << " ms\n";
+             << "  time per run: " << total_time / p->runs << " ms\n";
         if (!serial) {
             sstr << " average threads used: " << threads << "\n";
         }
@@ -423,9 +517,15 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             for (int i = 0; i < p->num_funcs; i++) {
                 halide_profiler_func_stats *fs = p->funcs + i;
 
-                // The first func is always a catch-all overhead
+                // The first id is always a catch-all overhead
                 // slot. Only report overhead time if it's non-zero
                 if (i == 0 && fs->time == 0) {
+                    continue;
+                }
+
+                // These two ids are malloc and free. Don't print them if there
+                // were no heap allocations.
+                if ((i == 2 || i == 3) && p->num_allocs == 0) {
                     continue;
                 }
 
@@ -606,7 +706,6 @@ WEAK void halide_profiler_reset_unlocked(halide_profiler_state *s) {
         free(p->funcs);
         free(p);
     }
-    s->first_free_id = 0;
 }
 
 WEAK void halide_profiler_reset() {
@@ -616,6 +715,7 @@ WEAK void halide_profiler_reset() {
     // state without grabbing the global profiler state's lock.
     halide_profiler_state *s = halide_profiler_get_state();
     LockProfiler lock(s);
+    halide_abort_if_false(nullptr, s->instances == nullptr);
     halide_profiler_reset_unlocked(s);
 }
 
@@ -624,12 +724,16 @@ __attribute__((destructor))
 #endif
 WEAK void
 halide_profiler_shutdown() {
+    using namespace Halide::Runtime::Internal::Synchronization;
+
     halide_profiler_state *s = halide_profiler_get_state();
     if (!s->sampling_thread) {
         return;
     }
 
-    s->current_func = halide_profiler_please_stop;
+    int one = 1;
+    atomic_store_relaxed(&(s->shutdown), &one);
+
 #if TIMER_PROFILING
     // Wait for timer interrupt to fire and notice things are shutdown.
     // volatile should be the right tool to use to wait for storage to be
@@ -643,7 +747,9 @@ halide_profiler_shutdown() {
     s->sampling_thread = nullptr;
 #endif
 
-    s->current_func = halide_profiler_outside_of_halide;
+    // The join_thread should have waited for any running instances to
+    // terminate.
+    halide_debug_assert(nullptr, s->instances == nullptr);
 
     // Print results. No need to lock anything because we just shut
     // down the thread.
@@ -664,7 +770,7 @@ WEAK void halide_windows_profiler_shutdown() {
     // sections in a static destructor as it may run after threads
     // have been killed by the OS. Furthermore, may calls, even things
     // like EnterCriticalSection may be set to kill the process if
-    // called during process shutdown. Hence kthis routine doesn't attmept
+    // called during process shutdown. Hence this routine doesn't attmept
     // to clean up state as the destructor does on other platforms.
 
     // Print results. Avoid locking as it will cause problems and
@@ -673,9 +779,5 @@ WEAK void halide_windows_profiler_shutdown() {
 }
 #endif
 }  // namespace
-
-WEAK void halide_profiler_pipeline_end(void *user_context, void *state) {
-    ((halide_profiler_state *)state)->current_func = halide_profiler_outside_of_halide;
-}
 
 }  // extern "C"
