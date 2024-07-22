@@ -24,51 +24,8 @@ void fill_buffer_b(Buffer<IntT> &buf, int col, int acc) {
     }
 }
 
-bool equal_eps(float lhs, float rhs, float eps) {
-    return std::abs(lhs - rhs) < eps;
-}
-
-struct make_uint_t {
-    template<typename... Args>
-    Type operator()(Args &&...args) const {
-        return UInt(static_cast<Args &&>(args)...);
-    }
-};
-
-struct make_int_t {
-    template<typename... Args>
-    Type operator()(Args &&...args) const {
-        return Int(static_cast<Args &&>(args)...);
-    }
-};
-
-template<typename T>
-void print_mat(const Buffer<T> &buf, int rows, int cols) {
-    using cast_T = std::conditional_t<std::is_integral_v<T>, int, T>;
-    for (int j = 0; j != rows; ++j) {
-        for (int i = 0; i != cols; ++i) {
-            std::cout << static_cast<cast_T>(buf(i, j)) << " ";
-        }
-        std::cout << std::endl;
-    }
-}
-
-template<typename T>
-void print_mat_rhs(const Buffer<T> &buf, int rows, int cols) {
-    using cast_T = std::conditional_t<std::is_integral_v<T>, int, T>;
-    for (int j = 0; j != (rows / (4 / sizeof(T))); ++j) {
-        for (int k = 0; k != (4 / sizeof(T)); ++k) {
-            for (int i = 0; i != cols; ++i) {
-                std::cout << static_cast<cast_T>(buf(k, i, j)) << " ";
-            }
-
-            std::cout << std::endl;
-        }
-    }
-}
-
 template<typename LhsInt8, typename RhsInt8>
-bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
+bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool validate) {
     Target target("x86-64-linux-avx512_sapphirerapids");
     Buffer<LhsInt8> A_buf(acc, row);
     Buffer<RhsInt8> B_buf(8, col, acc / 4);
@@ -108,11 +65,11 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
 
     Func result = mm.in();
 
-    // Should err with AMX mapping failure since B buffer has a 
-    // different layout than expected by AMX
-    result.compile_to_lowered_stmt("/dev/null", {A_buf, B_buf}, Halide::Text, target);
-
-    if (get_jit_target_from_environment().has_feature(Target::AVX512_SapphireRapids)) {
+    if (!validate) {
+        // Should err with AMX mapping failure since B buffer has a
+        // different layout than expected by AMX
+        result.compile_to_lowered_stmt("/dev/null", {A_buf, B_buf}, Halide::Text, target);
+    } else {
         std::cerr << "Validating compiled program\n";
 
         fill_buffer_a(A_buf, row, acc);
@@ -129,8 +86,8 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
                 }
                 if (val != out(i, j)) {
                     std::cerr << "Invalid result at " << i << ", " << j << "\n"
-                            << out(i, j) << " != " << val << "\n"
-                            << "Matrix dims: " << row << "x" << col << "x" << acc << "\nTile dims: " << tile_x << "x" << tile_y << "x" << tile_r << "\n";
+                              << out(i, j) << " != " << val << "\n"
+                              << "Matrix dims: " << row << "x" << col << "x" << acc << "\nTile dims: " << tile_x << "x" << tile_y << "x" << tile_r << "\n";
                     return false;
                 }
             }
@@ -141,8 +98,13 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
 }
 
 int main(int argc, char **argv) {
-    // matmul<int8_t, int8_t>(2, 2, 16, 2, 2, 8); 
-    // matmul<int8_t, int8_t>(4, 4, 8, 4, 4, 8); 
-    // matmul<int8_t, int8_t>(32, 32, 32, 8, 8, 8); 
-    matmul<int8_t, int8_t>(32, 32, 32, 8, 8, 4);
+    bool validate = false;
+    if (argc == 2 && argv[1] == std::string("--validate")) {
+        validate = true;
+    }
+    if (validate && !get_jit_target_from_environment().has_feature(Target::AVX512_SapphireRapids)) {
+        std::cerr << "Skipping test since target does not support AMX\n";
+        return 0;
+    }
+    matmul<int8_t, int8_t>(32, 32, 32, 8, 8, 4, validate);
 }
