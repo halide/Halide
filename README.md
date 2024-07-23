@@ -63,7 +63,7 @@ $ brew install halide
 
 ## Spack
 
-If you use [spack](https://spack.io/) to manage dependecies, especially on supercomputing systems,
+If you use [spack](https://spack.io/) to manage dependencies, especially on supercomputing systems,
 you can install Halide via:
 ```
 spack install halide
