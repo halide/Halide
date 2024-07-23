@@ -66,14 +66,9 @@ target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 #   Ref: https://stackoverflow.com/questions/59860465/pybind11-importerror-dll-not-found-when-trying-to-import-pyd-in-python-int
 #   Ref: https://bugs.python.org/issue36085
 #   Ref: https://docs.python.org/3/whatsnew/3.8.html#bpo-36085-whatsnew
-# TODO: copying a dummy file here works around a CMake limitation. The issue is that if $<TARGET_RUNTIME_DLLS:...> is
-#   empty, then copy_if_different errors out, thinking it doesn't have enough arguments.
-#   Ref: https://gitlab.kitware.com/cmake/cmake/-/issues/23543
-set(dummy_file "${CMAKE_CURRENT_BINARY_DIR}/.dummy_file")
-file(TOUCH "${dummy_file}")
 add_custom_command(
     TARGET Halide_Python POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${dummy_file}" $<TARGET_RUNTIME_DLLS:Halide_Python> $<TARGET_FILE_DIR:Halide_Python>
+    COMMAND ${CMAKE_COMMAND} -E copy -t $<TARGET_FILE_DIR:Halide_Python> $<TARGET_RUNTIME_DLLS:Halide_Python>
     COMMAND_EXPAND_LISTS
     VERBATIM
 )
