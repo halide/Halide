@@ -76,7 +76,7 @@ function(add_python_test)
         PROPERTIES
         LABELS "python"
         ENVIRONMENT "${ARG_ENVIRONMENT}"
-        ENVIRONMENT_MODIFICATION "${ARG_PYTHONPATH}"
+        ENVIRONMENT_MODIFICATION "${ARG_PYTHONPATH};$<LIST:TRANSFORM,$<TARGET_RUNTIME_DLL_DIRS:Halide_Python>,PREPEND,PATH=path_list_prepend:>"
     )
 endfunction()
 
