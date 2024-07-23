@@ -338,6 +338,7 @@ set(SOURCE_FILES
     SlidingWindow.cpp
     Solve.cpp
     SpirvIR.cpp
+    SpirvIR.h
     SplitTuples.cpp
     StageStridedLoads.cpp
     StmtToHTML.cpp
