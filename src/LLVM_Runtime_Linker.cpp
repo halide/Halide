@@ -709,9 +709,6 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
         // convert all of those to plain external.
         if (f.getLinkage() == llvm::GlobalValue::ExternalWeakLinkage) {
             f.setLinkage(llvm::GlobalValue::ExternalLinkage);
-        } else if (f.getLinkage() == llvm::GlobalValue::WeakAnyLinkage && is_halide_extern_c_sym && t.arch == Target::X86 && t.bits == 32) {
-            // Special case for x86-32
-            f.setLinkage(llvm::GlobalValue::ExternalLinkage);
         } else {
             const bool can_strip = !is_halide_extern_c_sym;
             if (can_strip || allow_stripping_all_weak_functions) {
