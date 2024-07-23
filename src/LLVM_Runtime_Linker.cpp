@@ -709,15 +709,15 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
         // convert all of those to plain external.
         if (f.getLinkage() == llvm::GlobalValue::ExternalWeakLinkage) {
             f.setLinkage(llvm::GlobalValue::ExternalLinkage);
+            // Ensure it isn't hidden.
+            if (is_halide_extern_c_sym) {
+                f.setVisibility(llvm::GlobalValue::DefaultVisibility);
+            }
         } else {
             const bool can_strip = !is_halide_extern_c_sym;
             if (can_strip || allow_stripping_all_weak_functions) {
                 convert_weak_to_linkonce(f);
             }
-        }
-        // Ensure it isn't hidden.
-        if (is_halide_extern_c_sym) {
-            f.setVisibility(llvm::GlobalValue::DefaultVisibility);
         }
 
         // Windows requires every symbol that's going to get merged
