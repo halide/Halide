@@ -61,6 +61,19 @@ Alternatively, if you use macOS, you can install Halide via
 $ brew install halide
 ```
 
+## Spack
+
+If you ue [spack](https://spack.io/) to manage dependecies, especially on supercomputing systems,
+you can install Halide via:
+```
+spack install halide
+```
+
+Spack offers most of the configuration options avaliable in a CMake build. These can be viewed on [Spack's Halide package page](https://packages.spack.io/package.html?name=halide) or via
+```
+spack info halide
+```
+
 ## Other package managers
 
 We are interested in bringing Halide to other popular package managers and
