@@ -205,6 +205,18 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    t1 = Target("arm-64-linux-armv87a-armv8a");
+    t2 = Target("arm-64-linux-armv82a-armv83a");
+    if (!t1.get_runtime_compatible_target(t2, t1)) {
+        printf("get_runtime_compatible_target failure\n");
+        return 1;
+    }
+    ts = t1.to_string();
+    if (ts != "arm-64-linux-armv8a") {
+        printf("get_runtime_compatible_target failure: %s\n", ts.c_str());
+        return 1;
+    }
+
     printf("Success!\n");
     return 0;
 }

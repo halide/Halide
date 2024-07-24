@@ -859,7 +859,14 @@ void run_with_large_stack(const std::function<void()> &action) {
 // Portable bit-counting methods
 int popcount64(uint64_t x) {
 #ifdef _MSC_VER
-#if defined(_WIN64)
+#if defined(_M_ARM) || defined(_M_ARM64) || defined(_M_ARM64_EC)
+    int popcnt = 0;
+    while (x) {
+        x &= x - 1;
+        popcnt++;
+    }
+    return popcnt;
+#elif defined(_WIN64)
     return __popcnt64(x);
 #else
     return __popcnt((uint32_t)(x >> 32)) + __popcnt((uint32_t)(x & 0xffffffff));

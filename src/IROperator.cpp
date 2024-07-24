@@ -1516,10 +1516,6 @@ Expr select(Expr condition, Expr true_value, Expr false_value) {
     return Select::make(std::move(condition), std::move(true_value), std::move(false_value));
 }
 
-Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
-    return select(condition, true_value, false_value);
-}
-
 Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
     user_assert(condition.size() == true_value.size() && true_value.size() == false_value.size())
         << "select() on Tuples requires all Tuples to have identical sizes.";
@@ -1528,10 +1524,6 @@ Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false
         result[i] = select(condition[i], true_value[i], false_value[i]);
     }
     return result;
-}
-
-Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
-    return select(condition, true_value, false_value);
 }
 
 Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {

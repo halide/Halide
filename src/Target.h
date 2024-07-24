@@ -154,7 +154,16 @@ struct Target {
         ARMFp16 = halide_target_feature_arm_fp16,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         RVV = halide_target_feature_rvv,
+        ARMv8a = halide_target_feature_armv8a,
         ARMv81a = halide_target_feature_armv81a,
+        ARMv82a = halide_target_feature_armv82a,
+        ARMv83a = halide_target_feature_armv83a,
+        ARMv84a = halide_target_feature_armv84a,
+        ARMv85a = halide_target_feature_armv85a,
+        ARMv86a = halide_target_feature_armv86a,
+        ARMv87a = halide_target_feature_armv87a,
+        ARMv88a = halide_target_feature_armv88a,
+        ARMv89a = halide_target_feature_armv89a,
         ARM64e = halide_target_feature_arm64e,
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
@@ -335,6 +344,10 @@ struct Target {
      * 10 (our minimum supported Vulkan compute capability) if no Vulkan
      * features are set. */
     int get_vulkan_capability_lower_bound() const;
+
+    /** Get the minimum ARM v8.x capability found as an integer. Returns
+     * -1 if no ARM v8.x features are set. */
+    int get_arm_v8_lower_bound() const;
 
     /** Was libHalide compiled with support for this target? */
     bool supported() const;

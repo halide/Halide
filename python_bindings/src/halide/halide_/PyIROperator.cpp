@@ -90,7 +90,7 @@ void define_operators(py::module &m) {
                     // We don't want to throw an error here, since the catch(...) would catch it,
                     // and it would be hard to distinguish from other errors. Just set the string here
                     // and jump to the error reporter outside the catch.
-                    tuple_error_msg = "tuple_select() may not mix Expr and Tuple for the condition elements.";
+                    tuple_error_msg = "select() on Tuples may not mix Expr and Tuple for the condition elements.";
                     goto handle_tuple_error;
                 }
 

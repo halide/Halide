@@ -1434,7 +1434,16 @@ typedef enum halide_target_feature_t {
     halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing
     halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile
     halide_target_feature_rvv,                    ///< Enable RISCV "V" Vector Extension
-    halide_target_feature_armv81a,                ///< Enable ARMv8.1-a instructions
+    halide_target_feature_armv8a,                 ///< Enable ARMv8a instructions
+    halide_target_feature_armv81a,                ///< Enable ARMv8.1a instructions
+    halide_target_feature_armv82a,                ///< Enable ARMv8.2a instructions
+    halide_target_feature_armv83a,                ///< Enable ARMv8.3a instructions
+    halide_target_feature_armv84a,                ///< Enable ARMv8.4a instructions
+    halide_target_feature_armv85a,                ///< Enable ARMv8.5a instructions
+    halide_target_feature_armv86a,                ///< Enable ARMv8.6a instructions
+    halide_target_feature_armv87a,                ///< Enable ARMv8.7a instructions
+    halide_target_feature_armv88a,                ///< Enable ARMv8.8a instructions
+    halide_target_feature_armv89a,                ///< Enable ARMv8.9a instructions
     halide_target_feature_arm64e,                 ///< Enable ARM64e (requires ARMv8.3a)
     halide_target_feature_sanitizer_coverage,     ///< Enable hooks for SanitizerCoverage support.
     halide_target_feature_profile_by_timer,       ///< Alternative to halide_target_feature_profile using timer interrupt for systems without threads or applicartions that need to avoid them.

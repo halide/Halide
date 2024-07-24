@@ -3542,6 +3542,13 @@ void Func::compile_to_lowered_stmt(const string &filename,
     pipeline().compile_to_lowered_stmt(filename, args, fmt, target);
 }
 
+void Func::compile_to_conceptual_stmt(const string &filename,
+                                      const vector<Argument> &args,
+                                      StmtOutputFormat fmt,
+                                      const Target &target) {
+    pipeline().compile_to_conceptual_stmt(filename, args, fmt, target);
+}
+
 void Func::print_loop_nest() {
     pipeline().print_loop_nest();
 }
