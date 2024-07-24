@@ -45,6 +45,11 @@ namespace {
 //
 // v8r has no relation to anything.
 Target complete_arm_target(Target t) {
+    // If arm64e is set, assume at least arm8.3a
+    if (t.has_feature(Target::ARM64e)) {
+        t.set_feature(Target::ARMv83a);
+    }
+
     constexpr int num_arm_v8_features = 10;
     static const Target::Feature arm_v8_features[num_arm_v8_features] = {
         Target::ARMv89a,
