@@ -225,7 +225,8 @@ foreach (i IN LISTS RUNTIME_CPP)
         else()
             # don't be fooled: these are just generic 32/64-bit targets for our purposes here
             if (j EQUAL 32)
-                set(TARGET "wasm32-unknown-unknown-unknown")
+                # wasm32 will fail for some i386 builds, but i386 won't
+                set(TARGET "i386-unknown-unknown-unknown")
             else ()
                 set(TARGET "wasm64-unknown-unknown-unknown")
             endif ()
