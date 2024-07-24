@@ -24,8 +24,8 @@ if (LLVM_PACKAGE_VERSION VERSION_LESS 16.0)
     message(FATAL_ERROR "LLVM version must be 16.0 or newer")
 endif ()
 
-if (LLVM_PACKAGE_VERSION VERSION_GREATER 19.0)
-    message(WARNING "Halide is not tested on LLVM versions beyond 19.0")
+if (LLVM_PACKAGE_VERSION VERSION_GREATER 20.0)
+    message(WARNING "Halide is not tested on LLVM versions beyond 20.0")
 endif ()
 
 # LLVM_DEFINITIONS is a space-separated list instead of a more typical

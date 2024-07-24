@@ -836,6 +836,8 @@ RUNTIME_CPP_COMPONENTS = \
   hexagon_dma_pool \
   hexagon_host \
   ios_io \
+  linux_aarch64_cpu_features \
+  linux_arm_cpu_features \
   linux_clock \
   linux_host_cpu_count \
   linux_yield \
@@ -847,6 +849,8 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
+  osx_aarch64_cpu_features \
+  osx_arm_cpu_features \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
@@ -881,6 +885,7 @@ RUNTIME_CPP_COMPONENTS = \
   wasm_cpu_features \
   webgpu_dawn \
   webgpu_emscripten \
+  windows_aarch64_cpu_features_arm \
   windows_clock \
   windows_cuda \
   windows_d3d12compute_arm \
@@ -2364,6 +2369,10 @@ ifneq (,$(findstring clang version 19.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 20.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2384,7 +2393,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 160 170 180 190))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 160 170 180 190 200))
 LLVM_OK=yes
 endif
 

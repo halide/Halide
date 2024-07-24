@@ -216,8 +216,8 @@ private:
                                  const Expr &condition,
                                  const Type &type,
                                  const std::string &name,
-                                 bool &on_stack) {
-        on_stack = true;
+                                 bool &can_fit_on_stack) {
+        can_fit_on_stack = true;
 
         Expr cond = simplify(condition);
         if (is_const_zero(cond)) {  // Condition always false
@@ -236,7 +236,7 @@ private:
         // it would have constant size).
         internal_assert(!extents.empty());
 
-        on_stack = false;
+        can_fit_on_stack = false;
         Expr size = cast<uint64_t>(extents[0]);
         for (size_t i = 1; i < extents.size(); i++) {
             size *= extents[i];
@@ -261,9 +261,12 @@ private:
         auto [new_extents, changed] = mutate_with_changes(op->extents);
         Expr condition = mutate(op->condition);
 
-        bool on_stack;
-        Expr size = compute_allocation_size(new_extents, condition, op->type, op->name, on_stack);
+        bool can_fit_on_stack;
+        Expr size = compute_allocation_size(new_extents, condition, op->type, op->name, can_fit_on_stack);
         internal_assert(size.type() == UInt(64));
+
+        bool on_stack = can_fit_on_stack && !op->new_expr.defined();
+
         func_alloc_sizes.push(op->name, {on_stack, size});
 
         // compute_allocation_size() might return a zero size, if the allocation is
