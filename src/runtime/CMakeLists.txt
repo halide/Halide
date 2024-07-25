@@ -229,7 +229,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                 # wasm32 will fail for some i386 builds, but i386 won't
                 set(TARGET "i386-unknown-unknown-unknown")
             else ()
-                set(TARGET "wasm64-unknown-unknown-unknown")
+                set(TARGET "x86_64-unknown-unknown-unknown")
             endif ()
         endif ()
 
