@@ -161,6 +161,8 @@ set(RUNTIME_CXX_FLAGS
     -fno-threadsafe-statics
     # Necessary for using virtual functions in the runtime code.
     -fno-rtti
+    # Will generate bad code in some situations
+    -fno-jump-tables
     -Wall
     -Wc++20-designator
     -Wcast-qual

@@ -1085,6 +1085,7 @@ RUNTIME_CXX_FLAGS = \
     -fno-vectorize \
     -fno-threadsafe-statics \
     -fno-rtti \
+    -fno-jump-tables \
     -Wall \
     -Wcast-qual \
     -Werror \
