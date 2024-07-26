@@ -224,7 +224,13 @@ foreach (i IN LISTS RUNTIME_CPP)
                     set(TARGET "x86_64-unknown-windows-unknown")
                 endif ()
             endif()
-        # Everything else
+        elseif (i MATCHES "webgpu")
+            if (j EQUAL 32)
+                # wasm32 will fail for some i386 builds, but i386 won't
+                set(TARGET "wasm32-unknown-unknown-unknown")
+            else ()
+                set(TARGET "wasm64-unknown-unknown-unknown")
+            endif ()
         else()
             # don't be fooled: these are just generic 32/64-bit targets for our purposes here
             if (j EQUAL 32)
