@@ -1053,9 +1053,9 @@ $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 .SECONDARY:
 
 # Compile generic 32- or 64-bit code
-# (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
-RUNTIME_TRIPLE_32 = "le32-unknown-nacl-unknown"
-RUNTIME_TRIPLE_64 = "le64-unknown-unknown-unknown"
+# Don't be fooled: these are just generic 32/64-bit targets for our purposes here
+RUNTIME_TRIPLE_32 = "i386-unknown-unknown-unknown"
+RUNTIME_TRIPLE_64 = "x86_64-unknown-unknown-unknown"
 
 # Windows requires special handling.  The generic windows_* modules must have -fpic elided
 # and (for 64 bit) must set wchar to be 2 bytes.  The windows_*_x86 and windows_*_arm
@@ -1068,7 +1068,11 @@ RUNTIME_TRIPLE_WIN_X86_32 = "i386-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_X86_64 = "x86_64-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_ARM_32 = "arm-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_ARM_64 = "aarch64-unknown-windows-unknown"
-RUNTIME_TRIPLE_WIN_GENERIC_64 = "le64-unknown-windows-unknown"
+# TODO: was le64 here, not sure if this is correct or not
+RUNTIME_TRIPLE_WIN_GENERIC_64 = "x86_64-unknown-windows-unknown"
+
+RUNTIME_TRIPLE_WEBGPU_32 = "wasm32-unknown-unknown-unknown"
+RUNTIME_TRIPLE_WEBGPU_64 = "wasm64-unknown-unknown-unknown"
 
 # `-fno-threadsafe-statics` is very important here (note that it allows us to use a 'modern' C++
 # standard but still skip threadsafe guards for static initialization in our runtime code)
@@ -1084,6 +1088,7 @@ RUNTIME_CXX_FLAGS = \
     -fno-vectorize \
     -fno-threadsafe-statics \
     -fno-rtti \
+    -fno-jump-tables \
     -Wall \
     -Wcast-qual \
     -Werror \
@@ -1093,7 +1098,8 @@ RUNTIME_CXX_FLAGS = \
     -Wno-unknown-warning-option \
     -Wno-unused-function \
     -Wvla \
-    -Wsign-compare
+    -Wsign-compare \
+    -Wno-sync-alignment
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
@@ -1118,6 +1124,22 @@ $(BUILD_DIR)/initmod.windows_%_32.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_D
 $(BUILD_DIR)/initmod.windows_%_64.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_GENERIC_64) -fshort-wchar -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_64.d
+
+$(BUILD_DIR)/initmod.webgpu_%_32.ll: $(SRC_DIR)/runtime/webgpu_%.cpp $(BUILD_DIR)/clang_ok
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WEBGPU_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_$*_32.d
+
+$(BUILD_DIR)/initmod.webgpu_%_64.ll: $(SRC_DIR)/runtime/webgpu_%.cpp $(BUILD_DIR)/clang_ok
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WEBGPU_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_$*_64.d
+
+$(BUILD_DIR)/initmod.webgpu_%_32_debug.ll: $(SRC_DIR)/runtime/webgpu_%.cpp $(BUILD_DIR)/clang_ok
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WEBGPU_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_$*_32_debug.d
+
+$(BUILD_DIR)/initmod.webgpu_%_64_debug.ll: $(SRC_DIR)/runtime/webgpu_%.cpp $(BUILD_DIR)/clang_ok
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WEBGPU_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_$*_64_debug.d
 
 $(BUILD_DIR)/initmod.%_64.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
