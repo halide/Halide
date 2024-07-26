@@ -138,25 +138,11 @@ else ()
     set(type static)
 endif ()
 
-# If Halide explicitly links against shared LLVM or if it is a static library
-# and we are not bundling our static dependencies, then end-users must have
-# the relevant system libraries installed.
-if (Halide_LLVM_SHARED_LIBS OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
-    set(depFile "${CMAKE_CURRENT_BINARY_DIR}/Halide-${type}-deps.cmake")
-    file(CONFIGURE
-         OUTPUT "${depFile}"
-         CONTENT [[
-set(Halide_LLVM_SHARED_LIBS @Halide_LLVM_SHARED_LIBS@)
-find_dependency(
-    Halide_LLVM @Halide_LLVM_VERSION@
-    COMPONENTS @Halide_LLVM_COMPONENTS@
-)
-]] @ONLY)
-
-    install(FILES "${depFile}" "${Halide_SOURCE_DIR}/cmake/FindHalide_LLVM.cmake"
-            DESTINATION ${Halide_INSTALL_CMAKEDIR}
-            COMPONENT Halide_Development)
-endif ()
+install(FILES
+        "${Halide_SOURCE_DIR}/cmake/FindHalide_LLVM.cmake"
+        "${Halide_SOURCE_DIR}/cmake/FindV8.cmake"
+        DESTINATION ${Halide_INSTALL_CMAKEDIR}
+        COMPONENT Halide_Development)
 
 install(EXPORT Halide_Targets
         DESTINATION ${Halide_INSTALL_CMAKEDIR}
@@ -202,6 +188,17 @@ install(FILES
         ${Halide_SOURCE_DIR}/cmake/MutexCopy.ps1
         DESTINATION ${Halide_INSTALL_HELPERSDIR}
         COMPONENT Halide_Development)
+
+##
+# Compute find_dependency calls for Halide
+##
+
+_Halide_install_pkgdeps(
+    FILE_NAME Halide-${type}-deps.cmake
+    EXPORT_FILE Halide-${type}-targets.cmake
+    DESTINATION "${Halide_INSTALL_CMAKEDIR}"
+    COMPONENT Halide_Development
+)
 
 ##
 # Documentation

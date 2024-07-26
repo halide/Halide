@@ -513,6 +513,7 @@ if (WITH_SERIALIZATION)
         flatbuffers 23.5.26 REQUIRED
         NAMES flatbuffers Flatbuffers FlatBuffers
     )
+    _Halide_pkgdep(flatbuffers)
 
     if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
         target_sources(Halide PRIVATE "$<TARGET_OBJECTS:flatbuffers::flatbuffers>")
@@ -585,6 +586,7 @@ endif ()
 
 if (Halide_WASM_BACKEND STREQUAL "wabt")
     find_package(wabt 1.0.36 REQUIRED)
+    _Halide_pkgdep(wabt)
 
     if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
         target_sources(Halide PRIVATE "$<TARGET_OBJECTS:wabt::wabt>")
@@ -596,6 +598,7 @@ if (Halide_WASM_BACKEND STREQUAL "wabt")
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 elseif (Halide_WASM_BACKEND STREQUAL "V8")
     find_package(V8 REQUIRED)
+    _Halide_pkgdep(V8)
     target_link_libraries(Halide PRIVATE V8::V8)
     target_compile_definitions(Halide PRIVATE WITH_V8)
 elseif (Halide_WASM_BACKEND)
