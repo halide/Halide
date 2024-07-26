@@ -32,8 +32,9 @@ include(CheckCXXSymbolExists)
 
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
-include(HalideGeneratorHelpers)
 include(HalideFeatures)
+include(HalideGeneratorHelpers)
+include(HalidePackageConfigHelpers)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
@@ -186,6 +187,8 @@ find_package(Threads REQUIRED)
 find_package(Halide_LLVM 17...20 REQUIRED
              COMPONENTS WebAssembly X86
              OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV)
+
+_Halide_pkgdep(Halide_LLVM PACKAGE_VARS Halide_LLVM_SHARED_LIBS)
 
 ## Image formats
 
