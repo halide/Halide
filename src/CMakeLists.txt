@@ -367,13 +367,13 @@ set(SOURCE_FILES
 set(C_TEMPLATE_FILES
     CodeGen_C_prologue
     CodeGen_C_vectors
-    )
+)
 
 set(HTML_TEMPLATE_FILES
     StmtToHTML_dependencies.html
     StmtToHTML.js
     StmtToHTML.css
-    )
+)
 
 ##
 # Build and import the runtime.
@@ -576,6 +576,7 @@ endif ()
 ##
 # Set compiler options for libHalide
 ##
+
 set_halide_compiler_warnings(Halide)
 
 if (CMAKE_GENERATOR MATCHES "Visual Studio")
@@ -592,7 +593,7 @@ target_compile_definitions(Halide
                            # in the Windows API.
                            $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
                            $<$<CXX_COMPILER_ID:MSVC>:_SCL_SECURE_NO_WARNINGS>
-                           )
+)
 
 ##
 # Set up additional backend options for Halide
@@ -631,7 +632,6 @@ option(TARGET_WEBGPU "Include WebGPU target" ON)
 if (TARGET_WEBGPU)
     target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 endif()
-
 
 ##
 # Add autoschedulers to the build.

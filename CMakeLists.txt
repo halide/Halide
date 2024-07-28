@@ -56,9 +56,9 @@ set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use. Halide requires
 option(CMAKE_CXX_STANDARD_REQUIRED "When enabled, the value of CMAKE_CXX_STANDARD is a requirement." ON)
 option(CMAKE_CXX_EXTENSIONS "When enabled, compiler-specific language extensions are enabled (e.g. -std=gnu++17)" OFF)
 
-if(CMAKE_CXX_STANDARD LESS 17)
+if (CMAKE_CXX_STANDARD LESS 17)
     message(FATAL_ERROR "Halide requires C++17 or newer but CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
-endif()
+endif ()
 
 # Build Halide with ccache if the package is present
 option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
@@ -79,12 +79,12 @@ if (Halide_CCACHE_BUILD)
 
     # Per https://ccache.dev/manual/latest.html#_precompiled_headers,
     # we must set -fno-pch-timestamp when using Clang + CCache + PCH
-    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    if (CMAKE_C_COMPILER_ID MATCHES "Clang")
         string(APPEND CMAKE_C_FLAGS " -Xclang -fno-pch-timestamp")
-    endif()
-    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    endif ()
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         string(APPEND CMAKE_CXX_FLAGS " -Xclang -fno-pch-timestamp")
-    endif()
+    endif ()
 
     message(STATUS "Enabling ccache usage for building.")
 endif ()
