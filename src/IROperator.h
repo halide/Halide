@@ -1729,7 +1729,6 @@ Expr target_natural_vector_size() {
 }
 //@}
 
-
 }  // namespace Halide
 
 #endif
