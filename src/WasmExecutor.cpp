@@ -345,8 +345,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         obj_file.pathname(),
         "--entry=" + fn_name,
         "-o",
-        wasm_output.pathname()
-    };
+        wasm_output.pathname()};
 
     constexpr int c = sizeof(lld_arg_strs) / sizeof(lld_arg_strs[0]);
     const char *lld_args[c];
