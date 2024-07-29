@@ -1491,15 +1491,10 @@ void CodeGen_ARM::visit(const Store *op) {
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
         llvm::Type *intrin_llvm_type = llvm_type_with_constraint(intrin_type, false, is_sve ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
-#if LLVM_VERSION >= 170
-        const bool is_opaque = true;
-#else
-        const bool is_opaque = llvm::PointerType::get(intrin_llvm_type, 0)->isOpaque();
-#endif
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
-                  << (is_opaque ? ".p0" : ".p0i8")
+                  << ".p0"
                   << ".v"
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
@@ -1526,9 +1521,6 @@ void CodeGen_ARM::visit(const Store *op) {
                       << (t.is_float() ? 'f' : 'i')
                       << t.bits()
                       << ".p0";
-                if (!is_opaque) {
-                    instr << (t.is_float() ? 'f' : 'i') << t.bits();
-                }
                 arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
                 arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
             }
