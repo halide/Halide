@@ -87,7 +87,6 @@ class CheckForSaturatingCasts : public CustomPass {
                                         << "Expressions of the form cast(type, clamp(e, min, max)) "
                                         << "should be replaced with a saturating_cast() call when min "
                                         << "and max are the natural bounds of the type.";
-
                                 }
                             } else {
                                 internal_assert(cast_type.is_uint());
@@ -99,7 +98,6 @@ class CheckForSaturatingCasts : public CustomPass {
                                         << "Expressions of the form cast(type, clamp(e, min, max)) "
                                         << "should be replaced with a saturating_cast() call when min "
                                         << "and max are the natural bounds of the type.";
-
                                 }
                             }
                         }

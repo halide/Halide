@@ -749,9 +749,9 @@ void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> d
             return "Anonymous IRMutator";
         }
         Stmt run(const std::vector<Function> &outputs,
-                         const std::map<std::string, Function> &env,
-                         const Stmt &stmt,
-                         const Target &target) override {
+                 const std::map<std::string, Function> &env,
+                 const Stmt &stmt,
+                 const Target &target) override {
             return mutator->mutate(stmt);
         };
 
