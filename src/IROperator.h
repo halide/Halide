@@ -1697,6 +1697,8 @@ Expr rounding_mul_shift_right(Expr a, Expr b, int q);
  \code
     Expr e = select(target_arch_is(Target::ARM), something, something_else);
  \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
  */
 //@{
 Expr target_arch_is(Target::Arch arch);
@@ -1705,11 +1707,13 @@ Expr target_has_feature(Target::Feature feat);
 //@}
 
 /** Return the bit width of the Target used during lowering; this can be useful
- * in writing library code without having to plumb a Target through call sites, so that you
- * can do things like
+ * in writing library code without having to plumb a Target through call sites,
+ * so that you can do things like
  \code
     Expr e = select(target_bits() == 32, something, something_else);
  \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
  */
 Expr target_bits();
 
@@ -1720,6 +1724,8 @@ Expr target_bits();
  \code
     f.vectorize(x, target_natural_vector_size(Float(32)));
  \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
  */
 //@{
 Expr target_natural_vector_size(Type t);
