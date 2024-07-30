@@ -205,7 +205,7 @@ void define_operators(py::module &m) {
     m.def("target_arch_is", &target_arch_is);
     m.def("target_bits", &target_bits);
     m.def("target_has_feature", &target_has_feature);
-    m.def("target_natural_vector_size", [](const Type& t) -> Expr {
+    m.def("target_natural_vector_size", [](const Type &t) -> Expr {
         return target_natural_vector_size(t);
     });
     m.def("target_os_is", &target_os_is);
