@@ -388,14 +388,14 @@ Halide reads and understands several options that can configure the build. The
 following are the most consequential and control how Halide is actually
 compiled.
 
-| Option                                   | Default               | Description                                                                                                      |
-|------------------------------------------|-----------------------|------------------------------------------------------------------------------------------------------------------|
-| [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.                             |
-| `Halide_BUNDLE_LLVM`                     | `OFF`                 | When building Halide as a static library, unpack the LLVM static libraries and add those objects to libHalide.a. |
-| `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                                    |
-| `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                                  |
-| `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                           |
-| `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                |
+| Option                                   | Default               | Description                                                                                       |
+|------------------------------------------|-----------------------|---------------------------------------------------------------------------------------------------|
+| [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.              |
+| `Halide_BUNDLE_STATIC`                   | `OFF`                 | When building Halide as a static library, merge static library dependencies into libHalide.a.     |
+| `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                     |
+| `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                   |
+| `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                            |
+| `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension) |
 
 The following options are _advanced_ and should not be required in typical workflows. Generally, these are used by
 Halide's own CI infrastructure, or as escape hatches for third-party packagers.
