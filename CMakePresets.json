@@ -163,7 +163,7 @@
       "binaryDir": "static-Release",
       "cacheVariables": {
         "BUILD_SHARED_LIBS": "NO",
-        "Halide_BUNDLE_LLVM": "YES"
+        "Halide_BUNDLE_STATIC": "YES"
       }
     },
     {
