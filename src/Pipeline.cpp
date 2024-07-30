@@ -756,7 +756,7 @@ void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> d
         };
 
         CustomPassFromIRMutator(IRMutator *m, std::function<void()> d)
-            : mutator(m), deleter(d) {
+            : mutator(m), deleter(std::move(d)) {
         }
 
         ~CustomPassFromIRMutator() override {
