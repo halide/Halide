@@ -90,7 +90,7 @@ public:
                                const std::map<std::string, Internal::Function> &env,
                                const Internal::Stmt &stmt,
                                const Target &target) = 0;
-    virtual ~CustomPass(){};
+    virtual ~CustomPass() = default;
 };
 
 /** A custom lowering pass. See Pipeline::add_custom_lowering_pass. */

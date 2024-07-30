@@ -745,10 +745,10 @@ void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> d
         std::function<void()> deleter;
 
     public:
-        virtual std::string name() override {
+        std::string name() override {
             return "Anonymous IRMutator";
         }
-        virtual Stmt run(const std::vector<Function> &outputs,
+        Stmt run(const std::vector<Function> &outputs,
                          const std::map<std::string, Function> &env,
                          const Stmt &stmt,
                          const Target &target) override {
@@ -759,7 +759,7 @@ void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> d
             : mutator(m), deleter(d) {
         }
 
-        ~CustomPassFromIRMutator() {
+        ~CustomPassFromIRMutator() override {
             if (deleter) {
                 deleter();
             }
