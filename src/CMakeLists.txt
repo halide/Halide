@@ -536,13 +536,6 @@ if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
 endif ()
 
-include(TargetExportScript)
-## TODO: implement something similar for Windows/link.exe
-# https://github.com/halide/Halide/issues/4651
-target_export_script(Halide
-                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
-                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
-
 # Note that we (deliberately) redeclare these versions here, even though the macros
 # with identical versions are expected to be defined in source; this allows us to
 # ensure that the versions defined between all build systems are identical.
@@ -595,6 +588,17 @@ elseif (Halide_WASM_BACKEND STREQUAL "V8")
 elseif (Halide_WASM_BACKEND)
     message(FATAL_ERROR "Unknown Halide_WASM_BACKEND `${Halide_WASM_BACKEND}`")
 endif ()
+
+##
+# Attach symbol export scripts
+##
+
+## TODO: implement something similar for Windows/link.exe
+# https://github.com/halide/Halide/issues/4651
+include(TargetExportScript)
+target_export_script(Halide
+                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
+                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
 
 ##
 # Set compiler options for libHalide
