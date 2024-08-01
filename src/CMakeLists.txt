@@ -26,16 +26,6 @@ set_target_properties(Halide PROPERTIES
 set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 ##
-# CodeGen backends
-
-# LLVM
-foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
-    string(TOUPPER "WITH_${backend}" definition)
-    target_compile_definitions(Halide PRIVATE "${definition}")
-    target_link_libraries(Halide PRIVATE Halide_LLVM::${backend})
-endforeach ()
-
-##
 # Lists of source files. Keep ALL lists sorted in alphabetical order.
 ##
 
@@ -483,6 +473,34 @@ target_sources(
 )
 
 ##
+# CodeGen backends
+##
+
+# LLVM backends
+foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
+    string(TOUPPER "WITH_${backend}" definition)
+    target_compile_definitions(Halide PRIVATE "${definition}")
+    target_link_libraries(Halide PRIVATE Halide_LLVM::${backend})
+endforeach ()
+
+# GPU backends
+find_package(
+    SPIRV-Headers 1.5.5 REQUIRED
+    HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
+)
+
+target_link_libraries(
+    Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>"
+)
+
+target_compile_definitions(Halide PRIVATE WITH_D3D12)
+target_compile_definitions(Halide PRIVATE WITH_METAL)
+target_compile_definitions(Halide PRIVATE WITH_OPENCL)
+target_compile_definitions(Halide PRIVATE WITH_SPIRV)
+target_compile_definitions(Halide PRIVATE WITH_VULKAN)
+target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
+
+##
 # Flatbuffers and Serialization dependencies.
 ##
 
@@ -654,23 +672,6 @@ else ()
         Halide PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>"
     )
 endif ()
-
-##
-# GPU CodeGen backends
-
-find_package(
-    SPIRV-Headers 1.5.5 REQUIRED
-    HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
-)
-
-target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
-
-target_compile_definitions(Halide PRIVATE WITH_D3D12)
-target_compile_definitions(Halide PRIVATE WITH_METAL)
-target_compile_definitions(Halide PRIVATE WITH_OPENCL)
-target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-target_compile_definitions(Halide PRIVATE WITH_VULKAN)
-target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 
 ##
 # Add autoschedulers to the build.
