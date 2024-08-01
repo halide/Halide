@@ -41,11 +41,19 @@ target_sources(Halide_RunGenMain INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOU
 target_link_libraries(Halide_RunGenMain INTERFACE Halide::Runtime Halide::ImageIO Halide::Tools)
 set_target_properties(Halide_RunGenMain PROPERTIES EXPORT_NAME RunGenMain)
 
+add_library(Halide_GenGen STATIC GenGen.cpp)
+add_library(Halide::GenGen ALIAS Halide_GenGen)
+set_target_properties(Halide_GenGen PROPERTIES EXPORT_NAME GenGen)
+
+target_link_libraries(Halide_GenGen PUBLIC Halide::Halide ${CMAKE_DL_LIBS})
+
 add_library(Halide_Generator INTERFACE)
 add_library(Halide::Generator ALIAS Halide_Generator)
-target_sources(Halide_Generator INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/GenGen.cpp>)
-target_link_libraries(Halide_Generator INTERFACE Halide::Halide ${CMAKE_DL_LIBS})
 set_target_properties(Halide_Generator PROPERTIES EXPORT_NAME Generator)
+
+target_link_libraries(
+    Halide_Generator INTERFACE "$<LINK_LIBRARY:WHOLE_ARCHIVE,Halide::GenGen>"
+)
 
 add_library(Halide_Tools INTERFACE)
 add_library(Halide::Tools ALIAS Halide_Tools)
