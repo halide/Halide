@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.28)
 
 # The Hexagon toolchain is broken
 set(ENV{HEXAGON_SDK_ROOT} "${HEXAGON_SDK_ROOT}")

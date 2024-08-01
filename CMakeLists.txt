@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22...3.23)
+cmake_minimum_required(VERSION 3.28)
 project(Halide
         VERSION 19.0.0
         DESCRIPTION "Halide compiler and libraries"

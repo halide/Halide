@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22...3.23)
+cmake_minimum_required(VERSION 3.28)
 project(Halide_Python)
 
 if (PROJECT_IS_TOP_LEVEL)
