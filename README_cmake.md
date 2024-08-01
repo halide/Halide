@@ -412,13 +412,13 @@ through the [`add_subdirectory`][add_subdirectory] or
 [`FetchContent`][fetchcontent] mechanisms. They control whether non-essential
 targets (like tests and documentation) are built.
 
-| Option                 | Default              | Description                                                      |
-|------------------------|----------------------|------------------------------------------------------------------|
-| `WITH_TESTS`           | `ON`                 | Enable building unit and integration tests                       |
-| `WITH_PYTHON_BINDINGS` | `ON` if Python found | Enable building Python 3.x bindings                              |
-| `WITH_DOCS`            | `OFF`                | Enable building the documentation via Doxygen                    |
-| `WITH_UTILS`           | `ON`                 | Enable building various utilities including the trace visualizer |
-| `WITH_TUTORIALS`       | `ON`                 | Enable building the tutorials                                    |
+| Option                 | Default | Description                                                      |
+|------------------------|---------|------------------------------------------------------------------|
+| `WITH_TESTS`           | `ON`    | Enable building unit and integration tests                       |
+| `WITH_PYTHON_BINDINGS` | `ON`    | Enable building Python 3.x bindings                              |
+| `WITH_DOCS`            | `OFF`   | Enable building the documentation via Doxygen                    |
+| `WITH_UTILS`           | `ON`    | Enable building various utilities including the trace visualizer |
+| `WITH_TUTORIALS`       | `ON`    | Enable building the tutorials                                    |
 
 The following options control whether to build certain test subsets. They only
 apply when `WITH_TESTS=ON`:

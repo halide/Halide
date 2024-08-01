@@ -28,12 +28,12 @@ file(CONFIGURE OUTPUT "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/HalideHelpersConfig.c
 ##
 
 # Import useful standard modules
-include(CMakeDependentOption)
 include(CheckCXXSymbolExists)
 
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(HalideGeneratorHelpers)
+include(HalideFeatures)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
@@ -66,10 +66,8 @@ if (CMAKE_CXX_STANDARD LESS 17)
     message(FATAL_ERROR "Halide requires C++17 or newer but CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
 endif ()
 
-# Build Halide with ccache if the package is present
-option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
-mark_as_advanced(Halide_CCACHE_BUILD)
-
+# Build Halide with ccache if the package is present and the user requested it
+Halide_feature(Halide_CCACHE_BUILD "Build with CCache as best configured for Halide" OFF ADVANCED)
 if (Halide_CCACHE_BUILD)
     find_program(CCACHE_PROGRAM ccache REQUIRED)
 
@@ -91,8 +89,6 @@ if (Halide_CCACHE_BUILD)
     if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         string(APPEND CMAKE_CXX_FLAGS " -Xclang -fno-pch-timestamp")
     endif ()
-
-    message(STATUS "Enabling ccache usage for building.")
 endif ()
 
 # Detect whether or not ASAN is enabled. Don't cache the result to ensure this
@@ -206,70 +202,56 @@ find_package(JPEG)
 find_package(PNG)
 
 ##
-# Declare options
-##
+# Optional features. These settings are defined early so that subdirectories see a consistent view
 
-# Declare these options after we include dependencies (since it declares Halide_ENABLE_RTTI etc)
-# but before we add any subdirectories, since any option you test before it is defined is
-# implicitly false the *first* time that the build file is processed, and there are some
-# out-of-order dependencies here (e.g, code in src/ eventually checks WITH_UTILS).
-# This is especially subtle since it means that some options can end up with different
-# values if you build a target as part of the initial CMake run, so (e.g.) a `make install`
-# from as totally clean build might neglect to install some pieces.
+Halide_feature(Halide_BUNDLE_STATIC "Bundle Halide's static dependencies" OFF ADVANCED
+               DEPENDS NOT BUILD_SHARED_LIBS)
 
-option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
-option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
-option(WITH_DOCS "Build documentation" OFF)
-option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
-cmake_dependent_option(
-    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
-    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
-)
+Halide_feature(Halide_ENABLE_EXCEPTIONS "Enable exceptions in Halide" ON)
+Halide_feature(Halide_ENABLE_RTTI "Enable RTTI in Halide" ON
+               DEPENDS LLVM_ENABLE_RTTI)
+
+Halide_feature(WITH_AUTOSCHEDULERS "Build the Halide autoschedulers" ON
+               DEPENDS BUILD_SHARED_LIBS)
+Halide_feature(WITH_DOCS "Halide's Doxygen documentation" OFF)
+Halide_feature(WITH_PACKAGING "Halide's CMake package install rules" TOP_LEVEL)
+Halide_feature(WITH_PYTHON_BINDINGS "Halide's native Python module (not the whole pip package)" ON
+               DEPENDS Halide_ENABLE_EXCEPTIONS AND Halide_ENABLE_RTTI)
+Halide_feature(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
+Halide_feature(WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
+               "Intercepting JIT compilation with a serialization roundtrip, for test only"
+               OFF ADVANCED
+               DEPENDS WITH_SERIALIZATION)
+Halide_feature(WITH_TESTS "Halide's unit test suite" TOP_LEVEL)
+Halide_feature(WITH_TUTORIALS "Halide's tutorial code" TOP_LEVEL)
+Halide_feature(WITH_UTILS "Optional utility programs for Halide, including HalideTraceViz" TOP_LEVEL)
 
 ##
 # Add source directories
-##
 
 add_subdirectory(src)
 add_subdirectory(tools)
 
-##
-# Add tests, tutorials, etc. if we're not being imported into another CMake project.
-##
-
 if (WITH_TESTS)
-    message(STATUS "Building tests enabled")
     add_subdirectory(test)
-else ()
-    message(STATUS "Building tests disabled")
 endif ()
 
 if (WITH_PYTHON_BINDINGS)
-    message(STATUS "Building Python bindings enabled")
     add_subdirectory(python_bindings)
-else ()
-    message(STATUS "Building Python bindings disabled")
 endif ()
 
 if (WITH_TUTORIALS)
-    message(STATUS "Building tutorials enabled")
     add_subdirectory(tutorial)
-else ()
-    message(STATUS "Building tutorials disabled")
 endif ()
 
 if (WITH_DOCS)
-    message(STATUS "Building docs enabled")
     add_subdirectory(doc)
-else ()
-    message(STATUS "Building docs disabled")
 endif ()
 
 if (WITH_UTILS)
-    message(STATUS "Building utils enabled")
     add_subdirectory(util)
-else ()
-    message(STATUS "Building utils disabled")
 endif ()
 
-add_subdirectory(packaging)
+if (WITH_PACKAGING)
+    add_subdirectory(packaging)
+endif ()

@@ -3,5 +3,10 @@ if (Halide_TARGET MATCHES "wasm")
     return()
 endif ()
 
+if (NOT WITH_AUTOSCHEDULERS)
+    message(WARNING "Python tests are skipped without autoschedulers")
+    return()
+endif ()
+
 add_subdirectory(correctness)
 add_subdirectory(generators)

@@ -179,8 +179,10 @@ set(RUNTIME_CXX_FLAGS
     -Wno-sync-alignment
 )
 
-option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
-mark_as_advanced(Halide_CLANG_TIDY_BUILD)
+Halide_feature(
+    Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF
+    ADVANCED
+)
 
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
@@ -353,7 +355,11 @@ target_sources(Halide_Runtime
                FILE_SET HEADERS
                FILES ${RUNTIME_HEADER_FILES})
 
-option(Halide_BUILD_HEXAGON_REMOTE_RUNTIME "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF)
-if (Halide_BUILD_HEXAGON_REMOTE_RUNTIME AND NOT Halide_CLANG_TIDY_BUILD)
+Halide_feature(
+    Halide_BUILD_HEXAGON_REMOTE_RUNTIME "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF
+    DEPENDS NOT Halide_CLANG_TIDY_BUILD
+    ADVANCED
+)
+if (Halide_BUILD_HEXAGON_REMOTE_RUNTIME)
   add_subdirectory(hexagon_remote)
 endif ()
