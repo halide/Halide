@@ -5,6 +5,16 @@ if (Halide_USE_FETCHCONTENT)
     list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES "${CMAKE_CURRENT_LIST_DIR}/cmake/dependencies.cmake")
 endif ()
 
+# TODO: remove this after updating build bots.
+if (NOT DEFINED VCPKG_OVERLAY_PORTS)
+    set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/cmake/vcpkg")
+endif ()
+
+# TODO: remove this after updating build bots.
+if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
+    set(VCPKG_MANIFEST_FEATURES developer)
+endif ()
+
 project(Halide
         VERSION 19.0.0
         DESCRIPTION "Halide compiler and libraries"

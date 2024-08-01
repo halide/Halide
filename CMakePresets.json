@@ -1,8 +1,8 @@
 {
-  "version": 3,
+  "version": 6,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 22,
+    "minor": 28,
     "patch": 0
   },
   "configurePresets": [
@@ -18,30 +18,41 @@
       "inherits": "base",
       "toolchainFile": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
-      }
-    },
-    {
-      "name": "windows-only",
-      "hidden": true,
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "Halide_LLVM_SHARED_LIBS": false
       }
     },
     {
       "name": "vcpkg",
-      "hidden": true,
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      "inherits": "base",
+      "displayName": "vcpkg deps",
+      "description": "Build with vcpkg dependencies",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "VCPKG_MANIFEST_FEATURES": "developer",
+        "Halide_USE_FETCHCONTENT": false
+      }
+    },
+    {
+      "name": "vcpkg-system-llvm",
+      "inherits": "vcpkg",
+      "displayName": "vcpkg deps, system LLVM",
+      "description": "Build with vcpkg dependencies, but find LLVM on the system",
+      "cacheVariables": {
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg"
+      }
     },
     {
       "name": "vs2022",
       "hidden": true,
       "inherits": [
-        "vcpkg",
-        "windows-only"
+        "vcpkg"
       ],
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "generator": "Visual Studio 17 2022",
       "toolset": "host=x64"
     },
@@ -64,22 +75,40 @@
       }
     },
     {
-      "name": "debian-debug",
-      "inherits": "debug",
-      "displayName": "Debian (Debug)",
-      "description": "Debug build assuming Debian-provided dependencies",
-      "cacheVariables": {
-        "Halide_LLVM_SHARED_LIBS": "ON"
-      }
+      "name": "debug-vcpkg",
+      "inherits": [
+        "debug",
+        "vcpkg"
+      ],
+      "displayName": "Debug (vcpkg)",
+      "description": "Debug build for a single-config generator, vcpkg dependencies"
     },
     {
-      "name": "debian-release",
-      "inherits": "debian-debug",
-      "displayName": "Debian (Release)",
-      "description": "Release build assuming Debian-provided dependencies",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
+      "name": "release-vcpkg",
+      "inherits": [
+        "release",
+        "vcpkg"
+      ],
+      "displayName": "Release (vcpkg)",
+      "description": "Release build for a single-config generator, vcpkg dependencies"
+    },
+    {
+      "name": "debug-vcpkg-system-llvm",
+      "inherits": [
+        "debug",
+        "vcpkg-system-llvm"
+      ],
+      "displayName": "Debug (vcpkg-system-llvm)",
+      "description": "Debug build for a single-config generator, vcpkg-system-llvm dependencies"
+    },
+    {
+      "name": "release-vcpkg-system-llvm",
+      "inherits": [
+        "release",
+        "vcpkg-system-llvm"
+      ],
+      "displayName": "Release (vcpkg-system-llvm)",
+      "description": "Release build for a single-config generator, vcpkg-system-llvm dependencies"
     },
     {
       "name": "win32",
@@ -107,9 +136,37 @@
       "description": "macOS build using Apple Clang and Homebrew LLVM",
       "generator": "Ninja",
       "inherits": "release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
       "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "/opt/homebrew;/opt/homebrew/opt/llvm;/opt/homebrew/opt/jpeg",
-        "Halide_LLVM_SHARED_LIBS": "YES"
+        "CMAKE_PREFIX_PATH": "/opt/homebrew;/opt/homebrew/opt/llvm;/opt/homebrew/opt/jpeg"
+      }
+    },
+    {
+      "name": "macOS-vcpkg",
+      "inherits": [
+        "macOS",
+        "vcpkg"
+      ],
+      "displayName": "macOS (vcpkg)",
+      "description": "macOS build with vcpkg dependencies",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": ""
+      }
+    },
+    {
+      "name": "macOS-vcpkg-system-llvm",
+      "inherits": [
+        "macOS",
+        "vcpkg-system-llvm"
+      ],
+      "displayName": "macOS (vcpkg-system-llvm)",
+      "description": "macOS build with vcpkg-system-llvm dependencies",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "/opt/homebrew/opt/llvm"
       }
     },
     {
@@ -182,7 +239,6 @@
       "description": "Build everything with fuzzing enabled",
       "cacheVariables": {
         "LLVM_ROOT": "$penv{LLVM_ROOT}",
-        "TARGET_WEBASSEMBLY": "NO",
         "WITH_TUTORIALS": "NO",
         "WITH_UTILS": "NO",
         "WITH_PYTHON_BINDINGS": "NO",
