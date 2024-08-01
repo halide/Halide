@@ -505,7 +505,6 @@ target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 ##
 
 # Build serialization, enabled by default
-option(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
 if (WITH_SERIALIZATION)
     # Sadly, there seem to be at least three variations of the Flatbuffer
     # package in terms of the case of the relevant CMake files. Fortunately,
@@ -546,10 +545,6 @@ endif ()
 
 # Enable serialization testing by intercepting JIT compilation with a serialization roundtrip;
 # This is used only for special builds made specifically for testing, and must be disabled by default.
-cmake_dependent_option(
-    WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING "Intercepting JIT compilation with a serialization roundtrip, for test only" OFF
-    "WITH_SERIALIZATION" OFF
-)
 if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
 endif ()
@@ -642,8 +637,9 @@ target_compile_definitions(Halide
 
 ##
 # RTTI and exceptions settings
+##
 
-option(Halide_ENABLE_RTTI "Enable RTTI in Halide" "${LLVM_ENABLE_RTTI}")
+# RTTI
 set_property(TARGET Halide PROPERTY CXX_RTTI "${Halide_ENABLE_RTTI}")
 set_property(TARGET Halide APPEND PROPERTY COMPATIBLE_INTERFACE_BOOL CXX_RTTI)
 
@@ -658,7 +654,7 @@ else ()
     )
 endif ()
 
-option(Halide_ENABLE_EXCEPTIONS "Enable exceptions in Halide" ON)
+# Exceptions
 if (Halide_ENABLE_EXCEPTIONS)
     target_compile_definitions(Halide PUBLIC HALIDE_WITH_EXCEPTIONS)
 else ()
@@ -677,9 +673,6 @@ endif ()
 # Add autoschedulers to the build.
 ##
 
-if (BUILD_SHARED_LIBS)
-    message(STATUS "Building autoschedulers enabled")
+if (WITH_AUTOSCHEDULERS)
     add_subdirectory(autoschedulers)
-else ()
-    message(STATUS "Building autoschedulers disabled (static Halide)")
 endif ()

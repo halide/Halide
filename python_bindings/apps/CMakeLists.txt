@@ -8,6 +8,11 @@ if (Halide_TARGET MATCHES "vulkan")
     return()
 endif ()
 
+if (NOT WITH_AUTOSCHEDULERS)
+    message(WARNING "Python apps are skipped without autoschedulers")
+    return()
+endif ()
+
 set(TEST_TMPDIR "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>")
 set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../apps/images>")
 

@@ -339,11 +339,13 @@ set(EXTRA_ALIAS_LIBS alias_with_offset_42 alias_Adams2019 alias_Li2018 alias_Mul
 _add_halide_libraries(alias)
 foreach (LIB IN LISTS EXTRA_ALIAS_LIBS)
     _add_halide_libraries(${LIB}
+                          ENABLE_IF WITH_AUTOSCHEDULERS
                           FROM alias.generator
                           GENERATOR_NAME ${LIB}
                           PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016)
 endforeach ()
 _add_halide_aot_tests(alias
+                      ENABLE_IF WITH_AUTOSCHEDULERS
                       HALIDE_LIBRARIES alias ${EXTRA_ALIAS_LIBS})
 
 # all_type_names_aottest.cpp
@@ -368,6 +370,7 @@ _add_halide_aot_tests(async_parallel
 # autograd_generator.cpp
 _add_halide_libraries(autograd)
 _add_halide_libraries(autograd_grad
+                      ENABLE_IF WITH_AUTOSCHEDULERS
                       GRADIENT_DESCENT
                       FROM autograd.generator
                       GENERATOR_NAME autograd
@@ -375,7 +378,7 @@ _add_halide_libraries(autograd_grad
                       AUTOSCHEDULER Halide::Mullapudi2016
                       PLUGINS Halide::Mullapudi2016)
 _add_halide_aot_tests(autograd
-                      ENABLE_IF TARGET Halide::Mullapudi2016 AND NOT ${_USING_WASM}
+                      ENABLE_IF WITH_AUTOSCHEDULERS AND NOT ${_USING_WASM}
                       HALIDE_LIBRARIES autograd autograd_grad
                       GROUPS multithreaded)
 
