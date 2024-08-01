@@ -161,6 +161,8 @@ set(RUNTIME_CXX_FLAGS
     -fno-threadsafe-statics
     # Necessary for using virtual functions in the runtime code.
     -fno-rtti
+    # Will generate bad code in some situations
+    -fno-jump-tables
     -Wall
     -Wc++20-designator
     -Wcast-qual
@@ -173,6 +175,7 @@ set(RUNTIME_CXX_FLAGS
     -Wvla
     -Wsign-compare
     -Wimplicit-fallthrough
+    -Wno-sync-alignment
 )
 
 option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
@@ -217,17 +220,24 @@ foreach (i IN LISTS RUNTIME_CPP)
                     # unfortunately, clang doesn't automatically set this flag even though the
                     # ABI is msvc on windows
                     set(fshort-wchar -fshort-wchar)
-                    set(TARGET "le64-unknown-windows-unknown")
+                    # TODO: was le64 here, not sure if this is correct or not
+                    set(TARGET "x86_64-unknown-windows-unknown")
                 endif ()
             endif()
-        # Everything else
-        else()
+        elseif (i MATCHES "webgpu")
             if (j EQUAL 32)
-                # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
-                set(TARGET "le32-unknown-nacl-unknown")
+                # wasm32 will fail for some i386 builds, but i386 won't
+                set(TARGET "wasm32-unknown-unknown-unknown")
             else ()
-                # generic 64-bit code
-                set(TARGET "le64-unknown-unknown-unknown")
+                set(TARGET "wasm64-unknown-unknown-unknown")
+            endif ()
+        else()
+            # don't be fooled: these are just generic 32/64-bit targets for our purposes here
+            if (j EQUAL 32)
+                # wasm32 will fail for some i386 builds, but i386 won't
+                set(TARGET "i386-unknown-unknown-unknown")
+            else ()
+                set(TARGET "x86_64-unknown-unknown-unknown")
             endif ()
         endif ()
 

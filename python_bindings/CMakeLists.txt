@@ -1,5 +1,9 @@
-cmake_minimum_required(VERSION 3.22...3.23)
+cmake_minimum_required(VERSION 3.28)
 project(Halide_Python)
+
+if (PROJECT_IS_TOP_LEVEL)
+    enable_testing()
+endif ()
 
 include(CMakeDependentOption)
 
@@ -11,6 +15,11 @@ include(CMakeDependentOption)
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "The minimum C++ standard to use")
 option(CMAKE_CXX_STANDARD_REQUIRED "Prevent CMake C++ standard selection decay" ON)
 option(CMAKE_CXX_EXTENSIONS "Enable C++ vendor extensions (e.g. GNU)" OFF)
+
+# Support not actually building the bindings, but using the ones we find
+# via `find_package(Halide)`. This allows running tests against the
+# installed Halide package.
+option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
 
 # Duplicated options from parent project
 option(WITH_TESTS "Build tests" ON)
@@ -41,18 +50,22 @@ if (Python3_VERSION VERSION_LESS "3.8")
 endif ()
 message(STATUS "Found Python ${Python3_VERSION} at ${Python3_EXECUTABLE}")
 
-if (PYBIND11_USE_FETCHCONTENT)
-    include(FetchContent)
-    FetchContent_Declare(
-        pybind11
-        GIT_REPOSITORY https://github.com/pybind/pybind11.git
-        GIT_TAG v${PYBIND11_VER}
-    )
-    FetchContent_MakeAvailable(pybind11)
-else ()
-    find_package(pybind11 ${PYBIND11_VER} REQUIRED)
+if (WITH_PYTHON_BINDINGS)
+    # If we are actually going to build the bindings, we need pybind11.
+    if (PYBIND11_USE_FETCHCONTENT)
+        include(FetchContent)
+        FetchContent_Declare(
+            pybind11
+            GIT_REPOSITORY https://github.com/pybind/pybind11.git
+            GIT_TAG v${PYBIND11_VER}
+        )
+        FetchContent_MakeAvailable(pybind11)
+    else ()
+        find_package(pybind11 ${PYBIND11_VER} REQUIRED)
+    endif ()
 endif ()
 
+# Note: this must happen, especially when WITH_PYTHON_BINDINGS is OFF.
 find_package(Halide REQUIRED Halide)
 if (NOT Halide_ENABLE_RTTI OR NOT Halide_ENABLE_EXCEPTIONS)
     message(FATAL_ERROR "Python bindings require RTTI and exceptions to be enabled.")
@@ -91,9 +104,11 @@ endfunction()
 # Add our sources to this sub-tree.
 ##
 
-add_subdirectory(src)
+if (WITH_PYTHON_BINDINGS)
+    add_subdirectory(src)
+endif ()
 
-if (WITH_PYTHON_STUBS)
+if (WITH_PYTHON_BINDINGS AND WITH_PYTHON_STUBS)
     add_subdirectory(stub)
 endif ()
 

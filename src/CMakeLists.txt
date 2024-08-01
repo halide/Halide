@@ -162,6 +162,7 @@ set(HEADER_FILES
     StripAsserts.h
     Substitute.h
     Target.h
+    TargetQueryOps.h
     Tracing.h
     TrimNoOps.h
     Tuple.h
@@ -351,6 +352,7 @@ set(SOURCE_FILES
     StripAsserts.cpp
     Substitute.cpp
     Target.cpp
+    TargetQueryOps.cpp
     Tracing.cpp
     TrimNoOps.cpp
     Tuple.cpp

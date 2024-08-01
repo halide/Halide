@@ -46,9 +46,7 @@
 // clang-format on
 
 #if WITH_WABT || WITH_V8
-#if LLVM_VERSION >= 170
 LLD_HAS_DRIVER(wasm)
-#endif
 #endif
 
 namespace Halide {
@@ -336,10 +334,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
 
     std::string lld_arg_strs[] = {
         "HalideJITLinker",
-#if LLVM_VERSION >= 170
-        "-flavor",
-        "wasm",
-#endif
+        "-flavor", "wasm",
         // For debugging purposes:
         // "--verbose",
         // "-error-limit=0",
@@ -350,8 +345,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         obj_file.pathname(),
         "--entry=" + fn_name,
         "-o",
-        wasm_output.pathname()
-    };
+        wasm_output.pathname()};
 
     constexpr int c = sizeof(lld_arg_strs) / sizeof(lld_arg_strs[0]);
     const char *lld_args[c];
@@ -359,7 +353,6 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         lld_args[i] = lld_arg_strs[i].c_str();
     }
 
-#if LLVM_VERSION >= 170
     // lld will temporarily hijack the signal handlers to ensure that temp files get cleaned up,
     // but rather than preserving custom handlers in place, it restores the default handlers.
     // This conflicts with some of our testing infrastructure, which relies on a SIGABRT handler
@@ -383,21 +376,6 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     }
 
     std::signal(SIGABRT, old_abort_handler);
-#else
-    // lld will temporarily hijack the signal handlers to ensure that temp files get cleaned up,
-    // but rather than preserving custom handlers in place, it restores the default handlers.
-    // This conflicts with some of our testing infrastructure, which relies on a SIGABRT handler
-    // set at global-ctor time to stay set. Therefore we'll save and restore this ourselves.
-    // Note that we must restore it before using internal_error (and also on the non-error path).
-    auto old_abort_handler = std::signal(SIGABRT, SIG_DFL);
-
-    if (!lld::wasm::link(lld_args, llvm::outs(), llvm::errs(), /*canExitEarly*/ false, /*disableOutput*/ false)) {
-        std::signal(SIGABRT, old_abort_handler);
-        internal_error << "lld::wasm::link failed\n";
-    }
-
-    std::signal(SIGABRT, old_abort_handler);
-#endif
 
 #if WASM_DEBUG_LEVEL
     wasm_output.detach();

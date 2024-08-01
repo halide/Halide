@@ -11,6 +11,7 @@
 #include <map>
 
 #include "Expr.h"
+#include "Target.h"
 #include "Tuple.h"
 
 namespace Halide {
@@ -1687,6 +1688,51 @@ Expr mul_shift_right(Expr a, Expr b, int q);
 //@{
 Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
 Expr rounding_mul_shift_right(Expr a, Expr b, int q);
+//@}
+
+/** Return a boolean Expr for the corresponding field of the Target
+ * being used during lowering; they can be useful in writing library
+ * code without having to plumb a Target through call sites, so that you
+ * can do things like
+ \code
+    Expr e = select(target_arch_is(Target::ARM), something, something_else);
+ \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
+ */
+//@{
+Expr target_arch_is(Target::Arch arch);
+Expr target_os_is(Target::OS os);
+Expr target_has_feature(Target::Feature feat);
+//@}
+
+/** Return the bit width of the Target used during lowering; this can be useful
+ * in writing library code without having to plumb a Target through call sites,
+ * so that you can do things like
+ \code
+    Expr e = select(target_bits() == 32, something, something_else);
+ \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
+ */
+Expr target_bits();
+
+/** Return the natural vector width for the given Type for the Target
+ * being used during lowering; this can be useful in writing library
+ * code without having to plumb a Target through call sites, so that you
+ * can do things like
+ \code
+    f.vectorize(x, target_natural_vector_size(Float(32)));
+ \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
+ */
+//@{
+Expr target_natural_vector_size(Type t);
+template<typename data_t>
+Expr target_natural_vector_size() {
+    return target_natural_vector_size(type_of<data_t>());
+}
 //@}
 
 }  // namespace Halide

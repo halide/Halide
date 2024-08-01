@@ -2735,4 +2735,24 @@ Expr concat_bits(const std::vector<Expr> &e) {
     return Call::make(t.with_bits(t.bits() * (int)e.size()), Call::concat_bits, e, Call::Intrinsic);
 }
 
+Expr target_arch_is(Target::Arch arch) {
+    return Call::make(Bool(), Call::target_arch_is, {Expr((int)arch)}, Call::PureIntrinsic);
+}
+
+Expr target_os_is(Target::OS os) {
+    return Call::make(Bool(), Call::target_os_is, {Expr((int)os)}, Call::PureIntrinsic);
+}
+
+Expr target_bits() {
+    return Call::make(Int(32), Call::target_bits, {}, Call::PureIntrinsic);
+}
+
+Expr target_has_feature(Target::Feature feat) {
+    return Call::make(Bool(), Call::target_has_feature, {Expr((int)feat)}, Call::PureIntrinsic);
+}
+
+Expr target_natural_vector_size(Type t) {
+    return Call::make(Int(32), Call::target_natural_vector_size, {make_zero(t.element_of())}, Call::PureIntrinsic);
+}
+
 }  // namespace Halide

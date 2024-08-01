@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.22...3.23)
+cmake_minimum_required(VERSION 3.28)
 project(Halide
-        VERSION 18.0.0
+        VERSION 19.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
@@ -151,9 +151,6 @@ function(set_halide_compiler_warnings NAME)
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
-
-        # This warning was removed in Clang 13
-        $<$<AND:$<CXX_COMPILER_ID:Clang,AppleClang>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,13.0>>:-Wno-return-std-move-in-c++11>
 
         $<$<CXX_COMPILER_ID:MSVC>:/W3>
         $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
