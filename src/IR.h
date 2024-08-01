@@ -612,6 +612,13 @@ struct Call : public ExprNode<Call> {
         sorted_avg,
         strict_float,
         stringify,
+
+        target_arch_is,
+        target_bits,
+        target_has_feature,
+        target_natural_vector_size,
+        target_os_is,
+
         undef,
         unreachable,
         unsafe_promise_clamped,

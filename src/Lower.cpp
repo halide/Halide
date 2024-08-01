@@ -70,6 +70,7 @@
 #include "StrictifyFloat.h"
 #include "StripAsserts.h"
 #include "Substitute.h"
+#include "TargetQueryOps.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
@@ -143,6 +144,8 @@ void lower_impl(const vector<Function> &output_funcs,
 
     // Create a deep-copy of the entire graph of Funcs.
     auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
+
+    lower_target_query_ops(env, t);
 
     bool any_strict_float = strictify_float(env, t);
     result_module.set_any_strict_float(any_strict_float);
