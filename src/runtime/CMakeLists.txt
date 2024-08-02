@@ -146,6 +146,7 @@ set(RUNTIME_HEADER_FILES
 # in a different directory ONLY IF that source was created
 # by add_custom_command, as is the case in this directory.
 add_library(Halide_initmod OBJECT)
+add_library(Halide::initmod ALIAS Halide_initmod)
 
 # Note: ensure that these flags match the flags in the Makefile.
 # Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
@@ -337,8 +338,6 @@ foreach (i IN LISTS RUNTIME_HEADER_FILES)
                        DEPENDS "${i}" binary2cpp
                        VERBATIM)
     target_sources(Halide_initmod PRIVATE "_initmod_${SYM_NAME}.cpp")
-
-    configure_file(${i} "${Halide_BINARY_DIR}/include/${i}" COPYONLY)
 endforeach ()
 
 ##
@@ -347,10 +346,14 @@ endforeach ()
 
 add_library(Halide_Runtime INTERFACE)
 add_library(Halide::Runtime ALIAS Halide_Runtime)
-target_include_directories(Halide_Runtime INTERFACE $<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>)
 set_target_properties(Halide_Runtime PROPERTIES EXPORT_NAME Runtime)
-option(Halide_BUILD_HEXAGON_REMOTE_RUNTIME "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF)
 
+target_sources(Halide_Runtime
+               INTERFACE
+               FILE_SET HEADERS
+               FILES ${RUNTIME_HEADER_FILES})
+
+option(Halide_BUILD_HEXAGON_REMOTE_RUNTIME "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF)
 if (Halide_BUILD_HEXAGON_REMOTE_RUNTIME AND NOT Halide_CLANG_TIDY_BUILD)
   add_subdirectory(hexagon_remote)
 endif ()

@@ -1,11 +1,23 @@
 ##
+# Declare the Halide library target.
+##
+
+add_library(Halide)
+add_library(Halide::Halide ALIAS Halide)
+
+##
 # Lists of source files. Keep ALL lists sorted in alphabetical order.
 ##
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
 # Also *don't* include anything that's only used internally (eg SpirvIR.h).
-set(HEADER_FILES
+target_sources(
+    Halide
+    PRIVATE
+    FILE_SET private_headers
+    TYPE HEADERS
+    FILES
     AbstractGenerator.h
     AddAtomicMutex.h
     AddImageChecks.h
@@ -175,9 +187,13 @@ set(HEADER_FILES
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
-    )
+)
 
-set(SOURCE_FILES
+# The sources that go into libHalide. For the sake of IDE support, headers that
+# exist in src/ but are not public should be included here.
+target_sources(
+    Halide
+    PRIVATE
     AbstractGenerator.cpp
     AddAtomicMutex.cpp
     AddImageChecks.cpp
@@ -363,7 +379,7 @@ set(SOURCE_FILES
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
-    )
+)
 
 set(C_TEMPLATE_FILES
     CodeGen_C_prologue
@@ -381,12 +397,13 @@ set(HTML_TEMPLATE_FILES
 ##
 
 add_subdirectory(runtime)
+target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:Halide::initmod>")
+target_link_libraries(Halide INTERFACE Halide::Runtime)
 
 ##
 # Build the template files via binary2cpp.
 ##
 
-add_library(Halide_c_templates OBJECT)
 foreach (f IN LISTS C_TEMPLATE_FILES)
     set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${f}.template.cpp>")
     set(DST "c_template.${f}.template.cpp")
@@ -395,7 +412,7 @@ foreach (f IN LISTS C_TEMPLATE_FILES)
                        COMMAND binary2cpp "halide_c_template_${f}" < "${SRC}" > "${DST}"
                        DEPENDS "${SRC}" binary2cpp
                        VERBATIM)
-    target_sources(Halide_c_templates PRIVATE ${DST})
+    target_sources(Halide PRIVATE ${DST})
 endforeach ()
 
 foreach (f IN LISTS HTML_TEMPLATE_FILES)
@@ -407,9 +424,8 @@ foreach (f IN LISTS HTML_TEMPLATE_FILES)
                        COMMAND binary2cpp "${VARNAME}" < "${SRC}" > "${DST}"
                        DEPENDS "${SRC}" binary2cpp
                        VERBATIM)
-    target_sources(Halide_c_templates PRIVATE ${DST})
+    target_sources(Halide PRIVATE ${DST})
 endforeach ()
-
 
 ##
 # Build the Halide mono-header.
@@ -417,24 +433,24 @@ endforeach ()
 
 set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
 set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
+set(headers "$<TARGET_PROPERTY:Halide,HEADER_SET_private_headers>")
 add_custom_command(OUTPUT "${HALIDE_H}"
                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
-                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" ${HEADER_FILES} > "$<SHELL_PATH:${HALIDE_H}>"
-                   DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES}
+                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>"
+                   DEPENDS build_halide_h "${LICENSE_PATH}" "${headers}"
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+                   COMMAND_EXPAND_LISTS
                    VERBATIM)
 add_custom_target(HalideIncludes DEPENDS "${HALIDE_H}")
+add_dependencies(Halide HalideIncludes)
 
-##
-# Define the Halide library target.
-##
-
-add_library(Halide
-            ${SOURCE_FILES}
-            ${HEADER_FILES}
-            # Including these as sources works around the need to "install" Halide_initmod
-            $<TARGET_OBJECTS:Halide_initmod>
-            $<TARGET_OBJECTS:Halide_c_templates>)
+target_sources(
+    Halide
+    INTERFACE
+    FILE_SET HEADERS
+    BASE_DIRS "${Halide_BINARY_DIR}/include"
+    FILES "${Halide_BINARY_DIR}/include/Halide.h"
+)
 
 ##
 # Flatbuffers and Serialization dependencies.
@@ -491,8 +507,14 @@ if (WITH_SERIALIZATION)
     )
     add_custom_target(generate_fb_header DEPENDS "${fb_header}")
 
-    add_dependencies(Halide generate_fb_header)
-    target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
+    target_sources(
+        Halide
+        PRIVATE
+        FILE_SET fb_headers
+        TYPE HEADERS
+        BASE_DIRS "${fb_dir}"
+        FILES "${fb_header}"
+    )
     target_link_libraries(Halide PRIVATE ${flatbuffers_target})
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
@@ -506,8 +528,6 @@ cmake_dependent_option(
 if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
 endif ()
-
-add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
@@ -541,10 +561,6 @@ target_compile_definitions(Halide PUBLIC
                            HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
                            HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
                            HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
-
-
-target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
-add_dependencies(Halide HalideIncludes)
 
 if (TARGET Halide_wabt)
     target_link_libraries(Halide PRIVATE Halide_wabt)
