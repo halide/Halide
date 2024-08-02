@@ -548,9 +548,11 @@ set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
 mark_as_advanced(Halide_SOVERSION_OVERRIDE)
 
 set_target_properties(Halide PROPERTIES
-                      POSITION_INDEPENDENT_CODE ON
-                      VERSION ${Halide_VERSION}
-                      SOVERSION ${Halide_SOVERSION_OVERRIDE})
+                      VERSION "${Halide_VERSION}"
+                      SOVERSION "${Halide_SOVERSION_OVERRIDE}")
+
+# Always build with PIC, even when static
+set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Note that we (deliberately) redeclare these versions here, even though the macros
 # with identical versions are expected to be defined in source; this allows us to
