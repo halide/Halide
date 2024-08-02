@@ -338,6 +338,7 @@ set(SOURCE_FILES
     SlidingWindow.cpp
     Solve.cpp
     SpirvIR.cpp
+    SpirvIR.h
     SplitTuples.cpp
     StageStridedLoads.cpp
     StmtToHTML.cpp
@@ -367,13 +368,13 @@ set(SOURCE_FILES
 set(C_TEMPLATE_FILES
     CodeGen_C_prologue
     CodeGen_C_vectors
-    )
+)
 
 set(HTML_TEMPLATE_FILES
     StmtToHTML_dependencies.html
     StmtToHTML.js
     StmtToHTML.css
-    )
+)
 
 ##
 # Build and import the runtime.
@@ -416,13 +417,13 @@ endforeach ()
 
 set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
 set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
-add_custom_command(OUTPUT "${Halide_BINARY_DIR}/include/Halide.h"
+add_custom_command(OUTPUT "${HALIDE_H}"
                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
                    COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" ${HEADER_FILES} > "$<SHELL_PATH:${HALIDE_H}>"
                    DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES}
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
                    VERBATIM)
-add_custom_target(HalideIncludes ALL DEPENDS "${Halide_BINARY_DIR}/include/Halide.h")
+add_custom_target(HalideIncludes DEPENDS "${HALIDE_H}")
 
 ##
 # Define the Halide library target.
@@ -532,8 +533,10 @@ add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
-target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
 target_compile_features(Halide PUBLIC cxx_std_17)
+if (NOT BUILD_SHARED_LIBS)
+    target_compile_definitions(Halide PRIVATE Halide_STATIC_DEFINE)
+endif ()
 
 include(TargetExportScript)
 ## TODO: implement something similar for Windows/link.exe
@@ -547,9 +550,11 @@ set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
 mark_as_advanced(Halide_SOVERSION_OVERRIDE)
 
 set_target_properties(Halide PROPERTIES
-                      POSITION_INDEPENDENT_CODE ON
-                      VERSION ${Halide_VERSION}
-                      SOVERSION ${Halide_SOVERSION_OVERRIDE})
+                      VERSION "${Halide_VERSION}"
+                      SOVERSION "${Halide_SOVERSION_OVERRIDE}")
+
+# Always build with PIC, even when static
+set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Note that we (deliberately) redeclare these versions here, even though the macros
 # with identical versions are expected to be defined in source; this allows us to
@@ -576,6 +581,7 @@ endif ()
 ##
 # Set compiler options for libHalide
 ##
+
 set_halide_compiler_warnings(Halide)
 
 if (CMAKE_GENERATOR MATCHES "Visual Studio")
@@ -592,7 +598,7 @@ target_compile_definitions(Halide
                            # in the Windows API.
                            $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
                            $<$<CXX_COMPILER_ID:MSVC>:_SCL_SECURE_NO_WARNINGS>
-                           )
+)
 
 ##
 # Set up additional backend options for Halide
@@ -624,14 +630,13 @@ if (TARGET_SPIRV)
         HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
     )
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
+    target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
 endif ()
 
 option(TARGET_WEBGPU "Include WebGPU target" ON)
 if (TARGET_WEBGPU)
     target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 endif()
-
 
 ##
 # Add autoschedulers to the build.

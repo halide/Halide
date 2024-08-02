@@ -6,7 +6,7 @@ cmake_dependent_option(WITH_V8 "Include V8 for WASM testing" OFF "TARGET_WEBASSE
 
 if (WITH_WABT AND WITH_V8)
     message(FATAL_ERROR "Cannot use both WABT and V8 at the same time, disable one of them.")
-endif()
+endif ()
 
 if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
     if (WITH_WABT)
