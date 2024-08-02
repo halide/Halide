@@ -630,7 +630,7 @@ if (TARGET_SPIRV)
         HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
     )
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
+    target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
 endif ()
 
 option(TARGET_WEBGPU "Include WebGPU target" ON)
