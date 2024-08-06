@@ -192,10 +192,8 @@ if (TARGET Halide::Mullapudi2016)
     target_link_libraries(lesson_21_auto_scheduler_generate PRIVATE Halide::Generator)
 
     add_halide_library(auto_schedule_false FROM lesson_21_auto_scheduler_generate
-                       TARGETS cmake
                        GENERATOR auto_schedule_gen)
     add_halide_library(auto_schedule_true FROM lesson_21_auto_scheduler_generate
-                       TARGETS cmake
                        AUTOSCHEDULER Halide::Mullapudi2016
                        GENERATOR auto_schedule_gen
                        PARAMS autoscheduler.parallelism=32

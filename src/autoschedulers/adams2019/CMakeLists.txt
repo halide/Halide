@@ -21,12 +21,10 @@ target_link_libraries(adams2019_cost_model.generator PRIVATE Halide::Generator)
 
 add_halide_library(adams2019_cost_model FROM adams2019_cost_model.generator
                    GENERATOR cost_model
-                   FUNCTION_NAME cost_model
-                   TARGETS cmake)
+                   FUNCTION_NAME cost_model)
 add_halide_library(adams2019_train_cost_model FROM adams2019_cost_model.generator
                    GENERATOR train_cost_model
                    FUNCTION_NAME train_cost_model
-                   TARGETS cmake
                    USE_RUNTIME adams2019_cost_model.runtime)
 
 # TODO: replace when we support "fat" objects in generators

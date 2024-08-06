@@ -20,12 +20,10 @@ target_link_libraries(anderson2021_cost_model.generator PRIVATE Halide::Generato
 
 add_halide_library(anderson2021_cost_model FROM anderson2021_cost_model.generator
                    GENERATOR cost_model
-                   FUNCTION_NAME cost_model
-                   TARGETS cmake)
+                   FUNCTION_NAME cost_model)
 add_halide_library(anderson2021_train_cost_model FROM anderson2021_cost_model.generator
                    GENERATOR train_cost_model
                    FUNCTION_NAME train_cost_model
-                   TARGETS cmake
                    USE_RUNTIME anderson2021_cost_model.runtime)
 
 ## retrain_cost_model
