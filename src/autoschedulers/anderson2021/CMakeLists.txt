@@ -60,7 +60,7 @@ add_autoscheduler(
 )
 
 target_include_directories(Halide_Anderson2021 PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
-target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser
+target_link_libraries(Halide_Anderson2021 PRIVATE Halide::ASLog
     anderson2021_cost_model anderson2021_train_cost_model)
 
 ## ====================================================

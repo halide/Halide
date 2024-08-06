@@ -103,7 +103,7 @@ add_autoscheduler(
 )
 
 target_include_directories(Halide_Adams2019 PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019")
-target_link_libraries(Halide_Adams2019 PRIVATE ASLog ParamParser adams2019_cost_model adams2019_train_cost_model)
+target_link_libraries(Halide_Adams2019 PRIVATE Halide::ASLog adams2019_cost_model adams2019_train_cost_model)
 
 # ====================================================
 # Auto-tuning support utilities.
