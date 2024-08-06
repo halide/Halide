@@ -21,9 +21,7 @@ set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
 # Main library exports
 ##
 
-target_sources(Halide_Generator INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/GenGen.cpp>)
-
-install(TARGETS Halide Halide_Generator Halide_LanguageOptions
+install(TARGETS Halide Halide_Generator Halide_GenGen Halide_LanguageOptions
         EXPORT Halide_Targets
         RUNTIME COMPONENT Halide_Runtime
         LIBRARY COMPONENT Halide_Runtime
@@ -216,6 +214,7 @@ install(FILES
         ${Halide_SOURCE_DIR}/cmake/FindHalide_WebGPU.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
         ${Halide_SOURCE_DIR}/cmake/TargetExportScript.cmake
+        ${Halide_SOURCE_DIR}/cmake/MutexCopy.ps1
         DESTINATION ${Halide_INSTALL_HELPERSDIR}
         COMPONENT Halide_Development)
 
