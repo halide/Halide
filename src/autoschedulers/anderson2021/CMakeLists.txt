@@ -36,7 +36,7 @@ if (WITH_UTILS)
                    retrain_cost_model.cpp
                    $<TARGET_OBJECTS:anderson2021_weights_obj>)
     target_include_directories(anderson2021_retrain_cost_model PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
-    target_link_libraries(anderson2021_retrain_cost_model PRIVATE ASLog anderson2021_cost_model
+    target_link_libraries(anderson2021_retrain_cost_model PRIVATE Halide::ASLog anderson2021_cost_model
         anderson2021_train_cost_model Halide::Halide Halide::Plugin)
 endif ()
 
@@ -60,7 +60,7 @@ add_autoscheduler(
 )
 
 target_include_directories(Halide_Anderson2021 PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
-target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser
+target_link_libraries(Halide_Anderson2021 PRIVATE Halide::ASLog
     anderson2021_cost_model anderson2021_train_cost_model)
 
 ## ====================================================
@@ -90,44 +90,44 @@ if (WITH_TESTS)
 
     add_executable(anderson2021_test_function_dag test_function_dag.cpp FunctionDAG.cpp)
     target_include_directories(anderson2021_test_function_dag PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
-    target_link_libraries(anderson2021_test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+    target_link_libraries(anderson2021_test_function_dag PRIVATE Halide::ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
     _add_test(anderson2021_test_function_dag)
 
     add_executable(anderson2021_test_bounds test/bounds.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp Tiling.cpp)
     target_include_directories(anderson2021_test_bounds PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
-    target_link_libraries(anderson2021_test_bounds PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+    target_link_libraries(anderson2021_test_bounds PRIVATE Halide::ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
     _add_test(anderson2021_test_bounds)
 
     add_executable(anderson2021_test_parser test/parser.cpp)
     target_include_directories(anderson2021_test_parser PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
-    target_link_libraries(anderson2021_test_parser PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+    target_link_libraries(anderson2021_test_parser PRIVATE Halide::ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
     _add_test(anderson2021_test_parser)
 
     add_executable(anderson2021_test_state test/state.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
     target_include_directories(anderson2021_test_state PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
-    target_link_libraries(anderson2021_test_state PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+    target_link_libraries(anderson2021_test_state PRIVATE Halide::ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
     _add_test(anderson2021_test_state)
 
     add_executable(anderson2021_test_storage_strides test/storage_strides.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
     target_include_directories(anderson2021_test_storage_strides PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
-    target_link_libraries(anderson2021_test_storage_strides PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+    target_link_libraries(anderson2021_test_storage_strides PRIVATE Halide::ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
     _add_test(anderson2021_test_storage_strides)
 
     add_executable(anderson2021_test_thread_info test/thread_info.cpp LoopNest.cpp
         FunctionDAG.cpp GPULoopInfo.cpp Tiling.cpp)
     target_include_directories(anderson2021_test_thread_info PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
-    target_link_libraries(anderson2021_test_thread_info PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+    target_link_libraries(anderson2021_test_thread_info PRIVATE Halide::ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
     _add_test(anderson2021_test_thread_info)
 
     add_executable(anderson2021_test_tiling test/tiling.cpp Tiling.cpp)
     target_include_directories(anderson2021_test_tiling PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
-    target_link_libraries(anderson2021_test_tiling PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+    target_link_libraries(anderson2021_test_tiling PRIVATE Halide::ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
     _add_test(anderson2021_test_tiling)
 endif()

@@ -27,7 +27,7 @@ install(TARGETS Halide Halide_Generator Halide_GenGen Halide_LanguageOptions
         LIBRARY COMPONENT Halide_Runtime
         NAMELINK_COMPONENT Halide_Development
         ARCHIVE COMPONENT Halide_Development
-        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+        FILE_SET HEADERS COMPONENT Halide_Development)
 
 if (TARGET Halide_Adams2019)
     install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021
@@ -44,24 +44,26 @@ foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
 endforeach ()
 
 ##
+# Runtime headers
+##
+
+install(TARGETS Halide_Runtime
+        EXPORT Halide_Interfaces
+        FILE_SET HEADERS COMPONENT Halide_Development)
+
+##
 # Library-type-agnostic interface targets
 ##
 
 target_sources(Halide_RunGenMain INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/RunGenMain.cpp>)
 
+install(FILES ${Halide_SOURCE_DIR}/tools/RunGenMain.cpp
+        DESTINATION ${Halide_INSTALL_TOOLSDIR}
+        COMPONENT Halide_Development)
+
 install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain Halide_ThreadPool
         EXPORT Halide_Interfaces
-        INCLUDES DESTINATION ${Halide_INSTALL_TOOLSDIR})
-
-install(TARGETS Halide_Runtime
-        EXPORT Halide_Interfaces
-        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-# Captures both the runtime and Halide.h
-install(DIRECTORY ${Halide_BINARY_DIR}/include/
-        TYPE INCLUDE
-        COMPONENT Halide_Development
-        FILES_MATCHING PATTERN "include/*.h")
+        FILE_SET HEADERS COMPONENT Halide_Development DESTINATION ${Halide_INSTALL_TOOLSDIR})
 
 ##
 # Patch RPATH for executable targets
@@ -112,17 +114,6 @@ install(FILES
 ##
 # Tools
 ##
-
-install(DIRECTORY ${Halide_SOURCE_DIR}/tools/
-        DESTINATION ${Halide_INSTALL_TOOLSDIR}
-        COMPONENT Halide_Development
-        FILES_MATCHING
-        PATTERN "*.h"
-        PATTERN "*.cpp"
-        PATTERN "*.m"
-        PATTERN "binary2cpp.cpp" EXCLUDE
-        PATTERN "build_halide_h.cpp" EXCLUDE
-        PATTERN "find_inverse.cpp" EXCLUDE)
 
 install(PROGRAMS ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/adams2019_autotune_loop.sh
                  ${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021/anderson2021_autotune_loop.sh
