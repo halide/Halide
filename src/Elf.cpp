@@ -521,6 +521,8 @@ Object::section_iterator Object::merge_text_sections() {
     return text;
 }
 
+namespace {
+
 template<typename T>
 std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, const std::vector<std::string> &dependencies,
                                                const std::string &soname) {
@@ -1036,6 +1038,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
     return output;
 }
+}  // namespace
 
 std::vector<char> Object::write_shared_object(Linker *linker, const std::vector<std::string> &dependencies,
                                               const std::string &soname) {

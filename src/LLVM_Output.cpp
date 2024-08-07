@@ -342,8 +342,6 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
     return std::move(cloned_module.get());
 }
 
-}  // namespace
-
 void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
                llvm::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
@@ -406,6 +404,8 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
     llvm::reportAndResetTimings();
 }
+
+}  // namespace
 
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
     return codegen_llvm(module, context);

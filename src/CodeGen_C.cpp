@@ -762,7 +762,7 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
                 constants.push_back(emit_constant_int64(extent));
             }
 
-            stream << get_indent() << "static const int64_t * const buffer_estimates_" << legalized_name << "[" << (int)arg.dimensions * 2 << "] = {\n";
+            stream << get_indent() << "static const int64_t * const buffer_estimates_" << legalized_name << "[" << arg.dimensions * 2 << "] = {\n";
             indent += 1;
             for (const auto &c : constants) {
                 stream << get_indent() << c << ",\n";
@@ -795,9 +795,9 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
         stream << get_indent() << "\"" << name << "\",\n";
         internal_assert(arg.kind < sizeof(kind_names) / sizeof(kind_names[0]));
         stream << get_indent() << kind_names[arg.kind] << ",\n";
-        stream << get_indent() << (int)arg.dimensions << ",\n";
+        stream << get_indent() << arg.dimensions << ",\n";
         internal_assert(arg.type.code() < sizeof(type_code_names) / sizeof(type_code_names[0]));
-        stream << get_indent() << "{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits() << ", " << (int)arg.type.lanes() << "},\n";
+        stream << get_indent() << "{" << type_code_names[arg.type.code()] << ", " << arg.type.bits() << ", " << arg.type.lanes() << "},\n";
         stream << get_indent() << "scalar_def_" << legalized_name << ",\n";
         stream << get_indent() << "scalar_min_" << legalized_name << ",\n";
         stream << get_indent() << "scalar_max_" << legalized_name << ",\n";
@@ -872,9 +872,9 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
 
         const auto name = map_name(arg.name);
 
-        stream << get_indent() << "{\"" << name << "\", " << kind_names[arg.kind] << ", " << (int)arg.dimensions
-               << ", halide_type_t{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits()
-               << ", " << (int)arg.type.lanes() << "}},\n";
+        stream << get_indent() << "{\"" << name << "\", " << kind_names[arg.kind] << ", " << arg.dimensions
+               << ", halide_type_t{" << type_code_names[arg.type.code()] << ", " << arg.type.bits()
+               << ", " << arg.type.lanes() << "}},\n";
     }
     indent -= 1;
     stream << get_indent() << "}};\n";
