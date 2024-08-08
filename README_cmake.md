@@ -392,7 +392,7 @@ compiled.
 |------------------------------------------|-----------------------|------------------------------------------------------------------------------------------------------------------|
 | [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.                             |
 | `Halide_BUNDLE_LLVM`                     | `OFF`                 | When building Halide as a static library, unpack the LLVM static libraries and add those objects to libHalide.a. |
-| `Halide_SHARED_LLVM`                     | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                                    |
+| `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                                    |
 | `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                                  |
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                           |
 | `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                |
@@ -589,7 +589,7 @@ If Halide is not globally installed, you will need to add the root of the Halide
 installation directory to [`CMAKE_PREFIX_PATH`][cmake_prefix_path] at the CMake
 command line.
 
-```
+```console
 dev@ubuntu:~/myproj$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/path/to/Halide-install" -S . -B build
 ```
 
@@ -784,10 +784,10 @@ Variables set by the package:
 
 Variables that control package behavior:
 
-| Variable                   | Description |
-|----------------------------|-------------|
-| `Halide_PYTHON_LAUNCHER`   | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators. |
-| `Halide_NO_DEFAULT_FLAGS`  | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator` |
+| Variable                  | Description                                                                                                                                     |
+|---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Halide_PYTHON_LAUNCHER`  | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators. |
+| `Halide_NO_DEFAULT_FLAGS` | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator`                               |
 
 
 ### Imported targets

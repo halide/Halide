@@ -69,7 +69,7 @@
       "displayName": "Debian (Debug)",
       "description": "Debug build assuming Debian-provided dependencies",
       "cacheVariables": {
-        "Halide_SHARED_LLVM": "ON"
+        "Halide_LLVM_SHARED_LIBS": "ON"
       }
     },
     {
@@ -109,7 +109,7 @@
       "inherits": "release",
       "cacheVariables": {
         "CMAKE_PREFIX_PATH": "/opt/homebrew;/opt/homebrew/opt/llvm;/opt/homebrew/opt/jpeg",
-        "Halide_SHARED_LLVM": "YES"
+        "Halide_LLVM_SHARED_LIBS": "YES"
       }
     },
     {

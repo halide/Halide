@@ -1,4 +1,4 @@
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+if (Halide_TARGET MATCHES "wasm")
     message(WARNING "Python tests are skipped under WASM.")
     return()
 endif ()
