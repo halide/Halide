@@ -467,11 +467,11 @@ if (WITH_SERIALIZATION)
         NAMES flatbuffers Flatbuffers FlatBuffers
     )
 
-    get_target_property(vendored_flatbuffers flatbuffers::flatbuffers ALIASED_TARGET)
-    if (vendored_flatbuffers)
-        set(flatbuffers_target "$<BUILD_LOCAL_INTERFACE:flatbuffers::flatbuffers>")
+    if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
+        target_sources(Halide PRIVATE "$<TARGET_OBJECTS:flatbuffers::flatbuffers>")
+        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:flatbuffers::flatbuffers>>")
     else ()
-        set(flatbuffers_target flatbuffers::flatbuffers)
+        target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
     endif ()
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
@@ -493,7 +493,6 @@ if (WITH_SERIALIZATION)
         BASE_DIRS "${fb_dir}"
         FILES "${fb_header}"
     )
-    target_link_libraries(Halide PRIVATE ${flatbuffers_target})
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
 
@@ -569,7 +568,14 @@ if (TARGET_WEBASSEMBLY)
 
     if (Halide_WASM_BACKEND STREQUAL "wabt")
         find_package(wabt 1.0.36 REQUIRED)
-        target_link_libraries(Halide PRIVATE wabt::wabt)
+
+        if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
+            target_sources(Halide PRIVATE "$<TARGET_OBJECTS:wabt::wabt>")
+            target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:wabt::wabt>>")
+        else ()
+            target_link_libraries(Halide PRIVATE wabt::wabt)
+        endif ()
+
         target_compile_definitions(Halide PRIVATE WITH_WABT)
     elseif (Halide_WASM_BACKEND STREQUAL "V8")
         find_package(V8 REQUIRED)
