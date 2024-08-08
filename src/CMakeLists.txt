@@ -545,8 +545,6 @@ target_compile_definitions(Halide PUBLIC
 ##
 
 if (TARGET_WEBASSEMBLY)
-    include(FetchContent)
-
     set(Halide_WASM_BACKEND "wabt"
         CACHE STRING "Which backend to use for Halide's WASM testing.")
     set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;OFF")
