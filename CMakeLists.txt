@@ -188,7 +188,7 @@ option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread fla
 find_package(Threads REQUIRED)
 
 ## Complex dependencies
-add_subdirectory(dependencies)
+add_subdirectory(dependencies/llvm)
 
 ## Image formats
 

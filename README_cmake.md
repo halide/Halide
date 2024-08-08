@@ -458,9 +458,9 @@ The following options enable/disable various Halide-specific backends:
 The following options are WebAssembly-specific. They only apply when
 `TARGET_WEBASSEMBLY=ON`:
 
-| Option      | Default | Description                               |
-|-------------|---------|-------------------------------------------|
-| `WITH_WABT` | `ON`    | Include WABT Interpreter for WASM testing |
+| Option                | Default | Description                                                                              |
+|-----------------------|---------|------------------------------------------------------------------------------------------|
+| `Halide_WASM_BACKEND` | `wabt`  | Select the backend for WASM testing. Can be `wabt`, `V8` or a false value such as `OFF`. |
 
 ### Find module options
 
