@@ -432,29 +432,6 @@ apply when `WITH_TESTS=ON`:
 | `WITH_TEST_PERFORMANCE`   | `ON`    | enable performance testing        |
 | `WITH_TEST_GENERATOR`     | `ON`    | enable the AOT generator tests    |
 
-The following options enable/disable various LLVM backends (they correspond to
-LLVM component names):
-
-| Option               | Default              | Description                         |
-|----------------------|----------------------|-------------------------------------|
-| `TARGET_AARCH64`     | `ON`, _if available_ | Enable the AArch64 backend          |
-| `TARGET_AMDGPU`      | `ON`, _if available_ | Enable the AMD GPU backend          |
-| `TARGET_ARM`         | `ON`, _if available_ | Enable the ARM backend              |
-| `TARGET_HEXAGON`     | `ON`, _if available_ | Enable the Hexagon backend          |
-| `TARGET_NVPTX`       | `ON`, _if available_ | Enable the NVidia PTX backend       |
-| `TARGET_POWERPC`     | `ON`, _if available_ | Enable the PowerPC backend          |
-| `TARGET_RISCV`       | `ON`, _if available_ | Enable the RISC V backend           |
-| `TARGET_WEBASSEMBLY` | `ON`, _if available_ | Enable the WebAssembly backend.     |
-| `TARGET_X86`         | `ON`, _if available_ | Enable the x86 (and x86_64) backend |
-
-The following options enable/disable various Halide-specific backends:
-
-| Option                | Default | Description                            |
-|-----------------------|---------|----------------------------------------|
-| `TARGET_OPENCL`       | `ON`    | Enable the OpenCL-C backend            |
-| `TARGET_METAL`        | `ON`    | Enable the Metal backend               |
-| `TARGET_D3D12COMPUTE` | `ON`    | Enable the Direct3D 12 Compute backend |
-
 The following options are WebAssembly-specific. They only apply when
 `TARGET_WEBASSEMBLY=ON`:
 
