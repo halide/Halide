@@ -8,41 +8,41 @@ target_link_libraries(_test_internal PRIVATE Halide::Test)
 target_include_directories(_test_internal PRIVATE "${Halide_SOURCE_DIR}/src")
 target_precompile_headers(_test_internal PRIVATE <Halide.h>)
 if (Halide_CCACHE_BUILD)
-    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        target_compile_options(_test_internal PRIVATE
-            "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>"
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(
+            _test_internal PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>"
         )
-    endif()
-endif()
+    endif ()
+endif ()
 
 add_halide_test(_test_internal GROUPS internal)
 
-option(WITH_TEST_AUTO_SCHEDULE "Build autoscheduler tests" ON)
+Halide_feature(WITH_TEST_AUTO_SCHEDULE "Build autoscheduler tests" ON)
 if (WITH_TEST_AUTO_SCHEDULE)
     add_subdirectory(autoschedulers)
 endif ()
 
-option(WITH_TEST_CORRECTNESS "Build correctness tests" ON)
+Halide_feature(WITH_TEST_CORRECTNESS "Build correctness tests" ON)
 if (WITH_TEST_CORRECTNESS)
     add_subdirectory(correctness)
 endif ()
 
-option(WITH_TEST_ERROR "Build error tests" ON)
+Halide_feature(WITH_TEST_ERROR "Build error tests" ON)
 if (WITH_TEST_ERROR)
     add_subdirectory(error)
 endif ()
 
-option(WITH_TEST_WARNING "Build warning tests" ON)
+Halide_feature(WITH_TEST_WARNING "Build warning tests" ON)
 if (WITH_TEST_WARNING)
     add_subdirectory(warning)
 endif ()
 
-option(WITH_TEST_PERFORMANCE "Build performance tests" ON)
+Halide_feature(WITH_TEST_PERFORMANCE "Build performance tests" ON)
 if (WITH_TEST_PERFORMANCE)
     add_subdirectory(performance)
 endif ()
 
-option(WITH_TEST_GENERATOR "Build generator tests" ON)
+Halide_feature(WITH_TEST_GENERATOR "Build generator tests" ON)
 if (WITH_TEST_GENERATOR)
     add_subdirectory(generator)
 endif ()
@@ -58,14 +58,10 @@ endif ()
 # some platform specific ifdefs for attributes and types that are causing compile 
 # errors.
 #
-cmake_dependent_option(WITH_TEST_RUNTIME "Build runtime tests" ON
-                       "NOT MSVC" OFF)
-
+Halide_feature(WITH_TEST_RUNTIME "Build runtime tests" AUTO
+               DEPENDS NOT MSVC)
 if (WITH_TEST_RUNTIME)
-    message(STATUS "Building internal runtime tests enabled")
     add_subdirectory(runtime)
-else ()
-    message(STATUS "Building internal runtime tests disabled")
 endif ()
 
 # FIXME: failing_with_issue is dead code :)
@@ -98,14 +94,8 @@ endif ()
 # is true: just because our compiler supports fuzzing doesn't mean we want to
 # build the fuzz tests, because they won't really build properly without the
 # right preset specified.
-cmake_dependent_option(
-    WITH_TEST_FUZZ "Build fuzz tests" OFF
-    HAS_FUZZ_FLAGS OFF
-)
-
+Halide_feature(WITH_TEST_FUZZ "Build fuzz tests" AUTO
+               DEPENDS HAS_FUZZ_FLAGS)
 if (WITH_TEST_FUZZ)
-    message(STATUS "Building fuzz tests enabled")
     add_subdirectory(fuzz)
-else ()
-    message(STATUS "Building fuzz tests disabled")
 endif ()

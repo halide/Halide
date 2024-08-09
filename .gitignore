@@ -202,6 +202,9 @@ install_manifest.txt
 # Ninja files
 *.ninja*
 
+# Package managers
+vcpkg_installed/
+
 ################################################################################
 ## IDE directories and metadata
 

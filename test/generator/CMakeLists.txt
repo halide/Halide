@@ -6,7 +6,7 @@
 # Some tests are not available when compiling for WASM.
 ##
 
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+if (Halide_TARGET MATCHES "wasm")
     set(_USING_WASM 1)
 else()
     set(_USING_WASM 0)
@@ -232,11 +232,13 @@ function(_add_one_aot_test TARGET)
             target_compile_definitions("${TARGET}" PRIVATE WITH_DAWN_NATIVE)
         endif ()
     endif ()
-    if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-        target_link_libraries("${TARGET}" PRIVATE CUDA::cuda_driver CUDA::cudart)
-    endif ()
-    if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
-        target_link_libraries("${TARGET}" PRIVATE OpenCL::OpenCL)
+    if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
+        if (Halide_TARGET MATCHES "cuda")
+            target_link_libraries("${TARGET}" PRIVATE CUDA::cuda_driver CUDA::cudart)
+        endif ()
+        if (Halide_TARGET MATCHES "opencl")
+            target_link_libraries("${TARGET}" PRIVATE OpenCL::OpenCL)
+        endif ()
     endif ()
     add_halide_test("${TARGET}" GROUPS generator ${args_GROUPS})
 endfunction()
@@ -307,11 +309,13 @@ function(_add_halide_aot_tests NAME)
     endif()
 endfunction()
 
-if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-    find_package(CUDAToolkit REQUIRED)
-endif ()
-if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
-    find_package(OpenCL REQUIRED)
+if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
+    if (Halide_TARGET MATCHES "cuda")
+        find_package(CUDAToolkit REQUIRED)
+    endif ()
+    if (Halide_TARGET MATCHES "opencl")
+        find_package(OpenCL REQUIRED)
+    endif ()
 endif ()
 
 ##
@@ -335,11 +339,13 @@ set(EXTRA_ALIAS_LIBS alias_with_offset_42 alias_Adams2019 alias_Li2018 alias_Mul
 _add_halide_libraries(alias)
 foreach (LIB IN LISTS EXTRA_ALIAS_LIBS)
     _add_halide_libraries(${LIB}
+                          ENABLE_IF WITH_AUTOSCHEDULERS
                           FROM alias.generator
                           GENERATOR_NAME ${LIB}
                           PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016)
 endforeach ()
 _add_halide_aot_tests(alias
+                      ENABLE_IF WITH_AUTOSCHEDULERS
                       HALIDE_LIBRARIES alias ${EXTRA_ALIAS_LIBS})
 
 # all_type_names_aottest.cpp
@@ -364,6 +370,7 @@ _add_halide_aot_tests(async_parallel
 # autograd_generator.cpp
 _add_halide_libraries(autograd)
 _add_halide_libraries(autograd_grad
+                      ENABLE_IF WITH_AUTOSCHEDULERS
                       GRADIENT_DESCENT
                       FROM autograd.generator
                       GENERATOR_NAME autograd
@@ -371,7 +378,7 @@ _add_halide_libraries(autograd_grad
                       AUTOSCHEDULER Halide::Mullapudi2016
                       PLUGINS Halide::Mullapudi2016)
 _add_halide_aot_tests(autograd
-                      ENABLE_IF TARGET Halide::Mullapudi2016 AND NOT ${_USING_WASM}
+                      ENABLE_IF WITH_AUTOSCHEDULERS AND NOT ${_USING_WASM}
                       HALIDE_LIBRARIES autograd autograd_grad
                       GROUPS multithreaded)
 
@@ -425,7 +432,7 @@ if (NOT ${_USING_WASM})
                           FEATURES c_plus_plus_name_mangling
                           EXTERNS cxx_mangling_externs)
     _add_halide_aot_tests(cxx_mangling)
-    if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
+    if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS AND Halide_TARGET MATCHES "cuda")
         add_halide_library(cxx_mangling_gpu
                            FROM cxx_mangling.generator
                            GENERATOR cxx_mangling

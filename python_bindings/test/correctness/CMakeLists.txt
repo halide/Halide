@@ -1,4 +1,4 @@
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "webgpu")
+if (Halide_TARGET MATCHES "webgpu")
     message(WARNING "Python correctness tests are not supported with WebGPU.")
     return()
 endif ()

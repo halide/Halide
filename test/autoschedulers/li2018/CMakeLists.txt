@@ -28,7 +28,7 @@ tests(GROUPS li2018 autoschedulers_cpu autoschedulers_gpu
 add_dependencies(li2018_test Halide::Li2018)
 
 if (WITH_PYTHON_BINDINGS)
-    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "webgpu")
+    if (Halide_TARGET MATCHES "webgpu")
         message(WARNING "li2018_gradient_autoscheduler_test_py is not supported with WebGPU.")
     else()
         find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
