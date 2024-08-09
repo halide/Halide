@@ -646,7 +646,7 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
 
         rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor) / s.factor)});
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -681,7 +681,7 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
         iter_outer->extent = extent;
         rvars.erase(iter_inner);
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -705,7 +705,7 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
                  << ", deleting it from the rvars list\n";
         rvars.erase(iter);
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -725,7 +725,7 @@ bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
         debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -788,6 +788,15 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
 
+    // Check whether the operator is associative and determine the operator and
+    // its identity for each value in the definition if it is a Tuple
+    const auto &prover_result = prove_associativity(func_name, args, values);
+
+    user_assert(prover_result.associative())
+        << "Failed to call rfactor() on " << name()
+        << " since it can't prove associativity of the operator\n";
+    internal_assert(prover_result.size() == values.size());
+
     // Figure out which pure vars were used in this update definition.
     std::set<string> pure_vars_used;
     internal_assert(args.size() == dim_vars.size());
@@ -798,15 +807,6 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
             }
         }
     }
-
-    // Check whether the operator is associative and determine the operator and
-    // its identity for each value in the definition if it is a Tuple
-    const auto &prover_result = prove_associativity(func_name, args, values);
-
-    user_assert(prover_result.associative())
-        << "Failed to call rfactor() on " << name()
-        << " since it can't prove associativity of the operator\n";
-    internal_assert(prover_result.size() == values.size());
 
     vector<Split> &splits = definition.schedule().splits();
     vector<Dim> &dims = definition.schedule().dims();
@@ -870,6 +870,10 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         for (const Split &s : splits) {
             // If it's already applied, we should remove it from the split list.
             if (!apply_split_directive(s, rvars, predicates, args, values)) {
+                user_assert(!s.is_fuse())
+                    << "In schedule for " << name()
+                    << ", can't perform rfactor() after fusing " << s.outer
+                    << " and " << s.inner << "\n";
                 temp.push_back(s);
             }
         }

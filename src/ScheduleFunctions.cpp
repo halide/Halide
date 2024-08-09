@@ -220,7 +220,7 @@ Stmt build_loop_nest(
         user_assert(predicated_vars.count(split.old_var) == 0)
             << "Cannot split a loop variable resulting from a split using PredicateLoads or PredicateStores.";
 
-        vector<ApplySplitResult> splits_result = apply_split(split, is_update, prefix, dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(split, prefix, dim_extent_alignment);
 
         // To ensure we substitute all indices used in call or provide,
         // we need to substitute all lets in, so we correctly guard x in
