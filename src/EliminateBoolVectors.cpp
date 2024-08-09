@@ -1,3 +1,4 @@
+#include "EliminateBoolVectors.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"

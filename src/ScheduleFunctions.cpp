@@ -1311,7 +1311,7 @@ protected:
 
         // Reinstate the let/if statements
         for (size_t i = containers.size(); i > 0; i--) {
-            auto p = containers[i - 1];
+            const auto &p = containers[i - 1];
             if (p.first.empty()) {
                 body = IfThenElse::make(p.second, body);
             } else {
@@ -2551,7 +2551,9 @@ bool group_should_be_inlined(const vector<Function> &funcs) {
 
 }  // namespace
 
-std::ostream &operator<<(std::ostream &out, const std::vector<Function> &v) {
+// We want this to have internal linkage, but putting it in an anonymous
+// namespace doesn't work due to two-phase lookup peculiarities.
+static std::ostream &operator<<(std::ostream &out, const std::vector<Function> &v) {  // NOLINT
     out << "{ ";
     for (size_t i = 0; i < v.size(); ++i) {
         out << v[i].name();

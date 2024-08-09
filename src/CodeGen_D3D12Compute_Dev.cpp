@@ -958,7 +958,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const FloatImm *op)
     // have seen division-by-zero shader warnings, and we postulated that it
     // could be indirectly related to compiler assumptions on signed integer
     // overflow when float_from_bits() is called, but we don't know for sure
-    return CodeGen_GPU_C::visit(op);
+    CodeGen_GPU_C::visit(op);
 }
 
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
@@ -1146,10 +1146,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         using IRVisitor::visit;
         void visit(const For *loop) override {
             if (!is_gpu(loop->for_type)) {
-                return loop->body.accept(this);
+                loop->body.accept(this);
+                return;
             }
             if (loop->for_type != ForType::GPUThread) {
-                return loop->body.accept(this);
+                loop->body.accept(this);
+                return;
             }
             internal_assert(is_const_zero(loop->min));
             int index = thread_loop_workgroup_index(loop->name);

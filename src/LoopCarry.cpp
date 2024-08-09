@@ -482,13 +482,13 @@ class LoopCarryOverLoop : public IRMutator {
 
             // Wrap them in the appropriate lets
             for (size_t i = initial_lets.size(); i > 0; i--) {
-                auto l = initial_lets[i - 1];
+                const auto &l = initial_lets[i - 1];
                 initial_stores = LetStmt::make(l.first, l.second, initial_stores);
             }
             // We may be lifting the initial stores out of let stmts,
             // so rewrap them in the necessary ones.
             for (size_t i = containing_lets.size(); i > 0; i--) {
-                auto l = containing_lets[i - 1];
+                const auto &l = containing_lets[i - 1];
                 if (stmt_uses_var(initial_stores, l.first)) {
                     initial_stores = LetStmt::make(l.first, l.second, initial_stores);
                 }

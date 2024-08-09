@@ -11,7 +11,7 @@ namespace Autoscheduler {
 // How small should an innermost loop cluster be before you just
 // entirely unroll the thing. Sized for an architecture with 16 vector
 // registers.
-const int kUnrollLimit = 12;
+constexpr static int kUnrollLimit = 12;
 
 // Given a multi-dimensional box of dimensionality d, generate a list
 // of candidate tile sizes for it, logarithmically spacing the sizes

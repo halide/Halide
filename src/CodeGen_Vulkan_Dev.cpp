@@ -1261,10 +1261,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
                 one_constant_id = builder.declare_constant(op->type, &one_value);
             }
         } else if (op->type.is_float() && op->type.bits() == 32) {
-            float one_value = float(1.0f);
+            float one_value = 1.0f;
             one_constant_id = builder.declare_constant(op->type, &one_value);
         } else if (op->type.is_float() && op->type.bits() == 64) {
-            double one_value = double(1.0);
+            double one_value = 1.0;
             one_constant_id = builder.declare_constant(op->type, &one_value);
         } else {
             internal_error << "Vulkan: Unhandled float type in fast_inverse intrinsic!\n";
@@ -1832,7 +1832,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
             array_size = op->constant_allocation_size();
             array_type_id = builder.declare_type(op->type, array_size);
             builder.add_symbol(variable_name + "_array_type", array_type_id, builder.current_module().id());
-            debug(2) << "Vulkan: Allocate (fixed-size) " << op->name << " type=" << op->type << " array_size=" << (uint32_t)array_size << " in shared memory on device in global scope\n";
+            debug(2) << "Vulkan: Allocate (fixed-size) " << op->name << " type=" << op->type << " array_size=" << array_size << " in shared memory on device in global scope\n";
 
         } else {
             // dynamic allocation with unknown size at compile time ...
@@ -1844,7 +1844,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
             array_type_id = builder.add_array_with_default_size(storage_type_id, array_size_id);
             builder.add_symbol(variable_name + "_array_type", array_type_id, builder.current_module().id());
 
-            debug(2) << "Vulkan: Allocate (dynamic size) " << op->name << " type=" << op->type << " default_size=" << (uint32_t)array_size << " in shared memory on device in global scope\n";
+            debug(2) << "Vulkan: Allocate (dynamic size) " << op->name << " type=" << op->type << " default_size=" << array_size << " in shared memory on device in global scope\n";
 
             // bind the specialization constant to the next slot
             std::string constant_name = variable_name + "_array_size";
@@ -1876,7 +1876,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size local allocations are supported with Vulkan.";
 
-        debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << (uint32_t)array_size << " on device in function scope\n";
+        debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << array_size << " on device in function scope\n";
 
         array_type_id = builder.declare_type(op->type, array_size);
         storage_class = SpvStorageClassFunction;  // function scope
@@ -2705,7 +2705,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
 
             // Set descriptor set and binding indices
             SpvBuilder::Literals dset_index = {entry_point_index};
-            SpvBuilder::Literals binding_index = {uint32_t(binding_counter++)};
+            SpvBuilder::Literals binding_index = {binding_counter++};
             builder.add_annotation(buffer_block_var_id, SpvDecorationDescriptorSet, dset_index);
             builder.add_annotation(buffer_block_var_id, SpvDecorationBinding, binding_index);
             symbol_table.push(arg.name, {buffer_block_var_id, storage_class});

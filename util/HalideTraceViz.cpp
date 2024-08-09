@@ -1175,9 +1175,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                     int frames_since_first_draw = (halide_clock - first_draw_clock) / state.globals.timestep;
                     if (frames_since_first_draw < label.fade_in_frames) {
                         uint32_t color = ((1 + frames_since_first_draw) * 255) / std::max(1, label.fade_in_frames);
-                        if (color > 255) {
-                            color = 255;
-                        }
+                        color = std::min<uint32_t>(color, 255);
                         color *= 0x10101;
                         surface->draw_text(label.text, label.pos, color, label.h_scale);
                         ++it;

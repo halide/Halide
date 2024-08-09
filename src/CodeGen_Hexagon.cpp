@@ -1044,7 +1044,7 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
             // Break them into native vectors, use vshuffvdd, and
             // concatenate the shuffled results.
             llvm::Type *native2_ty = get_vector_type(element_ty, native_elements * 2);
-            Value *bytes = codegen(-static_cast<int>(element_bits / 8));
+            Value *bytes = codegen(-(element_bits / 8));
             vector<Value *> ret;
             for (int i = 0; i < result_elements / 2; i += native_elements) {
                 Value *a_i = slice_vector(a, i, native_elements);
@@ -1147,7 +1147,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     llvm::Type *b_ty = b->getType();
     internal_assert(a_ty == b_ty);
 
-    int a_elements = static_cast<int>(get_vector_num_elements(a_ty));
+    int a_elements = get_vector_num_elements(a_ty);
 
     llvm::Type *element_ty = get_vector_element_type(a->getType());
     internal_assert(element_ty);

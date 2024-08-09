@@ -2425,7 +2425,7 @@ Stage Func::specialize(const Expr &c) {
 
 void Func::specialize_fail(const std::string &message) {
     invalidate_cache();
-    (void)Stage(func, func.definition(), 0).specialize_fail(message);
+    Stage(func, func.definition(), 0).specialize_fail(message);
 }
 
 Func &Func::serial(const VarOrRVar &var) {

@@ -311,6 +311,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     }
 }
 
+namespace {
 template<typename T>
 T substitute_facts_impl(const T &t,
                         const std::set<Expr, IRDeepCompare> &truths,
@@ -340,6 +341,7 @@ T substitute_facts_impl(const T &t,
 
     return substitutor.mutate(t);
 }
+}  // namespace
 
 Expr Simplify::ScopedFact::substitute_facts(const Expr &e) {
     return substitute_facts_impl(e, truths, falsehoods);

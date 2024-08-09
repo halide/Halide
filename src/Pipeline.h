@@ -484,7 +484,7 @@ public:
 
     template<typename... Args,
              typename = typename std::enable_if<Internal::all_are_printable_args<Args...>::value>::type>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
+    HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
         std::vector<Expr> collected_args;
         Internal::collect_print_args(collected_args, std::forward<Args>(error_args)...);
         add_requirement(condition, collected_args);

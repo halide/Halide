@@ -5,6 +5,7 @@
 namespace Halide {
 namespace PythonBindings {
 
+namespace {
 void define_rvar(py::module &m) {
     auto rvar_class =
         py::class_<RVar>(m, "RVar")
@@ -24,6 +25,7 @@ void define_rvar(py::module &m) {
 
     add_binary_operators(rvar_class);
 }
+}  // namespace
 
 void define_rdom(py::module &m) {
     define_rvar(m);

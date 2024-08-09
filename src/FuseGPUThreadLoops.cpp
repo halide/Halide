@@ -168,9 +168,7 @@ class NormalizeDimensionality : public IRMutator {
         if (op->for_type == ForType::GPUThread ||
             op->for_type == ForType::GPULane) {
             depth++;
-            if (depth > max_depth) {
-                max_depth = depth;
-            }
+            max_depth = std::max(max_depth, depth);
             Stmt stmt = IRMutator::visit(op);
             depth--;
             return stmt;

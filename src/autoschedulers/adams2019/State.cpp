@@ -686,6 +686,9 @@ void State::apply_schedule(const FunctionDAG &dag, const Adams2019Params &params
     }
 }
 
+// Keep track of how many times we evaluated a state.
+int State::cost_calculations = 0;
+
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide

@@ -1023,7 +1023,7 @@ struct Partitioner {
             : cost(c), parallelism(std::move(p)) {
         }
 
-        inline bool defined() const {
+        bool defined() const {
             return cost.defined() && parallelism.defined();
         }
 
@@ -3200,8 +3200,6 @@ bool inline_unbounded(const vector<Function> &outputs,
     return inlined;
 }
 
-}  // anonymous namespace
-
 // Generate schedules for all functions in the pipeline required to compute the
 // outputs. This applies the schedules and returns a string representation of
 // the schedules. The target architecture is specified by 'target'.
@@ -3450,6 +3448,7 @@ struct Mullapudi2016 {
 };
 
 REGISTER_AUTOSCHEDULER(Mullapudi2016)
+}  // anonymous namespace
 
 }  // namespace Autoscheduler
 }  // namespace Internal

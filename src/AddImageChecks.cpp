@@ -526,7 +526,7 @@ Stmt add_image_checks_inner(Stmt s,
                         << "as the first output buffer.\n";
 
                     stride_constrained = param.stride_constraint(i);
-                } else if (image.defined() && (int)i < image.dimensions()) {
+                } else if (image.defined() && i < image.dimensions()) {
                     stride_constrained = image.dim(i).stride();
                 }
 
@@ -543,7 +543,7 @@ Stmt add_image_checks_inner(Stmt s,
                 } else {
                     extent_constrained = Variable::make(Int(32), extent0_name);
                 }
-            } else if (image.defined() && (int)i < image.dimensions()) {
+            } else if (image.defined() && i < image.dimensions()) {
                 stride_constrained = image.dim(i).stride();
                 extent_constrained = image.dim(i).extent();
                 min_constrained = image.dim(i).min();
