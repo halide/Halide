@@ -6,7 +6,7 @@
 # Some tests are not available when compiling for WASM.
 ##
 
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+if (Halide_TARGET MATCHES "wasm")
     set(_USING_WASM 1)
 else()
     set(_USING_WASM 0)
@@ -232,11 +232,13 @@ function(_add_one_aot_test TARGET)
             target_compile_definitions("${TARGET}" PRIVATE WITH_DAWN_NATIVE)
         endif ()
     endif ()
-    if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-        target_link_libraries("${TARGET}" PRIVATE CUDA::cuda_driver CUDA::cudart)
-    endif ()
-    if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
-        target_link_libraries("${TARGET}" PRIVATE OpenCL::OpenCL)
+    if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
+        if (Halide_TARGET MATCHES "cuda")
+            target_link_libraries("${TARGET}" PRIVATE CUDA::cuda_driver CUDA::cudart)
+        endif ()
+        if (Halide_TARGET MATCHES "opencl")
+            target_link_libraries("${TARGET}" PRIVATE OpenCL::OpenCL)
+        endif ()
     endif ()
     add_halide_test("${TARGET}" GROUPS generator ${args_GROUPS})
 endfunction()
@@ -307,11 +309,13 @@ function(_add_halide_aot_tests NAME)
     endif()
 endfunction()
 
-if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-    find_package(CUDAToolkit REQUIRED)
-endif ()
-if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
-    find_package(OpenCL REQUIRED)
+if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
+    if (Halide_TARGET MATCHES "cuda")
+        find_package(CUDAToolkit REQUIRED)
+    endif ()
+    if (Halide_TARGET MATCHES "opencl")
+        find_package(OpenCL REQUIRED)
+    endif ()
 endif ()
 
 ##
@@ -425,7 +429,7 @@ if (NOT ${_USING_WASM})
                           FEATURES c_plus_plus_name_mangling
                           EXTERNS cxx_mangling_externs)
     _add_halide_aot_tests(cxx_mangling)
-    if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
+    if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS AND Halide_TARGET MATCHES "cuda")
         add_halide_library(cxx_mangling_gpu
                            FROM cxx_mangling.generator
                            GENERATOR cxx_mangling

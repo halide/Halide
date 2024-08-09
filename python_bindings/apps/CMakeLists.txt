@@ -1,9 +1,9 @@
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+if (Halide_TARGET MATCHES "wasm")
     message(WARNING "Python apps are skipped under WASM.")
     return()
 endif ()
 
-if (TARGET_VULKAN AND Halide_TARGET MATCHES "vulkan")
+if (Halide_TARGET MATCHES "vulkan")
     message(WARNING "Python apps are skipped under Vulkan.")
     return()
 endif ()

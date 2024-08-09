@@ -106,13 +106,6 @@ else ()
     set(Halide_ANY_SANITIZERS_ENABLED 0)
 endif ()
 
-# Enable the SPIR-V target if requested (must declare before processing dependencies)
-option(TARGET_SPIRV "Include SPIR-V target" OFF)
-option(TARGET_VULKAN "Include Vulkan target" ON)
-if (TARGET_VULKAN)
-    set(TARGET_SPIRV ON) # required
-endif()
-
 # Helper function to set C++ compiler warnings in a sane way
 function(set_halide_compiler_warnings NAME)
     target_compile_options(
@@ -193,8 +186,10 @@ endfunction()
 option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread flag to explicit linking" ON)
 find_package(Threads REQUIRED)
 
-## Complex dependencies
-add_subdirectory(dependencies/llvm)
+## LLVM
+find_package(Halide_LLVM 17...20 REQUIRED
+             COMPONENTS WebAssembly X86
+             OPTIONAL_COMPONENTS AArch64 AMDGPU ARM Hexagon NVPTX PowerPC RISCV)
 
 ## Image formats
 
