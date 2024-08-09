@@ -189,7 +189,7 @@ find_package(Threads REQUIRED)
 ## LLVM
 find_package(Halide_LLVM 17...20 REQUIRED
              COMPONENTS WebAssembly X86
-             OPTIONAL_COMPONENTS AArch64 AMDGPU ARM Hexagon NVPTX PowerPC RISCV)
+             OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV)
 
 ## Image formats
 
