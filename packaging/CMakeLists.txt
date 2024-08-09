@@ -29,7 +29,7 @@ install(TARGETS Halide Halide_Generator Halide_GenGen
         ARCHIVE COMPONENT Halide_Development
         FILE_SET HEADERS COMPONENT Halide_Development)
 
-if (TARGET Halide_Adams2019)
+if (WITH_AUTOSCHEDULERS)
     install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021
             EXPORT Halide_Interfaces
             LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
@@ -59,36 +59,33 @@ install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain Halide_ThreadPool
         FILE_SET HEADERS COMPONENT Halide_Development DESTINATION ${Halide_INSTALL_TOOLSDIR})
 
 ##
-# Patch RPATH for executable targets
+# Install command-line utils
 ##
 
-file(RELATIVE_PATH lib_dir
-     ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
-     ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
+if (WITH_AUTOSCHEDULERS AND WITH_UTILS)
+    file(RELATIVE_PATH lib_dir
+         ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
+         ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
 
-if (APPLE)
-    set(rbase @loader_path)
-else ()
-    set(rbase $ORIGIN)
-endif ()
-
-foreach (util IN ITEMS adams2019_retrain_cost_model
-                       adams2019_weightsdir_to_weightsfile
-                       anderson2021_retrain_cost_model
-                       anderson2021_weightsdir_to_weightsfile
-                       featurization_to_sample
-                       get_host_target)
-    if (TARGET ${util})
-        if (NOT CMAKE_INSTALL_RPATH)
-            set_target_properties(${util} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
-        endif ()
-        install(
-            TARGETS ${util}
-            EXPORT Halide_Interfaces
-            COMPONENT Halide_Development
-        )
+    if (APPLE)
+        set(rbase @loader_path)
+    else ()
+        set(rbase $ORIGIN)
     endif ()
-endforeach ()
+
+    set(utils
+        adams2019_retrain_cost_model
+        adams2019_weightsdir_to_weightsfile
+        anderson2021_retrain_cost_model
+        anderson2021_weightsdir_to_weightsfile
+        featurization_to_sample
+        get_host_target
+    )
+    if (NOT CMAKE_INSTALL_RPATH)
+        set_target_properties(${utils} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+    endif ()
+    install(TARGETS ${utils} EXPORT Halide_Interfaces COMPONENT Halide_Development)
+endif ()
 
 ##
 # READMEs and other top-level documentation
