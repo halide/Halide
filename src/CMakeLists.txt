@@ -5,15 +5,25 @@
 add_library(Halide)
 add_library(Halide::Halide ALIAS Halide)
 
-##
-# CodeGen backends
+# Language standard
+target_compile_features(Halide PUBLIC cxx_std_17)
 
-# LLVM
-foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
-    string(TOUPPER "WITH_${backend}" definition)
-    target_compile_definitions(Halide PRIVATE "${definition}")
-    target_link_libraries(Halide PRIVATE Halide_LLVM::${backend})
-endforeach ()
+# Inform the sources if we're building a static or shared library
+if (NOT BUILD_SHARED_LIBS)
+    target_compile_definitions(Halide PRIVATE Halide_STATIC_DEFINE)
+endif ()
+
+# Set the (shared) library version
+set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
+    CACHE STRING "SOVERSION to set for custom Halide packaging")
+mark_as_advanced(Halide_SOVERSION_OVERRIDE)
+
+set_target_properties(Halide PROPERTIES
+                      VERSION "${Halide_VERSION}"
+                      SOVERSION "${Halide_SOVERSION_OVERRIDE}")
+
+# Always build with PIC, even when static
+set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 ##
 # Lists of source files. Keep ALL lists sorted in alphabetical order.
@@ -463,6 +473,34 @@ target_sources(
 )
 
 ##
+# CodeGen backends
+##
+
+# LLVM backends
+foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
+    string(TOUPPER "WITH_${backend}" definition)
+    target_compile_definitions(Halide PRIVATE "${definition}")
+    target_link_libraries(Halide PRIVATE Halide_LLVM::${backend})
+endforeach ()
+
+# GPU backends
+find_package(
+    SPIRV-Headers 1.5.5 REQUIRED
+    HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
+)
+
+target_link_libraries(
+    Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>"
+)
+
+target_compile_definitions(Halide PRIVATE WITH_D3D12)
+target_compile_definitions(Halide PRIVATE WITH_METAL)
+target_compile_definitions(Halide PRIVATE WITH_OPENCL)
+target_compile_definitions(Halide PRIVATE WITH_SPIRV)
+target_compile_definitions(Halide PRIVATE WITH_VULKAN)
+target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
+
+##
 # Flatbuffers and Serialization dependencies.
 ##
 
@@ -515,29 +553,6 @@ cmake_dependent_option(
 if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
 endif ()
-
-target_compile_features(Halide PUBLIC cxx_std_17)
-if (NOT BUILD_SHARED_LIBS)
-    target_compile_definitions(Halide PRIVATE Halide_STATIC_DEFINE)
-endif ()
-
-include(TargetExportScript)
-## TODO: implement something similar for Windows/link.exe
-# https://github.com/halide/Halide/issues/4651
-target_export_script(Halide
-                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
-                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
-
-set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
-    CACHE STRING "SOVERSION to set for custom Halide packaging")
-mark_as_advanced(Halide_SOVERSION_OVERRIDE)
-
-set_target_properties(Halide PROPERTIES
-                      VERSION "${Halide_VERSION}"
-                      SOVERSION "${Halide_SOVERSION_OVERRIDE}")
-
-# Always build with PIC, even when static
-set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Note that we (deliberately) redeclare these versions here, even though the macros
 # with identical versions are expected to be defined in source; this allows us to
@@ -593,6 +608,17 @@ elseif (Halide_WASM_BACKEND)
 endif ()
 
 ##
+# Attach symbol export scripts
+##
+
+## TODO: implement something similar for Windows/link.exe
+# https://github.com/halide/Halide/issues/4651
+include(TargetExportScript)
+target_export_script(Halide
+                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
+                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
+
+##
 # Set compiler options for libHalide
 ##
 
@@ -646,23 +672,6 @@ else ()
         Halide PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>"
     )
 endif ()
-
-##
-# GPU CodeGen backends
-
-find_package(
-    SPIRV-Headers 1.5.5 REQUIRED
-    HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
-)
-
-target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
-
-target_compile_definitions(Halide PRIVATE WITH_D3D12)
-target_compile_definitions(Halide PRIVATE WITH_METAL)
-target_compile_definitions(Halide PRIVATE WITH_OPENCL)
-target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-target_compile_definitions(Halide PRIVATE WITH_VULKAN)
-target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 
 ##
 # Add autoschedulers to the build.
