@@ -459,41 +459,19 @@ target_sources(
 # Build serialization, enabled by default
 option(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
 if (WITH_SERIALIZATION)
-    # flatbuffers is small and compiles quickly, but if you want/need to use
-    # a local version (via find_package), configure with FLATBUFFERS_USE_FETCHCONTENT=OFF
-    option(FLATBUFFERS_USE_FETCHCONTENT "Enable to download the Flatbuffers library via FetchContent" ON)
-    set(FLATBUFFERS_VER 23.5.26 CACHE STRING "The Flatbuffers version to use (or download) ")
+    # Sadly, there seem to be at least three variations of the Flatbuffer
+    # package in terms of the case of the relevant CMake files. Fortunately,
+    # the IMPORTED targets appear to be consistently named `flatbuffers`.
+    find_package(
+        flatbuffers 23.5.26 REQUIRED
+        NAMES flatbuffers Flatbuffers FlatBuffers
+    )
 
-    if (FLATBUFFERS_USE_FETCHCONTENT)
-        include(FetchContent)
-        FetchContent_Declare(
-            flatbuffers
-            GIT_REPOSITORY https://github.com/google/flatbuffers.git
-            GIT_TAG v${FLATBUFFERS_VER}
-            GIT_SHALLOW TRUE
-            SYSTEM
-        )
-        # configuration for flatbuffers
-        set(FLATBUFFERS_BUILD_TESTS OFF)
-        set(FLATBUFFERS_INSTALL OFF)
-        FetchContent_MakeAvailable(flatbuffers)
-        set_target_properties(flatbuffers PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-        add_library(flatbuffers::flatbuffers ALIAS flatbuffers)
-        add_executable(flatbuffers::flatc ALIAS flatc)
-
-        message(STATUS "Using fetched-and-built flatbuffers, version ${FLATBUFFERS_VER}")
-        set(flatbuffers_target "$<BUILD_LOCAL_INTERFACE:flatbuffers::flatbuffers>")
+    if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
+        target_sources(Halide PRIVATE "$<TARGET_OBJECTS:flatbuffers::flatbuffers>")
+        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:flatbuffers::flatbuffers>>")
     else ()
-        # Sadly, there seem to be at least three variations of the Flatbuffer
-        # package in terms of the case of the relevant CMake files. Fortunately,
-        # the IMPORTED targets appear to be consistently named `flatbuffers`.
-        find_package(
-            flatbuffers ${FLATBUFFERS_VER}
-            NAMES flatbuffers Flatbuffers FlatBuffers
-            REQUIRED
-        )
-        set(flatbuffers_target flatbuffers::flatbuffers)
+        target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
     endif ()
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
@@ -515,7 +493,6 @@ if (WITH_SERIALIZATION)
         BASE_DIRS "${fb_dir}"
         FILES "${fb_header}"
     )
-    target_link_libraries(Halide PRIVATE ${flatbuffers_target})
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
 
@@ -567,8 +544,6 @@ target_compile_definitions(Halide PUBLIC
 ##
 
 if (TARGET_WEBASSEMBLY)
-    include(FetchContent)
-
     set(Halide_WASM_BACKEND "wabt"
         CACHE STRING "Which backend to use for Halide's WASM testing.")
     set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;OFF")
@@ -592,42 +567,15 @@ if (TARGET_WEBASSEMBLY)
     endif ()
 
     if (Halide_WASM_BACKEND STREQUAL "wabt")
-        set(WABT_VER 1.0.33)
+        find_package(wabt 1.0.36 REQUIRED)
 
-        message(STATUS "Fetching WABT ${WABT_VER}...")
-        FetchContent_Declare(wabt
-                             GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
-                             GIT_TAG ${WABT_VER}
-                             GIT_SHALLOW TRUE)
+        if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
+            target_sources(Halide PRIVATE "$<TARGET_OBJECTS:wabt::wabt>")
+            target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:wabt::wabt>>")
+        else ()
+            target_link_libraries(Halide PRIVATE wabt::wabt)
+        endif ()
 
-        # configuration for wabt
-        set(WITH_EXCEPTIONS ${Halide_ENABLE_EXCEPTIONS})
-        set(BUILD_TESTS OFF)
-        set(BUILD_TOOLS OFF)
-        set(BUILD_LIBWASM OFF)
-        set(USE_INTERNAL_SHA256 ON)
-        FetchContent_MakeAvailable(wabt)
-
-        set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-        # Disable this very-noisy warning in GCC
-        target_compile_options(wabt
-                               PRIVATE
-                               $<$<CXX_COMPILER_ID:GNU>:-Wno-alloca-larger-than>)
-
-        # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
-        # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,
-        # but perhaps we could do better (esp. if wabt was smarter about what it exposed?)
-        add_library(Halide_wabt INTERFACE)
-        target_sources(Halide_wabt INTERFACE $<BUILD_LOCAL_INTERFACE:$<TARGET_OBJECTS:wabt>>)
-        target_include_directories(Halide_wabt
-                                   SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
-                                   INTERFACE
-                                   $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>/include
-                                   $<BUILD_INTERFACE:${wabt_BINARY_DIR}>/include)
-        set_target_properties(Halide_wabt PROPERTIES EXPORT_NAME wabt)
-
-        target_link_libraries(Halide PRIVATE Halide_wabt)
         target_compile_definitions(Halide PRIVATE WITH_WABT)
     elseif (Halide_WASM_BACKEND STREQUAL "V8")
         find_package(V8 REQUIRED)

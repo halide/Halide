@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.28)
+
+option(Halide_USE_FETCHCONTENT "When Halide is top-level, use FetchContent for build-time dependencies." ON)
+if (Halide_USE_FETCHCONTENT)
+    list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES "${CMAKE_CURRENT_LIST_DIR}/cmake/dependencies.cmake")
+endif ()
+
 project(Halide
         VERSION 19.0.0
         DESCRIPTION "Halide compiler and libraries"
