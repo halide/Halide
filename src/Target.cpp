@@ -698,6 +698,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"armv87a", Target::ARMv87a},
     {"armv88a", Target::ARMv88a},
     {"armv89a", Target::ARMv89a},
+    {"arm64e", Target::ARM64e},
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
     {"spirv", Target::SPIRV},
@@ -1551,6 +1552,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format off
     const std::array<Feature, 23> intersection_features = {{
         ARMv7s,
+        ARM64e,
         AVX,
         AVX2,
         AVX512,
