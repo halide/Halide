@@ -31,7 +31,7 @@ def main():
     input = np.empty((640, 480), dtype=np.uint8, order='F')
     for y in range(480):
         for x in range(640):
-            input[x, y] = x ^ (y + 1)
+            input[x, y] = (x ^ (y + 1)) & 0xFF
 
     # And the memory where we want to write our output:
     output = np.empty((640, 480), dtype=np.uint8, order='F')
