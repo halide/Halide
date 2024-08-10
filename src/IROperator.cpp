@@ -1410,6 +1410,122 @@ Expr fast_cos(const Expr &x_full) {
     return fast_sin_cos(x_full, false);
 }
 
+// A vectorizable atan and atan2 implementation. Based on syrah fast vector math
+// https://github.com/boulos/syrah/blob/master/src/include/syrah/FixedVectorMath.h#L255
+Expr fast_atan(const Expr &x_full, ApproximationPrecision precision, bool between_m1_and_p1) {
+    const float pi_over_two = 1.57079637050628662109375f;
+    // atan(-x) = -atan(x) (so flip from negative to positive first)
+    // if x > 1 -> atan(x) = Pi/2 - atan(1/x)
+    Expr x_neg = x_full < 0.0f;
+    Expr x_flipped = select(x_neg, -x_full, x_full); // TODO, not needed?
+
+    Expr x;
+    Expr x_gt_1 = x_flipped > 1.0f;
+    if (between_m1_and_p1) {
+        x = x_flipped;
+    } else {
+        x = select(x_gt_1, 1.0f / x_flipped, x_flipped);
+    }
+
+    std::vector<float> c;
+    if (precision == MAE_1e_2 || precision == Poly2) {
+        // Coefficients with max error: 4.9977e-03
+        c.push_back(9.724422672912e-01f);
+        c.push_back(-1.920418089970e-01f);
+    } else if (precision == MAE_1e_3 || precision == Poly3) {
+        // Coefficients with max error: 6.1317e-04
+        c.push_back(9.953639222909e-01f);
+        c.push_back(-2.887227485229e-01f);
+        c.push_back(7.937016196576e-02f);
+    } else if (precision == MAE_1e_4 || precision == Poly4) {
+        // Coefficients with max error: 8.1862e-05
+        c.push_back(9.992146660828e-01f);
+        c.push_back(-3.211839266848e-01f);
+        c.push_back(1.462857116754e-01f);
+        c.push_back(-3.900014954510e-02f);
+    } else if (precision == Poly5) {
+        // Coefficients with max error: 1.1527e-05
+        c.push_back(9.998664595623e-01f);
+        c.push_back(-3.303069921053e-01f);
+        c.push_back(1.801687249421e-01f);
+        c.push_back(-8.517067470591e-02f);
+        c.push_back(2.085217296632e-02f);
+    } else if (precision == MAE_1e_5 || precision == Poly6) {
+        // Coefficients with max error: 1.6869e-06
+        c.push_back(9.999772493111e-01f);
+        c.push_back(-3.326235741278e-01f);
+        c.push_back(1.935452881570e-01f);
+        c.push_back(-1.164392687560e-01f);
+        c.push_back(5.266159827071e-02f);
+        c.push_back(-1.172481633666e-02f);
+    } else if (precision == MAE_1e_6 || precision == Poly7) {
+        // Coefficients with max error: 2.4856e-07
+        c.push_back(9.999961151054e-01f);
+        c.push_back(-3.331738028802e-01f);
+        c.push_back(1.980792937100e-01f);
+        c.push_back(-1.323378013498e-01f);
+        c.push_back(7.963167170570e-02f);
+        c.push_back(-3.361110979599e-02f);
+        c.push_back(6.814044980872e-03f);
+    } else if (precision == MAE_1e_7 || precision == Poly8) {
+        // Coefficients with max error: 3.7701e-08
+        c.push_back(9.999993361165e-01f);
+        c.push_back(-3.332986319318e-01f);
+        c.push_back(1.994659561726e-01f);
+        c.push_back(-1.390878950650e-01f);
+        c.push_back(9.642627167915e-02f);
+        c.push_back(-5.591842304884e-02f);
+        c.push_back(2.186731163463e-02f);
+        c.push_back(-4.055799860664e-03f);
+    }
+
+    Expr x2 = x * x;
+    Expr result = c.back();
+    for (size_t i = 1; i < c.size(); ++i) {
+        result = x2 * result + c[c.size() - i - 1];
+    }
+    result *= x;
+
+    if (!between_m1_and_p1) {
+        result = select(x_gt_1, pi_over_two - result, result);
+    }
+    result = select(x_neg, -result, result);
+    return result;
+}
+Expr fast_atan(const Expr &x_full, ApproximationPrecision precision) {
+    return fast_atan(x_full, precision, false);
+}
+
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) {
+    const float pi(3.1415927410125732421875f);
+    // atan2(y, x) =
+    //
+    // atan2(y > 0, x = +-0) ->  Pi/2
+    // atan2(y < 0, x = +-0) -> -Pi/2
+    // atan2(y = +-0, x < +0) -> +-Pi
+    // atan2(y = +-0, x >= +0) -> +-0
+    //
+    // atan2(y >= 0, x < 0) ->  Pi + atan(y/x)
+    // atan2(y <  0, x < 0) -> -Pi + atan(y/x)
+    // atan2(y, x > 0) -> atan(y/x)
+    //
+    // and then a bunch of code for dealing with infinities.
+#if 1
+    const float pi_over_two = 1.57079637050628662109375f;
+    Expr swap = abs(y) > abs(x);
+    Expr atan_input = select(swap, x, y) / select(swap, y, x);
+    Expr ati = fast_atan(atan_input, precision, true);
+    Expr at = select(swap, select(atan_input >= 0.0f, pi_over_two, -pi_over_two) - ati, ati);
+    return select(
+        x > 0.0f, at,
+        x < 0.0f && y >= 0.0f, at + pi,
+        x < 0.0f && y < 0.0f, at - pi,
+        x == 0.0f && y > 0.0f, pi_over_two,
+        x == 0.0f && y < 0.0f, -pi_over_two,
+        0.0f);
+#endif
+}
+
 Expr fast_exp(const Expr &x_full) {
     user_assert(x_full.type() == Float(32)) << "fast_exp only works for Float(32)";
 
