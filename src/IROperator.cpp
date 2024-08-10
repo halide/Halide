@@ -1412,7 +1412,7 @@ Expr fast_cos(const Expr &x_full) {
 
 // A vectorizable atan and atan2 implementation. Based on syrah fast vector math
 // https://github.com/boulos/syrah/blob/master/src/include/syrah/FixedVectorMath.h#L255
-Expr fast_atan(const Expr &x_full, ApproximationPrecision precision, bool between_m1_and_p1) {
+Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precision, bool between_m1_and_p1) {
     const float pi_over_two = 1.57079637050628662109375f;
     // atan(-x) = -atan(x) (so flip from negative to positive first)
     // if x > 1 -> atan(x) = Pi/2 - atan(1/x)
@@ -1490,13 +1490,14 @@ Expr fast_atan(const Expr &x_full, ApproximationPrecision precision, bool betwee
         result = select(x_gt_1, pi_over_two - result, result);
     }
     result = select(x_neg, -result, result);
-    return result;
+    return common_subexpression_elimination(result);
 }
 Expr fast_atan(const Expr &x_full, ApproximationPrecision precision) {
-    return fast_atan(x_full, precision, false);
+    Expr default_is_fast = target_has_feature(Target::CUDA);
+    return select(default_is_fast, atan(x_full), fast_atan_approximation(x_full, precision, false));
 }
 
-Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) {
+Expr fast_atan2_approximation(const Expr &y, const Expr &x, ApproximationPrecision precision) {
     const float pi(3.1415927410125732421875f);
     // atan2(y, x) =
     //
@@ -1516,14 +1517,20 @@ Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) 
     Expr atan_input = select(swap, x, y) / select(swap, y, x);
     Expr ati = fast_atan(atan_input, precision, true);
     Expr at = select(swap, select(atan_input >= 0.0f, pi_over_two, -pi_over_two) - ati, ati);
-    return select(
+    Expr result = select(
         x > 0.0f, at,
         x < 0.0f && y >= 0.0f, at + pi,
         x < 0.0f && y < 0.0f, at - pi,
         x == 0.0f && y > 0.0f, pi_over_two,
         x == 0.0f && y < 0.0f, -pi_over_two,
         0.0f);
+    return common_subexpression_elimination(result);
 #endif
+}
+
+Expr fast_atan2_approximation(const Expr &y, const Expr &x, ApproximationPrecision precision) {
+    Expr default_is_fast = target_has_feature(Target::CUDA);
+    return select(default_is_fast, atan2(y, x), fast_atan2_approximation(y, x, precision, false));
 }
 
 Expr fast_exp(const Expr &x_full) {
