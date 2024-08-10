@@ -8,7 +8,13 @@ args = parser.parse_args()
 
 order = args.order
 if args.func == "atan":
-    func = np.atan
+    if hasattr(np, "atan"):
+        func = np.atan
+    elif hasattr(np, "arctan"):
+        func = np.arctan
+    else:
+        print("Your numpy version doesn't support arctan.")
+        exit(1)
     exponents = 1 + np.arange(order) * 2
     lower, upper = 0.0, 1.0
 elif args.func == "sin":
@@ -91,13 +97,15 @@ print("exponent:", exponents)
 
 import matplotlib.pyplot as plt
 
-fig, ax = plt.subplots(4, figsize=(6, 7))
+fig, ax = plt.subplots(5, figsize=(6, 7))
+ax[0].set_title("Comparison of exact and approximate " + args.func)
 ax[0].plot(X, target, label=args.func)
 ax[0].plot(X, y_hat, label='approx')
 ax[0].grid()
 ax[0].set_xlim(lower, upper)
 ax[0].legend()
 
+ax[1].set_title("Absolute error in log-scale")
 ax[1].semilogy(X, np.abs(y_hat_init - target), label='abs error (init)')
 ax[1].semilogy(X, np.abs(diff), label='abs error (final)')
 ax[1].axhline(np.amax(np.abs(y_hat_init - target)), linestyle=':', c='C0')
@@ -106,18 +114,23 @@ ax[1].grid()
 ax[1].set_xlim(lower, upper)
 ax[1].legend()
 
+ax[2].set_title("Error")
 ax[2].plot(X, y_hat_init - target, label='init diff')
 ax[2].plot(X, y_hat - target, label='final diff')
 ax[2].grid()
 ax[2].set_xlim(lower, upper)
 ax[2].legend()
 
-#ax[2].loglog(loss_history[:,0], label='Loss')
-#ax[2].axvline(x=lstsq_iterations, linestyle=':', color='k')
-
-ax[3].loglog(loss_history[:,1], label='MaxAE')
-ax[3].axvline(x=lstsq_iterations, linestyle=':', color='k')
+ax[3].set_title("LstSq Weight (log-scale)")
+ax[3].semilogy(X, norm_weight, label='weight')
 ax[3].grid()
+ax[3].set_xlim(lower, upper)
 ax[3].legend()
+
+ax[4].set_title("Maximal Absolute Error progression during optimization")
+ax[4].loglog(loss_history[:,1], label='MaxAE')
+ax[4].axvline(x=lstsq_iterations, linestyle=':', color='k')
+ax[4].grid()
+ax[4].legend()
 plt.tight_layout()
 plt.show()
