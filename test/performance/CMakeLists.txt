@@ -12,6 +12,7 @@ tests(GROUPS performance
       boundary_conditions.cpp
       clamped_vector_load.cpp
       const_division.cpp
+      fast_arctan.cpp
       fast_inverse.cpp
       fast_pow.cpp
       fast_sine_cosine.cpp

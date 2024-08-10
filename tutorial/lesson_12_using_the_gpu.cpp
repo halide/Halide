@@ -189,6 +189,7 @@ public:
         // pixel.
         printf("Target: %s\n", target.to_string().c_str());
         curved.compile_jit(target);
+        curved.compile_to_conceptual_stmt("lesson_12_gpu.html", {input}, StmtOutputFormat::HTML, target);
 
         return true;
     }
