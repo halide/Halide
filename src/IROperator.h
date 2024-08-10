@@ -983,6 +983,31 @@ Expr fast_sin(const Expr &x);
 Expr fast_cos(const Expr &x);
 // @}
 
+enum ApproximationPrecision {
+    // Maximum Absolute error
+    MAE_1e_2,
+    MAE_1e_3,
+    MAE_1e_4,
+    MAE_1e_5,
+    MAE_1e_6,
+    MAE_1e_7,
+
+    // Number of terms in polynomial
+    Poly2,
+    Poly3,
+    Poly4,
+    Poly5,
+    Poly6,
+    Poly7,
+    Poly8
+};
+/** Fast vectorizable approximation for arctan.
+ * Notes:
+ *  - Does not behave well in (0,0).
+ */
+Expr fast_atan(const Expr &x, ApproximationPrecision precision = MAE_1e_5);
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = MAE_1e_5);
+
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
  * mantissa. Vectorizes cleanly. Slow on x86 if you don't
