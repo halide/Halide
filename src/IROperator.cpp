@@ -1410,8 +1410,8 @@ Expr fast_cos(const Expr &x_full) {
     return fast_sin_cos(x_full, false);
 }
 
-// A vectorizable atan and atan2 implementation. Based on syrah fast vector math
-// https://github.com/boulos/syrah/blob/master/src/include/syrah/FixedVectorMath.h#L255
+// A vectorizable atan and atan2 implementation.
+// Based on the ideas presented in https://mazzo.li/posts/vectorized-atan2.html.
 Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precision, bool between_m1_and_p1) {
     const float pi_over_two = 1.57079632679489661923f;
     Expr x;
@@ -1423,6 +1423,7 @@ Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precisio
         x = select(x_gt_1, 1.0f / x_full, x_full);
     }
 
+    // Coefficients obtained using src/polynomial_optimizer.py
     std::vector<float> c;
     if (precision == MAE_1e_2 || precision == Poly2) {
         // Coefficients with max error: 4.9977e-03
