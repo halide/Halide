@@ -990,7 +990,6 @@ enum ApproximationPrecision {
     MAE_1e_4,
     MAE_1e_5,
     MAE_1e_6,
-    MAE_1e_7,
 
     // Number of terms in polynomial
     Poly2,
@@ -1001,12 +1000,17 @@ enum ApproximationPrecision {
     Poly7,
     Poly8
 };
-/** Fast vectorizable approximation for arctan.
- * Notes:
- *  - Does not behave well in (0,0).
+/** Fast vectorizable approximation for arctan for Float(32).
+ * Desired precision can be specified as either a maximum absolute error (MAE) or
+ * the number of terms in the polynomial approximation (see the ApproximationPrecision
+ * enum).
+ * Note: Poly8 is only useful to increase precision for atan, and not for atan2.
+ * Note: LLVM has good implementations for atan/atan2 for CUDA targets (better than these).
  */
+// @{
 Expr fast_atan(const Expr &x, ApproximationPrecision precision = MAE_1e_5);
 Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = MAE_1e_5);
+// @}
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the

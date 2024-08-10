@@ -20,10 +20,10 @@ int main(int argc, char **argv) {
     float range = -10.0f;
     Expr t0 = x / 1000.f;
     Expr t1 = y / 1000.f;
-    atan_f(x) = fast_atan(-range * t0 + (1 - t0) * range, ApproximationPrecision::Poly5);
+    atan_f(x, y) = fast_atan(-range * t0 + (1 - t0) * range);
     atan2_f(x, y) = fast_atan2(-range * t0 + (1 - t0) * range,
-                               -range * t1 + (1 - t1) * range, ApproximationPrecision::Poly5);
-    atan_ref(x) = atan(-range * t0 + (1 - t0) * range);
+                               -range * t1 + (1 - t1) * range);
+    atan_ref(x, y) = atan(-range * t0 + (1 - t0) * range);
     atan2_ref(x, y) = atan2(-range * t0 + (1 - t0) * range, -range * t1 + (1 - t1) * range);
 
     if (target.has_gpu_feature()) {
@@ -46,9 +46,9 @@ int main(int argc, char **argv) {
         atan2_ref.vectorize(x, 8);
     }
 
-    double t_fast_atan = 1e6 * benchmark([&]() { atan_f.realize({1000}); });
+    double t_fast_atan = 1e3 * benchmark([&]() { atan_f.realize({1000, 1000}); });
     double t_fast_atan2 = 1e3 * benchmark([&]() { atan2_f.realize({1000, 1000}); });
-    double t_atan = 1e6 * benchmark([&]() { atan_ref.realize({1000}); });
+    double t_atan = 1e3 * benchmark([&]() { atan_ref.realize({1000, 1000}); });
     double t_atan2 = 1e3 * benchmark([&]() { atan2_ref.realize({1000, 1000}); });
 
     printf("atan: %f ns per pixel\n"

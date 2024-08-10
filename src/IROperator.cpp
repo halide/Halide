@@ -1413,18 +1413,14 @@ Expr fast_cos(const Expr &x_full) {
 // A vectorizable atan and atan2 implementation. Based on syrah fast vector math
 // https://github.com/boulos/syrah/blob/master/src/include/syrah/FixedVectorMath.h#L255
 Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precision, bool between_m1_and_p1) {
-    const float pi_over_two = 1.57079637050628662109375f;
-    // atan(-x) = -atan(x) (so flip from negative to positive first)
-    // if x > 1 -> atan(x) = Pi/2 - atan(1/x)
-    Expr x_neg = x_full < 0.0f;
-    Expr x_flipped = select(x_neg, -x_full, x_full); // TODO, not needed?
-
+    const float pi_over_two = 1.57079632679489661923f;
     Expr x;
-    Expr x_gt_1 = x_flipped > 1.0f;
+    // if x > 1 -> atan(x) = Pi/2 - atan(1/x)
+    Expr x_gt_1 = x_full > 1.0f;
     if (between_m1_and_p1) {
-        x = x_flipped;
+        x = x_full;
     } else {
-        x = select(x_gt_1, 1.0f / x_flipped, x_flipped);
+        x = select(x_gt_1, 1.0f / x_full, x_full);
     }
 
     std::vector<float> c;
@@ -1467,16 +1463,18 @@ Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precisio
         c.push_back(7.963167170570e-02f);
         c.push_back(-3.361110979599e-02f);
         c.push_back(6.814044980872e-03f);
-    } else if (precision == MAE_1e_7 || precision == Poly8) {
-        // Coefficients with max error: 3.7701e-08
-        c.push_back(9.999993361165e-01f);
-        c.push_back(-3.332986319318e-01f);
-        c.push_back(1.994659561726e-01f);
-        c.push_back(-1.390878950650e-01f);
-        c.push_back(9.642627167915e-02f);
-        c.push_back(-5.591842304884e-02f);
-        c.push_back(2.186731163463e-02f);
-        c.push_back(-4.055799860664e-03f);
+    } else if (precision == Poly8) {
+        // Coefficients with max error: 3.8005e-08
+        c.push_back(9.999993363468e-01f);
+        c.push_back(-3.332986419645e-01f);
+        c.push_back(1.994660800256e-01f);
+        c.push_back(-1.390885586782e-01f);
+        c.push_back(9.642807440478e-02f);
+        c.push_back(-5.592101944058e-02f);
+        c.push_back(2.186920026077e-02f);
+        c.push_back(-4.056345562152e-03f);
+    } else {
+        user_error << "Invalid precision specified to fast_atan";
     }
 
     Expr x2 = x * x;
@@ -1489,16 +1487,19 @@ Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precisio
     if (!between_m1_and_p1) {
         result = select(x_gt_1, pi_over_two - result, result);
     }
-    result = select(x_neg, -result, result);
     return common_subexpression_elimination(result);
 }
 Expr fast_atan(const Expr &x_full, ApproximationPrecision precision) {
-    Expr default_is_fast = target_has_feature(Target::CUDA);
-    return select(default_is_fast, atan(x_full), fast_atan_approximation(x_full, precision, false));
+    // LLVM has similar fast expansions of atan when compiling to CUDA.
+    // Expr default_is_fast = target_has_feature(Target::CUDA);
+    // TODO: above is incorrect, as it needs to be actually scheduled on GPU as well.
+    // return select(default_is_fast, atan(x_full), fast_atan_approximation(x_full, precision, false));
+    return fast_atan_approximation(x_full, precision, false);
 }
 
 Expr fast_atan2_approximation(const Expr &y, const Expr &x, ApproximationPrecision precision) {
-    const float pi(3.1415927410125732421875f);
+    const float pi(3.14159265358979323846f);
+    const float pi_over_two = 1.57079632679489661923f;
     // atan2(y, x) =
     //
     // atan2(y > 0, x = +-0) ->  Pi/2
@@ -1512,10 +1513,9 @@ Expr fast_atan2_approximation(const Expr &y, const Expr &x, ApproximationPrecisi
     //
     // and then a bunch of code for dealing with infinities.
 #if 1
-    const float pi_over_two = 1.57079637050628662109375f;
     Expr swap = abs(y) > abs(x);
     Expr atan_input = select(swap, x, y) / select(swap, y, x);
-    Expr ati = fast_atan(atan_input, precision, true);
+    Expr ati = fast_atan_approximation(atan_input, precision, true);
     Expr at = select(swap, select(atan_input >= 0.0f, pi_over_two, -pi_over_two) - ati, ati);
     Expr result = select(
         x > 0.0f, at,
@@ -1528,9 +1528,12 @@ Expr fast_atan2_approximation(const Expr &y, const Expr &x, ApproximationPrecisi
 #endif
 }
 
-Expr fast_atan2_approximation(const Expr &y, const Expr &x, ApproximationPrecision precision) {
-    Expr default_is_fast = target_has_feature(Target::CUDA);
-    return select(default_is_fast, atan2(y, x), fast_atan2_approximation(y, x, precision, false));
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) {
+    // LLVM has similar fast expansions of atan2 when compiling to CUDA.
+    // Expr default_is_fast = target_has_feature(Target::CUDA);
+    // TODO: above is incorrect, as it needs to be actually scheduled on GPU as well.
+    // return select(default_is_fast, atan2(y, x), fast_atan2_approximation(y, x, precision));
+    return fast_atan2_approximation(y, x, precision);
 }
 
 Expr fast_exp(const Expr &x_full) {
