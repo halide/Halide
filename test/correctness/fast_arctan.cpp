@@ -17,8 +17,7 @@ int main(int argc, char **argv) {
         {Halide::MAE_1e_3, 1e-3f},
         {Halide::MAE_1e_4, 1e-4f},
         {Halide::MAE_1e_5, 1e-5f},
-        {Halide::MAE_1e_6, 1e-6f}
-    };
+        {Halide::MAE_1e_6, 1e-6f}};
 
     for (Prec precision : precisions_to_test) {
         fprintf(stderr, "\nTesting for precision %e...\n", precision.epsilon);
