@@ -22,15 +22,19 @@ if args.func == "atan":
 elif args.func == "sin":
     func = np.sin
     exponents = 1 + np.arange(order) * 2
-    lower, upper = 0.0, np.pi
+    lower, upper = 0.0, np.pi / 2
 elif args.func == "cos":
     func = np.cos
     exponents = np.arange(order) * 2
-    lower, upper = 0.0, np.pi
+    lower, upper = 0.0, np.pi / 2
 elif args.func == "exp":
     func = lambda x: np.exp(x)
     exponents = np.arange(order)
-    lower, upper = -np.log(2), np.log(2)
+    lower, upper = 0, np.log(2)
+elif args.func == "log":
+    func = lambda x: np.log(x + 1.0)
+    exponents = np.arange(order)
+    lower, upper = 0, np.log(2)
 else:
     print("Unknown function:", args.func)
     exit(1)
@@ -90,12 +94,20 @@ print(f"mse: {mean_loss:40.27f}  max abs error: {max_abs_error:20.17f}")
 print()
 print(f"// Coefficients with max error: {max_abs_error:.4e}")
 for i, (e, c) in enumerate(zip(exponents, coeffs)):
-    print(f"const float c_{e}({c:.12e}f);")
+    print(f"const float c_{e}({c:+.12e}f);")
 print()
+
+print()
+print(f"// Coefficients with max error: {max_abs_error:.4e}")
+print("const float coef[] = {");
+for i, (e, c) in enumerate(reversed(list(zip(exponents, coeffs)))):
+    print(f"    {c:+.12e}, // * x^{e}")
+print("};\n")
+
 print()
 print(f"// Coefficients with max error: {max_abs_error:.4e}")
 for i, (e, c) in enumerate(zip(exponents, coeffs)):
-    print(f"c.push_back({c:.12e}f);")
+    print(f"c.push_back({c:+.12e}f);")
 print()
 print("exponent:", exponents)
 
