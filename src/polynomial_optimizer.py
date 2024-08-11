@@ -1,6 +1,8 @@
 import numpy as np
 import argparse
 
+np.set_printoptions(linewidth=3000)
+
 parser = argparse.ArgumentParser()
 parser.add_argument("func")
 parser.add_argument("order", type=int)
@@ -50,28 +52,30 @@ loss_history = np.zeros((lstsq_iterations, 2))
 # We will iteratively adjust the weights to put more focus on the parts where it goes wrong.
 weight = np.ones_like(target)
 
-for i in range(lstsq_iterations):
-    norm_weight = weight / np.mean(weight)
-    coeffs, residuals, rank, s = np.linalg.lstsq(powers * norm_weight[:,None], target * norm_weight, rcond=None)
-    if i == 0:
-        init_coeffs = coeffs.copy()
+try:
+    for i in range(lstsq_iterations):
+        norm_weight = weight / np.mean(weight)
+        coeffs, residuals, rank, s = np.linalg.lstsq(powers * norm_weight[:,None], target * norm_weight, rcond=None)
+        if i == 0:
+            init_coeffs = coeffs.copy()
 
-    y_hat = np.sum((powers * coeffs)[:,::-1], axis=-1)
-    diff = y_hat - target
-    abs_diff = np.abs(diff)
-    max_abs_error = np.amax(np.abs(diff))
-    if i % 10 == 0:
-        print("coefficients:", coeffs, f"  MaxAE: {max_abs_error:20.17f}  mean weight: {weight.mean():10.8f}")
-    norm_abs_diff = abs_diff / np.mean(abs_diff)
-    p = i / lstsq_iterations
-    p = min(p * 1.25, 1.0)
-    weight += np.power(norm_abs_diff, 2 + int(loss_power * p) // 2 * 2)
+        y_hat = np.sum((powers * coeffs)[:,::-1], axis=-1)
+        diff = y_hat - target
+        abs_diff = np.abs(diff)
+        max_abs_error = np.amax(np.abs(diff))
+        if i % 10 == 0:
+            print("coefficients:", coeffs, f"  MaxAE: {max_abs_error:20.17f}  mean weight: {weight.mean():10.8f}")
+        norm_abs_diff = abs_diff / np.mean(abs_diff)
+        p = i / lstsq_iterations
+        p = min(np.sqrt(p) * 1.25, 1.0)
+        weight += np.power(norm_abs_diff, 2 + int(loss_power * p) // 2 * 2)
 
-    loss = np.power(diff, loss_power)
-    loss_history[i, 0] = np.mean(loss)
-    loss_history[i, 1] = max_abs_error
+        loss = np.power(diff, loss_power)
+        loss_history[i, 0] = np.mean(loss)
+        loss_history[i, 1] = max_abs_error
 
-
+except KeyboardInterrupt:
+    print("Interrupted")
 
 
 print(coeffs)
@@ -97,7 +101,7 @@ print("exponent:", exponents)
 
 import matplotlib.pyplot as plt
 
-fig, ax = plt.subplots(5, figsize=(6, 7))
+fig, ax = plt.subplots(5, figsize=(5.5, 8))
 ax[0].set_title("Comparison of exact and approximate " + args.func)
 ax[0].plot(X, target, label=args.func)
 ax[0].plot(X, y_hat, label='approx')
@@ -128,8 +132,9 @@ ax[3].set_xlim(lower, upper)
 ax[3].legend()
 
 ax[4].set_title("Maximal Absolute Error progression during optimization")
-ax[4].loglog(loss_history[:,1], label='MaxAE')
-ax[4].axvline(x=lstsq_iterations, linestyle=':', color='k')
+ax[4].semilogx(1 + np.arange(loss_history.shape[0]), loss_history[:,1], label='MaxAE')
+ax[4].set_xlim(1, loss_history.shape[0] + 1)
+ax[4].axhline(y=loss_history[0,1], linestyle=':', color='k')
 ax[4].grid()
 ax[4].legend()
 plt.tight_layout()
