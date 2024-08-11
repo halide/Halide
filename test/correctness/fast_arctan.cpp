@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
             Var xo, xi;
             Var yo, yi;
             atan_f.never_partition_all();
-            atan_f.gpu_tile(x, xo, xi, 512, TailStrategy::ShiftInwards);
+            atan_f.gpu_tile(x, xo, xi, 256, TailStrategy::ShiftInwards);
         } else {
             atan_f.vectorize(x, 8);
         }
