@@ -34,8 +34,8 @@ int main(int argc, char **argv) {
         atan_ref.never_partition_all();
         atan2_ref.never_partition_all();
 
-        atan_f.gpu_tile(x, xo, xi, 512, TailStrategy::ShiftInwards);
-        atan_ref.gpu_tile(x, xo, xi, 512, TailStrategy::ShiftInwards);
+        atan_f.gpu_tile(x, xo, xi, 256, TailStrategy::ShiftInwards);
+        atan_ref.gpu_tile(x, xo, xi, 256, TailStrategy::ShiftInwards);
 
         atan2_f.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
         atan2_ref.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
