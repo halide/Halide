@@ -13,11 +13,11 @@ int main(int argc, char **argv) {
         ApproximationPrecision precision;
         float epsilon;
     } precisions_to_test[] = {
-        {Halide::MAE_1e_2, 1e-2f},
-        {Halide::MAE_1e_3, 1e-3f},
-        {Halide::MAE_1e_4, 1e-4f},
-        {Halide::MAE_1e_5, 1e-5f},
-        {Halide::MAE_1e_6, 1e-6f}};
+        {ApproximationPrecision::MAE_1e_2, 1e-2f},
+        {ApproximationPrecision::MAE_1e_3, 1e-3f},
+        {ApproximationPrecision::MAE_1e_4, 1e-4f},
+        {ApproximationPrecision::MAE_1e_5, 1e-5f},
+        {ApproximationPrecision::MAE_1e_6, 1e-6f}};
 
     for (Prec precision : precisions_to_test) {
         fprintf(stderr, "\nTesting for precision %e...\n", precision.epsilon);
