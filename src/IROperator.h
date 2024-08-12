@@ -983,7 +983,7 @@ Expr fast_sin(const Expr &x);
 Expr fast_cos(const Expr &x);
 // @}
 
-enum ApproximationPrecision {
+enum class ApproximationPrecision {
     // Maximum Absolute error
     MAE_1e_2,
     MAE_1e_3,
@@ -1000,15 +1000,15 @@ enum ApproximationPrecision {
     Poly7,
     Poly8
 };
-/** Fast vectorizable approximation for arctan for Float(32).
+/** Fast vectorizable approximations for arctan for Float(32).
  * Desired precision can be specified as either a maximum absolute error (MAE) or
  * the number of terms in the polynomial approximation (see the ApproximationPrecision enum).
  * Note: the polynomial uses odd powers, so the number of terms is not the degree of the polynomial.
  * Note: Poly8 is only useful to increase precision for atan, and not for atan2.
  */
 // @{
-Expr fast_atan(const Expr &x, ApproximationPrecision precision = MAE_1e_5);
-Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = MAE_1e_5);
+Expr fast_atan(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::MAE_1e_5);
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = ApproximationPrecision::MAE_1e_5);
 // @}
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
