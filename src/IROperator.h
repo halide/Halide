@@ -1005,6 +1005,7 @@ enum class ApproximationPrecision {
  * the number of terms in the polynomial approximation (see the ApproximationPrecision enum).
  * Note: the polynomial uses odd powers, so the number of terms is not the degree of the polynomial.
  * Note: Poly8 is only useful to increase precision for atan, and not for atan2.
+ * Note: The performance of this functions seem to be not reliably faster on WebGPU (for now, August 2024).
  */
 // @{
 Expr fast_atan(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::MAE_1e_5);
