@@ -180,6 +180,7 @@ function(_Halide_invoke_generator)
     set(compiler_log_extension ".halide_compiler_log")
     set(featurization_extension ".featurization")
     set(function_info_header_extension ".function_info.h")
+    set(hlpipe_extension ".hlpipe")
     set(llvm_assembly_extension ".ll")
     set(python_extension_extension ".py.cpp")
     set(pytorch_wrapper_extension ".pytorch.h")
@@ -383,6 +384,7 @@ function(add_halide_library TARGET)
         COMPILER_LOG
         FEATURIZATION
         FUNCTION_INFO_HEADER
+        HLPIPE
         LLVM_ASSEMBLY
         PYTHON_EXTENSION
         PYTORCH_WRAPPER
