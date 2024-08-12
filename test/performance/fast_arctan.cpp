@@ -38,8 +38,8 @@ int main(int argc, char **argv) {
     if (target.has_gpu_feature()) {
         atan_ref.never_partition_all();
         atan2_ref.never_partition_all();
-        atan_ref.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
-        atan2_ref.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
+        atan_ref.gpu_tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::ShiftInwards);
+        atan2_ref.gpu_tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::ShiftInwards);
     } else {
         atan_ref.vectorize(x, 8);
         atan2_ref.vectorize(x, 8);
@@ -74,8 +74,8 @@ int main(int argc, char **argv) {
         if (target.has_gpu_feature()) {
             atan_f.never_partition_all();
             atan2_f.never_partition_all();
-            atan_f.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
-            atan2_f.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
+            atan_f.gpu_tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::ShiftInwards);
+            atan2_f.gpu_tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::ShiftInwards);
         } else {
             atan_f.vectorize(x, 8);
             atan2_f.vectorize(x, 8);
