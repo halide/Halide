@@ -1416,7 +1416,7 @@ Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precisio
     const float pi_over_two = 1.57079632679489661923f;
     Expr x;
     // if x > 1 -> atan(x) = Pi/2 - atan(1/x)
-    Expr x_gt_1 = x_full > 1.0f;
+    Expr x_gt_1 = abs(x_full) > 1.0f;
     if (between_m1_and_p1) {
         x = x_full;
     } else {
@@ -1424,6 +1424,8 @@ Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precisio
     }
 
     // Coefficients obtained using src/polynomial_optimizer.py
+    // Note that the maximal errors are computed with numpy with double precision.
+    // The real errors are a bit larger with single-precision floats (see correctness/fast_arctan.cpp).
     std::vector<float> c;
     if (precision == MAE_1e_2 || precision == Poly2) {
         // Coefficients with max error: 4.9977e-03
@@ -1486,38 +1488,28 @@ Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precisio
     result *= x;
 
     if (!between_m1_and_p1) {
-        result = select(x_gt_1, pi_over_two - result, result);
+        result = select(x_gt_1, select(x_full < 0, -pi_over_two, pi_over_two) - result, result);
     }
     return common_subexpression_elimination(result);
 }
 Expr fast_atan(const Expr &x_full, ApproximationPrecision precision) {
-    // LLVM has similar fast expansions of atan when compiling to CUDA.
-    // Expr default_is_fast = target_has_feature(Target::CUDA);
-    // TODO: above is incorrect, as it needs to be actually scheduled on GPU as well.
-    // return select(default_is_fast, atan(x_full), fast_atan_approximation(x_full, precision, false));
     return fast_atan_approximation(x_full, precision, false);
 }
 
-Expr fast_atan2_approximation(const Expr &y, const Expr &x, ApproximationPrecision precision) {
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) {
     const float pi(3.14159265358979323846f);
     const float pi_over_two = 1.57079632679489661923f;
-    // atan2(y, x) =
-    //
-    // atan2(y > 0, x = +-0) ->  Pi/2
-    // atan2(y < 0, x = +-0) -> -Pi/2
-    // atan2(y = +-0, x < +0) -> +-Pi
-    // atan2(y = +-0, x >= +0) -> +-0
-    //
-    // atan2(y >= 0, x < 0) ->  Pi + atan(y/x)
-    // atan2(y <  0, x < 0) -> -Pi + atan(y/x)
-    // atan2(y, x > 0) -> atan(y/x)
-    //
-    // and then a bunch of code for dealing with infinities.
-#if 1
+    // Making sure we take the ratio of the biggest number by the smallest number (in absolute value)
+    // will always give us a number between -1 and +1, which is the range over which the approximation
+    // works well. We can therefore also skip the inversion logic in the fast_atan_approximation function
+    // by passing true for "between_m1_and_p1". This increases both speed (1 division instead of 2) and
+    // numerical precision.
     Expr swap = abs(y) > abs(x);
     Expr atan_input = select(swap, x, y) / select(swap, y, x);
     Expr ati = fast_atan_approximation(atan_input, precision, true);
     Expr at = select(swap, select(atan_input >= 0.0f, pi_over_two, -pi_over_two) - ati, ati);
+    // This select statement is literally taken over from the definition on Wikipedia.
+    // There might be optimizations to be done here, but I haven't tried that yet. -- Martijn
     Expr result = select(
         x > 0.0f, at,
         x < 0.0f && y >= 0.0f, at + pi,
@@ -1526,15 +1518,6 @@ Expr fast_atan2_approximation(const Expr &y, const Expr &x, ApproximationPrecisi
         x == 0.0f && y < 0.0f, -pi_over_two,
         0.0f);
     return common_subexpression_elimination(result);
-#endif
-}
-
-Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) {
-    // LLVM has similar fast expansions of atan2 when compiling to CUDA.
-    // Expr default_is_fast = target_has_feature(Target::CUDA);
-    // TODO: above is incorrect, as it needs to be actually scheduled on GPU as well.
-    // return select(default_is_fast, atan2(y, x), fast_atan2_approximation(y, x, precision));
-    return fast_atan2_approximation(y, x, precision);
 }
 
 Expr fast_exp(const Expr &x_full) {
