@@ -4,9 +4,6 @@
 # autoschedulers_gpu: this autoscheduler is expected to work for GPU targets
 # autoschedulers_cuda: this autoscheduler is expected to work on Cuda targets (but probably not other GPU targets)
 
-## Autoschedulers must always be built for the same target as libHalide.
-set(Halide_TARGET cmake)
-
 add_subdirectory(adams2019)
 if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
   add_subdirectory(anderson2021)

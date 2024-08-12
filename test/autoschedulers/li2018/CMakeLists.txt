@@ -2,6 +2,7 @@ add_halide_generator(li2018_demo_gradient.generator
                      SOURCES demo_generator.cpp)
 
 add_halide_library(li2018_demo_gradient FROM li2018_demo_gradient.generator
+                   TARGETS cmake
                    GENERATOR demo
                    FUNCTION_NAME demo
                    AUTOSCHEDULER Halide::Li2018

@@ -163,7 +163,13 @@ function(_add_halide_libraries TARGET)
         target_link_libraries(${TARGET} INTERFACE ${args_EXTERNS})
     endif()
 
-    if (NOT args_OMIT_C_BACKEND AND NOT Halide_CMAKE_TARGET MATCHES ";")
+    # AND NOT Halide_CMAKE_TARGET MATCHES ";" ??
+    if (NOT args_OMIT_C_BACKEND)
+        # The C backend basically ignores TARGETS (it emits a warning that the sources
+        # will be compiled with the current CMake toolchain)... but making matters worse,
+        # if you specify multiple targets here, you'll fail in compile_multitarget() because
+        # it wants object file to be generated. We'll just dodge all that by deliberately
+        # omitting the TARGETS argument here entirely.
         add_halide_library(${TARGET_CPP}
                            C_BACKEND
                            ${GRADIENT_DESCENT_OPT}
@@ -173,6 +179,8 @@ function(_add_halide_libraries TARGET)
                            NAMESPACE "${args_NAMESPACE}"
                            AUTOSCHEDULER "${args_AUTOSCHEDULER}"
                            USE_RUNTIME "${args_USE_RUNTIME}"
+                           # No: see comment above
+                           # TARGETS "${args_TARGETS}"
                            FEATURES "${args_FEATURES}"
                            PARAMS "${args_PARAMS}"
                            PLUGINS "${args_PLUGINS}"
@@ -573,6 +581,7 @@ set(metadata_tester_params
 # the metadata names are correctly emitted.
 if (${_USING_WASM})
     # wasm doesn't support multitargets
+    # TODO: currently, Halide_CMAKE_TARGET == Halide_HOST_TARGET when building for Emscripten; we should fix this
     set(MDT_TARGETS ${Halide_TARGET})
 elseif (Halide_CMAKE_TARGET MATCHES ";")
     # multiarch doesn't support multitargets
