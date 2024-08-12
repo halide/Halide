@@ -37,7 +37,7 @@ if (WITH_PYTHON_BINDINGS)
             COMMAND ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python3::Interpreter>" "${CMAKE_CURRENT_SOURCE_DIR}/test.py" $<TARGET_FILE:Halide::Li2018>
         )
 
-        set(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
+        set(PYTHONPATH "$<PATH:GET_PARENT_PATH,$<TARGET_FILE_DIR:Halide::Python>>")
         list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
         set_tests_properties(li2018_gradient_autoscheduler_test_py PROPERTIES
