@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
             Var xo, xi;
             Var yo, yi;
             atan2_f.never_partition_all();
-            atan2_f.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
+            atan2_f.gpu_tile(x, y, xo, yo, xi, yi, 32, 8, TailStrategy::ShiftInwards);
         } else {
             atan2_f.vectorize(x, 8);
         }
