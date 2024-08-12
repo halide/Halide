@@ -1427,29 +1427,29 @@ Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precisio
     // Note that the maximal errors are computed with numpy with double precision.
     // The real errors are a bit larger with single-precision floats (see correctness/fast_arctan.cpp).
     std::vector<float> c;
-    if (precision == MAE_1e_2 || precision == Poly2) {
+    if (precision == ApproximationPrecision::MAE_1e_2 || precision == ApproximationPrecision::Poly2) {
         // Coefficients with max error: 4.9977e-03
         c.push_back(9.724422672912e-01f);
         c.push_back(-1.920418089970e-01f);
-    } else if (precision == MAE_1e_3 || precision == Poly3) {
+    } else if (precision == ApproximationPrecision::MAE_1e_3 || precision == ApproximationPrecision::Poly3) {
         // Coefficients with max error: 6.1317e-04
         c.push_back(9.953639222909e-01f);
         c.push_back(-2.887227485229e-01f);
         c.push_back(7.937016196576e-02f);
-    } else if (precision == MAE_1e_4 || precision == Poly4) {
+    } else if (precision == ApproximationPrecision::MAE_1e_4 || precision == ApproximationPrecision::Poly4) {
         // Coefficients with max error: 8.1862e-05
         c.push_back(9.992146660828e-01f);
         c.push_back(-3.211839266848e-01f);
         c.push_back(1.462857116754e-01f);
         c.push_back(-3.900014954510e-02f);
-    } else if (precision == Poly5) {
+    } else if (precision == ApproximationPrecision::Poly5) {
         // Coefficients with max error: 1.1527e-05
         c.push_back(9.998664595623e-01f);
         c.push_back(-3.303069921053e-01f);
         c.push_back(1.801687249421e-01f);
         c.push_back(-8.517067470591e-02f);
         c.push_back(2.085217296632e-02f);
-    } else if (precision == MAE_1e_5 || precision == Poly6) {
+    } else if (precision == ApproximationPrecision::MAE_1e_5 || precision == ApproximationPrecision::Poly6) {
         // Coefficients with max error: 1.6869e-06
         c.push_back(9.999772493111e-01f);
         c.push_back(-3.326235741278e-01f);
@@ -1457,7 +1457,7 @@ Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precisio
         c.push_back(-1.164392687560e-01f);
         c.push_back(5.266159827071e-02f);
         c.push_back(-1.172481633666e-02f);
-    } else if (precision == MAE_1e_6 || precision == Poly7) {
+    } else if (precision == ApproximationPrecision::MAE_1e_6 || precision == ApproximationPrecision::Poly7) {
         // Coefficients with max error: 2.4856e-07
         c.push_back(9.999961151054e-01f);
         c.push_back(-3.331738028802e-01f);
@@ -1466,7 +1466,7 @@ Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precisio
         c.push_back(7.963167170570e-02f);
         c.push_back(-3.361110979599e-02f);
         c.push_back(6.814044980872e-03f);
-    } else if (precision == Poly8) {
+    } else if (precision == ApproximationPrecision::Poly8) {
         // Coefficients with max error: 3.8005e-08
         c.push_back(9.999993363468e-01f);
         c.push_back(-3.332986419645e-01f);
