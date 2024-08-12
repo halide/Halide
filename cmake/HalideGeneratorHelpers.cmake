@@ -96,6 +96,8 @@ function(add_halide_generator TARGET)
             add_executable(${gen} ALIAS ${TARGET})
             target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
 
+            _Halide_place_dll(${TARGET})
+
             if (NOT ARG_NO_DEFAULT_FLAGS AND NOT Halide_NO_DEFAULT_FLAGS)
                 # For crosscompiling builds, the Halide headers will be included using -isystem,
                 # which will cause all warnings to be ignored. This is not helpful, since
@@ -266,7 +268,6 @@ function(add_halide_library TARGET)
     else ()
         set(GENERATOR_CMD "${ARG_FROM}")
         set(GENERATOR_CMD_DEPS ${ARG_FROM})
-        _Halide_place_dll(${ARG_FROM})
     endif ()
 
     if (ARG_C_BACKEND)
