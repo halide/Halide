@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     struct Prec {
-        Halide::ApproximationPrecision precision;
+        ApproximationPrecision precision;
         float epsilon;
     } precisions_to_test[] = {
         {Halide::MAE_1e_2, 1e-2f},
@@ -24,8 +24,8 @@ int main(int argc, char **argv) {
         Func atan_f, atan2_f;
         Var x, y;
         const int steps = 1000;
-        Expr vx = (x - steps / 2) / float(steps);
-        Expr vy = (y - steps / 2) / float(steps);
+        Expr vx = (x - steps / 2) / float(steps / 8);
+        Expr vy = (y - steps / 2) / float(steps / 8);
 
         atan_f(x) = fast_atan(vx, precision.precision);
         if (target.has_gpu_feature()) {
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
         Buffer<float> atan_result = atan_f.realize({steps});
         float max_error = 0.0f;
         for (int i = 0; i < steps; ++i) {
-            const float x = (i - steps / 2) / float(steps);
+            const float x = (i - steps / 2) / float(steps / 8);
             const float atan_x = atan_result(i);
             const float atan_x_ref = atan(x);
             float abs_error = std::abs(atan_x_ref - atan_x);
@@ -66,9 +66,9 @@ int main(int argc, char **argv) {
         Buffer<float> atan2_result = atan2_f.realize({steps, steps});
         max_error = 0.0f;
         for (int i = 0; i < steps; ++i) {
-            const float x = (i - steps / 2) / float(steps);
+            const float x = (i - steps / 2) / float(steps / 8);
             for (int j = 0; j < steps; ++j) {
-                const float y = (j - steps / 2) / float(steps);
+                const float y = (j - steps / 2) / float(steps / 8);
                 const float atan2_x_y = atan2_result(i, j);
                 const float atan2_x_y_ref = atan2(x, y);
                 float abs_error = std::abs(atan2_x_y_ref - atan2_x_y);
