@@ -15,9 +15,8 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Func atan_f{"fast_atan"}, atan2_f{"fast_atan2"}, atan_ref{"atan_ref"}, atan2_ref{"atan2_ref"};
     Var x, y;
-    const int test_w = 512;
+    const int test_w = 256;
     const int test_h = 256;
 
     Expr t0 = x / float(test_w);
@@ -30,63 +29,99 @@ int main(int argc, char **argv) {
     Expr off = rdom / float(test_d) - 0.5f;
 
     float range = -10.0f;
-    atan_f(x, y) = sum(fast_atan(-range * t0 + (1 - t0) * range + off));
-    atan2_f(x, y) = sum(fast_atan2(-range * t0 + (1 - t0) * range + off,
-                                   -range * t1 + (1 - t1) * range));
+    Func atan_ref{"atan_ref"}, atan2_ref{"atan2_ref"};
     atan_ref(x, y) = sum(atan(-range * t0 + (1 - t0) * range + off));
     atan2_ref(x, y) = sum(atan2(-range * t0 + (1 - t0) * range + off, -range * t1 + (1 - t1) * range));
 
+    Var xo, xi;
+    Var yo, yi;
     if (target.has_gpu_feature()) {
-        Var xo, xi;
-        Var yo, yi;
-        atan_f.never_partition_all();
-        atan2_f.never_partition_all();
         atan_ref.never_partition_all();
         atan2_ref.never_partition_all();
-
-        atan_f.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
         atan_ref.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
-
-        atan2_f.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
         atan2_ref.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
     } else {
-        atan_f.vectorize(x, 8);
-        atan2_f.vectorize(x, 8);
         atan_ref.vectorize(x, 8);
         atan2_ref.vectorize(x, 8);
     }
 
+    Tools::BenchmarkConfig cfg = {0.2, 1.0};
     double scale = 1e9 / (double(test_w) * (test_h * test_d));
     // clang-format off
-    double t_fast_atan  = scale * benchmark([&]() {    atan_f.realize({test_w, test_h}); });
-    double t_fast_atan2 = scale * benchmark([&]() {   atan2_f.realize({test_w, test_h}); });
-    double t_atan       = scale * benchmark([&]() {  atan_ref.realize({test_w, test_h}); });
-    double t_atan2      = scale * benchmark([&]() { atan2_ref.realize({test_w, test_h}); });
+    double t_atan  = scale * benchmark([&]() {  atan_ref.realize({test_w, test_h}); }, cfg);
+    double t_atan2 = scale * benchmark([&]() { atan2_ref.realize({test_w, test_h}); }, cfg);
     // clang-format on
 
-    printf("atan: %f ns per pixel\n"
-           "fast_atan: %f ns per pixel\n"
-           "atan2: %f ns per pixel\n"
-           "fast_atan2: %f ns per pixel\n",
-           t_atan, t_fast_atan, t_atan2, t_fast_atan2);
-    if (target.has_gpu_feature()) {
-        if (t_atan * 1.10 < t_fast_atan) {
-            printf("fast_atan more than 10%% slower than atan on GPU.\n");
-            return 1;
+    struct Prec {
+        ApproximationPrecision precision;
+        float epsilon;
+        double atan_time{0.0f};
+        double atan2_time{0.0f};
+    } precisions_to_test[] = {
+        {ApproximationPrecision::MAE_1e_2, 1e-2f},
+        {ApproximationPrecision::MAE_1e_3, 1e-3f},
+        {ApproximationPrecision::MAE_1e_4, 1e-4f},
+        {ApproximationPrecision::MAE_1e_5, 1e-5f},
+        {ApproximationPrecision::MAE_1e_6, 1e-6f}};
+
+    for (Prec &precision : precisions_to_test) {
+        Func atan_f{"fast_atan"}, atan2_f{"fast_atan2"};
+
+        atan_f(x, y) = sum(fast_atan(-range * t0 + (1 - t0) * range + off, precision.precision));
+        atan2_f(x, y) = sum(fast_atan2(-range * t0 + (1 - t0) * range + off,
+                                       -range * t1 + (1 - t1) * range, precision.precision));
+
+        if (target.has_gpu_feature()) {
+            atan_f.never_partition_all();
+            atan2_f.never_partition_all();
+            atan_f.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
+            atan2_f.gpu_tile(x, y, xo, yo, xi, yi, 32, 16, TailStrategy::ShiftInwards);
+        } else {
+            atan_f.vectorize(x, 8);
+            atan2_f.vectorize(x, 8);
         }
-        if (t_atan2 * 1.10 < t_fast_atan2) {
-            printf("fast_atan2 more than 10%% slower than atan2 on GPU.\n");
-            return 1;
-        }
-    } else {
-        if (t_atan < t_fast_atan) {
+
+        // clang-format off
+        double t_fast_atan  = scale * benchmark([&]() {  atan_f.realize({test_w, test_h}); }, cfg);
+        double t_fast_atan2 = scale * benchmark([&]() { atan2_f.realize({test_w, test_h}); }, cfg);
+        // clang-format on
+        precision.atan_time = t_fast_atan;
+        precision.atan2_time = t_fast_atan2;
+    }
+
+    printf("                  atan: %f ns per atan\n", t_atan);
+    for (const Prec &precision : precisions_to_test) {
+        printf(" fast_atan (MAE %.0e): %f ns per atan (%4.1f%% faster)  [per invokation: %f ms]\n",
+               precision.epsilon, precision.atan_time, 100.0f * (1.0f - precision.atan_time / t_atan),
+               precision.atan_time / scale * 1e3);
+    }
+    printf("\n");
+    printf("                  atan2: %f ns per atan2\n", t_atan2);
+    for (const Prec &precision : precisions_to_test) {
+        printf(" fast_atan2 (MAE %.0e): %f ns per atan2 (%4.1f%% faster)  [per invokation: %f ms]\n",
+               precision.epsilon, precision.atan2_time, 100.0f * (1.0f - precision.atan2_time / t_atan2),
+               precision.atan2_time / scale * 1e3);
+    }
+
+    int num_passed = 0;
+    int num_tests = 0;
+    for (const Prec &precision : precisions_to_test) {
+        num_tests += 2;
+        if (t_atan < precision.atan_time) {
             printf("fast_atan is not faster than atan\n");
-            return 1;
+        } else {
+            num_passed++;
         }
-        if (t_atan2 < t_fast_atan2) {
+        if (t_atan2 < precision.atan2_time) {
             printf("fast_atan2 is not faster than atan2\n");
-            return 1;
+        } else {
+            num_passed++;
         }
+    }
+
+    if (num_passed < num_tests) {
+        printf("Not all measurements were faster for the fast variants of the atan/atan2 funcions.\n");
+        return 1;
     }
 
     printf("Success!\n");
