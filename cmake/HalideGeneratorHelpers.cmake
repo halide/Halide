@@ -760,14 +760,11 @@ endfunction()
 function(_Halide_gengen_ensure)
     # Create a Generator that is GenGen.cpp and nothing else; all it can do is generate a runtime.
     if (NOT TARGET _Halide_gengen)
-
         # add_executable requires at least one source file for some
         # configs (e.g. Xcode), because, uh, reasons, so we'll create
         # an empty one here to satisfy it
         set(empty "${CMAKE_CURRENT_BINARY_DIR}/_Halide_gengen.empty.cpp")
-        if (NOT EXISTS "${empty}")
-            file(WRITE "${empty}" "/* nothing */\n")
-        endif ()
+        file(CONFIGURE OUTPUT "${empty}" CONTENT "/* nothing */\n")
 
         add_executable(_Halide_gengen "${empty}")
         target_link_libraries(_Halide_gengen PRIVATE Halide::Generator)
