@@ -57,7 +57,7 @@ function(add_halide_generator TARGET)
         set(ARG_SOURCES "${ARG_UNPARSED_ARGUMENTS}")
     endif ()
 
-    _Halide_try_load_generators()
+    _Halide_try_load_generators("${ARG_PACKAGE_NAME}")
 
     # Communicate found information to the caller
     set(${ARG_PACKAGE_NAME}_FOUND "${${ARG_PACKAGE_NAME}_FOUND}" PARENT_SCOPE)
@@ -144,27 +144,24 @@ function(add_halide_generator TARGET)
     endif ()
 endfunction()
 
-# NOTE: this function must only be called by add_halide_generator
-# since it reads from its scope.
-function(_Halide_try_load_generators)
+function(_Halide_try_load_generators package_name)
     # Don't repeatedly run the search for the tools package.
-    if (NOT DEFINED ${ARG_PACKAGE_NAME}_FOUND)
+    if (NOT DEFINED ${package_name}_FOUND)
         # Some toolchains, like Emscripten, try to disable finding packages
         # outside their sysroots, but we always want to find the native
         # generators. Setting CMAKE_FIND_ROOT_PATH_BOTH here overrides
         # the toolchain search preference. This is okay since a user can
-        # always override this call by setting ${ARG_PACKAGE_NAME}_ROOT.
-        find_package(${ARG_PACKAGE_NAME} QUIET
-                     CMAKE_FIND_ROOT_PATH_BOTH)
+        # always override this call by setting ${package_name}_ROOT.
+        find_package(${package_name} QUIET CMAKE_FIND_ROOT_PATH_BOTH)
 
         # Communicate found information to the caller
-        set(${ARG_PACKAGE_NAME}_FOUND "${${ARG_PACKAGE_NAME}_FOUND}" PARENT_SCOPE)
+        set(${package_name}_FOUND "${${package_name}_FOUND}" PARENT_SCOPE)
 
-        if (NOT ${ARG_PACKAGE_NAME}_FOUND AND CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
+        if (NOT ${package_name}_FOUND AND CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
             message(WARNING
-                    "'${ARG_PACKAGE_NAME}' was not found and it looks like you "
+                    "'${package_name}' was not found and it looks like you "
                     "are cross-compiling without an emulator. This is likely to "
-                    "fail. Please set -D${ARG_PACKAGE_NAME}_ROOT=... at the CMake "
+                    "fail. Please set -D${package_name}_ROOT=... at the CMake "
                     "command line to the build directory of a host-built ${PROJECT_NAME}.")
         endif ()
     endif ()
