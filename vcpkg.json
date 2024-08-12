@@ -1,0 +1,207 @@
+{
+  "name": "halide",
+  "version": "19.0.0",
+  "description": "Halide is a programming language designed to make it easier to write high-performance image and array processing code on modern machines.",
+  "homepage": "https://github.com/halide/Halide",
+  "license": "MIT",
+  "supports": "!uwp",
+  "builtin-baseline": "4fa096bce24561bf869e56384e655f4b2bab71a8",
+  "default-features": [
+    "jit",
+    "serialization"
+  ],
+  "dependencies": [
+    {
+      "name": "llvm",
+      "default-features": false,
+      "features": [
+        "clang",
+        "enable-eh",
+        "enable-rtti",
+        "lld",
+        "target-webassembly",
+        "target-x86",
+        "tools"
+      ]
+    },
+    "spirv-headers"
+  ],
+  "features": {
+    "developer": {
+      "description": "Include all Halide features to facilitate development",
+      "dependencies": [
+        {
+          "name": "halide",
+          "default-features": false,
+          "features": [
+            "python-bindings",
+            "serialization",
+            "target-all",
+            "tests",
+            "wasm-executor"
+          ]
+        },
+        {
+          "name": "llvm",
+          "default-features": false,
+          "features": [
+            "clang-tools-extra",
+            "enable-assertions"
+          ]
+        }
+      ]
+    },
+    "jit": {
+      "description": "Include targets needed to compile for the library architecture",
+      "dependencies": [
+        {
+          "name": "halide",
+          "default-features": false,
+          "features": [
+            "target-arm"
+          ],
+          "platform": "arm32"
+        },
+        {
+          "name": "halide",
+          "default-features": false,
+          "features": [
+            "target-aarch64"
+          ],
+          "platform": "arm64"
+        },
+        {
+          "name": "halide",
+          "default-features": false,
+          "features": [
+            "target-all"
+          ],
+          "platform": "!x86 & !x64 & !arm"
+        }
+      ]
+    },
+    "python-bindings": {
+      "description": "Halide's native Python module (not the whole pip package)",
+      "dependencies": [
+        "pybind11"
+      ]
+    },
+    "serialization": {
+      "description": "Include experimental Serialization/Deserialization code",
+      "dependencies": [
+        "flatbuffers"
+      ]
+    },
+    "target-aarch64": {
+      "description": "Include AArch64 target",
+      "dependencies": [
+        {
+          "name": "llvm",
+          "default-features": false,
+          "features": [
+            "target-aarch64"
+          ]
+        }
+      ]
+    },
+    "target-all": {
+      "description": "Include all targets",
+      "dependencies": [
+        {
+          "name": "halide",
+          "default-features": false,
+          "features": [
+            "target-aarch64",
+            "target-arm",
+            "target-hexagon",
+            "target-powerpc",
+            "target-riscv"
+          ]
+        }
+      ]
+    },
+    "target-arm": {
+      "description": "Include ARM target",
+      "dependencies": [
+        {
+          "name": "llvm",
+          "default-features": false,
+          "features": [
+            "target-arm"
+          ]
+        }
+      ]
+    },
+    "target-hexagon": {
+      "description": "Include Hexagon target",
+      "dependencies": [
+        {
+          "name": "llvm",
+          "default-features": false,
+          "features": [
+            "target-hexagon"
+          ]
+        }
+      ]
+    },
+    "target-nvptx": {
+      "description": "Include NVPTX target",
+      "dependencies": [
+        {
+          "name": "llvm",
+          "default-features": false,
+          "features": [
+            "target-nvptx"
+          ]
+        }
+      ]
+    },
+    "target-powerpc": {
+      "description": "Include PowerPC target",
+      "dependencies": [
+        {
+          "name": "llvm",
+          "default-features": false,
+          "features": [
+            "target-powerpc"
+          ]
+        }
+      ]
+    },
+    "target-riscv": {
+      "description": "Include RISCV target",
+      "dependencies": [
+        {
+          "name": "llvm",
+          "default-features": false,
+          "features": [
+            "target-riscv"
+          ]
+        }
+      ]
+    },
+    "tests": {
+      "description": "Include dependencies needed for testing Halide",
+      "dependencies": [
+        {
+          "name": "cuda",
+          "platform": "(windows & x64 & !uwp & !xbox) | (linux & x64) | (linux & arm64)"
+        },
+        "eigen3",
+        "libjpeg-turbo",
+        "libpng",
+        "openblas",
+        {
+          "name": "opencl",
+          "platform": "(windows & x64 & !uwp & !xbox) | (linux & x64) | (linux & arm64)"
+        }
+      ]
+    },
+    "wasm-executor": {
+      "description": "Include built-in WASM executor",
+      "dependencies": [
+        "wabt"
+      ]
+    }
+  }
+}
