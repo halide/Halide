@@ -541,6 +541,7 @@ Target::Feature get_host_vulkan_capability(Target t) {
     return cap;
 }
 
+// Keep this list in sync in HalideGeneratorHelpers.cmake
 const std::map<std::string, Target::OS> os_name_map = {
     {"os_unknown", Target::OSUnknown},
     {"linux", Target::Linux},
@@ -562,6 +563,7 @@ bool lookup_os(const std::string &tok, Target::OS &result) {
     return false;
 }
 
+// Keep this list in sync in HalideGeneratorHelpers.cmake
 const std::map<std::string, Target::Arch> arch_name_map = {
     {"arch_unknown", Target::ArchUnknown},
     {"x86", Target::X86},

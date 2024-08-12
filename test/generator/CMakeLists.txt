@@ -163,8 +163,7 @@ function(_add_halide_libraries TARGET)
         target_link_libraries(${TARGET} INTERFACE ${args_EXTERNS})
     endif()
 
-
-    if (NOT args_OMIT_C_BACKEND)
+    if (NOT args_OMIT_C_BACKEND AND NOT Halide_CMAKE_TARGET MATCHES ";")
         add_halide_library(${TARGET_CPP}
                            C_BACKEND
                            ${GRADIENT_DESCENT_OPT}
@@ -288,7 +287,7 @@ function(_add_halide_aot_tests NAME)
                           DEPS ${args_HALIDE_LIBRARIES} ${args_HALIDE_RUNTIME} ${args_DEPS}
                           INCLUDES ${args_INCLUDES}
                           GROUPS ${args_GROUPS})
-        if (NOT args_OMIT_C_BACKEND)
+        if (NOT args_OMIT_C_BACKEND AND TARGET "${TARGET_CPP}")
             set(HALIDE_LIBRARIES_CPP "")
             foreach (hl IN LISTS args_HALIDE_LIBRARIES)
                 list(APPEND HALIDE_LIBRARIES_CPP "${hl}_cpp")
@@ -574,8 +573,10 @@ set(metadata_tester_params
 # the metadata names are correctly emitted.
 if (${_USING_WASM})
     # wasm doesn't support multitargets
-    # TODO: currently, Halide_CMAKE_TARGET == Halide_HOST_TARGET when building for Emscripten; we should fix this
     set(MDT_TARGETS ${Halide_TARGET})
+elseif (Halide_CMAKE_TARGET MATCHES ";")
+    # multiarch doesn't support multitargets
+    set(MDT_TARGETS cmake)
 else()
     set(MDT_TARGETS cmake-no_bounds_query cmake)
 endif()
@@ -622,7 +623,7 @@ if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windo
 endif ()
 
 # multitarget and wasm don't mix well
-if (NOT _USING_WASM)
+if (NOT _USING_WASM AND NOT Halide_CMAKE_TARGET MATCHES ";")
     # multitarget_aottest.cpp
     # multitarget_generator.cpp
     _add_halide_libraries(multitarget

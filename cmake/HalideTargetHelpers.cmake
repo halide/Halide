@@ -36,22 +36,36 @@ function(_Halide_host_target OUTVAR)
 endfunction()
 
 function(_Halide_cmake_target OUTVAR)
-    _Halide_target_arch_os("${CMAKE_SYSTEM_PROCESSOR}" "${CMAKE_SYSTEM_NAME}")
-
     math(EXPR bits "8 * ${CMAKE_SIZEOF_VOID_P}")
-
-    set(${OUTVAR} "${arch}-${bits}-${os}" PARENT_SCOPE)
+    if (CMAKE_OSX_ARCHITECTURES)
+        set(${OUTVAR} "")
+        foreach (processor IN LISTS CMAKE_OSX_ARCHITECTURES)
+            _Halide_target_arch_os("${processor}" "${CMAKE_SYSTEM_NAME}")
+            list(APPEND ${OUTVAR} "${arch}-${bits}-${os}")
+        endforeach ()
+        list(REMOVE_DUPLICATES ${OUTVAR}) # defensive
+    else ()
+        _Halide_target_arch_os("${CMAKE_SYSTEM_PROCESSOR}" "${CMAKE_SYSTEM_NAME}")
+        set(${OUTVAR} "${arch}-${bits}-${os}")
+    endif ()
+    set(${OUTVAR} "${${OUTVAR}}" PARENT_SCOPE)
 endfunction()
 
 ##
 # Set Halide `host` and `cmake` meta-target values
 ##
 
-_Halide_host_target(Halide_HOST_TARGET)
+if (NOT DEFINED Halide_HOST_TARGET)
+    _Halide_host_target(Halide_HOST_TARGET)
+endif ()
+
 set(Halide_HOST_TARGET "${Halide_HOST_TARGET}"
     CACHE STRING "Halide target triple matching the Halide library")
 
-_Halide_cmake_target(Halide_CMAKE_TARGET)
+if (NOT DEFINED Halide_CMAKE_TARGET)
+    _Halide_cmake_target(Halide_CMAKE_TARGET)
+endif ()
+
 set(Halide_CMAKE_TARGET "${Halide_CMAKE_TARGET}"
     CACHE STRING "Halide target triple matching the CMake target")
 
@@ -65,7 +79,7 @@ if (NOT DEFINED Halide_TARGET)
     elseif (Halide_HOST_TARGET STREQUAL Halide_CMAKE_TARGET)
         set(Halide_TARGET "host")
     else ()
-        set(Halide_TARGET "${Halide_CMAKE_TARGET}")
+        set(Halide_TARGET "cmake")
     endif ()
 endif ()
 

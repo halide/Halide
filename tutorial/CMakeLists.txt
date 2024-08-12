@@ -162,13 +162,13 @@ else ()
     target_link_libraries(lesson_16_rgb_generate PRIVATE Halide::Generator)
 
     add_halide_library(brighten_planar FROM lesson_16_rgb_generate
-                       GENERATOR brighten PARAMS layout=planar)
+                       TARGETS cmake GENERATOR brighten PARAMS layout=planar)
     add_halide_library(brighten_interleaved FROM lesson_16_rgb_generate
-                       GENERATOR brighten PARAMS layout=interleaved)
+                       TARGETS cmake GENERATOR brighten PARAMS layout=interleaved)
     add_halide_library(brighten_either FROM lesson_16_rgb_generate
-                       GENERATOR brighten PARAMS layout=either)
+                       TARGETS cmake GENERATOR brighten PARAMS layout=either)
     add_halide_library(brighten_specialized FROM lesson_16_rgb_generate
-                       GENERATOR brighten PARAMS layout=specialized)
+                       TARGETS cmake GENERATOR brighten PARAMS layout=specialized)
 
     add_executable(lesson_16_rgb_run lesson_16_rgb_run.cpp)
     target_link_libraries(lesson_16_rgb_run PRIVATE
@@ -192,9 +192,11 @@ if (TARGET Halide::Mullapudi2016)
     target_link_libraries(lesson_21_auto_scheduler_generate PRIVATE Halide::Generator)
 
     add_halide_library(auto_schedule_false FROM lesson_21_auto_scheduler_generate
+                       TARGETS cmake
                        GENERATOR auto_schedule_gen)
     add_halide_library(auto_schedule_true FROM lesson_21_auto_scheduler_generate
                        AUTOSCHEDULER Halide::Mullapudi2016
+                       TARGETS cmake
                        GENERATOR auto_schedule_gen
                        PARAMS autoscheduler.parallelism=32
                               autoscheduler.last_level_cache_size=16777216

@@ -1,8 +1,3 @@
-if (NOT TARGET Halide::Li2018)
-    message(STATUS "Disabling li2018 tests for static Halide")
-    return()
-endif ()
-
 add_halide_generator(li2018_demo_gradient.generator
                      SOURCES demo_generator.cpp)
 
