@@ -249,17 +249,9 @@ function(add_halide_library TARGET)
             message(FATAL_ERROR "You must call find_package(Python3) in your CMake code in order to use this rule with Python Generators.")
         endif ()
 
-        if (CMAKE_VERSION VERSION_LESS 3.24)
-            set(arg_sep "")
-        else ()
-            set(arg_sep "--")
-        endif ()
-
-        set(
-            GENERATOR_CMD
-            ${CMAKE_COMMAND} -E env "PYTHONPATH=$<TARGET_FILE_DIR:Halide::Python>/.." ${arg_sep}
-            ${Halide_PYTHON_LAUNCHER}
-            "$<TARGET_FILE:Python3::Interpreter>" $<SHELL_PATH:${py_src}>
+        set(GENERATOR_CMD
+            ${CMAKE_COMMAND} -E env "PYTHONPATH=$<PATH:GET_PARENT_PATH,$<TARGET_FILE_DIR:Halide::Python>>" --
+            ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python3::Interpreter>" $<SHELL_PATH:${py_src}>
         )
         set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python ${py_src})
     else ()
