@@ -1910,7 +1910,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(const string &buffer, Halide::Type t
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, Expr index) {
     // Promote index to 64-bit on targets that use 64-bit pointers.
-#if LLVM_VERSION >= 190
+#if LLVM_VERSION >= 200
     const llvm::DataLayout &d = module->getDataLayout();
 #else
     const llvm::DataLayout d(module.get());
@@ -1955,7 +1955,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     }
 
     // Promote index to 64-bit on targets that use 64-bit pointers.
-#if LLVM_VERSION >= 190
+#if LLVM_VERSION >= 200
     const llvm::DataLayout &d = module->getDataLayout();
 #else
     const llvm::DataLayout d(module.get());
@@ -3294,7 +3294,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::undef)) {
         user_error << "undef not eliminated before code generation. Please report this as a Halide bug.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
-#if LLVM_VERSION >= 190
+#if LLVM_VERSION >= 200
         const llvm::DataLayout &d = module->getDataLayout();
 #else
         const llvm::DataLayout d(module.get());
@@ -4478,7 +4478,7 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     Value *size = ConstantInt::get(i32_t, n);
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
     int align = native_vector_bits() / 8;
-#if LLVM_VERSION >= 190
+#if LLVM_VERSION >= 200
     const llvm::DataLayout &d = module->getDataLayout();
 #else
     const llvm::DataLayout d(module.get());
