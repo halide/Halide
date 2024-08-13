@@ -1,16 +1,57 @@
+# Original author: Martijn Courteaux
+
+# This script is used to fit polynomials to "non-trivial" functions (goniometric, transcendental, etc).
+# A lot of these functions can be approximated using conventional Taylor expansion, but these
+# minimize the error close to the point around which the Taylor expansion is made. Typically, when
+# implementing functions numerically, there is a range in which you want to use those (while exploiting
+# properties such as symmetries to get the full range). Therefore, it is beneficial to try to create a
+# polynomial approximation which is specifically optimized to work well in the range of interest (lower, upper).
+# Typically, this means that the error will be spread more evenly across the range of interest, and
+# precision will be lost for the range close to the point around which you'd normally develop a Taylor
+# expansion.
+#
+# This script provides an iterative approach to optimize these polynomials of given degree for a given
+# function. The key element of this approach is to solve the least-squared error problem, but by iteratively
+# adjusting the weights to approximate other loss functions instead of simply the MSE. If for example you
+# whish to create an approximation which reduces the Maximal Absolute Error (MAE) across the range,
+# The loss function actually could be conceptually approximated by E[abs(x - X)^(100)]. The high power will
+# cause the biggest difference to be the one that "wins" because that error will be disproportionately
+# magnified (compared to the smaller errors).
+#
+# This mechanism of the absolute difference raising to a high power is used to update the weights used
+# during least-squared error solving.
+#
+# The coefficients of fast_atan are produced by this.
+# The coefficients of other functions (fast_exp, fast_log, fast_sin, fast_cos) were all obtained by
+# some other tool or copied from some reference material.
+
 import numpy as np
 import argparse
 
 np.set_printoptions(linewidth=3000)
 
-parser = argparse.ArgumentParser()
+class SmartFormatter(argparse.HelpFormatter):
+    def _split_lines(self, text, width):
+        if text.startswith('R|'):
+            return text[2:].splitlines()
+        return argparse.HelpFormatter._split_lines(self, text, width)
+
+parser = argparse.ArgumentParser(formatter_class=SmartFormatter)
 parser.add_argument("func")
 parser.add_argument("order", type=int)
-parser.add_argument("loss", choices=["mse", "mae", "mulpe", "mulpe_mae"], default="mulpe")
-parser.add_argument("--no-gui", action='store_true')
-parser.add_argument("--print", action='store_true')
-parser.add_argument("--pbar", action='store_true')
-parser.add_argument("--format", default="all", choices=["all", "switch", "array", "consts"])
+parser.add_argument("loss",
+                    choices=["mse", "mae", "mulpe", "mulpe_mae"],
+                    default="mulpe",
+                    help="R|What to optimize for.\n"
+                    + " * mse: Mean Squared Error\n"
+                    + " * mae: Maximal Absolute Error\n"
+                    + " * mulpe: Maximal ULP Error  [default]\n"
+                    + " * mulpe_mae: 50%% mulpe + 50%% mae")
+parser.add_argument("--no-gui", action='store_true', help="Do not produce plots.k")
+parser.add_argument("--print", action='store_true', help="Print while optimizing.")
+parser.add_argument("--pbar", action='store_true', help="Create a progress bar while optimizing.")
+parser.add_argument("--format", default="all", choices=["all", "switch", "array", "consts"],
+                    help="Output format for copy-pastable coefficients. (default: all)")
 args = parser.parse_args()
 
 order = args.order
@@ -46,7 +87,11 @@ else:
 
 X = np.linspace(lower, upper, 2048 * 8)
 target = func(X)
-target_spacing = np.spacing(np.abs(target).astype(np.float32)).astype(np.float64) # Precision (aka ULP)
+
+target_spacing = np.spacing(np.abs(target).astype(np.float32)).astype(np.float64) # Precision (i.e., ULP)
+# We will optimize everything using double precision, which means we will obtain more bits of
+# precision than the actual target values in float32, which means that our reconstruction and
+# ideal target value can be a non-integer number of float32-ULPs apart.
 
 print("exponent:", exponents)
 coeffs = np.zeros(len(exponents))
@@ -107,7 +152,6 @@ try:
         p = i / lstsq_iterations
         p = min(p * 1.25, 1.0)
         raised_error = np.power(norm_error_metric, 2 + loss_power * p)
-        #weight += raised_error / np.mean(raised_error)
         weight += raised_error
 
         mean_loss = np.mean(np.power(abs_diff, loss_power))
@@ -130,7 +174,11 @@ print(f"mse: {mean_loss:40.27f}  max abs error: {max_abs_error:20.17f}  max ulp 
 
 def print_comment(indent=""):
     print(indent + "// "
-          + {"mae": "Max Absolute Error", "mse": "Mean Squared Error", "mulpe": "Max ULP Error", "mulpe_mae": "MaxUlpAE"}[args.loss]
+          + {"mae": "Max Absolute Error",
+             "mse": "Mean Squared Error",
+             "mulpe": "Max ULP Error",
+             "mulpe_mae": "MaxUlpAE"
+            }[args.loss]
           + f" optimized (MSE={mean_squared_error:.4e}, MAE={max_abs_error:.4e}, MaxUlpE={max_ulp_error:.4e})")
 
 

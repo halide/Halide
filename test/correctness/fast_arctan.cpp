@@ -1,9 +1,5 @@
 #include "Halide.h"
 
-#ifndef M_PI
-#define M_PI 3.14159265358979310000
-#endif
-
 using namespace Halide;
 
 int main(int argc, char **argv) {
@@ -20,7 +16,7 @@ int main(int argc, char **argv) {
         {ApproximationPrecision::MAE_1e_6, 1e-6f}};
 
     for (Prec precision : precisions_to_test) {
-        fprintf(stderr, "\nTesting for precision %e...\n", precision.epsilon);
+        printf("\nTesting for precision %e...\n", precision.epsilon);
         Func atan_f, atan2_f;
         Var x, y;
         const int steps = 1000;
@@ -37,7 +33,7 @@ int main(int argc, char **argv) {
             atan_f.vectorize(x, 8);
         }
 
-        fprintf(stderr, "    Testing fast_atan() correctness...  ");
+        printf("    Testing fast_atan() correctness...  ");
         Buffer<float> atan_result = atan_f.realize({steps});
         float max_error = 0.0f;
         for (int i = 0; i < steps; ++i) {
@@ -51,7 +47,7 @@ int main(int argc, char **argv) {
                 exit(1);
             }
         }
-        fprintf(stderr, "Passed: max abs error: %.5e\n", max_error);
+        printf("Passed: max abs error: %.5e\n", max_error);
 
         atan2_f(x, y) = fast_atan2(vx, vy, precision.precision);
         if (target.has_gpu_feature()) {
@@ -62,7 +58,7 @@ int main(int argc, char **argv) {
         } else {
             atan2_f.vectorize(x, 8);
         }
-        fprintf(stderr, "    Testing fast_atan2() correctness...  ");
+        printf("    Testing fast_atan2() correctness...  ");
         Buffer<float> atan2_result = atan2_f.realize({steps, steps});
         max_error = 0.0f;
         for (int i = 0; i < steps; ++i) {
@@ -79,7 +75,7 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        fprintf(stderr, "Passed: max abs error: %.5e\n", max_error);
+        printf("Passed: max abs error: %.5e\n", max_error);
     }
 
     printf("Success!\n");
