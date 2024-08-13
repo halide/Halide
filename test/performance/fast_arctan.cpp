@@ -1,10 +1,6 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
 
-#ifndef M_PI
-#define M_PI 3.14159265358979310000
-#endif
-
 using namespace Halide;
 using namespace Halide::Tools;
 
