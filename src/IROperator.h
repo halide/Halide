@@ -984,32 +984,65 @@ Expr fast_cos(const Expr &x);
 // @}
 
 enum class ApproximationPrecision {
-    // Maximum Absolute error
+    /** Mean Squared Error Optimized. */
+    // @{
+    MSE_Poly2,
+    MSE_Poly3,
+    MSE_Poly4,
+    MSE_Poly5,
+    MSE_Poly6,
+    MSE_Poly7,
+    MSE_Poly8,
+    // @}
+
+    /* Maximum Absolute Error Optimized. */
+    // @{
     MAE_1e_2,
     MAE_1e_3,
     MAE_1e_4,
     MAE_1e_5,
     MAE_1e_6,
+    // @}
 
-    // Number of terms in polynomial
-    Poly2,
-    Poly3,
-    Poly4,
-    Poly5,
-    Poly6,
-    Poly7,
-    Poly8
+    /** Number of terms in polynomial -- Optimized for Max Absolute Error. */
+    // @{
+    MAE_Poly2,
+    MAE_Poly3,
+    MAE_Poly4,
+    MAE_Poly5,
+    MAE_Poly6,
+    MAE_Poly7,
+    MAE_Poly8,
+    // @}
+
+    /** Number of terms in polynomial -- Optimized for Max ULP Error.
+     * ULP is "Units in Last Place", measured in IEEE 32-bit floats. */
+    // @{
+    MULPE_Poly2,
+    MULPE_Poly3,
+    MULPE_Poly4,
+    MULPE_Poly5,
+    MULPE_Poly6,
+    MULPE_Poly7,
+    MULPE_Poly8,
+    // @}
 };
-/** Fast vectorizable approximations for arctan for Float(32).
+/** Fast vectorizable approximations for arctan and arctan2 for Float(32).
  * Desired precision can be specified as either a maximum absolute error (MAE) or
- * the number of terms in the polynomial approximation (see the ApproximationPrecision enum).
+ * the number of terms in the polynomial approximation (see the ApproximationPrecision enum) which
+ * are optimized for either:
+ *  - MSE (Mean Squared Error)
+ *  - MAE (Maximum Absolute Error)
+ *  - MULPE (Maximum Units in Last Place Error).
+ * The default (Max ULP Error Polynomial 6) has a MAE of 3.53e-6. For more info on the precision,
+ * see the table in IROperator.cpp.
+ *
  * Note: the polynomial uses odd powers, so the number of terms is not the degree of the polynomial.
  * Note: Poly8 is only useful to increase precision for atan, and not for atan2.
- * Note: The performance of this functions seem to be not reliably faster on WebGPU (for now, August 2024).
  */
 // @{
-Expr fast_atan(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::MAE_1e_5);
-Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = ApproximationPrecision::MAE_1e_5);
+Expr fast_atan(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::MULPE_Poly6);
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = ApproximationPrecision::MULPE_Poly6);
 // @}
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
