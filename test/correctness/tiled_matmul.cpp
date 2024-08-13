@@ -254,6 +254,9 @@ auto matmul_uu = &matmul<uint8_t, uint8_t>;
 
 bool run_tests(bool (*fn)(int, int, int, int, int, int), int element_width) {
     return true
+        // TODO: tile_x and tile_y is not supported because they degenerate to a pattern that the matcher for LHS fails to recognize
+        // && fn(2, 2, 16, 1, 2, 4 / element_width)
+        // && fn(2, 2, 16, 2, 2, 4 / element_width)
         && fn(2, 2, 16, 2, 2, 8 / element_width)
         && fn(4, 4, 8, 4, 4, 8 / element_width)
         && fn(8, 8, 4, 8, 8, 4 / element_width)

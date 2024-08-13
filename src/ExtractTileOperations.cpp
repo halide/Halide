@@ -340,7 +340,7 @@ BaseStride get_rhs_tile_index(const Expr &index, int element_width, int tile_x, 
         }
     } else {
         // The only case where there is a ramp of ramp is when tile_y = 1 and so RHS has size (K/4)x4
-        // (and rhs.stride.1 != 4, o.w. it degenerates to 1D)
+        // (and rhs.stride.1 != 4, for o.w. it degenerates to 1D)
         if (tile_y != rhs_tile2.extent[0] || tile_r != rhs_tile2.extent[1]) {
             return {};
         }
