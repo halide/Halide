@@ -143,12 +143,12 @@ bool matmul(Halide::Target target) {
 
     // Uncomment to check the asm
     // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
-    result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
-    // auto time = Tools::benchmark(20, 20, [&]() {
-    //     result.realize(out);
-    // });
-    // std::cout << "Exec time: " << time << "\n";
+    auto time = Tools::benchmark(20, 20, [&]() {
+        result.realize(out);
+    });
+    std::cout << "Exec time: " << time << "\n";
     std::cout << "Success!\n";
     return true;
 }

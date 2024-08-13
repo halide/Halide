@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
         std::cerr << "Skipping test since target does not support AMX\n";
         return 0;
     }
-    // Note theoretically we should be able to compile this if tile_y is 8, in which case
+    // Note theoretically we should be able to compile this if tile_x is  set to 1, in which case
     // each row of a tile becomes contiguous in memory again.
     // However, we cannot do this because the matcher for LHS cannot handle the case
     // when tile_x or tile_y is 1.

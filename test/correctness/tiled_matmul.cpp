@@ -91,7 +91,6 @@ void print_mat_rhs(const Buffer<T> &buf, int rows, int cols) {
 
 template<typename LhsInt8, typename RhsInt8>
 bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
-    Target target("x86-64-linux-avx512_sapphirerapids");
     Buffer<LhsInt8> A_buf(acc, row);
     Buffer<RhsInt8> B_buf(4, col, acc / 4);
 
@@ -137,7 +136,7 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
     Buffer<int32_t> out(col, row);
 
     result.realize(out);
-    result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A_buf, B_buf}, target);
+    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A_buf, B_buf}, target);
 
     // uncomment to check the matrices
     // std::cout << "Matrix A\n";
@@ -168,7 +167,6 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
 }
 
 bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
-    Target target("x86-64-linux-avx512_sapphirerapids");
     Var x("x"), y("y");
     Buffer<bfloat16_t> A(acc, row);
     Buffer<bfloat16_t> B(2, col, acc / 2);
@@ -214,7 +212,7 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) 
     Buffer<float> out(col, row);
 
     // Uncomment to check the asm
-    result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
+    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
     // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
     result.realize(out);
