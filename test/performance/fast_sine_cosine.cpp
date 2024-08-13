@@ -1,10 +1,6 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
 
-#ifndef M_PI
-#define M_PI 3.14159265358979310000
-#endif
-
 using namespace Halide;
 using namespace Halide::Tools;
 
@@ -25,7 +21,7 @@ int main(int argc, char **argv) {
     Func sin_f, cos_f, sin_ref, cos_ref;
     Var x;
     Expr t = x / 1000.f;
-    const float two_pi = 2.0f * static_cast<float>(M_PI);
+    const float two_pi = 6.28318530717958647693f;
     sin_f(x) = fast_sin(-two_pi * t + (1 - t) * two_pi);
     cos_f(x) = fast_cos(-two_pi * t + (1 - t) * two_pi);
     sin_ref(x) = sin(-two_pi * t + (1 - t) * two_pi);
