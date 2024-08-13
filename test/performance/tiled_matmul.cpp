@@ -85,6 +85,8 @@ bool matmul(Halide::Target target) {
     // This means that the rows must always be divisible by 4 (or 2 for bf16).
     ImageParam B(rhs(8), 3, "rhs");
 
+    B.dim(1).set_stride(4);
+
     RDom r(0, acc);
 
     Func mm("matmul");
@@ -141,12 +143,12 @@ bool matmul(Halide::Target target) {
 
     // Uncomment to check the asm
     // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
-    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+    result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
-    auto time = Tools::benchmark(20, 20, [&]() {
-        result.realize(out);
-    });
-    std::cout << "Exec time: " << time << "\n";
+    // auto time = Tools::benchmark(20, 20, [&]() {
+    //     result.realize(out);
+    // });
+    // std::cout << "Exec time: " << time << "\n";
     std::cout << "Success!\n";
     return true;
 }
@@ -171,6 +173,8 @@ bool matmul_bf16(Halide::Target target) {
     Var x("x"), y("y");
     ImageParam A(BFloat(16), 2, "lhs");
     ImageParam B(BFloat(16), 3, "rhs");
+
+    B.dim(1).set_stride(2);
 
     RDom r(0, acc, "acc");
 

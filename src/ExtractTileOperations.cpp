@@ -81,35 +81,7 @@ const auto wild_i32x = Variable::make(Int(32, 0), "*");
 
 Tile<1> get_1d_tile_index(const Expr &e) {
     if (const auto *r1 = e.as<Ramp>()) {
-
-        const auto stride_var = Variable::make(Int(32), "stride");
-        const auto v1 = Variable::make(Int(32), "v1");
-        const auto v2 = Variable::make(Int(32), "v2");
-        const auto v3 = Variable::make(Int(32), "v3");
-
-        Expr patterns[] = {
-            ((v1 * stride_var) + v2) * v3,
-            v3 * ((v1 * stride_var) + v2),
-            (v2 + (v1 * stride_var)) * v3,
-            v3 * (v2 + (v1 * stride_var)),
-        };
-
-        std::map<std::string, Expr> matches;
-        for (const auto &pattern : patterns) {
-            if (expr_match(pattern, r1->base, matches)) {
-                auto stride = std::move(matches["stride"]);
-                // stride must be a constant in order to not be confused with v1
-                if (stride.as<IntImm>()) {
-                    return {true, r1->base, {std::move(stride)}, {r1->lanes}};
-                }
-
-                // if stride wasn't a constant then v1 could possibly be the stride if constant
-                auto v1_expr = std::move(matches["v1"]);
-                if (v1_expr.as<IntImm>()) {
-                    return {true, r1->base, {std::move(v1_expr)}, {r1->lanes}};
-                }
-            }
-        }
+        return {true, r1->base, {r1->stride}, {r1->lanes}};
     }
 
     return {};
@@ -218,7 +190,7 @@ Tile<3> get_3d_tile_index(const Expr &e) {
  * The pattern which is getting matched looks roughly like
  * `broadcast(ramp(0, 1, r), x*y) / broadcast(4, x*y*r) + optional(broadcast(base, x*y*r)) * broadcast(8, x*y*r) +
  *  broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) +
- *  broadcast(ramp(broadcast(_, r), broadcast(4, r), x) , y)`
+ *  broadcast(ramp(broadcast(_, r), broadcast(4, r), y) , x)`
  */
 Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     const auto *sub = e.as<Sub>();
@@ -239,38 +211,38 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     // The right hand side of the add expression is used for retrieving the dimensions of the matrix.
     // obtain the x, y, r dimensions
     // this expr looks like below, the shape of `add_lhs->a` can be seen further down below
-    // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) + broadcast(ramp(broadcast(base, r), broadcast(4, r), x) , y)
+    // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) + broadcast(ramp(broadcast(base, r), broadcast(4, r), y) , x)
     const Add *dim_expr = add_lhs->b.as<Add>();
 
     if (!dim_expr) {
         return {};
     }
 
-    // broadcast(ramp(broadcast(_, r), broadcast(4, r), x), y)
+    // broadcast(ramp(broadcast(_, r), broadcast(4, r), y), x)
     const Broadcast *base_stride_bc = dim_expr->b.as<Broadcast>();
 
     if (!base_stride_bc) {
         return {};
     }
 
-    int tile_y = base_stride_bc->lanes;
+    int tile_x = base_stride_bc->lanes;
 
     // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r)
-    const Mod *mod = dim_expr->a.as<Mod>();
-
-    if (!mod) {
+    std::vector<Expr> results{};
+    const Expr mod_pattern = Mod::make(wild_i32x, Broadcast::make(4 / element_width, 0));
+    if (!expr_match(mod_pattern, dim_expr->a, results)) {
         return {};
     }
 
     // broadcast(ramp(0, 1, r), x*y)
-    const Broadcast *bc_ramp = mod->a.as<Broadcast>();
+    const Broadcast *bc_ramp = results[0].as<Broadcast>();
 
     if (!bc_ramp) {
         return {};
     }
 
     int tile_xy = bc_ramp->lanes;
-    int tile_x = tile_xy / tile_y;
+    int tile_y = tile_xy / tile_x;
 
     // ramp(0, 1, r)
     const Ramp *r_ramp = bc_ramp->value.as<Ramp>();
@@ -282,21 +254,13 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     int tile_r = r_ramp->lanes;
 
     // get the base and stride
-    // ramp(broadcast(_, r), broadcast(4, r), x)
-    const Ramp *base_stride_ramp = base_stride_bc->value.as<Ramp>();
-
-    if (!base_stride_ramp) {
+    // ramp(broadcast(_, r), broadcast(4, r), y)
+    const Expr base_stride_ramp_pattern = Ramp::make(Broadcast::make(wild_i32, tile_r), Broadcast::make(4 / element_width, tile_r), tile_y);
+    if (!expr_match(base_stride_ramp_pattern, base_stride_bc->value, results)) {
         return {};
     }
 
-    // broadcast(_, r)
-    const Broadcast *base_bc = base_stride_ramp->base.as<Broadcast>();
-
-    if (!base_bc) {
-        return {};
-    }
-
-    Expr base = base_bc->value;
+    Expr base = results[0];
     Expr stride;
 
     bool found_stride = false;
@@ -308,7 +272,6 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     // this stride pattern can occur if `tile_r` is the same size as `acc`
     auto stride_pattern = Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4 / element_width), tile_x * tile_y * tile_r) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
 
-    std::vector<Expr> results{};
     if (expr_match(stride_pattern, add_lhs->a, results)) {
         found_stride = true;
         stride = std::move(results[0]);
@@ -353,17 +316,39 @@ BaseStride get_rhs_tile_index(const Expr &index, int element_width, int tile_x, 
 
             return {true, rhs_tile3.base, rhs_tile3.stride[0] * element_width};
         } else {
+            // 1D: degenerate as dot product. There are two cases:
+            //   * tile_r is 4, so effectively there is only one row in the loaded tile
+            //   * rhs.stride.1 == 4 && tile_y = 1, where the loaded RHS has shape (K/4)x4
+            //     and is contiguous in the memory
             if (rhs_tile1.extent[0] != tile_y * tile_r) {
                 return {};
             }
+            if (!(rhs_tile1.stride[0].as<IntImm>() && rhs_tile1.stride[0].as<IntImm>()->value == 1)) {
+                return {};
+            }
 
-            // times 4 because of the rhs layout, each vector used by AMX is 4 bytes in size.
-            // For the 4 gets divided by the element width which means each vector has 4 elements in u8/i8 and
-            // 2 elements for bf16.
-            return {true, rhs_tile1.base, rhs_tile1.stride[0] * (4 / element_width)};
+            if (tile_r == 4 / element_width) {
+                return {true, rhs_tile1.base, 0};
+            }
+
+            if (tile_y == 1) {
+                // 4 elements in u8/i8 and 2 elements for bf16.
+                return {true, rhs_tile1.base, 4 / element_width};
+            }
+
+            return {};
         }
     } else {
+        // The only case where there is a ramp of ramp is when tile_y = 1 and so RHS has size (K/4)x4
+        // (and rhs.stride.1 != 4, o.w. it degenerates to 1D)
         if (tile_y != rhs_tile2.extent[0] || tile_r != rhs_tile2.extent[1]) {
+            return {};
+        }
+        if (!(rhs_tile2.stride[1].as<IntImm>() && rhs_tile2.stride[1].as<IntImm>()->value == 1)) {
+            return {};
+        }
+
+        if (tile_y != 1) {
             return {};
         }
 
