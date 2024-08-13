@@ -1426,6 +1426,9 @@ Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precisio
     // Coefficients obtained using src/polynomial_optimizer.py
     // Note that the maximal errors are computed with numpy with double precision.
     // The real errors are a bit larger with single-precision floats (see correctness/fast_arctan.cpp).
+    // Also note that ULP distances which are not units are bogus, but this is because this error
+    // was again measured with double precision, so the actual reconstruction had more bits of precision
+    // than the actual float32 target value. So in practice the MaxULP Error will be close to round(MaxUlpE).
 
     // The table is huge, so let's put clang-format off and handle the layout manually:
     // clang-format off
