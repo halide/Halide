@@ -14,10 +14,6 @@ int main(int argc, char **argv) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
-    if (target.has_feature(Target::WebGPU)) {
-        printf("[SKIP] WebGPU seems to perform bad, and fast_atan is not really faster in all scenarios.\n");
-        return 0;
-    }
 
     Var x, y;
     const int test_w = 256;
@@ -27,7 +23,7 @@ int main(int argc, char **argv) {
     Expr t1 = y / float(test_h);
     // To make sure we time mostely the computation of the arctan, and not memory bandwidth,
     // we will compute many arctans per output and sum them. In my testing, GPUs suffer more
-    // from bandwith with this test, so we give it more arctangenses to compute per output.
+    // from bandwith with this test, so we give it more arctangents to compute per output.
     const int test_d = target.has_gpu_feature() ? 1024 : 64;
     RDom rdom{0, test_d};
     Expr off = rdom / float(test_d) - 0.5f;
@@ -49,24 +45,30 @@ int main(int argc, char **argv) {
         atan2_ref.vectorize(x, 8);
     }
 
-    Tools::BenchmarkConfig cfg = {0.2, 1.0};
     double scale = 1e9 / (double(test_w) * (test_h * test_d));
+    Buffer<float> atan_out(test_w, test_h);
+    Buffer<float> atan2_out(test_w, test_h);
+    atan_ref.compile_jit();
+    atan2_ref.compile_jit();
     // clang-format off
-    double t_atan  = scale * benchmark([&]() {  atan_ref.realize({test_w, test_h}); }, cfg);
-    double t_atan2 = scale * benchmark([&]() { atan2_ref.realize({test_w, test_h}); }, cfg);
+    double t_atan  = scale * benchmark([&]() {  atan_ref.realize( atan_out);  atan_out.device_sync(); });
+    double t_atan2 = scale * benchmark([&]() { atan2_ref.realize(atan2_out); atan2_out.device_sync(); });
     // clang-format on
 
     struct Prec {
         ApproximationPrecision precision;
-        float epsilon;
+        const char *name;
         double atan_time{0.0f};
         double atan2_time{0.0f};
     } precisions_to_test[] = {
-        {ApproximationPrecision::MAE_1e_2, 1e-2f},
-        {ApproximationPrecision::MAE_1e_3, 1e-3f},
-        {ApproximationPrecision::MAE_1e_4, 1e-4f},
-        {ApproximationPrecision::MAE_1e_5, 1e-5f},
-        {ApproximationPrecision::MAE_1e_6, 1e-6f}};
+        {ApproximationPrecision::MULPE_Poly2, "Poly2"},
+        {ApproximationPrecision::MULPE_Poly3, "Poly3"},
+        {ApproximationPrecision::MULPE_Poly4, "Poly4"},
+        {ApproximationPrecision::MULPE_Poly5, "Poly5"},
+        {ApproximationPrecision::MULPE_Poly6, "Poly6"},
+        {ApproximationPrecision::MULPE_Poly7, "Poly7"},
+        {ApproximationPrecision::MULPE_Poly8, "Poly8"},
+    };
 
     for (Prec &precision : precisions_to_test) {
         Func atan_f{"fast_atan"}, atan2_f{"fast_atan2"};
@@ -85,25 +87,27 @@ int main(int argc, char **argv) {
             atan2_f.vectorize(x, 8);
         }
 
+        atan_f.compile_jit();
+        atan2_f.compile_jit();
         // clang-format off
-        double t_fast_atan  = scale * benchmark([&]() {  atan_f.realize({test_w, test_h}); }, cfg);
-        double t_fast_atan2 = scale * benchmark([&]() { atan2_f.realize({test_w, test_h}); }, cfg);
+        double t_fast_atan  = scale * benchmark([&]() {  atan_f.realize( atan_out);  atan_out.device_sync(); });
+        double t_fast_atan2 = scale * benchmark([&]() { atan2_f.realize(atan2_out); atan2_out.device_sync(); });
         // clang-format on
         precision.atan_time = t_fast_atan;
         precision.atan2_time = t_fast_atan2;
     }
 
-    printf("                  atan: %f ns per atan\n", t_atan);
+    printf("              atan: %f ns per atan\n", t_atan);
     for (const Prec &precision : precisions_to_test) {
-        printf(" fast_atan (MAE %.0e): %f ns per atan (%4.1f%% faster)  [per invokation: %f ms]\n",
-               precision.epsilon, precision.atan_time, 100.0f * (1.0f - precision.atan_time / t_atan),
+        printf(" fast_atan (%s): %f ns per atan (%4.1f%% faster)  [per invokation: %f ms]\n",
+               precision.name, precision.atan_time, 100.0f * (1.0f - precision.atan_time / t_atan),
                precision.atan_time / scale * 1e3);
     }
     printf("\n");
-    printf("                  atan2: %f ns per atan2\n", t_atan2);
+    printf("              atan2: %f ns per atan2\n", t_atan2);
     for (const Prec &precision : precisions_to_test) {
-        printf(" fast_atan2 (MAE %.0e): %f ns per atan2 (%4.1f%% faster)  [per invokation: %f ms]\n",
-               precision.epsilon, precision.atan2_time, 100.0f * (1.0f - precision.atan2_time / t_atan2),
+        printf(" fast_atan2 (%s): %f ns per atan2 (%4.1f%% faster)  [per invokation: %f ms]\n",
+               precision.name, precision.atan2_time, 100.0f * (1.0f - precision.atan2_time / t_atan2),
                precision.atan2_time / scale * 1e3);
     }
 
