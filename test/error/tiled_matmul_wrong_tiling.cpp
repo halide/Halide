@@ -35,6 +35,7 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool 
 
     Func mm("matmul");
     mm(x, y) = cast<int32_t>(0);
+    // Tiling is set to 8
     mm(x, y) += cast<int32_t>(A_buf(r, y)) * cast<int32_t>(B_buf(r % 8, x, r / 8));
 
     Var rxi("rxi"), ryi("ryi");
@@ -77,9 +78,8 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r, bool 
         Buffer<int32_t> out(col, row);
         result.realize(out);
 
-        bool should_continue = true;
-        for (int j = 0; j < row && should_continue; ++j) {
-            for (int i = 0; i < col && should_continue; ++i) {
+        for (int j = 0; j < row; ++j) {
+            for (int i = 0; i < col; ++i) {
                 int32_t val = 0;
                 for (int k = 0; k < acc; ++k) {
                     val += static_cast<int32_t>(A_buf(k, j)) * static_cast<int32_t>(B_buf(k % 8, i, k / 8));
