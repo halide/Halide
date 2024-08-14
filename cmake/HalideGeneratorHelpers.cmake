@@ -515,8 +515,8 @@ function(add_halide_library TARGET)
 
     _Halide_get_platform_details(
         is_crosscompiling
-        object_suffix
-        static_library_suffix
+        object_extension
+        static_library_extension
         "${common_triple}"
     )
 
@@ -861,8 +861,8 @@ function(add_halide_runtime RT)
 
     _Halide_get_platform_details(
         is_crosscompiling
-        object_suffix
-        static_library_suffix
+        object_extension
+        static_library_extension
         "${common_triple}")
 
     # We defer reading the list of targets for which to generate a common
@@ -875,7 +875,7 @@ function(add_halide_runtime RT)
     set(target_list "$<LIST:TRANSFORM,${target_list},REPLACE,-(user_context|no_asserts|no_bounds_query|no_runtime|profile),>")
 
     if (is_crosscompiling)
-        set(GEN_OUTS "${RT}${static_library_suffix}")
+        set(GEN_OUTS "${RT}${static_library_extension}")
         add_custom_command(
             OUTPUT "${GEN_OUTS}"
             COMMAND Halide::GenRT -r "${RT}" -o .
@@ -907,13 +907,13 @@ function(add_halide_runtime RT)
                 endif ()
 
                 add_custom_command(
-                    OUTPUT "${this_rt}${object_suffix}"
+                    OUTPUT "${this_rt}${object_extension}"
                     COMMAND Halide::GenRT -r "${this_rt}" -o . -e object
                     "target=$<JOIN:$<REMOVE_DUPLICATES:${arch_target_list}>,$<COMMA>>"
                     DEPENDS Halide::GenRT
                     VERBATIM)
 
-                add_library("${this_rt}" STATIC "${this_rt}${object_suffix}")
+                add_library("${this_rt}" STATIC "${this_rt}${object_extension}")
                 set_target_properties("${this_rt}" PROPERTIES LINKER_LANGUAGE CXX)
                 _Halide_fix_xcode("${this_rt}")
                 _Halide_set_osx_arch("${this_rt}" "${triple}")
@@ -923,12 +923,12 @@ function(add_halide_runtime RT)
         else ()
             set(target_list "$<LIST:TRANSFORM,${target_list},REPLACE,cmake,${Halide_CMAKE_TARGET}>")
             add_custom_command(
-                OUTPUT "${RT}${object_suffix}"
+                OUTPUT "${RT}${object_extension}"
                 COMMAND Halide::GenRT -r "${RT}" -o . -e object
                 "target=$<JOIN:$<REMOVE_DUPLICATES:${target_list}>,$<COMMA>>"
                 DEPENDS Halide::GenRT
                 VERBATIM)
-            add_library("${RT}" STATIC "${RT}${object_suffix}")
+            add_library("${RT}" STATIC "${RT}${object_extension}")
             set_target_properties("${RT}" PROPERTIES LINKER_LANGUAGE CXX)
             _Halide_fix_xcode("${RT}")
         endif ()
@@ -950,11 +950,11 @@ function(add_halide_runtime RT)
 endfunction()
 
 function(_Halide_get_platform_details OUT_XC OUT_OBJ OUT_STATIC triple)
-    if (triple STREQUAL "host")
+    if (triple MATCHES "host")
         set(triple "${Halide_HOST_TARGET}")
     endif ()
 
-    if (triple STREQUAL "cmake")
+    if (triple MATCHES "cmake")
         set(triple "${Halide_CMAKE_TARGET}")
         set("${OUT_XC}" 0 PARENT_SCOPE)
     elseif (triple IN_LIST Halide_CMAKE_TARGET)
