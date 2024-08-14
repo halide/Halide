@@ -295,7 +295,7 @@ function(_add_halide_aot_tests NAME)
                           DEPS ${args_HALIDE_LIBRARIES} ${args_HALIDE_RUNTIME} ${args_DEPS}
                           INCLUDES ${args_INCLUDES}
                           GROUPS ${args_GROUPS})
-        if (NOT args_OMIT_C_BACKEND AND TARGET "${TARGET_CPP}")
+        if (NOT args_OMIT_C_BACKEND)
             set(HALIDE_LIBRARIES_CPP "")
             foreach (hl IN LISTS args_HALIDE_LIBRARIES)
                 list(APPEND HALIDE_LIBRARIES_CPP "${hl}_cpp")
