@@ -215,8 +215,7 @@ function(_Halide_library_from_generator TARGET)
     endif ()
 
     ## Gather platform information
-    _Halide_get_platform_details(
-        UNUSED
+    _Halide_get_platform_extensions(
         object_extension
         static_library_extension
         "${ARG_TARGETS}"
@@ -513,8 +512,8 @@ function(add_halide_library TARGET)
 
     _Halide_validate_multitarget(common_triple ${ARG_TARGETS})
 
-    _Halide_get_platform_details(
-        is_crosscompiling
+    _Halide_is_crosscompiling(is_crosscompiling "${common_triple}")
+    _Halide_get_platform_extensions(
         object_extension
         static_library_extension
         "${common_triple}"
@@ -859,8 +858,8 @@ function(add_halide_runtime RT)
 
     _Halide_validate_multitarget(common_triple ${ARG_TARGETS})
 
-    _Halide_get_platform_details(
-        is_crosscompiling
+    _Halide_is_crosscompiling(is_crosscompiling "${common_triple}")
+    _Halide_get_platform_extensions(
         object_extension
         static_library_extension
         "${common_triple}")
@@ -949,18 +948,25 @@ function(add_halide_runtime RT)
     endif ()
 endfunction()
 
-function(_Halide_get_platform_details OUT_XC OUT_OBJ OUT_STATIC triple)
+function(_Halide_is_crosscompiling OUT_XC triple)
+    if (triple MATCHES "host")
+        set(triple "${Halide_HOST_TARGET}")
+    endif ()
+
+    if (triple MATCHES "cmake" OR triple IN_LIST Halide_CMAKE_TARGET)
+        set("${OUT_XC}" 0 PARENT_SCOPE)
+    else ()
+        set("${OUT_XC}" 1 PARENT_SCOPE)
+    endif ()
+endfunction()
+
+function(_Halide_get_platform_extensions OUT_OBJ OUT_STATIC triple)
     if (triple MATCHES "host")
         set(triple "${Halide_HOST_TARGET}")
     endif ()
 
     if (triple MATCHES "cmake")
         set(triple "${Halide_CMAKE_TARGET}")
-        set("${OUT_XC}" 0 PARENT_SCOPE)
-    elseif (triple IN_LIST Halide_CMAKE_TARGET)
-        set("${OUT_XC}" 0 PARENT_SCOPE)
-    else ()
-        set("${OUT_XC}" 1 PARENT_SCOPE)
     endif ()
 
     if (triple MATCHES "windows")
