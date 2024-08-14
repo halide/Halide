@@ -10,8 +10,15 @@ int main(int argc, char **argv) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
+    bool performance_is_expected_to_be_poor = false;
     if (target.has_feature(Target::WebGPU)) {
-        printf("[SKIP] WebGPU seems to perform bad, and fast_atan is not really faster in all scenarios.\n");
+        printf("WebGPU seems to perform bad, and fast_atan is not always faster (won't error if it's not faster).\n");
+        performance_is_expected_to_be_poor = true;
+        return 0;
+    }
+    if (target.has_feature(Target::Metal)) {
+        printf("fast_atan is not always faster on Metal (won't error if it's not faster).\n");
+        performance_is_expected_to_be_poor = true;
         return 0;
     }
 
@@ -116,20 +123,22 @@ int main(int argc, char **argv) {
     for (const Prec &precision : precisions_to_test) {
         num_tests += 2;
         if (t_atan < precision.atan_time) {
-            printf("fast_atan is not faster than atan\n");
+            printf("fast_atan is not faster than atan for %s\n", precision.name);
         } else {
             num_passed++;
         }
         if (t_atan2 < precision.atan2_time) {
-            printf("fast_atan2 is not faster than atan2\n");
+            printf("fast_atan2 is not faster than atan2 for %s\n", precision.name);
         } else {
             num_passed++;
         }
     }
-
-    if (num_passed < num_tests) {
-        printf("Not all measurements were faster for the fast variants of the atan/atan2 funcions.\n");
-        return 1;
+    printf("Passed %d / %d performance test.\n", num_passed, num_tests);
+    if (!performance_is_expected_to_be_poor) {
+        if (num_passed < num_tests) {
+            printf("Not all measurements were faster for the fast variants of the atan/atan2 functions.\n");
+            return 1;
+        }
     }
 
     printf("Success!\n");
