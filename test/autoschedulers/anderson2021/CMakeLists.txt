@@ -41,8 +41,8 @@ add_halide_generator(anderson2021_demo.generator
                      SOURCES demo_generator.cpp)
 
 add_halide_library(anderson2021_demo FROM anderson2021_demo.generator
-                   TARGETS cmake
                    GENERATOR demo
+                   TARGETS cmake
                    FEATURES cuda cuda_capability_70
                    AUTOSCHEDULER Halide::Anderson2021
                    REGISTRATION DEMO_REGISTRATION_FILE)
@@ -60,8 +60,8 @@ add_halide_generator(anderson2021_included_schedule_file.generator
                      SOURCES included_schedule_file_generator.cpp)
 
 add_halide_library(anderson2021_included_schedule_file FROM anderson2021_included_schedule_file.generator
-                   TARGETS cmake
                    GENERATOR included_schedule_file
+                   TARGETS cmake
                    FEATURES cuda cuda_capability_70
                    AUTOSCHEDULER Halide::Anderson2021
                    REGISTRATION anderson2021_included_schedule_reg)

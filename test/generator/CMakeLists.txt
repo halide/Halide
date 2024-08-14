@@ -163,7 +163,6 @@ function(_add_halide_libraries TARGET)
         target_link_libraries(${TARGET} INTERFACE ${args_EXTERNS})
     endif()
 
-    # AND NOT Halide_CMAKE_TARGET MATCHES ";" ??
     if (NOT args_OMIT_C_BACKEND)
         # The C backend basically ignores TARGETS (it emits a warning that the sources
         # will be compiled with the current CMake toolchain)... but making matters worse,
