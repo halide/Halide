@@ -39,8 +39,8 @@ add_halide_generator(adams2019_demo.generator
                      SOURCES demo_generator.cpp)
 
 add_halide_library(adams2019_demo FROM adams2019_demo.generator
-                   TARGETS cmake
                    GENERATOR demo
+                   TARGETS cmake
                    AUTOSCHEDULER Halide::Adams2019
                    REGISTRATION DEMO_REGISTRATION_FILE)
 
@@ -57,8 +57,8 @@ add_halide_generator(adams2019_included_schedule_file.generator
                      SOURCES included_schedule_file_generator.cpp)
 
 add_halide_library(adams2019_included_schedule_file FROM adams2019_included_schedule_file.generator
-                   TARGETS cmake
                    GENERATOR included_schedule_file
+                   TARGETS cmake
                    AUTOSCHEDULER Halide::Adams2019
                    REGISTRATION adams2019_included_schedule_reg)
 
