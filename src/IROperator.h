@@ -983,6 +983,24 @@ Expr fast_sin(const Expr &x);
 Expr fast_cos(const Expr &x);
 // @}
 
+/**
+ * Enum that declares several options for functions that are approximated
+ * by polynomial expansions. These polynomials can be optimized for three
+ * different metrics: Mean Squared Error, Maximum Absolute Error, or
+ * Maximum Units in Last Place (ULP) Error.
+ *
+ * Orthogonally to the optimization objective, these polynomials can vary
+ * in degree. Higher degree polynomials will give more precise results.
+ * Note that the `X` in the `PolyX` enum values refer to the number of terms
+ * in the polynomial, and not the degree of the polynomial. E.g., even
+ * symmetric functions may be implemented using only even powers, for which
+ * `Poly3` would actually mean that terms in [1, x^2, x^4] are used.
+ *
+ * Additionally, if you don't care about number of terms in the polynomial
+ * and you do care about the maximal absolute error the approximation may have
+ * over the domain, you may use the `MAE_1e_x` values and the implementation
+ * will decide the appropriate polynomial degree that achieves this precision.
+ */
 enum class ApproximationPrecision {
     /** Mean Squared Error Optimized. */
     // @{
@@ -993,15 +1011,6 @@ enum class ApproximationPrecision {
     MSE_Poly6,
     MSE_Poly7,
     MSE_Poly8,
-    // @}
-
-    /* Maximum Absolute Error Optimized. */
-    // @{
-    MAE_1e_2,
-    MAE_1e_3,
-    MAE_1e_4,
-    MAE_1e_5,
-    MAE_1e_6,
     // @}
 
     /** Number of terms in polynomial -- Optimized for Max Absolute Error. */
@@ -1026,19 +1035,41 @@ enum class ApproximationPrecision {
     MULPE_Poly7,
     MULPE_Poly8,
     // @}
+
+    /* Maximum Absolute Error Optimized with given Maximal Absolute Error. */
+    // @{
+    MAE_1e_2,
+    MAE_1e_3,
+    MAE_1e_4,
+    MAE_1e_5,
+    MAE_1e_6,
+    // @}
+
+    /* Maximum ULP Error Optimized with given Maximal Absolute Error. */
+    // @{
+    MULPE_1e_2,
+    MULPE_1e_3,
+    MULPE_1e_4,
+    MULPE_1e_5,
+    MULPE_1e_6,
+    // @}
 };
+
 /** Fast vectorizable approximations for arctan and arctan2 for Float(32).
+ *
  * Desired precision can be specified as either a maximum absolute error (MAE) or
  * the number of terms in the polynomial approximation (see the ApproximationPrecision enum) which
  * are optimized for either:
  *  - MSE (Mean Squared Error)
  *  - MAE (Maximum Absolute Error)
  *  - MULPE (Maximum Units in Last Place Error).
- * The default (Max ULP Error Polynomial 6) has a MAE of 3.53e-6. For more info on the precision,
- * see the table in IROperator.cpp.
+ *
+ * The default (Max ULP Error Polynomial 6) has a MAE of 3.53e-6.
+ * For more info on the precision, see the table in IROperator.cpp.
  *
  * Note: the polynomial uses odd powers, so the number of terms is not the degree of the polynomial.
  * Note: Poly8 is only useful to increase precision for atan, and not for atan2.
+ * Note: The performance of this functions seem to be not reliably faster on WebGPU (for now, August 2024).
  */
 // @{
 Expr fast_atan(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::MULPE_Poly6);

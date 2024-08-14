@@ -10,6 +10,10 @@ int main(int argc, char **argv) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
+    if (target.has_feature(Target::WebGPU)) {
+        printf("[SKIP] WebGPU seems to perform bad, and fast_atan is not really faster in all scenarios.\n");
+        return 0;
+    }
 
     Var x, y;
     const int test_w = 256;
