@@ -55,12 +55,12 @@ fi
 CLANG_TIDY_BUILD_DIR=`mktemp -d`
 echo CLANG_TIDY_BUILD_DIR = ${CLANG_TIDY_BUILD_DIR}
 
-# Specify Halide_SHARED_LLVM=ON because some installers may provide only that.
+# Specify Halide_LLVM_SHARED_LIBS=ON because some installers may provide only that.
 echo Building compile_commands.json...
 cmake -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
       -DHalide_CLANG_TIDY_BUILD=ON \
-      -DHalide_SHARED_LLVM=ON \
+      -DHalide_LLVM_SHARED_LIBS=ON \
       -DLLVM_DIR=${CLANG_TIDY_LLVM_INSTALL_DIR}/lib/cmake/llvm \
       -S ${ROOT_DIR} \
       -B ${CLANG_TIDY_BUILD_DIR} \

@@ -1,8 +1,8 @@
 {
-  "version": 3,
+  "version": 6,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 22,
+    "minor": 28,
     "patch": 0
   },
   "configurePresets": [
@@ -18,30 +18,42 @@
       "inherits": "base",
       "toolchainFile": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
-      }
-    },
-    {
-      "name": "windows-only",
-      "hidden": true,
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "Halide_LLVM_SHARED_LIBS": false
       }
     },
     {
       "name": "vcpkg",
-      "hidden": true,
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      "inherits": "base",
+      "displayName": "vcpkg deps",
+      "description": "Build dependencies (with Halide exclusions) with vcpkg",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "VCPKG_MANIFEST_FEATURES": "developer",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg",
+        "Halide_USE_FETCHCONTENT": false
+      }
+    },
+    {
+      "name": "vcpkg-full",
+      "inherits": "vcpkg",
+      "displayName": "vcpkg deps (all dependencies)",
+      "description": "Build ALL dependencies with vcpkg",
+      "cacheVariables": {
+        "VCPKG_OVERLAY_PORTS": ""
+      }
     },
     {
       "name": "vs2022",
       "hidden": true,
       "inherits": [
-        "vcpkg",
-        "windows-only"
+        "vcpkg"
       ],
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "generator": "Visual Studio 17 2022",
       "toolset": "host=x64"
     },
@@ -64,41 +76,73 @@
       }
     },
     {
-      "name": "debian-debug",
-      "inherits": "debug",
-      "displayName": "Debian (Debug)",
-      "description": "Debug build assuming Debian-provided dependencies",
-      "cacheVariables": {
-        "Halide_SHARED_LLVM": "ON"
-      }
+      "name": "debug-vcpkg",
+      "inherits": [
+        "debug",
+        "vcpkg"
+      ],
+      "displayName": "Debug (vcpkg)",
+      "description": "Debug build for a single-config generator, vcpkg dependencies"
     },
     {
-      "name": "debian-release",
-      "inherits": "debian-debug",
-      "displayName": "Debian (Release)",
-      "description": "Release build assuming Debian-provided dependencies",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
+      "name": "release-vcpkg",
+      "inherits": [
+        "release",
+        "vcpkg"
+      ],
+      "displayName": "Release (vcpkg)",
+      "description": "Release build for a single-config generator, vcpkg dependencies"
+    },
+    {
+      "name": "debug-vcpkg-full",
+      "inherits": [
+        "debug",
+        "vcpkg-full"
+      ],
+      "displayName": "Debug (vcpkg-full)",
+      "description": "Debug build for a single-config generator, vcpkg-full dependencies"
+    },
+    {
+      "name": "release-vcpkg-full",
+      "inherits": [
+        "release",
+        "vcpkg-full"
+      ],
+      "displayName": "Release (vcpkg-full)",
+      "description": "Release build for a single-config generator, vcpkg-full dependencies"
     },
     {
       "name": "win32",
-      "inherits": [
-        "vs2022",
-        "base"
-      ],
+      "inherits": "vs2022",
       "displayName": "Win32 (Visual Studio)",
       "description": "Visual Studio-based Win32 build with vcpkg dependencies.",
       "architecture": "Win32"
     },
     {
       "name": "win64",
-      "inherits": [
-        "vs2022",
-        "base"
-      ],
+      "inherits": "vs2022",
       "displayName": "Win64 (Visual Studio)",
       "description": "Visual Studio-based x64 build with vcpkg dependencies.",
+      "architecture": "x64"
+    },
+    {
+      "name": "win32-vcpkg-full",
+      "inherits": [
+        "vcpkg-full",
+        "vs2022"
+      ],
+      "displayName": "Win32 (Visual Studio/vcpkg-full)",
+      "description": "Visual Studio-based Win32 build with vcpkg-full dependencies.",
+      "architecture": "Win32"
+    },
+    {
+      "name": "win64-vcpkg-full",
+      "inherits": [
+        "vcpkg-full",
+        "vs2022"
+      ],
+      "displayName": "Win64 (Visual Studio/vcpkg-full)",
+      "description": "Visual Studio-based x64 build with vcpkg-full dependencies.",
       "architecture": "x64"
     },
     {
@@ -107,9 +151,37 @@
       "description": "macOS build using Apple Clang and Homebrew LLVM",
       "generator": "Ninja",
       "inherits": "release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
       "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "/opt/homebrew;/opt/homebrew/opt/llvm;/opt/homebrew/opt/jpeg",
-        "Halide_SHARED_LLVM": "YES"
+        "CMAKE_PREFIX_PATH": "/opt/homebrew;/opt/homebrew/opt/llvm;/opt/homebrew/opt/jpeg"
+      }
+    },
+    {
+      "name": "macOS-vcpkg",
+      "inherits": [
+        "macOS",
+        "vcpkg"
+      ],
+      "displayName": "macOS (vcpkg)",
+      "description": "macOS build with vcpkg dependencies",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "/opt/homebrew/opt/llvm"
+      }
+    },
+    {
+      "name": "macOS-vcpkg-full",
+      "inherits": [
+        "macOS",
+        "vcpkg-full"
+      ],
+      "displayName": "macOS (vcpkg-full)",
+      "description": "macOS build with vcpkg-full dependencies",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": ""
       }
     },
     {
@@ -163,7 +235,7 @@
       "binaryDir": "static-Release",
       "cacheVariables": {
         "BUILD_SHARED_LIBS": "NO",
-        "Halide_BUNDLE_LLVM": "YES"
+        "Halide_BUNDLE_STATIC": "YES"
       }
     },
     {
@@ -182,7 +254,6 @@
       "description": "Build everything with fuzzing enabled",
       "cacheVariables": {
         "LLVM_ROOT": "$penv{LLVM_ROOT}",
-        "TARGET_WEBASSEMBLY": "NO",
         "WITH_TUTORIALS": "NO",
         "WITH_UTILS": "NO",
         "WITH_PYTHON_BINDINGS": "NO",
