@@ -51,10 +51,13 @@ function(bundle_static TARGET)
     # Repeatedly expand and flatten: T ~> T, T.INTERFACE_LINK_LIBRARIES
     foreach (i RANGE 5)
         _bundle_static_replace(
-            cmd "(.+)" "\\1;$<$<TARGET_EXISTS:\\1>:$<TARGET_PROPERTY:\\1,INTERFACE_LINK_LIBRARIES>>"
+            cmd "(.+)" "$<$<TARGET_EXISTS:\\1>:\\1;$<TARGET_PROPERTY:\\1,INTERFACE_LINK_LIBRARIES>>"
         )
         set(cmd "$<LIST:REMOVE_DUPLICATES,$<GENEX_EVAL:${cmd}>>")
     endforeach ()
+
+    # Ensure we are only including targets
+    _bundle_static_replace(cmd "(.+)" "$<TARGET_NAME_IF_EXISTS:\\1>")
 
     # Rewrite T ~> T^T.TYPE  -- we use ^ as a delimiter
     _bundle_static_replace(cmd "(.+)" "\\1^$<TARGET_PROPERTY:\\1,TYPE>")
