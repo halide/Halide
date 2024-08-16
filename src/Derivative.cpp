@@ -397,11 +397,11 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                     }
                     // Now we check all previous updates, see if the left hand
                     // side arguments overlap.
-                    Box current_box = boxes[update_id];
+                    const Box &current_box = boxes[update_id];
                     for (int prev_update_id = 0; prev_update_id < update_id;
                          prev_update_id++) {
                         // Gather two boxes from current update and previous update
-                        Box prev_box = boxes[prev_update_id];
+                        const Box &prev_box = boxes[prev_update_id];
                         internal_assert(current_box.size() == prev_box.size());
                         // If any of the boxes overlap, we need to throw an error
                         if (boxes_overlap(current_box, prev_box)) {
@@ -1369,7 +1369,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     // Prepare a set of new substitution variables for func_to_update
     vector<Var> new_args;
     new_args.reserve(func_to_update.dimensions());
-    for (int arg_id = 0; arg_id < (int)func_to_update.dimensions(); arg_id++) {
+    for (int arg_id = 0; arg_id < func_to_update.dimensions(); arg_id++) {
         new_args.emplace_back(unique_name("u" + std::to_string(arg_id)));
     }
 
@@ -1805,7 +1805,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
             return !rdom.defined();
         }
         int update_id = func_to_update.num_update_definitions() - 1;
-        vector<Expr> prev_lhs =
+        const vector<Expr> &prev_lhs =
             func_to_update.update_args(update_id);
         internal_assert(prev_lhs.size() == lhs.size());
         // If previous update has different left hand side, don't merge

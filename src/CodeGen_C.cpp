@@ -797,7 +797,7 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
         stream << get_indent() << kind_names[arg.kind] << ",\n";
         stream << get_indent() << (int)arg.dimensions << ",\n";
         internal_assert(arg.type.code() < sizeof(type_code_names) / sizeof(type_code_names[0]));
-        stream << get_indent() << "{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits() << ", " << (int)arg.type.lanes() << "},\n";
+        stream << get_indent() << "{" << type_code_names[arg.type.code()] << ", " << arg.type.bits() << ", " << arg.type.lanes() << "},\n";
         stream << get_indent() << "scalar_def_" << legalized_name << ",\n";
         stream << get_indent() << "scalar_min_" << legalized_name << ",\n";
         stream << get_indent() << "scalar_max_" << legalized_name << ",\n";
@@ -873,8 +873,8 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
         const auto name = map_name(arg.name);
 
         stream << get_indent() << "{\"" << name << "\", " << kind_names[arg.kind] << ", " << (int)arg.dimensions
-               << ", halide_type_t{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits()
-               << ", " << (int)arg.type.lanes() << "}},\n";
+               << ", halide_type_t{" << type_code_names[arg.type.code()] << ", " << arg.type.bits()
+               << ", " << arg.type.lanes() << "}},\n";
     }
     indent -= 1;
     stream << get_indent() << "}};\n";

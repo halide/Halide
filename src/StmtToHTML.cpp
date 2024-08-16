@@ -784,7 +784,7 @@ public:
         scope.pop(m.name());
     }
 
-    inline std::string escape_html(std::string src) {
+    std::string escape_html(std::string src) {
         src = replace_all(src, "&", "&amp;");
         src = replace_all(src, "<", "&lt;");
         src = replace_all(src, ">", "&gt;");
@@ -902,7 +902,7 @@ public:
                 std::vector<std::string> operands = split_string(operands_str, ", ");
                 operands_str = "";
                 for (size_t opidx = 0; opidx < operands.size(); ++opidx) {
-                    std::string op = operands[opidx];
+                    const std::string &op = operands[opidx];
                     internal_assert(!op.empty());
                     if (opidx != 0) {
                         operands_str += ", ";

@@ -80,12 +80,9 @@ struct FuncInfo {
 
         for (int lane = 0; lane < lanes; lane++) {
             for (int i = 0; i < real_dims; i++) {
-                if (p->coordinates()[lanes * i + lane] < min_coords[i]) {
-                    min_coords[i] = p->coordinates()[lanes * i + lane];
-                }
-                if (p->coordinates()[lanes * i + lane] > max_coords[i]) {
-                    max_coords[i] = p->coordinates()[lanes * i + lane];
-                }
+                const int coord = p->coordinates()[lanes * i + lane];
+                min_coords[i] = std::min(min_coords[i], coord);
+                max_coords[i] = std::max(max_coords[i], coord);
             }
         }
     }

@@ -570,7 +570,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     // Define all functions
     int idx = 0;
     for (const auto &f : input.functions()) {
-        const auto names = function_names[idx++];
+        const auto &names = function_names[idx++];
 
         run_with_large_stack([&]() {
             compile_func(f, names.simple_name, names.extern_name);
@@ -3228,7 +3228,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->SetInsertPoint(global_not_inited_bb);
         llvm::Value *selected_value = nullptr;
         for (int i = sub_fns.size() - 1; i >= 0; i--) {
-            const auto sub_fn = sub_fns[i];
+            const auto &sub_fn = sub_fns[i];
             if (!selected_value) {
                 selected_value = sub_fn.fn_ptr;
             } else {
