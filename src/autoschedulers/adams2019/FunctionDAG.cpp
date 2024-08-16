@@ -554,6 +554,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
     }
 }
 
+namespace {
 class DependsOnEstimate : public IRVisitor {
 public:
     bool found_estimate = false;
@@ -571,6 +572,7 @@ bool depends_on_estimate(const Expr &expr) {
     expr.accept(&dependency_checker);
     return dependency_checker.found_estimate;
 }
+}  // namespace
 
 FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) {
     map<string, Function> env = build_environment(outputs);

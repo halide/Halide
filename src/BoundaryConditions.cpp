@@ -14,7 +14,7 @@ Func repeat_edge(const Func &source,
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = args[i];
+        const Var &arg_var = args[i];
         Expr min = bounds[i].min;
         Expr extent = bounds[i].extent;
 
@@ -39,16 +39,15 @@ Func repeat_edge(const Func &source,
 
 Func constant_exterior(const Func &source, const Tuple &value,
                        const Region &bounds) {
-    std::vector<Var> source_args = source.args();
-    std::vector<Var> args(source_args);
+    std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size())
         << "constant_exterior called with more bounds (" << bounds.size()
-        << ") than dimensions (" << source_args.size()
+        << ") than dimensions (" << args.size()
         << ") Func " << source.name() << " has.\n";
 
     Expr out_of_bounds = cast<bool>(false);
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = source_args[i];
+        const Var &arg_var = args[i];
         Expr min = bounds[i].min;
         Expr extent = bounds[i].extent;
 
@@ -91,7 +90,7 @@ Func repeat_image(const Func &source,
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = args[i];
+        const Var &arg_var = args[i];
         Expr min = bounds[i].min;
         Expr extent = bounds[i].extent;
 
@@ -146,7 +145,7 @@ Func mirror_image(const Func &source,
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = args[i];
+        const Var &arg_var = args[i];
 
         Expr min = bounds[i].min;
         Expr extent = bounds[i].extent;
@@ -187,7 +186,7 @@ Func mirror_interior(const Func &source,
 
     std::vector<Expr> actuals;
     for (size_t i = 0; i < bounds.size(); i++) {
-        Var arg_var = args[i];
+        const Var &arg_var = args[i];
 
         Expr min = bounds[i].min;
         Expr extent = bounds[i].extent;

@@ -66,12 +66,14 @@ const std::string &RVar::name() const {
     }
 }
 
+namespace {
 template<int N>
 ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
     vector<ReductionVariable> d(&vars[0], &vars[N]);
     ReductionDomain dom(d);
     return dom;
 }
+}  // namespace
 
 // This just initializes the predefined x, y, z, w members of RDom.
 void RDom::init_vars(const string &name) {

@@ -364,7 +364,7 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
                 consumed_every_bit |= ((intptr_t)val) == -1;
                 val = ((intptr_t)val) >> 1;
             } else {
-                val = ((uintptr_t)val) >> 1;
+                val = val >> 1;
             }
             consumed_every_bit |= (val == 0);
             inst |= (next_bit << i);

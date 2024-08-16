@@ -32,7 +32,7 @@ struct Cost {
     }
     Cost() = default;
 
-    inline bool defined() const {
+    bool defined() const {
         return arith.defined() && memory.defined();
     }
     void simplify();

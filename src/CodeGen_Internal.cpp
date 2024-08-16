@@ -292,6 +292,7 @@ Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     }
 }
 
+namespace {
 std::pair<Expr, Expr> unsigned_long_div_mod_round_to_zero(Expr &num, const Expr &den,
                                                           const uint64_t *upper_bound) {
     internal_assert(num.type() == den.type());
@@ -329,6 +330,7 @@ std::pair<Expr, Expr> unsigned_long_div_mod_round_to_zero(Expr &num, const Expr 
     }
     return {q, r};
 }
+}  // namespace
 
 std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &num, const Expr &den,
                                                  const uint64_t *max_abs) {
@@ -557,6 +559,7 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
     return common_subexpression_elimination(a - correction);
 }
 
+namespace {
 bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;
@@ -585,6 +588,7 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     }
     return false;
 }
+}  // namespace
 
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options) {
     bool use_soft_float_abi = false;

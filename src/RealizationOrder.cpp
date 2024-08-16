@@ -282,8 +282,6 @@ void sort_funcs_by_name_and_counter(vector<string> *funcs,
     }
 }
 
-}  // anonymous namespace
-
 map<string, uint64_t> compute_visitation_order(const vector<Function> &outputs) {
     vector<Function> funcs = called_funcs_in_order_found(outputs);
     map<string, uint64_t> result;
@@ -292,6 +290,8 @@ map<string, uint64_t> compute_visitation_order(const vector<Function> &outputs) 
     }
     return result;
 }
+
+}  // anonymous namespace
 
 pair<vector<string>, vector<vector<string>>> realization_order(
     const vector<Function> &outputs, map<string, Function> &env) {

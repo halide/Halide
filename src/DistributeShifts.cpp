@@ -195,7 +195,7 @@ private:
 
 }  // namespace
 
-Stmt distribute_shifts(const Stmt &s, const bool multiply_adds) {
+Stmt distribute_shifts(const Stmt &s, bool multiply_adds) {
     return DistributeShiftsAsMuls(multiply_adds).mutate(s);
 }
 

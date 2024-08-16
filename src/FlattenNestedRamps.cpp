@@ -91,7 +91,7 @@ class FlattenRamps : public IRMutator {
                         c /= stride;
                     }
                     // Compute the number of elements loaded
-                    extent = (int)((max_constant_offset / stride) + 1);
+                    extent = (max_constant_offset / stride) + 1;
                 }
 
                 // If we're gathering from a very large range, it

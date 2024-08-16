@@ -129,7 +129,7 @@ void CodeGen_PowerPC::visit(const Min *op) {
             return;
         }
     }
-    return CodeGen_Posix::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_PowerPC::visit(const Max *op) {
@@ -139,7 +139,7 @@ void CodeGen_PowerPC::visit(const Max *op) {
             return;
         }
     }
-    return CodeGen_Posix::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 string CodeGen_PowerPC::mcpu_target() const {

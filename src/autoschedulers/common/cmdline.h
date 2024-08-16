@@ -484,7 +484,7 @@ public:
             return false;
         }
 
-        if (buf.length() > 0) {
+        if (!buf.empty()) {
             args.push_back(buf);
         }
 
@@ -520,7 +520,7 @@ public:
 
         std::map<char, std::string> lookup;
         for (auto &option : options) {
-            if (option.first.length() == 0) {
+            if (option.first.empty()) {
                 continue;
             }
             char initial = option.second->short_name();

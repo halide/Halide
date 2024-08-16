@@ -404,7 +404,6 @@ Expr deinterleave(Expr e, int starting_lane, int lane_stride, int new_lanes, con
     e = common_subexpression_elimination(e);
     return simplify(e);
 }
-}  // namespace
 
 Expr extract_odd_lanes(const Expr &e, const Scope<> &lets) {
     internal_assert(e.type().lanes() % 2 == 0);
@@ -416,6 +415,13 @@ Expr extract_even_lanes(const Expr &e, const Scope<> &lets) {
     return deinterleave(e, 0, 2, (e.type().lanes() + 1) / 2, lets);
 }
 
+Expr extract_mod3_lanes(const Expr &e, int lane, const Scope<> &lets) {
+    internal_assert(e.type().lanes() % 3 == 0);
+    return deinterleave(e, lane, 3, (e.type().lanes() + 2) / 3, lets);
+}
+
+}  // namespace
+
 Expr extract_even_lanes(const Expr &e) {
     internal_assert(e.type().lanes() % 2 == 0);
     Scope<> lets;
@@ -426,11 +432,6 @@ Expr extract_odd_lanes(const Expr &e) {
     internal_assert(e.type().lanes() % 2 == 0);
     Scope<> lets;
     return extract_odd_lanes(e, lets);
-}
-
-Expr extract_mod3_lanes(const Expr &e, int lane, const Scope<> &lets) {
-    internal_assert(e.type().lanes() % 3 == 0);
-    return deinterleave(e, lane, 3, (e.type().lanes() + 2) / 3, lets);
 }
 
 Expr extract_lane(const Expr &e, int lane) {
@@ -699,8 +700,8 @@ class Interleaver : public IRMutator {
         std::vector<Expr> args(stores.size());
         std::vector<Expr> predicates(stores.size());
 
-        int min_offset = 0;
-        std::vector<int> offsets(stores.size());
+        int64_t min_offset = 0;
+        std::vector<int64_t> offsets(stores.size());
 
         std::string load_name;
         Buffer<> load_image;
@@ -723,14 +724,12 @@ class Interleaver : public IRMutator {
             }
 
             offsets[i] = *offs;
-            if (*offs < min_offset) {
-                min_offset = *offs;
-            }
+            min_offset = std::min(min_offset, *offs);
         }
 
         // Gather the args for interleaving.
         for (size_t i = 0; i < stores.size(); ++i) {
-            int j = offsets[i] - min_offset;
+            int64_t j = offsets[i] - min_offset;
             if (j == 0) {
                 base = stores[i].as<Store>()->index.as<Ramp>()->base;
             }

@@ -32,7 +32,7 @@ std::string stringify(GPU_parallelism label) {
 
 // How small should an innermost loop cluster be before you just
 // entirely unroll the thing
-const int kUnrollLimitGPU = 16;
+constexpr static int kUnrollLimitGPU = 16;
 
 bool may_subtile(const Anderson2021Params &params) {
     return params.disable_subtiling == 0;

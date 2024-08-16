@@ -647,6 +647,7 @@ void check_representable(Type dst, int64_t x) {
     }
 }
 
+namespace {
 void match_lanes(Expr &a, Expr &b) {
     // Broadcast scalar to match vector
     if (a.type().is_scalar() && b.type().is_vector()) {
@@ -657,6 +658,18 @@ void match_lanes(Expr &a, Expr &b) {
         internal_assert(a.type().lanes() == b.type().lanes()) << "Can't match types of differing widths";
     }
 }
+
+// Cast to the wider type of the two. Already guaranteed to leave
+// signed/unsigned on number of lanes unchanged.
+void match_bits(Expr &x, Expr &y) {
+    // The signedness doesn't match, so just match the bits.
+    if (x.type().bits() < y.type().bits()) {
+        x = cast(x.type().with_bits(y.type().bits()), x);
+    } else if (y.type().bits() < x.type().bits()) {
+        y = cast(y.type().with_bits(x.type().bits()), y);
+    }
+}
+}  // namespace
 
 void match_types(Expr &a, Expr &b) {
     if (a.type() == b.type()) {
@@ -707,17 +720,6 @@ void match_types(Expr &a, Expr &b) {
     }
 }
 
-// Cast to the wider type of the two. Already guaranteed to leave
-// signed/unsigned on number of lanes unchanged.
-void match_bits(Expr &x, Expr &y) {
-    // The signedness doesn't match, so just match the bits.
-    if (x.type().bits() < y.type().bits()) {
-        x = cast(x.type().with_bits(y.type().bits()), x);
-    } else if (y.type().bits() < x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-}
-
 void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
     user_assert(x.defined() && y.defined()) << op_name << " of undefined Expr\n";
     user_assert(x.type().is_int() || x.type().is_uint())
@@ -745,6 +747,7 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
 
 // Fast math ops based on those from Syrah (http://github.com/boulos/syrah). Thanks, Solomon!
 
+namespace {
 // Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5
 void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent) {
     Type type = input.type();
@@ -774,6 +777,7 @@ void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent) {
 
     *reduced = reinterpret(type, blended);
 }
+}  // namespace
 
 Expr halide_log(const Expr &x_full) {
     Type type = x_full.type();

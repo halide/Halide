@@ -165,9 +165,7 @@ class KeyInfo {
         // Find maximum natural alignment needed.
         for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             int alignment = i.second.type.bytes();
-            if (alignment > max_alignment) {
-                max_alignment = alignment;
-            }
+            max_alignment = std::max(max_alignment, alignment);
         }
         // Make sure max_alignment is a power of two and has maximum value of 32
         int i = 0;
