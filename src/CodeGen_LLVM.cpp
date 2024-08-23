@@ -95,12 +95,6 @@ using std::vector;
 #define InitializeNVPTXAsmPrinter() InitializeAsmPrinter(NVPTX)
 #endif
 
-#ifdef WITH_AMDGPU
-#define InitializeAMDGPUTarget() InitializeTarget(AMDGPU)
-#define InitializeAMDGPUAsmParser() InitializeAsmParser(AMDGPU)
-#define InitializeAMDGPUAsmPrinter() InitializeAsmParser(AMDGPU)
-#endif
-
 #ifdef WITH_AARCH64
 #define InitializeAArch64Target() InitializeTarget(AArch64)
 #define InitializeAArch64AsmParser() InitializeAsmParser(AArch64)
@@ -576,7 +570,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     // Define all functions
     int idx = 0;
     for (const auto &f : input.functions()) {
-        const auto names = function_names[idx++];
+        const auto &names = function_names[idx++];
 
         run_with_large_stack([&]() {
             compile_func(f, names.simple_name, names.extern_name);
@@ -1916,7 +1910,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(const string &buffer, Halide::Type t
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, Expr index) {
     // Promote index to 64-bit on targets that use 64-bit pointers.
-    llvm::DataLayout d(module.get());
+    const llvm::DataLayout &d = module->getDataLayout();
     if (promote_indices() && d.getPointerSize() == 8) {
         index = promote_64(index);
     }
@@ -1957,7 +1951,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     }
 
     // Promote index to 64-bit on targets that use 64-bit pointers.
-    llvm::DataLayout d(module.get());
+    const llvm::DataLayout &d = module->getDataLayout();
     if (d.getPointerSize() == 8) {
         llvm::Type *index_type = index->getType();
         llvm::Type *desired_index_type = i64_t;
@@ -3234,7 +3228,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->SetInsertPoint(global_not_inited_bb);
         llvm::Value *selected_value = nullptr;
         for (int i = sub_fns.size() - 1; i >= 0; i--) {
-            const auto sub_fn = sub_fns[i];
+            const auto &sub_fn = sub_fns[i];
             if (!selected_value) {
                 selected_value = sub_fn.fn_ptr;
             } else {
@@ -3292,7 +3286,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::undef)) {
         user_error << "undef not eliminated before code generation. Please report this as a Halide bug.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
-        llvm::DataLayout d(module.get());
+        const llvm::DataLayout &d = module->getDataLayout();
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(halide_buffer_t_type));
     } else if (op->is_intrinsic(Call::strict_float)) {
         IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
@@ -4472,7 +4466,7 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     Value *size = ConstantInt::get(i32_t, n);
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
     int align = native_vector_bits() / 8;
-    llvm::DataLayout d(module.get());
+    const llvm::DataLayout &d = module->getDataLayout();
     int allocated_size = n * (int)d.getTypeAllocSize(t);
     if (t->isVectorTy() || n > 1) {
         ptr->setAlignment(llvm::Align(align));

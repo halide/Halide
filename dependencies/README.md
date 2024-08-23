@@ -1,8 +1,7 @@
 # Dependencies
 
-## LLVM / WASM
-
-These are Halide's wrappers for the LLVM and WASM CMake builds/packages.
+This folder contains vendored dependencies for building Halide. They do not
+form part of the API surface.
 
 ## SPIR-V
 

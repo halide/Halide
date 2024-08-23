@@ -23,7 +23,7 @@
 // our CMake build, so that we ensure that the in-build metadata (eg soversion)
 // matches, but keeping the canonical version here makes it easier to keep
 // downstream build systems (eg Blaze/Bazel) properly in sync with the source.
-#define HALIDE_VERSION_MAJOR 18
+#define HALIDE_VERSION_MAJOR 19
 #define HALIDE_VERSION_MINOR 0
 #define HALIDE_VERSION_PATCH 0
 
@@ -117,7 +117,7 @@ extern "C" {
 // For now, we say that if >= v12, and compiling on x86 or arm,
 // we assume support. This may need revision.
 #if defined(__GNUC__) && (__GNUC__ >= 12)
-#if defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__)
+#if defined(__x86_64__) || (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) || defined(__arm__) || defined(__aarch64__)
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
 #endif
 #endif
@@ -1434,7 +1434,16 @@ typedef enum halide_target_feature_t {
     halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing
     halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile
     halide_target_feature_rvv,                    ///< Enable RISCV "V" Vector Extension
-    halide_target_feature_armv81a,                ///< Enable ARMv8.1-a instructions
+    halide_target_feature_armv8a,                 ///< Enable ARMv8a instructions
+    halide_target_feature_armv81a,                ///< Enable ARMv8.1a instructions
+    halide_target_feature_armv82a,                ///< Enable ARMv8.2a instructions
+    halide_target_feature_armv83a,                ///< Enable ARMv8.3a instructions
+    halide_target_feature_armv84a,                ///< Enable ARMv8.4a instructions
+    halide_target_feature_armv85a,                ///< Enable ARMv8.5a instructions
+    halide_target_feature_armv86a,                ///< Enable ARMv8.6a instructions
+    halide_target_feature_armv87a,                ///< Enable ARMv8.7a instructions
+    halide_target_feature_armv88a,                ///< Enable ARMv8.8a instructions
+    halide_target_feature_armv89a,                ///< Enable ARMv8.9a instructions
     halide_target_feature_sanitizer_coverage,     ///< Enable hooks for SanitizerCoverage support.
     halide_target_feature_profile_by_timer,       ///< Alternative to halide_target_feature_profile using timer interrupt for systems without threads or applicartions that need to avoid them.
     halide_target_feature_spirv,                  ///< Enable SPIR-V code generation support.

@@ -311,6 +311,7 @@ tests(GROUPS correctness
       strict_float_bounds.cpp
       strided_load.cpp
       target.cpp
+      target_query.cpp
       tiled_matmul.cpp
       tracing.cpp
       tracing_bounds.cpp

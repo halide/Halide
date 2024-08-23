@@ -1857,12 +1857,6 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
     return b.interval;
 }
 
-}  // namespace
-
-Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
-    return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0);
-}
-
 Region region_union(const Region &a, const Region &b) {
     internal_assert(a.size() == b.size()) << "Mismatched dimensionality in region union\n";
     Region result;
@@ -1875,6 +1869,12 @@ Region region_union(const Region &a, const Region &b) {
         result.emplace_back(simplify(min), simplify(extent));
     }
     return result;
+}
+
+}  // namespace
+
+Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
+    return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0);
 }
 
 void merge_boxes(Box &a, const Box &b) {
@@ -3085,8 +3085,6 @@ private:
     }
 };
 
-}  // namespace
-
 map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provides,
                                const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     if (!fn.empty() && s.defined()) {
@@ -3275,6 +3273,7 @@ Box box_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provid
     internal_assert(boxes.size() <= 1);
     return boxes[fn];
 }
+}  // namespace
 
 map<string, Box> boxes_required(const Expr &e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(e, Stmt(), true, false, "", scope, fb);
@@ -3324,6 +3323,7 @@ Box box_touched(Stmt s, const string &fn, const Scope<Interval> &scope, const Fu
     return box_touched(Expr(), std::move(s), true, true, fn, scope, fb);
 }
 
+namespace {
 // Compute interval of all possible function's values (default + specialized values)
 Interval compute_pure_function_definition_value_bounds(
     const Definition &def, const Scope<Interval> &scope, const FuncValueBounds &fb, int dim) {
@@ -3338,6 +3338,7 @@ Interval compute_pure_function_definition_value_bounds(
     }
     return result;
 }
+}  // namespace
 
 FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
@@ -3345,7 +3346,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
     for (const auto &func_name : order) {
         Function f = env.find(func_name)->second;
-        const vector<string> f_args = f.args();
+        const vector<string> &f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
             pair<string, int> key = {f.name(), j};
 

@@ -109,8 +109,8 @@ v8](https://v8.dev/docs/embed). The process for Halide is summarized below.
 
 With V8 built, we can pass the CMake options:
 
-- `V8_INCLUDE_PATH`, path to V8 includes, e.g. `$HOME/v8/v8/include`
-- `V8_LIB_PATH`, path to V8 static library, e.g. `$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a`
+- `V8_INCLUDE_DIR`, path to V8 includes, e.g. `$HOME/v8/v8/include`
+- `V8_LIBRARY`, path to V8 static library, e.g. `$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a`
 
 An example to configure Halide with V8 support, build and run an example test:
 
@@ -121,8 +121,8 @@ $ export HL_JIT_TARGET=${HL_TARGET}
 $ cmake -G Ninja \
       -DWITH_WABT=OFF \
       -DWITH_V8=ON \
-      -DV8_INCLUDE_PATH=$HOME/v8/v8/include \
-      -DV8_LIB_PATH=$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a \
+      -DV8_INCLUDE_DIR=$HOME/v8/v8/include \
+      -DV8_LIBRARY=$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a \
       -DHalide_TARGET=${HL_TARGET} \
       /* other cmake settings here as appropriate */
 

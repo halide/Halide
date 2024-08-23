@@ -32,6 +32,42 @@ using namespace llvm;
 
 namespace {
 
+// Populate feature flags in a target according to those implied by
+// existing flags, so that instruction patterns can just check for the
+// oldest feature flag that supports an instruction.
+//
+// According to LLVM, ARM architectures have the following is-a-superset-of
+// relationships:
+//
+//   v9.5a > v9.4a > v9.3a > v9.2a > v9.1a > v9a;
+//             v       v       v       v       v
+//           v8.9a > v8.8a > v8.7a > v8.6a > v8.5a > v8.4a > ... > v8a;
+//
+// v8r has no relation to anything.
+Target complete_arm_target(Target t) {
+    constexpr int num_arm_v8_features = 10;
+    static const Target::Feature arm_v8_features[num_arm_v8_features] = {
+        Target::ARMv89a,
+        Target::ARMv88a,
+        Target::ARMv87a,
+        Target::ARMv86a,
+        Target::ARMv85a,
+        Target::ARMv84a,
+        Target::ARMv83a,
+        Target::ARMv82a,
+        Target::ARMv81a,
+        Target::ARMv8a,
+    };
+
+    for (int i = 0; i < num_arm_v8_features - 1; i++) {
+        if (t.has_feature(arm_v8_features[i])) {
+            t.set_feature(arm_v8_features[i + 1]);
+        }
+    }
+
+    return t;
+}
+
 // Substitute in loads that feed into slicing shuffles, to help with vld2/3/4
 // emission. These are commonly lifted as lets because they get used by multiple
 // interleaved slices of the same load.
@@ -201,7 +237,7 @@ protected:
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
-    : CodeGen_Posix(target) {
+    : CodeGen_Posix(complete_arm_target(target)) {
 
     // TODO(https://github.com/halide/Halide/issues/8088): See if
     // use_llvm_vp_intrinsics can replace architecture specific code in this
@@ -1455,15 +1491,10 @@ void CodeGen_ARM::visit(const Store *op) {
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
         llvm::Type *intrin_llvm_type = llvm_type_with_constraint(intrin_type, false, is_sve ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
-#if LLVM_VERSION >= 170
-        const bool is_opaque = true;
-#else
-        const bool is_opaque = llvm::PointerType::get(intrin_llvm_type, 0)->isOpaque();
-#endif
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
-                  << (is_opaque ? ".p0" : ".p0i8")
+                  << ".p0"
                   << ".v"
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
@@ -1490,9 +1521,6 @@ void CodeGen_ARM::visit(const Store *op) {
                       << (t.is_float() ? 'f' : 'i')
                       << t.bits()
                       << ".p0";
-                if (!is_opaque) {
-                    instr << (t.is_float() ? 'f' : 'i') << t.bits();
-                }
                 arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
                 arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
             }
@@ -2445,9 +2473,9 @@ string CodeGen_ARM::mcpu_target() const {
         }
     } else {
         if (target.os == Target::IOS) {
-            return "cyclone";
+            return "apple-a7";
         } else if (target.os == Target::OSX) {
-            return "apple-a12";
+            return "apple-m1";
         } else if (target.has_feature(Target::SVE2)) {
             return "cortex-x1";
         } else {
@@ -2465,8 +2493,35 @@ string CodeGen_ARM::mattrs() const {
     if (target.has_feature(Target::ARMFp16)) {
         attrs.emplace_back("+fullfp16");
     }
+    if (target.has_feature(Target::ARMv8a)) {
+        attrs.emplace_back("+v8a");
+    }
     if (target.has_feature(Target::ARMv81a)) {
         attrs.emplace_back("+v8.1a");
+    }
+    if (target.has_feature(Target::ARMv82a)) {
+        attrs.emplace_back("+v8.2a");
+    }
+    if (target.has_feature(Target::ARMv83a)) {
+        attrs.emplace_back("+v8.3a");
+    }
+    if (target.has_feature(Target::ARMv84a)) {
+        attrs.emplace_back("+v8.4a");
+    }
+    if (target.has_feature(Target::ARMv85a)) {
+        attrs.emplace_back("+v8.5a");
+    }
+    if (target.has_feature(Target::ARMv86a)) {
+        attrs.emplace_back("+v8.6a");
+    }
+    if (target.has_feature(Target::ARMv87a)) {
+        attrs.emplace_back("+v8.7a");
+    }
+    if (target.has_feature(Target::ARMv88a)) {
+        attrs.emplace_back("+v8.8a");
+    }
+    if (target.has_feature(Target::ARMv89a)) {
+        attrs.emplace_back("+v8.9a");
     }
     if (target.has_feature(Target::ARMDotProd)) {
         attrs.emplace_back("+dotprod");
@@ -2482,7 +2537,7 @@ string CodeGen_ARM::mattrs() const {
         }
     } else {
         // TODO: Should Halide's SVE flags be 64-bit only?
-        // TODO: Sound we ass "-neon" if NoNEON is set? Does this make any sense?
+        // TODO: Should we add "-neon" if NoNEON is set? Does this make any sense?
         if (target.has_feature(Target::SVE2)) {
             attrs.emplace_back("+sve2");
         } else if (target.has_feature(Target::SVE)) {

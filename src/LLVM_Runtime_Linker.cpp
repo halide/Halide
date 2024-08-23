@@ -410,17 +410,9 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         }
     } else if (target.arch == Target::POWERPC) {
         if (target.bits == 32) {
-#if LLVM_VERSION >= 170
             return llvm::DataLayout("E-m:e-p:32:32-Fn32-i64:64-n32");
-#else
-            return llvm::DataLayout("E-m:e-p:32:32-i64:64-n32");
-#endif
         } else {
-#if LLVM_VERSION >= 170
             return llvm::DataLayout("e-m:e-Fn32-i64:64-n32:64-S128-v256:256:256-v512:512:512");
-#else
-            return llvm::DataLayout("e-m:e-i64:64-n32:64-S128-v256:256:256-v512:512:512");
-#endif
         }
     } else if (target.arch == Target::Hexagon) {
         return llvm::DataLayout(
@@ -749,10 +741,6 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     }
 }
 
-}  // namespace
-
-namespace Internal {
-
 /** When JIT-compiling on 32-bit windows, we need to rewrite calls
  *  to name-mangled win32 api calls to non-name-mangled versions.
  */
@@ -761,7 +749,7 @@ void undo_win32_name_mangling(llvm::Module *m) {
     // For every function prototype...
     for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
         llvm::Function &f = *iter;
-        string n = get_llvm_function_name(f);
+        string n = Internal::get_llvm_function_name(f);
         // if it's a __stdcall call that starts with \01_, then we're making a win32 api call
         if (f.getCallingConv() == llvm::CallingConv::X86_StdCall &&
             f.empty() &&
@@ -833,6 +821,10 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
         }
     }
 }
+
+}  // namespace
+
+namespace Internal {
 
 std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, const Target &t,
                                                          std::unique_ptr<llvm::Module> extra_module) {

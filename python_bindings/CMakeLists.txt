@@ -1,5 +1,9 @@
-cmake_minimum_required(VERSION 3.22...3.23)
+cmake_minimum_required(VERSION 3.28)
 project(Halide_Python)
+
+if (PROJECT_IS_TOP_LEVEL)
+    enable_testing()
+endif ()
 
 include(CMakeDependentOption)
 
@@ -12,6 +16,11 @@ set(CMAKE_CXX_STANDARD 17 CACHE STRING "The minimum C++ standard to use")
 option(CMAKE_CXX_STANDARD_REQUIRED "Prevent CMake C++ standard selection decay" ON)
 option(CMAKE_CXX_EXTENSIONS "Enable C++ vendor extensions (e.g. GNU)" OFF)
 
+# Support not actually building the bindings, but using the ones we find
+# via `find_package(Halide)`. This allows running tests against the
+# installed Halide package.
+option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
+
 # Duplicated options from parent project
 option(WITH_TESTS "Build tests" ON)
 option(WITH_TUTORIALS "Build tutorials" ON)
@@ -23,10 +32,6 @@ cmake_dependent_option(
     WITH_TESTS OFF
 )
 
-# Set the expected (downloaded) version of pybind11
-option(PYBIND11_USE_FETCHCONTENT "Enable to download pybind11 via FetchContent" ON)
-set(PYBIND11_VER 2.10.4 CACHE STRING "The pybind11 version to use (or download)")
-
 ##
 # Dependencies
 ##
@@ -35,24 +40,13 @@ set(PYBIND11_VER 2.10.4 CACHE STRING "The pybind11 version to use (or download)"
 # Development.Module and Development.Embed. We don't need the Embed
 # part, so only requesting Module avoids failures when Embed is not
 # available, as is the case in the manylinux Docker images.
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
-if (Python3_VERSION VERSION_LESS "3.8")
-    message(FATAL_ERROR "Halide requires Python v3.8 or later, but found ${Python3_VERSION}.")
-endif ()
-message(STATUS "Found Python ${Python3_VERSION} at ${Python3_EXECUTABLE}")
+find_package(Python3 3.8 REQUIRED Interpreter Development.Module)
 
-if (PYBIND11_USE_FETCHCONTENT)
-    include(FetchContent)
-    FetchContent_Declare(
-        pybind11
-        GIT_REPOSITORY https://github.com/pybind/pybind11.git
-        GIT_TAG v${PYBIND11_VER}
-    )
-    FetchContent_MakeAvailable(pybind11)
-else ()
-    find_package(pybind11 ${PYBIND11_VER} REQUIRED)
+if (WITH_PYTHON_BINDINGS)
+    find_package(pybind11 2.10.4 REQUIRED)
 endif ()
 
+# Note: this must happen, especially when WITH_PYTHON_BINDINGS is OFF.
 find_package(Halide REQUIRED Halide)
 if (NOT Halide_ENABLE_RTTI OR NOT Halide_ENABLE_EXCEPTIONS)
     message(FATAL_ERROR "Python bindings require RTTI and exceptions to be enabled.")
@@ -91,9 +85,11 @@ endfunction()
 # Add our sources to this sub-tree.
 ##
 
-add_subdirectory(src)
+if (WITH_PYTHON_BINDINGS)
+    add_subdirectory(src)
+endif ()
 
-if (WITH_PYTHON_STUBS)
+if (WITH_PYTHON_BINDINGS AND WITH_PYTHON_STUBS)
     add_subdirectory(stub)
 endif ()
 

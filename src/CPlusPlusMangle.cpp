@@ -44,8 +44,6 @@ Type non_null_void_star_type() {
     return Handle(1, &t);
 }
 
-}  // namespace
-
 namespace WindowsMangling {
 
 struct PreviousDeclarations {
@@ -614,6 +612,8 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 }
 
 }  // namespace ItaniumABIMangling
+
+}  // namespace
 
 std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
                                             Type return_type, const std::vector<ExternFuncArgument> &args,
