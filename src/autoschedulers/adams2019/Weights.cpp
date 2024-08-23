@@ -12,7 +12,7 @@ namespace Internal {
 
 using Halide::Runtime::Buffer;
 
-constexpr uint32_t kSignature = 0x68776631;
+constexpr static uint32_t kSignature = 0x68776631;
 
 void Weights::randomize(uint32_t seed) {
     std::mt19937 rng(seed);
@@ -70,7 +70,7 @@ bool Weights::load(std::istream &i) {
         for (uint32_t d = 0; d < dimension_count; d++) {
             uint32_t extent;
             i.read((char *)&extent, sizeof(extent));
-            if (i.fail() || (int)extent != (int)buf.extent(d)) {
+            if (i.fail() || (int)extent != buf.extent(d)) {
                 return false;
             }
         }

@@ -20,14 +20,6 @@
 
 #include <fstream>
 
-// This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
-// hardcoding a path to the .h file.
-#ifdef WITH_NVPTX
-namespace llvm {
-FunctionPass *createNVVMReflectPass(const StringMap<int> &Mapping);
-}
-#endif
-
 namespace Halide {
 namespace Internal {
 

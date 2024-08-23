@@ -426,6 +426,7 @@ private:
             buf.dim = other.buf.dim;
             other.buf.dim = nullptr;
         }
+        other.buf = halide_buffer_t();
     }
 
     /** Initialize the shape from a halide_buffer_t. */
@@ -797,7 +798,6 @@ public:
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         move_shape_from(std::forward<Buffer<T, Dims, InClassDimStorage>>(other));
-        other.buf = halide_buffer_t();
     }
 
     /** Move-construct a Buffer from a Buffer of different
@@ -812,7 +812,6 @@ public:
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         move_shape_from(std::forward<Buffer<T2, D2, S2>>(other));
-        other.buf = halide_buffer_t();
     }
 
     /** Assign from another Buffer of possibly-different
@@ -864,7 +863,6 @@ public:
         free_shape_storage();
         buf = other.buf;
         move_shape_from(std::forward<Buffer<T2, D2, S2>>(other));
-        other.buf = halide_buffer_t();
         return *this;
     }
 
@@ -878,7 +876,6 @@ public:
         free_shape_storage();
         buf = other.buf;
         move_shape_from(std::forward<Buffer<T, Dims, InClassDimStorage>>(other));
-        other.buf = halide_buffer_t();
         return *this;
     }
 
@@ -1162,8 +1159,8 @@ public:
     /** Initialize a Buffer from a pointer to the min coordinate and
      * a vector describing the shape.  Does not take ownership of the
      * data, and does not set the host_dirty flag. */
-    explicit inline Buffer(halide_type_t t, add_const_if_T_is_const<void> *data,
-                           const std::vector<halide_dimension_t> &shape)
+    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data,
+                    const std::vector<halide_dimension_t> &shape)
         : Buffer(t, data, (int)shape.size(), shape.data()) {
     }
 
@@ -1182,7 +1179,7 @@ public:
     /** Initialize a Buffer from a pointer to the min coordinate and
      * a vector describing the shape.  Does not take ownership of the
      * data, and does not set the host_dirty flag. */
-    explicit inline Buffer(T *data, const std::vector<halide_dimension_t> &shape)
+    explicit Buffer(T *data, const std::vector<halide_dimension_t> &shape)
         : Buffer(data, (int)shape.size(), shape.data()) {
     }
 
@@ -1395,7 +1392,7 @@ public:
      *     my_func(input.alias(), output);
      * }\endcode
      */
-    inline Buffer<T, Dims, InClassDimStorage> alias() const {
+    Buffer<T, Dims, InClassDimStorage> alias() const {
         return *this;
     }
 
@@ -1710,7 +1707,7 @@ public:
     }
 
     /** Slice a buffer in-place at the dimension's minimum. */
-    inline void slice(int d) {
+    void slice(int d) {
         slice(d, dim(d).min());
     }
 

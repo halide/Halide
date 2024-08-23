@@ -426,7 +426,7 @@ void halide_toc_impl(const char *file, int line);
 template<typename TO>
 struct StaticCast {
     template<typename FROM>
-    inline constexpr static TO value(const FROM &from) {
+    constexpr static TO value(const FROM &from) {
         if constexpr (std::is_same<TO, bool>::value) {
             return from != 0;
         } else {
@@ -441,7 +441,7 @@ struct StaticCast {
 template<typename TO>
 struct IsRoundtrippable {
     template<typename FROM>
-    inline constexpr static bool value(const FROM &from) {
+    constexpr static bool value(const FROM &from) {
         if constexpr (std::is_convertible<FROM, TO>::value) {
             if constexpr (std::is_arithmetic<TO>::value &&
                           std::is_arithmetic<FROM>::value &&

@@ -53,6 +53,8 @@ bool may_subtile(const Anderson2021Params &params);
 
 int64_t get_shared_memory_limit(const Anderson2021Params &params);
 
+int64_t get_shared_memory_sm_limit(const Anderson2021Params &params);
+
 int64_t get_active_block_hardware_limit(const Anderson2021Params &params);
 
 int64_t get_active_warp_hardware_limit(const Anderson2021Params &params);
