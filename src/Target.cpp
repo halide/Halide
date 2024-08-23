@@ -1550,7 +1550,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 23> intersection_features = {{
+    const std::array<Feature, 14> intersection_features = {{
         ARMv7s,
         ARM64e,
         AVX,
@@ -1570,7 +1570,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 10> matching_features = {{
+    const std::array<Feature, 9> matching_features = {{
         ASAN,
         Debug,
         HexagonDma,

@@ -1,4 +1,4 @@
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "webgpu")
+if (Halide_TARGET MATCHES "webgpu")
     message(WARNING "Python tutorials are not supported with WebGPU.")
     return()
 endif ()
@@ -24,12 +24,12 @@ set(tests
 set(PYPATH_lesson_10_aot_compilation_run "$<TARGET_FILE_DIR:lesson_10_halide>")
 
 foreach (test IN LISTS tests)
-    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm" AND test MATCHES "lesson_10")
+    if (Halide_TARGET MATCHES "wasm" AND test MATCHES "lesson_10")
         message(WARNING "Not all tutorials build under WASM.")
         continue()
     endif ()
 
-    if (TARGET_VULKAN AND Halide_TARGET MATCHES "vulkan" AND test MATCHES "lesson_10")
+    if (Halide_TARGET MATCHES "vulkan" AND test MATCHES "lesson_10")
         message(WARNING "Not all tutorials build under Vulkan.")
         continue()
     endif ()
@@ -42,9 +42,9 @@ foreach (test IN LISTS tests)
     )
 endforeach ()
 
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+if (Halide_TARGET MATCHES "wasm")
     message(WARNING "Not all tutorials build under WASM.")
-elseif (TARGET_VULKAN AND Halide_TARGET MATCHES "vulkan")
+elseif (Halide_TARGET MATCHES "vulkan")
     message(WARNING "Not all tutorials build under Vulkan.")
 else ()
     ## Add some hacks for getting CMake to delay compiling lesson_10_halide until after the test has run. The "better" way

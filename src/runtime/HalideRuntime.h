@@ -23,7 +23,7 @@
 // our CMake build, so that we ensure that the in-build metadata (eg soversion)
 // matches, but keeping the canonical version here makes it easier to keep
 // downstream build systems (eg Blaze/Bazel) properly in sync with the source.
-#define HALIDE_VERSION_MAJOR 18
+#define HALIDE_VERSION_MAJOR 19
 #define HALIDE_VERSION_MINOR 0
 #define HALIDE_VERSION_PATCH 0
 
@@ -117,7 +117,7 @@ extern "C" {
 // For now, we say that if >= v12, and compiling on x86 or arm,
 // we assume support. This may need revision.
 #if defined(__GNUC__) && (__GNUC__ >= 12)
-#if defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__)
+#if defined(__x86_64__) || (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) || defined(__arm__) || defined(__aarch64__)
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
 #endif
 #endif

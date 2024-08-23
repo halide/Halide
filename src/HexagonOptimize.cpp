@@ -66,6 +66,7 @@ Expr native_deinterleave(const Expr &x) {
     return Call::make(x.type(), fn, {x}, Call::PureExtern);
 }
 
+namespace {
 bool is_native_interleave_op(const Expr &x, const char *name) {
     const Call *c = x.as<Call>();
     if (!c || c->args.size() != 1) {
@@ -73,6 +74,7 @@ bool is_native_interleave_op(const Expr &x, const char *name) {
     }
     return starts_with(c->name, name);
 }
+}  // namespace
 
 bool is_native_interleave(const Expr &x) {
     return is_native_interleave_op(x, "halide.hexagon.interleave");

@@ -135,10 +135,6 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (Halide::Internal::get_llvm_version() < 160) {
-        std::cout << "[SKIP] simd_op_check_riscv requires LLVM 16 or later.\n";
-        return 0;
-    }
     return SimdOpCheckTest::main<SimdOpCheckRISCV>(
         argc, argv,
         {

@@ -21,39 +21,76 @@ target_compile_options(regexp_replace PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd4996>
 add_library(Halide_ImageIO INTERFACE)
 add_library(Halide::ImageIO ALIAS Halide_ImageIO)
 set_target_properties(Halide_ImageIO PROPERTIES EXPORT_NAME ImageIO)
+
 target_link_libraries(Halide_ImageIO
                       INTERFACE
+                      Halide::Runtime
                       $<TARGET_NAME_IF_EXISTS:PNG::PNG>
                       $<TARGET_NAME_IF_EXISTS:JPEG::JPEG>)
 target_compile_definitions(Halide_ImageIO
                            INTERFACE
                            $<$<NOT:$<TARGET_EXISTS:PNG::PNG>>:HALIDE_NO_PNG>
                            $<$<NOT:$<TARGET_EXISTS:JPEG::JPEG>>:HALIDE_NO_JPEG>)
-target_include_directories(Halide_ImageIO INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+target_sources(Halide_ImageIO INTERFACE FILE_SET HEADERS FILES halide_image_io.h)
 
 ##
-# Utility targets meant for users
+# RunGenMain
 ##
 
 add_library(Halide_RunGenMain INTERFACE)
 add_library(Halide::RunGenMain ALIAS Halide_RunGenMain)
-target_sources(Halide_RunGenMain INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/RunGenMain.cpp>)
-target_link_libraries(Halide_RunGenMain INTERFACE Halide::Runtime Halide::ImageIO Halide::Tools)
 set_target_properties(Halide_RunGenMain PROPERTIES EXPORT_NAME RunGenMain)
+
+target_sources(Halide_RunGenMain INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/RunGenMain.cpp>)
+target_sources(Halide_RunGenMain INTERFACE FILE_SET HEADERS FILES RunGen.h)
+target_link_libraries(Halide_RunGenMain INTERFACE Halide::Runtime Halide::ImageIO Halide::Tools)
+
+##
+# Generator meta-target
+##
+
+add_library(Halide_GenGen STATIC GenGen.cpp)
+add_library(Halide::GenGen ALIAS Halide_GenGen)
+set_target_properties(Halide_GenGen PROPERTIES EXPORT_NAME GenGen)
+
+target_link_libraries(Halide_GenGen PUBLIC Halide::Halide ${CMAKE_DL_LIBS})
 
 add_library(Halide_Generator INTERFACE)
 add_library(Halide::Generator ALIAS Halide_Generator)
-target_sources(Halide_Generator INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/GenGen.cpp>)
-target_link_libraries(Halide_Generator INTERFACE Halide::Halide ${CMAKE_DL_LIBS})
 set_target_properties(Halide_Generator PROPERTIES EXPORT_NAME Generator)
+
+target_link_libraries(
+    Halide_Generator INTERFACE "$<LINK_LIBRARY:WHOLE_ARCHIVE,Halide::GenGen>"
+)
+
+##
+# Dependency-free header-only libs
+##
 
 add_library(Halide_Tools INTERFACE)
 add_library(Halide::Tools ALIAS Halide_Tools)
-target_include_directories(Halide_Tools INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 set_target_properties(Halide_Tools PROPERTIES EXPORT_NAME Tools)
+
+target_sources(
+    Halide_Tools
+    INTERFACE
+    FILE_SET HEADERS
+    FILES
+    halide_benchmark.h
+    halide_image.h
+    halide_image_info.h
+    halide_malloc_trace.h
+    halide_trace_config.h
+)
+
+##
+# Simple thread pool
+##
 
 add_library(Halide_ThreadPool INTERFACE)
 add_library(Halide::ThreadPool ALIAS Halide_ThreadPool)
-target_link_libraries(Halide_ThreadPool INTERFACE Threads::Threads)
-target_include_directories(Halide_Tools INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 set_target_properties(Halide_ThreadPool PROPERTIES EXPORT_NAME ThreadPool)
+
+target_link_libraries(Halide_ThreadPool INTERFACE Threads::Threads)
+target_sources(Halide_ThreadPool INTERFACE FILE_SET HEADERS FILES halide_thread_pool.h)
+
