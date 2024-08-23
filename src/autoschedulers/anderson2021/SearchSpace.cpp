@@ -303,7 +303,7 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
                 aslog(1) << "  " << e2->producer->func.name() << "\n";
             }
         }
-        internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << '\n';
+        internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << "\n";
     }
 
     int num_children = 0;

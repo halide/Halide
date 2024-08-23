@@ -149,8 +149,8 @@ class DetermineAllocStride : public IRVisitor {
         } else if (const Variable *var = e.as<Variable>()) {
             if (var->name == lane_var) {
                 return 1;
-            } else if (dependent_vars.contains(var->name)) {
-                return dependent_vars.get(var->name);
+            } else if (const Expr *e = dependent_vars.find(var->name)) {
+                return *e;
             } else {
                 return 0;
             }
@@ -475,8 +475,9 @@ class LowerWarpShuffles : public IRMutator {
         if ((lt && equal(lt->a, this_lane) && is_const(lt->b)) ||
             (le && equal(le->a, this_lane) && is_const(le->b))) {
             Expr condition = mutate(op->condition);
-            internal_assert(bounds.contains(this_lane_name));
-            Interval interval = bounds.get(this_lane_name);
+            const Interval *in = bounds.find(this_lane_name);
+            internal_assert(in);
+            Interval interval = *in;
             interval.max = lt ? simplify(lt->b - 1) : le->b;
             ScopedBinding<Interval> bind(bounds, this_lane_name, interval);
             Stmt then_case = mutate(op->then_case);
@@ -488,10 +489,10 @@ class LowerWarpShuffles : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        if (allocation_info.contains(op->name)) {
+        if (const auto *alloc = allocation_info.find(op->name)) {
             Expr idx = mutate(op->index);
             Expr value = mutate(op->value);
-            Expr stride = allocation_info.get(op->name).stride;
+            Expr stride = alloc->stride;
             internal_assert(stride.defined() && warp_size.defined());
 
             // Reduce the index to an index in my own stripe. We have
@@ -639,9 +640,9 @@ class LowerWarpShuffles : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        if (allocation_info.contains(op->name)) {
+        if (const auto *alloc = allocation_info.find(op->name)) {
             Expr idx = mutate(op->index);
-            Expr stride = allocation_info.get(op->name).stride;
+            Expr stride = alloc->stride;
 
             // Break the index into lane and stripe components
             Expr lane = simplify(reduce_expr(idx / stride, warp_size, bounds), true, bounds);

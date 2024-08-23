@@ -57,7 +57,7 @@ public:
         Expr u32_1 = in_u32(x), u32_2 = in_u32(x + 16), u32_3 = in_u32(x + 32);
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
-        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_2 < -0.3f), bool_3 = (f32_3 != -0.34f);
 
         // MMX and SSE1 (in 64 and 128 bits)
         for (int w = 1; w <= 4; w++) {
@@ -253,6 +253,17 @@ public:
             for (int w = 2; w <= 4; w++) {
                 check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2) + 16384) >> 15));
                 check("pmulhrsw", 4 * w, i16_sat((i32(i16_1) * i32(i16_2) + 16384) >> 15));
+                // Should be able to use the non-saturating form of pmulhrsw,
+                // because the second arg can't be -32768, so the i16_sat
+                // doesn't actually need to saturate.
+                check("pmulhrsw", 4 * w, i16_sat((i32(i16_1) * i32(i16_2 / 2) + 16384) >> 15));
+
+                // Should be able to use pmulhrsw despite the shift being too
+                // small, because there are enough bits of headroom to shift
+                // left one of the args:
+                check("pmulhrsw", 4 * w, i16_sat((i32(i16_1) * i32(i16_2 / 2) + 8192) >> 14));
+                check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2 / 3) + 8192) >> 14));
+
                 check("pabsb", 8 * w, abs(i8_1));
                 check("pabsw", 4 * w, abs(i16_1));
                 check("pabsd", 2 * w, abs(i32_1));
@@ -663,15 +674,17 @@ int main(int argc, char **argv) {
             // Always turn on f16c when using avx. Sandy Bridge had avx without
             // f16c, but f16c is orthogonal to everything else, so there's no
             // real reason to test avx without it.
-            Target("x86-64-linux-sse41-avx-f16c"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2"),
+            Target("x86-64-linux-sse41-avx-f16c-fma"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2"),
             // See above: don't test avx512 without extra features, the test
             // isn't yet set up to test it properly.
             // Target("x86-64-linux-sse41-avx-avx2-avx512"),
             // Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_knl"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
+            // Can be enabled when AVX10 and APX support are stable in LLVM.
+            // Target("x86-64-linux-avx10_1-vector_bits_256-x86apx"),
         });
 }

@@ -44,6 +44,7 @@ void define_operators(py::module &m) {
     });
 
     m.def("clamp", &clamp);
+    m.def("unsafe_promise_clamped", &unsafe_promise_clamped);
     m.def("abs", &abs);
     m.def("absd", &absd);
 
@@ -89,7 +90,7 @@ void define_operators(py::module &m) {
                     // We don't want to throw an error here, since the catch(...) would catch it,
                     // and it would be hard to distinguish from other errors. Just set the string here
                     // and jump to the error reporter outside the catch.
-                    tuple_error_msg = "tuple_select() may not mix Expr and Tuple for the condition elements.";
+                    tuple_error_msg = "select() on Tuples may not mix Expr and Tuple for the condition elements.";
                     goto handle_tuple_error;
                 }
 
@@ -127,44 +128,6 @@ void define_operators(py::module &m) {
         return py::cast(false_expr_value);
     });
 
-    m.def("tuple_select", [](const py::args &args) -> py::tuple {
-        // HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
-        PyErr_WarnEx(PyExc_DeprecationWarning,
-                     "tuple_select has been deprecated. Use select instead (which now works for Tuples)",
-                     1);
-
-        _halide_user_assert(args.size() >= 3)
-            << "tuple_select() must have at least 3 arguments";
-        _halide_user_assert((args.size() % 2) != 0)
-            << "tuple_select() must have an odd number of arguments";
-
-        int pos = (int)args.size() - 1;
-        Tuple false_value = args[pos--].cast<Tuple>();
-        bool has_tuple_cond = false, has_expr_cond = false;
-        while (pos > 0) {
-            Tuple true_value = args[pos--].cast<Tuple>();
-            // Note that 'condition' can be either Expr or Tuple, but must be consistent across all
-            py::object py_cond = args[pos--];
-            Expr expr_cond;
-            Tuple tuple_cond(expr_cond);
-            try {
-                tuple_cond = py_cond.cast<Tuple>();
-                has_tuple_cond = true;
-            } catch (...) {
-                expr_cond = py_cond.cast<Expr>();
-                has_expr_cond = true;
-            }
-
-            if (expr_cond.defined()) {
-                false_value = select(expr_cond, true_value, false_value);
-            } else {
-                false_value = select(tuple_cond, true_value, false_value);
-            }
-        }
-        _halide_user_assert(!(has_tuple_cond && has_expr_cond))
-            << "tuple_select() may not mix Expr and Tuple for the condition elements.";
-        return to_python_tuple(false_value);
-    });
     m.def("mux", (Expr(*)(const Expr &, const std::vector<Expr> &)) & mux);
 
     m.def("sin", &sin);
@@ -239,6 +202,13 @@ void define_operators(py::module &m) {
     m.def("likely_if_innermost", &likely_if_innermost);
     m.def("saturating_cast", (Expr(*)(Type, Expr)) & saturating_cast);
     m.def("strict_float", &strict_float);
+    m.def("target_arch_is", &target_arch_is);
+    m.def("target_bits", &target_bits);
+    m.def("target_has_feature", &target_has_feature);
+    m.def("target_natural_vector_size", [](const Type &t) -> Expr {
+        return target_natural_vector_size(t);
+    });
+    m.def("target_os_is", &target_os_is);
     m.def("logical_not", [](const Expr &expr) -> Expr {
         return !expr;
     });

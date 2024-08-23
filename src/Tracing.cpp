@@ -43,7 +43,7 @@ struct TraceEventBuilder {
         // special-casing of this call to get appropriate results.
         vector<Expr> args = {Expr(func),
                              values, coords,
-                             (int)type.code(), (int)type.bits(), (int)type.lanes(),
+                             (int)type.code(), type.bits(), type.lanes(),
                              (int)event,
                              parent_id, idx, (int)coordinates.size(),
                              trace_tag_expr};

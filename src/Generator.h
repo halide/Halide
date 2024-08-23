@@ -274,7 +274,6 @@
 #include "AbstractGenerator.h"
 #include "Func.h"
 #include "ImageParam.h"
-#include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
 #include "Target.h"
 
@@ -398,7 +397,7 @@ public:
     explicit GeneratorParamBase(const std::string &name);
     virtual ~GeneratorParamBase();
 
-    inline const std::string &name() const {
+    const std::string &name() const {
         return name_;
     }
 
@@ -490,12 +489,12 @@ public:
 template<typename FROM, typename TO>
 struct Convert {
     template<typename TO2 = TO, typename std::enable_if<!std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline static TO2 value(const FROM &from) {
+    static TO2 value(const FROM &from) {
         return static_cast<TO2>(from);
     }
 
     template<typename TO2 = TO, typename std::enable_if<std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline static TO2 value(const FROM &from) {
+    static TO2 value(const FROM &from) {
         return from != 0;
     }
 };
@@ -1648,15 +1647,15 @@ public:
 // types in question satisfy the property of copies referring to the same underlying
 // structure (returning references is just an optimization). Since this is verbose
 // and used in several places, we'll use a helper macro:
-#define HALIDE_FORWARD_METHOD(Class, Method)                                                                                                        \
-    template<typename... Args>                                                                                                                      \
-    inline auto Method(Args &&...args)->typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
-        return this->template as<Class>().Method(std::forward<Args>(args)...);                                                                      \
+#define HALIDE_FORWARD_METHOD(Class, Method)                                                                                                          \
+    template<typename... Args>                                                                                                                        \
+    inline auto Method(Args &&...args) -> typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
+        return this->template as<Class>().Method(std::forward<Args>(args)...);                                                                        \
     }
 
 #define HALIDE_FORWARD_METHOD_CONST(Class, Method)                                                                  \
     template<typename... Args>                                                                                      \
-    inline auto Method(Args &&...args) const->                                                                      \
+    inline auto Method(Args &&...args) const ->                                                                     \
         typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
         this->check_gio_access();                                                                                   \
         return this->template as<Class>().Method(std::forward<Args>(args)...);                                      \
@@ -1684,7 +1683,7 @@ protected:
     }
 
     template<typename T2>
-    inline T2 as() const {
+    T2 as() const {
         return (T2) * this;
     }
 
@@ -1837,7 +1836,7 @@ protected:
     }
 
     template<typename T2>
-    inline T2 as() const {
+    T2 as() const {
         return (T2) * this;
     }
 
@@ -2280,6 +2279,8 @@ public:
     HALIDE_FORWARD_METHOD(Func, align_bounds)
     HALIDE_FORWARD_METHOD(Func, align_extent)
     HALIDE_FORWARD_METHOD(Func, align_storage)
+    HALIDE_FORWARD_METHOD(Func, always_partition)
+    HALIDE_FORWARD_METHOD(Func, always_partition_all)
     HALIDE_FORWARD_METHOD_CONST(Func, args)
     HALIDE_FORWARD_METHOD(Func, bound)
     HALIDE_FORWARD_METHOD(Func, bound_extent)
@@ -2303,9 +2304,12 @@ public:
     HALIDE_FORWARD_METHOD(Func, hexagon)
     HALIDE_FORWARD_METHOD(Func, in)
     HALIDE_FORWARD_METHOD(Func, memoize)
+    HALIDE_FORWARD_METHOD(Func, never_partition)
+    HALIDE_FORWARD_METHOD(Func, never_partition_all)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD(Func, parallel)
+    HALIDE_FORWARD_METHOD(Func, partition)
     HALIDE_FORWARD_METHOD(Func, prefetch)
     HALIDE_FORWARD_METHOD(Func, print_loop_nest)
     HALIDE_FORWARD_METHOD(Func, rename)
@@ -3027,11 +3031,11 @@ public:
     GeneratorContext with_target(const Target &t) const;
 
     template<typename T>
-    inline std::unique_ptr<T> create() const {
+    std::unique_ptr<T> create() const {
         return T::create(*this);
     }
     template<typename T, typename... Args>
-    inline std::unique_ptr<T> apply(const Args &...args) const {
+    std::unique_ptr<T> apply(const Args &...args) const {
         auto t = this->create<T>();
         t->apply(args...);
         return t;
@@ -3070,7 +3074,7 @@ protected:
     static Expr cast(Expr e) {
         return Halide::cast<T>(e);
     }
-    static inline Expr cast(Halide::Type t, Expr e) {
+    static Expr cast(Halide::Type t, Expr e) {
         return Halide::cast(t, std::move(e));
     }
     template<typename T>
@@ -3079,16 +3083,16 @@ protected:
     using Buffer = Halide::Buffer<T, D>;
     template<typename T>
     using Param = Halide::Param<T>;
-    static inline Type Bool(int lanes = 1) {
+    static Type Bool(int lanes = 1) {
         return Halide::Bool(lanes);
     }
-    static inline Type Float(int bits, int lanes = 1) {
+    static Type Float(int bits, int lanes = 1) {
         return Halide::Float(bits, lanes);
     }
-    static inline Type Int(int bits, int lanes = 1) {
+    static Type Int(int bits, int lanes = 1) {
         return Halide::Int(bits, lanes);
     }
-    static inline Type UInt(int bits, int lanes = 1) {
+    static Type UInt(int bits, int lanes = 1) {
         return Halide::UInt(bits, lanes);
     }
 };
@@ -3343,7 +3347,7 @@ public:
 
     template<typename... Args,
              typename = typename std::enable_if<Internal::all_are_printable_args<Args...>::value>::type>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
+    HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
         std::vector<Expr> collected_args;
         Internal::collect_print_args(collected_args, std::forward<Args>(error_args)...);
         add_requirement(condition, collected_args);
@@ -3354,7 +3358,7 @@ public:
     }
 
 protected:
-    GeneratorBase(size_t size, const void *introspection_helper);
+    GeneratorBase(size_t size);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
     // Note that it is explicitly legal to override init_from_context(), so that you can (say)
@@ -3736,8 +3740,7 @@ template<class T>
 class Generator : public Internal::GeneratorBase {
 protected:
     Generator()
-        : Internal::GeneratorBase(sizeof(T),
-                                  Internal::Introspection::get_introspection_helper<T>()) {
+        : Internal::GeneratorBase(sizeof(T)) {
     }
 
 public:
@@ -3772,7 +3775,7 @@ public:
     }
 
     template<typename T2, typename... Args>
-    inline std::unique_ptr<T2> apply(const Args &...args) const {
+    std::unique_ptr<T2> apply(const Args &...args) const {
         auto t = this->create<T2>();
         t->apply(args...);
         return t;

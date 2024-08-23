@@ -58,7 +58,7 @@ class LoopNestParser {
             }
 
             if (tokens.back() == "gpu_simd" && compute_root_stages.count(stage) == 1 && compute_root_stages[stage] == -1) {
-                std::string vector_dim = tokens[tokens.size() - 3];
+                const std::string &vector_dim = tokens[tokens.size() - 3];
                 compute_root_stages[stage] = std::stoi(vector_dim.substr(0, vector_dim.size() - 1));
             }
 

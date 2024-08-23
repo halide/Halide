@@ -221,29 +221,21 @@ class ExprCost : public IRVisitor {
                 user_warning << "Unknown extern call " << call->name << "\n";
             }
         } else if (call->is_intrinsic()) {
-            // TODO: Improve the cost model. In some architectures (e.g. ARM or
-            // NEON), count_leading_zeros should be as cheap as bitwise ops.
-            // div_round_to_zero and mod_round_to_zero can also get fairly expensive.
-            if (call->is_intrinsic(Call::bitwise_and) ||
-                call->is_intrinsic(Call::bitwise_not) || call->is_intrinsic(Call::bitwise_xor) ||
-                call->is_intrinsic(Call::bitwise_or) || call->is_intrinsic(Call::shift_left) ||
-                call->is_intrinsic(Call::shift_right) || call->is_intrinsic(Call::div_round_to_zero) ||
-                call->is_intrinsic(Call::mod_round_to_zero) || call->is_intrinsic(Call::undef) ||
-                call->is_intrinsic(Call::mux) || call->is_intrinsic(Call::round) ||
-                call->is_intrinsic(Call::widening_mul) || call->is_intrinsic(Call::rounding_shift_right)) {
-                arith += 1;
-            } else if (call->is_intrinsic(Call::abs) || call->is_intrinsic(Call::absd) ||
-                       call->is_intrinsic(Call::lerp) || call->is_intrinsic(Call::random) ||
-                       call->is_intrinsic(Call::count_leading_zeros) ||
-                       call->is_intrinsic(Call::count_trailing_zeros) ||
-                       call->is_intrinsic(Call::saturating_cast)) {
+            if (call->is_intrinsic({Call::lerp,
+                                    Call::div_round_to_zero,
+                                    Call::mod_round_to_zero,
+                                    Call::random})) {
+                // It's an expensive arithmetic intrinsic
                 arith += 5;
-            } else if (Call::as_tag(call)) {
-                // Tags do not result in actual operations.
+            } else if (Call::as_tag(call) ||
+                       call->is_intrinsic({Call::promise_clamped,
+                                           Call::unsafe_promise_clamped,
+                                           Call::undef})) {
+                // These intrinsics entail no actual work
             } else {
-                // For other intrinsics, use 1 for the arithmetic cost.
+                // For other intrinsics (e.g. bitwise ops, fixed-point math),
+                // use 1 for the arithmetic cost.
                 arith += 1;
-                user_warning << "Unhandled intrinsic call " << call->name << "\n";
             }
         }
 

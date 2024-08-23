@@ -41,6 +41,37 @@ using std::string;
 using std::vector;
 
 namespace {
+
+bool can_widen(const Expr &e) {
+    // We don't want to widen Xtensa 48-bit integers
+    return e.type().bits() <= 32;
+}
+
+bool can_widen_all(const std::vector<Expr> &args) {
+    for (const auto &e : args) {
+        if (!can_widen(e)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Expr widen(Expr a) {
+    internal_assert(can_widen(a));
+    Type result_type = a.type().widen();
+    return Cast::make(result_type, std::move(a));
+}
+
+Expr narrow(Expr a) {
+    Type result_type = a.type().narrow();
+    return Cast::make(result_type, std::move(a));
+}
+
+Expr saturating_narrow(const Expr &a) {
+    Type narrow = a.type().narrow();
+    return saturating_cast(narrow, a);
+}
+
 int static_sign(const Expr &x) {
     if (is_positive_const(x)) {
         return 1;
@@ -48,14 +79,26 @@ int static_sign(const Expr &x) {
         return -1;
     } else {
         Expr zero = make_zero(x.type());
-        if (equal(const_true(), simplify(x > zero))) {
+        if (is_const_one(simplify(x > zero))) {
             return 1;
-        } else if (equal(const_true(), simplify(x < zero))) {
+        } else if (is_const_one(simplify(x < zero))) {
             return -1;
         }
     }
     return 0;
 }
+
+Interval simplify(const Interval &i) {
+    Interval result;
+    result.min = simplify(i.min);
+    if (i.is_single_point()) {
+        result.max = result.min;
+    } else {
+        result.max = simplify(i.max);
+    }
+    return result;
+}
+
 }  // anonymous namespace
 
 const FuncValueBounds &empty_func_value_bounds() {
@@ -77,8 +120,7 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
     Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
-    interval.min = simplify(interval.min);
-    interval.max = simplify(interval.max);
+    interval = simplify(interval);
 
     // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
     // for our purposes here, treat anything non-const as no-bound.
@@ -126,16 +168,6 @@ public:
     Bounds(const Scope<Interval> *s, const FuncValueBounds &fb, bool const_bound)
         : func_bounds(fb), const_bound(const_bound) {
         scope.set_containing_scope(s);
-
-        // Find any points that are single_points but fail is_single_point due to
-        // pointer equality checks and replace with single_points.
-        for (auto item = s->cbegin(); item != s->cend(); ++item) {
-            const Interval &item_interval = item.value();
-            if (!item_interval.is_single_point() &&
-                equal(item_interval.min, item_interval.max)) {
-                scope.push(item.name(), Interval::single_point(item_interval.min));
-            }
-        }
     }
 
 #if DO_TRACK_BOUNDS_INTERVALS
@@ -293,8 +325,7 @@ private:
                 // constants, so try to make the constants first.
 
                 // First constant-fold
-                a.min = simplify(a.min);
-                a.max = simplify(a.max);
+                a = simplify(a);
 
                 // Then try to strip off junk mins and maxes.
                 bool old_constant_bound = const_bound;
@@ -323,8 +354,7 @@ private:
                 // a is bounded, but from and to can't necessarily represent
                 // each other; however, if the bounds can be simplified to
                 // constants, they might fit regardless of types.
-                a.min = simplify(a.min);
-                a.max = simplify(a.max);
+                a = simplify(a);
                 const auto *umin = as_const_uint(a.min);
                 const auto *umax = as_const_uint(a.max);
                 if (umin && umax && to.can_represent(*umin) && to.can_represent(*umax)) {
@@ -374,13 +404,12 @@ private:
 
         if (const_bound) {
             bounds_of_type(op->type);
-            if (scope.contains(op->name)) {
-                const Interval &scope_interval = scope.get(op->name);
-                if (scope_interval.has_upper_bound() && is_const(scope_interval.max)) {
-                    interval.max = Interval::make_min(interval.max, scope_interval.max);
+            if (const Interval *scope_interval = scope.find(op->name)) {
+                if (scope_interval->has_upper_bound() && is_const(scope_interval->max)) {
+                    interval.max = Interval::make_min(interval.max, scope_interval->max);
                 }
-                if (scope_interval.has_lower_bound() && is_const(scope_interval.min)) {
-                    interval.min = Interval::make_max(interval.min, scope_interval.min);
+                if (scope_interval->has_lower_bound() && is_const(scope_interval->min)) {
+                    interval.min = Interval::make_max(interval.min, scope_interval->min);
                 }
             }
 
@@ -397,8 +426,8 @@ private:
                 }
             }
         } else {
-            if (scope.contains(op->name)) {
-                interval = scope.get(op->name);
+            if (const Interval *in = scope.find(op->name)) {
+                interval = *in;
             } else if (op->type.is_vector()) {
                 // Uh oh, we need to take the min/max lane of some unknown vector. Treat as unbounded.
                 bounds_of_type(op->type);
@@ -1195,20 +1224,40 @@ private:
             // else fall thru and continue
         }
 
+        const auto handle_expr_bounds = [this, t](const Expr &e) -> void {
+            if (e.defined()) {
+                e.accept(this);
+            } else {
+                // Just use the bounds of the type
+                this->bounds_of_type(t);
+            }
+        };
+
         if (op->is_intrinsic(Call::abs)) {
             Interval a = arg_bounds.get(0);
-            interval.min = make_zero(t);
+
             if (a.is_bounded()) {
                 if (equal(a.min, a.max)) {
                     interval = Interval::single_point(Call::make(t, Call::abs, {a.max}, Call::PureIntrinsic));
                 } else if (op->args[0].type().is_int() && op->args[0].type().bits() >= 32) {
-                    interval.max = Max::make(Cast::make(t, -a.min), Cast::make(t, a.max));
+                    interval.min = Cast::make(t, Max::make(a.min, -Min::make(make_zero(a.min.type()), a.max)));
+                    interval.max = Cast::make(t, Max::make(-a.min, a.max));
                 } else {
+                    interval.min = Cast::make(t, Max::make(a.min, -Min::make(make_zero(a.min.type()), a.max)));
                     a.min = Call::make(t, Call::abs, {a.min}, Call::PureIntrinsic);
                     a.max = Call::make(t, Call::abs, {a.max}, Call::PureIntrinsic);
                     interval.max = Max::make(a.min, a.max);
                 }
             } else {
+                if (a.has_lower_bound()) {
+                    // If a is strictly positive, then abs(a) is strictly positive.
+                    interval.min = Cast::make(t, Max::make(make_zero(a.min.type()), a.min));
+                } else if (a.has_upper_bound()) {
+                    // If a is strictly negative, then abs(a) is strictly positive.
+                    interval.min = Cast::make(t, -Min::make(make_zero(a.max.type()), a.max));
+                } else {
+                    interval.min = make_zero(t);
+                }
                 // If the argument is unbounded on one side, then the max is unbounded.
                 interval.max = Interval::pos_inf();
             }
@@ -1468,6 +1517,7 @@ private:
             }
         } else if (op->args.size() == 1 &&
                    (op->is_intrinsic(Call::round) ||
+                    op->is_intrinsic(Call::strict_float) ||
                     op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
                     op->name == "exp_f32" || op->name == "exp_f64" ||
@@ -1518,14 +1568,107 @@ private:
             }
             interval = result;
         } else if (op->is_intrinsic(Call::widen_right_add)) {
-            Expr add = Add::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            add.accept(this);
-        } else if (op->is_intrinsic(Call::widen_right_sub)) {
-            Expr sub = Sub::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            sub.accept(this);
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen(op->args[1]) ?
+                         lower_widen_right_add(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
         } else if (op->is_intrinsic(Call::widen_right_mul)) {
-            Expr mul = Mul::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            mul.accept(this);
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen(op->args[1]) ?
+                         lower_widen_right_mul(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widen_right_sub)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen(op->args[1]) ?
+                         lower_widen_right_sub(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widening_add)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         lower_widening_add(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widening_mul)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         lower_widening_mul(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widening_sub)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         lower_widening_sub(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::saturating_add)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         narrow(clamp(widen(op->args[0]) + widen(op->args[1]), t.min(), t.max())) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::saturating_sub)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         narrow(clamp(widen(op->args[0]) - widen(op->args[1]), t.min(), t.max())) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widening_shift_left)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen(op->args[0]) ?
+                         lower_widening_shift_left(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widening_shift_right)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen(op->args[0]) ?
+                         lower_widening_shift_right(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::rounding_shift_right)) {
+            internal_assert(op->args.size() == 2);
+            // TODO: uses bitwise ops we may not handle well
+            handle_expr_bounds(lower_rounding_shift_right(op->args[0], op->args[1]));
+        } else if (op->is_intrinsic(Call::rounding_shift_left)) {
+            internal_assert(op->args.size() == 2);
+            // TODO: uses bitwise ops we may not handle well
+            handle_expr_bounds(lower_rounding_shift_left(op->args[0], op->args[1]));
+        } else if (op->is_intrinsic(Call::halving_add)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         narrow((widen(op->args[0]) + widen(op->args[1])) / 2) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::halving_sub)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         narrow((widen(op->args[0]) - widen(op->args[1])) / 2) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::rounding_halving_add)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         narrow((widen(op->args[0]) + widen(op->args[1]) + 1) / 2) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
+            internal_assert(op->args.size() == 3);
+            Expr e = can_widen_all(op->args) ?
+                         saturating_narrow(rounding_shift_right(widening_mul(op->args[0], op->args[1]), op->args[2])) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::mul_shift_right)) {
+            internal_assert(op->args.size() == 3);
+            Expr e = can_widen_all(op->args) ?
+                         saturating_narrow(widening_mul(op->args[0], op->args[1]) >> op->args[2]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::sorted_avg)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = lower_sorted_avg(op->args[0], op->args[1]);
+            handle_expr_bounds(e);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {
@@ -1714,12 +1857,6 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
     return b.interval;
 }
 
-}  // namespace
-
-Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
-    return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0);
-}
-
 Region region_union(const Region &a, const Region &b) {
     internal_assert(a.size() == b.size()) << "Mismatched dimensionality in region union\n";
     Region result;
@@ -1732,6 +1869,12 @@ Region region_union(const Region &a, const Region &b) {
         result.emplace_back(simplify(min), simplify(extent));
     }
     return result;
+}
+
+}  // namespace
+
+Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
+    return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0);
 }
 
 void merge_boxes(Box &a, const Box &b) {
@@ -1919,11 +2062,10 @@ private:
     int innermost_depth = -1;
 
     void visit(const Variable *op) override {
-        if (vars_depth.contains(op->name)) {
-            int depth = vars_depth.get(op->name);
-            if (depth > innermost_depth) {
+        if (const int *depth = vars_depth.find(op->name)) {
+            if (*depth > innermost_depth) {
                 innermost_var = op->name;
-                innermost_depth = depth;
+                innermost_depth = *depth;
             }
         }
     }
@@ -2410,16 +2552,17 @@ private:
                 // If this let stmt is a redefinition of a previous one, we should
                 // remove the old let stmt from the 'children' map since it is
                 // no longer valid at this point.
-                if ((f.vi.instance > 0) && let_stmts.contains(op->name)) {
-                    const Expr &val = let_stmts.get(op->name);
-                    CollectVars collect(op->name);
-                    val.accept(&collect);
-                    f.old_let_vars = collect.vars;
+                if (f.vi.instance > 0) {
+                    if (const Expr *val = let_stmts.find(op->name)) {
+                        CollectVars collect(op->name);
+                        val->accept(&collect);
+                        f.old_let_vars = collect.vars;
 
-                    VarInstance old_vi = VarInstance(f.vi.var, f.vi.instance - 1);
-                    for (const auto &v : f.old_let_vars) {
-                        internal_assert(vars_renaming.count(v));
-                        children[get_var_instance(v)].erase(old_vi);
+                        VarInstance old_vi = VarInstance(f.vi.var, f.vi.instance - 1);
+                        for (const auto &v : f.old_let_vars) {
+                            internal_assert(vars_renaming.count(v));
+                            children[get_var_instance(v)].erase(old_vi);
+                        }
                     }
                 }
                 let_stmts.push(op->name, op->value);
@@ -2428,13 +2571,11 @@ private:
             op->value.accept(this);
 
             f.value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
-
-            bool fixed = f.value_bounds.min.same_as(f.value_bounds.max);
-            f.value_bounds.min = simplify(f.value_bounds.min);
-            f.value_bounds.max = fixed ? f.value_bounds.min : simplify(f.value_bounds.max);
+            f.value_bounds = simplify(f.value_bounds);
 
             if (is_small_enough_to_substitute(f.value_bounds.min) &&
-                (fixed || is_small_enough_to_substitute(f.value_bounds.max))) {
+                (f.value_bounds.is_single_point() ||
+                 is_small_enough_to_substitute(f.value_bounds.max))) {
                 scope.push(op->name, f.value_bounds);
             } else {
                 f.max_name = unique_name('t');
@@ -2621,17 +2762,15 @@ private:
                                                       expr_uses_var(box[i].min, l.min_name))) ||
                         (box[i].has_upper_bound() && (expr_uses_var(box[i].max, l.max_name) ||
                                                       expr_uses_var(box[i].max, l.min_name)))) {
-                        internal_assert(let_stmts.contains(l.var));
-                        const Expr &val = let_stmts.get(l.var);
-                        v_bound = bounds_of_expr_in_scope(val, scope, func_bounds);
-                        bool fixed = v_bound.min.same_as(v_bound.max);
-                        v_bound.min = simplify(v_bound.min);
-                        v_bound.max = fixed ? v_bound.min : simplify(v_bound.max);
+                        const Expr *val = let_stmts.find(l.var);
+                        internal_assert(val);
+                        v_bound = bounds_of_expr_in_scope(*val, scope, func_bounds);
+                        v_bound = simplify(v_bound);
 
-                        internal_assert(scope.contains(l.var));
-                        const Interval &old_bound = scope.get(l.var);
-                        v_bound.max = simplify(min(v_bound.max, old_bound.max));
-                        v_bound.min = simplify(max(v_bound.min, old_bound.min));
+                        const Interval *old_bound = scope.find(l.var);
+                        internal_assert(old_bound);
+                        v_bound.max = simplify(min(v_bound.max, old_bound->max));
+                        v_bound.min = simplify(max(v_bound.min, old_bound->min));
                     }
 
                     if (box[i].has_lower_bound()) {
@@ -2882,14 +3021,14 @@ private:
         }
 
         Expr min_val, max_val;
-        if (scope.contains(op->name + ".loop_min")) {
-            min_val = scope.get(op->name + ".loop_min").min;
+        if (const Interval *in = scope.find(op->name + ".loop_min")) {
+            min_val = in->min;
         } else {
             min_val = bounds_of_expr_in_scope(op->min, scope, func_bounds).min;
         }
 
-        if (scope.contains(op->name + ".loop_max")) {
-            max_val = scope.get(op->name + ".loop_max").max;
+        if (const Interval *in = scope.find(op->name + ".loop_max")) {
+            max_val = in->max;
         } else {
             max_val = bounds_of_expr_in_scope(op->extent, scope, func_bounds).max;
             max_val += bounds_of_expr_in_scope(op->min, scope, func_bounds).max;
@@ -2945,8 +3084,6 @@ private:
         }
     }
 };
-
-}  // namespace
 
 map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provides,
                                const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
@@ -3136,6 +3273,7 @@ Box box_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provid
     internal_assert(boxes.size() <= 1);
     return boxes[fn];
 }
+}  // namespace
 
 map<string, Box> boxes_required(const Expr &e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(e, Stmt(), true, false, "", scope, fb);
@@ -3185,6 +3323,7 @@ Box box_touched(Stmt s, const string &fn, const Scope<Interval> &scope, const Fu
     return box_touched(Expr(), std::move(s), true, true, fn, scope, fb);
 }
 
+namespace {
 // Compute interval of all possible function's values (default + specialized values)
 Interval compute_pure_function_definition_value_bounds(
     const Definition &def, const Scope<Interval> &scope, const FuncValueBounds &fb, int dim) {
@@ -3199,6 +3338,7 @@ Interval compute_pure_function_definition_value_bounds(
     }
     return result;
 }
+}  // namespace
 
 FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
@@ -3206,7 +3346,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
     for (const auto &func_name : order) {
         Function f = env.find(func_name)->second;
-        const vector<string> f_args = f.args();
+        const vector<string> &f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
             pair<string, int> key = {f.name(), j};
 
@@ -3223,12 +3363,12 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                 result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
                 // These can expand combinatorially as we go down the
                 // pipeline if we don't run CSE on them.
+                bool fixed = result.is_single_point();
                 if (result.has_lower_bound()) {
                     result.min = simplify(common_subexpression_elimination(result.min));
                 }
-
                 if (result.has_upper_bound()) {
-                    result.max = simplify(common_subexpression_elimination(result.max));
+                    result.max = fixed ? result.min : simplify(common_subexpression_elimination(result.max));
                 }
 
                 fb[key] = result;
@@ -3286,8 +3426,7 @@ namespace {
 void check(const Scope<Interval> &scope, const Expr &e, const Expr &correct_min, const Expr &correct_max) {
     FuncValueBounds fb;
     Interval result = bounds_of_expr_in_scope(e, scope, fb);
-    result.min = simplify(result.min);
-    result.max = simplify(result.max);
+    result = simplify(result);
     if (!equal(result.min, correct_min)) {
         internal_error << "In bounds of " << e << ":\n"
                        << "Incorrect min: " << result.min << "\n"
@@ -3303,8 +3442,7 @@ void check(const Scope<Interval> &scope, const Expr &e, const Expr &correct_min,
 void check_constant_bound(const Scope<Interval> &scope, const Expr &e, const Expr &correct_min, const Expr &correct_max) {
     FuncValueBounds fb;
     Interval result = bounds_of_expr_in_scope(e, scope, fb, true);
-    result.min = simplify(result.min);
-    result.max = simplify(result.max);
+    result = simplify(result);
     if (!equal(result.min, correct_min)) {
         internal_error << "In find constant bound of " << e << ":\n"
                        << "Incorrect min constant bound: " << result.min << "\n"
@@ -3458,8 +3596,7 @@ void boxes_touched_test() {
     for (size_t i = 0; i < result.size(); ++i) {
         const Interval &correct = expected[i];
         Interval b = result[i];
-        b.min = simplify(b.min);
-        b.max = simplify(b.max);
+        b = simplify(b);
         if (!equal(correct.min, b.min)) {
             internal_error << "In bounds of dim " << i << ":\n"
                            << "Incorrect min: " << b.min << "\n"
@@ -3517,6 +3654,21 @@ void bounds_test() {
     check(scope, cast<float>(x), 0.0f, 10.0f);
 
     check(scope, cast<int32_t>(abs(cast<float>(x))), 0, 10);
+    check(scope, abs(2 + x), u32(2), u32(12));
+    check(scope, abs(x - 11), u32(1), u32(11));
+    check(scope, abs(x - 5), u32(0), u32(5));
+    check(scope, abs(2 + cast<float>(x)), 2.f, 12.f);
+    check(scope, abs(cast<float>(x) - 11), 1.f, 11.f);
+    check(scope, abs(cast<float>(x) - 5), 0.f, 5.f);
+    check(scope, abs(2 + cast<int8_t>(x)), u8(2), u8(12));
+    check(scope, abs(cast<int8_t>(x) - 11), u8(1), u8(11));
+    check(scope, abs(cast<int8_t>(x) - 5), u8(0), u8(5));
+    scope.push("x", Interval(123, Interval::pos_inf()));
+    check(scope, abs(x), u32(123), Interval::pos_inf());
+    scope.pop("x");
+    scope.push("x", Interval(Interval::neg_inf(), -123));
+    check(scope, abs(x), u32(123), Interval::pos_inf());
+    scope.pop("x");
 
     // Check some vectors
     check(scope, Ramp::make(x * 2, 5, 5), 0, 40);
@@ -3784,7 +3936,7 @@ void bounds_test() {
         internal_assert(in.is_single_point());
     }
 
-    std::cout << "Bounds test passed" << std::endl;
+    std::cout << "Bounds test passed\n";
 }
 
 }  // namespace Internal

@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.22)
-project(integration_tests NONE)
+cmake_minimum_required(VERSION 3.28)
+project(integration_tests CXX)
 
 enable_testing()
 
@@ -46,7 +46,7 @@ foreach (bsl IN ITEMS "" "-DBUILD_SHARED_LIBS=NO" "-DBUILD_SHARED_LIBS=YES")
                      ${CMAKE_CTEST_COMMAND}
                      --build-and-test "${CMAKE_CURRENT_LIST_DIR}/jit" "${build_dir}"
                      --build-generator Ninja
-                     --build-options ${bsl} ${hsl} ${comp} -DCMAKE_BUILD_TYPE=Release
+                     --build-options -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} ${bsl} ${hsl} ${comp} -DCMAKE_BUILD_TYPE=Release
                      --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure)
 
             # Run ldd on the output binary. The pass/fail regexes are set later.
@@ -75,7 +75,7 @@ add_test(NAME aot_shared_generator
          ${CMAKE_CTEST_COMMAND}
          --build-and-test "${CMAKE_CURRENT_LIST_DIR}/aot" "${CMAKE_CURRENT_BINARY_DIR}/aot-shared"
          --build-generator Ninja
-         --build-options -DCMAKE_BUILD_TYPE=Release
+         --build-options -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_BUILD_TYPE=Release
          --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure)
 
 add_test(NAME aot_static_generator
@@ -83,7 +83,7 @@ add_test(NAME aot_static_generator
          ${CMAKE_CTEST_COMMAND}
          --build-and-test "${CMAKE_CURRENT_LIST_DIR}/aot" "${CMAKE_CURRENT_BINARY_DIR}/aot-static"
          --build-generator Ninja
-         --build-options -DHalide_SHARED_LIBS=NO -DCMAKE_BUILD_TYPE=Release
+         --build-options -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DHalide_SHARED_LIBS=NO -DCMAKE_BUILD_TYPE=Release
          --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure)
 
 add_test(NAME aot_shared_generator_adams2019
@@ -91,7 +91,7 @@ add_test(NAME aot_shared_generator_adams2019
          ${CMAKE_CTEST_COMMAND}
          --build-and-test "${CMAKE_CURRENT_LIST_DIR}/aot" "${CMAKE_CURRENT_BINARY_DIR}/aot-shared-auto"
          --build-generator Ninja
-         --build-options -DCMAKE_BUILD_TYPE=Release -Daot_USE_AUTOSCHEDULER=YES
+         --build-options -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_BUILD_TYPE=Release -Daot_USE_AUTOSCHEDULER=YES
          --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure)
 
 add_test(NAME aot_static_generator_adams2019
@@ -99,7 +99,7 @@ add_test(NAME aot_static_generator_adams2019
          ${CMAKE_CTEST_COMMAND}
          --build-and-test "${CMAKE_CURRENT_LIST_DIR}/aot" "${CMAKE_CURRENT_BINARY_DIR}/aot-static-auto"
          --build-generator Ninja
-         --build-options -DHalide_SHARED_LIBS=NO -DCMAKE_BUILD_TYPE=Release -Daot_USE_AUTOSCHEDULER=YES
+         --build-options -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DHalide_SHARED_LIBS=NO -DCMAKE_BUILD_TYPE=Release -Daot_USE_AUTOSCHEDULER=YES
          --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure)
 
 # Cannot use autoscheduler with generators linked to STATIC Halide

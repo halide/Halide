@@ -30,23 +30,23 @@ if [ -n "${FIX}" ]; then
     echo "Operating in -fix mode!"
 fi
 
-# We are currently standardized on using LLVM/Clang16 for this script.
+# We are currently standardized on using LLVM/Clang17 for this script.
 # Note that this is totally independent of the version of LLVM that you
-# are using to build Halide itself. If you don't have LLVM16 installed,
+# are using to build Halide itself. If you don't have LLVM17 installed,
 # you can usually install what you need easily via:
 #
-# sudo apt-get install llvm-16 clang-16 libclang-16-dev clang-tidy-16
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-16
+# sudo apt-get install llvm-17 clang-17 libclang-17-dev clang-tidy-17
+# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-17
 
 [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ] && echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script." && exit
 echo CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}
 
 VERSION=$(${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy --version)
-if [[ ${VERSION} =~ .*version\ 16.* ]]
+if [[ ${VERSION} =~ .*version\ 17.* ]]
 then
-    echo "clang-tidy version 16 found."
+    echo "clang-tidy version 17 found."
 else
-    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 16 install!"
+    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 17 install!"
     exit 1
 fi
 
@@ -55,12 +55,12 @@ fi
 CLANG_TIDY_BUILD_DIR=`mktemp -d`
 echo CLANG_TIDY_BUILD_DIR = ${CLANG_TIDY_BUILD_DIR}
 
-# Specify Halide_SHARED_LLVM=ON because some installers may provide only that.
+# Specify Halide_LLVM_SHARED_LIBS=ON because some installers may provide only that.
 echo Building compile_commands.json...
 cmake -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
       -DHalide_CLANG_TIDY_BUILD=ON \
-      -DHalide_SHARED_LLVM=ON \
+      -DHalide_LLVM_SHARED_LIBS=ON \
       -DLLVM_DIR=${CLANG_TIDY_LLVM_INSTALL_DIR}/lib/cmake/llvm \
       -S ${ROOT_DIR} \
       -B ${CLANG_TIDY_BUILD_DIR} \

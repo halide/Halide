@@ -74,7 +74,7 @@ typedef uint32_t VkSampleMask;
 // Provided by VK_VERSION_1_0
 #define VK_API_VERSION_MAJOR(version) (((uint32_t)(version) >> 22) & 0x7FU)
 #define VK_API_VERSION_MINOR(version) (((uint32_t)(version) >> 12) & 0x3FFU)
-#define VK_API_VERSION_PATCH(version) ((uint32_t)(version)&0xFFFU)
+#define VK_API_VERSION_PATCH(version) ((uint32_t)(version) & 0xFFFU)
 #define VK_MAKE_API_VERSION(variant, major, minor, patch) \
     ((((uint32_t)(variant)) << 29) | (((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
 #define VK_API_VERSION_1_0 VK_MAKE_API_VERSION(0, 1, 0, 0)
@@ -2639,18 +2639,16 @@ typedef void(VKAPI_PTR *PFN_vkCmdNextSubpass)(VkCommandBuffer commandBuffer, VkS
 typedef void(VKAPI_PTR *PFN_vkCmdEndRenderPass)(VkCommandBuffer commandBuffer);
 typedef void(VKAPI_PTR *PFN_vkCmdExecuteCommands)(VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer *pCommandBuffers);
 
-// This appears to be exported by the loader
+#ifndef VK_NO_PROTOTYPES
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(
     const VkInstanceCreateInfo *pCreateInfo,
     const VkAllocationCallbacks *pAllocator,
     VkInstance *pInstance);
 
-// Same as above ... these two methods are the only prototypes we depend upon
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
     VkInstance instance,
     const char *pName);
 
-#ifndef VK_NO_PROTOTYPES
 VKAPI_ATTR void VKAPI_CALL vkDestroyInstance(
     VkInstance instance,
     const VkAllocationCallbacks *pAllocator);

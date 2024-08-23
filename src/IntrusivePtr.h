@@ -32,6 +32,9 @@ public:
     bool is_const_zero() const {
         return count == 0;
     }
+    int atomic_get() const {
+        return count;
+    }
 };
 
 /**
@@ -172,6 +175,11 @@ public:
     HALIDE_ALWAYS_INLINE
     bool operator<(const IntrusivePtr<T> &other) const {
         return ptr < other.ptr;
+    }
+
+    HALIDE_ALWAYS_INLINE
+    bool is_sole_reference() const {
+        return ptr && ref_count(ptr).atomic_get() == 1;
     }
 };
 

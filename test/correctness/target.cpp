@@ -51,11 +51,10 @@ int main(int argc, char **argv) {
 
     // Full specification round-trip, crazy features
     t1 = Target(Target::Android, Target::ARM, 32,
-                {Target::JIT, Target::SSE41, Target::AVX, Target::AVX2,
-                 Target::CUDA, Target::OpenCL, Target::OpenGLCompute,
+                {Target::JIT, Target::CUDA, Target::OpenCL,
                  Target::Debug});
     ts = t1.to_string();
-    if (ts != "arm-32-android-avx-avx2-cuda-debug-jit-opencl-openglcompute-sse41") {
+    if (ts != "arm-32-android-cuda-debug-jit-opencl") {
         printf("to_string failure: %s\n", ts.c_str());
         return 1;
     }
@@ -203,6 +202,18 @@ int main(int argc, char **argv) {
     }
     if (ts != "x86-64-linux-trace_all") {
         printf("trace_all to_string failure: %s\n", ts.c_str());
+        return 1;
+    }
+
+    t1 = Target("arm-64-linux-armv87a-armv8a");
+    t2 = Target("arm-64-linux-armv82a-armv83a");
+    if (!t1.get_runtime_compatible_target(t2, t1)) {
+        printf("get_runtime_compatible_target failure\n");
+        return 1;
+    }
+    ts = t1.to_string();
+    if (ts != "arm-64-linux-armv8a") {
+        printf("get_runtime_compatible_target failure: %s\n", ts.c_str());
         return 1;
     }
 

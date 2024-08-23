@@ -128,8 +128,8 @@ std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Ar
     for (size_t i = 0; i < bounds.size(); i++) {
         Expr old_min = bounds[i].min;
         Expr old_extent = bounds[i].extent;
-        Expr new_min = mutator->mutate(old_min, std::forward<Args>(args)...);
-        Expr new_extent = mutator->mutate(old_extent, std::forward<Args>(args)...);
+        Expr new_min = mutator->mutate(old_min, args...);
+        Expr new_extent = mutator->mutate(old_extent, args...);
         if (!new_min.same_as(old_min)) {
             bounds_changed = true;
         }

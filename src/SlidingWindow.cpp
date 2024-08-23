@@ -69,10 +69,9 @@ class ExpandExpr : public IRMutator {
     const Scope<Expr> &scope;
 
     Expr visit(const Variable *var) override {
-        if (scope.contains(var->name)) {
-            Expr expr = scope.get(var->name);
-            debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
-            return expr;
+        if (const Expr *expr = scope.find(var->name)) {
+            debug(4) << "Fully expanded " << var->name << " -> " << *expr << "\n";
+            return *expr;
         } else {
             return var;
         }
@@ -658,7 +657,7 @@ class Dependencies : public IRVisitor {
 
     void visit(const ProducerConsumer *op) override {
         ScopedValue<bool> old_finding_a(in_producer, in_producer || (op->is_producer && op->name == producer));
-        return IRVisitor::visit(op);
+        IRVisitor::visit(op);
     }
 
     void visit(const Call *op) override {

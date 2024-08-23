@@ -3,14 +3,14 @@
 
 using namespace Halide;
 
-int percentage = 0;
+float percentage = 0;
 float ms = 0;
 void my_print(JITUserContext *, const char *msg) {
     float this_ms;
-    int this_percentage;
-    int val = sscanf(msg, " fn13: %fms (%d", &this_ms, &this_percentage);
+    float this_percentage;
+    int val = sscanf(msg, " fn13: %fms (%f", &this_ms, &this_percentage);
     if (val != 2) {
-        val = sscanf(msg, " fn13$1: %fms (%d", &this_ms, &this_percentage);
+        val = sscanf(msg, " fn13$1: %fms (%f", &this_ms, &this_percentage);
     }
     if (val == 2) {
         ms = this_ms;
@@ -59,8 +59,8 @@ int run_test(bool use_timer_profiler) {
 
     printf("Time spent in fn13: %fms\n", ms);
 
-    if (percentage < 40) {
-        printf("Percentage of runtime spent in f13: %d\n"
+    if (percentage < 40.0f) {
+        printf("Percentage of runtime spent in f13: %.1f%%\n"
                "This is suspiciously low. It should be more like 66%%\n",
                percentage);
         return 1;

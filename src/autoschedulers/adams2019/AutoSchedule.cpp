@@ -80,6 +80,8 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+namespace {
+
 using std::string;
 using std::vector;
 
@@ -193,7 +195,7 @@ public:
         return sz;
     }
 
-    void swap(StateQueue &other) {
+    void swap(StateQueue &other) noexcept {
         storage.swap(other.storage);
         std::swap(sz, other.sz);
     }
@@ -498,9 +500,6 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     return best;
 }
 
-// Keep track of how many times we evaluated a state.
-int State::cost_calculations = 0;
-
 // The main entrypoint to generate a schedule for a pipeline.
 void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
@@ -607,6 +606,8 @@ struct Adams2019 {
 };
 
 REGISTER_AUTOSCHEDULER(Adams2019)
+
+}  // namespace
 
 // An alternative entrypoint for other uses
 void find_and_apply_schedule(FunctionDAG &dag,

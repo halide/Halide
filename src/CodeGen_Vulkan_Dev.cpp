@@ -4,6 +4,7 @@
 #include <unordered_set>
 
 #include "CSE.h"
+#include "CanonicalizeGPUVars.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Vulkan_Dev.h"
@@ -291,8 +292,6 @@ protected:
 // have the same number of lanes. If this is indeed the case then the 'lanes'
 // member stores the number of lanes in those loads and stores.
 //
-// FIXME: Refactor this and the version in CodeGen_OpenGLCompute_Dev to a common place!
-//
 class CheckAlignedDenseVectorLoadStore : public IRVisitor {
 public:
     // True if all loads and stores from the buffer are dense, aligned, and all
@@ -383,12 +382,10 @@ private:
 struct FindWorkGroupSize : public IRVisitor {
     using IRVisitor::visit;
     void visit(const For *loop) override {
-        if (!CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
-            return loop->body.accept(this);
-        }
+        user_assert(loop->for_type != ForType::GPULane)
+            << "The Vulkan backend does not support the gpu_lanes() scheduling directive.";
 
-        if ((loop->for_type == ForType::GPUBlock) ||
-            (loop->for_type == ForType::GPUThread)) {
+        if (is_gpu(loop->for_type)) {
 
             // This should always be true at this point in codegen
             internal_assert(is_const_zero(loop->min));
@@ -413,11 +410,8 @@ struct FindWorkGroupSize : public IRVisitor {
     }
 
     int thread_loop_workgroup_index(const std::string &name) {
-        std::string ids[] = {".__thread_id_x",
-                             ".__thread_id_y",
-                             ".__thread_id_z"};
-        for (size_t i = 0; i < sizeof(ids) / sizeof(std::string); i++) {
-            if (ends_with(name, ids[i])) {
+        for (size_t i = 0; i < 3; i++) {
+            if (ends_with(name, gpu_thread_name(i))) {
                 return i;
             }
         }
@@ -548,6 +542,9 @@ void fill_bytes_with_value(uint8_t *bytes, int count, int value) {
 }
 
 SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type value_type, SpvId value_id) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(): casting from value type '"
+             << value_type << "' to target type '" << target_type << "' for value id '" << value_id << "' !\n";
+
     if (!value_type.is_bool()) {
         value_id = cast_type(Bool(), value_type, value_id);
     }
@@ -590,8 +587,8 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type 
 
     SpvId result_id = builder.reserve_id(SpvResultId);
     SpvId target_type_id = builder.declare_type(target_type);
-    SpvId true_value_id = builder.declare_constant(target_type, &true_data);
-    SpvId false_value_id = builder.declare_constant(target_type, &false_data);
+    SpvId true_value_id = builder.declare_constant(target_type, &true_data[0]);
+    SpvId false_value_id = builder.declare_constant(target_type, &false_data[0]);
     builder.append(SpvFactory::select(target_type_id, result_id, value_id, true_value_id, false_value_id));
     return result_id;
 }
@@ -1264,10 +1261,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
                 one_constant_id = builder.declare_constant(op->type, &one_value);
             }
         } else if (op->type.is_float() && op->type.bits() == 32) {
-            float one_value = float(1.0f);
+            float one_value = 1.0f;
             one_constant_id = builder.declare_constant(op->type, &one_value);
         } else if (op->type.is_float() && op->type.bits() == 64) {
-            double one_value = double(1.0);
+            double one_value = 1.0;
             one_constant_id = builder.declare_constant(op->type, &one_value);
         } else {
             internal_error << "Vulkan: Unhandled float type in fast_inverse intrinsic!\n";
@@ -1538,10 +1535,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Load *op) {
     user_assert(is_const_one(op->predicate)) << "Predicated loads not supported by SPIR-V codegen\n";
 
     // Construct the pointer to read from
-    internal_assert(symbol_table.contains(op->name));
-    SymbolIdStorageClassPair id_and_storage_class = symbol_table.get(op->name);
-    SpvId variable_id = id_and_storage_class.first;
-    SpvStorageClass storage_class = id_and_storage_class.second;
+    const SymbolIdStorageClassPair *id_and_storage_class = symbol_table.find(op->name);
+    internal_assert(id_and_storage_class);
+    SpvId variable_id = id_and_storage_class->first;
+    SpvStorageClass storage_class = id_and_storage_class->second;
     internal_assert(variable_id != SpvInvalidId);
     internal_assert(((uint32_t)storage_class) < ((uint32_t)SpvStorageClassMax));
 
@@ -1575,10 +1572,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Store *op) {
     op->value.accept(this);
     SpvId value_id = builder.current_id();
 
-    internal_assert(symbol_table.contains(op->name));
-    SymbolIdStorageClassPair id_and_storage_class = symbol_table.get(op->name);
-    SpvId variable_id = id_and_storage_class.first;
-    SpvStorageClass storage_class = id_and_storage_class.second;
+    const SymbolIdStorageClassPair *id_and_storage_class = symbol_table.find(op->name);
+    internal_assert(id_and_storage_class);
+    SpvId variable_id = id_and_storage_class->first;
+    SpvStorageClass storage_class = id_and_storage_class->second;
     internal_assert(variable_id != SpvInvalidId);
     internal_assert(((uint32_t)storage_class) < ((uint32_t)SpvStorageClassMax));
 
@@ -1629,20 +1626,18 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const AssertStmt *stmt) {
 
 namespace {
 std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
-    if (ends_with(name, ".__thread_id_x")) {
+    if (ends_with(name, gpu_thread_name(0))) {
         return {"LocalInvocationId", 0};
-    } else if (ends_with(name, ".__thread_id_y")) {
+    } else if (ends_with(name, gpu_thread_name(1))) {
         return {"LocalInvocationId", 1};
-    } else if (ends_with(name, ".__thread_id_z")) {
+    } else if (ends_with(name, gpu_thread_name(2))) {
         return {"LocalInvocationId", 2};
-    } else if (ends_with(name, ".__block_id_x")) {
+    } else if (ends_with(name, gpu_block_name(0))) {
         return {"WorkgroupId", 0};
-    } else if (ends_with(name, ".__block_id_y")) {
+    } else if (ends_with(name, gpu_block_name(1))) {
         return {"WorkgroupId", 1};
-    } else if (ends_with(name, ".__block_id_z")) {
+    } else if (ends_with(name, gpu_block_name(2))) {
         return {"WorkgroupId", 2};
-    } else if (ends_with(name, "id_w")) {
-        user_error << "Vulkan only supports <=3 dimensions for gpu blocks";
     }
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return {"", -1};
@@ -1653,20 +1648,17 @@ std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(For): name=" << op->name << " min=" << op->min << " extent=" << op->extent << "\n";
 
-    if (is_gpu_var(op->name)) {
-        internal_assert((op->for_type == ForType::GPUBlock) ||
-                        (op->for_type == ForType::GPUThread))
-            << "kernel loops must be either gpu block or gpu thread\n";
-
+    if (is_gpu(op->for_type)) {
         // This should always be true at this point in codegen
         internal_assert(is_const_zero(op->min));
         auto intrinsic = simt_intrinsic(op->name);
         const std::string intrinsic_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + intrinsic.first;
 
         // Intrinsics are inserted when adding the kernel
-        internal_assert(symbol_table.contains(intrinsic_var_name));
-        SpvId intrinsic_id = symbol_table.get(intrinsic_var_name).first;
-        SpvStorageClass storage_class = symbol_table.get(intrinsic_var_name).second;
+        const auto *intrin = symbol_table.find(intrinsic_var_name);
+        internal_assert(intrin);
+        SpvId intrinsic_id = intrin->first;
+        SpvStorageClass storage_class = intrin->second;
 
         // extract and cast to the extent type (which is what's expected by Halide's for loops)
         Type unsigned_type = UInt(32);
@@ -1840,7 +1832,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
             array_size = op->constant_allocation_size();
             array_type_id = builder.declare_type(op->type, array_size);
             builder.add_symbol(variable_name + "_array_type", array_type_id, builder.current_module().id());
-            debug(2) << "Vulkan: Allocate (fixed-size) " << op->name << " type=" << op->type << " array_size=" << (uint32_t)array_size << " in shared memory on device in global scope\n";
+            debug(2) << "Vulkan: Allocate (fixed-size) " << op->name << " type=" << op->type << " array_size=" << array_size << " in shared memory on device in global scope\n";
 
         } else {
             // dynamic allocation with unknown size at compile time ...
@@ -1852,7 +1844,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
             array_type_id = builder.add_array_with_default_size(storage_type_id, array_size_id);
             builder.add_symbol(variable_name + "_array_type", array_type_id, builder.current_module().id());
 
-            debug(2) << "Vulkan: Allocate (dynamic size) " << op->name << " type=" << op->type << " default_size=" << (uint32_t)array_size << " in shared memory on device in global scope\n";
+            debug(2) << "Vulkan: Allocate (dynamic size) " << op->name << " type=" << op->type << " default_size=" << array_size << " in shared memory on device in global scope\n";
 
             // bind the specialization constant to the next slot
             std::string constant_name = variable_name + "_array_size";
@@ -1884,7 +1876,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size local allocations are supported with Vulkan.";
 
-        debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << (uint32_t)array_size << " on device in function scope\n";
+        debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << array_size << " on device in function scope\n";
 
         array_type_id = builder.declare_type(op->type, array_size);
         storage_class = SpvStorageClassFunction;  // function scope
@@ -1907,8 +1899,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Free *op) {
     debug(3) << "Vulkan: Popping allocation called " << op->name << " off the symbol table\n";
-    internal_assert(symbol_table.contains(op->name));
-    SpvId variable_id = symbol_table.get(op->name).first;
+    const auto *id = symbol_table.find(op->name);
+    internal_assert(id);
+    SpvId variable_id = id->first;
     storage_access_map.erase(variable_id);
     symbol_table.pop(op->name);
 }
@@ -2474,11 +2467,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_workgroup_size(SpvId kernel_func
             local_size_y_id,
             local_size_z_id};
 
-        const char *local_size_names[3] = {
-            "__thread_id_x",
-            "__thread_id_y",
-            "__thread_id_z"};
-
         debug(1) << "Vulkan: Using dynamic workgroup local size with default of [" << local_size_x << ", " << local_size_y << ", " << local_size_z << "]...\n";
 
         // annotate each local size with a corresponding specialization constant
@@ -2486,8 +2474,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_workgroup_size(SpvId kernel_func
             SpvId constant_id = (uint32_t)(descriptor_set_table.back().specialization_constants.size() + 1);
             SpvBuilder::Literals spec_id = {constant_id};
             builder.add_annotation(local_size_ids[dim], SpvDecorationSpecId, spec_id);
-            builder.add_symbol(local_size_names[dim], local_size_ids[dim], builder.current_module().id());
-            SpecializationBinding spec_binding = {constant_id, (uint32_t)sizeof(uint32_t), local_size_names[dim]};
+            builder.add_symbol(gpu_thread_name(dim), local_size_ids[dim], builder.current_module().id());
+            SpecializationBinding spec_binding = {constant_id, (uint32_t)sizeof(uint32_t), gpu_thread_name(dim)};
             descriptor_set_table.back().specialization_constants.push_back(spec_binding);
             descriptor_set_table.back().workgroup_size_binding.local_size_constant_id[dim] = constant_id;
         }
@@ -2514,20 +2502,22 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_workgroup_size(SpvId kernel_func
 namespace {
 
 // Locate all the unique GPU variables used as SIMT intrinsics
+// This pass is used to identify if LocalInvocationID and/or WorkgroupID
+// need to be declared as variables for the entrypoint to the Kernel. Since
+// these can only be declared once and their type is vec3, we don't
+// care about the specific dims that are mapped to loop variables.
 class FindIntrinsicsUsed : public IRVisitor {
     using IRVisitor::visit;
     void visit(const For *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (is_gpu(op->for_type)) {
+
+            // map the block or thread id name to the SIMT intrinsic definition
             auto intrinsic = simt_intrinsic(op->name);
-            intrinsics_used.insert(intrinsic.first);
+
+            // mark the name of the intrinsic being used (without the dimension)
+            intrinsics_used.insert(intrinsic.first);  // name only!
         }
         op->body.accept(this);
-    }
-    void visit(const Variable *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            auto intrinsic = simt_intrinsic(op->name);
-            intrinsics_used.insert(intrinsic.first);
-        }
     }
 
 public:
@@ -2555,20 +2545,22 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_entry_point(const Stmt &s, SpvId
     s.accept(&find_intrinsics);
 
     SpvFactory::Variables entry_point_variables;
-    for (const std::string &intrinsic_name : find_intrinsics.intrinsics_used) {
+    for (const std::string &used_intrinsic : find_intrinsics.intrinsics_used) {
 
-        // The builtins are pointers to vec3
+        // The builtins are pointers to vec3 and can only be declared once per kernel entrypoint
         SpvStorageClass storage_class = SpvStorageClassInput;
         SpvId intrinsic_type_id = builder.declare_type(Type(Type::UInt, 32, 3));
         SpvId intrinsic_ptr_type_id = builder.declare_pointer_type(intrinsic_type_id, storage_class);
-        const std::string intrinsic_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + intrinsic_name;
+        const std::string intrinsic_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + used_intrinsic;
         SpvId intrinsic_var_id = builder.declare_global_variable(intrinsic_var_name, intrinsic_ptr_type_id, storage_class);
         SpvId intrinsic_loaded_id = builder.reserve_id();
         builder.append(SpvFactory::load(intrinsic_type_id, intrinsic_loaded_id, intrinsic_var_id));
         symbol_table.push(intrinsic_var_name, {intrinsic_loaded_id, storage_class});
 
-        // Annotate that this is the specific builtin
-        SpvBuiltIn built_in_kind = map_simt_builtin(intrinsic_name);
+        // Map the used intrinsic name to the specific builtin
+        SpvBuiltIn built_in_kind = map_simt_builtin(used_intrinsic);
+
+        // Add an annotation that indicates this variable is bound to the requested intrinsic
         SpvBuilder::Literals annotation_literals = {(uint32_t)built_in_kind};
         builder.add_annotation(intrinsic_var_id, SpvDecorationBuiltIn, annotation_literals);
 
@@ -2713,7 +2705,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
 
             // Set descriptor set and binding indices
             SpvBuilder::Literals dset_index = {entry_point_index};
-            SpvBuilder::Literals binding_index = {uint32_t(binding_counter++)};
+            SpvBuilder::Literals binding_index = {binding_counter++};
             builder.add_annotation(buffer_block_var_id, SpvDecorationDescriptorSet, dset_index);
             builder.add_annotation(buffer_block_var_id, SpvDecorationBinding, binding_index);
             symbol_table.push(arg.name, {buffer_block_var_id, storage_class});

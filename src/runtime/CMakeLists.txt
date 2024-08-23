@@ -32,6 +32,8 @@ set(RUNTIME_CPP
     hexagon_dma_pool
     hexagon_host
     ios_io
+    linux_aarch64_cpu_features
+    linux_arm_cpu_features
     linux_clock
     linux_host_cpu_count
     linux_yield
@@ -43,13 +45,11 @@ set(RUNTIME_CPP
     msan
     msan_stubs
     opencl
-    opengl_egl_context
-    opengl_glx_context
-    openglcompute
+    osx_aarch64_cpu_features
+    osx_arm_cpu_features
     osx_clock
     osx_get_symbol
     osx_host_cpu_count
-    osx_opengl_context
     osx_yield
     posix_aligned_alloc
     posix_allocator
@@ -84,6 +84,7 @@ set(RUNTIME_CPP
     # webgpu
     webgpu_dawn
     webgpu_emscripten
+    windows_aarch64_cpu_features_arm
     windows_clock
     windows_cuda
     windows_d3d12compute_arm
@@ -135,7 +136,6 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeHexagonHost.h
     HalideRuntimeMetal.h
     HalideRuntimeOpenCL.h
-    HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
     HalideRuntimeVulkan.h
     HalideRuntimeWebGPU.h
@@ -146,6 +146,7 @@ set(RUNTIME_HEADER_FILES
 # in a different directory ONLY IF that source was created
 # by add_custom_command, as is the case in this directory.
 add_library(Halide_initmod OBJECT)
+add_library(Halide::initmod ALIAS Halide_initmod)
 
 # Note: ensure that these flags match the flags in the Makefile.
 # Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
@@ -161,6 +162,8 @@ set(RUNTIME_CXX_FLAGS
     -fno-threadsafe-statics
     # Necessary for using virtual functions in the runtime code.
     -fno-rtti
+    # Will generate bad code in some situations
+    -fno-jump-tables
     -Wall
     -Wc++20-designator
     -Wcast-qual
@@ -172,10 +175,14 @@ set(RUNTIME_CXX_FLAGS
     -Wno-unused-function
     -Wvla
     -Wsign-compare
+    -Wimplicit-fallthrough
+    -Wno-sync-alignment
 )
 
-option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
-mark_as_advanced(Halide_CLANG_TIDY_BUILD)
+Halide_feature(
+    Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF
+    ADVANCED
+)
 
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
@@ -198,9 +205,9 @@ foreach (i IN LISTS RUNTIME_CPP)
                 endif ()
             # Windows on ARM
             elseif (i MATCHES "windows_.*_arm$")
-                if (j EQUAL 32 AND TARGET_ARM)
+                if (j EQUAL 32 AND "ARM" IN_LIST Halide_LLVM_COMPONENTS)
                     set(TARGET "arm-unknown-windows-unknown")
-                elseif (j EQUAL 64 AND TARGET_AARCH64)
+                elseif (j EQUAL 64 AND "AArch64" IN_LIST Halide_LLVM_COMPONENTS)
                     set(TARGET "aarch64-unknown-windows-unknown")
                 else ()
                     continue()
@@ -216,17 +223,24 @@ foreach (i IN LISTS RUNTIME_CPP)
                     # unfortunately, clang doesn't automatically set this flag even though the
                     # ABI is msvc on windows
                     set(fshort-wchar -fshort-wchar)
-                    set(TARGET "le64-unknown-windows-unknown")
+                    # TODO: was le64 here, not sure if this is correct or not
+                    set(TARGET "x86_64-unknown-windows-unknown")
                 endif ()
             endif()
-        # Everything else
-        else()
+        elseif (i MATCHES "webgpu")
             if (j EQUAL 32)
-                # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
-                set(TARGET "le32-unknown-nacl-unknown")
+                # wasm32 will fail for some i386 builds, but i386 won't
+                set(TARGET "wasm32-unknown-unknown-unknown")
             else ()
-                # generic 64-bit code
-                set(TARGET "le64-unknown-unknown-unknown")
+                set(TARGET "wasm64-unknown-unknown-unknown")
+            endif ()
+        else()
+            # don't be fooled: these are just generic 32/64-bit targets for our purposes here
+            if (j EQUAL 32)
+                # wasm32 will fail for some i386 builds, but i386 won't
+                set(TARGET "i386-unknown-unknown-unknown")
+            else ()
+                set(TARGET "x86_64-unknown-unknown-unknown")
             endif ()
         endif ()
 
@@ -326,8 +340,6 @@ foreach (i IN LISTS RUNTIME_HEADER_FILES)
                        DEPENDS "${i}" binary2cpp
                        VERBATIM)
     target_sources(Halide_initmod PRIVATE "_initmod_${SYM_NAME}.cpp")
-
-    configure_file(${i} "${Halide_BINARY_DIR}/include/${i}" COPYONLY)
 endforeach ()
 
 ##
@@ -336,10 +348,18 @@ endforeach ()
 
 add_library(Halide_Runtime INTERFACE)
 add_library(Halide::Runtime ALIAS Halide_Runtime)
-target_include_directories(Halide_Runtime INTERFACE $<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>)
 set_target_properties(Halide_Runtime PROPERTIES EXPORT_NAME Runtime)
-option(Halide_BUILD_HEXAGON_REMOTE_RUNTIME "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF)
 
-if (Halide_BUILD_HEXAGON_REMOTE_RUNTIME AND NOT Halide_CLANG_TIDY_BUILD)
+target_sources(Halide_Runtime
+               INTERFACE
+               FILE_SET HEADERS
+               FILES ${RUNTIME_HEADER_FILES})
+
+Halide_feature(
+    Halide_BUILD_HEXAGON_REMOTE_RUNTIME "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF
+    DEPENDS NOT Halide_CLANG_TIDY_BUILD
+    ADVANCED
+)
+if (Halide_BUILD_HEXAGON_REMOTE_RUNTIME)
   add_subdirectory(hexagon_remote)
 endif ()

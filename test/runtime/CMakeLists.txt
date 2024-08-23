@@ -8,7 +8,6 @@ function(_set_target_options NAME)
     target_compile_definitions(
         ${NAME}
         PRIVATE
-        HALIDE_VERSION=${Halide_VERSION}
         HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
         HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
         HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH}
@@ -16,6 +15,7 @@ function(_set_target_options NAME)
         COMPILING_HALIDE_RUNTIME
         COMPILING_HALIDE_RUNTIME_TESTS
     )
+    set_halide_compiler_warnings(${NAME})
 endfunction()
 
 function(halide_define_runtime_internal_test NAME)

@@ -110,8 +110,8 @@ void ComputeModulusRemainder::visit(const Reinterpret *) {
 }
 
 void ComputeModulusRemainder::visit(const Variable *op) {
-    if (scope.contains(op->name)) {
-        result = scope.get(op->name);
+    if (const auto *m = scope.find(op->name)) {
+        result = *m;
     } else {
         result = ModulusRemainder{};
     }
@@ -487,7 +487,7 @@ ModulusRemainder ModulusRemainder::unify(const ModulusRemainder &a, const Modulu
     int64_t r;
     if (!sub_with_overflow(64, a.remainder, b.remainder, &r)) {
         // The modulus is not representable as an int64.
-        return {0, 1};
+        return ModulusRemainder{};
     }
 
     int64_t diff = a.remainder - b.remainder;

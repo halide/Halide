@@ -205,7 +205,7 @@ Once Python is installed, you can install the Python module dependencies either
 globally or in a [virtual environment][venv] by running
 
 ```
-> pip3 install -r .\python_bindings\requirements.txt
+> pip3 install -r requirements.txt
 ```
 
 from the root of the repository.
@@ -388,14 +388,14 @@ Halide reads and understands several options that can configure the build. The
 following are the most consequential and control how Halide is actually
 compiled.
 
-| Option                                   | Default               | Description                                                                                                      |
-|------------------------------------------|-----------------------|------------------------------------------------------------------------------------------------------------------|
-| [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.                             |
-| `Halide_BUNDLE_LLVM`                     | `OFF`                 | When building Halide as a static library, unpack the LLVM static libraries and add those objects to libHalide.a. |
-| `Halide_SHARED_LLVM`                     | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                                    |
-| `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                                  |
-| `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                           |
-| `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                |
+| Option                                   | Default               | Description                                                                                       |
+|------------------------------------------|-----------------------|---------------------------------------------------------------------------------------------------|
+| [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.              |
+| `Halide_BUNDLE_STATIC`                   | `OFF`                 | When building Halide as a static library, merge static library dependencies into libHalide.a.     |
+| `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                     |
+| `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                   |
+| `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                            |
+| `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension) |
 
 The following options are _advanced_ and should not be required in typical workflows. Generally, these are used by
 Halide's own CI infrastructure, or as escape hatches for third-party packagers.
@@ -412,13 +412,13 @@ through the [`add_subdirectory`][add_subdirectory] or
 [`FetchContent`][fetchcontent] mechanisms. They control whether non-essential
 targets (like tests and documentation) are built.
 
-| Option                 | Default              | Description                                                      |
-|------------------------|----------------------|------------------------------------------------------------------|
-| `WITH_TESTS`           | `ON`                 | Enable building unit and integration tests                       |
-| `WITH_PYTHON_BINDINGS` | `ON` if Python found | Enable building Python 3.x bindings                              |
-| `WITH_DOCS`            | `OFF`                | Enable building the documentation via Doxygen                    |
-| `WITH_UTILS`           | `ON`                 | Enable building various utilities including the trace visualizer |
-| `WITH_TUTORIALS`       | `ON`                 | Enable building the tutorials                                    |
+| Option                 | Default | Description                                                      |
+|------------------------|---------|------------------------------------------------------------------|
+| `WITH_TESTS`           | `ON`    | Enable building unit and integration tests                       |
+| `WITH_PYTHON_BINDINGS` | `ON`    | Enable building Python 3.x bindings                              |
+| `WITH_DOCS`            | `OFF`   | Enable building the documentation via Doxygen                    |
+| `WITH_UTILS`           | `ON`    | Enable building various utilities including the trace visualizer |
+| `WITH_TUTORIALS`       | `ON`    | Enable building the tutorials                                    |
 
 The following options control whether to build certain test subsets. They only
 apply when `WITH_TESTS=ON`:
@@ -432,35 +432,12 @@ apply when `WITH_TESTS=ON`:
 | `WITH_TEST_PERFORMANCE`   | `ON`    | enable performance testing        |
 | `WITH_TEST_GENERATOR`     | `ON`    | enable the AOT generator tests    |
 
-The following options enable/disable various LLVM backends (they correspond to
-LLVM component names):
-
-| Option               | Default              | Description                         |
-|----------------------|----------------------|-------------------------------------|
-| `TARGET_AARCH64`     | `ON`, _if available_ | Enable the AArch64 backend          |
-| `TARGET_AMDGPU`      | `ON`, _if available_ | Enable the AMD GPU backend          |
-| `TARGET_ARM`         | `ON`, _if available_ | Enable the ARM backend              |
-| `TARGET_HEXAGON`     | `ON`, _if available_ | Enable the Hexagon backend          |
-| `TARGET_NVPTX`       | `ON`, _if available_ | Enable the NVidia PTX backend       |
-| `TARGET_POWERPC`     | `ON`, _if available_ | Enable the PowerPC backend          |
-| `TARGET_RISCV`       | `ON`, _if available_ | Enable the RISC V backend           |
-| `TARGET_WEBASSEMBLY` | `ON`, _if available_ | Enable the WebAssembly backend.     |
-| `TARGET_X86`         | `ON`, _if available_ | Enable the x86 (and x86_64) backend |
-
-The following options enable/disable various Halide-specific backends:
-
-| Option                | Default | Description                            |
-|-----------------------|---------|----------------------------------------|
-| `TARGET_OPENCL`       | `ON`    | Enable the OpenCL-C backend            |
-| `TARGET_METAL`        | `ON`    | Enable the Metal backend               |
-| `TARGET_D3D12COMPUTE` | `ON`    | Enable the Direct3D 12 Compute backend |
-
 The following options are WebAssembly-specific. They only apply when
 `TARGET_WEBASSEMBLY=ON`:
 
-| Option      | Default | Description                               |
-|-------------|---------|-------------------------------------------|
-| `WITH_WABT` | `ON`    | Include WABT Interpreter for WASM testing |
+| Option                | Default | Description                                                                              |
+|-----------------------|---------|------------------------------------------------------------------------------------------|
+| `Halide_WASM_BACKEND` | `wabt`  | Select the backend for WASM testing. Can be `wabt`, `V8` or a false value such as `OFF`. |
 
 ### Find module options
 
@@ -499,23 +476,6 @@ CUDA installation automatically, you can point it to it by setting:
 If the CMake version is lower than 3.18, the deprecated [`FindCUDA`][findcuda]
 module will be used instead. It reads the variable `CUDA_TOOLKIT_ROOT_DIR`
 instead of `CUDAToolkit_ROOT` above.
-
-TODO(https://github.com/halide/Halide/issues/5633): update this section for OpenGLCompute, which needs some (but maybe not all) of this.
-
-When targeting OpenGL, the [`FindOpenGL`][findopengl] and [`FindX11`][findx11]
-modules will be used to link AOT generated binaries. These modules can be
-overridden by setting the following variables:
-
-| Variable                | Description                      |
-|-------------------------|----------------------------------|
-| `OPENGL_egl_LIBRARY`    | Path to the EGL library.         |
-| `OPENGL_glu_LIBRARY`    | Path to the GLU library.         |
-| `OPENGL_glx_LIBRARY`    | Path to the GLVND GLX library.   |
-| `OPENGL_opengl_LIBRARY` | Path to the GLVND OpenGL library |
-| `OPENGL_gl_LIBRARY`     | Path to the OpenGL library.      |
-
-The OpenGL paths will need to be set if you intend to use OpenGL with X11 on
-macOS.
 
 Halide also searches for `libpng` and `libjpeg-turbo` through the
 [`FindPNG`][findpng] and [`FindJPEG`][findjpeg] modules, respectively. They can
@@ -575,7 +535,7 @@ No matter how you intend to use Halide, you will need some basic CMake
 boilerplate.
 
 ```cmake
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.28)
 project(HalideExample)
 
 set(CMAKE_CXX_STANDARD 17)  # or newer
@@ -606,7 +566,7 @@ If Halide is not globally installed, you will need to add the root of the Halide
 installation directory to [`CMAKE_PREFIX_PATH`][cmake_prefix_path] at the CMake
 command line.
 
-```
+```console
 dev@ubuntu:~/myproj$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/path/to/Halide-install" -S . -B build
 ```
 
@@ -801,10 +761,10 @@ Variables set by the package:
 
 Variables that control package behavior:
 
-| Variable                   | Description |
-|----------------------------|-------------|
-| `Halide_PYTHON_LAUNCHER`   | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators. |
-| `Halide_NO_DEFAULT_FLAGS`  | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator` |
+| Variable                  | Description                                                                                                                                     |
+|---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Halide_PYTHON_LAUNCHER`  | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators. |
+| `Halide_NO_DEFAULT_FLAGS` | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator`                               |
 
 
 ### Imported targets
@@ -1395,7 +1355,6 @@ guidelines you should follow when writing a new app.
 [finddoxygen]: https://cmake.org/cmake/help/latest/module/FindDoxygen.html
 [findjpeg]: https://cmake.org/cmake/help/latest/module/FindJPEG.html
 [findopencl]: https://cmake.org/cmake/help/latest/module/FindOpenCL.html
-[findopengl]: https://cmake.org/cmake/help/latest/module/FindOpenGL.html
 [findpng]: https://cmake.org/cmake/help/latest/module/FindPNG.html
 [findpython3]: https://cmake.org/cmake/help/latest/module/FindPython3.html
 [findx11]: https://cmake.org/cmake/help/latest/module/FindX11.html

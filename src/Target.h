@@ -109,7 +109,6 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        OpenGLCompute = halide_target_feature_openglcompute,  // NOTE: This feature is deprecated and will be removed in Halide 17.
         EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Profile = halide_target_feature_profile,
@@ -123,6 +122,7 @@ struct Target {
         HVX_v62 = halide_target_feature_hvx_v62,
         HVX_v65 = halide_target_feature_hvx_v65,
         HVX_v66 = halide_target_feature_hvx_v66,
+        HVX_v68 = halide_target_feature_hvx_v68,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
         MSAN = halide_target_feature_msan,
@@ -143,9 +143,8 @@ struct Target {
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
         EmbedBitcode = halide_target_feature_embed_bitcode,
         EnableLLVMLoopOpt = halide_target_feature_enable_llvm_loop_opt,
+        WasmMvpOnly = halide_target_feature_wasm_mvponly,
         WasmSimd128 = halide_target_feature_wasm_simd128,
-        WasmSignExt = halide_target_feature_wasm_signext,
-        WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
         WasmThreads = halide_target_feature_wasm_threads,
         WasmBulkMemory = halide_target_feature_wasm_bulk_memory,
         WebGPU = halide_target_feature_webgpu,
@@ -155,7 +154,16 @@ struct Target {
         ARMFp16 = halide_target_feature_arm_fp16,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         RVV = halide_target_feature_rvv,
+        ARMv8a = halide_target_feature_armv8a,
         ARMv81a = halide_target_feature_armv81a,
+        ARMv82a = halide_target_feature_armv82a,
+        ARMv83a = halide_target_feature_armv83a,
+        ARMv84a = halide_target_feature_armv84a,
+        ARMv85a = halide_target_feature_armv85a,
+        ARMv86a = halide_target_feature_armv86a,
+        ARMv87a = halide_target_feature_armv87a,
+        ARMv88a = halide_target_feature_armv88a,
+        ARMv89a = halide_target_feature_armv89a,
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
         SPIRV = halide_target_feature_spirv,
@@ -169,6 +177,8 @@ struct Target {
         VulkanV12 = halide_target_feature_vulkan_version12,
         VulkanV13 = halide_target_feature_vulkan_version13,
         Semihosting = halide_target_feature_semihosting,
+        AVX10_1 = halide_target_feature_avx10_1,
+        X86APX = halide_target_feature_x86_apx,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
@@ -178,6 +188,7 @@ struct Target {
         for (const auto &f : initial_features) {
             set_feature(f);
         }
+        validate_features();
     }
 
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
@@ -212,7 +223,7 @@ struct Target {
 
     bool has_feature(Feature f) const;
 
-    inline bool has_feature(halide_target_feature_t f) const {
+    bool has_feature(halide_target_feature_t f) const {
         return has_feature((Feature)f);
     }
 
@@ -234,10 +245,7 @@ struct Target {
 
     /** Is a fully feature GPU compute runtime enabled? I.e. is
      * Func::gpu_tile and similar going to work? Currently includes
-     * CUDA, OpenCL, Metal and D3D12Compute. We do not include OpenGL,
-     * because it is not capable of gpgpu, and is not scheduled via
-     * Func::gpu_tile.
-     * TODO: Should OpenGLCompute be included here? */
+     * CUDA, OpenCL, Metal and D3D12Compute. */
     bool has_gpu_feature() const;
 
     /** Does this target allow using a certain type. Generally all
@@ -336,6 +344,10 @@ struct Target {
      * features are set. */
     int get_vulkan_capability_lower_bound() const;
 
+    /** Get the minimum ARM v8.x capability found as an integer. Returns
+     * -1 if no ARM v8.x features are set. */
+    int get_arm_v8_lower_bound() const;
+
     /** Was libHalide compiled with support for this target? */
     bool supported() const;
 
@@ -358,6 +370,11 @@ struct Target {
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
+
+    /** Attempt to validate that all features set are sensible for the base Target.
+     * This is *not* guaranteed to get all invalid combinations, but is intended
+     * to catch at least the most common (e.g., setting arm-specific features on x86). */
+    void validate_features() const;
 };
 
 /** Return the target corresponding to the host machine. */

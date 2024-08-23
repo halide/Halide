@@ -3,6 +3,7 @@
 
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "IRMatch.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
@@ -175,6 +176,17 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
                 }
             }
         }
+
+        // Narrowing float -> int casts should go via an integer type of the
+        // matching width (see https://github.com/halide/Halide/issues/7972)
+        if (op->value.type().is_float() &&
+            (op->type.is_int() || op->type.is_uint()) &&
+            op->type.bits() < op->value.type().bits()) {
+            Expr equiv = Cast::make(op->type.with_bits(op->value.type().bits()), op->value);
+            equiv = Cast::make(op->type, equiv);
+            codegen(equiv);
+            return;
+        }
     }
 
     CodeGen_Posix::visit(op);
@@ -194,6 +206,12 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
         {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
         {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
+    };
+    static const Pattern reinterpret_patterns[] = {
+        {"saturating_narrow", i8_sat(wild_u16x_), Target::WasmSimd128},
+        {"saturating_narrow", u8_sat(wild_u16x_), Target::WasmSimd128},
+        {"saturating_narrow", i16_sat(wild_u32x_), Target::WasmSimd128},
+        {"saturating_narrow", u16_sat(wild_u32x_), Target::WasmSimd128},
     };
     static const vector<pair<Expr, Expr>> cast_rewrites = {
         // Some double-narrowing saturating casts can be better expressed as
@@ -222,6 +240,36 @@ void CodeGen_WebAssembly::visit(const Call *op) {
                 Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
                 value = codegen(replacement);
                 return;
+            }
+        }
+
+        // Search for saturating casts where the inner value can be
+        // reinterpreted to signed, so that we can use existing
+        // saturating_narrow instructions.
+        // TODO: should use lossless_cast once it is fixed.
+        for (const Pattern &p : reinterpret_patterns) {
+            if (!target.has_feature(p.required_feature)) {
+                continue;
+            }
+            if (expr_match(p.pattern, op, matches)) {
+                const Expr &expr = matches[0];
+                const Type &t = expr.type();
+                // TODO(8212): might want to keep track of scope of bounds information.
+                const ConstantInterval ibounds = constant_integer_bounds(expr);
+                const Type reint_type = t.with_code(halide_type_int);
+                // If the signed type can represent the maximum value unsigned value,
+                //  we can safely reinterpret this unsigned expression as signed.
+                if (reint_type.can_represent(ibounds)) {
+                    // Can safely reinterpret to signed integer.
+                    matches[0] = cast(reint_type, matches[0]);
+
+                    value = call_overloaded_intrin(op->type, p.intrin, matches);
+                    if (value) {
+                        return;
+                    }
+                }
+                // No reinterpret patterns match the same input, so stop matching.
+                break;
             }
         }
     }
@@ -319,50 +367,36 @@ string CodeGen_WebAssembly::mcpu_tune() const {
 }
 
 string CodeGen_WebAssembly::mattrs() const {
-    std::ostringstream s;
-    string sep;
+    user_assert(target.os == Target::WebAssemblyRuntime)
+        << "wasmrt is the only supported 'os' for WebAssembly at this time.";
 
-    if (target.has_feature(Target::WasmSignExt)) {
-        s << sep << "+sign-ext";
-        sep = ",";
+    std::vector<std::string_view> attrs;
+
+    if (!target.has_feature(Target::WasmMvpOnly)) {
+        attrs.emplace_back("+sign-ext");
+        attrs.emplace_back("+nontrapping-fptoint");
     }
-
     if (target.has_feature(Target::WasmSimd128)) {
-        s << sep << "+simd128";
-        sep = ",";
+        attrs.emplace_back("+simd128");
     }
-
-    if (target.has_feature(Target::WasmSatFloatToInt)) {
-        s << sep << "+nontrapping-fptoint";
-        sep = ",";
-    }
-
     if (target.has_feature(Target::WasmThreads)) {
         // "WasmThreads" doesn't directly affect LLVM codegen,
         // but it does end up requiring atomics, so be sure to enable them.
-        s << sep << ",+atomics";
-        sep = ",";
+        attrs.emplace_back("+atomics");
     }
-
     // PIC implies +mutable-globals because the PIC ABI used by the linker
     // depends on importing and exporting mutable globals. Also -pthread implies
     // mutable-globals too, so quitely enable it if either of these are specified.
     if (use_pic() || target.has_feature(Target::WasmThreads)) {
-        s << sep << "+mutable-globals";
-        sep = ",";
+        attrs.emplace_back("+mutable-globals");
     }
-
     // Recent Emscripten builds assume that specifying `-pthread` implies bulk-memory too,
     // so quietly enable it if either of these are specified.
     if (target.has_feature(Target::WasmBulkMemory) || target.has_feature(Target::WasmThreads)) {
-        s << sep << "+bulk-memory";
-        sep = ",";
+        attrs.emplace_back("+bulk-memory");
     }
 
-    user_assert(target.os == Target::WebAssemblyRuntime)
-        << "wasmrt is the only supported 'os' for WebAssembly at this time.";
-
-    return s.str();
+    return join_strings(attrs, ",");
 }
 
 bool CodeGen_WebAssembly::use_soft_float_abi() const {

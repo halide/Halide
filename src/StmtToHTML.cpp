@@ -784,7 +784,7 @@ public:
         scope.pop(m.name());
     }
 
-    inline std::string escape_html(std::string src) {
+    std::string escape_html(std::string src) {
         src = replace_all(src, "&", "&amp;");
         src = replace_all(src, "<", "&lt;");
         src = replace_all(src, ">", "&gt;");
@@ -902,7 +902,7 @@ public:
                 std::vector<std::string> operands = split_string(operands_str, ", ");
                 operands_str = "";
                 for (size_t opidx = 0; opidx < operands.size(); ++opidx) {
-                    std::string op = operands[opidx];
+                    const std::string &op = operands[opidx];
                     internal_assert(!op.empty());
                     if (opidx != 0) {
                         operands_str += ", ";
@@ -1124,7 +1124,7 @@ private:
 
     // Prints newline to stream
     void print_ln() {
-        stream << '\n';
+        stream << "\n";
     }
 
     // Prints a variable to stream
@@ -1134,8 +1134,8 @@ private:
 
     std::string variable(const std::string &x, const std::string &tooltip) {
         int id;
-        if (scope.contains(x)) {
-            id = scope.get(x);
+        if (const int *i = scope.find(x)) {
+            id = *i;
         } else {
             id = gen_unique_id();
             scope.push(x, id);
@@ -2378,7 +2378,10 @@ private:
     void generate_body(const Module &m) {
         stream << "<body>\n";
         stream << "  <div id='page-container'>\n";
+        generate_toolbar(m);
+        stream << "     <div id='content'>\n";
         generate_visualization_panes(m);
+        stream << "     </div>\n";
         stream << "  </div>\n";
 #if INLINE_TEMPLATES
         stream << "<script>\n"
@@ -2391,6 +2394,37 @@ private:
         stream << "<script src='file://" << (dir / "html_template_StmtToHTML.js").string() << "'></script>\n";
 #endif
         stream << "</body>";
+    }
+
+    void generate_toolbar(const Module &m) {
+        stream << "<div id='toolbar'>\n";
+
+        // IR settings
+        stream << "<form id='form-ir-settings' name='form-ir-settings'>IR:\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-ir-wrap' checked />Wrap</label>\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-ir-line-nums' checked />Line numbers</label>\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-ir-costs' checked />Costs</label>\n";
+        stream << "</form>\n";
+
+        // Which panes to show
+        stream << "<form id='form-panes' name='form-panes'>Panes:\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-ir' checked />Show IR</label>\n";
+        stream << "   <label><input type='checkbox' name='checkbox-show-assembly' checked />Show Assembly</label>\n";
+        Buffer<> device_code_buf = m.get_device_code_buffer();
+        if (device_code_buf.defined()) {
+            stream << "   <label><input type='checkbox' name='checkbox-show-device-code' checked />Show Device Code</label>\n";
+        }
+        stream << "</form>\n";
+
+        // Color theme
+        stream << "<form id='form-theme' name='form-theme'>Theme:\n";
+        stream << "    <label><input type='radio' name='theme' value='auto' checked />Auto</label>\n";
+        stream << "    <label><input type='radio' name='theme' value='classic-light' />Classic Light</label>\n";
+        stream << "    <label><input type='radio' name='theme' value='gruvbox-dark' />Gruvbox Dark</label>\n";
+        stream << "<label><input type='radio' name='theme' value='gruvbox-light' />Gruvbox Light</label>\n";
+
+        stream << "</form>\n";
+        stream << "</div>\n";
     }
 
     // Generate the three visualization panes

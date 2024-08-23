@@ -33,6 +33,15 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
         .def("fuse", &T::fuse,
              py::arg("inner"), py::arg("outer"), py::arg("fused"))
 
+        .def("partition", (T & (T::*)(const VarOrRVar &var, Partition partition_policy)) & T::partition,
+             py::arg("var"), py::arg("partition_policy"))
+        .def("never_partition_all", &T::never_partition_all)
+        .def("never_partition", (T & (T::*)(const std::vector<VarOrRVar> &vars)) & T::never_partition,
+             py::arg("vars"))
+        .def("always_partition_all", &T::always_partition_all)
+        .def("always_partition", (T & (T::*)(const std::vector<VarOrRVar> &vars)) & T::always_partition,
+             py::arg("vars"))
+
         .def("serial", &T::serial,
              py::arg("var"))
 
@@ -98,9 +107,7 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
                 // Templated function; specializing only on ImageParam for now
                 return t.template prefetch<ImageParam>(image, at, from, offset, strategy);
             },
-            py::arg("image"), py::arg("at"), py::arg("from"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
-
-        .def("source_location", &T::source_location);
+            py::arg("image"), py::arg("at"), py::arg("from"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf);
 }
 
 }  // namespace PythonBindings

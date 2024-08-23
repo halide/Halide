@@ -6,12 +6,14 @@
 #include <utility>
 
 #include "CSE.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "Func.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Interval.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -434,133 +436,139 @@ Expr const_false(int w) {
     return make_zero(UInt(1, w));
 }
 
-Expr lossless_cast(Type t, Expr e) {
+Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare> *cache) {
     if (!e.defined() || t == e.type()) {
         return e;
     } else if (t.can_represent(e.type())) {
         return cast(t, std::move(e));
-    }
-
-    if (const Cast *c = e.as<Cast>()) {
+    } else if (const Cast *c = e.as<Cast>()) {
         if (c->type.can_represent(c->value.type())) {
-            // We can recurse into widening casts.
-            return lossless_cast(t, c->value);
-        } else {
-            return Expr();
+            return lossless_cast(t, c->value, cache);
         }
-    }
-
-    if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.element_of(), b->value);
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        Expr v = lossless_cast(t.element_of(), b->value, cache);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
-        } else {
-            return Expr();
         }
-    }
-
-    if (const IntImm *i = e.as<IntImm>()) {
+    } else if (const IntImm *i = e.as<IntImm>()) {
         if (t.can_represent(i->value)) {
             return make_const(t, i->value);
-        } else {
-            return Expr();
         }
-    }
-
-    if (const UIntImm *i = e.as<UIntImm>()) {
+    } else if (const UIntImm *i = e.as<UIntImm>()) {
         if (t.can_represent(i->value)) {
             return make_const(t, i->value);
-        } else {
-            return Expr();
         }
-    }
-
-    if (const FloatImm *f = e.as<FloatImm>()) {
+    } else if (const FloatImm *f = e.as<FloatImm>()) {
         if (t.can_represent(f->value)) {
             return make_const(t, f->value);
-        } else {
-            return Expr();
         }
-    }
-
-    if (t.is_int_or_uint() && t.bits() >= 16) {
-        if (const Add *add = e.as<Add>()) {
-            // If we can losslessly narrow the args even more
-            // aggressively, we're good.
-            // E.g. lossless_cast(uint16, (uint32)(some_u8) + 37)
-            // = (uint16)(some_u8) + 37
-            Expr a = lossless_cast(t.narrow(), add->a);
-            Expr b = lossless_cast(t.narrow(), add->b);
-            if (a.defined() && b.defined()) {
-                return cast(t, a) + cast(t, b);
-            } else {
-                return Expr();
-            }
-        }
-
-        if (const Sub *sub = e.as<Sub>()) {
-            Expr a = lossless_cast(t.narrow(), sub->a);
-            Expr b = lossless_cast(t.narrow(), sub->b);
-            if (a.defined() && b.defined()) {
-                return cast(t, a) + cast(t, b);
-            } else {
-                return Expr();
-            }
-        }
-
-        if (const Mul *mul = e.as<Mul>()) {
-            Expr a = lossless_cast(t.narrow(), mul->a);
-            Expr b = lossless_cast(t.narrow(), mul->b);
-            if (a.defined() && b.defined()) {
-                return cast(t, a) * cast(t, b);
-            } else {
-                return Expr();
-            }
-        }
-
-        if (const VectorReduce *reduce = e.as<VectorReduce>()) {
-            const int factor = reduce->value.type().lanes() / reduce->type.lanes();
-            switch (reduce->op) {
-            case VectorReduce::Add:
-                // A horizontal add requires one extra bit per factor
-                // of two in the reduction factor. E.g. a reduction of
-                // 8 vector lanes down to 2 requires 2 extra bits in
-                // the output. We only deal with power-of-two types
-                // though, so just make sure the reduction factor
-                // isn't so large that it will more than double the
-                // number of bits required.
-                if (factor < (1 << (t.bits() / 2))) {
-                    Type narrower = reduce->value.type().with_bits(t.bits() / 2);
-                    Expr val = lossless_cast(narrower, reduce->value);
-                    if (val.defined()) {
-                        val = cast(narrower.with_bits(t.bits()), val);
-                        return VectorReduce::make(reduce->op, val, reduce->type.lanes());
-                    }
-                }
-                break;
-            case VectorReduce::Max:
-            case VectorReduce::Min: {
-                Expr val = lossless_cast(t, reduce->value);
-                if (val.defined()) {
-                    return VectorReduce::make(reduce->op, val, reduce->type.lanes());
-                }
-                break;
-            }
-            default:
-                break;
-            }
-        }
-    }
-
-    if (const Shuffle *shuf = e.as<Shuffle>()) {
+    } else if (const Shuffle *shuf = e.as<Shuffle>()) {
         std::vector<Expr> vecs;
         for (const auto &vec : shuf->vectors) {
-            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec));
+            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec, cache));
             if (!vecs.back().defined()) {
                 return Expr();
             }
         }
         return Shuffle::make(vecs, shuf->indices);
+    } else if (t.is_int_or_uint()) {
+        // Check the bounds. If they're small enough, we can throw narrowing
+        // casts around e, or subterms.
+        ConstantInterval ci = constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), cache);
+
+        if (t.can_represent(ci)) {
+            // There are certain IR nodes where if the result is expressible
+            // using some type, and the args are expressible using that type,
+            // then the operation can just be done in that type.
+            if (const Add *op = e.as<Add>()) {
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
+                if (a.defined() && b.defined()) {
+                    return Add::make(a, b);
+                }
+            } else if (const Sub *op = e.as<Sub>()) {
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
+                if (a.defined() && b.defined()) {
+                    return Sub::make(a, b);
+                }
+            } else if (const Mul *op = e.as<Mul>()) {
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
+                if (a.defined() && b.defined()) {
+                    return Mul::make(a, b);
+                }
+            } else if (const Min *op = e.as<Min>()) {
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
+                if (a.defined() && b.defined()) {
+                    debug(0) << a << " " << b << "\n";
+                    return Min::make(a, b);
+                }
+            } else if (const Max *op = e.as<Max>()) {
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
+                if (a.defined() && b.defined()) {
+                    return Max::make(a, b);
+                }
+            } else if (const Mod *op = e.as<Mod>()) {
+                Expr a = lossless_cast(t, op->a, cache);
+                Expr b = lossless_cast(t, op->b, cache);
+                if (a.defined() && b.defined()) {
+                    return Mod::make(a, b);
+                }
+            } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_add, Call::widen_right_add})) {
+                Expr a = lossless_cast(t, op->args[0], cache);
+                Expr b = lossless_cast(t, op->args[1], cache);
+                if (a.defined() && b.defined()) {
+                    return Add::make(a, b);
+                }
+            } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_sub, Call::widen_right_sub})) {
+                Expr a = lossless_cast(t, op->args[0], cache);
+                Expr b = lossless_cast(t, op->args[1], cache);
+                if (a.defined() && b.defined()) {
+                    return Sub::make(a, b);
+                }
+            } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_mul, Call::widen_right_mul})) {
+                Expr a = lossless_cast(t, op->args[0], cache);
+                Expr b = lossless_cast(t, op->args[1], cache);
+                if (a.defined() && b.defined()) {
+                    return Mul::make(a, b);
+                }
+            } else if (const Call *op = Call::as_intrinsic(e, {Call::shift_left, Call::widening_shift_left,
+                                                               Call::shift_right, Call::widening_shift_right})) {
+                Expr a = lossless_cast(t, op->args[0], cache);
+                Expr b = lossless_cast(t, op->args[1], cache);
+                if (a.defined() && b.defined()) {
+                    ConstantInterval cb = constant_integer_bounds(b, Scope<ConstantInterval>::empty_scope(), cache);
+                    if (cb > -t.bits() && cb < t.bits()) {
+                        if (op->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
+                            return a << b;
+                        } else if (op->is_intrinsic({Call::shift_right, Call::widening_shift_right})) {
+                            return a >> b;
+                        }
+                    }
+                }
+            } else if (const VectorReduce *op = e.as<VectorReduce>()) {
+                if (op->op == VectorReduce::Add ||
+                    op->op == VectorReduce::Min ||
+                    op->op == VectorReduce::Max) {
+                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, cache);
+                    if (v.defined()) {
+                        return VectorReduce::make(op->op, v, op->type.lanes());
+                    }
+                }
+            }
+
+            // At this point we know the expression fits in the target type, but
+            // what we really want is for the expression to be computed in the
+            // target type. So we can add a cast to the target type if we want
+            // here, but it only makes sense to do it if the expression type has
+            // the same or fewer bits than the target type.
+            if (e.type().bits() <= t.bits()) {
+                return cast(t, e);
+            }
+        }
     }
 
     return Expr();
@@ -568,6 +576,12 @@ Expr lossless_cast(Type t, Expr e) {
 
 Expr lossless_negate(const Expr &x) {
     if (const Mul *m = x.as<Mul>()) {
+        // Check the terms can't multiply to produce the most negative value.
+        if (x.type().is_int() &&
+            !x.type().can_represent(-constant_integer_bounds(x))) {
+            return Expr();
+        }
+
         Expr b = lossless_negate(m->b);
         if (b.defined()) {
             return Mul::make(m->a, b);
@@ -576,6 +590,7 @@ Expr lossless_negate(const Expr &x) {
         if (a.defined()) {
             return Mul::make(a, m->b);
         }
+
     } else if (const Call *m = Call::as_intrinsic(x, {Call::widening_mul})) {
         Expr b = lossless_negate(m->args[1]);
         if (b.defined()) {
@@ -594,8 +609,7 @@ Expr lossless_negate(const Expr &x) {
     } else if (const Cast *c = x.as<Cast>()) {
         Expr value = lossless_negate(c->value);
         if (value.defined()) {
-            // This works for constants, but not other things that
-            // could possibly be negated.
+            // This logic is only sound if we know the cast can't overflow.
             value = lossless_cast(c->type, value);
             if (value.defined()) {
                 return value;
@@ -633,6 +647,7 @@ void check_representable(Type dst, int64_t x) {
     }
 }
 
+namespace {
 void match_lanes(Expr &a, Expr &b) {
     // Broadcast scalar to match vector
     if (a.type().is_scalar() && b.type().is_vector()) {
@@ -643,6 +658,18 @@ void match_lanes(Expr &a, Expr &b) {
         internal_assert(a.type().lanes() == b.type().lanes()) << "Can't match types of differing widths";
     }
 }
+
+// Cast to the wider type of the two. Already guaranteed to leave
+// signed/unsigned on number of lanes unchanged.
+void match_bits(Expr &x, Expr &y) {
+    // The signedness doesn't match, so just match the bits.
+    if (x.type().bits() < y.type().bits()) {
+        x = cast(x.type().with_bits(y.type().bits()), x);
+    } else if (y.type().bits() < x.type().bits()) {
+        y = cast(y.type().with_bits(x.type().bits()), y);
+    }
+}
+}  // namespace
 
 void match_types(Expr &a, Expr &b) {
     if (a.type() == b.type()) {
@@ -693,17 +720,6 @@ void match_types(Expr &a, Expr &b) {
     }
 }
 
-// Cast to the wider type of the two. Already guaranteed to leave
-// signed/unsigned on number of lanes unchanged.
-void match_bits(Expr &x, Expr &y) {
-    // The signedness doesn't match, so just match the bits.
-    if (x.type().bits() < y.type().bits()) {
-        x = cast(x.type().with_bits(y.type().bits()), x);
-    } else if (y.type().bits() < x.type().bits()) {
-        y = cast(y.type().with_bits(x.type().bits()), y);
-    }
-}
-
 void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
     user_assert(x.defined() && y.defined()) << op_name << " of undefined Expr\n";
     user_assert(x.type().is_int() || x.type().is_uint())
@@ -731,6 +747,7 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
 
 // Fast math ops based on those from Syrah (http://github.com/boulos/syrah). Thanks, Solomon!
 
+namespace {
 // Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5
 void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent) {
     Type type = input.type();
@@ -760,6 +777,7 @@ void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent) {
 
     *reduced = reinterpret(type, blended);
 }
+}  // namespace
 
 Expr halide_log(const Expr &x_full) {
     Type type = x_full.type();
@@ -1502,10 +1520,6 @@ Expr select(Expr condition, Expr true_value, Expr false_value) {
     return Select::make(std::move(condition), std::move(true_value), std::move(false_value));
 }
 
-Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
-    return select(condition, true_value, false_value);
-}
-
 Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
     user_assert(condition.size() == true_value.size() && true_value.size() == false_value.size())
         << "select() on Tuples requires all Tuples to have identical sizes.";
@@ -1514,10 +1528,6 @@ Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false
         result[i] = select(condition[i], true_value[i], false_value[i]);
     }
     return result;
-}
-
-Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
-    return select(condition, true_value, false_value);
 }
 
 Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
@@ -1585,10 +1595,31 @@ Tuple mux(const Expr &id, const std::vector<Tuple> &values) {
     return Tuple{result};
 }
 
+namespace {
+void cast_bounds_for_promise_clamped(const Expr &value, const Expr &min, const Expr &max, Expr &casted_min, Expr &casted_max, const char *call_name) {
+    {
+        Expr n_min_val = lossless_cast(value.type(), min);
+        if (min.defined()) {
+            user_assert(n_min_val.defined())
+                << call_name << " min argument (type " << min.node_type() << " " << min.type() << ") could not be cast losslessly to " << value.type();
+        }
+        casted_min = n_min_val.defined() ? n_min_val : value.type().min();
+    }
+    {
+        Expr n_max_val = lossless_cast(value.type(), max);
+        if (max.defined()) {
+            user_assert(n_max_val.defined())
+                << call_name << " max argument (type " << max.node_type() << " " << max.type() << ") could not be cast losslessly to " << value.type();
+        }
+        casted_max = n_max_val.defined() ? n_max_val : value.type().max();
+    }
+}
+}  // namespace
+
 Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
     user_assert(value.defined()) << "unsafe_promise_clamped with undefined value.\n";
-    Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
-    Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
+    Expr n_min_val, n_max_val;
+    cast_bounds_for_promise_clamped(value, min, max, n_min_val, n_max_val, "unsafe_promise_clamped");
 
     // Min and max are allowed to be undefined with the meaning of no bound on that side.
     return Call::make(value.type(),
@@ -1600,8 +1631,8 @@ Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max)
 namespace Internal {
 Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
     internal_assert(value.defined()) << "promise_clamped with undefined value.\n";
-    Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
-    Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
+    Expr n_min_val, n_max_val;
+    cast_bounds_for_promise_clamped(value, min, max, n_min_val, n_max_val, "promise_clamped");
 
     // Min and max are allowed to be undefined with the meaning of no bound on that side.
     return Call::make(value.type(),
@@ -2706,6 +2737,26 @@ Expr concat_bits(const std::vector<Expr> &e) {
         user_assert(e[i].type() == t) << "All arguments to concat_bits must have the same type\n";
     }
     return Call::make(t.with_bits(t.bits() * (int)e.size()), Call::concat_bits, e, Call::Intrinsic);
+}
+
+Expr target_arch_is(Target::Arch arch) {
+    return Call::make(Bool(), Call::target_arch_is, {Expr((int)arch)}, Call::PureIntrinsic);
+}
+
+Expr target_os_is(Target::OS os) {
+    return Call::make(Bool(), Call::target_os_is, {Expr((int)os)}, Call::PureIntrinsic);
+}
+
+Expr target_bits() {
+    return Call::make(Int(32), Call::target_bits, {}, Call::PureIntrinsic);
+}
+
+Expr target_has_feature(Target::Feature feat) {
+    return Call::make(Bool(), Call::target_has_feature, {Expr((int)feat)}, Call::PureIntrinsic);
+}
+
+Expr target_natural_vector_size(Type t) {
+    return Call::make(Int(32), Call::target_natural_vector_size, {make_zero(t.element_of())}, Call::PureIntrinsic);
 }
 
 }  // namespace Halide

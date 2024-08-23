@@ -44,18 +44,22 @@ public:
         map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
         if (iter == cache.end()) {
             // Not in the cache, call the base class version.
-            debug(4) << "Mutating " << e << " (" << uses_var << ")\n";
+            debug(4) << "Mutating " << e << " (" << uses_var << ", " << failed << ")\n";
             bool old_uses_var = uses_var;
             uses_var = false;
+            bool old_failed = failed;
+            failed = false;
             Expr new_e = IRMutator::mutate(e);
-            CacheEntry entry = {new_e, uses_var};
+            CacheEntry entry = {new_e, uses_var, failed};
             uses_var = old_uses_var || uses_var;
+            failed = old_failed || failed;
             cache[e] = entry;
-            debug(4) << "(Miss) Rewrote " << e << " -> " << new_e << " (" << uses_var << ")\n";
+            debug(4) << "(Miss) Rewrote " << e << " -> " << new_e << " (" << uses_var << ", " << failed << ")\n";
             return new_e;
         } else {
             // Cache hit.
             uses_var = uses_var || iter->second.uses_var;
+            failed = failed || iter->second.failed;
             debug(4) << "(Hit) Rewrote " << e << " -> " << iter->second.expr << " (" << uses_var << ")\n";
             return iter->second.expr;
         }
@@ -75,7 +79,7 @@ private:
     // stateless, so we can cache everything.
     struct CacheEntry {
         Expr expr;
-        bool uses_var;
+        bool uses_var, failed;
     };
     map<Expr, CacheEntry, ExprCompare> cache;
 
@@ -388,16 +392,25 @@ private:
         const Mul *mul_a = a.as<Mul>();
         Expr expr;
         if (a_uses_var && !b_uses_var) {
+            const int64_t *ib = as_const_int(b);
+            auto is_multiple_of_b = [&](const Expr &e) {
+                if (ib && op->type.is_scalar()) {
+                    int64_t r = 0;
+                    return reduce_expr_modulo(e, *ib, &r) && r == 0;
+                } else {
+                    return can_prove(e / b * b == e);
+                }
+            };
             if (add_a && !a_failed &&
-                can_prove(add_a->a / b * b == add_a->a)) {
+                is_multiple_of_b(add_a->a)) {
                 // (f(x) + a) / b -> f(x) / b + a / b
                 expr = mutate(simplify(add_a->a / b) + add_a->b / b);
             } else if (sub_a && !a_failed &&
-                       can_prove(sub_a->a / b * b == sub_a->a)) {
+                       is_multiple_of_b(sub_a->a)) {
                 // (f(x) - a) / b -> f(x) / b - a / b
                 expr = mutate(simplify(sub_a->a / b) - sub_a->b / b);
             } else if (mul_a && !a_failed && no_overflow_int(op->type) &&
-                       can_prove(mul_a->b / b * b == mul_a->b)) {
+                       is_multiple_of_b(mul_a->b)) {
                 // (f(x) * a) / b -> f(x) * (a / b)
                 expr = mutate(mul_a->a * (mul_a->b / b));
             }
@@ -420,6 +433,37 @@ private:
         // Ignore intrinsics that shouldn't affect the results.
         if (Call::as_tag(op)) {
             return mutate(op->args[0]);
+        } else if (op->is_intrinsic({Call::absd, Call::bitwise_and, Call::bitwise_or,
+                                     Call::bitwise_xor, Call::halving_add, Call::rounding_halving_add,
+                                     Call::saturating_add, Call::widening_add, Call::widening_mul})) {
+            // It's a commutative intrinsic. We won't try to lift uses of the
+            // var out of the call, but we will reorder the args if it would
+            // help.
+            internal_assert(op->args.size() == 2);
+            bool old_uses_var = uses_var;
+            uses_var = false;
+            bool old_failed = failed;
+            failed = false;
+            Expr a = mutate(op->args[0]);
+            bool a_uses_var = uses_var;
+            bool a_failed = failed;
+            uses_var = false;
+            failed = false;
+            Expr b = mutate(op->args[1]);
+            bool b_uses_var = uses_var;
+            bool b_failed = failed;
+            uses_var = old_uses_var || a_uses_var || b_uses_var;
+            failed = old_failed || a_failed || b_failed;
+
+            failed |= a_uses_var && b_uses_var;
+
+            if (b_uses_var && !a_uses_var) {
+                return Call::make(op->type, op->name, {b, a}, op->call_type);
+            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                return op;
+            } else {
+                return Call::make(op->type, op->name, {a, b}, op->call_type);
+            }
         } else {
             return IRMutator::visit(op);
         }
@@ -773,16 +817,15 @@ private:
         if (op->name == var) {
             uses_var = true;
             return op;
-        } else if (scope.contains(op->name)) {
-            CacheEntry e = scope.get(op->name);
-            uses_var = uses_var || e.uses_var;
-            return e.expr;
-        } else if (external_scope.contains(op->name)) {
-            Expr e = external_scope.get(op->name);
+        } else if (const CacheEntry *e = scope.find(op->name)) {
+            uses_var = uses_var || e->uses_var;
+            failed = failed || e->failed;
+            return e->expr;
+        } else if (const Expr *e = external_scope.find(op->name)) {
             // Expressions in the external scope haven't been solved
             // yet. This will either pull its solution from the cache,
             // or solve it and then put it into the cache.
-            return mutate(e);
+            return mutate(*e);
         } else {
             return op;
         }
@@ -790,11 +833,14 @@ private:
 
     Expr visit(const Let *op) override {
         bool old_uses_var = uses_var;
+        bool old_failed = failed;
         uses_var = false;
+        failed = false;
         Expr value = mutate(op->value);
-        CacheEntry e = {value, uses_var};
-
+        CacheEntry e = {value, uses_var, failed};
         uses_var = old_uses_var;
+        failed = old_failed;
+
         ScopedBinding<CacheEntry> bind(scope, op->name, e);
         return mutate(op->body);
     }
@@ -931,13 +977,13 @@ class SolveForInterval : public IRVisitor {
 
     void visit(const Variable *op) override {
         internal_assert(op->type.is_bool());
-        if (scope.contains(op->name)) {
+        if (const Expr *e = scope.find(op->name)) {
             pair<string, bool> key = {op->name, target};
             auto it = solved_vars.find(key);
             if (it != solved_vars.end()) {
                 result = it->second;
             } else {
-                scope.get(op->name).accept(this);
+                e->accept(this);
                 solved_vars[key] = result;
             }
         } else {
@@ -1460,6 +1506,9 @@ void solve_test() {
     check_solve(max(x - y, x + z), x + max(0 - y, z));
     check_solve(min(x + y, x - z), x + min(y, 0 - z));
     check_solve(max(x + y, x - z), x + max(y, 0 - z));
+
+    check_solve((5 * Broadcast::make(x, 4) + y) / 5,
+                Broadcast::make(x, 4) + (Broadcast::make(y, 4) / 5));
 
     debug(0) << "Solve test passed\n";
 }

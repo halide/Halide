@@ -3,6 +3,7 @@
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "DistributeShifts.h"
 #include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
@@ -65,6 +66,7 @@ Expr native_deinterleave(const Expr &x) {
     return Call::make(x.type(), fn, {x}, Call::PureExtern);
 }
 
+namespace {
 bool is_native_interleave_op(const Expr &x, const char *name) {
     const Call *c = x.as<Call>();
     if (!c || c->args.size() != 1) {
@@ -72,6 +74,7 @@ bool is_native_interleave_op(const Expr &x, const char *name) {
     }
     return starts_with(c->name, name);
 }
+}  // namespace
 
 bool is_native_interleave(const Expr &x) {
     return is_native_interleave_op(x, "halide.hexagon.interleave");
@@ -91,6 +94,8 @@ string type_suffix(Type type, bool signed_variants) {
             return prefix + "h";
         case 32:
             return prefix + "w";
+        default:
+            break;
         }
     } else if (type.is_uint()) {
         switch (type.bits()) {
@@ -100,6 +105,15 @@ string type_suffix(Type type, bool signed_variants) {
             return prefix + "uh";
         case 32:
             return prefix + "uw";
+        default:
+            break;
+        }
+    } else if (type.is_float()) {
+        switch (type.bits()) {
+        case 32:
+            return prefix + "sf";
+        default:
+            break;
         }
     }
     internal_error << "Unsupported HVX type: " << type << "\n";
@@ -185,8 +199,11 @@ struct Pattern {
         // re-interleave the result.
         ReinterleaveOp0 = InterleaveResult | DeinterleaveOp0,
 
-        v65orLater = 1 << 10,  // Pattern should be matched only for v65 target or later
-        v66orLater = 1 << 11,  // Pattern should be matched only for v66 target or later
+        SafeReinterpretOp0 = 1 << 10,  // Pattern should be matched only if the first arg can be safely reinterpreted.
+
+        v65orLater = 1 << 11,  // Pattern should be matched only for v65 target or later
+        v66orLater = 1 << 12,  // Pattern should be matched only for v66 target or later
+        v68orLater = 1 << 13,  // Pattern should be matched only for v68 target or later
     };
 
     string intrin;  // Name of the intrinsic
@@ -220,11 +237,16 @@ Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 // Check if a pattern with flags 'flags' is supported on the target.
 bool check_pattern_target(int flags, const Target &target) {
     if ((flags & (Pattern::v65orLater)) &&
-        !target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+        !target.features_any_of({Target::HVX_v65, Target::HVX_v66,
+                                 Target::HVX_v68})) {
         return false;
     }
     if ((flags & (Pattern::v66orLater)) &&
-        !target.features_any_of({Target::HVX_v66})) {
+        !target.features_any_of({Target::HVX_v66, Target::HVX_v68})) {
+        return false;
+    }
+    if ((flags & (Pattern::v68orLater)) &&
+        !target.features_any_of({Target::HVX_v68})) {
         return false;
     }
     return true;
@@ -255,6 +277,27 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     if (flags & Pattern::SwapOps12) {
         internal_assert(matches.size() >= 3);
         std::swap(matches[1], matches[2]);
+    }
+    if (flags & Pattern::SafeReinterpretOp0) {
+        // Use bounds inference to check if the first operand can
+        // be safely reinterpreted.
+        // TODO: should use lossless_cast once it is fixed.
+        const Expr &expr = matches[0];
+        const Type &t = expr.type();
+        if (t.is_int()) {
+            // TODO(8212): might want to keep track of scope of bounds information.
+            const ConstantInterval ibounds = constant_integer_bounds(expr);
+            const Type reint_type = UInt(t.bits());
+            // A signed integer can be reinterpreted as unsigned if strictly positive.
+            return reint_type.can_represent(ibounds);
+        } else {
+            internal_assert(t.is_uint());
+            // TODO(8212): might want to keep track of scope of bounds information.
+            const ConstantInterval ibounds = constant_integer_bounds(expr);
+            const Type reint_type = Int(t.bits());
+            // An unsigned integer can be reinterpreted as signed if less than int max.
+            return reint_type.can_represent(ibounds);
+        }
     }
     return true;
 }
@@ -341,6 +384,7 @@ typedef pair<Expr, Expr> MulExpr;
 // the number of lanes in Broadcast or indices in a Shuffle
 // to match the ty lanes before using lossless_cast on it.
 Expr unbroadcast_lossless_cast(Type ty, Expr x) {
+    internal_assert(x.defined());
     if (x.type().is_vector()) {
         if (const Broadcast *bc = x.as<Broadcast>()) {
             if (ty.is_scalar()) {
@@ -369,56 +413,78 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
 // multiplies in 'mpys', added to 'rest'.
 // Difference in mpys.size() - return indicates the number of
 // expressions where we pretend the op to be multiplied by 1.
-int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
+int find_mpy_ops(const Expr &op, Type result_ty, Type a_ty, Type b_ty, int max_mpy_count,
                  vector<MulExpr> &mpys, Expr &rest) {
+
+    auto add_to_rest = [&](const Expr &a) {
+        if (rest.defined()) {
+            // Just widen to the result type. We run find_intrinsics on rest
+            // after calling this, to find things like widen_right_add in this
+            // summation.
+            rest = Add::make(rest, cast(result_ty, a));
+        } else {
+            rest = cast(result_ty, a);
+        }
+    };
+
     if ((int)mpys.size() >= max_mpy_count) {
-        rest = rest.defined() ? Add::make(rest, op) : op;
+        add_to_rest(op);
         return 0;
     }
 
-    // If the add is also widening, remove the cast.
-    int mpy_bits = std::max(a_ty.bits(), b_ty.bits()) * 2;
-    Expr maybe_mul = op;
-    if (op.type().bits() == mpy_bits * 2) {
-        if (const Cast *cast = op.as<Cast>()) {
-            if (cast->value.type().bits() == mpy_bits) {
-                maybe_mul = cast->value;
-            }
-        }
-    }
-    maybe_mul = as_mul(maybe_mul);
-
-    if (maybe_mul.defined()) {
-        const Mul *mul = maybe_mul.as<Mul>();
-        Expr a = unbroadcast_lossless_cast(a_ty, mul->a);
-        Expr b = unbroadcast_lossless_cast(b_ty, mul->b);
+    auto handle_mul = [&](const Expr &arg0, const Expr &arg1) -> bool {
+        Expr a = unbroadcast_lossless_cast(a_ty, arg0);
+        Expr b = unbroadcast_lossless_cast(b_ty, arg1);
         if (a.defined() && b.defined()) {
             mpys.emplace_back(a, b);
-            return 1;
-        } else {
+            return true;
+        } else if (a_ty != b_ty) {
             // Try to commute the op.
-            a = unbroadcast_lossless_cast(a_ty, mul->b);
-            b = unbroadcast_lossless_cast(b_ty, mul->a);
+            a = unbroadcast_lossless_cast(a_ty, arg1);
+            b = unbroadcast_lossless_cast(b_ty, arg0);
             if (a.defined() && b.defined()) {
                 mpys.emplace_back(a, b);
-                return 1;
+                return true;
             }
         }
+        return false;
+    };
+
+    if (const Mul *mul = op.as<Mul>()) {
+        bool no_overflow = mul->type.can_represent(constant_integer_bounds(mul->a) *
+                                                   constant_integer_bounds(mul->b));
+        if (no_overflow && handle_mul(mul->a, mul->b)) {
+            return 1;
+        }
+    } else if (const Call *mul = Call::as_intrinsic(op, {Call::widening_mul, Call::widen_right_mul})) {
+        bool no_overflow = (mul->is_intrinsic(Call::widening_mul) ||
+                            mul->type.can_represent(constant_integer_bounds(mul->args[0]) *
+                                                    constant_integer_bounds(mul->args[1])));
+        if (no_overflow && handle_mul(mul->args[0], mul->args[1])) {
+            return 1;
+        }
     } else if (const Add *add = op.as<Add>()) {
-        int mpy_count = 0;
-        mpy_count += find_mpy_ops(add->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-        mpy_count += find_mpy_ops(add->b, a_ty, b_ty, max_mpy_count, mpys, rest);
-        return mpy_count;
-    } else if (const Call *add = Call::as_intrinsic(op, {Call::widening_add})) {
-        int mpy_count = 0;
-        mpy_count += find_mpy_ops(cast(op.type(), add->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
-        mpy_count += find_mpy_ops(cast(op.type(), add->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
-        return mpy_count;
-    } else if (const Call *wadd = Call::as_intrinsic(op, {Call::widen_right_add})) {
-        int mpy_count = 0;
-        mpy_count += find_mpy_ops(wadd->args[0], a_ty, b_ty, max_mpy_count, mpys, rest);
-        mpy_count += find_mpy_ops(cast(op.type(), wadd->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
-        return mpy_count;
+        bool no_overflow = (add->type == result_ty ||
+                            add->type.can_represent(constant_integer_bounds(add->a) +
+                                                    constant_integer_bounds(add->b)));
+        if (no_overflow) {
+            return (find_mpy_ops(add->a, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest) +
+                    find_mpy_ops(add->b, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest));
+        }
+    } else if (const Call *add = Call::as_intrinsic(op, {Call::widening_add, Call::widen_right_add})) {
+        bool no_overflow = (add->type == result_ty ||
+                            add->is_intrinsic(Call::widening_add) ||
+                            add->type.can_represent(constant_integer_bounds(add->args[0]) +
+                                                    constant_integer_bounds(add->args[1])));
+        if (no_overflow) {
+            return (find_mpy_ops(add->args[0], result_ty, a_ty, b_ty, max_mpy_count, mpys, rest) +
+                    find_mpy_ops(add->args[1], result_ty, a_ty, b_ty, max_mpy_count, mpys, rest));
+        }
+    } else if (const Cast *cast = op.as<Cast>()) {
+        bool cast_is_lossless = cast->type.can_represent(constant_integer_bounds(cast->value));
+        if (cast_is_lossless) {
+            return find_mpy_ops(cast->value, result_ty, a_ty, b_ty, max_mpy_count, mpys, rest);
+        }
     }
 
     // Attempt to pretend this op is multiplied by 1.
@@ -430,7 +496,7 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
     } else if (as_b.defined()) {
         mpys.emplace_back(make_one(a_ty), as_b);
     } else {
-        rest = rest.defined() ? Add::make(rest, op) : op;
+        add_to_rest(op);
     }
     return 0;
 }
@@ -513,10 +579,10 @@ class OptimizePatterns : public IRMutator {
             // match a subset of the expressions that vector*vector
             // matches.
             if (op->type.is_uint()) {
-                mpy_count = find_mpy_ops(op, UInt(8, lanes), UInt(8), 4, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, UInt(8, lanes), UInt(8), 4, mpys, rest);
                 suffix = ".vub.ub";
             } else {
-                mpy_count = find_mpy_ops(op, UInt(8, lanes), Int(8), 4, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, UInt(8, lanes), Int(8), 4, mpys, rest);
                 suffix = ".vub.b";
             }
 
@@ -547,7 +613,7 @@ class OptimizePatterns : public IRMutator {
                         new_expr = Call::make(op->type, "halide.hexagon.pack.vw", {new_expr}, Call::PureExtern);
                     }
                     if (rest.defined()) {
-                        new_expr = Add::make(new_expr, rest);
+                        new_expr = Add::make(new_expr, find_intrinsics(rest));
                     }
                     return mutate(new_expr);
                 }
@@ -557,10 +623,10 @@ class OptimizePatterns : public IRMutator {
             mpys.clear();
             rest = Expr();
             if (op->type.is_uint()) {
-                mpy_count = find_mpy_ops(op, UInt(8, lanes), UInt(8, lanes), 4, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, UInt(8, lanes), UInt(8, lanes), 4, mpys, rest);
                 suffix = ".vub.vub";
             } else {
-                mpy_count = find_mpy_ops(op, Int(8, lanes), Int(8, lanes), 4, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, Int(8, lanes), Int(8, lanes), 4, mpys, rest);
                 suffix = ".vb.vb";
             }
 
@@ -590,7 +656,7 @@ class OptimizePatterns : public IRMutator {
                         new_expr = Call::make(op->type, "halide.hexagon.pack.vw", {new_expr}, Call::PureExtern);
                     }
                     if (rest.defined()) {
-                        new_expr = Add::make(new_expr, rest);
+                        new_expr = Add::make(new_expr, find_intrinsics(rest));
                     }
                     return mutate(new_expr);
                 }
@@ -609,11 +675,11 @@ class OptimizePatterns : public IRMutator {
 
             // Try to find vector*scalar multiplies.
             if (op->type.bits() == 16) {
-                mpy_count = find_mpy_ops(op, UInt(8, lanes), Int(8), 2, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, UInt(8, lanes), Int(8), 2, mpys, rest);
                 vmpa_suffix = ".vub.vub.b.b";
                 vdmpy_suffix = ".vub.b";
             } else if (op->type.bits() == 32) {
-                mpy_count = find_mpy_ops(op, Int(16, lanes), Int(8), 2, mpys, rest);
+                mpy_count = find_mpy_ops(op, op->type, Int(16, lanes), Int(8), 2, mpys, rest);
                 vmpa_suffix = ".vh.vh.b.b";
                 vdmpy_suffix = ".vh.b";
             }
@@ -641,7 +707,7 @@ class OptimizePatterns : public IRMutator {
                     new_expr = halide_hexagon_add_2mpy(op->type, vmpa_suffix, mpys[0].first, mpys[1].first, mpys[0].second, mpys[1].second);
                 }
                 if (rest.defined()) {
-                    new_expr = Add::make(new_expr, rest);
+                    new_expr = Add::make(new_expr, find_intrinsics(rest));
                 }
                 return mutate(new_expr);
             }
@@ -911,10 +977,18 @@ class OptimizePatterns : public IRMutator {
 
             // Saturating narrowing casts. These may interleave later with trunc_sat.
             {"halide.hexagon.pack_satub.vh", u8_sat(wild_i16x)},
-            {"halide.hexagon.pack_satub.vuh", u8_sat(wild_u16x)},
             {"halide.hexagon.pack_satuh.vw", u16_sat(wild_i32x)},
             {"halide.hexagon.pack_satb.vh", i8_sat(wild_i16x)},
             {"halide.hexagon.pack_sath.vw", i16_sat(wild_i32x)},
+            // The same patterns as above, but with safely reinterpreting the
+            // argument to be signed.
+            {"halide.hexagon.pack_satub.vh", u8_sat(wild_u16x), Pattern::SafeReinterpretOp0},
+            {"halide.hexagon.pack_satuh.vw", u16_sat(wild_u32x), Pattern::SafeReinterpretOp0},
+            {"halide.hexagon.pack_satb.vh", i8_sat(wild_u16x), Pattern::SafeReinterpretOp0},
+            {"halide.hexagon.pack_sath.vw", i16_sat(wild_u32x), Pattern::SafeReinterpretOp0},
+            // Slightly more expensive versions of uint saturation casts than the reinterpret
+            // patterns above, these perform vpack(min(UMAX, x)).
+            {"halide.hexagon.pack_satub.vuh", u8_sat(wild_u16x)},
             {"halide.hexagon.pack_satuh.vuw", u16_sat(wild_u32x)},
 
             // We don't have a vpack equivalent to this one, so we match it directly.
@@ -1353,8 +1427,8 @@ class EliminateInterleaves : public IRMutator {
         }
 
         if (const Load *load = x.as<Load>()) {
-            if (buffers.contains(load->name)) {
-                return buffers.get(load->name) != BufferState::NotInterleaved;
+            if (const auto *state = buffers.find(load->name)) {
+                return *state != BufferState::NotInterleaved;
             }
         }
 
@@ -1394,8 +1468,8 @@ class EliminateInterleaves : public IRMutator {
         }
 
         if (const Load *load = x.as<Load>()) {
-            if (buffers.contains(load->name)) {
-                return buffers.get(load->name) != BufferState::NotInterleaved;
+            if (const auto *state = buffers.find(load->name)) {
+                return *state != BufferState::NotInterleaved;
             }
         }
 
@@ -1681,6 +1755,15 @@ class EliminateInterleaves : public IRMutator {
         return true;
     }
 
+    // Indicates the minimum Hexagon Vector Extension (HVX) target version required for using these instructions.
+    enum class HvxTarget {
+        v62orLater,  // Use for Hexagon v62 target or later
+        v65orLater,  // Use for Hexagon v65 target or later
+        v66orLater,  // Use for Hexagon v66 target or later
+        v68orLater,  // Use for Hexagon v68 target or later
+    };
+    HvxTarget hvx_target;
+
     Expr visit(const Call *op) override {
         vector<Expr> args(op->args);
 
@@ -1698,27 +1781,27 @@ class EliminateInterleaves : public IRMutator {
         // does not deinterleave, and then opportunistically select
         // the interleaving alternative when we can cancel out to the
         // interleave.
-        static std::map<string, string> deinterleaving_alts = {
-            {"halide.hexagon.pack.vh", "halide.hexagon.trunc.vh"},
-            {"halide.hexagon.pack.vw", "halide.hexagon.trunc.vw"},
-            {"halide.hexagon.packhi.vh", "halide.hexagon.trunclo.vh"},
-            {"halide.hexagon.packhi.vw", "halide.hexagon.trunclo.vw"},
-            {"halide.hexagon.pack_satub.vh", "halide.hexagon.trunc_satub.vh"},
-            {"halide.hexagon.pack_satub.vuh", "halide.hexagon.trunc_satub.vuh"},
-            {"halide.hexagon.pack_sath.vw", "halide.hexagon.trunc_sath.vw"},
-            {"halide.hexagon.pack_satuh.vw", "halide.hexagon.trunc_satuh.vw"},
-            {"halide.hexagon.pack_satuh.vuw", "halide.hexagon.trunc_satuh.vuw"},
+        static std::map<string, std::pair<HvxTarget, std::string>> deinterleaving_alts = {
+            {"halide.hexagon.pack.vh", {HvxTarget::v62orLater, "halide.hexagon.trunc.vh"}},
+            {"halide.hexagon.pack.vw", {HvxTarget::v62orLater, "halide.hexagon.trunc.vw"}},
+            {"halide.hexagon.packhi.vh", {HvxTarget::v62orLater, "halide.hexagon.trunclo.vh"}},
+            {"halide.hexagon.packhi.vw", {HvxTarget::v62orLater, "halide.hexagon.trunclo.vw"}},
+            {"halide.hexagon.pack_satub.vh", {HvxTarget::v62orLater, "halide.hexagon.trunc_satub.vh"}},
+            {"halide.hexagon.pack_satub.vuh", {HvxTarget::v65orLater, "halide.hexagon.trunc_satub.vuh"}},
+            {"halide.hexagon.pack_sath.vw", {HvxTarget::v62orLater, "halide.hexagon.trunc_sath.vw"}},
+            {"halide.hexagon.pack_satuh.vw", {HvxTarget::v62orLater, "halide.hexagon.trunc_satuh.vw"}},
+            {"halide.hexagon.pack_satuh.vuw", {HvxTarget::v62orLater, "halide.hexagon.trunc_satuh.vuw"}},
         };
 
         // The reverse mapping of the above.
-        static std::map<string, string> interleaving_alts = {
-            {"halide.hexagon.trunc.vh", "halide.hexagon.pack.vh"},
-            {"halide.hexagon.trunc.vw", "halide.hexagon.pack.vw"},
-            {"halide.hexagon.trunclo.vh", "halide.hexagon.packhi.vh"},
-            {"halide.hexagon.trunclo.vw", "halide.hexagon.packhi.vw"},
-            {"halide.hexagon.trunc_satub.vh", "halide.hexagon.pack_satub.vh"},
-            {"halide.hexagon.trunc_sath.vw", "halide.hexagon.pack_sath.vw"},
-            {"halide.hexagon.trunc_satuh.vw", "halide.hexagon.pack_satuh.vw"},
+        static std::map<string, std::pair<HvxTarget, std::string>> interleaving_alts = {
+            {"halide.hexagon.trunc.vh", {HvxTarget::v62orLater, "halide.hexagon.pack.vh"}},
+            {"halide.hexagon.trunc.vw", {HvxTarget::v62orLater, "halide.hexagon.pack.vw"}},
+            {"halide.hexagon.trunclo.vh", {HvxTarget::v62orLater, "halide.hexagon.packhi.vh"}},
+            {"halide.hexagon.trunclo.vw", {HvxTarget::v62orLater, "halide.hexagon.packhi.vw"}},
+            {"halide.hexagon.trunc_satub.vh", {HvxTarget::v62orLater, "halide.hexagon.pack_satub.vh"}},
+            {"halide.hexagon.trunc_sath.vw", {HvxTarget::v62orLater, "halide.hexagon.pack_sath.vw"}},
+            {"halide.hexagon.trunc_satuh.vw", {HvxTarget::v62orLater, "halide.hexagon.pack_satuh.vw"}},
         };
 
         if (is_native_deinterleave(op) && yields_interleave(args[0])) {
@@ -1734,7 +1817,8 @@ class EliminateInterleaves : public IRMutator {
                                    op->func, op->value_index, op->image, op->param);
             // Add the interleave back to the result of the call.
             return native_interleave(expr);
-        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() &&
+        } else if (deinterleaving_alts.find(op->name) != deinterleaving_alts.end() && hvx_target >= deinterleaving_alts[op->name].first &&
+
                    yields_removable_interleave(args)) {
             // This call has a deinterleaving alternative, and the
             // arguments are interleaved, so we should use the
@@ -1742,14 +1826,14 @@ class EliminateInterleaves : public IRMutator {
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            return Call::make(op->type, deinterleaving_alts[op->name], args, op->call_type);
-        } else if (interleaving_alts.count(op->name) && is_native_deinterleave(args[0])) {
+            return Call::make(op->type, deinterleaving_alts[op->name].second, args, op->call_type);
+        } else if (interleaving_alts.count(op->name) && hvx_target >= interleaving_alts[op->name].first && is_native_deinterleave(args[0])) {
             // This is an interleaving alternative with a
             // deinterleave, which can be generated when we
             // deinterleave storage. Revert back to the interleaving
             // op so we can remove the deinterleave.
             Expr arg = args[0].as<Call>()->args[0];
-            return Call::make(op->type, interleaving_alts[op->name], {arg}, op->call_type,
+            return Call::make(op->type, interleaving_alts[op->name].second, {arg}, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (changed) {
             return Call::make(op->type, op->name, args, op->call_type,
@@ -1812,34 +1896,33 @@ class EliminateInterleaves : public IRMutator {
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
 
-        if (buffers.contains(op->name)) {
+        if (BufferState *state = buffers.shallow_find(op->name)) {
             // When inspecting the stores to a buffer, update the state.
-            BufferState &state = buffers.ref(op->name);
             if (!is_const_one(predicate) || !op->value.type().is_vector()) {
                 // TODO(psuriana): This store is predicated. Mark the buffer as
                 // not interleaved for now.
-                state = BufferState::NotInterleaved;
+                *state = BufferState::NotInterleaved;
             } else if (yields_removable_interleave(value)) {
                 // The value yields a removable interleave. If we aren't tracking
                 // this buffer, mark it as interleaved.
-                if (state == BufferState::Unknown) {
-                    state = BufferState::Interleaved;
+                if (*state == BufferState::Unknown) {
+                    *state = BufferState::Interleaved;
                 }
             } else if (!yields_interleave(value)) {
                 // The value does not yield an interleave. Mark the
                 // buffer as not interleaved.
-                state = BufferState::NotInterleaved;
+                *state = BufferState::NotInterleaved;
             } else {
                 // If the buffer yields an interleave, but is not an
                 // interleave itself, we don't want to change the
                 // buffer state.
             }
-            internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
-            bool &aligned_accesses = aligned_buffer_access.ref(op->name);
+            bool *aligned_accesses = aligned_buffer_access.shallow_find(op->name);
+            internal_assert(aligned_accesses) << "Buffer not found in scope";
             int64_t aligned_offset = 0;
 
             if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
-                aligned_accesses = false;
+                *aligned_accesses = false;
             }
         }
         if (deinterleave_buffers.contains(op->name)) {
@@ -1868,12 +1951,13 @@ class EliminateInterleaves : public IRMutator {
                 // which is only true if any of the stores are
                 // actually interleaved (and don't just yield an
                 // interleave).
-                internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
-                bool &aligned_accesses = aligned_buffer_access.ref(op->name);
+                bool *aligned_accesses = aligned_buffer_access.shallow_find(op->name);
+                internal_assert(aligned_accesses) << "Buffer not found in scope";
+
                 int64_t aligned_offset = 0;
 
                 if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
-                    aligned_accesses = false;
+                    *aligned_accesses = false;
                 }
             } else {
                 // This is not a double vector load, so we can't
@@ -1892,8 +1976,17 @@ class EliminateInterleaves : public IRMutator {
     using IRMutator::visit;
 
 public:
-    EliminateInterleaves(int native_vector_bytes)
+    EliminateInterleaves(const Target &t, int native_vector_bytes)
         : native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes) {
+        if (t.features_any_of({Target::HVX_v65})) {
+            hvx_target = HvxTarget::v65orLater;
+        } else if (t.features_any_of({Target::HVX_v66})) {
+            hvx_target = HvxTarget::v66orLater;
+        } else if (t.features_any_of({Target::HVX_v68})) {
+            hvx_target = HvxTarget::v68orLater;
+        } else {
+            hvx_target = HvxTarget::v62orLater;
+        }
     }
 };
 
@@ -2203,6 +2296,9 @@ Stmt scatter_gather_generator(Stmt s) {
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
+    debug(4) << "Hexagon: lowering before find_intrinsics\n"
+             << s << "\n";
+
     // We need to redo intrinsic matching due to simplification that has
     // happened after the end of target independent lowering.
     s = find_intrinsics(s);
@@ -2229,7 +2325,7 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
              << s << "\n";
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(t.natural_vector_size(Int(8))).mutate(s);
+    s = EliminateInterleaves(t, t.natural_vector_size(Int(8))).mutate(s);
     debug(4) << "Hexagon: Lowering after EliminateInterleaves\n"
              << s << "\n";
 

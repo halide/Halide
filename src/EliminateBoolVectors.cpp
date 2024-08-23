@@ -1,3 +1,4 @@
+#include "EliminateBoolVectors.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
@@ -15,8 +16,8 @@ private:
     Scope<Type> lets;
 
     Expr visit(const Variable *op) override {
-        if (lets.contains(op->name)) {
-            return Variable::make(lets.get(op->name), op->name);
+        if (const Type *t = lets.find(op->name)) {
+            return Variable::make(*t, op->name);
         } else {
             return op;
         }

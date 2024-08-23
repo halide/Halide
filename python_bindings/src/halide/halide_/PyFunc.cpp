@@ -205,18 +205,25 @@ void define_func(py::module &m) {
             })
 
             .def("compute_at", (Func & (Func::*)(const Func &, const Var &)) & Func::compute_at, py::arg("f"), py::arg("var"))
-            .def("compute_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::compute_at, py::arg("f"), py::arg("var"))
+            .def("compute_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::compute_at, py::arg("f"), py::arg("rvar"))
             .def("compute_at", (Func & (Func::*)(LoopLevel)) & Func::compute_at, py::arg("loop_level"))
 
             .def("store_at", (Func & (Func::*)(const Func &, const Var &)) & Func::store_at, py::arg("f"), py::arg("var"))
-            .def("store_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::store_at, py::arg("f"), py::arg("var"))
+            .def("store_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::store_at, py::arg("f"), py::arg("rvar"))
             .def("store_at", (Func & (Func::*)(LoopLevel)) & Func::store_at, py::arg("loop_level"))
 
             .def("async_", &Func::async)
+            .def("ring_buffer", &Func::ring_buffer)
+            .def("bound_storage", &Func::bound_storage)
             .def("memoize", &Func::memoize)
             .def("compute_inline", &Func::compute_inline)
             .def("compute_root", &Func::compute_root)
             .def("store_root", &Func::store_root)
+
+            .def("hoist_storage", (Func & (Func::*)(const Func &f, const Var &var)) & Func::hoist_storage, py::arg("f"), py::arg("var"))
+            .def("hoist_storage", (Func & (Func::*)(const Func &f, const RVar &rvar)) & Func::hoist_storage, py::arg("f"), py::arg("rvar"))
+            .def("hoist_storage", (Func & (Func::*)(LoopLevel)) & Func::hoist_storage, py::arg("loop_level"))
+            .def("hoist_storage_root", &Func::hoist_storage_root)
 
             .def("store_in", &Func::store_in, py::arg("memory_type"))
 
@@ -278,6 +285,11 @@ void define_func(py::module &m) {
             .def(
                 "compile_to_lowered_stmt", [](Func &f, const std::string &filename, const std::vector<Argument> &args, StmtOutputFormat fmt, const Target &target) {
                     f.compile_to_lowered_stmt(filename, args, fmt, to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("fmt") = Text, py::arg("target") = Target())
+            .def(
+                "compile_to_conceptual_stmt", [](Func &f, const std::string &filename, const std::vector<Argument> &args, StmtOutputFormat fmt, const Target &target) {
+                    f.compile_to_conceptual_stmt(filename, args, fmt, to_aot_target(target));
                 },
                 py::arg("filename"), py::arg("arguments"), py::arg("fmt") = Text, py::arg("target") = Target())
             .def(

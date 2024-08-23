@@ -143,9 +143,6 @@ CodeGen_RISCV::CodeGen_RISCV(const Target &t)
     user_assert(native_vector_bits() > 0) << "No vector_bits was specified for RISCV codegen; "
                                           << "this is almost certainly a mistake. You should add -rvv-vector_bits_N "
                                           << "to your Target string, where N is the SIMD width in bits (e.g. 128).";
-#if LLVM_VERSION < 170
-    user_warning << "RISCV codegen is only tested with LLVM 17.0 or later; it is unlikely to work well with earlier versions of LLVM.\n";
-#endif
 }
 
 string CodeGen_RISCV::mcpu_target() const {
@@ -164,17 +161,21 @@ string CodeGen_RISCV::mattrs() const {
     //   +f Single-Precision Floating-Point,
     //   +d Double-Precision Floating-Point,
     //   +c Compressed Instructions,
-    string arch_flags = "+m,+a,+f,+d,+c";
+    std::vector<std::string> attrs = {
+        "+m",
+        "+a",
+        "+f",
+        "+d",
+        "+c",
+    };
 
     if (target.has_feature(Target::RVV)) {
-        arch_flags += ",+v";
-#if LLVM_VERSION >= 160
+        attrs.emplace_back("+v");
         if (target.vector_bits != 0) {
-            arch_flags += ",+zvl" + std::to_string(target.vector_bits) + "b";
+            attrs.push_back("+zvl" + std::to_string(target.vector_bits) + "b");
         }
-#endif
     }
-    return arch_flags;
+    return join_strings(attrs, ",");
 }
 
 string CodeGen_RISCV::mabi() const {
@@ -345,11 +346,9 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
         left_arg->getType(),
         right_arg->getType(),
     };
-#if LLVM_VERSION >= 170
     if (round_any) {
         llvm_arg_types.push_back(xlen_type);
     }
-#endif
     if (intrin.flags & AddVLArg) {
         llvm_arg_types.push_back(xlen_type);
     }

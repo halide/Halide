@@ -405,7 +405,7 @@ void propagate_estimate_test() {
     check(img.dim(0).min() + img.dim(1).min() + x, x + 2);
     check(img.dim(0).extent() + img.dim(1).min() + img.dim(1).extent() * x, 55 * x + 38);
 
-    std::cout << "Propagate estimate test passed" << std::endl;
+    std::cout << "Propagate estimate test passed\n";
 }
 
 }  // namespace Internal

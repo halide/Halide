@@ -9,6 +9,8 @@ tests(GROUPS error
       auto_schedule_no_parallel.cpp
       auto_schedule_no_reorder.cpp
       autodiff_unbounded.cpp
+      bad_async_producer.cpp
+      bad_async_producer_2.cpp
       bad_bound.cpp
       bad_bound_storage.cpp
       bad_compute_at.cpp
@@ -18,6 +20,7 @@ tests(GROUPS error
       bad_const_cast.cpp
       bad_device_api.cpp
       bad_dimensions.cpp
+      bad_ring_buffer.cpp
       bad_extern_split.cpp
       bad_fold.cpp
       bad_host_alignment.cpp
@@ -92,7 +95,9 @@ tests(GROUPS error
       reuse_var_in_schedule.cpp
       reused_args.cpp
       rfactor_inner_dim_non_commutative.cpp
+      round_up_and_blend_race.cpp
       run_with_large_stack_throws.cpp
+      shift_inwards_and_blend_race.cpp
       specialize_fail.cpp
       split_inner_wrong_tail_strategy.cpp
       split_non_innermost_predicated.cpp

@@ -3,7 +3,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
+Expr Simplify::visit(const EQ *op, ExprInfo *info) {
     if (truths.count(op)) {
         return const_true(op->type.lanes());
     } else if (falsehoods.count(op)) {
@@ -31,7 +31,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         if (rewrite(x == 1, x)) {
             return rewrite.result;
         } else if (rewrite(x == 0, !x)) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         } else if (rewrite(x == x, const_true(lanes))) {
             return rewrite.result;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -41,8 +41,8 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         }
     }
 
-    ExprInfo delta_bounds;
-    Expr delta = mutate(op->a - op->b, &delta_bounds);
+    ExprInfo delta_info;
+    Expr delta = mutate(op->a - op->b, &delta_info);
     const int lanes = op->type.lanes();
 
     // If the delta is 0, then it's just x == x
@@ -51,16 +51,12 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     }
 
     // Attempt to disprove using bounds analysis
-    if (delta_bounds.min_defined && delta_bounds.min > 0) {
-        return const_false(lanes);
-    }
-
-    if (delta_bounds.max_defined && delta_bounds.max < 0) {
+    if (!delta_info.bounds.contains(0)) {
         return const_false(lanes);
     }
 
     // Attempt to disprove using modulus remainder analysis
-    if (delta_bounds.alignment.remainder != 0) {
+    if (delta_info.alignment.remainder != 0) {
         return const_false(lanes);
     }
 
@@ -109,7 +105,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(min(x, 0) == 0, 0 <= x) ||
 
         false) {
-        return mutate(rewrite.result, bounds);
+        return mutate(rewrite.result, info);
     }
 
     if (rewrite(c0 == 0, fold(c0 == 0)) ||
@@ -121,7 +117,9 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         const EQ *eq = rewrite.result.as<EQ>();
         if (eq &&
             eq->a.same_as(op->a) &&
-            eq->b.same_as(op->b)) {
+            equal(eq->b, op->b)) {
+            // Note we don't use same_as for b, because the shuffling of the RHS
+            // to the LHS and back might mutate it and then mutate it back.
             return op;
         } else {
             return rewrite.result;
@@ -134,7 +132,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
 }
 
 // ne redirects to not eq
-Expr Simplify::visit(const NE *op, ExprInfo *bounds) {
+Expr Simplify::visit(const NE *op, ExprInfo *info) {
     if (!may_simplify(op->a.type())) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -145,7 +143,7 @@ Expr Simplify::visit(const NE *op, ExprInfo *bounds) {
         }
     }
 
-    Expr mutated = mutate(Not::make(EQ::make(op->a, op->b)), bounds);
+    Expr mutated = mutate(Not::make(EQ::make(op->a, op->b)), info);
     if (const NE *ne = mutated.as<NE>()) {
         if (ne->a.same_as(op->a) && ne->b.same_as(op->b)) {
             return op;

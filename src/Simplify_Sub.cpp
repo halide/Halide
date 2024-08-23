@@ -3,23 +3,19 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
-    ExprInfo a_bounds, b_bounds;
-    Expr a = mutate(op->a, &a_bounds);
-    Expr b = mutate(op->b, &b_bounds);
+Expr Simplify::visit(const Sub *op, ExprInfo *info) {
+    ExprInfo a_info, b_info;
+    Expr a = mutate(op->a, &a_info);
+    Expr b = mutate(op->b, &b_info);
 
-    if (bounds && no_overflow_int(op->type)) {
+    if (info) {
         // Doesn't account for correlated a, b, so any
         // cancellation rule that exploits that should always
         // remutate to recalculate the bounds.
-        bounds->min_defined = a_bounds.min_defined &&
-                              b_bounds.max_defined &&
-                              sub_with_overflow(64, a_bounds.min, b_bounds.max, &(bounds->min));
-        bounds->max_defined = a_bounds.max_defined &&
-                              b_bounds.min_defined &&
-                              sub_with_overflow(64, a_bounds.max, b_bounds.min, &(bounds->max));
-        bounds->alignment = a_bounds.alignment - b_bounds.alignment;
-        bounds->trim_bounds_using_alignment();
+        info->bounds = a_info.bounds - b_info.bounds;
+        info->alignment = a_info.alignment - b_info.alignment;
+        info->trim_bounds_using_alignment();
+        info->cast_to(op->type);
     }
 
     if (may_simplify(op->type)) {
@@ -184,7 +180,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite((slice(x, c0, c1, c2) - z) - slice(y, c0, c1, c2), slice(x - y, c0, c1, c2) - z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
              rewrite((z - slice(x, c0, c1, c2)) - slice(y, c0, c1, c2), z - slice(x + y, c0, c1, c2), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
 
-             (no_overflow(op->type) &&
+             (no_overflow(op->type) && EVAL_IN_LAMBDA
               (rewrite(max(x, y) - x, max(y - x, 0)) ||
                rewrite(min(x, y) - x, min(y - x, 0)) ||
                rewrite(max(x, y) - y, max(x - y, 0)) ||
@@ -387,7 +383,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(max(y, x + c0) - max(x + c1, w), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0, this)) ||
                rewrite(max(y, x + c0) - max(x + c1, w), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0, this)))) ||
 
-             (no_overflow_int(op->type) &&
+             (no_overflow_int(op->type) && EVAL_IN_LAMBDA
               (rewrite(c0 - (c1 - x)/c2, (fold(c0*c2 - c1 + c2 - 1) + x)/c2, c2 > 0) ||
                rewrite(c0 - (x + c1)/c2, (fold(c0*c2 - c1 + c2 - 1) - x)/c2, c2 > 0) ||
                rewrite(x - (x + y)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0) ||
@@ -446,7 +442,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite((min(z, x*c0 + y) + w) / c1 - x*c2, (min(z - x*c0, y) + w) / c1, c0 == c1 * c2) ||
 
                false)))) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
     }
     // clang-format on

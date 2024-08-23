@@ -37,7 +37,7 @@ public:
         Expr u32_1 = in_u32(x), u32_2 = in_u32(x + 16), u32_3 = in_u32(x + 32);
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
-        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_2 < -0.3f), bool_3 = (f32_3 != -0.34f);
 
         // Table copied from the Cortex-A9 TRM.
 
@@ -229,6 +229,13 @@ public:
             check(arm32 ? "vcvt.u32.f32" : "fcvtzu", 2 * w, u32(f32_1));
             check(arm32 ? "vcvt.s32.f32" : "fcvtzs", 2 * w, i32(f32_1));
             // skip the fixed point conversions for now
+
+            if (!arm32) {
+                check("fcvtmu *v", 2 * w, u32(floor(f32_1)));
+                check("fcvtpu *v", 2 * w, u32(ceil(f32_1)));
+                check("fcvtms *v", 2 * w, i32(floor(f32_1)));
+                check("fcvtps *v", 2 * w, i32(ceil(f32_1)));
+            }
 
             // VDIV     -       F, D    Divide
             // This doesn't actually get vectorized in 32-bit. Not sure cortex processors can do vectorized division.
@@ -554,7 +561,7 @@ public:
                         // use the forms with an accumulator
                         check(arm32 ? "vpadal.s8" : "sadalp", 16, sum_(i16(in_i8(f * x + r))));
                         check(arm32 ? "vpadal.u8" : "uadalp", 16, sum_(i16(in_u8(f * x + r))));
-                        check(arm32 ? "vpadal.u8" : "uadalp*", 16, sum_(u16(in_u8(f * x + r))));
+                        check(arm32 ? "vpadal.u8" : "uadalp", 16, sum_(u16(in_u8(f * x + r))));
 
                         check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i16(f * x + r))));
                         check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u16(f * x + r))));
@@ -588,17 +595,10 @@ public:
                             check(arm32 ? "vpaddl.u8" : "udot", 8, sum_(i32(in_u8(f * x + r))));
                             check(arm32 ? "vpaddl.u8" : "udot", 8, sum_(u32(in_u8(f * x + r))));
                             if (!arm32) {
-                                check("sdot", 8, i32_1 + i32(i8_1) * 3 + i32(i8_2) * 6 + i32(i8_3) * 9 + i32(i8_4) * 12);
-                                check("sdot", 8, i32_1 + i32(i8_1) * 3 + i32(i8_2) * 6 + i32(i8_3) * 9 + i32(i8_4));
-                                check("sdot", 8, i32_1 + i32(i8_1) * 3 + i32(i8_2) * 6 + i32(i8_3) + i32(i8_4) * 12);
-                                check("sdot", 8, i32_1 + i32(i8_1) * 3 + i32(i8_2) + i32(i8_3) * 9 + i32(i8_4) * 12);
-                                check("sdot", 8, i32_1 + i32(i8_1) + i32(i8_2) * 6 + i32(i8_3) * 9 + i32(i8_4) * 12);
-
-                                check("udot", 8, u32_1 + u32(u8_1) * 3 + u32(u8_2) * 6 + u32(u8_3) * 9 + u32(u8_4) * 12);
-                                check("udot", 8, u32_1 + u32(u8_1) * 3 + u32(u8_2) * 6 + u32(u8_3) * 9 + u32(u8_4));
-                                check("udot", 8, u32_1 + u32(u8_1) * 3 + u32(u8_2) * 6 + u32(u8_3) + u32(u8_4) * 12);
-                                check("udot", 8, u32_1 + u32(u8_1) * 3 + u32(u8_2) + u32(u8_3) * 9 + u32(u8_4) * 12);
-                                check("udot", 8, u32_1 + u32(u8_1) + u32(u8_2) * 6 + u32(u8_3) * 9 + u32(u8_4) * 12);
+                                check("udot", 8, u32(u8_1) * 200 + u32(u8_2) * 201 + u32(u8_3) * 202 + u32(u8_4) * 203);
+                                // For signed, mapping the pattern above to sdot
+                                // is a wash, because we can add more products
+                                // of i8s together before they overflow an i16.
                             }
                         } else {
                             check(arm32 ? "vpaddl.s8" : "saddlp", 8, sum_(i32(in_i8(f * x + r))));
@@ -614,15 +614,15 @@ public:
                         // signed, because the intermediate type is u16
                         if (target.has_feature(Target::ARMDotProd)) {
                             check(arm32 ? "vpadal.s16" : "sdot", 8, sum_(i32(in_i8(f * x + r))));
-                            check(arm32 ? "vpadal.u16" : "udot", 8, sum_(i32(in_u8(f * x + r))));
+                            check(arm32 ? "vpadal.s16" : "udot", 8, sum_(i32(in_u8(f * x + r))));
                             check(arm32 ? "vpadal.u16" : "udot", 8, sum_(u32(in_u8(f * x + r))));
                         } else {
                             check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i8(f * x + r))));
-                            check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u8(f * x + r))));
+                            check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_u8(f * x + r))));
                             check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u8(f * x + r))));
                         }
                         check(arm32 ? "vpadal.s32" : "sadalp", 4, sum_(i64(in_i16(f * x + r))));
-                        check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(i64(in_u16(f * x + r))));
+                        check(arm32 ? "vpadal.s32" : "sadalp", 4, sum_(i64(in_u16(f * x + r))));
                         check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(u64(in_u16(f * x + r))));
                     }
 
@@ -948,8 +948,7 @@ public:
             // LLVM15 emits UZP2 if the shift amount is half the width of the vector element.
             const auto shrn_or_uzp2 = [&](int element_width, int shift_amt, int vector_width) {
                 constexpr int simd_vector_bits = 128;
-                if (Halide::Internal::get_llvm_version() >= 150 &&
-                    ((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
+                if (((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
                     shift_amt == element_width / 2) {
                     return "uzp2";
                 }

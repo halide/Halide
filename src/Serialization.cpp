@@ -214,8 +214,6 @@ Serialize::DeviceAPI Serializer::serialize_device_api(const DeviceAPI &device_ap
         return Serialize::DeviceAPI::CUDA;
     case DeviceAPI::OpenCL:
         return Serialize::DeviceAPI::OpenCL;
-    case DeviceAPI::OpenGLCompute:
-        return Serialize::DeviceAPI::OpenGLCompute;
     case DeviceAPI::Metal:
         return Serialize::DeviceAPI::Metal;
     case DeviceAPI::Hexagon:
@@ -320,6 +318,10 @@ Serialize::TailStrategy Serializer::serialize_tail_strategy(const TailStrategy &
         return Serialize::TailStrategy::PredicateStores;
     case TailStrategy::ShiftInwards:
         return Serialize::TailStrategy::ShiftInwards;
+    case TailStrategy::ShiftInwardsAndBlend:
+        return Serialize::TailStrategy::ShiftInwardsAndBlend;
+    case TailStrategy::RoundUpAndBlend:
+        return Serialize::TailStrategy::RoundUpAndBlend;
     case TailStrategy::Auto:
         return Serialize::TailStrategy::Auto;
     default:
@@ -1027,6 +1029,7 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
     for (const auto &tag : function.get_trace_tags()) {
         trace_tags_serialized.push_back(serialize_string(builder, tag));
     }
+    const bool no_profiling = function.should_not_profile();
     const bool frozen = function.frozen();
     auto func = Serialize::CreateFunc(builder,
                                       name_serialized,
@@ -1048,7 +1051,9 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
                                       trace_loads,
                                       trace_stores,
                                       trace_realizations,
-                                      builder.CreateVector(trace_tags_serialized), frozen);
+                                      builder.CreateVector(trace_tags_serialized),
+                                      no_profiling,
+                                      frozen);
     return func;
 }
 
@@ -1113,6 +1118,7 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
     const Serialize::MemoryType memory_type = serialize_memory_type(func_schedule.memory_type());
     const auto memoized = func_schedule.memoized();
     const auto async = func_schedule.async();
+    const auto ring_buffer = serialize_expr(builder, func_schedule.ring_buffer());
     const auto memoize_eviction_key_serialized = serialize_expr(builder, func_schedule.memoize_eviction_key());
     return Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized,
                                          hoist_storage_level_serialized,
@@ -1120,7 +1126,7 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
                                          builder.CreateVector(bounds_serialized),
                                          builder.CreateVector(estimates_serialized),
                                          builder.CreateVector(wrappers_serialized),
-                                         memory_type, memoized, async,
+                                         memory_type, memoized, async, ring_buffer.first, ring_buffer.second,
                                          memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
 }
 
@@ -1157,7 +1163,10 @@ Offset<Serialize::Definition> Serializer::serialize_definition(FlatBufferBuilder
     for (const auto &specialization : definition.specializations()) {
         specializations_serialized.push_back(serialize_specialization(builder, specialization));
     }
-    const auto source_location_serialized = serialize_string(builder, definition.source_location());
+    // This always relied on Introspection working, so an empty string was always valid.
+    // Rather than change the serialization format for a compiler-dependent value, we'll
+    // just always use an empty string now.
+    const auto source_location_serialized = serialize_string(builder, "");
     return Serialize::CreateDefinition(builder, is_init,
                                        predicate_serialized.first, predicate_serialized.second,
                                        builder.CreateVector(values_types), builder.CreateVector(values_serialized),
@@ -1501,6 +1510,14 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
         buffers_serialized.push_back(serialize_buffer(builder, buffer.second));
     }
 
+    std::string halide_version = std::to_string(HALIDE_VERSION_MAJOR) + "." +
+                                 std::to_string(HALIDE_VERSION_MINOR) + "." +
+                                 std::to_string(HALIDE_VERSION_PATCH);
+
+    std::string serialization_version = std::to_string((int)Serialize::SerializationVersionMajor::Value) + "." +
+                                        std::to_string((int)Serialize::SerializationVersionMinor::Value) + "." +
+                                        std::to_string((int)Serialize::SerializationVersionPatch::Value);
+
     auto pipeline_obj = Serialize::CreatePipeline(builder,
                                                   builder.CreateVector(funcs_serialized),
                                                   builder.CreateVector(output_names_serialized),
@@ -1509,7 +1526,9 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
                                                   builder.CreateVector(func_names_in_order_serialized),
                                                   builder.CreateVector(parameters_serialized),
                                                   builder.CreateVector(external_parameters_serialized),
-                                                  builder.CreateVector(buffers_serialized));
+                                                  builder.CreateVector(buffers_serialized),
+                                                  serialize_string(builder, halide_version),
+                                                  serialize_string(builder, serialization_version));
     builder.Finish(pipeline_obj);
 
     uint8_t *buf = builder.GetBufferPointer();

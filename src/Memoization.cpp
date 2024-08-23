@@ -165,9 +165,7 @@ class KeyInfo {
         // Find maximum natural alignment needed.
         for (const ConstDependencyKeyInfoPair &i : dependencies.dependency_info) {
             int alignment = i.second.type.bytes();
-            if (alignment > max_alignment) {
-                max_alignment = alignment;
-            }
+            max_alignment = std::max(max_alignment, alignment);
         }
         // Make sure max_alignment is a power of two and has maximum value of 32
         int i = 0;
@@ -425,13 +423,10 @@ private:
 
             Stmt body = mutate(op->body);
 
-            std::string cache_miss_name = op->name + ".cache_miss";
-            Expr cache_miss = Variable::make(Bool(), cache_miss_name);
-
             if (op->is_producer) {
-                Stmt mutated_body = IfThenElse::make(cache_miss, body);
-                return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
-            } else {
+                std::string cache_miss_name = op->name + ".cache_miss";
+                Expr cache_miss = Variable::make(Bool(), cache_miss_name);
+
                 const Function f(iter->second);
                 KeyInfo key_info(f, top_level_name, memoize_instance);
 
@@ -447,9 +442,10 @@ private:
                                      key_info.store_computation(cache_key_name, computed_bounds_name,
                                                                 eviction_key_name, f.outputs(), op->name));
 
-                Stmt mutated_body = Block::make(cache_store_back, body);
-                return ProducerConsumer::make(op->name, op->is_producer, mutated_body);
+                body = Block::make(body, cache_store_back);
+                body = IfThenElse::make(cache_miss, body);
             }
+            return ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
             return IRMutator::visit(op);
         }

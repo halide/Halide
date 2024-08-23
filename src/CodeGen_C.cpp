@@ -30,7 +30,6 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeCuda_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeHexagonHost_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeMetal_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeWebGPU_h[];
@@ -306,9 +305,6 @@ CodeGen_C::~CodeGen_C() {
             }
             if (target.has_feature(Target::OpenCL)) {
                 stream << halide_internal_runtime_header_HalideRuntimeOpenCL_h << "\n";
-            }
-            if (target.has_feature(Target::OpenGLCompute)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h << "\n";
             }
             if (target.has_feature(Target::D3D12Compute)) {
                 stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << "\n";
@@ -801,7 +797,7 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
         stream << get_indent() << kind_names[arg.kind] << ",\n";
         stream << get_indent() << (int)arg.dimensions << ",\n";
         internal_assert(arg.type.code() < sizeof(type_code_names) / sizeof(type_code_names[0]));
-        stream << get_indent() << "{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits() << ", " << (int)arg.type.lanes() << "},\n";
+        stream << get_indent() << "{" << type_code_names[arg.type.code()] << ", " << arg.type.bits() << ", " << arg.type.lanes() << "},\n";
         stream << get_indent() << "scalar_def_" << legalized_name << ",\n";
         stream << get_indent() << "scalar_min_" << legalized_name << ",\n";
         stream << get_indent() << "scalar_max_" << legalized_name << ",\n";
@@ -877,8 +873,8 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
         const auto name = map_name(arg.name);
 
         stream << get_indent() << "{\"" << name << "\", " << kind_names[arg.kind] << ", " << (int)arg.dimensions
-               << ", halide_type_t{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits()
-               << ", " << (int)arg.type.lanes() << "}},\n";
+               << ", halide_type_t{" << type_code_names[arg.type.code()] << ", " << arg.type.bits()
+               << ", " << arg.type.lanes() << "}},\n";
     }
     indent -= 1;
     stream << get_indent() << "}};\n";
@@ -1159,8 +1155,9 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     bool is_constant = buffer.dimensions() != 0;
 
     // If it is an GPU source kernel, we would like to see the actual output, not the
-    // uint8 representation. We use a string literal for this.
-    if (ends_with(name, "gpu_source_kernels")) {
+    // uint8 representation. We use a string literal for this. Since the Vulkan backend
+    // actually generates a SPIR-V binary, keep it as raw data to avoid textual reformatting.
+    if (ends_with(name, "gpu_source_kernels") && !target.has_feature(Target::Vulkan)) {
         stream << "static const char *" << name << "_string = R\"BUFCHARSOURCE(";
         stream.write((char *)b.host, num_elems);
         stream << ")BUFCHARSOURCE\";\n";
@@ -1940,8 +1937,9 @@ void CodeGen_C::visit(const Load *op) {
         user_assert(is_const_one(op->predicate)) << "Predicated scalar load is not supported by C backend.\n";
 
         string id_index = print_expr(op->index);
-        bool type_cast_needed = !(allocations.contains(op->name) &&
-                                  allocations.get(op->name).type.element_of() == t.element_of());
+        const auto *alloc = allocations.find(op->name);
+        bool type_cast_needed = !(alloc &&
+                                  alloc->type.element_of() == t.element_of());
         if (type_cast_needed) {
             const char *const_flag = output_kind == CPlusPlusImplementation ? " const" : "";
             rhs << "((" << print_type(t.element_of()) << const_flag << " *)" << name << ")";

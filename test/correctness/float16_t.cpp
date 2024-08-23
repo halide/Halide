@@ -12,7 +12,7 @@ extern "C" {
 
 // In Clang 15 and later, this function is passed a uint16... but in the xmm0 register on x86-64.
 // So we'll declare it as a float and just grab the upper 16 bits.
-__attribute__((weak)) float __extendhfsf2(float actually_a_float16) {
+__attribute__((weak, visibility("default"))) float __extendhfsf2(float actually_a_float16) {
     uint16_t data;
     memcpy(&data, &actually_a_float16, sizeof(data));
     return (float)Halide::float16_t::make_from_bits(data);
@@ -20,7 +20,7 @@ __attribute__((weak)) float __extendhfsf2(float actually_a_float16) {
 
 #else
 
-__attribute__((weak)) float __extendhfsf2(uint16_t data) {
+__attribute__((weak, visibility("default"))) float __extendhfsf2(uint16_t data) {
     return (float)Halide::float16_t::make_from_bits(data);
 }
 
@@ -226,6 +226,37 @@ int run_test() {
         }
     }
 
+    // Check non-real-number values (requires strict_float)
+    {
+        Func f;
+        Var x;
+        Param<float16_t> a, b, c, d;
+        a.set(float16_t::make_nan());
+        b.set(float16_t::make_infinity());
+        c.set(float16_t::make_negative_infinity());
+        d.set(float16_t::make_zero());
+        f(x) = mux(x, {is_nan(a), is_inf(a), is_finite(a),
+                       is_nan(b), is_inf(b), is_finite(b),
+                       is_nan(c), is_inf(c), is_finite(c),
+                       is_nan(d), is_inf(d), is_finite(d)});
+        f.compute_root().bound(x, 0, 12).unroll(x);
+
+        bool expected[12] = {
+            true, false, false,
+            false, true, false,
+            false, true, false,
+            false, false, true};
+
+        Buffer<bool> result = f.realize({12}, get_jit_target_from_environment().with_feature(Target::StrictFloat));
+
+        for (int i = 0; i < 12; i++) {
+            if (result(i) != expected[i]) {
+                fprintf(stderr, "Result %d is %d instead of %d\n", i, result(i), expected[i]);
+                return 1;
+            }
+        }
+    }
+
     Target target = get_jit_target_from_environment();
     if (target.has_feature(Target::CUDA) ||
         target.has_feature(Target::Metal)) {
@@ -236,14 +267,14 @@ int run_test() {
         Param<float16_t> mul("mul");
 
         Func output;
-        output(x, y) = x * y * (input(x, y) * mul);
+        output(x, y) = x * y * (sqrt(input(x, y)) * mul);
 
         Var xi, yi;
         output.gpu_tile(x, y, xi, yi, 8, 8);
 
         mul.set(float16_t(2.0f));
         Buffer<float16_t> in(8, 8);
-        in.fill(float16_t(0.25f));
+        in.fill(float16_t(0.0625f));
         input.set(in);
         Buffer<float16_t> buf = output.realize({8, 8});
         for (int y = 0; y < 8; y++) {

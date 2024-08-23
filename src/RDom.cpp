@@ -66,12 +66,14 @@ const std::string &RVar::name() const {
     }
 }
 
+namespace {
 template<int N>
 ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
     vector<ReductionVariable> d(&vars[0], &vars[N]);
     ReductionDomain dom(d);
     return dom;
 }
+}  // namespace
 
 // This just initializes the predefined x, y, z, w members of RDom.
 void RDom::init_vars(const string &name) {
@@ -135,7 +137,7 @@ void RDom::validate_min_extent(const Expr &min, const Expr &extent) {
 
 void RDom::initialize_from_region(const Region &region, string name) {
     if (name.empty()) {
-        name = make_entity_name(this, "Halide:.*:RDom", 'r');
+        name = unique_name('r');
     }
 
     std::vector<ReductionVariable> vars;
@@ -264,7 +266,7 @@ std::ostream &operator<<(std::ostream &stream, const RDom &dom) {
     }
     stream << ")";
     Expr pred = simplify(dom.domain().predicate());
-    if (!equal(const_true(), pred)) {
+    if (!is_const_one(pred)) {
         stream << " where (\n  " << pred << ")";
     }
     stream << "\n";

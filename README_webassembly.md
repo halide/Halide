@@ -6,10 +6,11 @@ backend.
 As WebAssembly itself is still under active development, Halide's support has
 some limitations. Some of the most important:
 
+-   Sign-extension operations are enabled by default (but can be avoided via
+    Target::WasmMvpOnly).
+-   Non-trapping float-to-int conversions are enabled by default (but can be
+    avoided via Target::WasmMvpOnly).
 -   Fixed-width SIMD (128 bit) can be enabled via Target::WasmSimd128.
--   Sign-extension operations can be enabled via Target::WasmSignExt.
--   Non-trapping float-to-int conversions can be enabled via
-    Target::WasmSatFloatToInt.
 -   Threads have very limited support via Target::WasmThreads; see
     [below](#using-threads) for more details.
 -   Halide's JIT for Wasm is extremely limited and really useful only for
@@ -108,8 +109,8 @@ v8](https://v8.dev/docs/embed). The process for Halide is summarized below.
 
 With V8 built, we can pass the CMake options:
 
-- `V8_INCLUDE_PATH`, path to V8 includes, e.g. `$HOME/v8/v8/include`
-- `V8_LIB_PATH`, path to V8 static library, e.g. `$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a`
+- `V8_INCLUDE_DIR`, path to V8 includes, e.g. `$HOME/v8/v8/include`
+- `V8_LIBRARY`, path to V8 static library, e.g. `$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a`
 
 An example to configure Halide with V8 support, build and run an example test:
 
@@ -120,8 +121,8 @@ $ export HL_JIT_TARGET=${HL_TARGET}
 $ cmake -G Ninja \
       -DWITH_WABT=OFF \
       -DWITH_V8=ON \
-      -DV8_INCLUDE_PATH=$HOME/v8/v8/include \
-      -DV8_LIB_PATH=$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a \
+      -DV8_INCLUDE_DIR=$HOME/v8/v8/include \
+      -DV8_LIBRARY=$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a \
       -DHalide_TARGET=${HL_TARGET} \
       /* other cmake settings here as appropriate */
 
@@ -152,9 +153,8 @@ cmake -DLLVM_ENABLE_PROJECTS="clang;lld" ...
 ```
 
 -   To run the JIT tests, set `HL_JIT_TARGET=wasm-32-wasmrt` (possibly adding
-    `wasm_simd128`, `wasm_signext`, and/or `wasm_sat_float_to_int`) and run
-    CMake/CTest normally. Note that wasm testing is only support under CMake
-    (not via Make).
+    `wasm_simd128`) and run CMake/CTest normally. Note that wasm testing is
+    only supported under CMake (not via Make).
 
 ## Enabling wasm AOT
 
@@ -165,9 +165,8 @@ will), you need to install Emscripten locally.
     (https://emscripten.org/docs/getting_started/downloads.html).
 
 -   To run the AOT tests, set `HL_TARGET=wasm-32-wasmrt` (possibly adding
-    `wasm_simd128`, `wasm_signext`, and/or `wasm_sat_float_to_int`) and run
-    CMake/CTest normally. Note that wasm testing is only support under CMake
-    (not via Make).
+    `wasm_simd128`) and run CMake/CTest normally. Note that wasm testing is
+    only supported under CMake (not via Make).
 
 # Running benchmarks
 

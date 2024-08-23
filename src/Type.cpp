@@ -1,3 +1,4 @@
+#include "ConstantBounds.h"
 #include "IR.h"
 #include <cfloat>
 #include <sstream>
@@ -34,7 +35,7 @@ Halide::Expr Type::max() const {
     } else {
         internal_assert(is_float());
         if (bits() == 16) {
-            return Internal::FloatImm::make(*this, 65504.0);
+            return Internal::FloatImm::make(*this, (double)float16_t::make_infinity());
         } else if (bits() == 32) {
             return Internal::FloatImm::make(*this, std::numeric_limits<float>::infinity());
         } else if (bits() == 64) {
@@ -58,7 +59,7 @@ Halide::Expr Type::min() const {
     } else {
         internal_assert(is_float());
         if (bits() == 16) {
-            return Internal::FloatImm::make(*this, -65504.0);
+            return Internal::FloatImm::make(*this, (double)float16_t::make_negative_infinity());
         } else if (bits() == 32) {
             return Internal::FloatImm::make(*this, -std::numeric_limits<float>::infinity());
         } else if (bits() == 64) {
@@ -124,6 +125,10 @@ bool Type::can_represent(Type other) const {
     } else {
         return false;
     }
+}
+
+bool Type::can_represent(const Internal::ConstantInterval &in) const {
+    return in.is_bounded() && can_represent(in.min) && can_represent(in.max);
 }
 
 bool Type::can_represent(int64_t x) const {

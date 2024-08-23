@@ -76,7 +76,7 @@ WEAK int load_libcuda(void *user_context) {
     halide_abort_if_false(user_context, cuInit == nullptr);
     halide_error_code_t result;
 
-// clang-format off
+    // clang-format off
 #define CUDA_FN(ret, fn, args)               result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, false, fn); if (result) return result;        // NOLINT(bugprone-macro-parentheses)
 #define CUDA_FN_OPTIONAL(ret, fn, args)      result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, true, fn); if (result) return result; // NOLINT(bugprone-macro-parentheses)
 #define CUDA_FN_3020(ret, fn, fn_3020, args) result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_3020, false, fn); if (result) return result;  // NOLINT(bugprone-macro-parentheses)

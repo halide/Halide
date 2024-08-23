@@ -6,8 +6,12 @@
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
 #include "Closure.h"
+#include "ConstantInterval.h"
+#include "Expr.h"
 #include "IROperator.h"
+#include "Interval.h"
 #include "Module.h"
+#include "ModulusRemainder.h"
 #include "Target.h"
 #include "Util.h"
 
@@ -45,7 +49,6 @@ ostream &operator<<(ostream &out, const Type &type) {
     }
     return out;
 }
-
 ostream &operator<<(ostream &stream, const Expr &ir) {
     if (!ir.defined()) {
         stream << "(undefined)";
@@ -98,9 +101,6 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
         break;
     case DeviceAPI::OpenCL:
         out << "<OpenCL>";
-        break;
-    case DeviceAPI::OpenGLCompute:
-        out << "<OpenGLCompute>";
         break;
     case DeviceAPI::Metal:
         out << "<Metal>";
@@ -179,6 +179,12 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
         break;
     case TailStrategy::RoundUp:
         out << "RoundUp";
+        break;
+    case TailStrategy::ShiftInwardsAndBlend:
+        out << "ShiftInwardsAndBlend";
+        break;
+    case TailStrategy::RoundUpAndBlend:
+        out << "RoundUpAndBlend";
         break;
     }
     return out;
@@ -262,6 +268,66 @@ void IRPrinter::test() {
                        << source.str();
     }
     std::cout << "IRPrinter test passed\n";
+}
+
+std::ostream &operator<<(std::ostream &stream, IRNodeType type) {
+#define CASE(e)         \
+    case IRNodeType::e: \
+        stream << #e;   \
+        break;
+    switch (type) {
+        CASE(IntImm)
+        CASE(UIntImm)
+        CASE(FloatImm)
+        CASE(StringImm)
+        CASE(Broadcast)
+        CASE(Cast)
+        CASE(Reinterpret)
+        CASE(Variable)
+        CASE(Add)
+        CASE(Sub)
+        CASE(Mod)
+        CASE(Mul)
+        CASE(Div)
+        CASE(Min)
+        CASE(Max)
+        CASE(EQ)
+        CASE(NE)
+        CASE(LT)
+        CASE(LE)
+        CASE(GT)
+        CASE(GE)
+        CASE(And)
+        CASE(Or)
+        CASE(Not)
+        CASE(Select)
+        CASE(Load)
+        CASE(Ramp)
+        CASE(Call)
+        CASE(Let)
+        CASE(Shuffle)
+        CASE(VectorReduce)
+        // Stmts
+        CASE(LetStmt)
+        CASE(AssertStmt)
+        CASE(ProducerConsumer)
+        CASE(For)
+        CASE(Acquire)
+        CASE(Store)
+        CASE(Provide)
+        CASE(Allocate)
+        CASE(Free)
+        CASE(Realize)
+        CASE(Block)
+        CASE(Fork)
+        CASE(IfThenElse)
+        CASE(Evaluate)
+        CASE(Prefetch)
+        CASE(Atomic)
+        CASE(HoistedStorage)
+    }
+#undef CASE
+    return stream;
 }
 
 ostream &operator<<(ostream &stream, const AssociativePattern &p) {
@@ -440,6 +506,45 @@ std::ostream &operator<<(std::ostream &out, const Closure &c) {
         out << " dims=" << (int)b.second.dimensions;
         out << "\n";
     }
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const Interval &in) {
+    out << "[";
+    if (in.has_lower_bound()) {
+        out << in.min;
+    } else {
+        out << "-inf";
+    }
+    out << ", ";
+    if (in.has_upper_bound()) {
+        out << in.max;
+    } else {
+        out << "inf";
+    }
+    out << "]";
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ConstantInterval &in) {
+    out << "[";
+    if (in.min_defined) {
+        out << in.min;
+    } else {
+        out << "-inf";
+    }
+    out << ", ";
+    if (in.max_defined) {
+        out << in.max;
+    } else {
+        out << "inf";
+    }
+    out << "]";
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
+    out << "(mod: " << c.modulus << " rem: " << c.remainder << ")";
     return out;
 }
 
@@ -1081,10 +1186,6 @@ void IRPrinter::visit(const Shuffle *op) {
                << ", " << op->slice_stride()
                << ", " << op->indices.size()
                << ")";
-    } else if (op->is_broadcast()) {
-        stream << "broadcast(";
-        print_list(op->vectors);
-        stream << ", " << op->broadcast_factor() << ")";
     } else {
         stream << "shuffle(";
         print_list(op->vectors);
@@ -1103,18 +1204,18 @@ void IRPrinter::visit(const VectorReduce *op) {
     stream << "("
            << op->type
            << ")vector_reduce_" << op->op << "("
-           << ", "
            << op->value
            << ")";
 }
 
 void IRPrinter::visit(const Atomic *op) {
     if (op->mutex_name.empty()) {
-        stream << get_indent() << "atomic {\n";
+        stream << get_indent() << "atomic ("
+               << op->producer_name << ") {\n";
     } else {
-        stream << get_indent() << "atomic (";
-        stream << op->mutex_name;
-        stream << ") {\n";
+        stream << get_indent() << "atomic ("
+               << op->producer_name << ", "
+               << op->mutex_name << ") {\n";
     }
     indent += 2;
     print(op->body);

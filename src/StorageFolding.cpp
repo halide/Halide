@@ -10,16 +10,13 @@
 #include "Monotonic.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "Util.h"
 #include <utility>
 
 namespace Halide {
 namespace Internal {
 
 namespace {
-
-int64_t next_power_of_two(int64_t x) {
-    return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
-}
 
 using std::map;
 using std::string;
@@ -824,11 +821,6 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         to_acquire = min_provided_prev - min_provided;  // This is the first time we use these entries
                         to_release = max_required - max_required_next;  // This is the last time we use these entries
                     }
-
-                    if (provided.used.defined()) {
-                        to_acquire = select(provided.used, to_acquire, 0);
-                    }
-                    // We should always release the required region, even if we don't use it.
 
                     // On the first iteration, we need to acquire the extent of the region shared
                     // between the producer and consumer, and we need to release it on the last

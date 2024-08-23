@@ -49,8 +49,8 @@ add_tutorial(lesson_07_multi_stage_pipelines.cpp WITH_IMAGE_IO)
 add_tutorial(lesson_08_scheduling_2.cpp WITH_IMAGE_IO WITH_OPENMP GROUPS multithreaded)
 add_tutorial(lesson_09_update_definitions.cpp WITH_IMAGE_IO WITH_OPENMP GROUPS multithreaded)
 
-if (TARGET_NVPTX)
-    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
+    if (Halide_TARGET MATCHES "wasm")
         # TODO: Requires custom build rules to work under wasm.
         message(WARNING "Not all tutorials build under WASM.")
     else ()
@@ -154,7 +154,7 @@ set_tests_properties(tutorial_lesson_15_check_files PROPERTIES
                      FIXTURES_REQUIRED tutorial_lesson_15)
 
 # Lesson 16
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+if (Halide_TARGET MATCHES "wasm")
     # TODO: Requires custom build rules to work under wasm
     message(WARNING "Not all tutorials build under WASM.")
 else ()
@@ -210,6 +210,7 @@ if (TARGET Halide::Mullapudi2016)
     set_tests_properties(tutorial_lesson_21_auto_scheduler_run PROPERTIES LABELS "tutorial;multithreaded")
 endif ()
 
-# Lessons 22-23
+# Lessons 22-24
 add_tutorial(lesson_22_jit_performance.cpp)
 add_tutorial(lesson_23_serialization.cpp WITH_IMAGE_IO)
+add_tutorial(lesson_24_async.cpp)

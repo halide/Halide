@@ -36,8 +36,8 @@ class ExprUsesVars : public IRGraphVisitor {
     void visit_name(const std::string &name) {
         if (vars.contains(name)) {
             result = true;
-        } else if (scope.contains(name)) {
-            include(scope.get(name));
+        } else if (const Expr *e = scope.find(name)) {
+            IRGraphVisitor::include(*e);
         }
     }
 

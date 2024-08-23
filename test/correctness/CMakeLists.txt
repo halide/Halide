@@ -8,11 +8,13 @@ tests(GROUPS correctness
       align_bounds.cpp
       argmax.cpp
       async_device_copy.cpp
+      async_order.cpp
       autodiff.cpp
       bad_likely.cpp
       bit_counting.cpp
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
+      bool_predicate_cast.cpp
       bound.cpp
       bound_small_allocations.cpp
       bound_storage.cpp
@@ -56,6 +58,7 @@ tests(GROUPS correctness
       computed_index.cpp
       concat.cpp
       constant_expr.cpp
+      constant_interval.cpp
       constant_type.cpp
       constraints.cpp
       convolution_multiple_kernels.cpp
@@ -75,6 +78,7 @@ tests(GROUPS correctness
       debug_to_file_reorder.cpp
       deferred_loop_level.cpp
       deinterleave4.cpp
+      device_buffer_copies_with_profile.cpp
       device_buffer_copy.cpp
       device_copy_at_inner_loop.cpp
       device_crop.cpp
@@ -82,6 +86,7 @@ tests(GROUPS correctness
       dilate3x3.cpp
       div_by_zero.cpp
       div_round_to_zero.cpp
+      ring_buffer.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       early_out.cpp
@@ -117,9 +122,11 @@ tests(GROUPS correctness
       fused_where_inner_extent_is_zero.cpp
       fuzz_float_stores.cpp
       fuzz_schedule.cpp
+      fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
+      gpu_alloc_group_profiling.cpp
       gpu_arg_types.cpp
       gpu_assertion_in_kernel.cpp
       gpu_bounds_inference_failure.cpp
@@ -128,13 +135,13 @@ tests(GROUPS correctness
       gpu_data_flows.cpp
       gpu_different_blocks_threads_dimensions.cpp
       gpu_dynamic_shared.cpp
-      gpu_error_1.cpp
-      gpu_error_2.cpp
+      gpu_f16_intrinsics.cpp
       gpu_free_sync.cpp
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
       gpu_many_kernels.cpp
+      gpu_metal_completion_handler_error_check.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
@@ -182,7 +189,7 @@ tests(GROUPS correctness
       interleave_x.cpp
       interval.cpp
       intrinsics.cpp
-      introspection.cpp
+      invalid_gpu_loop_nests.cpp
       inverse.cpp
       isnan.cpp
       issue_3926.cpp
@@ -196,6 +203,7 @@ tests(GROUPS correctness
       likely.cpp
       load_library.cpp
       logical.cpp
+      loop_carry.cpp
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
       lossless_cast.cpp
@@ -218,6 +226,7 @@ tests(GROUPS correctness
       multiple_outputs.cpp
       mux.cpp
       narrow_predicates.cpp
+      negative_split_factors.cpp
       nested_tail_strategies.cpp
       newtons_method.cpp
       non_nesting_extern_bounds_query.cpp
@@ -272,6 +281,7 @@ tests(GROUPS correctness
       simd_op_check_hvx.cpp
       simd_op_check_powerpc.cpp
       simd_op_check_riscv.cpp
+      simd_op_check_sve2.cpp
       simd_op_check_wasm.cpp
       simd_op_check_x86.cpp
       simplified_away_embedded_image.cpp
@@ -290,6 +300,7 @@ tests(GROUPS correctness
       split_fuse_rvar.cpp
       split_reuse_inner_name_bug.cpp
       split_store_compute.cpp
+      stable_realization_order.cpp
       stack_allocations.cpp
       stage_strided_loads.cpp
       stencil_chain_in_update_definitions.cpp
@@ -300,6 +311,7 @@ tests(GROUPS correctness
       strict_float_bounds.cpp
       strided_load.cpp
       target.cpp
+      target_query.cpp
       tiled_matmul.cpp
       tracing.cpp
       tracing_bounds.cpp
@@ -318,6 +330,7 @@ tests(GROUPS correctness
       uninitialized_read.cpp
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
+      unroll_loop_with_implied_constant_bounds.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
       unsafe_promises.cpp
@@ -334,7 +347,9 @@ tests(GROUPS correctness
       vectorize_mixed_widths.cpp
       vectorize_nested.cpp
       vectorize_varying_allocation_size.cpp
+      vectorized_assert.cpp
       vectorized_gpu_allocation.cpp
+      vectorized_guard_with_if_tail.cpp
       vectorized_initialization.cpp
       vectorized_load_from_vectorized_allocation.cpp
       vectorized_reduction_bug.cpp

@@ -32,7 +32,7 @@ std::string stringify(GPU_parallelism label) {
 
 // How small should an innermost loop cluster be before you just
 // entirely unroll the thing
-const int kUnrollLimitGPU = 16;
+constexpr static int kUnrollLimitGPU = 16;
 
 bool may_subtile(const Anderson2021Params &params) {
     return params.disable_subtiling == 0;
@@ -1565,12 +1565,6 @@ int64_t LoopNest::points_accessed_per_thread(
     int64_t num_points = 1;
     for (int i = 0; i < producer->dimensions; i++) {
         num_points *= bounds->region_required(i).extent();
-
-        // If the min is >= 100000, there's a good chance that the bounds are
-        // uninitialized, indicating a bug
-        internal_assert(std::abs(bounds->region_required(i).min()) < 100000)
-            << "region_required min = " << std::abs(bounds->region_required(i).min())
-            << "; region_required max = " << std::abs(bounds->region_required(i).max());
         if (verbose) {
             aslog(2) << "region_required(" << i << ") = " << bounds->region_required(i).extent() << "; ";
         }

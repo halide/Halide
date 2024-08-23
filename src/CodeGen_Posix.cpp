@@ -342,8 +342,8 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
 }
 
 string CodeGen_Posix::get_allocation_name(const std::string &n) {
-    if (allocations.contains(n)) {
-        return allocations.get(n).name;
+    if (const auto *alloc = allocations.find(n)) {
+        return alloc->name;
     } else {
         return n;
     }

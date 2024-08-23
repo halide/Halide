@@ -9,7 +9,7 @@ Expr expensive(Expr x, int c) {
     if (c <= 0) {
         return x;
     } else {
-        return expensive(fast_pow(x, x + 1), c - 1);
+        return expensive(x * (x + 1), c - 1);
     }
 }
 
@@ -31,11 +31,12 @@ int main(int argc, char **argv) {
     }
 
     double times[2];
+    uint32_t correct = 0;
     for (int use_async = 0; use_async < 2; use_async++) {
         Var x, y, t, xi, yi;
 
-        ImageParam in(Float(32), 3);
-        Func cpu, gpu;
+        ImageParam in(UInt(32), 3);
+        Func cpu("cpu"), gpu("gpu");
 
         // We have a two-stage pipeline that processes frames. We want
         // to run the first stage on the GPU and the second stage on
@@ -50,25 +51,43 @@ int main(int argc, char **argv) {
 
         // Assume GPU memory is limited, and compute the GPU stage one
         // frame at a time. Hoist the allocation to the top level.
-        gpu.compute_at(cpu, t).store_root().gpu_tile(x, y, xi, yi, 8, 8);
+        gpu.compute_at(gpu.in(), Var::outermost()).store_root().gpu_tile(x, y, xi, yi, 8, 8);
 
         // Stage the copy-back of the GPU result into a host-side
         // double-buffer.
         gpu.in().copy_to_host().compute_at(cpu, t).store_root().fold_storage(t, 2);
 
         if (use_async) {
+            // gpu.async();
             gpu.in().async();
-            gpu.async();
         }
 
-        in.set(Buffer<float>(800, 800, 16));
-        Buffer<float> out(800, 800, 16);
+        Buffer<uint32_t> in_buf(800, 800, 16);
+        in_buf.fill(17);
+        in.set(in_buf);
+        Buffer<uint32_t> out(800, 800, 16);
 
         cpu.compile_jit();
 
         times[use_async] = benchmark(10, 1, [&]() {
             cpu.realize(out);
         });
+
+        if (!use_async) {
+            correct = out(0, 0, 0);
+        } else {
+            for (int t = 0; t < out.dim(2).extent(); t++) {
+                for (int y = 0; y < out.dim(1).extent(); y++) {
+                    for (int x = 0; x < out.dim(0).extent(); x++) {
+                        if (out(x, y, t) != correct) {
+                            printf("Async output at (%d, %d, %d) is %u instead of %u\n",
+                                   x, y, t, out(x, y, t), correct);
+                            return 1;
+                        }
+                    }
+                }
+            }
+        }
 
         printf("%s: %f\n",
                use_async ? "with async" : "without async",

@@ -471,12 +471,6 @@ public:
     }
     // @}
 
-    /** Attempt to get the source file and line where this stage was
-     * defined by parsing the process's own debug symbols. Returns an
-     * empty string if no debug symbols were found or the debug
-     * symbols were not understood. Works on OS X and Linux only. */
-    std::string source_location() const;
-
     /** Assert that this stage has intentionally been given no schedule, and
      * suppress the warning about unscheduled update definitions that would
      * otherwise fire. This counts as a schedule, so calling this twice on the
@@ -959,6 +953,14 @@ public:
                                  const std::vector<Argument> &args,
                                  StmtOutputFormat fmt = Text,
                                  const Target &target = get_target_from_environment());
+
+    /** Write out a conceptual representation of lowered code, before any parallel loop
+     * get factored out into separate functions, or GPU loops are offloaded to kernel code.r
+     * Useful for analyzing and debugging scheduling. Can emit html or plain text. */
+    void compile_to_conceptual_stmt(const std::string &filename,
+                                    const std::vector<Argument> &args,
+                                    StmtOutputFormat fmt = Text,
+                                    const Target &target = get_target_from_environment());
 
     /** Write out the loop nests specified by the schedule for this
      * Function. Helpful for understanding what a schedule is
@@ -2281,6 +2283,21 @@ public:
      */
     Func &async();
 
+    /** Expands the storage of the function by an extra dimension
+     * to enable ring buffering. For this to be useful the storage
+     * of the function has to be hoisted to an upper loop level using
+     * \ref Func::hoist_storage. The index for the new ring buffer dimension
+     * is calculated implicitly based on a linear combination of the all of
+     * the loop variables between hoist_storage and compute_at/store_at
+     * loop levels. Scheduling a function with ring_buffer increases the
+     * amount of memory required for this function by an *extent* times.
+     * ring_buffer is especially useful in combination with \ref Func::async,
+     * but can be used without it.
+     *
+     * The extent is expected to be a positive integer.
+     */
+    Func &ring_buffer(Expr extent);
+
     /** Bound the extent of a Func's storage, but not extent of its
      * compute. This can be useful for forcing a function's allocation
      * to be a fixed size, which often means it can go on the stack.
@@ -2544,6 +2561,15 @@ public:
      */
     Func &add_trace_tag(const std::string &trace_tag);
 
+    /** Marks this function as a function that should not be profiled
+     * when using the target feature Profile or ProfileByTimer.
+     * This is useful when this function is does too little work at once
+     * such that the overhead of setting the profiling token might
+     * become significant, or that the measured time is not representative
+     * due to modern processors (instruction level parallelism, out-of-order
+     * execution). */
+    Func &no_profiling();
+
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide
      * functions */
@@ -2575,10 +2601,6 @@ public:
      \endcode
      */
     std::vector<Argument> infer_arguments() const;
-
-    /** Get the source location of the pure definition of this
-     * Func. See Stage::source_location() */
-    std::string source_location() const;
 
     /** Return the current StageSchedule associated with this initial
      * Stage of this Func. For introspection only: to modify schedule,

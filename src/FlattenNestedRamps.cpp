@@ -81,18 +81,18 @@ class FlattenRamps : public IRMutator {
 
             // If they are, we'll have a full vector of const_indices
             if ((int)const_indices.size() == lanes) {
-
                 // Compute the stride for the underlying strided load
-                int stride = 0;
-                for (int c : const_indices) {
-                    stride = (int)gcd(stride, c);
+                int stride = 0, extent = 1;
+                if (max_constant_offset > 0) {
+                    for (int c : const_indices) {
+                        stride = (int)gcd(stride, c);
+                    }
+                    for (int &c : const_indices) {
+                        c /= stride;
+                    }
+                    // Compute the number of elements loaded
+                    extent = (max_constant_offset / stride) + 1;
                 }
-                for (int &c : const_indices) {
-                    c /= stride;
-                }
-
-                // Compute the number of elements loaded
-                int extent = (int)((max_constant_offset / stride) + 1);
 
                 // If we're gathering from a very large range, it
                 // might be better to just do the gather rather than
@@ -105,12 +105,22 @@ class FlattenRamps : public IRMutator {
                 // in the schedule somehow.
                 const int max_unused_lane_factor = 4;
                 if (extent < max_unused_lane_factor * lanes) {
-                    Expr dense_index = Ramp::make(min_lane, make_const(min_lane.type(), stride), extent);
-                    Expr dense_load =
-                        Load::make(op->type.with_lanes(extent), op->name, dense_index,
-                                   op->image, op->param,
-                                   const_true(extent), ModulusRemainder{});
-                    return Shuffle::make({dense_load}, const_indices);
+                    if (max_constant_offset == 0) {
+                        // It's a load of a broadcast. Convert it to a broadcast of a load
+                        Expr load = Load::make(op->type.element_of(), op->name, min_lane,
+                                               op->image, op->param,
+                                               const_true(), ModulusRemainder{});
+                        return Broadcast::make(load, lanes);
+                    } else {
+                        // Turn it into a dense load and a shuffle
+                        Expr dense_index =
+                            Ramp::make(min_lane, make_const(min_lane.type(), stride), extent);
+                        Expr dense_load =
+                            Load::make(op->type.with_lanes(extent), op->name, dense_index,
+                                       op->image, op->param,
+                                       const_true(extent), ModulusRemainder{});
+                        return Shuffle::make({dense_load}, const_indices);
+                    }
                 }
             }
         }

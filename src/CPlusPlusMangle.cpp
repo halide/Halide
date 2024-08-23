@@ -44,8 +44,6 @@ Type non_null_void_star_type() {
     return Handle(1, &t);
 }
 
-}  // namespace
-
 namespace WindowsMangling {
 
 struct PreviousDeclarations {
@@ -246,9 +244,10 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
             return "H";
         case 64:
             return "_J";
+        default:
+            internal_error << "Unexpected integer size: " << type.bits() << ".\n";
+            return "";
         }
-        internal_error << "Unexpected integer size: " << type.bits() << ".\n";
-        return "";
     } else if (type.is_uint()) {
         switch (type.bits()) {
         case 1:
@@ -261,9 +260,10 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
             return "I";
         case 64:
             return "_K";
+        default:
+            internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
+            return "";
         }
-        internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
-        return "";
     } else if (type.is_float()) {
         if (type.bits() == 32) {
             return "M";
@@ -546,9 +546,10 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
             } else {
                 return "l";
             }
+        default:
+            internal_error << "Unexpected integer size: " << type.bits() << ".\n";
+            return "";
         }
-        internal_error << "Unexpected integer size: " << type.bits() << ".\n";
-        return "";
     } else if (type.is_uint()) {
         switch (type.bits()) {
         case 1:
@@ -571,9 +572,10 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
             } else {
                 return "m";
             }
+        default:
+            internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
+            return "";
         }
-        internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
-        return "";
     } else if (type.is_float()) {
         if (type.bits() == 32) {
             return "f";
@@ -610,6 +612,8 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
 }
 
 }  // namespace ItaniumABIMangling
+
+}  // namespace
 
 std::string cplusplus_function_mangled_name(const std::string &name, const std::vector<std::string> &namespaces,
                                             Type return_type, const std::vector<ExternFuncArgument> &args,

@@ -55,10 +55,11 @@ public:
 
     // Public interface methods
     MemoryRegion *reserve(void *user_context, const MemoryRequest &request);
-    int release(void *user_context, MemoryRegion *region);  //< unmark and cache the region for reuse
-    int reclaim(void *user_context, MemoryRegion *region);  //< free the region and consolidate
-    int retain(void *user_context, MemoryRegion *region);   //< retain the region and increase the usage count
-    bool collect(void *user_context);                       //< returns true if any blocks were removed
+    int conform(void *user_context, MemoryRequest *request) const;  //< conform the given request into a suitable allocation
+    int release(void *user_context, MemoryRegion *region);          //< unmark and cache the region for reuse
+    int reclaim(void *user_context, MemoryRegion *region);          //< free the region and consolidate
+    int retain(void *user_context, MemoryRegion *region);           //< retain the region and increase the usage count
+    bool collect(void *user_context);                               //< returns true if any blocks were removed
     int release(void *user_context);
     int destroy(void *user_context);
 
@@ -86,13 +87,13 @@ private:
     int destroy_region_allocator(void *user_context, RegionAllocator *region_allocator);
 
     // Reserves a block of memory for the requested size and returns the corresponding block entry, or nullptr on failure
-    BlockEntry *reserve_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated);
+    BlockEntry *reserve_block_entry(void *user_context, const MemoryRequest &request);
 
     // Locates the "best-fit" block entry for the requested size, or nullptr if none was found
-    BlockEntry *find_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated);
+    BlockEntry *find_block_entry(void *user_context, const MemoryRequest &request);
 
-    // Creates a new block entry and int the list
-    BlockEntry *create_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated);
+    // Creates a new block entry and adds it tos the list
+    BlockEntry *create_block_entry(void *user_context, const MemoryRequest &request);
 
     // Releases the block entry from being used, and makes it available for further allocations
     int release_block_entry(void *user_context, BlockEntry *block_entry);
@@ -113,7 +114,7 @@ private:
     bool is_compatible_block(const BlockResource *block, const MemoryProperties &properties) const;
 
     // Returns true if the given block is suitable for the request allocation
-    bool is_block_suitable_for_request(void *user_context, const BlockResource *block, const MemoryProperties &properties, size_t size, bool dedicated) const;
+    bool is_block_suitable_for_request(void *user_context, const BlockResource *block, const MemoryRequest &request) const;
 
     Config config;
     LinkedList block_list;
@@ -126,7 +127,7 @@ BlockAllocator *BlockAllocator::create(void *user_context, const Config &cfg, co
         allocators.system.allocate(user_context, sizeof(BlockAllocator)));
 
     if (result == nullptr) {
-        error(user_context) << "BlockAllocator: Failed to create instance! Out of memory!\n";
+        error(user_context) << "BlockAllocator: Failed to create instance! Out of memory\n";
         return nullptr;
     }
 
@@ -160,12 +161,13 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
                         << "dedicated=" << (request.dedicated ? "true" : "false") << " "
                         << "usage=" << halide_memory_usage_name(request.properties.usage) << " "
                         << "caching=" << halide_memory_caching_name(request.properties.caching) << " "
-                        << "visibility=" << halide_memory_visibility_name(request.properties.visibility) << ") ...\n";
+                        << "visibility=" << halide_memory_visibility_name(request.properties.visibility) << ") ...";
 #endif
-    BlockEntry *block_entry = reserve_block_entry(user_context, request.properties, request.size, request.dedicated);
+    // Reserve a block entry for use
+    BlockEntry *block_entry = reserve_block_entry(user_context, request);
     if (block_entry == nullptr) {
         error(user_context) << "BlockAllocator: Failed to allocate new empty block of requested size ("
-                            << (int32_t)(request.size) << " bytes)!\n";
+                            << (int32_t)(request.size) << " bytes)\n";
         return nullptr;
     }
 
@@ -173,14 +175,15 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
     halide_abort_if_false(user_context, block != nullptr);
     halide_abort_if_false(user_context, block->allocator != nullptr);
 
+    // Reserve an initial memory region for the block
     MemoryRegion *result = reserve_memory_region(user_context, block->allocator, request);
     if (result == nullptr) {
 
         // Unable to reserve region in an existing block ... create a new block and try again.
-        block_entry = create_block_entry(user_context, request.properties, request.size, request.dedicated);
+        block_entry = create_block_entry(user_context, request);
         if (block_entry == nullptr) {
             error(user_context) << "BlockAllocator: Out of memory! Failed to allocate empty block of size ("
-                                << (int32_t)(request.size) << " bytes)!\n";
+                                << (int32_t)(request.size) << " bytes)\n";
             return nullptr;
         }
 
@@ -288,7 +291,7 @@ MemoryRegion *BlockAllocator::reserve_memory_region(void *user_context, RegionAl
     if (result == nullptr) {
 #ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "BlockAllocator: Failed to allocate region of size ("
-                            << (int32_t)(request.size) << " bytes)!\n";
+                            << (int32_t)(request.size) << " bytes)\n";
 #endif
         // allocator has enough free space, but not enough contiguous space
         // -- collect and try to reallocate
@@ -299,48 +302,48 @@ MemoryRegion *BlockAllocator::reserve_memory_region(void *user_context, RegionAl
     return result;
 }
 
-bool BlockAllocator::is_block_suitable_for_request(void *user_context, const BlockResource *block, const MemoryProperties &properties, size_t size, bool dedicated) const {
-    if (!is_compatible_block(block, properties)) {
+bool BlockAllocator::is_block_suitable_for_request(void *user_context, const BlockResource *block, const MemoryRequest &request) const {
+    if (!is_compatible_block(block, request.properties)) {
 #ifdef DEBUG_RUNTIME_INTERNAL
-        debug(user_context) << "BlockAllocator: skipping block ... incompatible properties!\n"
-                            << " block_resource=" << (void *)block << "\n"
-                            << " block_size=" << (uint32_t)block->memory.size << "\n"
-                            << " block_reserved=" << (uint32_t)block->reserved << "\n"
-                            << " block_usage=" << halide_memory_usage_name(block->memory.properties.usage) << "\n"
-                            << " block_caching=" << halide_memory_caching_name(block->memory.properties.caching) << "\n"
-                            << " block_visibility=" << halide_memory_visibility_name(block->memory.properties.visibility) << "\n";
-        debug(user_context) << " request_size=" << (uint32_t)size << "\n"
-                            << " request_usage=" << halide_memory_usage_name(properties.usage) << "\n"
-                            << " request_caching=" << halide_memory_caching_name(properties.caching) << "\n"
-                            << " request_visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+        debug(user_context) << "BlockAllocator: skipping block ... incompatible properties! ("
+                            << "block_resource=" << (void *)block << " "
+                            << "block_size=" << (uint32_t)block->memory.size << " "
+                            << "block_reserved=" << (uint32_t)block->reserved << " "
+                            << "block_usage=" << halide_memory_usage_name(block->memory.properties.usage) << " "
+                            << "block_caching=" << halide_memory_caching_name(block->memory.properties.caching) << " "
+                            << "block_visibility=" << halide_memory_visibility_name(block->memory.properties.visibility) << " "
+                            << "request_size=" << (uint32_t)request.size << " "
+                            << "request_usage=" << halide_memory_usage_name(request.properties.usage) << " "
+                            << "request_caching=" << halide_memory_caching_name(request.properties.caching) << " "
+                            << "request_visibility=" << halide_memory_visibility_name(request.properties.visibility) << ")";
 #endif
         // skip blocks that are using incompatible memory
         return false;
     }
 
-    if (dedicated && (block->reserved > 0)) {
+    if (request.dedicated && (block->reserved > 0)) {
 #ifdef DEBUG_RUNTIME_INTERNAL
-        debug(user_context) << "BlockAllocator: skipping block ... can be used for dedicated allocation!\n"
-                            << " block_resource=" << (void *)block << "\n"
-                            << " block_size=" << (uint32_t)block->memory.size << "\n"
-                            << " block_reserved=" << (uint32_t)block->reserved << "\n";
+        debug(user_context) << "BlockAllocator: skipping block ... can be used for dedicated allocation! ("
+                            << "block_resource=" << (void *)block << " "
+                            << "block_size=" << (uint32_t)block->memory.size << " "
+                            << "block_reserved=" << (uint32_t)block->reserved << ")";
 #endif
         // skip blocks that can't be dedicated to a single allocation
         return false;
 
     } else if (block->memory.dedicated && (block->reserved > 0)) {
 #ifdef DEBUG_RUNTIME_INTERNAL
-        debug(user_context) << "BlockAllocator: skipping block ... already dedicated to an allocation!\n"
-                            << " block_resource=" << (void *)block << "\n"
-                            << " block_size=" << (uint32_t)block->memory.size << "\n"
-                            << " block_reserved=" << (uint32_t)block->reserved << "\n";
+        debug(user_context) << "BlockAllocator: skipping block ... already dedicated to an allocation! ("
+                            << "block_resource=" << (void *)block << " "
+                            << "block_size=" << (uint32_t)block->memory.size << " "
+                            << "block_reserved=" << (uint32_t)block->reserved << ")";
 #endif
         // skip dedicated blocks that are already allocated
         return false;
     }
 
     size_t available = (block->memory.size - block->reserved);
-    if (available >= size) {
+    if (available >= request.size) {
         return true;
     }
 
@@ -348,23 +351,23 @@ bool BlockAllocator::is_block_suitable_for_request(void *user_context, const Blo
 }
 
 BlockAllocator::BlockEntry *
-BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated) {
+BlockAllocator::find_block_entry(void *user_context, const MemoryRequest &request) {
     BlockEntry *block_entry = block_list.back();
     while (block_entry != nullptr) {
         BlockEntry *prev_entry = block_entry->prev_ptr;
         const BlockResource *block = static_cast<BlockResource *>(block_entry->value);
-        if (is_block_suitable_for_request(user_context, block, properties, size, dedicated)) {
+        if (is_block_suitable_for_request(user_context, block, request)) {
 #ifdef DEBUG_RUNTIME_INTERNAL
-            debug(user_context) << "BlockAllocator: found suitable block ...\n"
-                                << " user_context=" << (void *)(user_context) << "\n"
-                                << " block_resource=" << (void *)block << "\n"
-                                << " block_size=" << (uint32_t)block->memory.size << "\n"
-                                << " block_reserved=" << (uint32_t)block->reserved << "\n"
-                                << " request_size=" << (uint32_t)size << "\n"
-                                << " dedicated=" << (dedicated ? "true" : "false") << "\n"
-                                << " usage=" << halide_memory_usage_name(properties.usage) << "\n"
-                                << " caching=" << halide_memory_caching_name(properties.caching) << "\n"
-                                << " visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+            debug(user_context) << "BlockAllocator: found suitable block ("
+                                << "user_context=" << (void *)(user_context) << " "
+                                << "block_resource=" << (void *)block << " "
+                                << "block_size=" << (uint32_t)block->memory.size << " "
+                                << "block_reserved=" << (uint32_t)block->reserved << " "
+                                << "request_size=" << (uint32_t)request.size << " "
+                                << "request_dedicated=" << (request.dedicated ? "true" : "false") << " "
+                                << "request_usage=" << halide_memory_usage_name(request.properties.usage) << " "
+                                << "request_caching=" << halide_memory_caching_name(request.properties.caching) << " "
+                                << "request_visibility=" << halide_memory_visibility_name(request.properties.visibility) << ")";
 #endif
             return block_entry;
         }
@@ -373,39 +376,39 @@ BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &pro
 
     if (block_entry == nullptr) {
 #ifdef DEBUG_RUNTIME_INTERNAL
-        debug(user_context) << "BlockAllocator: couldn't find suitable block!\n"
-                            << " user_context=" << (void *)(user_context) << "\n"
-                            << " request_size=" << (uint32_t)size << "\n"
-                            << " dedicated=" << (dedicated ? "true" : "false") << "\n"
-                            << " usage=" << halide_memory_usage_name(properties.usage) << "\n"
-                            << " caching=" << halide_memory_caching_name(properties.caching) << "\n"
-                            << " visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+        debug(user_context) << "BlockAllocator: couldn't find suitable block! ("
+                            << "user_context=" << (void *)(user_context) << " "
+                            << "request_size=" << (uint32_t)request.size << " "
+                            << "request_dedicated=" << (request.dedicated ? "true" : "false") << " "
+                            << "request_usage=" << halide_memory_usage_name(request.properties.usage) << " "
+                            << "request_caching=" << halide_memory_caching_name(request.properties.caching) << " "
+                            << "request_visibility=" << halide_memory_visibility_name(request.properties.visibility) << ")";
 #endif
     }
     return block_entry;
 }
 
 BlockAllocator::BlockEntry *
-BlockAllocator::reserve_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated) {
+BlockAllocator::reserve_block_entry(void *user_context, const MemoryRequest &request) {
 #ifdef DEBUG_RUNTIME_INTERNAL
-    debug(user_context) << "BlockAllocator: reserving block ... !\n"
-                        << " requested_size=" << (uint32_t)size << "\n"
-                        << " requested_is_dedicated=" << (dedicated ? "true" : "false") << "\n"
-                        << " requested_usage=" << halide_memory_usage_name(properties.usage) << "\n"
-                        << " requested_caching=" << halide_memory_caching_name(properties.caching) << "\n"
-                        << " requested_visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+    debug(user_context) << "BlockAllocator: reserving block ... ! ("
+                        << "requested_size=" << (uint32_t)request.size << " "
+                        << "requested_is_dedicated=" << (request.dedicated ? "true" : "false") << " "
+                        << "requested_usage=" << halide_memory_usage_name(request.properties.usage) << " "
+                        << "requested_caching=" << halide_memory_caching_name(request.properties.caching) << " "
+                        << "requested_visibility=" << halide_memory_visibility_name(request.properties.visibility) << ")";
 #endif
-    BlockEntry *block_entry = find_block_entry(user_context, properties, size, dedicated);
+    BlockEntry *block_entry = find_block_entry(user_context, request);
     if (block_entry == nullptr) {
 #ifdef DEBUG_RUNTIME_INTERNAL
-        debug(user_context) << "BlockAllocator: creating block ... !\n"
-                            << " requested_size=" << (uint32_t)size << "\n"
-                            << " requested_is_dedicated=" << (dedicated ? "true" : "false") << "\n"
-                            << " requested_usage=" << halide_memory_usage_name(properties.usage) << "\n"
-                            << " requested_caching=" << halide_memory_caching_name(properties.caching) << "\n"
-                            << " requested_visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+        debug(user_context) << "BlockAllocator: creating block ... ! ("
+                            << "requested_size=" << (uint32_t)request.size << " "
+                            << "requested_is_dedicated=" << (request.dedicated ? "true" : "false") << " "
+                            << "requested_usage=" << halide_memory_usage_name(request.properties.usage) << " "
+                            << "requested_caching=" << halide_memory_caching_name(request.properties.caching) << " "
+                            << "requested_visibility=" << halide_memory_visibility_name(request.properties.visibility) << ")";
 #endif
-        block_entry = create_block_entry(user_context, properties, size, dedicated);
+        block_entry = create_block_entry(user_context, request);
     }
 
     if (block_entry) {
@@ -422,14 +425,14 @@ BlockAllocator::create_region_allocator(void *user_context, BlockResource *block
 #ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Creating region allocator ("
                         << "user_context=" << (void *)(user_context) << " "
-                        << "block_resource=" << (void *)(block) << ")...\n";
+                        << "block_resource=" << (void *)(block) << ")...";
 #endif
     halide_abort_if_false(user_context, block != nullptr);
     RegionAllocator *region_allocator = RegionAllocator::create(
         user_context, block, {allocators.system, allocators.region});
 
     if (region_allocator == nullptr) {
-        error(user_context) << "BlockAllocator: Failed to create new region allocator!\n";
+        error(user_context) << "BlockAllocator: Failed to create new region allocator\n";
         return nullptr;
     }
 
@@ -440,7 +443,7 @@ int BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocator
 #ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Destroying region allocator ("
                         << "user_context=" << (void *)(user_context) << " "
-                        << "region_allocator=" << (void *)(region_allocator) << ")...\n";
+                        << "region_allocator=" << (void *)(region_allocator) << ")...";
 #endif
     if (region_allocator == nullptr) {
         return 0;
@@ -449,7 +452,7 @@ int BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocator
 }
 
 BlockAllocator::BlockEntry *
-BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated) {
+BlockAllocator::create_block_entry(void *user_context, const MemoryRequest &request) {
     if (config.maximum_pool_size && (pool_size() >= config.maximum_pool_size)) {
         error(user_context) << "BlockAllocator: No free blocks found! Maximum pool size reached ("
                             << (int32_t)(config.maximum_pool_size) << " bytes or "
@@ -459,13 +462,13 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
 
     if (config.maximum_block_count && (block_count() >= config.maximum_block_count)) {
         error(user_context) << "BlockAllocator: No free blocks found! Maximum block count reached ("
-                            << (int32_t)(config.maximum_block_count) << ")!\n";
+                            << (int32_t)(config.maximum_block_count) << ")\n";
         return nullptr;
     }
 
     BlockEntry *block_entry = block_list.append(user_context);
     if (block_entry == nullptr) {
-        debug(user_context) << "BlockAllocator: Failed to allocate new block entry!\n";
+        debug(user_context) << "BlockAllocator: Failed to allocate new block entry\n";
         return nullptr;
     }
 
@@ -473,15 +476,19 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
     debug(user_context) << "BlockAllocator: Creating block entry ("
                         << "block_entry=" << (void *)(block_entry) << " "
                         << "block=" << (void *)(block_entry->value) << " "
-                        << "allocator=" << (void *)(allocators.block.allocate) << ")...\n";
+                        << "allocator=" << (void *)(allocators.block.allocate) << ")...";
 #endif
 
+    // Constrain the request to the a valid block allocation
+    MemoryRequest block_request = request;
+    conform(user_context, &block_request);
+
+    // Create the block resource itself
     BlockResource *block = static_cast<BlockResource *>(block_entry->value);
-    block->memory.size = constrain_requested_size(size);
+    block->memory.size = block_request.size;
     block->memory.handle = nullptr;
-    block->memory.properties = properties;
-    block->memory.properties.nearest_multiple = max(config.nearest_multiple, properties.nearest_multiple);
-    block->memory.dedicated = dedicated;
+    block->memory.properties = block_request.properties;
+    block->memory.dedicated = block_request.dedicated;
     block->reserved = 0;
     block->allocator = create_region_allocator(user_context, block);
     alloc_memory_block(user_context, block);
@@ -492,7 +499,7 @@ int BlockAllocator::release_block_entry(void *user_context, BlockAllocator::Bloc
 #ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Releasing block entry ("
                         << "block_entry=" << (void *)(block_entry) << " "
-                        << "block=" << (void *)(block_entry->value) << ")...\n";
+                        << "block=" << (void *)(block_entry->value) << ")...";
 #endif
     BlockResource *block = static_cast<BlockResource *>(block_entry->value);
     if (block->allocator) {
@@ -506,7 +513,7 @@ int BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::Bloc
     debug(user_context) << "BlockAllocator: Destroying block entry ("
                         << "block_entry=" << (void *)(block_entry) << " "
                         << "block=" << (void *)(block_entry->value) << " "
-                        << "deallocator=" << (void *)(allocators.block.deallocate) << ")...\n";
+                        << "deallocator=" << (void *)(allocators.block.deallocate) << ")...";
 #endif
     BlockResource *block = static_cast<BlockResource *>(block_entry->value);
     if (block->allocator) {
@@ -520,7 +527,7 @@ int BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::Bloc
 
 int BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block) {
 #ifdef DEBUG_RUNTIME_INTERNAL
-    debug(user_context) << "BlockAllocator: Allocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.allocate << ")...\n";
+    debug(user_context) << "BlockAllocator: Allocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.allocate << ")...";
 #endif
     halide_abort_if_false(user_context, allocators.block.allocate != nullptr);
     MemoryBlock *memory_block = &(block->memory);
@@ -531,7 +538,7 @@ int BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block)
 
 int BlockAllocator::free_memory_block(void *user_context, BlockResource *block) {
 #ifdef DEBUG_RUNTIME_INTERNAL
-    debug(user_context) << "BlockAllocator: Deallocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.deallocate << ")...\n";
+    debug(user_context) << "BlockAllocator: Deallocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.deallocate << ")...";
 #endif
     halide_abort_if_false(user_context, allocators.block.deallocate != nullptr);
     MemoryBlock *memory_block = &(block->memory);
@@ -559,6 +566,33 @@ size_t BlockAllocator::constrain_requested_size(size_t size) const {
     }
 
     return actual_size;
+}
+
+int BlockAllocator::conform(void *user_context, MemoryRequest *request) const {
+
+    request->properties.nearest_multiple = max(config.nearest_multiple, request->properties.nearest_multiple);
+
+    if (request->properties.nearest_multiple) {
+        size_t nm = request->properties.nearest_multiple;
+        request->size = (((request->size + nm - 1) / nm) * nm);  // round up to nearest multiple
+    }
+
+    if (config.minimum_block_size) {
+        request->size = ((request->size < config.minimum_block_size) ?
+                             config.minimum_block_size :
+                             request->size);
+    }
+    if (config.maximum_block_size) {
+        request->size = ((request->size > config.maximum_block_size) ?
+                             config.maximum_block_size :
+                             request->size);
+    }
+
+    if (allocators.block.conform) {
+        return allocators.block.conform(user_context, request);
+    }
+
+    return 0;
 }
 
 bool BlockAllocator::is_compatible_block(const BlockResource *block, const MemoryProperties &properties) const {

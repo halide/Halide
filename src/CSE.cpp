@@ -76,7 +76,7 @@ public:
         Expr expr;
         int use_count = 0;
         // All consumer Exprs for which this is the last child Expr.
-        map<ExprWithCompareCache, int> uses;
+        map<Expr, int, IRGraphDeepCompare> uses;
         Entry(const Expr &e)
             : expr(e) {
         }
@@ -84,23 +84,13 @@ public:
     vector<std::unique_ptr<Entry>> entries;
 
     map<Expr, int, ExprCompare> shallow_numbering, output_numbering;
-    map<ExprWithCompareCache, int> leaves;
+    map<Expr, int, IRGraphDeepCompare> leaves;
 
-    int number = -1;
-
-    IRCompareCache cache;
-
-    GVN()
-        : number(0), cache(8) {
-    }
+    int number = 0;
 
     Stmt mutate(const Stmt &s) override {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
-    }
-
-    ExprWithCompareCache with_cache(const Expr &e) {
-        return ExprWithCompareCache(e, &cache);
     }
 
     Expr mutate(const Expr &e) override {
@@ -123,7 +113,7 @@ public:
         // that child has an identical parent to this one.
 
         auto &use_map = number == -1 ? leaves : entries[number]->uses;
-        auto p = use_map.emplace(with_cache(new_e), (int)entries.size());
+        auto p = use_map.emplace(new_e, (int)entries.size());
         auto iter = p.first;
         bool novel = p.second;
         if (novel) {
@@ -201,8 +191,8 @@ class RemoveLets : public IRGraphMutator {
     Scope<Expr> scope;
 
     Expr visit(const Variable *op) override {
-        if (scope.contains(op->name)) {
-            return scope.get(op->name);
+        if (const Expr *e = scope.find(op->name)) {
+            return *e;
         } else {
             return op;
         }

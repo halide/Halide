@@ -8,8 +8,10 @@
  */
 
 #include <cmath>
+#include <map>
 
 #include "Expr.h"
+#include "Target.h"
 #include "Tuple.h"
 
 namespace Halide {
@@ -140,10 +142,16 @@ Expr const_true(int lanes = 1);
  * falses, if a lanes argument is given. */
 Expr const_false(int lanes = 1);
 
-/** Attempt to cast an expression to a smaller type while provably not
- * losing information. If it can't be done, return an undefined
- * Expr. */
-Expr lossless_cast(Type t, Expr e);
+/** Attempt to cast an expression to a smaller type while provably not losing
+ * information. If it can't be done, return an undefined Expr.
+ *
+ * Optionally accepts a map that gives the constant bounds of exprs already
+ * analyzed to avoid redoing work across many calls to lossless_cast. It is not
+ * safe to use this optional map in contexts where the same Expr object may
+ * take on a different value. For example:
+ * (let x = 4 in some_expr_object) + (let x = 5 in the_same_expr_object)).
+ * It is safe to use it after uniquify_variable_names has been run. */
+Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare> *cache = nullptr);
 
 /** Attempt to negate x without introducing new IR and without overflow.
  * If it can't be done, return an undefined Expr. */
@@ -801,10 +809,6 @@ inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
 /** Equivalent of ternary select(), but taking/returning tuples. If the condition is
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
-HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
-Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
-HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
-Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
 Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
 Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
 // @}
@@ -812,16 +816,6 @@ Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_
 /** Equivalent of multiway select(), but taking/returning tuples. If the condition is
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
-template<typename... Args>
-HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
-inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
-    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
-}
-template<typename... Args>
-HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
-inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&...args) {
-    return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
-}
 template<typename... Args>
 inline Tuple select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
     return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
@@ -1696,124 +1690,50 @@ Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
 Expr rounding_mul_shift_right(Expr a, Expr b, int q);
 //@}
 
-namespace Internal {
+/** Return a boolean Expr for the corresponding field of the Target
+ * being used during lowering; they can be useful in writing library
+ * code without having to plumb a Target through call sites, so that you
+ * can do things like
+ \code
+    Expr e = select(target_arch_is(Target::ARM), something, something_else);
+ \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
+ */
+//@{
+Expr target_arch_is(Target::Arch arch);
+Expr target_os_is(Target::OS os);
+Expr target_has_feature(Target::Feature feat);
+//@}
 
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr widen_right_add(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::widen_right_add(a, b);
+/** Return the bit width of the Target used during lowering; this can be useful
+ * in writing library code without having to plumb a Target through call sites,
+ * so that you can do things like
+ \code
+    Expr e = select(target_bits() == 32, something, something_else);
+ \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
+ */
+Expr target_bits();
+
+/** Return the natural vector width for the given Type for the Target
+ * being used during lowering; this can be useful in writing library
+ * code without having to plumb a Target through call sites, so that you
+ * can do things like
+ \code
+    f.vectorize(x, target_natural_vector_size(Float(32)));
+ \endcode
+ * Note that this doesn't do any checking at runtime to verify that the Target
+ * is valid for the current hardware configuration.
+ */
+//@{
+Expr target_natural_vector_size(Type t);
+template<typename data_t>
+Expr target_natural_vector_size() {
+    return target_natural_vector_size(type_of<data_t>());
 }
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr widen_right_mul(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::widen_right_mul(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr widen_right_sub(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::widen_right_sub(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr widening_add(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::widening_add(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr widening_mul(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::widening_mul(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr widening_sub(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::widening_sub(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr widening_shift_left(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::widening_shift_left(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr widening_shift_left(const Expr &a, int b, T * = nullptr) {
-    return Halide::widening_shift_left(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr widening_shift_right(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::widening_shift_right(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr widening_shift_right(const Expr &a, int b, T * = nullptr) {
-    return Halide::widening_shift_right(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr rounding_shift_left(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::widening_shift_left(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr rounding_shift_left(const Expr &a, int b, T * = nullptr) {
-    return Halide::widening_shift_left(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr rounding_shift_right(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::rounding_shift_right(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr rounding_shift_right(const Expr &a, int b, T * = nullptr) {
-    return Halide::rounding_shift_right(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr saturating_add(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::saturating_add(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr saturating_sub(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::saturating_sub(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr halving_add(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::halving_add(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr rounding_halving_add(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::rounding_halving_add(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr halving_sub(const Expr &a, const Expr &b, T * = nullptr) {
-    return Halide::halving_sub(a, b);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr mul_shift_right(const Expr &a, const Expr &b, const Expr &q, T * = nullptr) {
-    return Halide::mul_shift_right(a, b, q);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr mul_shift_right(const Expr &a, const Expr &b, int q, T * = nullptr) {
-    return Halide::mul_shift_right(a, b, q);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q, T * = nullptr) {
-    return Halide::rounding_mul_shift_right(a, b, q);
-}
-template<typename T = void>
-HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-Expr rounding_mul_shift_right(const Expr &a, const Expr &b, int q, T * = nullptr) {
-    return Halide::rounding_mul_shift_right(a, b, q);
-}
-}  // namespace Internal
+//@}
 
 }  // namespace Halide
 

@@ -69,11 +69,11 @@ Func::Func(const std::vector<Type> &required_types, int required_dims, const str
 }
 
 Func::Func()
-    : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
+    : func(unique_name('f')) {
 }
 
 Func::Func(const Expr &e)
-    : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
+    : func(unique_name('f')) {
     (*this)(_) = e;
 }
 
@@ -375,6 +375,79 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
              rhs_checker.has_self_reference ||
              rhs_checker.has_rvar);
 }
+
+void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
+    // Splits with a 'blend' tail strategy do a load and then a store of values
+    // outside of the region to be computed, so for each split using a 'blend'
+    // tail strategy, verify that there aren't any parallel vars that stem from
+    // the same original dimension, so that this load and store doesn't race
+    // with a true computation of that value happening in some other thread.
+
+    // Note that we only need to check vars in the same dimension, because
+    // allocation bounds inference is done per-dimension and allocates padding
+    // based on the values actually accessed by the lowered code (i.e. it covers
+    // the blend region). So for example, an access beyond the end of a scanline
+    // can't overflow onto the next scanline. Halide will allocate padding, or
+    // throw a bounds error if it's an input or output.
+
+    if (sched.allow_race_conditions()) {
+        return;
+    }
+
+    std::set<std::string> parallel;
+    for (const auto &dim : sched.dims()) {
+        if (is_unordered_parallel(dim.for_type)) {
+            parallel.insert(dim.var);
+        }
+    }
+
+    // Process the splits in reverse order to figure out which root vars have a
+    // parallel child.
+    for (auto it = sched.splits().rbegin(); it != sched.splits().rend(); it++) {
+        if (it->is_fuse()) {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->inner);
+                parallel.insert(it->old_var);
+            }
+        } else if (it->is_rename() || it->is_purify()) {
+            if (parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        } else {
+            if (parallel.count(it->inner) || parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        }
+    }
+
+    // Now propagate back to all children of the identified root vars, to assert
+    // that none of them use a blending tail strategy.
+    for (auto it = sched.splits().begin(); it != sched.splits().end(); it++) {
+        if (it->is_fuse()) {
+            if (parallel.count(it->inner) || parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        } else if (it->is_rename() || it->is_purify()) {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->outer);
+            }
+        } else {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->inner);
+                parallel.insert(it->old_var);
+                if (it->tail == TailStrategy::ShiftInwardsAndBlend ||
+                    it->tail == TailStrategy::RoundUpAndBlend) {
+                    user_error << "Tail strategy " << it->tail
+                               << " may not be used to split " << it->old_var
+                               << " because other vars stemming from the same original "
+                               << "Var or RVar are marked as parallel."
+                               << "This could cause a race condition.\n";
+                }
+            }
+        }
+    }
+}
+
 }  // namespace
 
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
@@ -438,6 +511,10 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                    << " to mark as " << t
                    << " in vars for function\n"
                    << dump_argument_list();
+    }
+
+    if (is_unordered_parallel(t)) {
+        check_for_race_conditions_in_split_with_blend(definition.schedule());
     }
 }
 
@@ -711,6 +788,17 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
 
+    // Figure out which pure vars were used in this update definition.
+    std::set<string> pure_vars_used;
+    internal_assert(args.size() == dim_vars.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        if (const Internal::Variable *var = args[i].as<Variable>()) {
+            if (var->name == dim_vars[i].name()) {
+                pure_vars_used.insert(var->name);
+            }
+        }
+    }
+
     // Check whether the operator is associative and determine the operator and
     // its identity for each value in the definition if it is a Tuple
     const auto &prover_result = prove_associativity(func_name, args, values);
@@ -911,7 +999,9 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         val = substitute_self_reference(val, func_name, intm.function(), vars_rename);
         update_vals[i] = val;
     }
-    intm(update_args) = Tuple(update_vals);
+    // There may not actually be a reference to the RDom in the args or values,
+    // so we use Function::define_update, which lets pass pass an explicit RDom.
+    intm.function().define_update(update_args, update_vals, intm_rdom.domain());
 
     // Determine the dims and schedule of the update definition of the
     // intermediate Func. We copy over the schedule from the original
@@ -935,16 +1025,20 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
 
     // Determine the dims of the new update definition
 
+    // The new update definition needs all the pure vars of the Func, but the
+    // one we're rfactoring may not have used them all. Add any missing ones to
+    // the dims list.
+
     // Add pure Vars from the original init definition to the dims list
     // if they are not already in the list
     for (const Var &v : dim_vars) {
-        const auto &iter = std::find_if(dims.begin(), dims.end(),
-                                        [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
-        if (iter == dims.end()) {
+        if (!pure_vars_used.count(v.name())) {
             Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
+            // Insert it just before Var::outermost
             dims.insert(dims.end() - 1, d);
         }
     }
+
     // Then, we need to remove lifted RVars from the dims list
     for (const string &rv : rvars_removed) {
         remove(rv);
@@ -1169,6 +1263,11 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
                 tail = TailStrategy::ShiftInwards;
             }
         }
+    }
+
+    if (tail == TailStrategy::ShiftInwardsAndBlend ||
+        tail == TailStrategy::RoundUpAndBlend) {
+        check_for_race_conditions_in_split_with_blend(definition.schedule());
     }
 
     if (!definition.is_init()) {
@@ -1806,6 +1905,11 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
 
     dims_old.swap(dims);
 
+    // We're not allowed to reorder Var::outermost inwards (rfactor assumes it's
+    // the last one).
+    user_assert(dims.back().var == Var::outermost().name())
+        << "Var::outermost() may not be reordered inside any other var.\n";
+
     return *this;
 }
 
@@ -2040,14 +2144,6 @@ Stage &Stage::compute_with(const Stage &s, const VarOrRVar &var, const vector<pa
 
 Stage &Stage::compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrategy align) {
     return compute_with(LoopLevel(s.function, var, s.stage_index), align);
-}
-
-/** Attempt to get the source file and line where this stage was
- * defined by parsing the process's own debug symbols. Returns an
- * empty string if no debug symbols were found or the debug
- * symbols were not understood. Works on OS X and Linux only. */
-std::string Stage::source_location() const {
-    return definition.source_location();
 }
 
 void Stage::unscheduled() {
@@ -2316,6 +2412,12 @@ Func &Func::async() {
     return *this;
 }
 
+Func &Func::ring_buffer(Expr extent) {
+    invalidate_cache();
+    func.schedule().ring_buffer() = std::move(extent);
+    return *this;
+}
+
 Stage Func::specialize(const Expr &c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0).specialize(c);
@@ -2323,7 +2425,7 @@ Stage Func::specialize(const Expr &c) {
 
 void Func::specialize_fail(const std::string &message) {
     invalidate_cache();
-    (void)Stage(func, func.definition(), 0).specialize_fail(message);
+    Stage(func, func.definition(), 0).specialize_fail(message);
 }
 
 Func &Func::serial(const VarOrRVar &var) {
@@ -2929,6 +3031,11 @@ Func &Func::add_trace_tag(const std::string &trace_tag) {
     return *this;
 }
 
+Func &Func::no_profiling() {
+    func.do_not_profile();
+    return *this;
+}
+
 void Func::debug_to_file(const string &filename) {
     invalidate_cache();
     func.debug_file() = filename;
@@ -3377,11 +3484,6 @@ vector<Argument> Func::infer_arguments() const {
     return Pipeline(*this).infer_arguments();
 }
 
-std::string Func::source_location() const {
-    user_assert(defined()) << "A Func with no definition has no source_location\n";
-    return func.definition().source_location();
-}
-
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
     return pipeline().compile_to_module(args, fn_name, target);
 }
@@ -3438,6 +3540,13 @@ void Func::compile_to_lowered_stmt(const string &filename,
                                    StmtOutputFormat fmt,
                                    const Target &target) {
     pipeline().compile_to_lowered_stmt(filename, args, fmt, target);
+}
+
+void Func::compile_to_conceptual_stmt(const string &filename,
+                                      const vector<Argument> &args,
+                                      StmtOutputFormat fmt,
+                                      const Target &target) {
+    pipeline().compile_to_conceptual_stmt(filename, args, fmt, target);
 }
 
 void Func::print_loop_nest() {

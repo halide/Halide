@@ -569,6 +569,7 @@ struct Call : public ExprNode<Call> {
         mux,
         popcount,
         prefetch,
+        profiling_enable_instance_marker,
         promise_clamped,
         random,
         register_destructor,
@@ -594,6 +595,10 @@ struct Call : public ExprNode<Call> {
         signed_integer_overflow,
         size_of_halide_buffer_t,
 
+        // Marks the point in lowering where the outermost skip stages checks
+        // should be introduced.
+        skip_stages_marker,
+
         // Takes a realization name and a loop variable. Declares that values of
         // the realization that were stored on earlier loop iterations of the
         // given loop are potentially loaded in this loop iteration somewhere
@@ -607,6 +612,13 @@ struct Call : public ExprNode<Call> {
         sorted_avg,
         strict_float,
         stringify,
+
+        target_arch_is,
+        target_bits,
+        target_has_feature,
+        target_natural_vector_size,
+        target_os_is,
+
         undef,
         unreachable,
         unsafe_promise_clamped,
@@ -624,6 +636,8 @@ struct Call : public ExprNode<Call> {
         widening_shift_left,
         widening_shift_right,
         widening_sub,
+
+        get_runtime_vscale,
 
         IntrinsicOpCount  // Sentinel: keep last.
     };
@@ -873,11 +887,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_interleave() const;
 
-    /** Check if this shuffle can be represented as a broadcast.
-     * For example:
-     * A uint8 shuffle of with 4*n lanes and indices:
-     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
-     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    /** Check if this shuffle can be represented as a repeating pattern that
+     * repeats the same shuffle of the single input vector some number of times.
+     * For example: 0, 3, 1, 1,  0, 3, 1, 1, .....,  0, 3, 1, 1
+     */
     bool is_broadcast() const;
     int broadcast_factor() const;
 

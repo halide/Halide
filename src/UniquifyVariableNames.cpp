@@ -104,10 +104,9 @@ class UniquifyVariableNames : public IRMutator {
     }
 
     Expr visit(const Variable *op) override {
-        if (renaming.contains(op->name)) {
-            string new_name = renaming.get(op->name);
-            if (new_name != op->name) {
-                return Variable::make(op->type, new_name);
+        if (const string *new_name = renaming.find(op->name)) {
+            if (*new_name != op->name) {
+                return Variable::make(op->type, *new_name);
             }
         }
         return op;
@@ -173,6 +172,7 @@ Stmt uniquify_variable_names(const Stmt &s) {
     return u.mutate(s);
 }
 
+namespace {
 void check(vector<pair<Var, Expr>> in,
            vector<pair<Var, Expr>> out) {
     Stmt in_stmt = Evaluate::make(0), out_stmt = Evaluate::make(0);
@@ -194,6 +194,7 @@ void check(vector<pair<Var, Expr>> in,
         << "Correct output:\n"
         << out_stmt << "\n";
 }
+}  // namespace
 
 void uniquify_variable_names_test() {
     Var x("x"), x_1("x_1"), x_2("x_2"), x_3{"x_3"};
@@ -248,7 +249,7 @@ void uniquify_variable_names_test() {
           {{x, Let::make(y.name(), 3, y)},
            {x_1, Let::make(y.name(), 4, y)}});
 
-    std::cout << "uniquify_variable_names test passed" << std::endl;
+    std::cout << "uniquify_variable_names test passed\n";
 }
 
 }  // namespace Internal

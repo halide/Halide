@@ -96,7 +96,7 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex) {
 // (e.g. correctness/multiple_scatter). Since we don't have threads, we don't
 // need to mutex to do anything, but returning a null would trigger an error
 // condition that would be misrepoted as out-of-memory.
-WEAK halide_mutex_array *halide_mutex_array_create(int sz) {
+WEAK halide_mutex_array *halide_mutex_array_create(uint64_t sz) {
     return &halide_fake_mutex_array;
 }
 

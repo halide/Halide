@@ -15,31 +15,29 @@ using std::pair;
 using std::string;
 using std::vector;
 
-#if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
-int Simplify::debug_indent = 0;
-#endif
-
 Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
     : remove_dead_code(r) {
 
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
-        ExprInfo bounds;
+        ExprInfo info;
         if (const int64_t *i_min = as_const_int(iter.value().min)) {
-            bounds.min_defined = true;
-            bounds.min = *i_min;
+            info.bounds.min_defined = true;
+            info.bounds.min = *i_min;
         }
         if (const int64_t *i_max = as_const_int(iter.value().max)) {
-            bounds.max_defined = true;
-            bounds.max = *i_max;
+            info.bounds.max_defined = true;
+            info.bounds.max = *i_max;
         }
 
-        if (ai->contains(iter.name())) {
-            bounds.alignment = ai->get(iter.name());
+        if (const auto *a = ai->find(iter.name())) {
+            info.alignment = *a;
         }
 
-        if (bounds.min_defined || bounds.max_defined || bounds.alignment.modulus != 1) {
-            bounds_and_alignment_info.push(iter.name(), bounds);
+        if (info.bounds.min_defined ||
+            info.bounds.max_defined ||
+            info.alignment.modulus != 1) {
+            bounds_and_alignment_info.push(iter.name(), info);
         }
     }
 
@@ -48,20 +46,20 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
             // Already handled
             continue;
         }
-        ExprInfo bounds;
-        bounds.alignment = iter.value();
-        bounds_and_alignment_info.push(iter.name(), bounds);
+        ExprInfo info;
+        info.alignment = iter.value();
+        bounds_and_alignment_info.push(iter.name(), info);
     }
 }
 
-std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vector<Expr> &old_exprs, ExprInfo *bounds) {
+std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vector<Expr> &old_exprs) {
     vector<Expr> new_exprs(old_exprs.size());
     bool changed = false;
 
     // Mutate the args
     for (size_t i = 0; i < old_exprs.size(); i++) {
         const Expr &old_e = old_exprs[i];
-        Expr new_e = mutate(old_e, bounds);
+        Expr new_e = mutate(old_e, nullptr);
         if (!new_e.same_as(old_e)) {
             changed = true;
         }
@@ -74,18 +72,18 @@ std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vect
 void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
     for (size_t i = 0; i < dimensions; i++) {
         string stride = name + ".stride." + std::to_string(i);
-        if (var_info.contains(stride)) {
-            var_info.ref(stride).old_uses++;
+        if (auto *info = var_info.shallow_find(stride)) {
+            info->old_uses++;
         }
 
         string min = name + ".min." + std::to_string(i);
-        if (var_info.contains(min)) {
-            var_info.ref(min).old_uses++;
+        if (auto *info = var_info.shallow_find(min)) {
+            info->old_uses++;
         }
     }
 
-    if (var_info.contains(name)) {
-        var_info.ref(name).old_uses++;
+    if (auto *info = var_info.shallow_find(name)) {
+        info->old_uses++;
     }
 }
 
@@ -135,17 +133,17 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
         Simplify::ExprInfo i;
         if (v) {
             simplify->mutate(lt->b, &i);
-            if (i.min_defined) {
+            if (i.bounds.min_defined) {
                 // !(v < i)
-                learn_lower_bound(v, i.min);
+                learn_lower_bound(v, i.bounds.min);
             }
         }
         v = lt->b.as<Variable>();
         if (v) {
             simplify->mutate(lt->a, &i);
-            if (i.max_defined) {
+            if (i.bounds.max_defined) {
                 // !(i < v)
-                learn_upper_bound(v, i.max);
+                learn_upper_bound(v, i.bounds.max);
             }
         }
     } else if (const LE *le = fact.as<LE>()) {
@@ -153,17 +151,17 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
         Simplify::ExprInfo i;
         if (v && v->type.is_int() && v->type.bits() >= 32) {
             simplify->mutate(le->b, &i);
-            if (i.min_defined) {
+            if (i.bounds.min_defined) {
                 // !(v <= i)
-                learn_lower_bound(v, i.min + 1);
+                learn_lower_bound(v, i.bounds.min + 1);
             }
         }
         v = le->b.as<Variable>();
         if (v && v->type.is_int() && v->type.bits() >= 32) {
             simplify->mutate(le->a, &i);
-            if (i.max_defined) {
+            if (i.bounds.max_defined) {
                 // !(i <= v)
-                learn_upper_bound(v, i.max - 1);
+                learn_upper_bound(v, i.bounds.max - 1);
             }
         }
     } else if (const Call *c = Call::as_tag(fact)) {
@@ -179,16 +177,15 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
         return;
     }
     if (simplify->falsehoods.insert(fact).second) {
-        falsehoods.push_back(fact);
+        falsehoods.insert(fact);
     }
 }
 
 void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
     ExprInfo b;
-    b.max_defined = true;
-    b.max = val;
-    if (simplify->bounds_and_alignment_info.contains(v->name)) {
-        b.intersect(simplify->bounds_and_alignment_info.get(v->name));
+    b.bounds = ConstantInterval::bounded_above(val);
+    if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+        b.intersect(*info);
     }
     simplify->bounds_and_alignment_info.push(v->name, b);
     bounds_pop_list.push_back(v);
@@ -196,10 +193,9 @@ void Simplify::ScopedFact::learn_upper_bound(const Variable *v, int64_t val) {
 
 void Simplify::ScopedFact::learn_lower_bound(const Variable *v, int64_t val) {
     ExprInfo b;
-    b.min_defined = true;
-    b.min = val;
-    if (simplify->bounds_and_alignment_info.contains(v->name)) {
-        b.intersect(simplify->bounds_and_alignment_info.get(v->name));
+    b.bounds = ConstantInterval::bounded_below(val);
+    if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
+        b.intersect(*info);
     }
     simplify->bounds_and_alignment_info.push(v->name, b);
     bounds_pop_list.push_back(v);
@@ -228,10 +224,9 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 // TODO: Visiting it again is inefficient
                 Simplify::ExprInfo expr_info;
                 simplify->mutate(eq->b, &expr_info);
-                if (simplify->bounds_and_alignment_info.contains(v->name)) {
+                if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
                     // We already know something about this variable and don't want to suppress it.
-                    auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
-                    expr_info.intersect(existing_knowledge);
+                    expr_info.intersect(*info);
                 }
                 simplify->bounds_and_alignment_info.push(v->name, expr_info);
                 bounds_pop_list.push_back(v);
@@ -245,10 +240,9 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             // TODO: Visiting it again is inefficient
             Simplify::ExprInfo expr_info;
             simplify->mutate(eq->a, &expr_info);
-            if (simplify->bounds_and_alignment_info.contains(vb->name)) {
+            if (const auto *info = simplify->bounds_and_alignment_info.find(vb->name)) {
                 // We already know something about this variable and don't want to suppress it.
-                auto existing_knowledge = simplify->bounds_and_alignment_info.get(vb->name);
-                expr_info.intersect(existing_knowledge);
+                expr_info.intersect(*info);
             }
             simplify->bounds_and_alignment_info.push(vb->name, expr_info);
             bounds_pop_list.push_back(vb);
@@ -257,10 +251,9 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             Simplify::ExprInfo expr_info;
             expr_info.alignment.modulus = *modulus;
             expr_info.alignment.remainder = *remainder;
-            if (simplify->bounds_and_alignment_info.contains(v->name)) {
+            if (const auto *info = simplify->bounds_and_alignment_info.find(v->name)) {
                 // We already know something about this variable and don't want to suppress it.
-                auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
-                expr_info.intersect(existing_knowledge);
+                expr_info.intersect(*info);
             }
             simplify->bounds_and_alignment_info.push(v->name, expr_info);
             bounds_pop_list.push_back(v);
@@ -270,17 +263,17 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         Simplify::ExprInfo i;
         if (v && v->type.is_int() && v->type.bits() >= 32) {
             simplify->mutate(lt->b, &i);
-            if (i.max_defined) {
+            if (i.bounds.max_defined) {
                 // v < i
-                learn_upper_bound(v, i.max - 1);
+                learn_upper_bound(v, i.bounds.max - 1);
             }
         }
         v = lt->b.as<Variable>();
         if (v && v->type.is_int() && v->type.bits() >= 32) {
             simplify->mutate(lt->a, &i);
-            if (i.min_defined) {
+            if (i.bounds.min_defined) {
                 // i < v
-                learn_lower_bound(v, i.min + 1);
+                learn_lower_bound(v, i.bounds.min + 1);
             }
         }
     } else if (const LE *le = fact.as<LE>()) {
@@ -288,17 +281,17 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         Simplify::ExprInfo i;
         if (v) {
             simplify->mutate(le->b, &i);
-            if (i.max_defined) {
+            if (i.bounds.max_defined) {
                 // v <= i
-                learn_upper_bound(v, i.max);
+                learn_upper_bound(v, i.bounds.max);
             }
         }
         v = le->b.as<Variable>();
         if (v) {
             simplify->mutate(le->a, &i);
-            if (i.min_defined) {
+            if (i.bounds.min_defined) {
                 // i <= v
-                learn_lower_bound(v, i.min);
+                learn_lower_bound(v, i.bounds.min);
             }
         }
     } else if (const Call *c = Call::as_tag(fact)) {
@@ -314,21 +307,41 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         return;
     }
     if (simplify->truths.insert(fact).second) {
-        truths.push_back(fact);
+        truths.insert(fact);
     }
 }
 
-template<class T>
-T substitute_facts_impl(T t, const vector<Expr> &truths, const vector<Expr> &falsehoods) {
-    // An std::map<Expr, Expr> version of substitute might be an optimization?
-    for (const auto &i : truths) {
-        t = substitute(i, const_true(i.type().lanes()), t);
-    }
-    for (const auto &i : falsehoods) {
-        t = substitute(i, const_false(i.type().lanes()), t);
-    }
-    return t;
+namespace {
+template<typename T>
+T substitute_facts_impl(const T &t,
+                        const std::set<Expr, IRDeepCompare> &truths,
+                        const std::set<Expr, IRDeepCompare> &falsehoods) {
+    class Substitutor : public IRMutator {
+        const std::set<Expr, IRDeepCompare> &truths, &falsehoods;
+
+    public:
+        using IRMutator::mutate;
+        Expr mutate(const Expr &e) override {
+            if (!e.type().is_bool()) {
+                return IRMutator::mutate(e);
+            } else if (truths.count(e)) {
+                return make_one(e.type());
+            } else if (falsehoods.count(e)) {
+                return make_zero(e.type());
+            } else {
+                return IRMutator::mutate(e);
+            }
+        }
+
+        Substitutor(const std::set<Expr, IRDeepCompare> &t,
+                    const std::set<Expr, IRDeepCompare> &f)
+            : truths(t), falsehoods(f) {
+        }
+    } substitutor(truths, falsehoods);
+
+    return substitutor.mutate(t);
 }
+}  // namespace
 
 Expr Simplify::ScopedFact::substitute_facts(const Expr &e) {
     return substitute_facts_impl(e, truths, falsehoods);
@@ -355,8 +368,13 @@ Simplify::ScopedFact::~ScopedFact() {
 
 Expr simplify(const Expr &e, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
-              const Scope<ModulusRemainder> &alignment) {
+              const Scope<ModulusRemainder> &alignment,
+              const std::vector<Expr> &assumptions) {
     Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    std::vector<Simplify::ScopedFact> facts;
+    for (const Expr &a : assumptions) {
+        facts.push_back(m.scoped_truth(a));
+    }
     Expr result = m.mutate(e, nullptr);
     if (m.in_unreachable) {
         return unreachable(e.type());
@@ -366,8 +384,13 @@ Expr simplify(const Expr &e, bool remove_dead_let_stmts,
 
 Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
-              const Scope<ModulusRemainder> &alignment) {
+              const Scope<ModulusRemainder> &alignment,
+              const std::vector<Expr> &assumptions) {
     Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    std::vector<Simplify::ScopedFact> facts;
+    for (const Expr &a : assumptions) {
+        facts.push_back(m.scoped_truth(a));
+    }
     Stmt result = m.mutate(s);
     if (m.in_unreachable) {
         return Evaluate::make(unreachable());
@@ -407,8 +430,8 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
             Expr visit(const Variable *op) override {
                 auto it = vars.find(op->name);
-                if (lets.contains(op->name)) {
-                    return Variable::make(op->type, lets.get(op->name));
+                if (const std::string *n = lets.find(op->name)) {
+                    return Variable::make(op->type, *n);
                 } else if (it == vars.end()) {
                     std::string name = "v" + std::to_string(count++);
                     vars[op->name] = name;

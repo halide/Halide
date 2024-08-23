@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.28)
 
 option(Halide_NO_DEFAULT_FLAGS "When enabled, suppresses recommended flags in add_halide_generator" OFF)
 
@@ -83,7 +83,7 @@ function(add_halide_generator TARGET)
             list(LENGTH ARG_SOURCES len)
             if (NOT len EQUAL 1)
                 message(FATAL_ERROR "Python Generators must specify exactly one source file.")
-            endif()
+            endif ()
 
             # Make a fake target here that we can attach the Python source to,
             # so that we can extract 'em in add_halide_library()
@@ -109,7 +109,8 @@ function(add_halide_generator TARGET)
                 # we *want* deprecation warnings to be propagated. So we must set
                 # NO_SYSTEM_FROM_IMPORTED in order for it to be seen.
                 set_target_properties(${TARGET} PROPERTIES NO_SYSTEM_FROM_IMPORTED YES)
-                target_compile_options(${TARGET} PRIVATE
+                target_compile_options(
+                    ${TARGET} PRIVATE
                     $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
                     $<$<CXX_COMPILER_ID:MSVC>:/w14996>  # 4996: compiler encountered deprecated declaration
                 )
@@ -135,7 +136,7 @@ function(add_halide_generator TARGET)
         set(stub_file "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${GEN_NAME}.${MODULE_NAME}.py_stub_generated.cpp")
         if (NOT EXISTS "${stub_file}")
             file(WRITE "${stub_file}" "${stub_text}")
-        endif()
+        endif ()
 
         Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${stub_file}" ${ARG_SOURCES})
         set_target_properties(${TARGET}_pystub PROPERTIES
@@ -244,7 +245,7 @@ function(add_halide_library TARGET)
             message(FATAL_ERROR "Unable to locate FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
         endif ()
         set(ARG_FROM "${FQ_ARG_FROM}")
-    endif()
+    endif ()
 
     get_property(py_src TARGET ${ARG_FROM} PROPERTY Halide_PYTHON_GENERATOR_SOURCE)
     if (py_src)
@@ -252,7 +253,7 @@ function(add_halide_library TARGET)
         if (NOT TARGET Halide::Python)
             message(FATAL_ERROR "This version of Halide was built without support for Python bindings; rebuild using WITH_PYTHON_BINDINGS=ON to use this rule with Python Generators.")
         endif ()
-        
+
         if (NOT TARGET Python3::Interpreter)
             message(FATAL_ERROR "You must call find_package(Python3) in your CMake code in order to use this rule with Python Generators.")
         endif ()
@@ -270,11 +271,11 @@ function(add_halide_library TARGET)
             "$<TARGET_FILE:Python3::Interpreter>" $<SHELL_PATH:${py_src}>
         )
         set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python ${py_src})
-    else()
+    else ()
         set(GENERATOR_CMD "${ARG_FROM}")
         set(GENERATOR_CMD_DEPS ${ARG_FROM})
         _Halide_place_dll(${ARG_FROM})
-    endif()
+    endif ()
 
     if (ARG_C_BACKEND)
         if (ARG_USE_RUNTIME)
@@ -356,10 +357,10 @@ function(add_halide_library TARGET)
     ##
 
     _Halide_get_platform_details(
-            is_crosscompiling
-            object_suffix
-            static_library_suffix
-            ${ARG_TARGETS})
+        is_crosscompiling
+        object_suffix
+        static_library_suffix
+        ${ARG_TARGETS})
 
     # Always emit a C header
     set(generator_outputs c_header)
@@ -436,7 +437,8 @@ function(add_halide_library TARGET)
                               LINKER_LANGUAGE CXX)
         if (NOT Halide_NO_DEFAULT_FLAGS)
             # Silence many useless warnings in generated C++ code compilation
-            target_compile_options("${TARGET}" PRIVATE
+            target_compile_options(
+                "${TARGET}" PRIVATE
                 $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-psabi>)
         endif ()
         _Halide_fix_xcode("${TARGET}")
@@ -579,8 +581,14 @@ function(_Halide_place_dll GEN)
         return()
     endif ()
 
-    add_custom_command(TARGET ${GEN} POST_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:${GEN}>)
+    add_custom_command(
+        TARGET ${GEN} POST_BUILD
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/MutexCopy.ps1"
+        -src "$<TARGET_FILE:Halide::Halide>"
+        -dstDir "$<TARGET_FILE_DIR:${GEN}>"
+        VERBATIM
+    )
     set_property(TARGET ${GEN} PROPERTY Halide_GENERATOR_HAS_POST_BUILD 1)
 endfunction()
 
@@ -613,8 +621,8 @@ function(add_halide_runtime RT)
         get_target_property(aliased ${ARG_FROM} ALIASED_TARGET)
         if (target_type STREQUAL "EXECUTABLE" AND NOT aliased)
             add_executable(_Halide_gengen ALIAS ${ARG_FROM})
-        endif()
-    endif()
+        endif ()
+    endif ()
 
     # The default of NO_THREADS/NO_DL_LIBS is OFF unless Halide_RUNTIME_NO_THREADS/NO_DL_LIBS is defined globally
     if (NOT DEFINED ARG_NO_THREADS)
@@ -628,10 +636,10 @@ function(add_halide_runtime RT)
     _Halide_gengen_ensure()
 
     _Halide_get_platform_details(
-            is_crosscompiling
-            object_suffix
-            static_library_suffix
-            ${ARG_TARGETS})
+        is_crosscompiling
+        object_suffix
+        static_library_suffix
+        ${ARG_TARGETS})
 
     if (is_crosscompiling)
         set(GEN_OUTS "${RT}${static_library_suffix}")
@@ -720,34 +728,13 @@ function(_Halide_add_targets_to_runtime TARGET)
 endfunction()
 
 function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
-    # TODO(https://github.com/halide/Halide/issues/5633): verify that this is correct & necessary for OpenGLCompute
-    if ("${ARGN}" MATCHES "openglcompute")
-        if ("${ARGN}" MATCHES "egl")
-            find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
-            target_link_libraries(${TARGET} ${VISIBILITY} OpenGL::OpenGL OpenGL::EGL)
-        else ()
-            if ("${ARGN}" MATCHES "linux" OR ("${ARGN}" MATCHES "host" AND Halide_HOST_TARGET MATCHES "linux"))
-                find_package(X11 REQUIRED)
-                target_link_libraries(${TARGET} ${VISIBILITY} X11::X11)
-            endif ()
-
-            find_package(OpenGL REQUIRED)
-            target_link_libraries(${TARGET} ${VISIBILITY} OpenGL::GL)
-        endif ()
-    endif ()
-
-    if ("${ARGN}" MATCHES "vulkan")
-        find_package(Vulkan REQUIRED)
-        target_link_libraries(${TARGET} ${VISIBILITY} Vulkan::Vulkan)
-    endif ()
-
     if ("${ARGN}" MATCHES "metal")
         find_library(FOUNDATION_LIBRARY Foundation REQUIRED)
         find_library(METAL_LIBRARY Metal REQUIRED)
         target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}" "${METAL_LIBRARY}")
     endif ()
 
-    if ("${ARGN}" MATCHES "webgpu")
+    if ("${ARGN}" MATCHES "webgpu" AND NOT "${ARGN}" MATCHES "wasm")
         find_package(Halide_WebGPU REQUIRED)
         target_link_libraries(${TARGET} ${VISIBILITY} Halide::WebGPU)
     endif ()
@@ -775,7 +762,7 @@ function(_Halide_target_export_single_symbol TARGET SYMBOL)
         file(WRITE
              "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple"
              "_${SYMBOL}\n")
-    endif()
+    endif ()
     if (NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript")
         file(WRITE
              "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript"

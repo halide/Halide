@@ -149,7 +149,6 @@ public:
 private:
     Internal::IntrusivePtr<PipelineContents> contents;
 
-    // For the three method below, precisely one of the first two args should be non-null
     void prepare_jit_call_arguments(RealizationArg &output, const Target &target,
                                     JITUserContext **user_context, bool is_bounds_inference, Internal::JITCallArgs &args_result);
 
@@ -160,7 +159,7 @@ private:
 
     static AutoSchedulerFn find_autoscheduler(const std::string &autoscheduler_name);
 
-    int call_jit_code(const Target &target, const Internal::JITCallArgs &args);
+    int call_jit_code(const Internal::JITCallArgs &args);
 
     // Get the value of contents->jit_target, but reality-check that the contents
     // sensibly match the value. Return Target() if not jitted.
@@ -281,6 +280,14 @@ public:
                                  const std::vector<Argument> &args,
                                  StmtOutputFormat fmt = Text,
                                  const Target &target = get_target_from_environment());
+
+    /** Write out a conceptual representation of lowered code, before any parallel loop
+     * get factored out into separate functions, or GPU loops are offloaded to kernel code.r
+     * Useful for analyzing and debugging scheduling. Can emit html or plain text. */
+    void compile_to_conceptual_stmt(const std::string &filename,
+                                    const std::vector<Argument> &args,
+                                    StmtOutputFormat fmt = Text,
+                                    const Target &target = get_target_from_environment());
 
     /** Write out the loop nests specified by the schedule for this
      * Pipeline's Funcs. Helpful for understanding what a schedule is
@@ -477,7 +484,7 @@ public:
 
     template<typename... Args,
              typename = typename std::enable_if<Internal::all_are_printable_args<Args...>::value>::type>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
+    HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
         std::vector<Expr> collected_args;
         Internal::collect_print_args(collected_args, std::forward<Args>(error_args)...);
         add_requirement(condition, collected_args);
