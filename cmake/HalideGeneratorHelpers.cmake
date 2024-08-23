@@ -98,7 +98,7 @@ function(add_halide_generator TARGET)
 
             # Make a library of the Generator that can be used for (e.g.) cpp_stub.
             add_library(${TARGET}.objs INTERFACE)
-            target_sources(${TARGET}.objs INTERFACE "$<LIST:FILTER,$<TARGET_OBJECTS:${TARGET}>,EXCLUDE,/GenGen.cpp.o(bj)?$>")
+            target_sources(${TARGET}.objs INTERFACE "$<TARGET_OBJECTS:${TARGET}>")
             target_link_libraries("${TARGET}.objs" INTERFACE Halide::Halide ${ARG_LINK_LIBRARIES})
             target_include_directories("${TARGET}.objs" INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>")
             add_executable(${gen} ALIAS ${TARGET})
