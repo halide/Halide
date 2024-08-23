@@ -82,7 +82,7 @@ struct debug_sink {
     debug_sink() = default;
 
     template<typename T>
-    inline debug_sink &operator<<(T &&x) {
+    debug_sink &operator<<(T &&x) {
         return *this;
     }
 };
@@ -163,7 +163,7 @@ public:
 
         // alignment and min-block-size are the same for our purposes here.
         constexpr uint32_t kAlignment = 32;
-        const uint32_t size = std::max(align_up((uint32_t)requested_size, kAlignment), kAlignment);
+        const uint32_t size = std::max(align_up(requested_size, kAlignment), kAlignment);
 
         constexpr uint32_t kMaxAllocSize = 0x7fffffff;
         internal_assert(size <= kMaxAllocSize);
@@ -822,7 +822,7 @@ void copy_hostbuf_to_existing_wasmbuf(WabtContext &wabt_context, const halide_bu
 
 template<typename T>
 struct LoadValue {
-    inline wabt::interp::Value operator()(const void *src) {
+    wabt::interp::Value operator()(const void *src) {
         const T val = *(const T *)(src);
         return wabt::interp::Value::Make(val);
     }
@@ -867,7 +867,7 @@ inline wabt::interp::Value load_value(const T &val) {
 
 template<typename T>
 struct StoreValue {
-    inline void operator()(const wabt::interp::Value &src, void *dst) {
+    void operator()(const wabt::interp::Value &src, void *dst) {
         *(T *)dst = src.Get<T>();
     }
 };
@@ -2134,8 +2134,6 @@ void add_extern_callbacks(const Local<Context> &context,
 
 #endif  // WITH_V8
 
-}  // namespace
-
 // clang-format off
 
 #if WITH_WABT
@@ -2226,6 +2224,8 @@ const HostCallbackMap &get_host_callback_map() {
 
     return m;
 }
+
+}  // namespace
 
 #undef DEFINE_CALLBACK
 #undef DEFINE_POSIX_MATH_CALLBACK

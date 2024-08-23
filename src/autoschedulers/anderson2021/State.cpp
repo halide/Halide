@@ -7,9 +7,11 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+namespace {
 int64_t get_stack_memory_limit(const Anderson2021Params &params) {
     return params.stack_factor * 103232;
 }
+}  // namespace
 
 uint64_t State::structural_hash(int depth) const {
     uint64_t h = num_decisions_made;

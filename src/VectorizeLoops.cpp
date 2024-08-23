@@ -828,7 +828,9 @@ class VectorSubs : public IRMutator {
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            int lanes = std::max(predicate.type().lanes(), std::max(value.type().lanes(), index.type().lanes()));
+            int lanes = std::max({predicate.type().lanes(),
+                                  value.type().lanes(),
+                                  index.type().lanes()});
             return Store::make(op->name, widen(value, lanes), widen(index, lanes),
                                op->param, widen(predicate, lanes), op->alignment);
         }

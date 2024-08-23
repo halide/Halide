@@ -79,6 +79,8 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+namespace {
+
 using std::string;
 using std::vector;
 
@@ -712,6 +714,7 @@ struct Anderson2021 {
 };
 
 REGISTER_AUTOSCHEDULER(Anderson2021)
+}  // namespace
 
 // An alternative entrypoint for other uses
 void find_and_apply_schedule(FunctionDAG &dag,

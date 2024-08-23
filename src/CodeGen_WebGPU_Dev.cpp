@@ -408,7 +408,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 
     close_scope("shader " + name);
 
-    for (auto [name, alloc] : workgroup_allocations) {
+    for (const auto &[name, alloc] : workgroup_allocations) {
         std::stringstream length;
         if (is_const(alloc->extents[0])) {
             length << alloc->extents[0];

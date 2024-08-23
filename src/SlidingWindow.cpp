@@ -657,7 +657,7 @@ class Dependencies : public IRVisitor {
 
     void visit(const ProducerConsumer *op) override {
         ScopedValue<bool> old_finding_a(in_producer, in_producer || (op->is_producer && op->name == producer));
-        return IRVisitor::visit(op);
+        IRVisitor::visit(op);
     }
 
     void visit(const Call *op) override {

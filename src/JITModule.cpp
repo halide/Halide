@@ -587,7 +587,7 @@ void print_handler(JITUserContext *context, const char *msg) {
     if (context && context->handlers.custom_print) {
         context->handlers.custom_print(context, msg);
     } else {
-        return active_handlers.custom_print(context, msg);
+        active_handlers.custom_print(context, msg);
     }
 }
 

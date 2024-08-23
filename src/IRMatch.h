@@ -1318,7 +1318,7 @@ HALIDE_ALWAYS_INLINE double constant_fold_bin_op<And>(halide_type_t &t, double a
     return 0;
 }
 
-constexpr inline uint32_t bitwise_or_reduce() {
+constexpr uint32_t bitwise_or_reduce() {
     return 0;
 }
 
@@ -1327,7 +1327,7 @@ constexpr uint32_t bitwise_or_reduce(uint32_t first, Args... rest) {
     return first | bitwise_or_reduce(rest...);
 }
 
-constexpr inline bool and_reduce() {
+constexpr bool and_reduce() {
     return true;
 }
 

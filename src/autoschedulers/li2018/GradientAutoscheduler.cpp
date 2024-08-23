@@ -737,7 +737,7 @@ void apply_schedule(const GradientAutoschedulerParams &params,
         pure_arg_bounds.reserve(update_args.size());
         int parallelism = 1;
         for (int arg_id = 0; arg_id < (int)update_args.size(); arg_id++) {
-            Expr arg = update_args[arg_id];
+            const Expr &arg = update_args[arg_id];
             const Variable *var = arg.as<Variable>();
             if (var != nullptr &&
                 !var->param.defined() &&
@@ -818,8 +818,6 @@ void apply_schedule(const GradientAutoschedulerParams &params,
     }
     schedule_source << ";\n";
 }
-
-}  // namespace
 
 void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
@@ -950,6 +948,7 @@ struct Li2018 {
 
 REGISTER_AUTOSCHEDULER(Li2018)
 
+}  // namespace
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide
