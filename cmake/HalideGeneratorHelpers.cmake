@@ -94,7 +94,6 @@ function(add_halide_generator TARGET)
         else ()
             add_executable(${TARGET} ${ARG_SOURCES})
             target_link_libraries("${TARGET}" PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
-            target_include_directories("${TARGET}" PRIVATE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>")
 
             # Make a library of the Generator that can be used for (e.g.) cpp_stub.
             add_library(${TARGET}.objs INTERFACE)
