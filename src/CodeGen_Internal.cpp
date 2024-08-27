@@ -51,8 +51,8 @@ bool function_takes_user_context(const std::string &name) {
         "halide_print",
         "halide_profiler_memory_allocate",
         "halide_profiler_memory_free",
-        "halide_profiler_pipeline_start",
-        "halide_profiler_pipeline_end",
+        "halide_profiler_instance_start",
+        "halide_profiler_instance_end",
         "halide_profiler_stack_peak_update",
         "halide_spawn_thread",
         "halide_device_release",
@@ -292,6 +292,7 @@ Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     }
 }
 
+namespace {
 std::pair<Expr, Expr> unsigned_long_div_mod_round_to_zero(Expr &num, const Expr &den,
                                                           const uint64_t *upper_bound) {
     internal_assert(num.type() == den.type());
@@ -329,6 +330,7 @@ std::pair<Expr, Expr> unsigned_long_div_mod_round_to_zero(Expr &num, const Expr 
     }
     return {q, r};
 }
+}  // namespace
 
 std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &num, const Expr &den,
                                                  const uint64_t *max_abs) {
@@ -557,6 +559,7 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
     return common_subexpression_elimination(a - correction);
 }
 
+namespace {
 bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;
@@ -585,6 +588,7 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     }
     return false;
 }
+}  // namespace
 
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options) {
     bool use_soft_float_abi = false;
@@ -674,8 +678,16 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 #else
     const auto opt_level = llvm::CodeGenOpt::Aggressive;
 #endif
+
+    // Get module mcpu_target and mattrs.
+    std::string mcpu_target;
+    get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
+    std::string mattrs;
+    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
-                                                /*CPU target=*/"", /*Features=*/"",
+                                                mcpu_target,
+                                                mattrs,
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
                                                 use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,

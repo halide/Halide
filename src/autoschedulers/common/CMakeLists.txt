@@ -1,16 +1,28 @@
 add_library(Halide_Plugin INTERFACE)
 add_library(Halide::Plugin ALIAS Halide_Plugin)
-target_include_directories(Halide_Plugin INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-target_link_libraries(Halide_Plugin INTERFACE Halide::Halide)
+target_sources(
+    Halide_Plugin
+    INTERFACE
+    FILE_SET HEADERS
+    FILES
+    Errors.h
+    HalidePlugin.h
+    ParamParser.h
+    cmdline.h
+    PerfectHashMap.h
+)
+target_link_libraries(Halide_Plugin INTERFACE Halide::Halide Halide::ASLog)
 
-add_library(ASLog STATIC ASLog.cpp)
-target_include_directories(ASLog PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-set_property(TARGET ASLog PROPERTY POSITION_INDEPENDENT_CODE YES)
-
-# Sigh, header-only libraries shouldn't be special
-add_library(ParamParser INTERFACE)
-target_include_directories(ParamParser INTERFACE
-                           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+add_library(Halide_ASLog STATIC)
+add_library(Halide::ASLog ALIAS Halide_ASLog)
+target_sources(
+    Halide_ASLog
+    PRIVATE ASLog.cpp
+    PUBLIC
+    FILE_SET HEADERS
+    FILES ASLog.h
+)
+set_property(TARGET Halide_ASLog PROPERTY POSITION_INDEPENDENT_CODE YES)
 
 if (WITH_UTILS)
     add_executable(featurization_to_sample featurization_to_sample.cpp)

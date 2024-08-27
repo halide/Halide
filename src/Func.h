@@ -471,12 +471,6 @@ public:
     }
     // @}
 
-    /** Attempt to get the source file and line where this stage was
-     * defined by parsing the process's own debug symbols. Returns an
-     * empty string if no debug symbols were found or the debug
-     * symbols were not understood. Works on OS X and Linux only. */
-    std::string source_location() const;
-
     /** Assert that this stage has intentionally been given no schedule, and
      * suppress the warning about unscheduled update definitions that would
      * otherwise fire. This counts as a schedule, so calling this twice on the
@@ -959,6 +953,14 @@ public:
                                  const std::vector<Argument> &args,
                                  StmtOutputFormat fmt = Text,
                                  const Target &target = get_target_from_environment());
+
+    /** Write out a conceptual representation of lowered code, before any parallel loop
+     * get factored out into separate functions, or GPU loops are offloaded to kernel code.r
+     * Useful for analyzing and debugging scheduling. Can emit html or plain text. */
+    void compile_to_conceptual_stmt(const std::string &filename,
+                                    const std::vector<Argument> &args,
+                                    StmtOutputFormat fmt = Text,
+                                    const Target &target = get_target_from_environment());
 
     /** Write out the loop nests specified by the schedule for this
      * Function. Helpful for understanding what a schedule is
@@ -2599,10 +2601,6 @@ public:
      \endcode
      */
     std::vector<Argument> infer_arguments() const;
-
-    /** Get the source location of the pure definition of this
-     * Func. See Stage::source_location() */
-    std::string source_location() const;
 
     /** Return the current StageSchedule associated with this initial
      * Stage of this Func. For introspection only: to modify schedule,

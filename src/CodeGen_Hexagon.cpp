@@ -128,7 +128,9 @@ private:
 
 CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
     : CodeGen_Posix(t) {
-    if (target.has_feature(Halide::Target::HVX_v66)) {
+    if (target.has_feature(Halide::Target::HVX_v68)) {
+        isa_version = 68;
+    } else if (target.has_feature(Halide::Target::HVX_v66)) {
         isa_version = 66;
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
         isa_version = 65;
@@ -1042,7 +1044,7 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
             // Break them into native vectors, use vshuffvdd, and
             // concatenate the shuffled results.
             llvm::Type *native2_ty = get_vector_type(element_ty, native_elements * 2);
-            Value *bytes = codegen(-static_cast<int>(element_bits / 8));
+            Value *bytes = codegen(-(element_bits / 8));
             vector<Value *> ret;
             for (int i = 0; i < result_elements / 2; i += native_elements) {
                 Value *a_i = slice_vector(a, i, native_elements);
@@ -1145,7 +1147,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     llvm::Type *b_ty = b->getType();
     internal_assert(a_ty == b_ty);
 
-    int a_elements = static_cast<int>(get_vector_num_elements(a_ty));
+    int a_elements = get_vector_num_elements(a_ty);
 
     llvm::Type *element_ty = get_vector_element_type(a->getType());
     internal_assert(element_ty);
@@ -1787,7 +1789,9 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
 }
 
 string CodeGen_Hexagon::mcpu_target() const {
-    if (target.has_feature(Halide::Target::HVX_v66)) {
+    if (target.has_feature(Halide::Target::HVX_v68)) {
+        return "hexagonv68";
+    } else if (target.has_feature(Halide::Target::HVX_v66)) {
         return "hexagonv66";
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
         return "hexagonv65";
@@ -1856,6 +1860,12 @@ void CodeGen_Hexagon::visit(const Mul *op) {
             return;
         }
 
+        // v68 has vector support for single-precision float.
+        if (target.has_feature(Halide::Target::HVX_v68) &&
+            op->type.is_float() && op->type.bits() == 32) {
+            CodeGen_Posix::visit(op);
+            return;
+        }
         internal_error << "Unhandled HVX multiply " << op->a.type() << "*"
                        << op->b.type() << "\n"
                        << Expr(op) << "\n";

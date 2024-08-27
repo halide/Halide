@@ -1,11 +1,43 @@
 ##
+# Declare the Halide library target.
+##
+
+add_library(Halide)
+add_library(Halide::Halide ALIAS Halide)
+
+# Language standard
+target_compile_features(Halide PUBLIC cxx_std_17)
+
+# Inform the sources if we're building a static or shared library
+if (NOT BUILD_SHARED_LIBS)
+    target_compile_definitions(Halide PRIVATE Halide_STATIC_DEFINE)
+endif ()
+
+# Set the (shared) library version
+set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
+    CACHE STRING "SOVERSION to set for custom Halide packaging")
+mark_as_advanced(Halide_SOVERSION_OVERRIDE)
+
+set_target_properties(Halide PROPERTIES
+                      VERSION "${Halide_VERSION}"
+                      SOVERSION "${Halide_SOVERSION_OVERRIDE}")
+
+# Always build with PIC, even when static
+set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+##
 # Lists of source files. Keep ALL lists sorted in alphabetical order.
 ##
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
 # Also *don't* include anything that's only used internally (eg SpirvIR.h).
-set(HEADER_FILES
+target_sources(
+    Halide
+    PRIVATE
+    FILE_SET private_headers
+    TYPE HEADERS
+    FILES
     AbstractGenerator.h
     AddAtomicMutex.h
     AddImageChecks.h
@@ -45,6 +77,8 @@ set(HEADER_FILES
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
+    ConstantBounds.h
+    ConstantInterval.h
     CSE.h
     Debug.h
     DebugArguments.h
@@ -89,7 +123,6 @@ set(HEADER_FILES
     InlineReductions.h
     IntegerDivisionTable.h
     Interval.h
-    Introspection.h
     IntrusivePtr.h
     IR.h
     IREquality.h
@@ -159,6 +192,7 @@ set(HEADER_FILES
     StripAsserts.h
     Substitute.h
     Target.h
+    TargetQueryOps.h
     Tracing.h
     TrimNoOps.h
     Tuple.h
@@ -173,9 +207,13 @@ set(HEADER_FILES
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
-    )
+)
 
-set(SOURCE_FILES
+# The sources that go into libHalide. For the sake of IDE support, headers that
+# exist in src/ but are not public should be included here.
+target_sources(
+    Halide
+    PRIVATE
     AbstractGenerator.cpp
     AddAtomicMutex.cpp
     AddImageChecks.cpp
@@ -219,6 +257,8 @@ set(SOURCE_FILES
     CodeGen_X86.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
+    ConstantBounds.cpp
+    ConstantInterval.cpp
     CSE.cpp
     Debug.cpp
     DebugArguments.cpp
@@ -258,7 +298,6 @@ set(SOURCE_FILES
     InlineReductions.cpp
     IntegerDivisionTable.cpp
     Interval.cpp
-    Introspection.cpp
     IR.cpp
     IREquality.cpp
     IRMatch.cpp
@@ -335,6 +374,7 @@ set(SOURCE_FILES
     SlidingWindow.cpp
     Solve.cpp
     SpirvIR.cpp
+    SpirvIR.h
     SplitTuples.cpp
     StageStridedLoads.cpp
     StmtToHTML.cpp
@@ -344,6 +384,7 @@ set(SOURCE_FILES
     StripAsserts.cpp
     Substitute.cpp
     Target.cpp
+    TargetQueryOps.cpp
     Tracing.cpp
     TrimNoOps.cpp
     Tuple.cpp
@@ -358,30 +399,31 @@ set(SOURCE_FILES
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
-    )
+)
 
 set(C_TEMPLATE_FILES
     CodeGen_C_prologue
     CodeGen_C_vectors
-    )
+)
 
 set(HTML_TEMPLATE_FILES
     StmtToHTML_dependencies.html
     StmtToHTML.js
     StmtToHTML.css
-    )
+)
 
 ##
 # Build and import the runtime.
 ##
 
 add_subdirectory(runtime)
+target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:Halide::initmod>")
+target_link_libraries(Halide INTERFACE Halide::Runtime)
 
 ##
 # Build the template files via binary2cpp.
 ##
 
-add_library(Halide_c_templates OBJECT)
 foreach (f IN LISTS C_TEMPLATE_FILES)
     set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${f}.template.cpp>")
     set(DST "c_template.${f}.template.cpp")
@@ -390,7 +432,7 @@ foreach (f IN LISTS C_TEMPLATE_FILES)
                        COMMAND binary2cpp "halide_c_template_${f}" < "${SRC}" > "${DST}"
                        DEPENDS "${SRC}" binary2cpp
                        VERBATIM)
-    target_sources(Halide_c_templates PRIVATE ${DST})
+    target_sources(Halide PRIVATE ${DST})
 endforeach ()
 
 foreach (f IN LISTS HTML_TEMPLATE_FILES)
@@ -402,9 +444,8 @@ foreach (f IN LISTS HTML_TEMPLATE_FILES)
                        COMMAND binary2cpp "${VARNAME}" < "${SRC}" > "${DST}"
                        DEPENDS "${SRC}" binary2cpp
                        VERBATIM)
-    target_sources(Halide_c_templates PRIVATE ${DST})
+    target_sources(Halide PRIVATE ${DST})
 endforeach ()
-
 
 ##
 # Build the Halide mono-header.
@@ -412,93 +453,87 @@ endforeach ()
 
 set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
 set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
-add_custom_command(OUTPUT "${Halide_BINARY_DIR}/include/Halide.h"
+set(headers "$<TARGET_PROPERTY:Halide,HEADER_SET_private_headers>")
+add_custom_command(OUTPUT "${HALIDE_H}"
                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
-                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" ${HEADER_FILES} > "$<SHELL_PATH:${HALIDE_H}>"
-                   DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES}
+                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>"
+                   DEPENDS build_halide_h "${LICENSE_PATH}" "${headers}"
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+                   COMMAND_EXPAND_LISTS
                    VERBATIM)
-add_custom_target(HalideIncludes ALL DEPENDS "${Halide_BINARY_DIR}/include/Halide.h")
+add_custom_target(HalideIncludes DEPENDS "${HALIDE_H}")
+add_dependencies(Halide HalideIncludes)
+
+target_sources(
+    Halide
+    INTERFACE
+    FILE_SET HEADERS
+    BASE_DIRS "${Halide_BINARY_DIR}/include"
+    FILES "${Halide_BINARY_DIR}/include/Halide.h"
+)
+
+if (Halide_BUNDLE_STATIC)
+    bundle_static(Halide)
+endif ()
 
 ##
-# Define the Halide library target.
+# CodeGen backends
 ##
 
-add_library(Halide
-            ${SOURCE_FILES}
-            ${HEADER_FILES}
-            # Including these as sources works around the need to "install" Halide_initmod
-            $<TARGET_OBJECTS:Halide_initmod>
-            $<TARGET_OBJECTS:Halide_c_templates>)
+# LLVM backends
+foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
+    string(TOUPPER "WITH_${backend}" definition)
+    target_compile_definitions(Halide PRIVATE "${definition}")
+    if (Halide_BUNDLE_STATIC AND NOT Halide_LLVM_SHARED_LIBS)
+        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:Halide_LLVM::${backend}>")
+    else ()
+        target_link_libraries(Halide PRIVATE Halide_LLVM::${backend})
+    endif ()
+endforeach ()
+
+# GPU backends
+find_package(
+    SPIRV-Headers 1.5.5 REQUIRED
+    HINTS "${Halide_SOURCE_DIR}/dependencies/spirv"
+)
+
+target_link_libraries(
+    Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:SPIRV-Headers::SPIRV-Headers>"
+)
+
+target_compile_definitions(Halide PRIVATE WITH_D3D12)
+target_compile_definitions(Halide PRIVATE WITH_METAL)
+target_compile_definitions(Halide PRIVATE WITH_OPENCL)
+target_compile_definitions(Halide PRIVATE WITH_SPIRV)
+target_compile_definitions(Halide PRIVATE WITH_VULKAN)
+target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 
 ##
 # Flatbuffers and Serialization dependencies.
 ##
 
 # Build serialization, enabled by default
-option(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
-
-# flatbuffers is small and compiles quickly, but if you want/need to use
-# a local version (via find_package), configure with FLATBUFFERS_USE_FETCHCONTENT=OFF
-option(FLATBUFFERS_USE_FETCHCONTENT "Enable to download the Flatbuffers library via FetchContent" ON)
-set(FLATBUFFERS_VER 23.5.26 CACHE STRING "The Flatbuffers version to use (or download)")
-
 if (WITH_SERIALIZATION)
-    if (FLATBUFFERS_USE_FETCHCONTENT)
-        include(FetchContent)
-        message(STATUS "Fetching flatbuffers ${FLATBUFFERS_VER}...")
-        FetchContent_Declare(
-            flatbuffers
-            GIT_REPOSITORY https://github.com/google/flatbuffers.git
-            GIT_TAG v${FLATBUFFERS_VER}
-            GIT_SHALLOW TRUE
-        )
-        # configuration for flatbuffers
-        set(FLATBUFFERS_BUILD_TESTS OFF)
-        set(FLATBUFFERS_INSTALL OFF)
-        FetchContent_MakeAvailable(flatbuffers)
-        set_target_properties(flatbuffers PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    # Sadly, there seem to be at least three variations of the Flatbuffer
+    # package in terms of the case of the relevant CMake files. Fortunately,
+    # the IMPORTED targets appear to be consistently named `flatbuffers`.
+    find_package(
+        flatbuffers 23.5.26 REQUIRED
+        NAMES flatbuffers Flatbuffers FlatBuffers
+    )
+    _Halide_pkgdep(flatbuffers)
 
-        add_library(Halide_flatbuffers INTERFACE)
-        target_sources(Halide_flatbuffers INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:flatbuffers>>)
-        target_include_directories(Halide_flatbuffers
-                                   SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
-                                   INTERFACE
-                                   $<BUILD_INTERFACE:${flatbuffers_SOURCE_DIR}>/include
-                                   $<BUILD_INTERFACE:${flatbuffers_BINARY_DIR}>/include)
-        set_target_properties(Halide_flatbuffers PROPERTIES EXPORT_NAME flatbuffers)
-
-        add_executable(flatbuffers::flatc ALIAS flatc)
-        message(STATUS "Using fetched-and-built flatbuffers, version ${FLATBUFFERS_VER}")
+    if (Halide_BUNDLE_STATIC)
+        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:flatbuffers::flatbuffers>")
+    elseif (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
+        target_sources(Halide PRIVATE "$<TARGET_OBJECTS:flatbuffers::flatbuffers>")
+        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:flatbuffers::flatbuffers>>")
     else ()
-        # Sadly, there seem to be at least three variations of the Flatbuffer package
-        # in terms of the case of the relevant CMake files; if we guess wrong, we
-        # fail on case-sensitive file systems. We'll try this as a hack workaround:
-        # just try all three. (Note that the internal CMake library name appears to be
-        # `flatbuffers` in all cases.)
-        set(FB_NAME "")
-        foreach (N IN ITEMS flatbuffers Flatbuffers FlatBuffers)
-            # TODO: should we check the version here?
-            find_package(${N} QUIET)
-            if (${N}_FOUND)
-                set(FB_NAME ${N})
-                message(STATUS "Using installed flatbuffers, version ${${N}_VERSION}")
-                break()
-            endif ()
-        endforeach ()
-
-        if (NOT FB_NAME)
-            message(FATAL_ERROR "WITH_SERIALIZATION is ON and FLATBUFFERS_USE_FETCHCONTENT is OFF, "
-                                "but could not find flatbuffers installed locally. "
-                                "Either install flatbuffers or build with WITH_SERIALIZATION=OFF.")
-        endif ()
-
-        add_library(Halide_flatbuffers ALIAS flatbuffers::flatbuffers)
+        target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
     endif ()
 
-    set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
-
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
+    set(fb_dir "${Halide_BINARY_DIR}/include/flatc")
     set(fb_header "${fb_dir}/halide_ir.fbs.h")
     add_custom_command(
         OUTPUT "${fb_header}"
@@ -507,45 +542,23 @@ if (WITH_SERIALIZATION)
         VERBATIM
     )
     add_custom_target(generate_fb_header DEPENDS "${fb_header}")
-    set_source_files_properties("${fb_header}" PROPERTIES GENERATED TRUE)
 
-    add_dependencies(Halide generate_fb_header)
-    target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
-    target_link_libraries(Halide PRIVATE Halide_flatbuffers)
+    target_sources(
+        Halide
+        PRIVATE
+        FILE_SET fb_headers
+        TYPE HEADERS
+        BASE_DIRS "${fb_dir}"
+        FILES "${fb_header}"
+    )
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
 
 # Enable serialization testing by intercepting JIT compilation with a serialization roundtrip;
 # This is used only for special builds made specifically for testing, and must be disabled by default.
-option(WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING "Intercepting JIT compilation with a serialization roundtrip, for test only" OFF)
 if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
-    if (WITH_SERIALIZATION)
-        target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
-    endif ()
+    target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
 endif ()
-
-add_library(Halide::Halide ALIAS Halide)
-
-target_link_libraries(Halide PRIVATE Halide::LLVM)
-target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
-target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
-target_compile_features(Halide PUBLIC cxx_std_17)
-
-include(TargetExportScript)
-## TODO: implement something similar for Windows/link.exe
-# https://github.com/halide/Halide/issues/4651
-target_export_script(Halide
-                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
-                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
-
-set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
-    CACHE STRING "SOVERSION to set for custom Halide packaging")
-mark_as_advanced(Halide_SOVERSION_OVERRIDE)
-
-set_target_properties(Halide PROPERTIES
-                      POSITION_INDEPENDENT_CODE ON
-                      VERSION ${Halide_VERSION}
-                      SOVERSION ${Halide_SOVERSION_OVERRIDE})
 
 # Note that we (deliberately) redeclare these versions here, even though the macros
 # with identical versions are expected to be defined in source; this allows us to
@@ -555,28 +568,76 @@ target_compile_definitions(Halide PUBLIC
                            HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
                            HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
 
+##
+# WasmExecutor backend selection
+##
 
-target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
-add_dependencies(Halide HalideIncludes)
+set(Halide_WASM_BACKEND "wabt"
+    CACHE STRING "Which backend to use for Halide's WASM testing.")
+set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;OFF")
 
-option(Halide_WITH_INTROSPECTION "Enable use of debugging symbols for default Func, Var, etc. names" ON)
-if (Halide_WITH_INTROSPECTION)
-    target_compile_definitions(Halide PRIVATE WITH_INTROSPECTION)
+if (WITH_WABT AND NOT WITH_V8)
+    message(DEPRECATION "WITH_WABT has been replaced by Halide_WASM_BACKEND=\"wabt\"")
+    set(Halide_WASM_BACKEND "wabt")
+elseif (NOT WITH_WABT AND WITH_V8)
+    message(DEPRECATION "WITH_V8 has been replaced by Halide_WASM_BACKEND=\"V8\"")
+    set(Halide_WASM_BACKEND "V8")
+elseif (WITH_WABT AND WITH_V8)
+    message(FATAL_ERROR "Cannot use both WABT and V8 at the same time, disable one of them.")
+elseif (DEFINED WITH_WABT AND DEFINED WITH_V8 AND NOT WITH_WABT AND NOT WITH_V8)
+    message(DEPRECATION "Disabling both WITH_WABT and WITH_V8 has been replaced by Halide_WASM_BACKEND=\"OFF\"")
+    set(Halide_WASM_BACKEND "OFF")
 endif ()
 
-if (TARGET Halide_wabt)
-    target_link_libraries(Halide PRIVATE Halide_wabt)
+if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
+    message(WARNING "wabt is not yet supported on Windows")
+    set(Halide_WASM_BACKEND "OFF")
+endif ()
+
+if (Halide_WASM_BACKEND STREQUAL "wabt")
+    find_package(wabt 1.0.36 REQUIRED)
+    _Halide_pkgdep(wabt)
+
+    if (Halide_BUNDLE_STATIC)
+        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:wabt::wabt>")
+    elseif (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
+        target_sources(Halide PRIVATE "$<TARGET_OBJECTS:wabt::wabt>")
+        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:wabt::wabt>>")
+    else ()
+        target_link_libraries(Halide PRIVATE wabt::wabt)
+    endif ()
+
     target_compile_definitions(Halide PRIVATE WITH_WABT)
+elseif (Halide_WASM_BACKEND STREQUAL "V8")
+    find_package(V8 REQUIRED)
+    _Halide_pkgdep(V8)
+    target_compile_definitions(Halide PRIVATE WITH_V8)
+
+    get_property(type TARGET V8::V8 PROPERTY TYPE)
+    if (Halide_BUNDLE_STATIC AND type STREQUAL "STATIC_LIBRARY")
+        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:V8::V8>")
+    else ()
+        target_link_libraries(Halide PRIVATE V8::V8)
+    endif ()
+elseif (Halide_WASM_BACKEND)
+    message(FATAL_ERROR "Unknown Halide_WASM_BACKEND `${Halide_WASM_BACKEND}`")
 endif ()
 
-if (TARGET Halide_V8)
-    target_link_libraries(Halide PRIVATE Halide_V8)
-    target_compile_definitions(Halide PRIVATE WITH_V8)
-endif ()
+##
+# Attach symbol export scripts
+##
+
+## TODO: implement something similar for Windows/link.exe
+# https://github.com/halide/Halide/issues/4651
+include(TargetExportScript)
+target_export_script(Halide
+                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
+                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
 
 ##
 # Set compiler options for libHalide
 ##
+
 set_halide_compiler_warnings(Halide)
 
 if (CMAKE_GENERATOR MATCHES "Visual Studio")
@@ -593,52 +654,46 @@ target_compile_definitions(Halide
                            # in the Windows API.
                            $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
                            $<$<CXX_COMPILER_ID:MSVC>:_SCL_SECURE_NO_WARNINGS>
-                           )
+)
 
 ##
-# Set up additional backend options for Halide
+# RTTI and exceptions settings
 ##
 
-option(TARGET_OPENCL "Include OpenCL-C target" ON)
-if (TARGET_OPENCL)
-    target_compile_definitions(Halide PRIVATE WITH_OPENCL)
+# RTTI
+set_property(TARGET Halide PROPERTY CXX_RTTI "${Halide_ENABLE_RTTI}")
+set_property(TARGET Halide APPEND PROPERTY COMPATIBLE_INTERFACE_BOOL CXX_RTTI)
+
+if (Halide_ENABLE_RTTI)
+    target_compile_definitions(Halide PUBLIC HALIDE_ENABLE_RTTI)
+else ()
+    target_compile_options(
+        Halide
+        PUBLIC
+        "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->"
+        "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-rtti>"
+    )
 endif ()
 
-option(TARGET_METAL "Include Metal target" ON)
-if (TARGET_METAL)
-    target_compile_definitions(Halide PRIVATE WITH_METAL)
+# Exceptions
+if (Halide_ENABLE_EXCEPTIONS)
+    target_compile_definitions(Halide PUBLIC HALIDE_WITH_EXCEPTIONS)
+else ()
+    target_compile_options(
+        Halide
+        PUBLIC
+        "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/EHs-c->"
+        "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-exceptions>"
+    )
+    target_compile_definitions(
+        Halide PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>"
+    )
 endif ()
-
-option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
-if (TARGET_D3D12COMPUTE)
-    target_compile_definitions(Halide PRIVATE WITH_D3D12)
-endif ()
-
-if (TARGET_VULKAN)
-    message(STATUS "Enabling Vulkan target")
-    target_compile_definitions(Halide PRIVATE WITH_VULKAN)
-endif()
-
-if (TARGET_SPIRV)
-    # Our vendored SPIRV headers are only used internally; users do not need
-    # them installed.
-    target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:Halide::SPIRV>")
-endif ()
-
-option(TARGET_WEBGPU "Include WebGPU target" ON)
-if (TARGET_WEBGPU)
-    target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
-endif()
-
 
 ##
 # Add autoschedulers to the build.
 ##
 
-if (BUILD_SHARED_LIBS)
-    message(STATUS "Building autoschedulers enabled")
+if (WITH_AUTOSCHEDULERS)
     add_subdirectory(autoschedulers)
-else ()
-    message(STATUS "Building autoschedulers disabled (static Halide)")
 endif ()

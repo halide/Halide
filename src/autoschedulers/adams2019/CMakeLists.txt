@@ -81,7 +81,7 @@ if (WITH_UTILS)
                    retrain_cost_model.cpp
                    $<TARGET_OBJECTS:adams2019_weights_obj>)
     target_include_directories(adams2019_retrain_cost_model PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019")
-    target_link_libraries(adams2019_retrain_cost_model PRIVATE ASLog adams2019_cost_model adams2019_train_cost_model Halide::Halide Halide::Plugin)
+    target_link_libraries(adams2019_retrain_cost_model PRIVATE adams2019_cost_model adams2019_train_cost_model Halide::Plugin)
 endif ()
 
 # =================================================================
@@ -103,7 +103,7 @@ add_autoscheduler(
 )
 
 target_include_directories(Halide_Adams2019 PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019")
-target_link_libraries(Halide_Adams2019 PRIVATE ASLog ParamParser adams2019_cost_model adams2019_train_cost_model)
+target_link_libraries(Halide_Adams2019 PRIVATE adams2019_cost_model adams2019_train_cost_model)
 
 # ====================================================
 # Auto-tuning support utilities.
@@ -120,7 +120,8 @@ endif ()
 
 if (WITH_TESTS)
     add_executable(adams2019_test_function_dag test_function_dag.cpp FunctionDAG.cpp)
-    target_link_libraries(adams2019_test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+    target_link_libraries(adams2019_test_function_dag PRIVATE Halide::Plugin)
+
     add_test(NAME adams2019_test_function_dag COMMAND adams2019_test_function_dag)
     set_tests_properties(adams2019_test_function_dag PROPERTIES LABELS "adams2019;autoschedulers_cpu")
 endif()

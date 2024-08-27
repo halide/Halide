@@ -32,6 +32,42 @@ using namespace llvm;
 
 namespace {
 
+// Populate feature flags in a target according to those implied by
+// existing flags, so that instruction patterns can just check for the
+// oldest feature flag that supports an instruction.
+//
+// According to LLVM, ARM architectures have the following is-a-superset-of
+// relationships:
+//
+//   v9.5a > v9.4a > v9.3a > v9.2a > v9.1a > v9a;
+//             v       v       v       v       v
+//           v8.9a > v8.8a > v8.7a > v8.6a > v8.5a > v8.4a > ... > v8a;
+//
+// v8r has no relation to anything.
+Target complete_arm_target(Target t) {
+    constexpr int num_arm_v8_features = 10;
+    static const Target::Feature arm_v8_features[num_arm_v8_features] = {
+        Target::ARMv89a,
+        Target::ARMv88a,
+        Target::ARMv87a,
+        Target::ARMv86a,
+        Target::ARMv85a,
+        Target::ARMv84a,
+        Target::ARMv83a,
+        Target::ARMv82a,
+        Target::ARMv81a,
+        Target::ARMv8a,
+    };
+
+    for (int i = 0; i < num_arm_v8_features - 1; i++) {
+        if (t.has_feature(arm_v8_features[i])) {
+            t.set_feature(arm_v8_features[i + 1]);
+        }
+    }
+
+    return t;
+}
+
 // Substitute in loads that feed into slicing shuffles, to help with vld2/3/4
 // emission. These are commonly lifted as lets because they get used by multiple
 // interleaved slices of the same load.
@@ -201,7 +237,7 @@ protected:
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
-    : CodeGen_Posix(target) {
+    : CodeGen_Posix(complete_arm_target(target)) {
 
     // TODO(https://github.com/halide/Halide/issues/8088): See if
     // use_llvm_vp_intrinsics can replace architecture specific code in this
@@ -1212,50 +1248,42 @@ void CodeGen_ARM::visit(const Add *op) {
     Expr ac_u8 = Variable::make(UInt(8, 0), "ac"), bc_u8 = Variable::make(UInt(8, 0), "bc");
     Expr cc_u8 = Variable::make(UInt(8, 0), "cc"), dc_u8 = Variable::make(UInt(8, 0), "dc");
 
-    // clang-format off
+    Expr ma_i8 = widening_mul(a_i8, ac_i8);
+    Expr mb_i8 = widening_mul(b_i8, bc_i8);
+    Expr mc_i8 = widening_mul(c_i8, cc_i8);
+    Expr md_i8 = widening_mul(d_i8, dc_i8);
+
+    Expr ma_u8 = widening_mul(a_u8, ac_u8);
+    Expr mb_u8 = widening_mul(b_u8, bc_u8);
+    Expr mc_u8 = widening_mul(c_u8, cc_u8);
+    Expr md_u8 = widening_mul(d_u8, dc_u8);
+
     static const Pattern patterns[] = {
-        // If we had better normalization, we could drastically reduce the number of patterns here.
         // Signed variants.
-        {init_i32 + widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8)), "dot_product"},
-        {init_i32 + widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), i16(d_i8)), "dot_product", Int(8)},
-        {init_i32 + widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(i16(c_i8), widening_mul(d_i8, dc_i8)), "dot_product", Int(8)},
-        {init_i32 + widening_add(widening_mul(a_i8, ac_i8),  i16(b_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8)), "dot_product", Int(8)},
-        {init_i32 + widening_add(i16(a_i8), widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8)), "dot_product", Int(8)},
-        // Signed variants (associative).
-        {init_i32 + (widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8))), "dot_product"},
-        {init_i32 + (widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), i16(d_i8))), "dot_product", Int(8)},
-        {init_i32 + (widening_add(widening_mul(a_i8, ac_i8),  widening_mul(b_i8, bc_i8)) + widening_add(i16(c_i8), widening_mul(d_i8, dc_i8))), "dot_product", Int(8)},
-        {init_i32 + (widening_add(widening_mul(a_i8, ac_i8),  i16(b_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8))), "dot_product", Int(8)},
-        {init_i32 + (widening_add(i16(a_i8), widening_mul(b_i8, bc_i8)) + widening_add(widening_mul(c_i8, cc_i8), widening_mul(d_i8, dc_i8))), "dot_product", Int(8)},
+        {(init_i32 + widening_add(ma_i8, mb_i8)) + widening_add(mc_i8, md_i8), "dot_product"},
+        {init_i32 + (widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8)), "dot_product"},
+        {widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8), "dot_product"},
+
         // Unsigned variants.
-        {init_u32 + widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8)), "dot_product"},
-        {init_u32 + widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), u16(d_u8)), "dot_product", UInt(8)},
-        {init_u32 + widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(u16(c_u8), widening_mul(d_u8, dc_u8)), "dot_product", UInt(8)},
-        {init_u32 + widening_add(widening_mul(a_u8, ac_u8),  u16(b_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8)), "dot_product", UInt(8)},
-        {init_u32 + widening_add(u16(a_u8), widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8)), "dot_product", UInt(8)},
-        // Unsigned variants (associative).
-        {init_u32 + (widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8))), "dot_product"},
-        {init_u32 + (widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), u16(d_u8))), "dot_product", UInt(8)},
-        {init_u32 + (widening_add(widening_mul(a_u8, ac_u8),  widening_mul(b_u8, bc_u8)) + widening_add(u16(c_u8), widening_mul(d_u8, dc_u8))), "dot_product", UInt(8)},
-        {init_u32 + (widening_add(widening_mul(a_u8, ac_u8),  u16(b_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8))), "dot_product", UInt(8)},
-        {init_u32 + (widening_add(u16(a_u8), widening_mul(b_u8, bc_u8)) + widening_add(widening_mul(c_u8, cc_u8), widening_mul(d_u8, dc_u8))), "dot_product", UInt(8)},
+        {(init_u32 + widening_add(ma_u8, mb_u8)) + widening_add(mc_u8, md_u8), "dot_product"},
+        {init_u32 + (widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8)), "dot_product"},
+        {widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8), "dot_product"},
     };
-    // clang-format on
 
     std::map<std::string, Expr> matches;
     for (const Pattern &p : patterns) {
         if (expr_match(p.pattern, op, matches)) {
-            Expr init = matches["init"];
-            Expr values = Shuffle::make_interleave({matches["a"], matches["b"], matches["c"], matches["d"]});
-            // Coefficients can be 1 if not in the pattern.
-            Expr one = make_one(p.coeff_type.with_lanes(op->type.lanes()));
-            // This hideous code pattern implements fetching a
-            // default value if the map doesn't contain a key.
-            Expr _ac = matches.try_emplace("ac", one).first->second;
-            Expr _bc = matches.try_emplace("bc", one).first->second;
-            Expr _cc = matches.try_emplace("cc", one).first->second;
-            Expr _dc = matches.try_emplace("dc", one).first->second;
-            Expr coeffs = Shuffle::make_interleave({_ac, _bc, _cc, _dc});
+            Expr init;
+            auto it = matches.find("init");
+            if (it == matches.end()) {
+                init = make_zero(op->type);
+            } else {
+                init = it->second;
+            }
+            Expr values = Shuffle::make_interleave({matches["a"], matches["b"],
+                                                    matches["c"], matches["d"]});
+            Expr coeffs = Shuffle::make_interleave({matches["ac"], matches["bc"],
+                                                    matches["cc"], matches["dc"]});
             value = call_overloaded_intrin(op->type, p.intrin, {init, values, coeffs});
             if (value) {
                 return;
@@ -1463,15 +1491,10 @@ void CodeGen_ARM::visit(const Store *op) {
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
         llvm::Type *intrin_llvm_type = llvm_type_with_constraint(intrin_type, false, is_sve ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
-#if LLVM_VERSION >= 170
-        const bool is_opaque = true;
-#else
-        const bool is_opaque = llvm::PointerType::get(intrin_llvm_type, 0)->isOpaque();
-#endif
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
-                  << (is_opaque ? ".p0" : ".p0i8")
+                  << ".p0"
                   << ".v"
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
@@ -1498,9 +1521,6 @@ void CodeGen_ARM::visit(const Store *op) {
                       << (t.is_float() ? 'f' : 'i')
                       << t.bits()
                       << ".p0";
-                if (!is_opaque) {
-                    instr << (t.is_float() ? 'f' : 'i') << t.bits();
-                }
                 arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
                 arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
             }
@@ -2453,9 +2473,9 @@ string CodeGen_ARM::mcpu_target() const {
         }
     } else {
         if (target.os == Target::IOS) {
-            return "cyclone";
+            return "apple-a7";
         } else if (target.os == Target::OSX) {
-            return "apple-a12";
+            return "apple-m1";
         } else if (target.has_feature(Target::SVE2)) {
             return "cortex-x1";
         } else {
@@ -2473,8 +2493,35 @@ string CodeGen_ARM::mattrs() const {
     if (target.has_feature(Target::ARMFp16)) {
         attrs.emplace_back("+fullfp16");
     }
+    if (target.has_feature(Target::ARMv8a)) {
+        attrs.emplace_back("+v8a");
+    }
     if (target.has_feature(Target::ARMv81a)) {
         attrs.emplace_back("+v8.1a");
+    }
+    if (target.has_feature(Target::ARMv82a)) {
+        attrs.emplace_back("+v8.2a");
+    }
+    if (target.has_feature(Target::ARMv83a)) {
+        attrs.emplace_back("+v8.3a");
+    }
+    if (target.has_feature(Target::ARMv84a)) {
+        attrs.emplace_back("+v8.4a");
+    }
+    if (target.has_feature(Target::ARMv85a)) {
+        attrs.emplace_back("+v8.5a");
+    }
+    if (target.has_feature(Target::ARMv86a)) {
+        attrs.emplace_back("+v8.6a");
+    }
+    if (target.has_feature(Target::ARMv87a)) {
+        attrs.emplace_back("+v8.7a");
+    }
+    if (target.has_feature(Target::ARMv88a)) {
+        attrs.emplace_back("+v8.8a");
+    }
+    if (target.has_feature(Target::ARMv89a)) {
+        attrs.emplace_back("+v8.9a");
     }
     if (target.has_feature(Target::ARMDotProd)) {
         attrs.emplace_back("+dotprod");
@@ -2490,7 +2537,7 @@ string CodeGen_ARM::mattrs() const {
         }
     } else {
         // TODO: Should Halide's SVE flags be 64-bit only?
-        // TODO: Sound we ass "-neon" if NoNEON is set? Does this make any sense?
+        // TODO: Should we add "-neon" if NoNEON is set? Does this make any sense?
         if (target.has_feature(Target::SVE2)) {
             attrs.emplace_back("+sve2");
         } else if (target.has_feature(Target::SVE)) {

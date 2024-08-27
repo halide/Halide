@@ -1,6 +1,7 @@
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -538,7 +539,7 @@ void CodeGen_X86::visit(const Cast *op) {
 
     // clang-format off
     static Pattern patterns[] = {
-        // This isn't rounding_multiply_quantzied(i16, i16, 15) because it doesn't
+        // This isn't rounding_mul_shift_right(i16, i16, 15) because it doesn't
         // saturate the result.
         {"pmulhrs", i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), 15))},
 
@@ -647,7 +648,7 @@ void CodeGen_X86::visit(const Call *op) {
     };
 
     // clang-format off
-    static Pattern patterns[] = {
+    static const Pattern patterns[] = {
         {"pmulh", mul_shift_right(wild_i16x_, wild_i16x_, 16)},
         {"pmulh", mul_shift_right(wild_u16x_, wild_u16x_, 16)},
         {"saturating_narrow", i16_sat(wild_i32x_)},
@@ -664,6 +665,41 @@ void CodeGen_X86::visit(const Call *op) {
             if (value) {
                 return;
             }
+        }
+    }
+
+    // clang-format off
+    static const Pattern reinterpret_patterns[] = {
+        {"saturating_narrow", i16_sat(wild_u32x_)},
+        {"saturating_narrow", u16_sat(wild_u32x_)},
+        {"saturating_narrow", i8_sat(wild_u16x_)},
+        {"saturating_narrow", u8_sat(wild_u16x_)},
+    };
+    // clang-format on
+
+    // Search for saturating casts where the inner value can be
+    // reinterpreted to signed, so that we can use existing
+    // saturating_narrow instructions.
+    // TODO: should use lossless_cast once it is fixed.
+    for (const auto &pattern : reinterpret_patterns) {
+        if (expr_match(pattern.pattern, op, matches)) {
+            const Expr &expr = matches[0];
+            const Type &t = expr.type();
+            // TODO(8212): might want to keep track of scope of bounds information.
+            const ConstantInterval ibounds = constant_integer_bounds(expr);
+            const Type reint_type = t.with_code(halide_type_int);
+            // If the signed type can represent the maximum value unsigned value,
+            //  we can safely reinterpret this unsigned expression as signed.
+            if (reint_type.can_represent(ibounds)) {
+                // Can safely reinterpret to signed integer.
+                matches[0] = cast(reint_type, matches[0]);
+                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+                if (value) {
+                    return;
+                }
+            }
+            // No reinterpret patterns match the same input, so stop matching.
+            break;
         }
     }
 
@@ -700,7 +736,12 @@ void CodeGen_X86::visit(const Call *op) {
         // Handle edge case of possible overflow.
         // See https://github.com/halide/Halide/pull/7129/files#r1008331426
         // On AVX512 (and with enough lanes) we can use a mask register.
-        if (target.has_feature(Target::AVX512) && op->type.lanes() >= 32) {
+        ConstantInterval ca = constant_integer_bounds(a);
+        ConstantInterval cb = constant_integer_bounds(b);
+        if (!ca.contains(-32768) || !cb.contains(-32768)) {
+            // Overflow isn't possible
+            pmulhrs.accept(this);
+        } else if (target.has_feature(Target::AVX512) && op->type.lanes() >= 32) {
             Expr expr = select((a == i16_min) && (b == i16_min), i16_max, pmulhrs);
             expr.accept(this);
         } else {

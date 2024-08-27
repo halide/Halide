@@ -105,7 +105,6 @@ void *get_known_symbol(const char *name) {
 
         {"halide_error", (char *)(&halide_error)},
         {"halide_print", (char *)(&halide_print)},
-        {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
         {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
         {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
 

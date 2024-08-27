@@ -2,7 +2,11 @@
 #define HALIDE_IR_EQUALITY_H
 
 /** \file
- * Methods to test Exprs and Stmts for equality of value
+ * Methods to test Exprs and Stmts for equality of value.
+ *
+ * These methods traverse the entire IR tree. For equality of reference, use
+ * Expr::same_as. If you're comparing non-CSE'd Exprs, use graph_equal or
+ * graph_less_than, which is safe for nasty graphs of IR nodes.
  */
 
 #include "Expr.h"
@@ -10,117 +14,148 @@
 namespace Halide {
 namespace Internal {
 
-/** A compare struct suitable for use in std::map and std::set that
- * computes a lexical ordering on IR nodes. */
+// We want to inline a few quick checks into the caller. These are the actual
+// implementations that get called after those quick checks.
+bool equal_impl(const IRNode &a, const IRNode &b);
+bool graph_equal_impl(const IRNode &a, const IRNode &b);
+bool less_than_impl(const IRNode &a, const IRNode &b);
+bool graph_less_than_impl(const IRNode &a, const IRNode &b);
+
+/** Compare an Expr to an int literal. This is a somewhat common use of equal in
+ * tests. Making this separate avoids constructing an Expr out of the int
+ * literal just to check if it's equal to a. */
+HALIDE_ALWAYS_INLINE
+bool equal(const Expr &a, int b) {
+    if (const IntImm *i = a.as<IntImm>()) {
+        return (a.type() == Int(32) && i->value == b);
+    } else {
+        return false;
+    }
+}
+
+/** Check if two defined Stmts or Exprs are equal. */
+HALIDE_ALWAYS_INLINE
+bool equal(const IRNode &a, const IRNode &b) {
+    if (&a == &b) {
+        return true;
+    } else if (a.node_type != b.node_type) {
+        return false;
+    } else {
+        return equal_impl(a, b);
+    }
+}
+
+/** Check if two possible-undefined Stmts or Exprs are equal. */
+HALIDE_ALWAYS_INLINE
+bool equal(const IRHandle &a, const IRHandle &b) {
+    if (!a.defined()) {
+        return !b.defined();
+    } else if (!b.defined()) {
+        return false;
+    } else {
+        return equal(*(a.get()), *(b.get()));
+    }
+}
+
+/** Check if two defined Stmts or Exprs are equal. Safe to call on Exprs that
+ * haven't been passed to common_subexpression_elimination. */
+HALIDE_ALWAYS_INLINE
+bool graph_equal(const IRNode &a, const IRNode &b) {
+    if (&a == &b) {
+        return true;
+    } else if (a.node_type != b.node_type) {
+        return false;
+    } else {
+        return equal_impl(a, b);
+    }
+}
+
+/** Check if two possibly-undefined Stmts or Exprs are equal. Safe to call on
+ * Exprs that haven't been passed to common_subexpression_elimination. */
+HALIDE_ALWAYS_INLINE
+bool graph_equal(const IRHandle &a, const IRHandle &b) {
+    if (!a.defined()) {
+        return !b.defined();
+    } else if (!b.defined()) {
+        return false;
+    } else {
+        return equal(*(a.get()), *(b.get()));
+    }
+}
+
+/** Check if two defined Stmts or Exprs are in a lexicographic order. For use in
+ * map keys. */
+HALIDE_ALWAYS_INLINE
+bool less_than(const IRNode &a, const IRNode &b) {
+    if (&a == &b) {
+        return false;
+    } else if (a.node_type < b.node_type) {
+        return true;
+    } else {
+        return less_than_impl(a, b);
+    }
+}
+
+/** Check if two possibly-undefined Stmts or Exprs are in a lexicographic
+ * order. For use in map keys. */
+HALIDE_ALWAYS_INLINE
+bool less_than(const IRHandle &a, const IRHandle &b) {
+    if (a.get() == b.get()) {
+        return false;
+    } else if (!a.defined()) {
+        return true;
+    } else if (!b.defined()) {
+        return false;
+    } else {
+        return less_than(*(a.get()), *(b.get()));
+    }
+}
+
+/** Check if two defined Stmts or Exprs are in a lexicographic order. For use in
+ * map keys. Safe to use on Exprs that haven't been passed to
+ * common_subexpression_elimination. */
+HALIDE_ALWAYS_INLINE
+bool graph_less_than(const IRNode &a, const IRNode &b) {
+    if (&a == &b) {
+        return false;
+    } else if (a.node_type < b.node_type) {
+        return true;
+    } else {
+        return graph_less_than_impl(a, b);
+    }
+}
+
+/** Check if two possibly-undefined Stmts or Exprs are in a lexicographic
+ * order. For use in map keys. Safe to use on Exprs that haven't been passed to
+ * common_subexpression_elimination. */
+HALIDE_ALWAYS_INLINE
+bool graph_less_than(const IRHandle &a, const IRHandle &b) {
+    if (a.get() == b.get()) {
+        return false;
+    } else if (!a.defined()) {
+        return true;
+    } else if (!b.defined()) {
+        return false;
+    } else {
+        return graph_less_than(*(a.get()), *(b.get()));
+    }
+}
+
+/** A compare struct built around less_than, for use as the comparison
+ * object in a std::map or std::set. */
 struct IRDeepCompare {
-    bool operator()(const Expr &a, const Expr &b) const;
-    bool operator()(const Stmt &a, const Stmt &b) const;
-};
-
-/** Lossily track known equal exprs with a cache. On collision, the
- * old pair is evicted. Used below by ExprWithCompareCache. */
-class IRCompareCache {
-private:
-    struct Entry {
-        Expr a, b;
-    };
-
-    int bits;
-
-    uint32_t hash(const Expr &a, const Expr &b) const {
-        // Note this hash is symmetric in a and b, so that a
-        // comparison in a and b hashes to the same bucket as
-        // a comparison on b and a.
-        uint64_t pa = (uint64_t)(a.get());
-        uint64_t pb = (uint64_t)(b.get());
-        uint64_t mix = (pa + pb) + (pa ^ pb);
-        mix ^= (mix >> bits);
-        mix ^= (mix >> (bits * 2));
-        uint32_t bottom = mix & ((1 << bits) - 1);
-        return bottom;
-    }
-
-    std::vector<Entry> entries;
-
-public:
-    void insert(const Expr &a, const Expr &b) {
-        uint32_t h = hash(a, b);
-        entries[h].a = a;
-        entries[h].b = b;
-    }
-
-    bool contains(const Expr &a, const Expr &b) const {
-        uint32_t h = hash(a, b);
-        const Entry &e = entries[h];
-        return ((a.same_as(e.a) && b.same_as(e.b)) ||
-                (a.same_as(e.b) && b.same_as(e.a)));
-    }
-
-    void clear() {
-        for (auto &entry : entries) {
-            entry.a = Expr();
-            entry.b = Expr();
-        }
-    }
-
-    IRCompareCache() = default;
-    IRCompareCache(int b)
-        : bits(b), entries(static_cast<size_t>(1) << bits) {
+    bool operator()(const IRHandle &a, const IRHandle &b) const {
+        return less_than(a, b);
     }
 };
 
-/** A wrapper about Exprs so that they can be deeply compared with a
- * cache for known-equal subexpressions. Useful for unsanitized Exprs
- * coming in from the front-end, which may be horrible graphs with
- * sub-expressions that are equal by value but not by identity. This
- * isn't a comparison object like IRDeepCompare above, because libc++
- * requires that comparison objects be stateless (and constructs a new
- * one for each comparison!), so they can't have a cache associated
- * with them. However, by sneakily making the cache a mutable member
- * of the objects being compared, we can dodge this issue.
- *
- * Clunky example usage:
- *
-\code
-Expr a, b, c, query;
-std::set<ExprWithCompareCache> s;
-IRCompareCache cache(8);
-s.insert(ExprWithCompareCache(a, &cache));
-s.insert(ExprWithCompareCache(b, &cache));
-s.insert(ExprWithCompareCache(c, &cache));
-if (m.contains(ExprWithCompareCache(query, &cache))) {...}
-\endcode
- *
- */
-struct ExprWithCompareCache {
-    Expr expr;
-    mutable IRCompareCache *cache = nullptr;
-
-    ExprWithCompareCache() = default;
-    ExprWithCompareCache(const Expr &e, IRCompareCache *c)
-        : expr(e), cache(c) {
+/** A compare struct built around graph_less_than, for use as the comparison
+ * object in a std::map or std::set. */
+struct IRGraphDeepCompare {
+    bool operator()(const IRHandle &a, const IRHandle &b) const {
+        return graph_less_than(a, b);
     }
-
-    /** The comparison uses (and updates) the cache */
-    bool operator<(const ExprWithCompareCache &other) const;
 };
-
-/** Compare IR nodes for equality of value. Traverses entire IR
- * tree. For equality of reference, use Expr::same_as. If you're
- * comparing non-CSE'd Exprs, use graph_equal, which is safe for nasty
- * graphs of IR nodes. */
-// @{
-bool equal(const Expr &a, const Expr &b);
-bool equal(const Stmt &a, const Stmt &b);
-bool graph_equal(const Expr &a, const Expr &b);
-bool graph_equal(const Stmt &a, const Stmt &b);
-// @}
-
-/** Order unsanitized IRNodes for use in a map key */
-// @{
-bool graph_less_than(const Expr &a, const Expr &b);
-bool graph_less_than(const Stmt &a, const Stmt &b);
-// @}
 
 void ir_equality_test();
 

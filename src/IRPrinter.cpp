@@ -6,8 +6,12 @@
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
 #include "Closure.h"
+#include "ConstantInterval.h"
+#include "Expr.h"
 #include "IROperator.h"
+#include "Interval.h"
 #include "Module.h"
+#include "ModulusRemainder.h"
 #include "Target.h"
 #include "Util.h"
 
@@ -45,7 +49,6 @@ ostream &operator<<(ostream &out, const Type &type) {
     }
     return out;
 }
-
 ostream &operator<<(ostream &stream, const Expr &ir) {
     if (!ir.defined()) {
         stream << "(undefined)";
@@ -267,6 +270,66 @@ void IRPrinter::test() {
     std::cout << "IRPrinter test passed\n";
 }
 
+std::ostream &operator<<(std::ostream &stream, IRNodeType type) {
+#define CASE(e)         \
+    case IRNodeType::e: \
+        stream << #e;   \
+        break;
+    switch (type) {
+        CASE(IntImm)
+        CASE(UIntImm)
+        CASE(FloatImm)
+        CASE(StringImm)
+        CASE(Broadcast)
+        CASE(Cast)
+        CASE(Reinterpret)
+        CASE(Variable)
+        CASE(Add)
+        CASE(Sub)
+        CASE(Mod)
+        CASE(Mul)
+        CASE(Div)
+        CASE(Min)
+        CASE(Max)
+        CASE(EQ)
+        CASE(NE)
+        CASE(LT)
+        CASE(LE)
+        CASE(GT)
+        CASE(GE)
+        CASE(And)
+        CASE(Or)
+        CASE(Not)
+        CASE(Select)
+        CASE(Load)
+        CASE(Ramp)
+        CASE(Call)
+        CASE(Let)
+        CASE(Shuffle)
+        CASE(VectorReduce)
+        // Stmts
+        CASE(LetStmt)
+        CASE(AssertStmt)
+        CASE(ProducerConsumer)
+        CASE(For)
+        CASE(Acquire)
+        CASE(Store)
+        CASE(Provide)
+        CASE(Allocate)
+        CASE(Free)
+        CASE(Realize)
+        CASE(Block)
+        CASE(Fork)
+        CASE(IfThenElse)
+        CASE(Evaluate)
+        CASE(Prefetch)
+        CASE(Atomic)
+        CASE(HoistedStorage)
+    }
+#undef CASE
+    return stream;
+}
+
 ostream &operator<<(ostream &stream, const AssociativePattern &p) {
     stream << "{\n";
     for (size_t i = 0; i < p.ops.size(); ++i) {
@@ -443,6 +506,45 @@ std::ostream &operator<<(std::ostream &out, const Closure &c) {
         out << " dims=" << (int)b.second.dimensions;
         out << "\n";
     }
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const Interval &in) {
+    out << "[";
+    if (in.has_lower_bound()) {
+        out << in.min;
+    } else {
+        out << "-inf";
+    }
+    out << ", ";
+    if (in.has_upper_bound()) {
+        out << in.max;
+    } else {
+        out << "inf";
+    }
+    out << "]";
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ConstantInterval &in) {
+    out << "[";
+    if (in.min_defined) {
+        out << in.min;
+    } else {
+        out << "-inf";
+    }
+    out << ", ";
+    if (in.max_defined) {
+        out << in.max;
+    } else {
+        out << "inf";
+    }
+    out << "]";
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
+    out << "(mod: " << c.modulus << " rem: " << c.remainder << ")";
     return out;
 }
 

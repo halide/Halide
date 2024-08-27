@@ -58,6 +58,7 @@ tests(GROUPS correctness
       computed_index.cpp
       concat.cpp
       constant_expr.cpp
+      constant_interval.cpp
       constant_type.cpp
       constraints.cpp
       convolution_multiple_kernels.cpp
@@ -121,9 +122,11 @@ tests(GROUPS correctness
       fused_where_inner_extent_is_zero.cpp
       fuzz_float_stores.cpp
       fuzz_schedule.cpp
+      fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
+      gpu_alloc_group_profiling.cpp
       gpu_arg_types.cpp
       gpu_assertion_in_kernel.cpp
       gpu_bounds_inference_failure.cpp
@@ -132,11 +135,13 @@ tests(GROUPS correctness
       gpu_data_flows.cpp
       gpu_different_blocks_threads_dimensions.cpp
       gpu_dynamic_shared.cpp
+      gpu_f16_intrinsics.cpp
       gpu_free_sync.cpp
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
       gpu_many_kernels.cpp
+      gpu_metal_completion_handler_error_check.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
@@ -184,7 +189,6 @@ tests(GROUPS correctness
       interleave_x.cpp
       interval.cpp
       intrinsics.cpp
-      introspection.cpp
       invalid_gpu_loop_nests.cpp
       inverse.cpp
       isnan.cpp
@@ -307,6 +311,7 @@ tests(GROUPS correctness
       strict_float_bounds.cpp
       strided_load.cpp
       target.cpp
+      target_query.cpp
       tiled_matmul.cpp
       tracing.cpp
       tracing_bounds.cpp

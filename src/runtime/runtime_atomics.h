@@ -128,7 +128,8 @@ ALWAYS_INLINE uintptr_t atomic_or_fetch_relaxed(uintptr_t *addr, uintptr_t val) 
     return __sync_or_and_fetch(addr, val);
 }
 
-ALWAYS_INLINE void atomic_store_relaxed(uintptr_t *addr, uintptr_t *val) {
+template<typename T>
+ALWAYS_INLINE void atomic_store_relaxed(T *addr, T *val) {
     *addr = *val;
 }
 
@@ -247,7 +248,8 @@ ALWAYS_INLINE uintptr_t atomic_or_fetch_relaxed(uintptr_t *addr, uintptr_t val) 
     return __atomic_or_fetch(addr, val, __ATOMIC_RELAXED);
 }
 
-ALWAYS_INLINE void atomic_store_relaxed(uintptr_t *addr, uintptr_t *val) {
+template<typename T>
+ALWAYS_INLINE void atomic_store_relaxed(T *addr, T *val) {
     __atomic_store(addr, val, __ATOMIC_RELAXED);
 }
 

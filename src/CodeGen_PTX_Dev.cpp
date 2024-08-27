@@ -20,14 +20,6 @@
 
 #include <fstream>
 
-// This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
-// hardcoding a path to the .h file.
-#ifdef WITH_NVPTX
-namespace llvm {
-FunctionPass *createNVVMReflectPass(const StringMap<int> &Mapping);
-}
-#endif
-
 namespace Halide {
 namespace Internal {
 
@@ -697,7 +689,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     using OptimizationLevel = llvm::OptimizationLevel;
     OptimizationLevel level = OptimizationLevel::O3;
 
-#if LLVM_VERSION >= 180
+#if LLVM_VERSION >= 180 && LLVM_VERSION < 190
     target_machine->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
 #else
     target_machine->registerPassBuilderCallbacks(pb);

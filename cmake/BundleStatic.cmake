@@ -1,201 +1,126 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.28)
 
 ##
-# This module provides a utility for bundling a set of IMPORTED
-# STATIC libraries together as a merged INTERFACE library that,
-# due to CMake Issue #15415, requires manual propagation to its
-# linkees, unfortunately.
-#
-# This is useful when a STATIC library produced by your project
-# depends privately on some 3rd-party STATIC libraries that are
-# tricky to distribute or for end-users to build. CMake handles
-# this by assuming that imported libraries will be easy to find
-# in an end-user's environment so a simple find_dependency call
-# in the package config will suffice. Unfortunately, things are
-# not so simple. Some libraries (eg. LLVM) can be built in many
-# different configurations, and dependents can be built against
-# one fixed configuration. If we have LLVM -> X -> Y where X is
-# my library and Y is some other user's library, then Y must be
-# very careful to build LLVM in _exactly_ the same way as X was
-# configured to use. While this might be acceptable in a super-
-# build, it fails when we want to release binary packages of X.
-##
+# Merge all the static library dependencies of TARGET into the library as a
+# POST_BUILD step.
 
-# All of the IMPORTED_ and INTERFACE_ properties should be accounted for below.
-# https://cmake.org/cmake/help/v3.22/manual/cmake-properties.7.html#properties-on-targets
+function(_bundle_static_replace VAR BEFORE AFTER)
+    string(REPLACE "$<" "$\\\\<" AFTER "${AFTER}")
+    string(REPLACE ">" "$<ANGLE-R>" AFTER "${AFTER}")
+    string(REPLACE "," "$<COMMA>" AFTER "${AFTER}")
+    string(REPLACE ";" "$<SEMICOLON>" AFTER "${AFTER}")
+    set("${VAR}" "$<LIST:TRANSFORM,${${VAR}},REPLACE,${BEFORE},${AFTER}>")
+    set("${VAR}" "$<LIST:TRANSFORM,${${VAR}},REPLACE,\\\\<,<>")
+    set("${VAR}" "$<GENEX_EVAL:${${VAR}}>" PARENT_SCOPE)
+endfunction()
 
-# Irrelevant properties:
-# IMPORTED_IMPLIB(_<CONFIG>) # shared-only
-# IMPORTED_LIBNAME(_<CONFIG>) # interface-only
-# IMPORTED_LINK_DEPENDENT_LIBRARIES(_<CONFIG>) # shared-only
-# IMPORTED_LINK_INTERFACE_LIBRARIES(_<CONFIG>) # deprecated
-# IMPORTED_LINK_INTERFACE_MULTIPLICITY(_<CONFIG>) # static-only. irrelevant when all objects listed.
-# IMPORTED_NO_SONAME(_<CONFIG>) # shared-only
-# IMPORTED_SONAME(_<CONFIG>) # shared-only
+function(_bundle_static_check_output VAR)
+    execute_process(COMMAND ${ARGN} OUTPUT_VARIABLE "${VAR}" RESULT_VARIABLE "_${VAR}" ERROR_QUIET)
+    if (_${VAR})
+        set("${VAR}" "")
+    endif ()
+    set("${VAR}" "${${VAR}}" PARENT_SCOPE)
+endfunction()
+
+function(_bundle_static_is_apple_libtool result item)
+    _bundle_static_check_output(version_info "${item}" -V)
+    if (version_info MATCHES "Apple, Inc.")
+        set(result 1 PARENT_SCOPE)
+    else ()
+        set(result 0 PARENT_SCOPE)
+    endif ()
+endfunction()
 
 function(bundle_static TARGET)
-    set(options)
-    set(oneValueArgs)
-    set(multiValueArgs LIBRARIES)
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    get_property(type TARGET "${TARGET}" PROPERTY TYPE)
+    if (NOT type STREQUAL "STATIC_LIBRARY")
+        return()
+    endif ()
 
-    set(interfaceLib ${TARGET})
-    set(objectLib ${interfaceLib}.obj)
+    # The following code is quite subtle. First, it "recursively" (up to a depth
+    # limit) expands all the INTERFACE_LINK_LIBRARIES of the TARGET. Once the
+    # full set of library dependencies has been determined, it filters just
+    # the static libraries and replaces them with their on-disk locations.
 
-    add_library(${objectLib} OBJECT IMPORTED)
-    set_target_properties(${objectLib} PROPERTIES IMPORTED_GLOBAL TRUE)
+    # Start with the $<LINK_ONLY:$<BUILD_LOCAL_INTERFACE:...>> dependencies of
+    # the target. These are the privately-linked static and interface libraries
+    # that the user intends to delete upon export.
+    set(cmd "$<TARGET_PROPERTY:${TARGET},INTERFACE_LINK_LIBRARIES>")
+    set(cmd "$<FILTER:${cmd},INCLUDE,LINK_ONLY:..BUILD_LOCAL_INTERFACE>")
 
-    target_sources(${interfaceLib} INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:${objectLib}>>)
-
-    set(queue ${ARG_LIBRARIES})
-    while (queue)
-        list(POP_FRONT queue lib)
-        if (VISITED_${lib})
-            continue()
-        endif ()
-        set(VISITED_${lib} TRUE)
-
-        if (NOT TARGET ${lib})
-            target_link_libraries(${interfaceLib} INTERFACE ${lib})
-            continue()
-        endif ()
-
-        get_property(isImported TARGET ${lib} PROPERTY IMPORTED)
-        get_property(type TARGET ${lib} PROPERTY TYPE)
-
-        if (NOT isImported OR NOT "${type}" STREQUAL "STATIC_LIBRARY")
-            target_link_libraries(${interfaceLib} INTERFACE ${lib})
-            continue()
-        endif ()
-
-        transfer_same(PROPERTIES INTERFACE_POSITION_INDEPENDENT_CODE
-                      FROM ${lib} TO ${interfaceLib})
-
-        transfer_append(PROPERTIES
-                        INTERFACE_AUTOUIC_OPTIONS
-                        INTERFACE_COMPILE_DEFINITIONS
-                        INTERFACE_COMPILE_FEATURES
-                        INTERFACE_COMPILE_OPTIONS
-                        INTERFACE_INCLUDE_DIRECTORIES
-                        INTERFACE_LINK_DEPENDS
-                        INTERFACE_LINK_DIRECTORIES
-                        INTERFACE_LINK_OPTIONS
-                        INTERFACE_PRECOMPILE_HEADERS
-                        INTERFACE_SOURCES
-                        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
-                        FROM ${lib} TO ${interfaceLib})
-
-        transfer_same(PROPERTIES IMPORTED_COMMON_LANGUAGE_RUNTIME
-                      FROM ${lib} TO ${objectLib})
-
-        transfer_locations(FROM ${lib} TO ${objectLib})
-
-        get_property(deps TARGET ${lib} PROPERTY INTERFACE_LINK_LIBRARIES)
-        list(APPEND queue ${deps})
-    endwhile ()
-endfunction()
-
-function(transfer_same)
-    set(options)
-    set(oneValueArgs FROM TO PROPERTIES)
-    set(multiValueArgs)
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    foreach (p IN LISTS ARG_PROPERTIES)
-        get_property(fromSet TARGET ${ARG_FROM} PROPERTY ${p} SET)
-        if (NOT fromSet)
-            continue()
-        endif ()
-        get_property(fromVal TARGET ${ARG_FROM} PROPERTY ${p})
-
-        get_property(toSet TARGET ${ARG_TO} PROPERTY ${p} SET)
-        if (NOT toSet)
-            set_property(TARGET ${ARG_TO} PROPERTY ${p} ${fromVal})
-        endif ()
-
-        get_property(toVal TARGET ${ARG_TO} PROPERTY ${p})
-        if (NOT "${fromVal}" STREQUAL "${toVal}")
-            message(WARNING "Property ${p} does not agree between ${ARG_FROM} [${fromVal}] and ${ARG_TO} [${toVal}]")
-        endif ()
+    # Repeatedly expand and flatten: T ~> T, T.INTERFACE_LINK_LIBRARIES
+    foreach (i RANGE 5)
+        _bundle_static_replace(
+            cmd "(.+)" "$<$<TARGET_EXISTS:\\1>:\\1;$<TARGET_PROPERTY:\\1,INTERFACE_LINK_LIBRARIES>>"
+        )
+        set(cmd "$<LIST:REMOVE_DUPLICATES,$<GENEX_EVAL:${cmd}>>")
     endforeach ()
-endfunction()
 
-function(transfer_append)
-    set(options)
-    set(oneValueArgs FROM TO PROPERTIES)
-    set(multiValueArgs)
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    # Ensure we are only including targets
+    _bundle_static_replace(cmd "(.+)" "$<TARGET_NAME_IF_EXISTS:\\1>")
 
-    foreach (p IN LISTS ARG_PROPERTIES)
-        get_property(fromSet TARGET ${ARG_FROM} PROPERTY ${p} SET)
-        if (fromSet)
-            get_property(fromVal TARGET ${ARG_FROM} PROPERTY ${p})
-            set_property(TARGET ${ARG_TO} APPEND PROPERTY ${p} ${fromVal})
-        endif ()
-    endforeach ()
-endfunction()
+    # Rewrite T ~> T^T.TYPE  -- we use ^ as a delimiter
+    _bundle_static_replace(cmd "(.+)" "\\1^$<TARGET_PROPERTY:\\1,TYPE>")
+    set(cmd "$<GENEX_EVAL:${cmd}>")
 
-function(transfer_locations)
-    set(options)
-    set(oneValueArgs FROM TO)
-    set(multiValueArgs)
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    # Select exactly the set of static libraries
+    set(cmd "$<FILTER:${cmd},INCLUDE,\\^STATIC_LIBRARY$>")
 
-    get_property(configs TARGET ${ARG_FROM} PROPERTY IMPORTED_CONFIGURATIONS)
-    foreach (cfg IN LISTS configs ITEMS "")
-        if (cfg)
-            string(TOUPPER "_${cfg}" cfg)
-        endif ()
+    # Rewrite T^... ~> $<TARGET_FILE:T>
+    _bundle_static_replace(cmd "^([^^]+)\\^.+$" "$<TARGET_FILE:\\1>")
 
-        get_property(lib TARGET ${ARG_FROM} PROPERTY "IMPORTED_LOCATION${cfg}")
-        if (lib)
-            cmake_path(GET lib STEM stage)
-            set(stage "${CMAKE_CURRENT_BINARY_DIR}/${stage}.obj")
+    # Rename the target to target.tmp
+    add_custom_command(
+        TARGET "${TARGET}" POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E rename "$<TARGET_FILE:${TARGET}>" "$<TARGET_FILE:${TARGET}>.tmp"
+        VERBATIM
+    )
 
-            if (NOT EXISTS "${stage}")
-                file(MAKE_DIRECTORY "${stage}")
-                if (MSVC)
-                    execute_process(COMMAND "${CMAKE_AR}" /NOLOGO /LIST "${lib}"
-                                    WORKING_DIRECTORY "${stage}"
-                                    OUTPUT_VARIABLE objsInLib)
+    # Finally merge everything together using the platform tool.
+    find_program(LIB lib.exe HINTS "${CMAKE_AR}")
+    if (WIN32 AND LIB)
+        add_custom_command(
+            TARGET "${TARGET}" POST_BUILD
+            COMMAND "${LIB}" "/out:$<TARGET_FILE:${TARGET}>" "$<TARGET_FILE:${TARGET}>.tmp" "${cmd}"
+            COMMAND_EXPAND_LISTS
+            VERBATIM
+        )
+        return()
+    endif ()
 
-                    # Process the output to a list of internal objects
-                    string(STRIP "${objsInLib}" objsInLib)
-                    string(REGEX REPLACE "(\r|\n)+" ";" objsInLib "${objsInLib}")
-                    list(TRANSFORM objsInLib STRIP)
+    find_program(LIBTOOL libtool VALIDATOR _bundle_static_is_apple_libtool)
+    if (APPLE AND LIBTOOL)
+        add_custom_command(
+            TARGET "${TARGET}" POST_BUILD
+            COMMAND "${LIBTOOL}" -static -o "$<TARGET_FILE:${TARGET}>" "$<TARGET_FILE:${TARGET}>.tmp" "${cmd}"
+            COMMAND_EXPAND_LISTS
+            VERBATIM
+        )
+        return()
+    endif ()
 
-                    foreach (obj IN LISTS objsInLib)
-                        execute_process(COMMAND "${CMAKE_AR}" /NOLOGO "/EXTRACT:${obj}" "${lib}"
-                                        WORKING_DIRECTORY "${stage}")
-                    endforeach ()
-                else ()
-                    execute_process(COMMAND "${CMAKE_AR}" -x "${lib}"
-                                    WORKING_DIRECTORY "${stage}"
-                                    RESULT_VARIABLE error)
-                endif ()
-            endif ()
+    _bundle_static_check_output(version_info "${CMAKE_AR}" V)
+    if (version_info MATCHES "GNU")
+        string(CONFIGURE [[
+            create $<TARGET_FILE:@TARGET@>
+            addlib $<TARGET_FILE:@TARGET@>.tmp
+            $<LIST:JOIN,$<LIST:TRANSFORM,@cmd@,PREPEND,addlib >,
+            >
+            save
+            end
+        ]] mri_script)
+        string(REGEX REPLACE "(^|\n) +" "\\1" mri_script "${mri_script}")
 
-            get_property(languages TARGET ${ARG_FROM} PROPERTY "IMPORTED_LINK_INTERFACE_LANGUAGES${cfg}")
-            if (NOT languages)
-                get_property(languages TARGET ${ARG_FROM} PROPERTY "IMPORTED_LINK_INTERFACE_LANGUAGES")
-            endif ()
+        file(GENERATE OUTPUT "fuse-${TARGET}.mri"
+             CONTENT "${mri_script}" TARGET "${TARGET}")
 
-            message(VERBOSE "Transferring ${languages}[${cfg}] objects from ${lib} to ${ARG_TO}")
+        add_custom_command(
+            TARGET "${TARGET}" POST_BUILD
+            COMMAND "${CMAKE_AR}" -M < "${CMAKE_CURRENT_BINARY_DIR}/fuse-${TARGET}.mri"
+            VERBATIM
+        )
+        return()
+    endif ()
 
-            set(globs "")
-            foreach (lang IN LISTS languages)
-                if (DEFINED "CMAKE_${lang}_OUTPUT_EXTENSION")
-                    list(APPEND globs "${stage}/*${CMAKE_${lang}_OUTPUT_EXTENSION}")
-                endif ()
-            endforeach ()
-
-            file(GLOB_RECURSE objects ${globs})
-
-            foreach (obj IN LISTS objects)
-                message(VERBOSE "... ${obj}")
-            endforeach ()
-
-            set_property(TARGET ${ARG_TO} APPEND PROPERTY "IMPORTED_OBJECTS${cfg}" ${objects})
-        endif ()
-    endforeach ()
+    message(FATAL_ERROR "bundle_static_libs not implemented for the present toolchain")
 endfunction()

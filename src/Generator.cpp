@@ -1114,8 +1114,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
 
 GeneratorParamBase::GeneratorParamBase(const std::string &name)
     : name_(name) {
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
-                                              this, nullptr);
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam, this);
 }
 
 GeneratorParamBase::~GeneratorParamBase() {
@@ -1238,9 +1237,9 @@ std::vector<std::string> GeneratorRegistry::enumerate() {
     return result;
 }
 
-GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper)
+GeneratorBase::GeneratorBase(size_t size)
     : size(size) {
-    ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this, introspection_helper);
+    ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this);
 }
 
 GeneratorBase::~GeneratorBase() {
@@ -1851,7 +1850,7 @@ GeneratorInputBase::GeneratorInputBase(size_t array_size,
                                        const std::vector<Type> &t,
                                        int d)
     : GIOBase(array_size, name, kind, t, d) {
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorInput, this, nullptr);
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorInput, this);
 }
 
 GeneratorInputBase::GeneratorInputBase(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
@@ -1994,8 +1993,7 @@ void GeneratorInputBase::set_estimates_impl(const Region &estimates) {
 GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GIOBase(array_size, name, kind, t, d) {
     internal_assert(kind != ArgInfoKind::Scalar);
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorOutput,
-                                              this, nullptr);
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorOutput, this);
 }
 
 GeneratorOutputBase::GeneratorOutputBase(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)

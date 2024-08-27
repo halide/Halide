@@ -139,11 +139,6 @@ DstType reinterpret_bits(const SrcType &src) {
     return dst;
 }
 
-/** Make a unique name for an object based on the name of the stack
- * variable passed in. If introspection isn't working or there are no
- * debug symbols, just uses unique_name with the given prefix. */
-std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
-
 /** Get value of an environment variable. Returns its value
  * is defined in the environment. If the var is not defined, an empty string
  * is returned.
@@ -431,7 +426,7 @@ void halide_toc_impl(const char *file, int line);
 template<typename TO>
 struct StaticCast {
     template<typename FROM>
-    inline constexpr static TO value(const FROM &from) {
+    constexpr static TO value(const FROM &from) {
         if constexpr (std::is_same<TO, bool>::value) {
             return from != 0;
         } else {
@@ -446,7 +441,7 @@ struct StaticCast {
 template<typename TO>
 struct IsRoundtrippable {
     template<typename FROM>
-    inline constexpr static bool value(const FROM &from) {
+    constexpr static bool value(const FROM &from) {
         if constexpr (std::is_convertible<FROM, TO>::value) {
             if constexpr (std::is_arithmetic<TO>::value &&
                           std::is_arithmetic<FROM>::value &&

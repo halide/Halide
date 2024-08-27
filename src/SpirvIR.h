@@ -23,8 +23,8 @@
 #include "IntrusivePtr.h"
 #include "Type.h"
 
-#include <spirv/1.6/GLSL.std.450.h>  // GLSL extended instructions for common intrinsics
-#include <spirv/1.6/spirv.h>         // Use v1.6 headers but only use the minimal viable format version (for maximum compatiblity)
+#include <spirv/unified1/GLSL.std.450.h>  // GLSL extended instructions for common intrinsics
+#include <spirv/unified1/spirv.h>         // Use v1.6 headers but only use the minimal viable format version (for maximum compatiblity)
 
 namespace Halide {
 namespace Internal {

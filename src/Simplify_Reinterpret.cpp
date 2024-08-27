@@ -3,7 +3,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Reinterpret *op, ExprInfo *bounds) {
+Expr Simplify::visit(const Reinterpret *op, ExprInfo *info) {
     Expr a = mutate(op->value, nullptr);
 
     int64_t ia;
@@ -19,7 +19,7 @@ Expr Simplify::visit(const Reinterpret *op, ExprInfo *bounds) {
         return make_const(op->type, (int64_t)ua);
     } else if (const Reinterpret *as_r = a.as<Reinterpret>()) {
         // Fold double-reinterprets.
-        return mutate(reinterpret(op->type, as_r->value), bounds);
+        return mutate(reinterpret(op->type, as_r->value), info);
     } else if ((op->type.bits() == a.type().bits()) &&
                op->type.is_int_or_uint() &&
                a.type().is_int_or_uint()) {

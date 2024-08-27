@@ -210,47 +210,36 @@ WEAK int halide_vulkan_device_release(void *user_context) {
     debug(user_context)
         << "halide_vulkan_device_release (user_context: " << user_context << ")\n";
 
-    VulkanMemoryAllocator *allocator;
-    VkInstance instance;
-    VkDevice device;
-    VkCommandPool command_pool;
-    VkPhysicalDevice physical_device;
-    VkQueue queue;
-    uint32_t _throwaway;
+    VulkanMemoryAllocator *allocator = nullptr;
+    VkInstance instance = nullptr;
+    VkDevice device = nullptr;
+    VkCommandPool command_pool = VkInvalidCommandPool;
+    VkPhysicalDevice physical_device = nullptr;
+    VkQueue queue = nullptr;
+    uint32_t queue_family_index = 0;
 
+    int destroy_status = halide_error_code_success;
     int acquire_status = halide_vulkan_acquire_context(user_context,
                                                        reinterpret_cast<halide_vulkan_memory_allocator **>(&allocator),
-                                                       &instance, &device, &physical_device, &command_pool, &queue, &_throwaway, false);
+                                                       &instance, &device, &physical_device, &command_pool, &queue, &queue_family_index, false);
 
-    if ((acquire_status == halide_error_code_success) && (instance != nullptr)) {
-        vkQueueWaitIdle(queue);
-        if (command_pool == cached_command_pool) {
-            cached_command_pool = 0;
-        }
-        if (reinterpret_cast<halide_vulkan_memory_allocator *>(allocator) == cached_allocator) {
+    if (acquire_status == halide_error_code_success) {
+        // Destroy the context if we created it
+        if ((instance == cached_instance) && (device == cached_device)) {
+            destroy_status = vk_destroy_context(user_context, allocator, instance, device, physical_device, command_pool, queue);
+            cached_command_pool = VkInvalidCommandPool;
             cached_allocator = nullptr;
-        }
-
-        vk_destroy_command_pool(user_context, allocator, command_pool);
-        vk_destroy_shader_modules(user_context, allocator);
-        vk_destroy_memory_allocator(user_context, allocator);
-
-        if (device == cached_device) {
             cached_device = nullptr;
             cached_physical_device = nullptr;
             cached_queue = nullptr;
             cached_queue_family_index = 0;
-        }
-        vkDestroyDevice(device, nullptr);
-
-        if (instance == cached_instance) {
             cached_instance = nullptr;
         }
-        vkDestroyInstance(instance, nullptr);
+
         halide_vulkan_release_context(user_context, instance, device, queue);
     }
 
-    return halide_error_code_success;
+    return destroy_status;
 }
 
 WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
@@ -1409,7 +1398,18 @@ WEAK __attribute__((constructor)) void register_vulkan_allocation_pool() {
 }
 
 WEAK __attribute__((destructor)) void halide_vulkan_cleanup() {
-    halide_vulkan_device_release(nullptr);
+    // FIXME: When the VK_LAYER_KHRONOS_validation is intercepting calls to the API, it will
+    //        cause a segfault if it's invoked inside the destructor since it uses it's own global
+    //        state to track object usage which is no longer valid once this call is invoked.
+    //        Calling this destructor with the validator hooks in place will cause an uncaught
+    //        exception for an uninitialized mutex lock. We can avoid the crash on exit by \
+    //        bypassing the device release call and leak (!!!!)
+    // ISSUE: https://github.com/halide/Halide/issues/8290
+    const char *layer_names = vk_get_layer_names_internal(nullptr);
+    bool has_validation_layer = strstr(layer_names, "VK_LAYER_KHRONOS_validation");
+    if (!has_validation_layer) {
+        halide_vulkan_device_release(nullptr);
+    }
 }
 
 // --------------------------------------------------------------------------

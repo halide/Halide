@@ -69,11 +69,11 @@ Func::Func(const std::vector<Type> &required_types, int required_dims, const str
 }
 
 Func::Func()
-    : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
+    : func(unique_name('f')) {
 }
 
 Func::Func(const Expr &e)
-    : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
+    : func(unique_name('f')) {
     (*this)(_) = e;
 }
 
@@ -999,7 +999,9 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         val = substitute_self_reference(val, func_name, intm.function(), vars_rename);
         update_vals[i] = val;
     }
-    intm(update_args) = Tuple(update_vals);
+    // There may not actually be a reference to the RDom in the args or values,
+    // so we use Function::define_update, which lets pass pass an explicit RDom.
+    intm.function().define_update(update_args, update_vals, intm_rdom.domain());
 
     // Determine the dims and schedule of the update definition of the
     // intermediate Func. We copy over the schedule from the original
@@ -2144,14 +2146,6 @@ Stage &Stage::compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrate
     return compute_with(LoopLevel(s.function, var, s.stage_index), align);
 }
 
-/** Attempt to get the source file and line where this stage was
- * defined by parsing the process's own debug symbols. Returns an
- * empty string if no debug symbols were found or the debug
- * symbols were not understood. Works on OS X and Linux only. */
-std::string Stage::source_location() const {
-    return definition.source_location();
-}
-
 void Stage::unscheduled() {
     user_assert(!definition.schedule().touched()) << "Stage::unscheduled called on an update definition with a schedule\n";
     definition.schedule().touched() = true;
@@ -2431,7 +2425,7 @@ Stage Func::specialize(const Expr &c) {
 
 void Func::specialize_fail(const std::string &message) {
     invalidate_cache();
-    (void)Stage(func, func.definition(), 0).specialize_fail(message);
+    Stage(func, func.definition(), 0).specialize_fail(message);
 }
 
 Func &Func::serial(const VarOrRVar &var) {
@@ -3490,11 +3484,6 @@ vector<Argument> Func::infer_arguments() const {
     return Pipeline(*this).infer_arguments();
 }
 
-std::string Func::source_location() const {
-    user_assert(defined()) << "A Func with no definition has no source_location\n";
-    return func.definition().source_location();
-}
-
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
     return pipeline().compile_to_module(args, fn_name, target);
 }
@@ -3551,6 +3540,13 @@ void Func::compile_to_lowered_stmt(const string &filename,
                                    StmtOutputFormat fmt,
                                    const Target &target) {
     pipeline().compile_to_lowered_stmt(filename, args, fmt, target);
+}
+
+void Func::compile_to_conceptual_stmt(const string &filename,
+                                      const vector<Argument> &args,
+                                      StmtOutputFormat fmt,
+                                      const Target &target) {
+    pipeline().compile_to_conceptual_stmt(filename, args, fmt, target);
 }
 
 void Func::print_loop_nest() {

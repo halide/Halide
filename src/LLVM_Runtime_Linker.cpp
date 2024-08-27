@@ -46,20 +46,31 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
         return std::unique_ptr<llvm::Module>();                                                                         \
     }
 
+#define DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, bits)              \
+    do {                                                        \
+        if (debug) {                                            \
+            return get_initmod_##mod##_##bits##_debug(context); \
+        } else {                                                \
+            return get_initmod_##mod##_##bits(context);         \
+        }                                                       \
+    } while (0)
+
 #define DECLARE_CPP_INITMOD_LOOKUP(mod)                                                                     \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
         if (bits_64) {                                                                                      \
-            if (debug) {                                                                                    \
-                return get_initmod_##mod##_64_debug(context);                                               \
-            } else {                                                                                        \
-                return get_initmod_##mod##_64(context);                                                     \
-            }                                                                                               \
+            DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 64);                                                       \
         } else {                                                                                            \
-            if (debug) {                                                                                    \
-                return get_initmod_##mod##_32_debug(context);                                               \
-            } else {                                                                                        \
-                return get_initmod_##mod##_32(context);                                                     \
-            }                                                                                               \
+            DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 32);                                                       \
+        }                                                                                                   \
+    }
+
+#define DECLARE_CPP_INITMOD_LOOKUP_64(mod)                                                                  \
+    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
+        if (bits_64) {                                                                                      \
+            DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 64);                                                       \
+        } else {                                                                                            \
+            internal_error << "No support for 32-bit initmod: " #mod;                                       \
+            return nullptr; /* appease warnings */                                                          \
         }                                                                                                   \
     }
 
@@ -69,6 +80,11 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     DECLARE_INITMOD(mod##_32)       \
     DECLARE_INITMOD(mod##_64)       \
     DECLARE_CPP_INITMOD_LOOKUP(mod)
+
+#define DECLARE_CPP_INITMOD_64(mod) \
+    DECLARE_INITMOD(mod##_64_debug) \
+    DECLARE_INITMOD(mod##_64)       \
+    DECLARE_CPP_INITMOD_LOOKUP_64(mod)
 
 #define DECLARE_LL_INITMOD(mod) \
     DECLARE_INITMOD(mod##_ll)
@@ -183,18 +199,28 @@ DECLARE_NO_INITMOD(metal_objc_x86)
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(arm_no_neon)
 DECLARE_CPP_INITMOD(arm_cpu_features)
+DECLARE_CPP_INITMOD(linux_arm_cpu_features)
+DECLARE_CPP_INITMOD(osx_arm_cpu_features)
 #else
 DECLARE_NO_INITMOD(arm)
 DECLARE_NO_INITMOD(arm_no_neon)
 DECLARE_NO_INITMOD(arm_cpu_features)
+DECLARE_NO_INITMOD(linux_arm_cpu_features)
+DECLARE_NO_INITMOD(osx_arm_cpu_features)
 #endif  // WITH_ARM
 
 #ifdef WITH_AARCH64
 DECLARE_LL_INITMOD(aarch64)
 DECLARE_CPP_INITMOD(aarch64_cpu_features)
+DECLARE_CPP_INITMOD(linux_aarch64_cpu_features)
+DECLARE_CPP_INITMOD(osx_aarch64_cpu_features)
+DECLARE_CPP_INITMOD_64(windows_aarch64_cpu_features_arm)
 #else
 DECLARE_NO_INITMOD(aarch64)
 DECLARE_NO_INITMOD(aarch64_cpu_features)
+DECLARE_NO_INITMOD(linux_aarch64_cpu_features)
+DECLARE_NO_INITMOD(osx_aarch64_cpu_features)
+DECLARE_NO_INITMOD(windows_aarch64_cpu_features_arm)
 #endif  // WITH_AARCH64
 
 #ifdef WITH_NVPTX
@@ -360,6 +386,17 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64");
             }
         } else {  // 64-bit
+#if LLVM_VERSION >= 190
+            if (target.os == Target::IOS) {
+                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
+            } else if (target.os == Target::OSX) {
+                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
+            } else if (target.os == Target::Windows) {
+                return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128-Fn32");
+            } else {
+                return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32");
+            }
+#else
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
             } else if (target.os == Target::OSX) {
@@ -369,20 +406,13 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             } else {
                 return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128");
             }
+#endif
         }
     } else if (target.arch == Target::POWERPC) {
         if (target.bits == 32) {
-#if LLVM_VERSION >= 170
             return llvm::DataLayout("E-m:e-p:32:32-Fn32-i64:64-n32");
-#else
-            return llvm::DataLayout("E-m:e-p:32:32-i64:64-n32");
-#endif
         } else {
-#if LLVM_VERSION >= 170
             return llvm::DataLayout("e-m:e-Fn32-i64:64-n32:64-S128-v256:256:256-v512:512:512");
-#else
-            return llvm::DataLayout("e-m:e-i64:64-n32:64-S128-v256:256:256-v512:512:512");
-#endif
         }
     } else if (target.arch == Target::Hexagon) {
         return llvm::DataLayout(
@@ -409,6 +439,25 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
 }  // namespace
 
 namespace Internal {
+
+namespace {
+
+std::optional<llvm::VersionTuple> get_os_version_constraint(const llvm::Triple &triple) {
+    if (!triple.isOSBinFormatMachO()) {
+        return std::nullopt;
+    }
+
+    if (triple.getOS() == llvm::Triple::MacOSX && triple.getArch() == llvm::Triple::x86_64) {
+        // At time of writing (June 2024), this is one version prior
+        // to the oldest version still supported by Apple.
+        return llvm::VersionTuple(11, 0, 0);
+    }
+
+    llvm::VersionTuple t = triple.getMinimumSupportedOSVersion();
+    return t.empty() ? std::nullopt : std::make_optional(t);
+}
+
+}  // namespace
 
 llvm::Triple get_triple_for_target(const Target &target) {
     llvm::Triple triple;
@@ -541,6 +590,14 @@ llvm::Triple get_triple_for_target(const Target &target) {
         }
     } else {
         // Return default-constructed triple. Must be set later.
+    }
+
+    // Setting a minimum OS version here enables LLVM to include platform
+    // metadata in the MachO object file. Without this, Xcode 15's ld
+    // issues warnings about missing the "platform load command".
+    if (auto version = get_os_version_constraint(triple)) {
+        // llvm::Triple determines the version by parsing the OSName.
+        triple.setOSName((triple.getOSName() + version->getAsString()).str());
     }
 
     return triple;
@@ -684,10 +741,6 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     }
 }
 
-}  // namespace
-
-namespace Internal {
-
 /** When JIT-compiling on 32-bit windows, we need to rewrite calls
  *  to name-mangled win32 api calls to non-name-mangled versions.
  */
@@ -696,7 +749,7 @@ void undo_win32_name_mangling(llvm::Module *m) {
     // For every function prototype...
     for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
         llvm::Function &f = *iter;
-        string n = get_llvm_function_name(f);
+        string n = Internal::get_llvm_function_name(f);
         // if it's a __stdcall call that starts with \01_, then we're making a win32 api call
         if (f.getCallingConv() == llvm::CallingConv::X86_StdCall &&
             f.empty() &&
@@ -768,6 +821,10 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
         }
     }
 }
+
+}  // namespace
+
+namespace Internal {
 
 std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, const Target &t,
                                                          std::unique_ptr<llvm::Module> extra_module) {
@@ -1117,7 +1174,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
                 modules.push_back(get_initmod_hvx_128_ll(c));
-                if (t.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
+                if (t.features_any_of({Target::HVX_v65, Target::HVX_v66,
+                                       Target::HVX_v68})) {
                     modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
                                                                 debug));
                 }
@@ -1166,9 +1224,23 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::ARM) {
                 if (t.bits == 64) {
-                    modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
+                    if (t.os == Target::Android || t.os == Target::Linux) {
+                        modules.push_back(get_initmod_linux_aarch64_cpu_features(c, bits_64, debug));
+                    } else if (t.os == Target::OSX || t.os == Target::IOS) {
+                        modules.push_back(get_initmod_osx_aarch64_cpu_features(c, bits_64, debug));
+                    } else if (t.os == Target::Windows) {
+                        modules.push_back(get_initmod_windows_aarch64_cpu_features_arm(c, bits_64, debug));
+                    } else {
+                        modules.push_back(get_initmod_aarch64_cpu_features(c, bits_64, debug));
+                    }
                 } else {
-                    modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
+                    if (t.os == Target::Android || t.os == Target::Linux) {
+                        modules.push_back(get_initmod_linux_arm_cpu_features(c, bits_64, debug));
+                    } else if (t.os == Target::OSX || t.os == Target::IOS) {
+                        modules.push_back(get_initmod_osx_arm_cpu_features(c, bits_64, debug));
+                    } else {
+                        modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
+                    }
                 }
             }
             if (t.arch == Target::POWERPC) {

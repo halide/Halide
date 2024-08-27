@@ -342,8 +342,6 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
     return std::move(cloned_module.get());
 }
 
-}  // namespace
-
 void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
                llvm::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
@@ -384,25 +382,6 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     // Make sure things marked as always-inline get inlined
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
 
-#if LLVM_VERSION < 170
-    // Remove any stale debug info
-    //
-    // Note: this pass was added in https://github.com/halide/Halide/pull/2060;
-    // based on the comments, it looks like it was an attempt to fix an error,
-    // but didn't actually fix it, and (apparently) just got left in?
-    //
-    // There is a 'new' equivalent that we could add in the optimization pass
-    // in Codegen_LLVM.cpp, but since this seems to be have added in error,
-    // we're just going to elide it for LLVM >= 17.0
-    pass_manager.add(llvm::createStripDeadDebugInfoPass());
-
-    // Enable symbol rewriting. This allows code outside libHalide to
-    // use symbol rewriting when compiling Halide code (for example, by
-    // using cl::ParseCommandLineOption and then passing the appropriate
-    // rewrite options via -mllvm flags).
-    pass_manager.add(llvm::createRewriteSymbolsPass());
-#endif
-
     if (target_machine->isPositionIndependent()) {
         Internal::debug(1) << "Target machine is Position Independent!\n";
     }
@@ -425,6 +404,8 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
     llvm::reportAndResetTimings();
 }
+
+}  // namespace
 
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
     return codegen_llvm(module, context);

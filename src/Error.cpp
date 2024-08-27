@@ -1,5 +1,4 @@
 #include "Error.h"
-#include "Introspection.h"
 #include "Util.h"  // for get_env_variable
 
 #include <csignal>
@@ -155,7 +154,6 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
 #endif
     const char sep = use_newlines ? '\n' : ' ';
 
-    const std::string &source_loc = Introspection::get_source_location();
     const char *what = (flags & Warning) ? "Warning" : "Error";
     if (flags & User) {
         // Only mention where inside of libHalide the error tripped if we have debug level > 0
@@ -164,15 +162,9 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
             debug(1) << "Condition failed: " << condition_string << "\n";
         }
         msg << what << ":";
-        if (!source_loc.empty()) {
-            msg << " (at " << source_loc << ")";
-        }
         msg << sep;
     } else {
         msg << "Internal " << what << " at " << file << ":" << line;
-        if (source_loc.empty()) {
-            msg << " triggered by user code at " << source_loc << ":";
-        }
         msg << sep;
         if (condition_string) {
             msg << "Condition failed: " << condition_string << ":" << sep;

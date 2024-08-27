@@ -21,81 +21,71 @@ set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
 # Main library exports
 ##
 
-target_sources(Halide_Generator INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/GenGen.cpp>)
-
-install(TARGETS Halide Halide_Generator Halide_LanguageOptions
+install(TARGETS Halide Halide_Generator Halide_GenGen
         EXPORT Halide_Targets
         RUNTIME COMPONENT Halide_Runtime
         LIBRARY COMPONENT Halide_Runtime
         NAMELINK_COMPONENT Halide_Development
         ARCHIVE COMPONENT Halide_Development
-        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+        FILE_SET HEADERS COMPONENT Halide_Development)
 
-if (TARGET Halide_Adams2019)
+if (WITH_AUTOSCHEDULERS)
     install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021
             EXPORT Halide_Interfaces
             LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
             NAMELINK_COMPONENT Halide_Development)
 endif ()
 
-# Halide_LLVM
-foreach (dep IN ITEMS Halide_LLVM Halide_wabt Halide_flatbuffers)
-    if (TARGET ${dep})
-        install(TARGETS ${dep} EXPORT Halide_Targets)
-    endif ()
-endforeach ()
+##
+# Runtime headers
+##
+
+install(TARGETS Halide_Runtime
+        EXPORT Halide_Interfaces
+        FILE_SET HEADERS COMPONENT Halide_Development)
 
 ##
-# Library-type-agnostic interface targets
+# Halide tools
 ##
 
 target_sources(Halide_RunGenMain INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/RunGenMain.cpp>)
 
+install(FILES ${Halide_SOURCE_DIR}/tools/RunGenMain.cpp
+        DESTINATION ${Halide_INSTALL_TOOLSDIR}
+        COMPONENT Halide_Development)
+
 install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain Halide_ThreadPool
         EXPORT Halide_Interfaces
-        INCLUDES DESTINATION ${Halide_INSTALL_TOOLSDIR})
-
-install(TARGETS Halide_Runtime
-        EXPORT Halide_Interfaces
-        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-# Captures both the runtime and Halide.h
-install(DIRECTORY ${Halide_BINARY_DIR}/include/
-        TYPE INCLUDE
-        COMPONENT Halide_Development
-        FILES_MATCHING PATTERN "include/*.h")
+        FILE_SET HEADERS COMPONENT Halide_Development DESTINATION ${Halide_INSTALL_TOOLSDIR})
 
 ##
-# Patch RPATH for executable targets
+# Install command-line utils
 ##
 
-file(RELATIVE_PATH lib_dir
-     ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
-     ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
+if (WITH_AUTOSCHEDULERS AND WITH_UTILS)
+    file(RELATIVE_PATH lib_dir
+         ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
+         ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
 
-if (APPLE)
-    set(rbase @loader_path)
-else ()
-    set(rbase $ORIGIN)
-endif ()
-
-foreach (util IN ITEMS adams2019_retrain_cost_model
-                       adams2019_weightsdir_to_weightsfile
-                       anderson2021_retrain_cost_model
-                       anderson2021_weightsdir_to_weightsfile
-                       featurization_to_sample
-                       get_host_target)
-    if (TARGET ${util})
-        if (NOT CMAKE_INSTALL_RPATH)
-            set_target_properties(${util} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
-        endif ()
-        install(
-            TARGETS ${util}
-            EXPORT Halide_Interfaces
-            COMPONENT Halide_Development
-        )
+    if (APPLE)
+        set(rbase @loader_path)
+    else ()
+        set(rbase $ORIGIN)
     endif ()
-endforeach ()
+
+    set(utils
+        adams2019_retrain_cost_model
+        adams2019_weightsdir_to_weightsfile
+        anderson2021_retrain_cost_model
+        anderson2021_weightsdir_to_weightsfile
+        featurization_to_sample
+        get_host_target
+    )
+    if (NOT CMAKE_INSTALL_RPATH)
+        set_target_properties(${utils} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+    endif ()
+    install(TARGETS ${utils} EXPORT Halide_Interfaces COMPONENT Halide_Development)
+endif ()
 
 ##
 # READMEs and other top-level documentation
@@ -114,17 +104,6 @@ install(FILES
 ##
 # Tools
 ##
-
-install(DIRECTORY ${Halide_SOURCE_DIR}/tools/
-        DESTINATION ${Halide_INSTALL_TOOLSDIR}
-        COMPONENT Halide_Development
-        FILES_MATCHING
-        PATTERN "*.h"
-        PATTERN "*.cpp"
-        PATTERN "*.m"
-        PATTERN "binary2cpp.cpp" EXCLUDE
-        PATTERN "build_halide_h.cpp" EXCLUDE
-        PATTERN "find_inverse.cpp" EXCLUDE)
 
 install(PROGRAMS ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/adams2019_autotune_loop.sh
                  ${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021/anderson2021_autotune_loop.sh
@@ -159,21 +138,11 @@ else ()
     set(type static)
 endif ()
 
-# If Halide explicitly links against shared LLVM or if it is a static library
-# and we are not bundling our static dependencies, then end-users must have
-# the relevant system libraries installed.
-if (Halide_SHARED_LLVM OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
-    set(depFile "${CMAKE_CURRENT_BINARY_DIR}/Halide-${type}-deps.cmake")
-    file(WRITE "${depFile}" "find_dependency(LLVM ${LLVM_PACKAGE_VERSION})\n")
-
-    if (TARGET_WEBASSEMBLY)
-        file(APPEND "${depFile}" [[find_dependency(LLD HINTS "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")]])
-    endif ()
-
-    install(FILES "${depFile}"
-            DESTINATION ${Halide_INSTALL_CMAKEDIR}
-            COMPONENT Halide_Development)
-endif ()
+install(FILES
+        "${Halide_SOURCE_DIR}/cmake/FindHalide_LLVM.cmake"
+        "${Halide_SOURCE_DIR}/cmake/FindV8.cmake"
+        DESTINATION ${Halide_INSTALL_CMAKEDIR}
+        COMPONENT Halide_Development)
 
 install(EXPORT Halide_Targets
         DESTINATION ${Halide_INSTALL_CMAKEDIR}
@@ -216,8 +185,20 @@ install(FILES
         ${Halide_SOURCE_DIR}/cmake/FindHalide_WebGPU.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
         ${Halide_SOURCE_DIR}/cmake/TargetExportScript.cmake
+        ${Halide_SOURCE_DIR}/cmake/MutexCopy.ps1
         DESTINATION ${Halide_INSTALL_HELPERSDIR}
         COMPONENT Halide_Development)
+
+##
+# Compute find_dependency calls for Halide
+##
+
+_Halide_install_pkgdeps(
+    FILE_NAME Halide-${type}-deps.cmake
+    EXPORT_FILE Halide-${type}-targets.cmake
+    DESTINATION "${Halide_INSTALL_CMAKEDIR}"
+    COMPONENT Halide_Development
+)
 
 ##
 # Documentation

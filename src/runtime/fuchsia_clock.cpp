@@ -30,7 +30,7 @@ WEAK int64_t halide_current_time_ns(void *user_context) {
     return zx_clock_get_monotonic() - halide_reference_clock;
 }
 
-WEAK void halide_sleep_ms(void *user_context, int ms) {
-    zx_nanosleep(zx_deadline_after(ms * 1000));
+WEAK void halide_sleep_us(void *user_context, int us) {
+    zx_nanosleep(zx_deadline_after(us));
 }
 }

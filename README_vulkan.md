@@ -57,9 +57,9 @@ For Vulkan device drivers, consult the appropriate hardware vendor for your devi
 
 ## Linux 
 
-On Ubuntu Linux v22.04, the vulkan runtime is distributed in the `vulkan-tools` package. For earlier versions of Ubuntu (e.g. v20.x or v18.x) the contents of the `vulkan-tools` package was distributed as `vulkan-utils` so use that package instead.
+The Vulkan SDK packages are now being maintained by LunarG.  These include the Vulkan Loader library, as well as the Vulkan Tools packages. Instructions for installing these can be found on their [Getting Started Guide](https://vulkan.lunarg.com/doc/view/latest/linux/getting_started_ubuntu.html).
 
-Proprietary drivers can be installed via 'apt' using PPA's for each vendor. Examples for AMD and NVIDIA are provided below.
+Once the SDK has been installed, you need to install the appropriate driver for your device.  Proprietary drivers can be installed via 'apt' using PPA's for each vendor. Examples for AMD and NVIDIA are provided below.
 
 For AMD on Ubuntu v22.04:
 ```

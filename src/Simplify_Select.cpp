@@ -3,20 +3,17 @@
 namespace Halide {
 namespace Internal {
 
-Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
+Expr Simplify::visit(const Select *op, ExprInfo *info) {
 
-    ExprInfo t_bounds, f_bounds;
+    ExprInfo t_info, f_info;
     Expr condition = mutate(op->condition, nullptr);
-    Expr true_value = mutate(op->true_value, &t_bounds);
-    Expr false_value = mutate(op->false_value, &f_bounds);
+    Expr true_value = mutate(op->true_value, &t_info);
+    Expr false_value = mutate(op->false_value, &f_info);
 
-    if (bounds) {
-        bounds->min_defined = t_bounds.min_defined && f_bounds.min_defined;
-        bounds->max_defined = t_bounds.max_defined && f_bounds.max_defined;
-        bounds->min = std::min(t_bounds.min, f_bounds.min);
-        bounds->max = std::max(t_bounds.max, f_bounds.max);
-        bounds->alignment = ModulusRemainder::unify(t_bounds.alignment, f_bounds.alignment);
-        bounds->trim_bounds_using_alignment();
+    if (info) {
+        info->bounds = ConstantInterval::make_union(t_info.bounds, f_info.bounds);
+        info->alignment = ModulusRemainder::unify(t_info.alignment, f_info.alignment);
+        info->trim_bounds_using_alignment();
     }
 
     if (may_simplify(op->type)) {
@@ -230,7 +227,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
                rewrite(select(x, y, true), !x || y) ||
                rewrite(select(x, false, y), !x && y) ||
                rewrite(select(x, true, y), x || y))))) {
-            return mutate(rewrite.result, bounds);
+            return mutate(rewrite.result, info);
         }
         // clang-format on
     }

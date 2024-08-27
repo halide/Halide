@@ -380,6 +380,13 @@ class PredicateLoadStore : public IRMutator {
         return pred;
     }
 
+    Stmt visit(const Atomic *op) override {
+        // We don't support codegen for vectorized predicated atomic stores, so
+        // just bail out.
+        valid = false;
+        return op;
+    }
+
     Expr visit(const Load *op) override {
         valid = valid && ((op->predicate.type().lanes() == lanes) || (op->predicate.type().is_scalar() && !expr_uses_var(op->index, var)));
         if (!valid) {
@@ -821,7 +828,9 @@ class VectorSubs : public IRMutator {
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
         } else {
-            int lanes = std::max(predicate.type().lanes(), std::max(value.type().lanes(), index.type().lanes()));
+            int lanes = std::max({predicate.type().lanes(),
+                                  value.type().lanes(),
+                                  index.type().lanes()});
             return Store::make(op->name, widen(value, lanes), widen(index, lanes),
                                op->param, widen(predicate, lanes), op->alignment);
         }

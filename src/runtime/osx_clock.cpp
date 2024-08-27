@@ -45,7 +45,7 @@ WEAK int64_t halide_current_time_ns(void *user_context) {
 }
 
 extern int usleep(int);
-WEAK void halide_sleep_ms(void *user_context, int ms) {
-    usleep(ms * 1000);
+WEAK void halide_sleep_us(void *user_context, int us) {
+    usleep(us);
 }
 }

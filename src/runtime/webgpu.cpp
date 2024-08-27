@@ -1025,6 +1025,7 @@ WEAK int halide_webgpu_run(void *user_context,
                 switch (arg_type.bits) {
                 case 1: {
                     *(int32_t *)arg_out = *((int8_t *)arg_in);
+                    break;
                 }
                 case 8: {
                     *(int32_t *)arg_out = *((int8_t *)arg_in);
@@ -1048,6 +1049,7 @@ WEAK int halide_webgpu_run(void *user_context,
                 switch (arg_type.bits) {
                 case 1: {
                     *(uint32_t *)arg_out = *((uint8_t *)arg_in);
+                    break;
                 }
                 case 8: {
                     *(uint32_t *)arg_out = *((uint8_t *)arg_in);

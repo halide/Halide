@@ -445,6 +445,11 @@ def test_requirements():
         assert False, "Did not see expected exception!"
 
 
+def test_implicit_convert_int64():
+    assert (hl.i32(0) + 0x7fffffff).type() == hl.Int(32)
+    assert (hl.i32(0) + (0x7fffffff+1)).type() == hl.Int(64)
+
+
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
@@ -463,3 +468,4 @@ if __name__ == "__main__":
     test_scalar_funcs()
     test_bool_conversion()
     test_requirements()
+    test_implicit_convert_int64()
