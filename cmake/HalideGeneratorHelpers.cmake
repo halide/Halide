@@ -129,9 +129,7 @@ function(add_halide_generator TARGET)
                "HALIDE_GENERATOR_PYSTUB(${GEN_NAME}, ${MODULE_NAME})\n")
 
         set(stub_file "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${GEN_NAME}.${MODULE_NAME}.py_stub_generated.cpp")
-        if (NOT EXISTS "${stub_file}")
-            file(WRITE "${stub_file}" "${stub_text}")
-        endif ()
+        file(CONFIGURE OUTPUT "${stub_file}" CONTENT "${stub_text}" @ONLY)
 
         Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${stub_file}" ${ARG_SOURCES})
         set_target_properties(${TARGET}_pystub PROPERTIES
@@ -1028,27 +1026,21 @@ endfunction()
 function(_Halide_fix_xcode TARGET)
     if (CMAKE_GENERATOR STREQUAL "Xcode")
         # Xcode generator requires at least one source file to work correctly.
-        # Touching the empty file unconditionally would cause the archiver to
-        # re-run every time CMake re-runs, even if nothing actually changed.
         set(empty_file "${CMAKE_CURRENT_BINARY_DIR}/Halide_${TARGET}_empty.cpp")
-        if (NOT EXISTS "${empty_file}")
-            file(TOUCH "${empty_file}")
-        endif ()
+        file(CONFIGURE OUTPUT "${empty_file}" CONTENT "")
         target_sources("${TARGET}" PRIVATE "${empty_file}")
     endif ()
 endfunction()
 
 function(_Halide_target_export_single_symbol TARGET SYMBOL)
-    if (NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple")
-        file(CONFIGURE
-             OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple"
-             CONTENT "_${SYMBOL}\n")
-    endif ()
-    if (NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript")
-        file(CONFIGURE
-             OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript"
-             CONTENT "{ global: ${SYMBOL}; local: *; };\n")
-    endif ()
+    file(CONFIGURE
+         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple"
+         CONTENT "_${SYMBOL}\n")
+
+    file(CONFIGURE
+         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript"
+         CONTENT "{ global: ${SYMBOL}; local: *; };\n")
+
     target_export_script(
         ${TARGET}
         APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple"
