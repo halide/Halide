@@ -266,10 +266,11 @@ function(_Halide_library_from_generator TARGET)
     list(TRANSFORM output_files PREPEND "${CMAKE_CURRENT_BINARY_DIR}/")
 
     foreach (out IN LISTS outputs)
-        set("OUT_${out}" "")
+        set("local_out_${out}" "")
     endforeach ()
 
     foreach (out file IN ZIP_LISTS outputs output_files)
+        list(APPEND "local_out_${out}" "${file}")
         list(APPEND "OUT_${out}" "${file}")
     endforeach ()
 
@@ -280,9 +281,9 @@ function(_Halide_library_from_generator TARGET)
     # Create the filter's library target
     if (ARG_TYPE STREQUAL "static_library")
         add_library("${TARGET}" STATIC IMPORTED GLOBAL)
-        set_target_properties("${TARGET}" PROPERTIES IMPORTED_LOCATION "${OUT_${ARG_TYPE}}")
+        set_target_properties("${TARGET}" PROPERTIES IMPORTED_LOCATION "${local_out_${ARG_TYPE}}")
     else ()
-        add_library("${TARGET}" STATIC ${OUT_${ARG_TYPE}})
+        add_library("${TARGET}" STATIC ${local_out_${ARG_TYPE}})
         set_property(TARGET "${TARGET}" PROPERTY POSITION_INDEPENDENT_CODE ON)
         set_property(TARGET "${TARGET}" PROPERTY LINKER_LANGUAGE CXX)
 
@@ -308,11 +309,11 @@ function(_Halide_library_from_generator TARGET)
     target_sources("${TARGET}" INTERFACE
                    FILE_SET HEADERS
                    BASE_DIRS "${CMAKE_CURRENT_BINARY_DIR}"
-                   FILES "${OUT_c_header}")
+                   FILES "${local_out_c_header}")
 endfunction()
 
 function(_Halide_lipo)
-    cmake_parse_arguments(PARSE_ARGV 0 ARG "OVERWRITE" "TARGET;INPUTS" "")
+    cmake_parse_arguments(PARSE_ARGV 0 ARG "OVERWRITE" "TARGET" "INPUTS")
 
     set(merged_libs ${ARG_INPUTS})
 
@@ -618,6 +619,11 @@ function(add_halide_library TARGET)
 
     list(JOIN ARG_FEATURES "-" ARG_FEATURES)
 
+    # Clear output lists
+    foreach (output IN LISTS extra_outputs)
+        set(OUT_${output} "")
+    endforeach ()
+
     list(LENGTH Halide_CMAKE_TARGET num_platforms)
     if (common_triple STREQUAL "cmake" AND num_platforms GREATER 1)
         set(merged_base "")
@@ -644,7 +650,7 @@ function(add_halide_library TARGET)
                 list(APPEND merged_libs "${this_lib}")
             endif ()
 
-            # TODO: accumulate OUT_s. Overwrites OUT_ from the previous call.
+            # Appends to OUT_c_header, OUT_<extra-output>, etc.
             _Halide_library_from_generator(
                 "${this_lib}" ${generator_args} TARGETS ${targets_arch})
             _Halide_set_osx_arch("${this_lib}" "${triple}")
@@ -661,7 +667,8 @@ function(add_halide_library TARGET)
         if (ARG_FEATURES)
             list(TRANSFORM ARG_TARGETS APPEND "-${ARG_FEATURES}")
         endif ()
-        # Sets OUT_c_header, OUT_<extra-output>, etc.
+
+        # Appends to OUT_c_header, OUT_<extra-output>, etc.
         _Halide_library_from_generator(
             "${TARGET}" ${generator_args} TARGETS ${ARG_TARGETS})
     endif ()
@@ -670,7 +677,8 @@ function(add_halide_library TARGET)
     set_property(TARGET "${TARGET}" PROPERTY Halide_LIBRARY_RUNTIME_TARGET "${ARG_USE_RUNTIME}")
     set_property(TARGET "${TARGET}" PROPERTY Halide_LIBRARY_FUNCTION_NAME "${ARG_FUNCTION_NAME}")
     if ("python_extension" IN_LIST extra_outputs)
-        set_property(TARGET "${TARGET}" PROPERTY Halide_LIBRARY_PYTHON_EXTENSION_CPP "${OUT_python_extension}")
+        list(GET OUT_python_extension 0 py_ext_cpp) # These files should always be identical
+        set_property(TARGET "${TARGET}" PROPERTY Halide_LIBRARY_PYTHON_EXTENSION_CPP "${py_ext_cpp}")
     endif ()
 
     # Propagate outputs
