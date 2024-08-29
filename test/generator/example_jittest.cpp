@@ -16,7 +16,14 @@ void verify(const Buffer<int32_t, 3> &img, float compiletime_factor, float runti
 }
 
 int main(int argc, char **argv) {
-    GeneratorContext context(get_jit_target_from_environment());
+    Target t = get_jit_target_from_environment();
+    if (t.has_feature(Target::WebGPU) || t.has_feature(Target::WasmThreads)) {
+        printf("[SKIP] This test does not support WebGPU or WasmThreads.\n");
+        return 0;
+    }
+
+    GeneratorContext context(t);
+
     const float runtime_factor = 4.5f;
 
     // Demonstrate (and test) various ways to use a Stub to invoke a Generator with the JIT.
