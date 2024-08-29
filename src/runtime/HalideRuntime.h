@@ -117,7 +117,7 @@ extern "C" {
 // For now, we say that if >= v12, and compiling on x86 or arm,
 // we assume support. This may need revision.
 #if defined(__GNUC__) && (__GNUC__ >= 12)
-#if defined(__x86_64__) || (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) || defined(__arm__) || defined(__aarch64__)
+#if defined(__x86_64__) || (defined(__i386__) && (__GNUC__ >= 14) && defined(__SSE2__)) || ((defined(__arm__) || defined(__aarch64__)) && (__GNUC__ >= 13))
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
 #endif
 #endif
