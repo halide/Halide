@@ -240,7 +240,11 @@ function(_Halide_library_from_generator TARGET)
     endif ()
 
     foreach (output IN LISTS ARG_EXTRA_OUTPUTS)
-        _Halide_add_output("${output}" "${TARGET}")
+        if (output STREQUAL "c_source" AND ARG_TYPE STREQUAL "c_source")
+            # Skip this as it was handled above
+        else ()
+            _Halide_add_output("${output}" "${TARGET}")
+        endif ()
     endforeach ()
 
     ## Run the generator
@@ -440,6 +444,7 @@ function(add_halide_library TARGET)
         ASSEMBLY
         BITCODE
         COMPILER_LOG
+        C_SOURCE
         FEATURIZATION
         FUNCTION_INFO_HEADER
         HLPIPE
