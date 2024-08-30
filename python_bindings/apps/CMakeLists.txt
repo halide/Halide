@@ -1,3 +1,12 @@
+cmake_minimum_required(VERSION 3.28)
+project(Halide_Python_apps)
+
+if (PROJECT_IS_TOP_LEVEL)
+    enable_testing()
+endif ()
+
+find_package(Halide REQUIRED COMPONENTS Python)
+
 if (Halide_TARGET MATCHES "wasm")
     message(WARNING "Python apps are skipped under WASM.")
     return()
@@ -12,6 +21,9 @@ if (NOT WITH_AUTOSCHEDULERS)
     message(WARNING "Python apps are skipped without autoschedulers")
     return()
 endif ()
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../cmake")
+include(AddPythonTest)
 
 set(TEST_TMPDIR "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>")
 set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../apps/images>")
@@ -53,7 +65,7 @@ foreach (app IN LISTS APPS)
                                             MODULE_NAME ${G}
                                             HALIDE_LIBRARIES app_aot_${G})
         list(APPEND DEPS app_ext_${G})
-    endforeach()
+    endforeach ()
 
     set(app_src "${app}_app.py")
     add_python_test(
