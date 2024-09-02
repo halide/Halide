@@ -127,11 +127,11 @@ works well on OS X and Ubuntu.)
 If you want to build it yourself, first check it out from GitHub:
 
 ```
-% git clone --depth 1 --branch llvmorg-16.0.6 https://github.com/llvm/llvm-project.git
+% git clone --depth 1 --branch llvmorg-18.1.8 https://github.com/llvm/llvm-project.git
 ```
 
-(If you want to build LLVM 17.x, use branch `release/17.x`; for current trunk,
-use `main`)
+(LLVM 18.1.8 is the most recent released LLVM at the time of writing. For current trunk,
+use `main` instead)
 
 Then build it like so:
 
