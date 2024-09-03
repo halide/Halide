@@ -140,6 +140,7 @@ Then build it like so:
         -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
         -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly;RISCV" \
         -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
+        -DLLVM_ENABLE_ZSTD=OFF \
         -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
         -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
         -S llvm-project/llvm -B llvm-build
