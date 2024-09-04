@@ -21,11 +21,13 @@ target_link_libraries(anderson2021_cost_model.generator PRIVATE Halide::Generato
 add_halide_library(anderson2021_cost_model FROM anderson2021_cost_model.generator
                    GENERATOR cost_model
                    FUNCTION_NAME cost_model
-                   TARGETS cmake)
+                   FEATURES[x86-64-osx] avx2 sse41
+                   FEATURES[arm-64-osx] arm_dot_prod-arm_fp16)
 add_halide_library(anderson2021_train_cost_model FROM anderson2021_cost_model.generator
                    GENERATOR train_cost_model
                    FUNCTION_NAME train_cost_model
-                   TARGETS cmake
+                   FEATURES[x86-64-osx] avx2 sse41
+                   FEATURES[arm-64-osx] arm_dot_prod-arm_fp16
                    USE_RUNTIME anderson2021_cost_model.runtime)
 
 ## retrain_cost_model
@@ -121,7 +123,7 @@ if (WITH_TESTS)
     _add_test(anderson2021_test_storage_strides)
 
     add_executable(anderson2021_test_thread_info test/thread_info.cpp LoopNest.cpp
-        FunctionDAG.cpp GPULoopInfo.cpp Tiling.cpp)
+                   FunctionDAG.cpp GPULoopInfo.cpp Tiling.cpp)
     target_include_directories(anderson2021_test_thread_info PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
     target_link_libraries(anderson2021_test_thread_info PRIVATE Halide::Plugin)
 
@@ -132,4 +134,4 @@ if (WITH_TESTS)
     target_link_libraries(anderson2021_test_tiling PRIVATE Halide::Plugin)
 
     _add_test(anderson2021_test_tiling)
-endif()
+endif ()

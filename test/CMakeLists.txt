@@ -17,7 +17,8 @@ endif ()
 
 add_halide_test(_test_internal GROUPS internal)
 
-Halide_feature(WITH_TEST_AUTO_SCHEDULE "Build autoscheduler tests" ON)
+Halide_feature(WITH_TEST_AUTO_SCHEDULE "Build autoscheduler tests" AUTO
+               DEPENDS WITH_AUTOSCHEDULERS)
 if (WITH_TEST_AUTO_SCHEDULE)
     add_subdirectory(autoschedulers)
 endif ()

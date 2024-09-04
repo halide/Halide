@@ -1,8 +1,3 @@
-if (NOT TARGET Halide::Adams2019)
-    message(STATUS "Disabling adams2019 tests for static Halide")
-    return()
-endif ()
-
 ##
 # Build rules for the Adams2019 autoscheduler library
 ##

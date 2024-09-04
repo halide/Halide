@@ -162,13 +162,13 @@ else ()
     target_link_libraries(lesson_16_rgb_generate PRIVATE Halide::Generator)
 
     add_halide_library(brighten_planar FROM lesson_16_rgb_generate
-                       GENERATOR brighten PARAMS layout=planar)
+                       TARGETS cmake GENERATOR brighten PARAMS layout=planar)
     add_halide_library(brighten_interleaved FROM lesson_16_rgb_generate
-                       GENERATOR brighten PARAMS layout=interleaved)
+                       TARGETS cmake GENERATOR brighten PARAMS layout=interleaved)
     add_halide_library(brighten_either FROM lesson_16_rgb_generate
-                       GENERATOR brighten PARAMS layout=either)
+                       TARGETS cmake GENERATOR brighten PARAMS layout=either)
     add_halide_library(brighten_specialized FROM lesson_16_rgb_generate
-                       GENERATOR brighten PARAMS layout=specialized)
+                       TARGETS cmake GENERATOR brighten PARAMS layout=specialized)
 
     add_executable(lesson_16_rgb_run lesson_16_rgb_run.cpp)
     target_link_libraries(lesson_16_rgb_run PRIVATE

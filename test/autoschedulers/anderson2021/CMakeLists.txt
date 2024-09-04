@@ -1,8 +1,3 @@
-if (NOT TARGET Halide::Anderson2021)
-    message(STATUS "Disabling anderson2021 tests for static Halide")
-    return()
-endif ()
-
 ##
 # Build rules for the Anderson2021 autoscheduler library
 ##
