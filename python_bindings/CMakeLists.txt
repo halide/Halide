@@ -59,7 +59,7 @@ endif ()
 function(add_python_test)
     cmake_parse_arguments(ARG "" "FILE;LABEL" "PYTHONPATH;ENVIRONMENT;TEST_ARGS" ${ARGN})
 
-    list(PREPEND ARG_PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
+    list(PREPEND ARG_PYTHONPATH "$<PATH:GET_PARENT_PATH,$<TARGET_FILE_DIR:Halide::Python>>")
     list(TRANSFORM ARG_PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
     list(PREPEND ARG_ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}")

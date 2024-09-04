@@ -163,7 +163,6 @@ function(_add_halide_libraries TARGET)
         target_link_libraries(${TARGET} INTERFACE ${args_EXTERNS})
     endif()
 
-
     if (NOT args_OMIT_C_BACKEND)
         # The C backend basically ignores TARGETS (it emits a warning that the sources
         # will be compiled with the current CMake toolchain)... but making matters worse,
@@ -583,6 +582,9 @@ if (${_USING_WASM})
     # wasm doesn't support multitargets
     # TODO: currently, Halide_CMAKE_TARGET == Halide_HOST_TARGET when building for Emscripten; we should fix this
     set(MDT_TARGETS ${Halide_TARGET})
+elseif (Halide_CMAKE_TARGET MATCHES ";")
+    # multiarch doesn't support multitargets
+    set(MDT_TARGETS cmake)
 else()
     set(MDT_TARGETS cmake-no_bounds_query cmake)
 endif()
@@ -629,7 +631,7 @@ if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windo
 endif ()
 
 # multitarget and wasm don't mix well
-if (NOT _USING_WASM)
+if (NOT _USING_WASM AND NOT Halide_CMAKE_TARGET MATCHES ";")
     # multitarget_aottest.cpp
     # multitarget_generator.cpp
     _add_halide_libraries(multitarget

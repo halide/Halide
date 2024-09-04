@@ -1,8 +1,3 @@
-if (NOT TARGET Halide::Mullapudi2016)
-    message(STATUS "Disabling mullapudi2016 tests for static Halide")
-    return()
-endif()
-
 tests(GROUPS mullapudi2016 autoschedulers_cpu
       SOURCES
       extern.cpp

@@ -62,7 +62,20 @@ install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain Halide_ThreadPool
 # Install command-line utils
 ##
 
+set(utils Halide_GenRT)
+
 if (WITH_AUTOSCHEDULERS AND WITH_UTILS)
+    list(APPEND utils
+        adams2019_retrain_cost_model
+        adams2019_weightsdir_to_weightsfile
+        anderson2021_retrain_cost_model
+        anderson2021_weightsdir_to_weightsfile
+        featurization_to_sample
+        get_host_target
+    )
+endif ()
+
+if (NOT CMAKE_INSTALL_RPATH)
     file(RELATIVE_PATH lib_dir
          ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
          ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
@@ -73,19 +86,10 @@ if (WITH_AUTOSCHEDULERS AND WITH_UTILS)
         set(rbase $ORIGIN)
     endif ()
 
-    set(utils
-        adams2019_retrain_cost_model
-        adams2019_weightsdir_to_weightsfile
-        anderson2021_retrain_cost_model
-        anderson2021_weightsdir_to_weightsfile
-        featurization_to_sample
-        get_host_target
-    )
-    if (NOT CMAKE_INSTALL_RPATH)
-        set_target_properties(${utils} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
-    endif ()
-    install(TARGETS ${utils} EXPORT Halide_Interfaces COMPONENT Halide_Development)
+    set_target_properties(${utils} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
 endif ()
+
+install(TARGETS ${utils} EXPORT Halide_Interfaces COMPONENT Halide_Development)
 
 ##
 # READMEs and other top-level documentation
