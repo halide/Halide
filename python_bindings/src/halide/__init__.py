@@ -2,7 +2,9 @@ def patch_dll_dirs():
     import os
     if hasattr(os, 'add_dll_directory'):
         from pathlib import Path
-        os.add_dll_directory(str(Path(__file__).parent / 'bin'))
+        bin_dir = Path(__file__).parent / 'bin'
+        if bin_dir.exists():
+            os.add_dll_directory(str(bin_dir))
 
 
 patch_dll_dirs()
