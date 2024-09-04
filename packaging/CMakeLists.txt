@@ -190,9 +190,15 @@ write_basic_package_version_file(HalideHelpersConfigVersion.cmake
                                  COMPATIBILITY SameMajorVersion
                                  ARCH_INDEPENDENT)
 
+if (WITH_PYTHON_BINDINGS)
+    set(extra_paths Halide_Python_INSTALL_CMAKEDIR)
+else ()
+    set(extra_paths "")
+endif ()
+
 configure_package_config_file(
     common/HalideConfig.cmake HalideConfig.cmake
-    PATH_VARS Halide_INSTALL_HELPERSDIR Halide_Python_INSTALL_CMAKEDIR
+    PATH_VARS Halide_INSTALL_HELPERSDIR ${extra_paths}
     INSTALL_DESTINATION "${Halide_INSTALL_CMAKEDIR}"
     NO_SET_AND_CHECK_MACRO
     NO_CHECK_REQUIRED_COMPONENTS_MACRO
