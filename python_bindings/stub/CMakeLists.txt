@@ -13,7 +13,3 @@ set_target_properties(Halide_PyStubs PROPERTIES
                       CXX_VISIBILITY_PRESET hidden
                       VISIBILITY_INLINES_HIDDEN TRUE
                       POSITION_INDEPENDENT_CODE ON)
-
-install(TARGETS Halide_PyStubs
-        EXPORT Halide_Targets
-        COMPONENT Halide_Python)

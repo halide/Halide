@@ -131,7 +131,7 @@ function(add_halide_generator TARGET)
         set(stub_file "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${GEN_NAME}.${MODULE_NAME}.py_stub_generated.cpp")
         file(CONFIGURE OUTPUT "${stub_file}" CONTENT "${stub_text}" @ONLY)
 
-        Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${stub_file}" ${ARG_SOURCES})
+        Python_add_library(${TARGET}_pystub MODULE WITH_SOABI "${stub_file}" ${ARG_SOURCES})
         set_target_properties(${TARGET}_pystub PROPERTIES
                               CXX_VISIBILITY_PRESET hidden
                               VISIBILITY_INLINES_HIDDEN ON
@@ -398,16 +398,17 @@ function(_Halide_compute_generator_cmd)
 
     # TODO: Python Generators need work to support crosscompiling (https://github.com/halide/Halide/issues/7014)
     if (NOT TARGET Halide::Python)
-        message(FATAL_ERROR "This version of Halide was built without support for Python bindings; rebuild using WITH_PYTHON_BINDINGS=ON to use this rule with Python Generators.")
+        message(FATAL_ERROR "Missing Halide::Python. Load the Python component "
+                "in find_package() or set WITH_PYTHON_BINDINGS=ON if in tree.")
     endif ()
 
-    if (NOT TARGET Python3::Interpreter)
-        message(FATAL_ERROR "You must call find_package(Python3) in your CMake code in order to use this rule with Python Generators.")
+    if (NOT TARGET Python::Interpreter)
+        message(FATAL_ERROR "Missing Python::Interpreter. Missing call to find_package(Python 3)?")
     endif ()
 
     set("${ARG_OUT_COMMAND}"
-        ${CMAKE_COMMAND} -E env "PYTHONPATH=$<PATH:GET_PARENT_PATH,$<TARGET_FILE_DIR:Halide::Python>>" --
-        ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python3::Interpreter>" $<SHELL_PATH:${py_src}>
+        ${CMAKE_COMMAND} -E env "PYTHONPATH=$<PATH:NORMAL_PATH,$<TARGET_FILE_DIR:Halide::Python>/..>" --
+        ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python::Interpreter>" $<SHELL_PATH:${py_src}>
         PARENT_SCOPE)
     set("${ARG_OUT_DEPENDS}" ${ARG_FROM} Halide::Python ${py_src} PARENT_SCOPE)
 endfunction()
@@ -794,7 +795,7 @@ function(add_halide_python_extension_library TARGET)
                        DEPENDS Halide::GenRT
                        VERBATIM)
 
-    Python3_add_library(${TARGET} MODULE WITH_SOABI ${pycpps} ${pyext_module_definition_src})
+    Python_add_library(${TARGET} MODULE WITH_SOABI ${pycpps} ${pyext_module_definition_src})
     target_link_libraries(${TARGET} PRIVATE ${ARG_HALIDE_LIBRARIES})
     target_compile_definitions(${TARGET} PRIVATE
                                # Skip the default module-definition code in each file
@@ -802,6 +803,7 @@ function(add_halide_python_extension_library TARGET)
                                # Gotta explicitly specify the module name and function(s) for this mode
                                HALIDE_PYTHON_EXTENSION_MODULE_NAME=${ARG_MODULE_NAME}
                                "HALIDE_PYTHON_EXTENSION_FUNCTIONS=${function_names}")
+    target_compile_features(${TARGET} PRIVATE cxx_std_17)
     set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_MODULE_NAME})
     _Halide_target_export_single_symbol(${TARGET} "PyInit_${ARG_MODULE_NAME}")
 endfunction()

@@ -18,6 +18,25 @@ set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
     CACHE STRING "Path to Halide build-time tools and sources")
 
 ##
+# RPATH patching helper
+##
+
+function(_Halide_compute_rpath)
+    cmake_parse_arguments(PARSE_ARGV 0 ARG "" "ORIGIN_DIR;LIB_DIR" "TARGETS")
+    if (APPLE)
+        set(rbase @loader_path)
+    else ()
+        set(rbase $ORIGIN)
+    endif ()
+
+    file(RELATIVE_PATH lib_dir
+         ${CMAKE_CURRENT_BINARY_DIR}/${ARG_ORIGIN_DIR}
+         ${CMAKE_CURRENT_BINARY_DIR}/${ARG_LIB_DIR})
+
+    set_target_properties(${ARG_TARGETS} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+endfunction()
+
+##
 # Main library exports
 ##
 
@@ -30,10 +49,20 @@ install(TARGETS Halide Halide_Generator Halide_GenGen
         FILE_SET HEADERS COMPONENT Halide_Development)
 
 if (WITH_AUTOSCHEDULERS)
-    install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021
+    set(autoschedulers Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021)
+
+    install(TARGETS ${autoschedulers}
             EXPORT Halide_Interfaces
             LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
             NAMELINK_COMPONENT Halide_Development)
+
+    if (NOT CMAKE_INSTALL_RPATH)
+        _Halide_compute_rpath(
+            TARGETS ${autoschedulers}
+            ORIGIN_DIR "${Halide_INSTALL_PLUGINDIR}"
+            LIB_DIR "${CMAKE_INSTALL_LIBDIR}"
+        )
+    endif ()
 endif ()
 
 ##
@@ -76,17 +105,11 @@ if (WITH_AUTOSCHEDULERS AND WITH_UTILS)
 endif ()
 
 if (NOT CMAKE_INSTALL_RPATH)
-    file(RELATIVE_PATH lib_dir
-         ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
-         ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
-
-    if (APPLE)
-        set(rbase @loader_path)
-    else ()
-        set(rbase $ORIGIN)
-    endif ()
-
-    set_target_properties(${utils} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+    _Halide_compute_rpath(
+        TARGETS ${utils}
+        ORIGIN_DIR "${CMAKE_INSTALL_BINDIR}"
+        LIB_DIR "${CMAKE_INSTALL_LIBDIR}"
+    )
 endif ()
 
 install(TARGETS ${utils} EXPORT Halide_Interfaces COMPONENT Halide_Development)
@@ -167,14 +190,25 @@ write_basic_package_version_file(HalideHelpersConfigVersion.cmake
                                  COMPATIBILITY SameMajorVersion
                                  ARCH_INDEPENDENT)
 
-# Compute a hint to make it easier to find HalideHelpers from find_package(Halide)
-# This is read by configure_file below.
-file(RELATIVE_PATH HalideHelpers_HINT
-     "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_CMAKEDIR}"
-     "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_HELPERSDIR}")
+if (WITH_PYTHON_BINDINGS)
+    set(extra_paths Halide_Python_INSTALL_CMAKEDIR)
+else ()
+    set(extra_paths "")
+endif ()
 
-configure_file(common/HalideConfig.cmake HalideConfig.cmake @ONLY)
-configure_file(common/HalideHelpersConfig.cmake HalideHelpersConfig.cmake @ONLY)
+configure_package_config_file(
+    common/HalideConfig.cmake HalideConfig.cmake
+    PATH_VARS Halide_INSTALL_HELPERSDIR ${extra_paths}
+    INSTALL_DESTINATION "${Halide_INSTALL_CMAKEDIR}"
+    NO_SET_AND_CHECK_MACRO
+    NO_CHECK_REQUIRED_COMPONENTS_MACRO
+)
+
+configure_package_config_file(
+    common/HalideHelpersConfig.cmake HalideHelpersConfig.cmake
+    INSTALL_DESTINATION "${Halide_INSTALL_HELPERSDIR}"
+    NO_SET_AND_CHECK_MACRO
+)
 
 install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfig.cmake
@@ -212,6 +246,14 @@ if (WITH_DOCS)
     install(DIRECTORY ${Halide_BINARY_DIR}/doc/html
             TYPE DOC
             COMPONENT Halide_Documentation)
+endif ()
+
+##
+# Pip overrides
+##
+
+if (SKBUILD)
+    add_subdirectory(pip)
 endif ()
 
 ##

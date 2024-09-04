@@ -1,11 +1,12 @@
-cmake>=3.22
+build
+cmake>=3.28
 imageio
-ninja; platform_system!='Windows'
+ninja
 numpy
 pillow
 pybind11==2.10.4
-scikit-build
+scikit-build-core==0.10.5
 scipy
 setuptools>=43
+tbump==6.11.0
 wheel
-build

@@ -26,14 +26,14 @@ if (WITH_PYTHON_BINDINGS)
     if (Halide_TARGET MATCHES "webgpu")
         message(WARNING "li2018_gradient_autoscheduler_test_py is not supported with WebGPU.")
     else()
-        find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
+        find_package(Python 3.8 REQUIRED COMPONENTS Interpreter Development.Module)
 
         add_test(
             NAME li2018_gradient_autoscheduler_test_py
-            COMMAND ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python3::Interpreter>" "${CMAKE_CURRENT_SOURCE_DIR}/test.py" $<TARGET_FILE:Halide::Li2018>
+            COMMAND ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python::Interpreter>" "${CMAKE_CURRENT_SOURCE_DIR}/test.py" $<TARGET_FILE:Halide::Li2018>
         )
 
-        set(PYTHONPATH "$<PATH:GET_PARENT_PATH,$<TARGET_FILE_DIR:Halide::Python>>")
+        set(PYTHONPATH "$<PATH:NORMAL_PATH,$<TARGET_FILE_DIR:Halide::Python>/..>")
         list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
         set_tests_properties(li2018_gradient_autoscheduler_test_py PROPERTIES
