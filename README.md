@@ -359,6 +359,9 @@ Now you should be able to just run `make` in the root directory of the Halide
 source tree. `make run_tests` will run the JIT test suite, and `make test_apps`
 will make sure all the apps compile and run (but won't check their output).
 
+When building the tests, you can set the AOT compilation target with the 
+`HL_TARGET` environment variable.
+
 There is no `make install`. If you want to make an install package, use CMake.
 
 ### Building Halide out-of-tree with make
@@ -374,8 +377,6 @@ $ make -f ../Halide/Makefile
 
 # Some useful environment variables
 
-`HL_TARGET=...` will set Halide's AOT compilation target.
-
 `HL_JIT_TARGET=...` will set Halide's JIT compilation target.
 
 `HL_DEBUG_CODEGEN=1` will print out pseudocode for what Halide is compiling.
@@ -387,9 +388,9 @@ may be required and thus allocated. A maximum of 256 threads is allowed. (By
 default, the number of cores on the host is used.)
 
 `HL_TRACE_FILE=...` specifies a binary target file to dump tracing data into
-(ignored unless at least one `trace_` feature is enabled in `HL_TARGET` or
-`HL_JIT_TARGET`). The output can be parsed programmatically by starting from the
-code in `utils/HalideTraceViz.cpp`.
+(ignored unless at least one `trace_` feature is enabled in the target). The
+output can be parsed programmatically by starting from the code in
+`utils/HalideTraceViz.cpp`.
 
 # Further references
 
