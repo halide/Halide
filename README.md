@@ -19,15 +19,14 @@ Halide requires C++17 (or later) to use.
 
 For more detail about what Halide is, see https://halide-lang.org.
 
-For API documentation see https://halide-lang.org/docs
+For API documentation see https://halide-lang.org/docs.
 
-To see some example code, read through the tutorials
-at https://halide-lang.org/tutorials. The code is in the `tutorials/` directory.
-
-To see some larger examples, look through the `apps/`.
+For some example code, read through the tutorials online
+at https://halide-lang.org/tutorials. The corresponding code is in the
+`tutorials/` directory. Larger examples are in the `apps/` directory.
 
 If you've acquired a full source distribution and want to build Halide, see the
-[notes below](#building-halide-with-cmake).
+[notes below](#building-halide).
 
 # Getting Halide
 
@@ -37,16 +36,16 @@ The latest version of Halide can always be found on GitHub
 at https://github.com/halide/Halide/releases
 
 We provide binary releases for many popular platforms and architectures,
-including 32/64-bit x86 Windows, 64-bit x86/ARM macOS, and 32/64-bit x86/ARM 
+including 32/64-bit x86 Windows, 64-bit x86/ARM macOS, and 32/64-bit x86/ARM
 Ubuntu Linux.
 
-The macOS releases are built using XCode's command-line tools with
-Apple Clang 500.2.76. This means that we link against libc++ instead of
-libstdc++. You may need to adjust compiler options accordingly if you're using
-an older XCode which does not default to libc++.
+The macOS releases are built using XCode's command-line tools with Apple Clang
+500.2.76. This means that we link against libc++ instead of libstdc++. You may
+need to adjust compiler options accordingly if you're using an older XCode which
+does not default to libc++.
 
-We use a recent Ubuntu LTS to build the Linux releases; if your distribution 
-is too old, it might not have the requisite glibc.
+We use a recent Ubuntu LTS to build the Linux releases; if your distribution is
+too old, it might not have the requisite glibc.
 
 ## Vcpkg
 
@@ -121,18 +120,19 @@ issue.
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
-this means versions 18, 17, and 16 are supported, but 15 is not. The commands
-`llvm-config` and `clang` must be somewhere in the path.
+this means versions 19, 18, and 17 are supported, but 16 is not.
 
-If your OS does not have packages for LLVM, you can find binaries for it at
-http://llvm.org/releases/download.html. Download an appropriate package and then
-either install it, or at least put the `bin` subdirectory in your path. (This
-works well on OS X and Ubuntu.)
+It is easy to get a binary release of LLVM on macOS by using
+[Homebrew](https://brew.sh). Just run `brew install llvm`. On Debian flavors of
+Linux, the [LLVM APT repo](https://apt.llvm.org) is best; use the provided
+installation script. We know of no suitable binary releases for Windows.
+See [the section on Windows](#windows) below for tailored instructions.
 
-If you want to build it yourself, first check it out from GitHub:
+If your OS does not have packages for LLVM, or you want more control over the
+configuration, you can build it yourself. First check it out from GitHub:
 
-```
-% git clone --depth 1 --branch llvmorg-18.1.8 https://github.com/llvm/llvm-project.git
+```shell
+$ git clone --depth 1 --branch llvmorg-18.1.8 https://github.com/llvm/llvm-project.git
 ```
 
 (LLVM 18.1.8 is the most recent released LLVM at the time of writing. For
@@ -140,56 +140,61 @@ current trunk, use `main` instead)
 
 Then build it like so:
 
-```
-% cmake -DCMAKE_BUILD_TYPE=Release \
+```shell
+$ cmake -G Ninja -S llvm-project/llvm -B build \
+        -DCMAKE_BUILD_TYPE=Release
         -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
-        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly;RISCV" \
-        -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
-        -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
-        -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
-        -S llvm-project/llvm -B llvm-build
-% cmake --build llvm-build
-% cmake --install llvm-build --prefix llvm-install
+        -DLLVM_ENABLE_RUNTIMES=compiler-rt \
+        -DLLVM_TARGETS_TO_BUILD="WebAssembly;X86;AArch64;ARM;Hexagon;NVPTX;PowerPC;RISCV" \
+        -DLLVM_ENABLE_ASSERTIONS=ON \
+        -DLLVM_ENABLE_EH=ON \
+        -DLLVM_ENABLE_RTTI=ON \
+        -DLLVM_ENABLE_HTTPLIB=OFF \
+        -DLLVM_ENABLE_LIBEDIT=OFF \
+        -DLLVM_ENABLE_LIBXML2=OFF \
+        -DLLVM_ENABLE_TERMINFO=OFF \
+        -DLLVM_ENABLE_ZLIB=OFF \
+        -DLLVM_ENABLE_ZSTD=OFF \
+        -DLLVM_BUILD_32_BITS=OFF
+$ cmake --build build
+$ cmake --install build --prefix llvm-install
 ```
 
-Running a serial build will be slow. To improve speed, try running a parallel
-build. That's done by default in Ninja; for make, use the option -j NNN, where
-NNN is the number of parallel jobs, e.g. the number of CPUs you have. Then,
-point Halide to it:
+This will produce a working LLVM installation in `$PWD/llvm-install`. We refer
+to this path as `LLVM_ROOT` later. **Do not confuse this installation tree with
+the build tree!**
 
-```
-% export LLVM_ROOT=$PWD/llvm-install
-% export LLVM_CONFIG=$LLVM_ROOT/bin/llvm-config
-```
+LLVM takes a long time to build, so the above command uses Ninja to maximize
+parallelism. If you choose to omit `-G Ninja`, Makefiles will be generated
+instead. In this case, enable parallelism with `cmake --build build -j NNN`
+where `NNN` is the number of parallel jobs, i.e. the number of CPUs you have.
 
-Note that you _must_ add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to
-`LLVM_ENABLE_PROJECTS` is only required when using WebAssembly,
-`LLVM_ENABLE_RUNTIMES="compiler-rt"` is only required if building the fuzz
-tests, and adding `clang-tools-extra` is only necessary if you plan to
-contribute code to Halide (so that you can run `clang-tidy` on your pull
-requests). We recommend enabling both in all cases to simplify builds. You can
-disable exception handling (EH) and RTTI if you don't want the Python bindings.
+Note that you _must_ add `clang` and `lld` to `LLVM_ENABLE_PROJECTS` and
+`WebAssembly` and `X86` _must_ be included in `LLVM_TARGETS_TO_BUILD`.
+`LLVM_ENABLE_RUNTIMES=compiler-rt` is only required to build the fuzz tests, and
+`clang-tools-extra` is only necessary if you plan to contribute code to Halide
+(so that you can run `clang-tidy` on your pull requests). You can disable
+exception handling (EH) and RTTI if you don't want the Python bindings. We
+recommend enabling the full set to simplify builds during development.
 
 ## Building Halide with CMake
 
 This is discussed in greater detail in [CMakeBuild.md](./doc/CMakeBuild.md).
+CMake version 3.28+ is required to build Halide.
 
 ### MacOS and Linux
 
 Follow the above instructions to build LLVM or acquire a suitable binary
 release. Then change directory to the Halide repository and run:
 
-```
-% cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=$LLVM_ROOT/lib/cmake/llvm -S . -B build
-% cmake --build build
+```shell
+$ cmake -G Ninja  -S . -B build -DCMAKE_BUILD_TYPE=Release -DHalide_LLVM_ROOT=$LLVM_ROOT
+$ cmake --build build
 ```
 
-`LLVM_DIR` is the folder in the LLVM installation tree **(do not use the build
-tree by mistake)** that contains `LLVMConfig.cmake`. It is not required to set
-this variable if you have a suitable system-wide version installed. If you have
-multiple system-wide versions installed, you can specify the version with
-`Halide_REQUIRE_LLVM_VERSION`. Remove `-G Ninja` if you prefer to build with a
-different generator.
+Setting `-DHalide_LLVM_ROOT` is not required if you have a suitable system-wide
+version installed. However, if you have multiple LLVMs installed, it can pick
+between them.
 
 ### Windows
 
@@ -204,13 +209,13 @@ to `D:\Halide`. We also assume that your shell environment is set up correctly.
 For a 64-bit build, run:
 
 ```
-D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
+D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
 ```
 
 For a 32-bit build, run:
 
 ```
-D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64_x86
+D:\> "C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64_x86
 ```
 
 #### Managing dependencies with vcpkg
@@ -221,23 +226,13 @@ The best way to get compatible dependencies on Windows is to use
 ```
 D:\> git clone https://github.com/Microsoft/vcpkg.git
 D:\> cd vcpkg
-D:\> .\bootstrap-vcpkg.bat
-D:\vcpkg> .\vcpkg integrate install
+D:\vcpkg> .\bootstrap-vcpkg.bat -disableMetrics
 ...
 CMake projects should use: "-DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake"
 ```
 
-Then install the libraries. For a 64-bit build, run:
-
-```
-D:\vcpkg> .\vcpkg install libpng:x64-windows libjpeg-turbo:x64-windows llvm[target-all,clang-tools-extra]:x64-windows
-```
-
-To support 32-bit builds, also run:
-
-```
-D:\vcpkg> .\vcpkg install libpng:x86-windows libjpeg-turbo:x86-windows llvm[target-all,clang-tools-extra]:x86-windows
-```
+When using the toolchain file, vcpkg will automatically build all the necessary
+dependencies.
 
 #### Building Halide
 
@@ -246,86 +241,74 @@ build in either 32-bit or 64-bit depending on the environment script (`vcvars`)
 that was run earlier.
 
 ```
-D:\Halide> cmake -G Ninja ^
-                 -DCMAKE_BUILD_TYPE=Release ^
-                 -DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
-                 -S . -B build
+D:\Halide> cmake -G Ninja -S . -B build ^
+                 --toolchain D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
+                 -DCMAKE_BUILD_TYPE=Release
 ```
-
-**Note:** If building with Python bindings on 32-bit (enabled by default), be
-sure to point CMake to the installation path of a 32-bit Python 3. You can do
-this by specifying, for example:
-`"-DPython3_ROOT_DIR=C:\Program Files (x86)\Python38-32"`.
 
 Then run the build with:
 
 ```
-D:\Halide> cmake --build build --config Release
+D:\Halide> cmake --build build
 ```
 
 To run all the tests:
 
 ```
-D:\Halide> cd build
-D:\Halide\build> ctest -C Release
+D:\Halide> ctest --test-dir build --output-on-failure
 ```
 
 Subsets of the tests can be selected with `-L` and include `correctness`,
-`python`, `error`, and the other directory names under `/tests`.
+`generator`, `error`, and the other directory names under `tests/`.
 
 #### Building LLVM (optional)
 
 Follow these steps if you want to build LLVM yourself. First, download LLVM's
-sources (these instructions use the latest 17.0 release)
+sources (these instructions use the 18.1.8 release).
 
 ```
-D:\> git clone --depth 1 --branch release/17.x https://github.com/llvm/llvm-project.git
+D:\> git clone --depth 1 --branch llvm-org-18.1.8 https://github.com/llvm/llvm-project.git
 ```
 
-For a 64-bit build, run:
+As above, run `vcvarsall.bat` to pick between x86 and x64. Then configure LLVM
+with the following command (for 32-bit, set `-DLLVM_BUILD_32_BITS=ON` instead):
 
 ```
-D:\> cmake -G Ninja ^
+D:\> cmake -G Ninja -S llvm-project\llvm -B build ^
            -DCMAKE_BUILD_TYPE=Release ^
            -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
-           -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;RISCV ^
+           -DLLVM_ENABLE_RUNTIMES=compiler-rt ^
+           -DLLVM_TARGETS_TO_BUILD=WebAssembly;X86;AArch64;ARM;Hexagon;NVPTX;PowerPC;RISCV ^
            -DLLVM_ENABLE_ASSERTIONS=ON ^
            -DLLVM_ENABLE_EH=ON ^
            -DLLVM_ENABLE_RTTI=ON ^
-           -DLLVM_BUILD_32_BITS=OFF ^
-           -S llvm-project\llvm -B llvm-build
-```
-
-For a 32-bit build, run:
-
-```
-D:\> cmake -G Ninja ^
-           -DCMAKE_BUILD_TYPE=Release ^
-           -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
+           -DLLVM_ENABLE_HTTPLIB=OFF ^
+           -DLLVM_ENABLE_LIBEDIT=OFF ^
+           -DLLVM_ENABLE_LIBXML2=OFF ^
            -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;RISCV ^
-           -DLLVM_ENABLE_ASSERTIONS=ON ^
-           -DLLVM_ENABLE_EH=ON ^
-           -DLLVM_ENABLE_RTTI=ON ^
-           -DLLVM_BUILD_32_BITS=ON ^
-           -S llvm-project\llvm -B llvm32-build
+           -DLLVM_ENABLE_ZLIB=OFF ^
+           -DLLVM_ENABLE_ZSTD=OFF ^
+           -DLLVM_BUILD_32_BITS=OFF
 ```
 
-Finally, run:
+**MSBuild:** If you want to build LLVM with MSBuild instead of Ninja, use
+`-G "Visual Studio 17 2022" -Thost=x64 -A x64` or
+`-G "Visual Studio 17 2022" -Thost=x64 -A Win32` in place of `-G Ninja`.
+
+Finally, run the build and install to a local directory:
 
 ```
-D:\> cmake --build llvm-build --config Release
-D:\> cmake --install llvm-build --prefix llvm-install
+D:\> cmake --build build --config Release
+D:\> cmake --install build --prefix llvm-install
 ```
 
 You can substitute `Debug` for `Release` in the above `cmake` commands if you
-want a debug build. Make sure to add `-DLLVM_DIR=D:/llvm-install/lib/cmake/llvm`
-to the Halide CMake command to override `vcpkg`'s LLVM.
+want a debug build.
 
-**MSBuild:** If you want to build LLVM with MSBuild instead of Ninja, use
-`-G "Visual Studio 16 2019" -Thost=x64 -A x64` or
-`-G "Visual Studio 16 2019" -Thost=x64 -A Win32` in place of `-G Ninja`.
+To use this with Halide, but still allow vcpkg to manage other dependencies, you
+must add two flags to Halide's CMake configure command line. First, disable LLVM
+with `-DVCPKG_OVERLAY_PORTS=cmake/vcpkg`. Second, point CMake to our newly built
+Halide with `-DHalide_LLVM_ROOT=D:/llvm-install`.
 
 #### If all else fails...
 
@@ -340,10 +323,17 @@ latest build to see what commands the build bots run, and what the output was.
 **TL;DR**: Have LLVM 17 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
 
-With `LLVM_CONFIG` set (or `llvm-config` in your path), you should be able to
-just run `make` in the root directory of the Halide source tree.
-`make run_tests` will run the JIT test suite, and `make test_apps` will make
-sure all the apps compile and run (but won't check their output).
+By default, `make` will use the `llvm-config` tool found in the `PATH`. If you
+want to use a different LLVM, such as a custom-built one following the
+instructions above, set the following environment variable:
+
+```shell
+$ export LLVM_CONFIG="$LLVM_ROOT/bin/llvm-config"
+```
+
+Now you should be able to just run `make` in the root directory of the Halide
+source tree. `make run_tests` will run the JIT test suite, and `make test_apps`
+will make sure all the apps compile and run (but won't check their output).
 
 There is no `make install`. If you want to make an install package, use CMake.
 
@@ -351,10 +341,12 @@ There is no `make install`. If you want to make an install package, use CMake.
 
 If you wish to build Halide in a separate directory, you can do that like so:
 
-    % cd ..
-    % mkdir halide_build
-    % cd halide_build
-    % make -f ../Halide/Makefile
+```shell
+$ cd ..
+$ mkdir halide_build
+$ cd halide_build
+$ make -f ../Halide/Makefile
+```
 
 # Some useful environment variables
 
