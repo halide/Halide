@@ -42,7 +42,7 @@ struct ArchParams {
      * CACHE_SIZE to 48 KB.
      */
     constexpr ArchParams(bool has_gpu_feature)
-        : parallelism(has_gpu_feature ? 128 : 16), last_level_cache_size(has_gpu_feature ? 48 * 1024 : 16 * 1024 * 1024),
+        : parallelism(has_gpu_feature ? 128 : 16), last_level_cache_size(has_gpu_feature ? 35 * 1024 : 16 * 1024 * 1024),
           balance(has_gpu_feature ? 20 : 40) {
     }
 };
