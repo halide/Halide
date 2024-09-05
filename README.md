@@ -217,7 +217,7 @@ between them.
 
 ### Windows
 
-We suggest building with Visual Studio 2019. Your mileage may vary with earlier
+We suggest building with Visual Studio 2022. Your mileage may vary with earlier
 versions. Be sure to install the "C++ CMake tools for Windows" in the Visual
 Studio installer. For older versions of Visual Studio, do not install the CMake
 tools, but instead acquire CMake and Ninja from their respective project

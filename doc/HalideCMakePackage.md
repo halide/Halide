@@ -763,7 +763,7 @@ using [`install(FILES)`][install-files] and the
 
 [lld]: https://lld.llvm.org/
 
-[msvc-cmd]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=vs-2019
+[msvc-cmd]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line
 
 [msvc]: https://cmake.org/cmake/help/latest/variable/MSVC.html
 
@@ -801,10 +801,8 @@ using [`install(FILES)`][install-files] and the
 
 [vcpkg]: https://github.com/Microsoft/vcpkg
 
-[vcvarsall]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=vs-2019#vcvarsall-syntax
+[vcvarsall]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line#vcvarsall-syntax
 
 [venv]: https://docs.python.org/3/tutorial/venv.html
-
-[vs2019-cmake-docs]: https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio?view=vs-2019
 
 [win32]: https://cmake.org/cmake/help/latest/variable/WIN32.html
