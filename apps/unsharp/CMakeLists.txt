@@ -18,7 +18,8 @@ add_halide_generator(unsharp.generator SOURCES unsharp_generator.cpp)
 add_halide_library(unsharp FROM unsharp.generator)
 add_halide_library(unsharp_auto_schedule FROM unsharp.generator
                    GENERATOR unsharp
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(unsharp_filter filter.cpp)
