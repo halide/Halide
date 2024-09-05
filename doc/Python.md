@@ -1,34 +1,33 @@
 # Halide Bindings for Python
 
-<!-- MarkdownTOC autolink="true" -->
-
-- [Python Requirements](#python-requirements)
-- [Compilation Instructions](#compilation-instructions)
-- [Documentation and Examples](#documentation-and-examples)
-- [Differences from C++ API](#differences-from-c-api)
-- [Example of Simple Usage](#example-of-simple-usage)
-- [Halide Generators In Python](#halide-generators-in-python)
-    - [Writing a Generator in Python](#writing-a-generator-in-python)
-        - [@hl.generator\("name"\)](#hlgeneratorname)
-        - [hl.GeneratorParam](#hlgeneratorparam)
-        - [hl.InputBuffer, hl.InputScalar](#hlinputbuffer-hlinputscalar)
-        - [hl.OutputBuffer, hl.OutputScalar](#hloutputbuffer-hloutputscalar)
-        - [Names](#names)
-        - [generate\(\) method](#generate-method)
-        - [Types for Inputs and Outputs](#types-for-inputs-and-outputs)
-    - [Using a Generator for JIT compilation](#using-a-generator-for-jit-compilation)
-    - [Using a Generator for AOT compilation](#using-a-generator-for-aot-compilation)
-    - [Calling Generator-Produced code from Python](#calling-generator-produced-code-from-python)
-    - [Advanced Generator-Related Topics](#advanced-generator-related-topics)
-        - [Generator Aliases](#generator-aliases)
-        - [Dynamic Inputs and Outputs](#dynamic-inputs-and-outputs)
-        - [Calling a Generator Directly](#calling-a-generator-directly)
-        - [The Lifecycle Of A Generator](#the-lifecycle-of-a-generator)
-        - [Notable Differences Between C++ and Python Generators](#notable-differences-between-c-and-python-generators)
-- [Keeping Up To Date](#keeping-up-to-date)
-- [License](#license)
-
-<!-- /MarkdownTOC -->
+<!-- TOC -->
+* [Halide Bindings for Python](#halide-bindings-for-python)
+  * [Python Requirements](#python-requirements)
+  * [Compilation Instructions](#compilation-instructions)
+  * [Documentation and Examples](#documentation-and-examples)
+  * [Differences from C++ API](#differences-from-c-api)
+  * [Example of Simple Usage](#example-of-simple-usage)
+  * [Halide Generators In Python](#halide-generators-in-python)
+    * [Writing a Generator in Python](#writing-a-generator-in-python)
+      * [@hl.generator("name")](#hlgeneratorname)
+      * [hl.GeneratorParam](#hlgeneratorparam)
+      * [hl.InputBuffer, hl.InputScalar](#hlinputbuffer-hlinputscalar)
+      * [hl.OutputBuffer, hl.OutputScalar](#hloutputbuffer-hloutputscalar)
+      * [Names](#names)
+      * [generate() method](#generate-method)
+      * [Types for Inputs and Outputs](#types-for-inputs-and-outputs)
+    * [Using a Generator for JIT compilation](#using-a-generator-for-jit-compilation)
+    * [Using a Generator for AOT compilation](#using-a-generator-for-aot-compilation)
+    * [Calling Generator-Produced code from Python](#calling-generator-produced-code-from-python)
+    * [Advanced Generator-Related Topics](#advanced-generator-related-topics)
+      * [Generator Aliases](#generator-aliases)
+      * [Dynamic Inputs and Outputs](#dynamic-inputs-and-outputs)
+      * [Calling a Generator Directly](#calling-a-generator-directly)
+      * [The Lifecycle Of A Generator](#the-lifecycle-of-a-generator)
+      * [Notable Differences Between C++ and Python Generators](#notable-differences-between-c-and-python-generators)
+  * [Keeping Up To Date](#keeping-up-to-date)
+  * [License](#license)
+<!-- TOC -->
 
 Halide provides Python bindings for most of its public API. Python 3.8 (or
 higher) is required. The Python bindings are supported on 64-bit Linux, OSX,
