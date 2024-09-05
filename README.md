@@ -344,11 +344,13 @@ Halide with `-DHalide_LLVM_ROOT=D:/llvm-install`.
 
 #### If all else fails...
 
-Do what the build-bots do: https://buildbot.halide-lang.org/master/#/builders
+Do what the buildbots do: https://buildbot.halide-lang.org/master/#/builders
 
-If the column that best matches your system is red, then maybe things aren't
-just broken for you. If it's green, then you can click the "stdio" links in the
-latest build to see what commands the build bots run, and what the output was.
+If the row that best matches your system is red, then maybe things aren't just
+broken for you. If it's green, then you can click through to the latest build
+and see the commands that the build bots run. Open a step ("Configure Halide" is
+useful) and look at the "stdio" logs in the viewer. These logs contain the full
+commands that were run, as well as the environment variables they were run with.
 
 ## Building Halide with make
 
