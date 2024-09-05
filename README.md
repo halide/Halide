@@ -355,9 +355,9 @@ commands that were run, as well as the environment variables they were run with.
 ## Building Halide with make
 
 > [!WARNING]
-> Make support is limited and may be broken at times. CMake is the reference
-> build system, and we _strongly_ recommend using it. Make remains mostly to
-> support certain upstream workflows.
+> We do not provide support for the Makefile. Feel free to use it, but if
+> anything goes wrong, switch to the CMake build. Note also that the Makefile
+> cannot build the Python bindings or produce install packages.
 
 *TL;DR*: Have LLVM 17 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
@@ -376,8 +376,6 @@ will make sure all the apps compile and run (but won't check their output).
 
 When building the tests, you can set the AOT compilation target with the 
 `HL_TARGET` environment variable.
-
-There is no `make install`. If you want to make an install package, use CMake.
 
 ### Building Halide out-of-tree with make
 
