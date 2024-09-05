@@ -339,7 +339,12 @@ latest build to see what commands the build bots run, and what the output was.
 
 ## Building Halide with make
 
-**TL;DR**: Have LLVM 17 (or greater) installed and run `make` in the root
+> [!WARNING]
+> Make support is limited and may be broken at times. CMake is the reference
+> build system, and we _strongly_ recommend using it. Make remains mostly to
+> support certain upstream workflows.
+
+*TL;DR*: Have LLVM 17 (or greater) installed and run `make` in the root
 directory of the repository (where this README is).
 
 By default, `make` will use the `llvm-config` tool found in the `PATH`. If you
