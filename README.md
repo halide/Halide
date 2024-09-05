@@ -17,36 +17,17 @@ in Python without C++.
 
 Halide requires C++17 (or later) to use.
 
-For more detail about what Halide is, see http://halide-lang.org.
+For more detail about what Halide is, see https://halide-lang.org.
 
-For API documentation see http://halide-lang.org/docs
+For API documentation see https://halide-lang.org/docs
 
-To see some example code, look in the tutorials directory.
+To see some example code, read through the tutorials
+at https://halide-lang.org/tutorials. The code is in the `tutorials/` directory.
+
+To see some larger examples, look through the `apps/`.
 
 If you've acquired a full source distribution and want to build Halide, see the
 [notes below](#building-halide-with-cmake).
-
-## Looking for more detail?
-
-We have more documentation in `doc/`, the following links might be helpful:
-
-| Document                             | Description                                                               |
-|--------------------------------------|---------------------------------------------------------------------------|
-| [CMake build](doc/CMakeBuild.md)     | How to configure and build Halide using CMake.                            |
-| [CMake package](doc/CMakePackage.md) | How to use the Halide CMake package to build your code.                   |
-| [Python](doc/Python.md)              | Documentation for the Python bindings                                     |
-| [RunGen](doc/RunGen.md)              | How to use the RunGen interface to run and benchmark arbitrary pipelines. |
-| [Vulkan](doc/Vulkan.md)              | How to use the Halide Vulkan backend (BETA)                               |
-| [WebAssembly](doc/WebAssembly.md)    | How to use the WebAssembly backend and how to use V8 in place of wabt.    |
-| [WebGPU](doc/WebGPU.md)              | How to run WebGPU pipelines (BETA)                                        |
-
-The following links are of greater interest to developers wishing to contribute
-code to Halide:
-
-| Document                                 | Description                                                                                                   |
-|------------------------------------------|---------------------------------------------------------------------------------------------------------------|
-| [CMake developer](doc/CMakeDeveloper.md) | Guidelines for authoring new CMake code.                                                                      |
-| [FuzzTesting](doc/FuzzTesting.md)        | Information about fuzz testing the Halide compiler (rather than pipelines). Intended for internal developers. |
 
 # Getting Halide
 
@@ -385,6 +366,28 @@ default, the number of cores on the host is used.)
 (ignored unless at least one `trace_` feature is enabled in `HL_TARGET` or
 `HL_JIT_TARGET`). The output can be parsed programmatically by starting from the
 code in `utils/HalideTraceViz.cpp`.
+
+# Further references
+
+We have more documentation in `doc/`, the following links might be helpful:
+
+| Document                             | Description                                                               |
+|--------------------------------------|---------------------------------------------------------------------------|
+| [CMake build](doc/CMakeBuild.md)     | How to configure and build Halide using CMake.                            |
+| [CMake package](doc/CMakePackage.md) | How to use the Halide CMake package to build your code.                   |
+| [Python](doc/Python.md)              | Documentation for the Python bindings                                     |
+| [RunGen](doc/RunGen.md)              | How to use the RunGen interface to run and benchmark arbitrary pipelines. |
+| [Vulkan](doc/Vulkan.md)              | How to use the Halide Vulkan backend (BETA)                               |
+| [WebAssembly](doc/WebAssembly.md)    | How to use the WebAssembly backend and how to use V8 in place of wabt.    |
+| [WebGPU](doc/WebGPU.md)              | How to run WebGPU pipelines (BETA)                                        |
+
+The following links are of greater interest to developers wishing to contribute
+code to Halide:
+
+| Document                                 | Description                                                                                                   |
+|------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| [CMake developer](doc/CMakeDeveloper.md) | Guidelines for authoring new CMake code.                                                                      |
+| [FuzzTesting](doc/FuzzTesting.md)        | Information about fuzz testing the Halide compiler (rather than pipelines). Intended for internal developers. |
 
 # Using Halide on OSX
 
