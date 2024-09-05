@@ -109,13 +109,13 @@ the _binary outputs_ of the AOT compiler.
 These are the **tested** host toolchain and platform combinations for building
 and running the Halide compiler library.
 
-| Compiler   | Version      | OS                     | Architectures   |
-|------------|--------------|------------------------|-----------------|
-| GCC        | 9.4          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
-| GCC        | 9.4          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
-| MSVC       | 2019 (19.28) | Windows 10 (20H2)      | x86, x64        |
-| AppleClang | 14.0.3       | macOS 13.4             | x86_64          |
-| AppleClang | 14.0.3       | macOS 13.4             | ARM64           |
+| Compiler   | Version      | OS                     | Architectures |
+|------------|--------------|------------------------|---------------|
+| GCC        | 9.5          | Ubuntu Linux 20.04 LTS | x86, x64      |
+| GCC        | 11.4         | Ubuntu Linux 22.04 LTS | ARM32, ARM64  |
+| MSVC       | 2022 (19.37) | Windows 11 (22631)     | x86, x64      |
+| AppleClang | 15.0.0       | macOS 14.4.1           | x64           |
+| AppleClang | 14.0.0       | macOS 14.6             | ARM64         |
 
 Some users have successfully built Halide for Linux using Clang 9.0.0+, for
 Windows using ClangCL 11.0.0+, and for Windows ARM64 by cross-compiling with
