@@ -30,6 +30,36 @@ If you've acquired a full source distribution and want to build Halide, see the
 
 # Getting Halide
 
+## Pip
+
+As of Halide 19.0.0, we provide binary wheels on PyPI which include the Python
+bindings and the C++/CMake package for native development. Full releases may be
+installed with `pip` like so:
+
+```shell
+$ pip install halide
+```
+
+Every commit to `main` is published to Test PyPI as a development version and
+these may be installed with a few extra flags:
+
+```shell
+$ pip install halide --pre --extra-index-url https://test.pypi.org/simple
+```
+
+Currently, we provide wheels for: Windows x86-64, macOS x86-64, macOS arm64, and
+Linux x86-64. The Linux wheels are built for manylinux_2_28, which makes them
+broadly compatible (Ubuntu 18.04 LTS+).
+
+## Homebrew
+
+Alternatively, if you use macOS, you can install Halide via
+[Homebrew](https://brew.sh/) like so:
+
+```
+$ brew install halide
+```
+
 ## Binary tarballs
 
 The latest version of Halide can always be found on GitHub
@@ -61,25 +91,12 @@ code for the active platform. If you want to include all the backends, you
 should install `halide[target-all]:x64-windows` instead. Note that since this
 will build LLVM, it will take a _lot_ of disk space (up to 100GB).
 
-## Homebrew
-
-Alternatively, if you use macOS, you can install Halide via
-[Homebrew](https://brew.sh/) like so:
-
-```
-$ brew install halide
-```
-
 ## Other package managers
 
 We are interested in bringing Halide to other popular package managers and Linux
-distribution repositories including, but not limited to, Conan,
-Debian, [Ubuntu (or PPA)](https://github.com/halide/Halide/issues/5285),
-CentOS/Fedora, and Arch. If you have experience publishing packages we would be
-happy to work with you!
-
-If you are a maintainer of any other package distribution platform, we would be
-excited to work with you, too.
+distribution repositories! We track the status of various distributions of
+Halide [in this GitHub issue](https://github.com/halide/Halide/issues/4660). If
+you have experience publishing packages we would be happy to work with you!
 
 # Building Halide
 
