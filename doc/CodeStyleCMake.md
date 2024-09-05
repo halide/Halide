@@ -244,14 +244,6 @@ guidelines you should follow when writing a new app.
 
 [build_shared_libs]: https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html
 
-[choco-cmake]: https://chocolatey.org/packages/cmake/
-
-[choco-doxygen]: https://chocolatey.org/packages/doxygen.install
-
-[choco-ninja]: https://chocolatey.org/packages/ninja
-
-[chocolatey]: https://chocolatey.org/
-
 [cmake-apt]: https://apt.kitware.com/
 
 [cmake-discourse]: https://discourse.cmake.org/
