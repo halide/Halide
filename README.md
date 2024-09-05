@@ -147,8 +147,10 @@ this means versions 19, 18, and 17 are supported, but 16 is not.
 It is simplest to get a binary release of LLVM on macOS by using
 [Homebrew](https://brew.sh). Just run `brew install llvm`. On Debian flavors of
 Linux, the [LLVM APT repo](https://apt.llvm.org) is best; use the provided
-installation script. We know of no suitable binary releases for Windows.
-See [the section on Windows](#windows) below for tailored instructions.
+installation script. We know of no suitable official binary releases for
+Windows, however the ones we use in CI can usually be found at
+https://buildbot.halide-lang.org, along with tarballs for our other tested
+platforms. See [the section on Windows](#windows) below for further advice.
 
 If your OS does not have packages for LLVM, or you want more control over the
 configuration, you can build it yourself. First check it out from GitHub:
