@@ -97,7 +97,7 @@ However, this has two major pitfalls. First, it applies to _all_ targets created
 in that directory, even those before the call to `include_directories` and those
 created in [`include()`][include]-ed CMake files. As CMake files get larger and
 more complex, this behavior gets harder to pinpoint. This is particularly vexing
-when using the `link_libraries` or `add_defintions` commands. Second, this form
+when using the `link_libraries` or `add_definitions` commands. Second, this form
 does not provide a way to _propagate_ the include directory to consumers of
 `my_lib`. The correct way to do this is:
 
