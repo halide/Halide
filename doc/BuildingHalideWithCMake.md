@@ -51,12 +51,12 @@ Kitware provides packages for CMake on [PyPI][pypi-cmake] which can be installed
 via `pip` into a [virtual environment][venv]. There are binary wheels available
 for nearly all relevant platforms, including:
 
-| OS                | x86-32             | x86-64             | ARM64                      | s390x              | ppc64le            |
-|-------------------|--------------------|--------------------|----------------------------|--------------------|--------------------|
-| Windows           | :white_check_mark: | :white_check_mark: | :white_check_mark:         | :x:                | :x:                |
-| macOS             | :x:                | 10.10+             | 11.0+ (incl. `universal2`) | :x:                | :x:                |
-| Linux (musl 1.1+) | :white_check_mark: | :white_check_mark: | :white_check_mark:         | :white_check_mark: | :white_check_mark: |
-| Linux (glibc)     | glibc 2.12+        | glibc 2.12+        | glibc 2.17+                | glibc 2.17+        | glibc 2.17+        |
+| OS                | x86-32             | x86-64             | ARM64                      |
+|-------------------|--------------------|--------------------|----------------------------|
+| Windows           | :white_check_mark: | :white_check_mark: | :white_check_mark:         |
+| macOS             | :x:                | 10.10+             | 11.0+ (incl. `universal2`) |
+| Linux (musl 1.1+) | :white_check_mark: | :white_check_mark: | :white_check_mark:         |
+| Linux (glibc)     | glibc 2.12+        | glibc 2.12+        | glibc 2.17+                |
 
 We recommend installing CMake using [pipx] to avoid package conflicts and
 redundant installations. After installing pipx, run:
