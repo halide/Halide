@@ -68,8 +68,9 @@ broadly compatible (Debian 10, Ubuntu 18.10, Fedora 29).
 
 If `pip` isn't enough for your purposes, or you are developing Halide directly,
 you have two options for building and using the Python bindings. Note that the
-bindings require both Halide and LLVM to be built with RTTI and exceptions
-**enabled**, which is not the default for LLVM.
+bindings require Halide to be built with RTTI and exceptions **enabled**, which
+in turn requires LLVM to be built with RTTI, but this is not the default for
+LLVM.
 
 ### Using CMake directly
 
