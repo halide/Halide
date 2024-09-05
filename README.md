@@ -6,8 +6,7 @@ currently targets:
 
 - CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V
 - Operating systems: Linux, Windows, macOS, Android, iOS, Qualcomm QuRT
-- GPU Compute APIs: CUDA, OpenCL, Apple Metal, Microsoft
-  Direct X 12, Vulkan
+- GPU Compute APIs: CUDA, OpenCL, Apple Metal, Microsoft Direct X 12, Vulkan
 
 Rather than being a standalone programming language, Halide is embedded in C++.
 This means you write C++ code that builds an in-memory representation of a
@@ -41,8 +40,8 @@ We have more documentation in `doc/`, the following links might be helpful:
 | [WebAssembly](doc/WebAssembly.md)    | How to use the WebAssembly backend and how to use V8 in place of wabt.    |
 | [WebGPU](doc/WebGPU.md)              | How to run WebGPU pipelines (BETA)                                        |
 
-The following links are of greater interest to developers wishing to 
-contribute code to Halide:
+The following links are of greater interest to developers wishing to contribute
+code to Halide:
 
 | Document                                 | Description                                                                                                   |
 |------------------------------------------|---------------------------------------------------------------------------------------------------------------|
@@ -56,9 +55,9 @@ contribute code to Halide:
 The latest version of Halide can always be found on GitHub
 at https://github.com/halide/Halide/releases
 
-We provide binary releases for many popular platforms and architectures, 
-including 32/64-bit x86 Windows, 64-bit macOS, and 32/64-bit x86/ARM
-Ubuntu Linux.
+We provide binary releases for many popular platforms and architectures,
+including 32/64-bit x86 Windows, 64-bit macOS, and 32/64-bit x86/ARM Ubuntu
+Linux.
 
 ## Vcpkg
 
@@ -85,8 +84,8 @@ $ brew install halide
 
 ## Other package managers
 
-We are interested in bringing Halide to other popular package managers and
-Linux distribution repositories including, but not limited to, Conan,
+We are interested in bringing Halide to other popular package managers and Linux
+distribution repositories including, but not limited to, Conan,
 Debian, [Ubuntu (or PPA)](https://github.com/halide/Halide/issues/5285),
 CentOS/Fedora, and Arch. If you have experience publishing packages we would be
 happy to work with you!
@@ -152,8 +151,8 @@ If you want to build it yourself, first check it out from GitHub:
 % git clone --depth 1 --branch llvmorg-18.1.8 https://github.com/llvm/llvm-project.git
 ```
 
-(LLVM 18.1.8 is the most recent released LLVM at the time of writing. For current trunk,
-use `main` instead)
+(LLVM 18.1.8 is the most recent released LLVM at the time of writing. For
+current trunk, use `main` instead)
 
 Then build it like so:
 
@@ -170,9 +169,9 @@ Then build it like so:
 ```
 
 Running a serial build will be slow. To improve speed, try running a parallel
-build. That's done by default in Ninja; for make, use the option -j NNN,
-where NNN is the number of parallel jobs, e.g. the number of CPUs you have.
-Then, point Halide to it:
+build. That's done by default in Ninja; for make, use the option -j NNN, where
+NNN is the number of parallel jobs, e.g. the number of CPUs you have. Then,
+point Halide to it:
 
 ```
 % export LLVM_ROOT=$PWD/llvm-install
@@ -430,9 +429,11 @@ branch.)
 
 Go to https://qpm.qualcomm.com/#/main/home
 
-1. Go to Tools, and download Qualcomm Package Manager 3. Install the package manager on your machine.
-2. Run the installed Qualcomm Package Manager and install the Qualcomm Hexagon SDK 5.x (or 4.x).
-   The SDK can be selected from the Qualcomm Hexagon SDK Products.
+1. Go to Tools, and download Qualcomm Package Manager 3. Install the package
+   manager on your machine.
+2. Run the installed Qualcomm Package Manager and install the Qualcomm Hexagon
+   SDK 5.x (or 4.x). The SDK can be selected from the Qualcomm Hexagon SDK
+   Products.
 3. Set an environment variable to point to the SDK installation location
    ```
    export SDK_LOC=/location/of/SDK
