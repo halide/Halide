@@ -10,11 +10,8 @@ in all its examples. To learn more about CMake, consult the
 [documentation][cmake-docs] and engage with the community on
 the [CMake Discourse][cmake-discourse].
 
-# Table of Contents
-
 <!-- TOC -->
 * [Using Halide from your CMake build](#using-halide-from-your-cmake-build)
-* [Table of Contents](#table-of-contents)
 * [A basic CMake project](#a-basic-cmake-project)
   * [JIT mode](#jit-mode)
   * [AOT mode](#aot-mode)

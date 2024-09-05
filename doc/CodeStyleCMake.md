@@ -19,11 +19,8 @@ When contributing new CMake code to Halide, keep in mind that the minimum
 version is 3.28. Therefore, it is not only possible, but _required_, to use
 modern CMake best practices.
 
-# Table of Contents
-
 <!-- TOC -->
 * [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
-* [Table of Contents](#table-of-contents)
 * [General guidelines and best practices](#general-guidelines-and-best-practices)
   * [Prohibited commands list](#prohibited-commands-list)
   * [Prohibited variables list](#prohibited-variables-list)

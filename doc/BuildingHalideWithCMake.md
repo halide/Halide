@@ -4,11 +4,8 @@ This is a detailed guide to building Halide with CMake. If you want to learn how
 to use Halide in your own CMake projects, see [HalideCMakePackage.md]. If you
 are looking for Halide's CMake coding guidelines, see [CodeStyleCMake.md].
 
-# Table of Contents
-
 <!-- TOC -->
 * [Building Halide with CMake](#building-halide-with-cmake)
-* [Table of Contents](#table-of-contents)
 * [Installing CMake](#installing-cmake)
   * [Cross-platform](#cross-platform)
   * [Windows](#windows)
