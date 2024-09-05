@@ -258,7 +258,13 @@ CMake projects should use: "-DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems
 ```
 
 When using the toolchain file, vcpkg will automatically build all the necessary
-dependencies.
+dependencies. However, as stated above, be aware that acquiring LLVM this way
+may use over 100 GB of disk space for its build trees and take a very long time
+to build. You can manually delete the build trees afterward, but vcpkg will not
+do this automatically.
+
+See [BuildingHalideWithCMake.md](./doc/BuildingHalideWithCMake.md#vcpkg-presets)
+for directions to use Vcpkg for everything _except_ LLVM.
 
 #### Building Halide
 
