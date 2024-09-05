@@ -37,8 +37,16 @@ The latest version of Halide can always be found on GitHub
 at https://github.com/halide/Halide/releases
 
 We provide binary releases for many popular platforms and architectures,
-including 32/64-bit x86 Windows, 64-bit macOS, and 32/64-bit x86/ARM Ubuntu
-Linux.
+including 32/64-bit x86 Windows, 64-bit x86/ARM macOS, and 32/64-bit x86/ARM 
+Ubuntu Linux.
+
+The macOS releases are built using XCode's command-line tools with
+Apple Clang 500.2.76. This means that we link against libc++ instead of
+libstdc++. You may need to adjust compiler options accordingly if you're using
+an older XCode which does not default to libc++.
+
+We use a recent Ubuntu LTS to build the Linux releases; if your distribution 
+is too old, it might not have the requisite glibc.
 
 ## Vcpkg
 
@@ -74,7 +82,9 @@ happy to work with you!
 If you are a maintainer of any other package distribution platform, we would be
 excited to work with you, too.
 
-# Platform Support
+# Building Halide
+
+## Platform Support
 
 There are two sets of platform requirements relevant to Halide: those required
 to run the compiler library in either JIT or AOT mode, and those required to run
@@ -107,14 +117,7 @@ the generated headers correctly. The C++ bindings currently require C++17. If
 you discover a compatibility problem with a generated pipeline, please open an
 issue.
 
-# Building Halide with Make
-
-### TL;DR
-
-Have llvm-16.0 (or greater) installed and run `make` in the root directory of
-the repository (where this README is).
-
-### Acquiring LLVM
+## Acquiring LLVM
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
@@ -167,25 +170,9 @@ contribute code to Halide (so that you can run `clang-tidy` on your pull
 requests). We recommend enabling both in all cases to simplify builds. You can
 disable exception handling (EH) and RTTI if you don't want the Python bindings.
 
-### Building Halide with make
+## Building Halide with CMake
 
-With `LLVM_CONFIG` set (or `llvm-config` in your path), you should be able to
-just run `make` in the root directory of the Halide source tree.
-`make run_tests` will run the JIT test suite, and `make test_apps` will make
-sure all the apps compile and run (but won't check their output).
-
-There is no `make install`. If you want to make an install package, use CMake.
-
-### Building Halide out-of-tree with make
-
-If you wish to build Halide in a separate directory, you can do that like so:
-
-    % cd ..
-    % mkdir halide_build
-    % cd halide_build
-    % make -f ../Halide/Makefile
-
-# Building Halide with CMake
+This is discussed in greater detail in [CMakeBuild.md](./doc/CMakeBuild.md).
 
 ### MacOS and Linux
 
@@ -348,6 +335,27 @@ If the column that best matches your system is red, then maybe things aren't
 just broken for you. If it's green, then you can click the "stdio" links in the
 latest build to see what commands the build bots run, and what the output was.
 
+## Building Halide with make
+
+**TL;DR**: Have LLVM 17 (or greater) installed and run `make` in the root
+directory of the repository (where this README is).
+
+With `LLVM_CONFIG` set (or `llvm-config` in your path), you should be able to
+just run `make` in the root directory of the Halide source tree.
+`make run_tests` will run the JIT test suite, and `make test_apps` will make
+sure all the apps compile and run (but won't check their output).
+
+There is no `make install`. If you want to make an install package, use CMake.
+
+### Building Halide out-of-tree with make
+
+If you wish to build Halide in a separate directory, you can do that like so:
+
+    % cd ..
+    % mkdir halide_build
+    % cd halide_build
+    % make -f ../Halide/Makefile
+
 # Some useful environment variables
 
 `HL_TARGET=...` will set Halide's AOT compilation target.
@@ -388,13 +396,6 @@ code to Halide:
 |------------------------------------------|---------------------------------------------------------------------------------------------------------------|
 | [CMake developer](doc/CMakeDeveloper.md) | Guidelines for authoring new CMake code.                                                                      |
 | [FuzzTesting](doc/FuzzTesting.md)        | Information about fuzz testing the Halide compiler (rather than pipelines). Intended for internal developers. |
-
-# Using Halide on OSX
-
-Precompiled Halide distributions are built using XCode's command-line tools with
-Apple clang 500.2.76. This means that we link against libc++ instead of
-libstdc++. You may need to adjust compiler options accordingly if you're using
-an older XCode which does not default to libc++.
 
 # Halide for Hexagon HVX
 
