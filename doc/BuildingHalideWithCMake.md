@@ -553,6 +553,8 @@ Python and C++ `find_package` workflows.
 
 [V8]: https://v8.dev
 
+[WebAssembly.md]: ./WebAssembly.md
+
 [add_subdirectory]: https://cmake.org/cmake/help/latest/command/add_subdirectory.html
 
 [brew-cmake]: https://formulae.brew.sh/cask/cmake#default
