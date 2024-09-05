@@ -433,7 +433,7 @@ targets (like tests and documentation) are built.
 | Option                 | Default | Description                                                      |
 |------------------------|---------|------------------------------------------------------------------|
 | `WITH_DOCS`            | `OFF`   | Enable building the documentation via Doxygen                    |
-| `WITH_PACKAGING`       | `ON`    | Enable building Python 3 bindings                                |
+| `WITH_PACKAGING`       | `ON`    | Include the `install()` rules for Halide.                        |
 | `WITH_PYTHON_BINDINGS` | `ON`    | Enable building Python 3 bindings                                |
 | `WITH_TESTS`           | `ON`    | Enable building unit and integration tests                       |
 | `WITH_TUTORIALS`       | `ON`    | Enable building the tutorials                                    |
