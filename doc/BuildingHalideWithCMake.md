@@ -1,8 +1,8 @@
 # Building Halide with CMake
 
 This is a detailed guide to building Halide with CMake. If you want to learn how
-to use Halide in your own CMake projects, see [CMakePackage.md]. If you are
-looking for Halide's CMake coding guidelines, see [CMakeDeveloper.md].
+to use Halide in your own CMake projects, see [HalideCMakePackage.md]. If you
+are looking for Halide's CMake coding guidelines, see [CodeStyleCMake.md].
 
 # Table of Contents
 
@@ -521,10 +521,6 @@ Python and C++ `find_package` workflows.
 [ATLAS]: http://math-atlas.sourceforge.net/
 
 [Clang]: https://clang.llvm.org
-
-[CMakeDeveloper.md]: ./CMakeDeveloper.md
-
-[CMakePackage.md]: ./CMakePackage.md
 
 [Eigen3]: http://eigen.tuxfamily.org/index.php?title=Main_Page
 

@@ -1,8 +1,9 @@
 # Contributing CMake code to Halide
 
 This document specifies the coding standards we adhere to when authoring new
-CMake code. If you need directions for building Halide, see [CMakeBuild.md]. If
-you are looking for Halide's CMake package documentation, see [CMakePackage.md].
+CMake code. If you need directions for building Halide,
+see [BuildingHalideWithCMake.md]. If you are looking for Halide's CMake package
+documentation, see [HalideCMakePackage.md].
 
 This document is necessary for two major reasons. First, due to its long
 history, size, and dedication to backwards compatibility, CMake is _incredibly_

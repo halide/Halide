@@ -1,9 +1,9 @@
 # Using Halide from your CMake build
 
 This is a detailed guide to building your own Halide programs with the official
-CMake package. If you need directions for building Halide, see [CMakeBuild.md].
-If you are looking for Halide's CMake coding guidelines,
-see [CMakeDeveloper.md].
+CMake package. If you need directions for building Halide,
+see [BuildingHalideWithCMake.md]. If you are looking for Halide's CMake coding
+guidelines, see [CodeStyleCMake.md].
 
 This document assumes some basic familiarity with CMake but tries to be explicit
 in all its examples. To learn more about CMake, consult the
@@ -623,7 +623,7 @@ allows one to specify a command _prefix_ to run a target-system binary on the
 host machine. One could set this to a custom shell script that uploads the
 generator executable, runs it on the device and copies back the results.
 
-Another option is to install `qemu-user-static` to transparently emulate the 
+Another option is to install `qemu-user-static` to transparently emulate the
 cross-built generator.
 
 ## Bypass CMake

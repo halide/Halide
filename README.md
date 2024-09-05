@@ -196,8 +196,10 @@ recommend enabling the full set to simplify builds during development.
 
 ## Building Halide with CMake
 
-This is discussed in greater detail in [CMakeBuild.md](./doc/CMakeBuild.md).
-CMake version 3.28+ is required to build Halide.
+This is discussed in greater detail in [BuildingHalideWithCMake.md]. CMake
+version 3.28+ is required to build Halide.
+
+[BuildingHalideWithCMake.md]: doc/BuildingHalideWithCMake.md
 
 ### MacOS and Linux
 
@@ -388,21 +390,21 @@ code in `utils/HalideTraceViz.cpp`.
 
 We have more documentation in `doc/`, the following links might be helpful:
 
-| Document                             | Description                                                               |
-|--------------------------------------|---------------------------------------------------------------------------|
-| [CMake build](doc/CMakeBuild.md)     | How to configure and build Halide using CMake.                            |
-| [CMake package](doc/CMakePackage.md) | How to use the Halide CMake package to build your code.                   |
-| [Hexagon](doc/Hexagon.md)            | How to use the Hexagon backend.                                           |
-| [Python](doc/Python.md)              | Documentation for the Python bindings.                                    |
-| [RunGen](doc/RunGen.md)              | How to use the RunGen interface to run and benchmark arbitrary pipelines. |
-| [Vulkan](doc/Vulkan.md)              | How to use the Halide Vulkan backend (BETA)                               |
-| [WebAssembly](doc/WebAssembly.md)    | How to use the WebAssembly backend and how to use V8 in place of wabt.    |
-| [WebGPU](doc/WebGPU.md)              | How to run WebGPU pipelines (BETA)                                        |
+| Document                                      | Description                                                               |
+|-----------------------------------------------|---------------------------------------------------------------------------|
+| [CMake build](doc/BuildingHalideWithCMake.md) | How to configure and build Halide using CMake.                            |
+| [CMake package](doc/HalideCMakePackage.md)    | How to use the Halide CMake package to build your code.                   |
+| [Hexagon](doc/Hexagon.md)                     | How to use the Hexagon backend.                                           |
+| [Python](doc/Python.md)                       | Documentation for the Python bindings.                                    |
+| [RunGen](doc/RunGen.md)                       | How to use the RunGen interface to run and benchmark arbitrary pipelines. |
+| [Vulkan](doc/Vulkan.md)                       | How to use the Halide Vulkan backend (BETA)                               |
+| [WebAssembly](doc/WebAssembly.md)             | How to use the WebAssembly backend and how to use V8 in place of wabt.    |
+| [WebGPU](doc/WebGPU.md)                       | How to run WebGPU pipelines (BETA)                                        |
 
 The following links are of greater interest to developers wishing to contribute
 code to Halide:
 
 | Document                                 | Description                                                                                                   |
 |------------------------------------------|---------------------------------------------------------------------------------------------------------------|
-| [CMake developer](doc/CMakeDeveloper.md) | Guidelines for authoring new CMake code.                                                                      |
+| [CMake developer](doc/CodeStyleCMake.md) | Guidelines for authoring new CMake code.                                                                      |
 | [FuzzTesting](doc/FuzzTesting.md)        | Information about fuzz testing the Halide compiler (rather than pipelines). Intended for internal developers. |
