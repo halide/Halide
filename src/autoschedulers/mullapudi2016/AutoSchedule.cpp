@@ -3302,8 +3302,8 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     // Find the level at which group members will be computed.
-    internal_assert(dims.size() > outer_dims.size());
-    const auto tile_inner_index = dims.size() - outer_dims.size() - 1;
+    internal_assert(dims.size() >= outer_dims.size());
+    const auto tile_inner_index = std::max(int(dims.size() - outer_dims.size()) - 1, 0);
     VarOrRVar tile_inner_var(Var::outermost());
     if (!outer_dims.empty()) {
         string var_name = get_base_name(dims[tile_inner_index].var);
