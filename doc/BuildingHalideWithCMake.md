@@ -226,8 +226,8 @@ done by running the official installer from the [Python website][python]. Be
 sure to download the debugging symbols through the installer. This will require
 using the "Advanced Installation" workflow. Although it is not strictly
 necessary, it is convenient to install Python system-wide on Windows (i.e.
-`C:\Program Files`). This makes it easy for CMake to find without needing to
-manually set the `PATH`.
+`C:\Program Files`) because CMake looks at standard paths and registry keys.
+This removes the need to manually set the `PATH`.
 
 Once Python is installed, you can install the Python module dependencies either
 globally or in a [virtual environment][venv] by running

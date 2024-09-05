@@ -144,7 +144,7 @@ At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, or trunk. At the time of writing,
 this means versions 19, 18, and 17 are supported, but 16 is not.
 
-It is easy to get a binary release of LLVM on macOS by using
+It is simplest to get a binary release of LLVM on macOS by using
 [Homebrew](https://brew.sh). Just run `brew install llvm`. On Debian flavors of
 Linux, the [LLVM APT repo](https://apt.llvm.org) is best; use the provided
 installation script. We know of no suitable binary releases for Windows.
