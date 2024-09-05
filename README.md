@@ -77,7 +77,10 @@ need to adjust compiler options accordingly if you're using an older XCode which
 does not default to libc++.
 
 We use a recent Ubuntu LTS to build the Linux releases; if your distribution is
-too old, it might not have the requisite glibc.
+too old, it might not have the requisite glibc. 
+
+Nightly builds of Halide and the LLVM versions we use in CI are also available
+at https://buildbot.halide-lang.org/
 
 ## Vcpkg
 
