@@ -49,7 +49,7 @@ $ pip install halide --pre --extra-index-url https://test.pypi.org/simple
 
 Currently, we provide wheels for: Windows x86-64, macOS x86-64, macOS arm64, and
 Linux x86-64. The Linux wheels are built for manylinux_2_28, which makes them
-broadly compatible (Ubuntu 18.04 LTS+).
+broadly compatible (Debian 10, Ubuntu 18.10, Fedora 29).
 
 ## Homebrew
 
