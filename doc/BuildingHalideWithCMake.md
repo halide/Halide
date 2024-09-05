@@ -139,22 +139,22 @@ the PATH.
 The following is a complete list of required and optional dependencies for
 building the core pieces of Halide.
 
-| Dependency    | Version                 | Required when...           | Notes                                               |
-|---------------|-------------------------|----------------------------|-----------------------------------------------------|
-| [LLVM]        | Latest, previous, trunk | _always_                   | WebAssembly and X86 targets are required.           |
-| [Clang]       | `==LLVM`                | _always_                   |                                                     |
-| [LLD]         | `==LLVM`                | _always_                   |                                                     |
-| [flatbuffers] | `~=23.5.26`             | `WITH_SERIALIZATION=ON`    |                                                     |
-| [wabt]        | `==1.0.36`              | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
-| [V8]          | trunk                   | `Halide_WASM_BACKEND=V8`   | Difficult to build. See [WebAssembly.md]            |
-| [Python]      | `>=3.8`                 | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
-| [pybind11]    | `~=2.10.4`              | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
+| Dependency    | Version            | Required when...           | Notes                                               |
+|---------------|--------------------|----------------------------|-----------------------------------------------------|
+| [LLVM]        | _see policy below_ | _always_                   | WebAssembly and X86 targets are required.           |
+| [Clang]       | `==LLVM`           | _always_                   |                                                     |
+| [LLD]         | `==LLVM`           | _always_                   |                                                     |
+| [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                     |
+| [wabt]        | `==1.0.36`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
+| [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | Difficult to build. See [WebAssembly.md]            |
+| [Python]      | `>=3.8`            | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
+| [pybind11]    | `~=2.10.4`         | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 
-Halide maintains the following compatibility policy with LLVM: Halide version N
-support LLVM versions `N-1`, `N`, and `N+1`. Our binary distributions always
-include the latest `N` patch at time of release. For most users, we recommend
-using a pre-packaged binary release of LLVM rather than trying to build it
-yourself.
+Halide maintains the following compatibility policy with LLVM: Halide version
+`N` supports LLVM versions `N`, `N-1`, and `N-2`. Our binary distributions
+always include the latest `N` patch at time of release. For most users, we
+recommend using a pre-packaged binary release of LLVM rather than trying to
+build it yourself.
 
 To build the apps, documentation, and tests, an extended set is needed.
 

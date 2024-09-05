@@ -136,7 +136,7 @@ issue.
 ## Acquiring LLVM
 
 At any point in time, building Halide requires either the latest stable version
-of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
+of LLVM, the previous stable version of LLVM, or trunk. At the time of writing,
 this means versions 19, 18, and 17 are supported, but 16 is not.
 
 It is easy to get a binary release of LLVM on macOS by using
