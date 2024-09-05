@@ -517,17 +517,41 @@ Python and C++ `find_package` workflows.
 
 [ATLAS]: http://math-atlas.sourceforge.net/
 
+[BuildingHalideWithCMake.md]: ./BuildingHalideWithCMake.md
+
 [Clang]: https://clang.llvm.org
+
+[CodeStyleCMake.md]: ./CodeStyleCMake.md
+
+[Eigen3CMake]: https://eigen.tuxfamily.org/dox/TopicCMakeGuide.html
 
 [Eigen3]: http://eigen.tuxfamily.org/index.php?title=Main_Page
 
-[Eigen3CMake]: https://eigen.tuxfamily.org/dox/TopicCMakeGuide.html
+[FindBLAS]: https://cmake.org/cmake/help/latest/module/FindBLAS.html
+
+[FindCUDAToolkit]: https://cmake.org/cmake/help/latest/module/FindCUDAToolkit.html
+
+[FindCUDA]: https://cmake.org/cmake/help/latest/module/FindCUDA.html
+
+[FindDoxygen]: https://cmake.org/cmake/help/latest/module/FindDoxygen.html
+
+[FindJPEG]: https://cmake.org/cmake/help/latest/module/FindJPEG.html
+
+[FindOpenCL]: https://cmake.org/cmake/help/latest/module/FindOpenCL.html
+
+[FindPNG]: https://cmake.org/cmake/help/latest/module/FindPNG.html
+
+[FindPython]: https://cmake.org/cmake/help/latest/module/FindPython.html
+
+[HalideCMakePackage.md]: ./HalideCMakePackage.md
 
 [LLVM]: https://github.com/llvm/llvm-project
 
 [Ninja]: https://ninja-build.org/
 
 [OpenBLAS]: https://www.openblas.net/
+
+[V8]: https://v8.dev
 
 [add_subdirectory]: https://cmake.org/cmake/help/latest/command/add_subdirectory.html
 
@@ -561,22 +585,6 @@ Python and C++ `find_package` workflows.
 
 [find_package]: https://cmake.org/cmake/help/latest/command/find_package.html
 
-[FindBLAS]: https://cmake.org/cmake/help/latest/module/FindBLAS.html
-
-[FindCUDA]: https://cmake.org/cmake/help/latest/module/FindCUDA.html
-
-[FindCUDAToolkit]: https://cmake.org/cmake/help/latest/module/FindCUDAToolkit.html
-
-[FindDoxygen]: https://cmake.org/cmake/help/latest/module/FindDoxygen.html
-
-[FindJPEG]: https://cmake.org/cmake/help/latest/module/FindJPEG.html
-
-[FindOpenCL]: https://cmake.org/cmake/help/latest/module/FindOpenCL.html
-
-[FindPNG]: https://cmake.org/cmake/help/latest/module/FindPNG.html
-
-[FindPython]: https://cmake.org/cmake/help/latest/module/FindPython.html
-
 [flatbuffers]: https://github.com/google/flatbuffers
 
 [homebrew]: https://brew.sh
@@ -601,11 +609,9 @@ Python and C++ `find_package` workflows.
 
 [snap store]: https://snapcraft.io/cmake
 
-[V8]: https://v8.dev
+[vcpkg-overlay]: https://learn.microsoft.com/en-us/vcpkg/concepts/overlay-ports
 
 [vcpkg]: https://github.com/Microsoft/vcpkg
-
-[vcpkg-overlay]: https://learn.microsoft.com/en-us/vcpkg/concepts/overlay-ports
 
 [vcvarsall]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line#developer_command_file_locations
 

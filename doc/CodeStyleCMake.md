@@ -220,20 +220,29 @@ guidelines you should follow when writing a new app.
 - Test your app with ctest before opening a PR. Apps are built as part of the
   test, rather than the main build.
 
-[add_custom_command]:
-https://cmake.org/cmake/help/latest/command/add_custom_command.html
+[BuildingHalideWithCMake.md]: ./BuildingHalideWithCMake.md
+
+[CodeStyleCMake.md]: ./CodeStyleCMake.md
+
+[ExternalProject]: https://cmake.org/cmake/help/latest/module/ExternalProject.html
+
+[FetchContent]: https://cmake.org/cmake/help/latest/module/FetchContent.html
+
+[FindCUDAToolkit]: https://cmake.org/cmake/help/latest/module/FindCUDAToolkit.html
+
+[HalideCMakePackage.md]: ./HalideCMakePackage.md
+
+[add_custom_command]: https://cmake.org/cmake/help/latest/command/add_custom_command.html
 
 [add_library]: https://cmake.org/cmake/help/latest/command/add_library.html
 
-[add_subdirectory]:
-https://cmake.org/cmake/help/latest/command/add_subdirectory.html
+[add_subdirectory]: https://cmake.org/cmake/help/latest/command/add_subdirectory.html
 
 [atlas]: http://math-atlas.sourceforge.net/
 
 [brew-cmake]: https://formulae.brew.sh/cask/cmake#default
 
-[build_shared_libs]:
-https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html
+[build_shared_libs]: https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html
 
 [choco-cmake]: https://chocolatey.org/packages/cmake/
 
@@ -253,77 +262,53 @@ https://cmake.org/cmake/help/latest/variable/BUILD_SHARED_LIBS.html
 
 [cmake-from-source]: https://cmake.org/install/
 
-[cmake-genex]:
-https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html
+[cmake-genex]: https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html
 
-[cmake-install]:
-https://cmake.org/cmake/help/latest/manual/cmake.1.html#install-a-project
+[cmake-install]: https://cmake.org/cmake/help/latest/manual/cmake.1.html#install-a-project
 
-[cmake-propagation]:
-https://cmake.org/cmake/help/latest/manual/cmake-buildsystem.7.html#transitive-usage-requirements
+[cmake-propagation]: https://cmake.org/cmake/help/latest/manual/cmake-buildsystem.7.html#transitive-usage-requirements
 
-[cmake-toolchains]:
-https://cmake.org/cmake/help/latest/manual/cmake-toolchains.7.html
+[cmake-toolchains]: https://cmake.org/cmake/help/latest/manual/cmake-toolchains.7.html
 
-[cmake-user-interaction]:
-https://cmake.org/cmake/help/latest/guide/user-interaction/index.html#setting-build-variables
+[cmake-user-interaction]: https://cmake.org/cmake/help/latest/guide/user-interaction/index.html#setting-build-variables
 
-[cmake_binary_dir]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_BINARY_DIR.html
+[cmake_binary_dir]: https://cmake.org/cmake/help/latest/variable/CMAKE_BINARY_DIR.html
 
-[cmake_build_type]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html
+[cmake_build_type]: https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html
 
-[cmake_crosscompiling]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_CROSSCOMPILING.html
+[cmake_crosscompiling]: https://cmake.org/cmake/help/latest/variable/CMAKE_CROSSCOMPILING.html
 
-[cmake_crosscompiling_emulator]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_CROSSCOMPILING_EMULATOR.html
+[cmake_crosscompiling_emulator]: https://cmake.org/cmake/help/latest/variable/CMAKE_CROSSCOMPILING_EMULATOR.html
 
-[cmake_ctest_command]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_CTEST_COMMAND.html
+[cmake_ctest_command]: https://cmake.org/cmake/help/latest/variable/CMAKE_CTEST_COMMAND.html
 
-[cmake_current_binary_dir]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_CURRENT_BINARY_DIR.html
+[cmake_current_binary_dir]: https://cmake.org/cmake/help/latest/variable/CMAKE_CURRENT_BINARY_DIR.html
 
-[cmake_cxx_extensions]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_EXTENSIONS.html
+[cmake_cxx_extensions]: https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_EXTENSIONS.html
 
-[cmake_cxx_standard]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_STANDARD.html
+[cmake_cxx_standard]: https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_STANDARD.html
 
-[cmake_cxx_standard_required]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_STANDARD_REQUIRED.html
+[cmake_cxx_standard_required]: https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_STANDARD_REQUIRED.html
 
-[cmake_foreach]:
-https://cmake.org/cmake/help/latest/command/foreach.html
+[cmake_foreach]: https://cmake.org/cmake/help/latest/command/foreach.html
 
-[cmake_if]:
-https://cmake.org/cmake/help/latest/command/if.html
+[cmake_if]: https://cmake.org/cmake/help/latest/command/if.html
 
-[cmake_lang_compiler_id]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_LANG_COMPILER_ID.html
+[cmake_lang_compiler_id]: https://cmake.org/cmake/help/latest/variable/CMAKE_LANG_COMPILER_ID.html
 
-[cmake_make_program]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_MAKE_PROGRAM.html
+[cmake_make_program]: https://cmake.org/cmake/help/latest/variable/CMAKE_MAKE_PROGRAM.html
 
-[cmake_minimum_required]:
-https://cmake.org/cmake/help/latest/command/cmake_minimum_required.html
+[cmake_minimum_required]: https://cmake.org/cmake/help/latest/command/cmake_minimum_required.html
 
-[cmake_prefix_path]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html
+[cmake_prefix_path]: https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html
 
-[cmake_presets]:
-https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
+[cmake_presets]: https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
 
-[cmake_sizeof_void_p]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_SIZEOF_VOID_P.html
+[cmake_sizeof_void_p]: https://cmake.org/cmake/help/latest/variable/CMAKE_SIZEOF_VOID_P.html
 
-[cmake_source_dir]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_SOURCE_DIR.html
+[cmake_source_dir]: https://cmake.org/cmake/help/latest/variable/CMAKE_SOURCE_DIR.html
 
-[cmake_system_name]:
-https://cmake.org/cmake/help/latest/variable/CMAKE_SYSTEM_NAME.html
+[cmake_system_name]: https://cmake.org/cmake/help/latest/variable/CMAKE_SYSTEM_NAME.html
 
 [doxygen-download]: https://www.doxygen.nl/download.html
 
@@ -331,20 +316,11 @@ https://cmake.org/cmake/help/latest/variable/CMAKE_SYSTEM_NAME.html
 
 [eigen]: http://eigen.tuxfamily.org/index.php?title=Main_Page
 
-[enable_testing]:
-https://cmake.org/cmake/help/latest/command/enable_testing.html
-
-[ExternalProject]:
-https://cmake.org/cmake/help/latest/module/ExternalProject.html
-
-[FetchContent]: https://cmake.org/cmake/help/latest/module/FetchContent.html
+[enable_testing]: https://cmake.org/cmake/help/latest/command/enable_testing.html
 
 [find_package]: https://cmake.org/cmake/help/latest/command/find_package.html
 
 [findcuda]: https://cmake.org/cmake/help/latest/module/FindCUDA.html
-
-[FindCUDAToolkit]:
-https://cmake.org/cmake/help/latest/module/FindCUDAToolkit.html
 
 [finddoxygen]: https://cmake.org/cmake/help/latest/module/FindDoxygen.html
 
@@ -358,25 +334,21 @@ https://cmake.org/cmake/help/latest/module/FindCUDAToolkit.html
 
 [findx11]: https://cmake.org/cmake/help/latest/module/FindX11.html
 
-[halide-generator-tutorial]:
-https://halide-lang.org/tutorials/tutorial_lesson_15_generators.html
+[halide-generator-tutorial]: https://halide-lang.org/tutorials/tutorial_lesson_15_generators.html
 
 [halide-tutorials]: https://halide-lang.org/tutorials/tutorial_introduction.html
 
 [homebrew]: https://brew.sh
 
-[imported-executable]:
-https://cmake.org/cmake/help/latest/command/add_executable.html#imported-executables
+[imported-executable]: https://cmake.org/cmake/help/latest/command/add_executable.html#imported-executables
 
-[imported-target]:
-https://cmake.org/cmake/help/latest/manual/cmake-buildsystem.7.html#imported-targets
+[imported-target]: https://cmake.org/cmake/help/latest/manual/cmake-buildsystem.7.html#imported-targets
 
 [include]: https://cmake.org/cmake/help/latest/command/include.html
 
 [install-files]: https://cmake.org/cmake/help/latest/command/install.html#files
 
-[install-targets]:
-https://cmake.org/cmake/help/latest/command/install.html#targets
+[install-targets]: https://cmake.org/cmake/help/latest/command/install.html#targets
 
 [libjpeg]: https://www.libjpeg-turbo.org/
 
@@ -384,10 +356,9 @@ https://cmake.org/cmake/help/latest/command/install.html#targets
 
 [lld]: https://lld.llvm.org/
 
-[msvc]: https://cmake.org/cmake/help/latest/variable/MSVC.html
+[msvc-cmd]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=vs-2019
 
-[msvc-cmd]:
-https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=vs-2019
+[msvc]: https://cmake.org/cmake/help/latest/variable/MSVC.html
 
 [ninja-download]: https://github.com/ninja-build/ninja/releases
 
@@ -395,50 +366,38 @@ https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=vs-
 
 [openblas]: https://www.openblas.net/
 
+[project-name_binary_dir]: https://cmake.org/cmake/help/latest/variable/PROJECT-NAME_BINARY_DIR.html
+
+[project-name_source_dir]: https://cmake.org/cmake/help/latest/variable/PROJECT-NAME_SOURCE_DIR.html
+
 [project]: https://cmake.org/cmake/help/latest/command/project.html
 
-[project-name_binary_dir]:
-https://cmake.org/cmake/help/latest/variable/PROJECT-NAME_BINARY_DIR.html
+[project_binary_dir]: https://cmake.org/cmake/help/latest/variable/PROJECT_BINARY_DIR.html
 
-[project-name_source_dir]:
-https://cmake.org/cmake/help/latest/variable/PROJECT-NAME_SOURCE_DIR.html
-
-[project_source_dir]:
-https://cmake.org/cmake/help/latest/variable/PROJECT_SOURCE_DIR.html
-
-[project_binary_dir]:
-https://cmake.org/cmake/help/latest/variable/PROJECT_BINARY_DIR.html
+[project_source_dir]: https://cmake.org/cmake/help/latest/variable/PROJECT_SOURCE_DIR.html
 
 [pypi-cmake]: https://pypi.org/project/cmake/
 
 [python]: https://www.python.org/downloads/
 
-[target-file]:
-https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html#target-dependent-queries
+[target-file]: https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html#target-dependent-queries
 
-[target_compile_definitions]:
-https://cmake.org/cmake/help/latest/command/target_compile_definitions.html
+[target_compile_definitions]: https://cmake.org/cmake/help/latest/command/target_compile_definitions.html
 
-[target_compile_options]:
-https://cmake.org/cmake/help/latest/command/target_compile_options.html
+[target_compile_options]: https://cmake.org/cmake/help/latest/command/target_compile_options.html
 
-[target_include_directories]:
-https://cmake.org/cmake/help/latest/command/target_include_directories.html
+[target_include_directories]: https://cmake.org/cmake/help/latest/command/target_include_directories.html
 
-[target_link_libraries]:
-https://cmake.org/cmake/help/latest/command/target_link_libraries.html
+[target_link_libraries]: https://cmake.org/cmake/help/latest/command/target_link_libraries.html
 
-[target_link_options]:
-https://cmake.org/cmake/help/latest/command/target_link_options.html
+[target_link_options]: https://cmake.org/cmake/help/latest/command/target_link_options.html
 
 [vcpkg]: https://github.com/Microsoft/vcpkg
 
-[vcvarsall]:
-https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=vs-2019#vcvarsall-syntax
+[vcvarsall]: https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=vs-2019#vcvarsall-syntax
 
 [venv]: https://docs.python.org/3/tutorial/venv.html
 
-[vs2019-cmake-docs]:
-https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio?view=vs-2019
+[vs2019-cmake-docs]: https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio?view=vs-2019
 
 [win32]: https://cmake.org/cmake/help/latest/variable/WIN32.html
