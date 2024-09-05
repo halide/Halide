@@ -32,9 +32,11 @@ If you've acquired a full source distribution and want to build Halide, see the
 
 ## Pip
 
-As of Halide 19.0.0, we provide binary wheels on PyPI which include the Python
-bindings and the C++/CMake package for native development. Full releases may be
-installed with `pip` like so:
+As of Halide 19.0.0, we provide binary wheels on PyPI. Halide provides bindings
+for C++ and Python. Even if you only intend to use Halide from C++, pip may be
+the easiest way to get a binary build of Halide.
+
+Full releases may be installed with `pip` like so:
 
 ```shell
 $ pip install halide
