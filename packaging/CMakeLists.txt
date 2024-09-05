@@ -119,14 +119,15 @@ install(TARGETS ${utils} EXPORT Halide_Interfaces COMPONENT Halide_Development)
 ##
 
 install(FILES
-        ${Halide_SOURCE_DIR}/README_cmake.md
         ${Halide_SOURCE_DIR}/README.md
-        ${Halide_SOURCE_DIR}/README_python.md
-        ${Halide_SOURCE_DIR}/README_rungen.md
-        ${Halide_SOURCE_DIR}/README_webassembly.md
         ${Halide_SOURCE_DIR}/LICENSE.txt
         COMPONENT Halide_Documentation
         TYPE DOC)
+
+install(DIRECTORY "${Halide_SOURCE_DIR}/doc"
+        COMPONENT Halide_Documentation
+        TYPE DOC
+        FILES_MATCHING PATTERN "*.md")
 
 ##
 # Tools
