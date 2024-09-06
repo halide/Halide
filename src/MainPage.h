@@ -25,6 +25,10 @@
  * particular check out local_laplacian, bilateral_grid, and
  * interpolate.
  *
+ * If you plan to build your program with CMake, you might be interested in
+ * documentation for <a href="https://github.com/halide/Halide/blob/main/doc/HalideCMakePackage.md">
+ * the Halide CMake helpers</a>.
+ *
  * Below are links to the documentation for the important classes in Halide.
  *
  * For defining, scheduling, and evaluating basic pipelines:
