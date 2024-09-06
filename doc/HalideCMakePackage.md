@@ -71,13 +71,17 @@ vendor-specific extensions to C++. This is not necessary to simply use Halide,
 but we do not allow such extensions in the Halide repo.
 
 Finally, we use [`find_package`][find_package] to locate Halide on your system.
-If Halide is not globally installed, you will need to add the root of the Halide
-installation directory to [`CMAKE_PREFIX_PATH`][cmake_prefix_path] at the CMake
-command line.
+When using the pip package on Linux and macOS, CMake's `find_package`
+command should find Halide as long as you're in the same virtual environment you
+installed it in. On Windows, you will need to add the virtual environment root
+directory to [`CMAKE_PREFIX_PATH`][cmake_prefix_path]:
 
 ```shell
-$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/path/to/Halide-install"
+$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=%VIRTUAL_ENV%
 ```
+
+If `find_package` cannot find Halide, set `CMAKE_PREFIX_PATH` to the Halide
+installation directory.
 
 ## JIT mode
 
