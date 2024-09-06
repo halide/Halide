@@ -53,6 +53,15 @@ Currently, we provide wheels for: Windows x86-64, macOS x86-64, macOS arm64, and
 Linux x86-64. The Linux wheels are built for manylinux_2_28, which makes them
 broadly compatible (Debian 10, Ubuntu 18.10, Fedora 29).
 
+*For C++ usage of the pip package:* On Linux and macOS, CMake's `find_package`
+command should find Halide as long as you're in the same virtual environment you
+installed it in. On Windows, you will need to add the virtual environment root
+directory to `CMAKE_PREFIX_PATH`. This can be done by running
+`set CMAKE_PREFIX_PATH=%VIRTUAL_ENV%` in `cmd`.
+
+Other build systems can find the Halide root path by running `python -c 
+"import halide; print(halide.install_dir())"`.
+
 ## Homebrew
 
 Alternatively, if you use macOS, you can install Halide via
