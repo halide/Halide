@@ -36,7 +36,7 @@ classifiers = [
     "Environment :: GPU :: NVIDIA CUDA",
     "Environment :: WebAssembly",
     "Intended Audience :: Developers",
-    "Intended Audience :: Science / Research",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
     "Operating System :: MacOS",
