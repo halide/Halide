@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install clang-tidy
-        run: brew install llvm@17
+        run: brew install llvm@17 ninja
       - name: Run clang-tidy
         run: ./run-clang-tidy.sh
         env:
