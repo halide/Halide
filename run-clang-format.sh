@@ -11,13 +11,23 @@ ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 #
 # sudo apt-get install llvm-17 clang-17 libclang-17-dev clang-tidy-17
 # export CLANG_FORMAT_LLVM_INSTALL_DIR=/usr/lib/llvm-17
+#
+# On macOS:
+#
+# brew install llvm@17
+# export CLANG_FORMAT_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@17
 
-[ -z "$CLANG_FORMAT_LLVM_INSTALL_DIR" ] && echo "CLANG_FORMAT_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script." && exit
-echo CLANG_FORMAT_LLVM_INSTALL_DIR = ${CLANG_FORMAT_LLVM_INSTALL_DIR}
+if [ -z "$CLANG_FORMAT_LLVM_INSTALL_DIR" ]; then
+  echo "CLANG_FORMAT_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script."
+  exit 1
+fi
 
-VERSION=$(${CLANG_FORMAT_LLVM_INSTALL_DIR}/bin/clang-format --version)
-if [[ ${VERSION} =~ .*version\ 17.* ]]
-then
+echo "CLANG_FORMAT_LLVM_INSTALL_DIR = ${CLANG_FORMAT_LLVM_INSTALL_DIR}"
+
+CLANG_FORMAT="${CLANG_FORMAT_LLVM_INSTALL_DIR}/bin/clang-format"
+
+VERSION=$("${CLANG_FORMAT}" --version)
+if [[ ${VERSION} =~ .*version\ 17.* ]]; then
     echo "clang-format version 17 found."
 else
     echo "CLANG_FORMAT_LLVM_INSTALL_DIR must point to an LLVM 17 install!"
@@ -33,5 +43,6 @@ find "${ROOT_DIR}/apps" \
      "${ROOT_DIR}/util" \
      "${ROOT_DIR}/python_bindings" \
      -not -path "${ROOT_DIR}/src/runtime/hexagon_remote/bin/src/*" \
-     \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" | \
-     xargs ${CLANG_FORMAT_LLVM_INSTALL_DIR}/bin/clang-format -i -style=file
+     \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" \
+     -print0 | \
+     xargs -0 "${CLANG_FORMAT}" -i -style=file

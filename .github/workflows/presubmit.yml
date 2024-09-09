@@ -1,13 +1,14 @@
 name: Halide Presubmit Checks
 on:
-  # We don't want 'edited' (that's basically just the description, title, etc)
+  # We don't want 'edited' (that's basically just the description, title, etc.)
   # We don't want 'review_requested' (that's redundant to the ones below for our purposes)
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [ opened, synchronize, reopened ]
     paths:
       - '**.h'
       - '**.c'
       - '**.cpp'
+      - 'run-clang-tidy.sh'
 
 permissions:
   contents: read
@@ -23,29 +24,17 @@ jobs:
           source: '.'
           extensions: 'h,c,cpp'
           clangFormatVersion: 17
-  # As of Aug 2023, the macOS runners have more RAM (14GB vs 7GB) and CPU (3 cores vs 2)
-  # than the Linux and Windows runners, so let's use those instead, since clang-tidy is
-  # a bit of a sluggard
   check_clang_tidy:
     name: Check clang-tidy
-    runs-on: ubuntu-20.04
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v3
       - name: Install clang-tidy
-        run: |
-          # from apt.llvm.org
-          # wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
-          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
-          sudo apt-add-repository "deb https://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-17 main"
-          sudo apt-get update
-          sudo apt-get install llvm-17 clang-17 liblld-17-dev libclang-17-dev clang-tidy-17 ninja-build
+        run: brew install llvm@17 ninja
       - name: Run clang-tidy
-        run: |
-          export CC=clang-17
-          export CXX=clang++-17
-          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-17
-          export CMAKE_GENERATOR=Ninja
-          ./run-clang-tidy.sh
+        run: ./run-clang-tidy.sh
+        env:
+          CLANG_TIDY_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@17
   check_cmake_file_lists:
     name: Check CMake file lists
     runs-on: ubuntu-20.04
