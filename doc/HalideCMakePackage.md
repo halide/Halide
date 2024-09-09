@@ -532,9 +532,9 @@ will be added to the extension as a callable method of the module. Note that
 every library specified must be built with the `PYTHON_EXTENSION` keyword
 specified, and all libraries must use the same Halide runtime.
 
-The result will be a shared library of the form
-`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
-platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.)
+The result will be a shared library of the form `<target>.<soabi>.so`, where 
+`<soabi>` describes the specific Python version and platform (e.g., 
+`cpython-310-darwin` for Python 3.10 on macOS.)
 
 ### `add_halide_runtime`
 
