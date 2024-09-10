@@ -82,7 +82,7 @@ directions posted on [Kitware's website][cmake-from-source].
 On Windows, there are two primary methods for installing an up-to-date CMake:
 
 1. You can get CMake through the Visual Studio 2022 installer.
-2. You can use Windows's built-in package manager, [winget]:
+2. You can use Windows's built-in package manager, [winget][winget]:
    ```shell
    winget install Kitware.CMake
    ```
@@ -105,8 +105,8 @@ There are a few good ways to install CMake on Ubuntu:
 1. If you're running 24.04 LTS, then simply running
    `sudo apt install cmake` will install CMake 3.28.
 2. If you're running an older LTS or would like to use the newest CMake, try
-   installing via the [snap store]: `snap install cmake`. Note this will
-   conflict with an APT-provided CMake.
+   installing via the [snap store][snap store]: `snap install cmake`. Note this
+   will conflict with an APT-provided CMake.
 3. Kitware also provides an [APT repository][cmake-apt] with up-to-date
    releases. Compatible with 20.04 LTS+ and is the best option for 32-bit ARM.
 
@@ -215,7 +215,7 @@ appropriately per-platform. They are documented further below.
 On Windows, we recommend using `vcpkg` to install library dependencies.
 
 To build the documentation, you will need to install [Doxygen]. This can be done
-either from the [Doxygen website][doxygen-download] or through [winget]:
+either from the [Doxygen website][doxygen-download] or through [winget][winget]:
 
 ```shell
 $ winget install DimitriVanHeesch.Doxygen

@@ -11,7 +11,7 @@
   * [Example of Simple Usage](#example-of-simple-usage)
   * [Halide Generators In Python](#halide-generators-in-python)
     * [Writing a Generator in Python](#writing-a-generator-in-python)
-      * [@hl.generator("name")](#hlgeneratorname)
+      * [`hl.generator("name")`](#hlgeneratorname)
       * [hl.GeneratorParam](#hlgeneratorparam)
       * [hl.InputBuffer, hl.InputScalar](#hlinputbuffer-hlinputscalar)
       * [hl.OutputBuffer, hl.OutputScalar](#hloutputbuffer-hloutputscalar)
@@ -348,7 +348,7 @@ C++ Generators for the following to make sense.)
 
 Let's take the details here one at a time.
 
-#### @hl.generator("name")
+#### `hl.generator("name")`
 
 This decorator adds appropriate "glue" machinery to the class to enforce various
 invariants. It also serves as the declares a "registered name" for the
@@ -523,9 +523,9 @@ add_halide_python_extension_library(my_extension
 This compiles the Generator code in `logical_op_generator.py` with the
 registered name `logical_op_generator` to produce the target `xor_filter`, and
 then wraps the compiled output with a Python extension. The result will be a
-shared library of the form
-`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
-platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.)
+shared library of the form `<target>.<soabi>.so`, where `<soabi>` describes 
+the specific Python version and platform (e.g., `cpython-310-darwin` for 
+Python 3.10 on OSX.)
 
 Note that you can combine multiple Halide libraries into a single Python module;
 this is convenient for packaging, but also because all the libraries in a single
