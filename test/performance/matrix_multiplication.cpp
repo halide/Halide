@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     out(x, y) = matrix_mul(x, y);
 
     // Now the schedule. Single-threaded, it hits 155 GFlops on Skylake-X
-    // i9-9960x with AVX-512 (80% of peak)), and 87 GFlops with AVX2 (90% of
+    // i9-9960x with AVX-512 (80% of peak), and 87 GFlops with AVX2 (90% of
     // peak).
     //
     // Using 16 threads (and no hyperthreading), hits 2080 GFlops (67% of peak)
