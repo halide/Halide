@@ -175,7 +175,7 @@ Then build it like so:
 
 ```shell
 $ cmake -G Ninja -S llvm-project/llvm -B build \
-        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_BUILD_TYPE=Release \
         -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
         -DLLVM_ENABLE_RUNTIMES=compiler-rt \
         -DLLVM_TARGETS_TO_BUILD="WebAssembly;X86;AArch64;ARM;Hexagon;NVPTX;PowerPC;RISCV" \
