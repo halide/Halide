@@ -643,8 +643,13 @@ private:
                 // No corresponding instructions exists for is_nan, is_inf, is_finite.
                 // The instructions expected to be generated depends on CodeGen_LLVM::visit(const Call *op)
                 add_arm64("nan", is_vector ? sel_op("", "fcmge", "fcmuo") : "fcmp", is_nan(f_1));
-                add_arm64("inf", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
-                add_arm64("finite", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
+                if (Halide::Internal::get_llvm_version() >= 200) {
+                    add_arm64("inf", is_vector ? sel_op("", "fcmge", "fcmeq") : "", is_inf(f_1));
+                    add_arm64("finite", is_vector ? sel_op("", "fcmge", "fcmeq") : "", is_inf(f_1));
+                } else {
+                    add_arm64("inf", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
+                    add_arm64("finite", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
+                }
             }
 
             if (bits == 16) {
