@@ -63,6 +63,15 @@ target_link_libraries(
     Halide_Generator INTERFACE "$<LINK_LIBRARY:WHOLE_ARCHIVE,Halide::GenGen>"
 )
 
+## gengen tool for building runtimes in add_halide_runtime
+add_executable(Halide_GenRT GenGen.cpp)
+add_executable(Halide::GenRT ALIAS Halide_GenRT)
+set_target_properties(Halide_GenRT PROPERTIES EXPORT_NAME GenRT OUTPUT_NAME gengen)
+
+target_link_libraries(Halide_GenRT PRIVATE Halide::Halide ${CMAKE_DL_LIBS})
+
+_Halide_place_dll(Halide_GenRT)
+
 ##
 # Dependency-free header-only libs
 ##

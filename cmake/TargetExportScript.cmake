@@ -42,10 +42,11 @@ function(target_export_script TARGET)
     endif ()
 
     ## The Apple linker expects a different flag.
-    set(EXPORTED_SYMBOLS_FLAG "LINKER:-exported_symbols_list,${ARG_APPLE_LD}")
+    file(CONFIGURE OUTPUT _target_export_script.apple.ldscript CONTENT [[]])
+    set(EXPORTED_SYMBOLS_FLAG "LINKER:-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/_target_export_script.apple.ldscript")
     check_linker_flag(CXX "${EXPORTED_SYMBOLS_FLAG}" LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
     if (LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
-        target_link_options(${TARGET} PRIVATE "${EXPORTED_SYMBOLS_FLAG}")
+        target_link_options(${TARGET} PRIVATE "LINKER:-exported_symbols_list,${ARG_APPLE_LD}")
         set_property(TARGET ${TARGET} APPEND PROPERTY LINK_DEPENDS "${ARG_APPLE_LD}")
         return()
     endif ()

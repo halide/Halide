@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
+@PACKAGE_INIT@
 
 macro(Halide_fail message)
     set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE "${message}")
@@ -19,7 +20,7 @@ macro(Halide_find_component_dependency comp dep)
     endif ()
 endmacro()
 
-set(Halide_known_components Halide PNG JPEG static shared)
+set(Halide_known_components Halide Python PNG JPEG static shared)
 set(Halide_components Halide PNG JPEG)
 
 foreach (Halide_comp IN LISTS Halide_known_components)
@@ -46,6 +47,7 @@ endif ()
 # Inform downstreams of potential compatibility issues. For instance, exceptions
 # and RTTI must both be enabled to build Python bindings and ASAN builds should
 # not be mixed with non-ASAN builds.
+set(WITH_AUTOSCHEDULERS "@WITH_AUTOSCHEDULERS@")
 set(Halide_ENABLE_EXCEPTIONS "@Halide_ENABLE_EXCEPTIONS@")
 set(Halide_ENABLE_RTTI "@Halide_ENABLE_RTTI@")
 set(Halide_ASAN_ENABLED "@Halide_ASAN_ENABLED@")
@@ -58,7 +60,7 @@ include(CMakeFindDependencyMacro)
 
 find_dependency(
     HalideHelpers "@Halide_VERSION@" EXACT
-    HINTS "${CMAKE_CURRENT_LIST_DIR}/@HalideHelpers_HINT@"
+    HINTS "@PACKAGE_Halide_INSTALL_HELPERSDIR@"
 )
 
 if (Halide_comp_PNG)
@@ -110,11 +112,19 @@ else ()
     endif ()
 endif ()
 
+## Load Python component
+if (Halide_comp_Python OR "@WITH_PYTHON_BINDINGS@")
+    Halide_find_component_dependency(
+        Python Halide_Python
+        HINTS "@PACKAGE_Halide_Python_INSTALL_CMAKEDIR@"
+    )
+endif ()
+
 ## Hide variables and helper macros that are not part of our API.
 
 # Delete internal component tracking
 foreach (comp IN LISTS Halide_known_components)
-  unset(Halide_comp_${comp})
+    unset(Halide_comp_${comp})
 endforeach ()
 
 unset(Halide_components)

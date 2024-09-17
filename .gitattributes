@@ -11,3 +11,6 @@
 *.png binary
 *.jpg binary
 *.tiff binary
+
+# Freeze version information in git archives
+.git_archival.txt export-subst

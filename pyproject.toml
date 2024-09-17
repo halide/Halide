@@ -1,10 +1,141 @@
 [build-system]
 requires = [
-  "setuptools>=43",
-  "wheel",
-  "scikit-build",
-  "pybind11==2.10.4",
-  "cmake>=3.22",
-  "ninja; platform_system!='Windows'"
+    "scikit-build-core==0.10.5",
+    "pybind11==2.10.4",
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "halide"
+authors = [{ name = "The Halide team", email = "halide-dev@lists.csail.mit.edu" }]
+maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
+description = "Halide is a programming language designed to make it easier to write high-performance image and array processing code."
+license = { file = "LICENSE.txt" }
+readme = "./packaging/pip/README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "imageio",
+]
+dynamic = ['version']
+keywords = [
+    "array",
+    "compiler",
+    "domain-specific language",
+    "dsl",
+    "gpu",
+    "hexagon",
+    "image processing",
+    "machine learning",
+    "performance",
+    "programming language",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: GPU",
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Environment :: WebAssembly",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: Software Development :: Libraries",
+]
+
+[project.urls]
+Homepage = "https://halide-lang.org"
+Documentation = "https://github.com/halide/Halide/blob/main/doc/Python.md"
+"Documentation (C++)" = "https://halide-lang.org/docs"
+Issues = "https://github.com/halide/Halide/issues"
+Repository = "https://github.com/halide/Halide.git"
+
+[tool.scikit-build]
+cmake.version = ">=3.28"
+wheel.install-dir = "halide"
+sdist.include = ["dependencies/"]
+sdist.exclude = [".github/", "apps/", "test/", "tutorial/"]
+metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
+
+[tool.scikit-build.cmake.define]
+CMAKE_DISABLE_FIND_PACKAGE_JPEG = true
+CMAKE_DISABLE_FIND_PACKAGE_PNG = true
+Halide_ENABLE_EXCEPTIONS = true
+Halide_ENABLE_RTTI = true
+Halide_INSTALL_PYTHONDIR = "."
+Halide_USE_FETCHCONTENT = false
+Halide_WASM_BACKEND = "wabt"
+WITH_PYTHON_BINDINGS = true
+WITH_TESTS = false
+WITH_TUTORIALS = false
+
+##
+# Don't version libHalide.so/dylib -- wheels are zip files that do
+# not understand symbolic links. Including version information here
+# causes the final wheel to have three copies of our library. Not good.
+Halide_VERSION_OVERRIDE = ""
+Halide_SOVERSION_OVERRIDE = ""
+
+[[tool.scikit-build.overrides]]
+if.platform-system = "^win32"
+inherit.cmake.define = "append"
+cmake.define.Halide_WASM_BACKEND = "OFF"
+
+[tool.tbump]
+github_url = "https://github.com/halide/Halide/"
+
+[tool.tbump.version]
+current = "19.0.0"
+regex = '(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)'
+
+[tool.tbump.git]
+message_template = "Bump version to {new_version}"
+tag_template = "v{new_version}.dev0"
+
+[[tool.tbump.file]]
+src = "CMakeLists.txt"
+search = "VERSION {current_version}"
+
+[[tool.tbump.file]]
+src = "python_bindings/CMakeLists.txt"
+search = "VERSION {current_version}"
+
+[[tool.tbump.file]]
+src = "vcpkg.json"
+
+[[tool.tbump.file]]
+src = "src/runtime/HalideRuntime.h"
+version_template = "{major}"
+search = "#define HALIDE_VERSION_MAJOR {current_version}"
+
+[[tool.tbump.file]]
+src = "src/runtime/HalideRuntime.h"
+version_template = "{minor}"
+search = "#define HALIDE_VERSION_MINOR {current_version}"
+
+[[tool.tbump.file]]
+src = "src/runtime/HalideRuntime.h"
+version_template = "{patch}"
+search = "#define HALIDE_VERSION_PATCH {current_version}"
+
+# Must be last table in file since pip.yml appends to it
+# See: https://github.com/pypa/setuptools-scm/issues/455
+[tool.setuptools_scm]

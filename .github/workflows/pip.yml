@@ -6,227 +6,254 @@ name: Build PyPI package
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, build/pip-packaging ]
   release:
     types: [ created ]
+
+env:
+  # TODO: detect this from repo somehow: https://github.com/halide/Halide/issues/8406
+  LLVM_VERSION: 18.1.8
+  FLATBUFFERS_VERSION: 23.5.26
+  WABT_VERSION: 1.0.36
 
 concurrency:
   group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: true
-
-env:
-  LLVM_VER: 15.0.7
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
   packages: read  #  to fetch packages (docker)
 
 jobs:
-  # When creating 'dev' (e.g. nightly) PyPI packages, we need to create a unique
-  # label for each upload. For simplicity, we choose the Unix time-since-epoch in
-  # UTC form (aka `date +%s`).
-  pip-labels:
-    name: Create Label for PyPI Packages
-    runs-on: ubuntu-latest
-    outputs:
-      halide_pypi_label: ${{ steps.make_label.outputs.unix_time_utc }}
-    steps:
-      - id: make_label
-        run: echo "unix_time_utc=$(date +%s)" >> "$GITHUB_OUTPUT"
+  build-wheels:
+    name: Build Halide wheels for ${{ matrix.platform_tag }}
 
-  pip-linux:
-    name: Package Halide Python bindings
-
-    runs-on: ubuntu-latest
-    needs: pip-labels
-
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        arch: [ x86_64, aarch64 ]
+        include:
+          - os: ubuntu-latest
+            platform_tag: manylinux_x86_64
+          - os: windows-latest
+            platform_tag: win_amd64
+          - os: macos-13
+            platform_tag: macosx_x86_64
+          - os: macos-14
+            platform_tag: macosx_arm64
+
+    env:
+      MACOSX_DEPLOYMENT_TARGET: 11
 
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2.1.0
+      - name: Login to GitHub Container Registry
+        if: matrix.os == 'ubuntu-latest'
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2.1.0
+      - uses: actions/checkout@v4
         with:
-          platforms: all
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Build wheels
-        uses: pypa/cibuildwheel@v2.11.2
-        env:
-          CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
-          CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux*"
-          CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }} --global-option=--build-number --global-option=${{github.run_id}}"
-          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
-          # CIBW_MANYLINUX_I686_IMAGE: ghcr.io/halide/manylinux2014_i686-llvm:${{ env.LLVM_VER }}
-          CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
-          CIBW_BEFORE_ALL_LINUX: >
-            cmake -G Ninja -S . -B build
-            -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_TESTS=NO
-            -DWITH_TUTORIALS=NO -DWITH_UTILS=NO -DWITH_PYTHON_STUBS=NO &&
-            cmake --build build --target install
-
-      - uses: actions/upload-artifact@v3
-        with:
-          name: wheels
-          path: ./wheelhouse/*.whl
-
-  pip-other:
-    name: Package Halide Python bindings
-
-    runs-on: ${{ matrix.runner }}
-    needs: pip-labels
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: windows-latest
-            pytag: win_amd64
-            arch: x64
-
-          - runner: macos-latest
-            pytag: macosx_universal2
-            arch: x86_64;arm64
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Cache LLVM build folder
-        id: cache-llvm
-        uses: actions/cache@v3.0.11
-        with:
-          path: local-llvm
-          key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
+      # See: https://github.com/pypa/setuptools-scm/issues/455
+      - name: Suppress git version tag
+        if: github.event_name == 'push' && github.ref_name == 'main'
+        run: |
+          echo 'local_scheme = "no-local-version"' >> pyproject.toml
+          git update-index --assume-unchanged pyproject.toml
 
       - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@latest
+      - uses: lukka/get-cmake@v3.28.4
 
-      - uses: actions/checkout@v3
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.8
+        if: runner.os == 'macOS' && runner.arch == 'ARM64'
+
+      ########################################################################
+      # flatbuffers
+      ########################################################################
+
+      - name: Cache flatbuffers build folder
+        if: matrix.os != 'ubuntu-latest'
+        id: cache-flatbuffers
+        uses: actions/cache@v4
+        with:
+          path: opt/flatbuffers
+          key: flatbuffers-${{ env.FLATBUFFERS_VERSION }}-${{ matrix.platform_tag }}
+
+      - uses: actions/checkout@v4
+        if: matrix.os != 'ubuntu-latest' && steps.cache-flatbuffers.outputs.cache-hit != 'true'
+        with:
+          path: flatbuffers-src
+          repository: google/flatbuffers
+          ref: v${{ env.FLATBUFFERS_VERSION }}
+
+      - name: Configure flatbuffers
+        if: matrix.os != 'ubuntu-latest' && steps.cache-flatbuffers.outputs.cache-hit != 'true'
+        run: >
+          cmake -G Ninja -S flatbuffers-src -B flatbuffers-build
+          "-DCMAKE_BUILD_TYPE=Release"
+          "-DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/opt/flatbuffers"
+          "-DFLATBUFFERS_BUILD_TESTS=NO"
+
+      - name: Install flatbuffers
+        if: matrix.os != 'ubuntu-latest' && steps.cache-flatbuffers.outputs.cache-hit != 'true'
+        run: |
+          cmake --build flatbuffers-build --target install
+          cmake -E rm -rf flatbuffers-src flatbuffers-build
+
+      ########################################################################
+      # wabt
+      ########################################################################
+
+      - name: Cache wabt build folder
+        if: matrix.os != 'ubuntu-latest' && matrix.os != 'windows-latest'
+        id: cache-wabt
+        uses: actions/cache@v4
+        with:
+          path: opt/wabt
+          key: wabt-${{ env.WABT_VERSION }}-${{ matrix.platform_tag }}
+
+      - uses: actions/checkout@v4
+        if: >
+          matrix.os != 'ubuntu-latest' && matrix.os != 'windows-latest'
+          && steps.cache-wabt.outputs.cache-hit != 'true'
+        with:
+          submodules: 'true'
+          path: wabt-src
+          repository: WebAssembly/wabt
+          ref: ${{ env.WABT_VERSION }}
+
+      - name: Configure wabt
+        if: >
+          matrix.os != 'ubuntu-latest' && matrix.os != 'windows-latest'
+          && steps.cache-wabt.outputs.cache-hit != 'true'
+        run: >
+          cmake -G Ninja -S wabt-src -B wabt-build
+          "-DCMAKE_BUILD_TYPE=Release"
+          "-DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/opt/wabt"
+          "-DWITH_EXCEPTIONS=ON"
+          "-DBUILD_TESTS=OFF"
+          "-DBUILD_TOOLS=OFF"
+          "-DBUILD_LIBWASM=OFF"
+          "-DUSE_INTERNAL_SHA256=ON"
+
+      - name: Install wabt
+        if: >
+          matrix.os != 'ubuntu-latest' && matrix.os != 'windows-latest'
+          && steps.cache-wabt.outputs.cache-hit != 'true'
+        run: |
+          cmake --build wabt-build --target install
+          cmake -E rm -rf wabt-src wabt-build
+
+      ########################################################################
+      # LLVM
+      ########################################################################
+
+      - name: Cache LLVM build folder
+        if: matrix.os != 'ubuntu-latest'
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: opt/llvm
+          key: llvm-${{ env.LLVM_VERSION }}-${{ matrix.platform_tag }}
+
+      - uses: actions/checkout@v4
+        if: matrix.os != 'ubuntu-latest' && steps.cache-llvm.outputs.cache-hit != 'true'
         with:
           path: llvm-src
           repository: llvm/llvm-project
-          ref: llvmorg-${{ env.LLVM_VER }}
+          ref: llvmorg-${{ env.LLVM_VERSION }}
 
       - name: Configure LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        if: matrix.os != 'ubuntu-latest' && steps.cache-llvm.outputs.cache-hit != 'true'
         run: >
           cmake -G Ninja -S llvm-src/llvm -B llvm-build
-          -DCMAKE_BUILD_TYPE=Release
-          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-          "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly"
+          "-DCMAKE_BUILD_TYPE=Release"
+          "-DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/opt/llvm"
+          "-DLLVM_ENABLE_ASSERTIONS=ON"
+          "-DLLVM_ENABLE_BINDINGS=OFF"
+          "-DLLVM_ENABLE_CURL=OFF"
+          "-DLLVM_ENABLE_DIA_SDK=OFF"
+          "-DLLVM_ENABLE_EH=ON"
+          "-DLLVM_ENABLE_HTTPLIB=OFF"
+          "-DLLVM_ENABLE_IDE=OFF"
+          "-DLLVM_ENABLE_LIBEDIT=OFF"
+          "-DLLVM_ENABLE_LIBXML2=OFF"
+          "-DLLVM_ENABLE_OCAMLDOC=OFF"
           "-DLLVM_ENABLE_PROJECTS=clang;lld"
-          -DLLVM_ENABLE_ASSERTIONS=ON
-          -DLLVM_ENABLE_RTTI=ON
-          -DLLVM_ENABLE_EH=ON
-          -DLLVM_ENABLE_LIBXML2=OFF
-          -DLLVM_ENABLE_TERMINFO=OFF
-          -DLLVM_ENABLE_ZSTD=OFF
-          -DLLVM_ENABLE_ZLIB=OFF
-          -DLLVM_ENABLE_OCAMLDOC=OFF
-          -DLLVM_ENABLE_BINDINGS=OFF
-          -DLLVM_ENABLE_IDE=OFF
-
-      - name: Build LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --build llvm-build
+          "-DLLVM_ENABLE_RTTI=ON"
+          "-DLLVM_ENABLE_RUNTIMES=compiler-rt"
+          "-DLLVM_ENABLE_TERMINFO=OFF"
+          "-DLLVM_ENABLE_WARNINGS=OFF"
+          "-DLLVM_ENABLE_ZLIB=OFF"
+          "-DLLVM_ENABLE_ZSTD=OFF"
+          "-DLLVM_INCLUDE_BENCHMARKS=OFF"
+          "-DLLVM_INCLUDE_EXAMPLES=OFF"
+          "-DLLVM_INCLUDE_TESTS=OFF"
+          "-DLLVM_TARGETS_TO_BUILD=WebAssembly;X86;AArch64;ARM;Hexagon;NVPTX;PowerPC;RISCV"
 
       - name: Install LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --install llvm-build --prefix local-llvm
+        if: matrix.os != 'ubuntu-latest' && steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          cmake --build llvm-build --target install
+          cmake -E rm -rf llvm-src llvm-build
 
-      # Remove the LLVM source tree after building it, otherwise we can
-      # run out of local space while building halide
-      - name: Clean LLVM Source
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        shell: bash
-        run: rm -rf llvm-src
+      ########################################################################
+      # Wheels
+      ########################################################################
 
-      - name: Configure Halide
-        if: runner.os == 'Windows'
-        run: >
-          cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.arch }}" -S . -B halide-build
-          -DWITH_DOCS=NO
-          -DWITH_PYTHON_BINDINGS=NO
-          -DWITH_TESTS=NO
-          -DWITH_TUTORIALS=NO
-          -DWITH_UTILS=NO
-          -DWITH_PYTHON_STUBS=NO
-          -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
-
-      - name: Configure Halide
-        if: runner.os != 'Windows'
-        run: >
-          cmake -G Ninja -S . -B halide-build
-          -DCMAKE_BUILD_TYPE=Release
-          "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
-          -DWITH_DOCS=NO
-          -DWITH_PYTHON_BINDINGS=NO
-          -DWITH_TESTS=NO
-          -DWITH_TUTORIALS=NO
-          -DWITH_UTILS=NO
-          -DWITH_PYTHON_STUBS=NO
-          -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
-
-      - name: Build Halide
-        run: cmake --build halide-build --config Release
-
-      - name: Install Halide
-        run: cmake --install halide-build --config Release --prefix local-halide
+      #- uses: mxschmitt/action-tmate@v3
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.10.2
+        uses: pypa/cibuildwheel@v2.20.0
         env:
-          CMAKE_PREFIX_PATH: ${{ github.workspace }}/local-halide
-          CIBW_BUILD: "cp38-${{ matrix.pytag }} cp39-${{ matrix.pytag }} cp310-${{ matrix.pytag }}"
-          CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }} --global-option=--build-number --global-option=${{github.run_id}}"
-          CIBW_ARCHS_MACOS: "universal2"
+          CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
+          CIBW_SKIP: "cp3{5,6,7}*"
+          CIBW_ENVIRONMENT_MACOS: >
+            CMAKE_PREFIX_PATH='${{ github.workspace }}/opt'
+            Python_ROOT_DIR=''
+          CIBW_ENVIRONMENT_WINDOWS: >
+            CMAKE_GENERATOR=Ninja
+            CMAKE_PREFIX_PATH='${{ github.workspace }}\opt'
+          CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/halide/manylinux_2_28_x86_64-llvm:${{ env.LLVM_VERSION }}"
+          CIBW_TEST_COMMAND: >
+            cmake -G Ninja -S {project}/python_bindings/apps -B build -DCMAKE_BUILD_TYPE=Release &&
+            cmake --build build &&
+            ctest --test-dir build --output-on-failure
+          # Windows puts the Python interpreter in /Scripts, rather than /bin, which CMake doesn't understand.
+          CIBW_TEST_COMMAND_WINDOWS: >
+            cmake -G Ninja -S {project}/python_bindings/apps -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=%VIRTUAL_ENV% &&
+            cmake --build build &&
+            ctest --test-dir build --output-on-failure
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-${{ matrix.platform_tag }}
           path: ./wheelhouse/*.whl
-
-  pip-sdist:
-    name: Make SDist
-    runs-on: ubuntu-latest
-    needs: pip-labels
-    steps:
-      - uses: actions/checkout@v3
-      - run: pipx run build --sdist -C--global-option=egg_info -C--global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }}
-      - uses: actions/upload-artifact@v3
-        with:
-          name: wheels
-          path: dist/*.tar.gz
 
   publish:
     name: Publish on PyPI
-    needs: [ pip-linux, pip-other, pip-sdist ]
+    needs: build-wheels
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: wheels-*
+          merge-multiple: true
           path: dist
 
-      - uses: pypa/gh-action-pypi-publish@v1.5.1
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        if: github.event_name == 'push' && github.ref_name == 'main'
         with:
-          user: __token__
-          password: ${{ secrets.TEST_PYPI_TOKEN }}
           repository_url: https://test.pypi.org/legacy/
 
-      - uses: pypa/gh-action-pypi-publish@v1.5.1
+      - uses: pypa/gh-action-pypi-publish@release/v1
         if: github.event_name == 'release' && github.event.action == 'published'
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_TOKEN }}

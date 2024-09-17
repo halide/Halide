@@ -19,7 +19,7 @@ set(tests
     lesson_12_using_the_gpu.py
     lesson_13_tuples.py
     lesson_14_types.py
-    )
+)
 
 set(PYPATH_lesson_10_aot_compilation_run "$<TARGET_FILE_DIR:lesson_10_halide>")
 
@@ -64,9 +64,9 @@ else ()
 
     # This target allows CMake to build lesson_10_halide.so (or whatever the correct extension is) as part of the tests
     # later. It is excluded from ALL since it isn't valid to build outside of this context.
-    Python3_add_library(lesson_10_halide MODULE EXCLUDE_FROM_ALL
-                        lesson_10_halide.py.cpp
-                        lesson_10_halide.o)
+    Python_add_library(lesson_10_halide MODULE EXCLUDE_FROM_ALL
+                       lesson_10_halide.py.cpp
+                       lesson_10_halide.o)
 
     target_link_libraries(lesson_10_halide PRIVATE Halide::Runtime)
 
@@ -91,14 +91,3 @@ else ()
     set_tests_properties(python_tutorial_lesson_10_aot_compilation_run PROPERTIES
                          FIXTURES_REQUIRED py_lesson_10)
 endif ()
-
-##
-# Packaging
-##
-
-include(GNUInstallDirs)
-
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
-        DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
-        COMPONENT Halide_Documentation
-        FILES_MATCHING PATTERN "*.py")
