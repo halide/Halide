@@ -233,6 +233,12 @@ WEAK void d3d12_free(void *p) {
 }
 
 template<typename T>
+WEAK T zero_struct() {
+    T zero = {};
+    return zero;
+}
+
+template<typename T>
 WEAK T *malloct() {
     TRACELOG;
     T *p = nullptr;
@@ -242,12 +248,6 @@ WEAK T *malloct() {
     *p = zero_struct<T>();
 #endif
     return p;
-}
-
-template<typename T>
-WEAK T zero_struct() {
-    T zero = {};
-    return zero;
 }
 
 #define hashmap_malloc(user_context, size) d3d12_malloc(size)

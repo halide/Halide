@@ -39,27 +39,27 @@ ALWAYS_INLINE T atomic_fetch_add_acquire_release(T *addr, T val) {
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
-ALWAYS_INLINE T atomic_fetch_add_sequentially_consistent(T *addr, TV val) {
+ALWAYS_INLINE TV atomic_fetch_add_sequentially_consistent(T *addr, TV val) {
     return __sync_fetch_and_add(addr, val);
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
-ALWAYS_INLINE T atomic_fetch_sub_sequentially_consistent(T *addr, TV val) {
+ALWAYS_INLINE TV atomic_fetch_sub_sequentially_consistent(T *addr, TV val) {
     return __sync_fetch_and_sub(addr, val);
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
-ALWAYS_INLINE T atomic_fetch_or_sequentially_consistent(T *addr, TV val) {
+ALWAYS_INLINE TV atomic_fetch_or_sequentially_consistent(T *addr, TV val) {
     return __sync_fetch_and_or(addr, val);
 }
 
-template<typename T>
-ALWAYS_INLINE T atomic_add_fetch_sequentially_consistent(T *addr, T val) {
+template<typename T, typename TV = typename remove_volatile<T>::type>
+ALWAYS_INLINE TV atomic_add_fetch_sequentially_consistent(T *addr, TV val) {
     return __sync_add_and_fetch(addr, val);
 }
 
-template<typename T>
-ALWAYS_INLINE T atomic_sub_fetch_sequentially_consistent(T *addr, T val) {
+template<typename T, typename TV = typename remove_volatile<T>::type>
+ALWAYS_INLINE TV atomic_sub_fetch_sequentially_consistent(T *addr, TV val) {
     return __sync_sub_and_fetch(addr, val);
 }
 
@@ -103,7 +103,7 @@ ALWAYS_INLINE T atomic_fetch_and_release(T *addr, T val) {
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
-ALWAYS_INLINE T atomic_fetch_and_sequentially_consistent(T *addr, TV val) {
+ALWAYS_INLINE TV atomic_fetch_and_sequentially_consistent(T *addr, TV val) {
     return __sync_fetch_and_and(addr, val);
 }
 
@@ -165,27 +165,27 @@ ALWAYS_INLINE T atomic_fetch_add_acquire_release(T *addr, T val) {
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
-ALWAYS_INLINE T atomic_fetch_add_sequentially_consistent(T *addr, TV val) {
+ALWAYS_INLINE TV atomic_fetch_add_sequentially_consistent(T *addr, TV val) {
     return __atomic_fetch_add(addr, val, __ATOMIC_SEQ_CST);
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
-ALWAYS_INLINE T atomic_fetch_sub_sequentially_consistent(T *addr, TV val) {
+ALWAYS_INLINE TV atomic_fetch_sub_sequentially_consistent(T *addr, TV val) {
     return __atomic_fetch_sub(addr, val, __ATOMIC_SEQ_CST);
 }
 
 template<typename T, typename TV = typename remove_volatile<T>::type>
-ALWAYS_INLINE T atomic_fetch_or_sequentially_consistent(T *addr, TV val) {
+ALWAYS_INLINE TV atomic_fetch_or_sequentially_consistent(T *addr, TV val) {
     return __atomic_fetch_or(addr, val, __ATOMIC_SEQ_CST);
 }
 
-template<typename T>
-ALWAYS_INLINE T atomic_add_fetch_sequentially_consistent(T *addr, T val) {
+template<typename T, typename TV = typename remove_volatile<T>::type>
+ALWAYS_INLINE TV atomic_add_fetch_sequentially_consistent(T *addr, TV val) {
     return __atomic_add_fetch(addr, val, __ATOMIC_SEQ_CST);
 }
 
-template<typename T>
-ALWAYS_INLINE T atomic_sub_fetch_sequentially_consistent(T *addr, T val) {
+template<typename T, typename TV = typename remove_volatile<T>::type>
+ALWAYS_INLINE TV atomic_sub_fetch_sequentially_consistent(T *addr, TV val) {
     return __atomic_sub_fetch(addr, val, __ATOMIC_SEQ_CST);
 }
 
