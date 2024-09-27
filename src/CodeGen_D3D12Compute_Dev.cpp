@@ -196,15 +196,24 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             oss << "bool";
             break;
         case 8:
+            if (type.is_uint()) {
+                oss << "u";
+            }
+            oss << "int";
+            break;
         case 16:
+            if (type.is_uint()) {
+                oss << "u";
+            }
+            oss << "short";
+            break;
         case 32:
             if (type.is_uint()) {
                 oss << "u";
             }
             oss << "int";
             if (target.get_d3d12_capability_lower_bound() >= 60) {
-                oss << type.bits();
-                oss << "_t";
+                oss << "32_t";
             } else {
 #if DEBUG_TYPES
             oss << type.bits();

@@ -58,10 +58,7 @@
 // For HLSL 6.x
 #include "mini_d3d12.h"
 #include "dxcapi.h"
-
-#include <vector>
-
-//using std::vector;
+#include "d3d12shader.h"
 
 // For all intents and purposes, we always want to use COMPUTE command lists
 // (and queues) ...
@@ -681,6 +678,10 @@ WEAK HANDLE hFenceEvent = nullptr;
 
 WEAK d3d12_command_allocator *cmd_allocator_main = nullptr;
 
+// NOTE(soufianekhiat): used by HLSL 6+
+WEAK IDxcUtils *dx_hlsl6_utils = nullptr;
+WEAK IDxcCompiler3 *dx_hlsl6_compiler = nullptr;
+
 // NOTE(marcos): the term "frame" here is borrowed from graphics to delineate the
 // lifetime of a kernel dispatch; more specifically, a number of "expensive" API
 // objects is necessary for each dispatch, and they must remain alive and immutable
@@ -976,6 +977,12 @@ WEAK void D3D12LoadDependencies(void *user_context) {
     CreateDXGIFactory1 = LibrarySymbol::get(user_context, lib_dxgi, "CreateDXGIFactory1");
     DxcCreateInstanceFunc = LibrarySymbol::get(user_context, lib_dxcompiler, "DxcCreateInstance");
 
+    if (DxcCreateInstanceFunc != nullptr)
+    {
+        DxcCreateInstanceFunc(CLSID_DxcUtils, IID_PPV_ARGS(&dx_hlsl6_utils));
+        DxcCreateInstanceFunc(CLSID_DxcCompiler, IID_PPV_ARGS(&dx_hlsl6_compiler));
+    }
+
     // Windows x64 follows the LLP64 integer type convention:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
     static_assert(sizeof(BOOL) == (32 / 8));      // BOOL      must be  32 bits
@@ -1001,11 +1008,8 @@ WEAK void D3D12LoadDependencies(void *user_context) {
     static_assert(sizeof(UINT16) == (16 / 8));
     static_assert(sizeof(UINT32) == (32 / 8));
     static_assert(sizeof(UINT64) == (64 / 8));
-#ifdef BITS_64
+    // d3d12 is only allowed on 64 bits
     static_assert(sizeof(SIZE_T) == (64 / 8));
-#else
-    static_assert(sizeof(SIZE_T) == (32 / 8));
-#endif
 }
 
 #if HALIDE_D3D12_PIX
@@ -1873,63 +1877,95 @@ WEAK d3d12_function *d3d12_compile_shader(d3d12_device *device, d3d12_library *l
     int source_size = library->source_length;
     using SS16 = StackStringStreamPrinter<16>;
     SS16 SS[4] = {SS16(nullptr), SS16(nullptr), SS16(nullptr), SS16(nullptr)};
-    D3D_SHADER_MACRO pDefines[] = {
-        {"__GROUPSHARED_SIZE_IN_BYTES", (SS[0] << shared_mem_bytes).str()},
-        {"__NUM_TREADS_X", (SS[1] << threadsX).str()},
-        {"__NUM_TREADS_Y", (SS[2] << threadsY).str()},
-        {"__NUM_TREADS_Z", (SS[3] << threadsZ).str()},
-        {nullptr, nullptr}};
-    const char *shaderName = name;  // only used for debug information
-    ID3DInclude *includeHandler = nullptr;
-    const char *entryPoint = name;
-    const char *target = "cs_5_1";  // all d3d12 hardware support SM 5.1
-    UINT flags1 = 0;
-    UINT flags2 = 0;  // flags related to effects (.fx files)
-    ID3DBlob *shaderBlob = nullptr;
-    ID3DBlob *errorMsgs = nullptr;
-
-    flags1 |= D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
-#if HALIDE_D3D12_DEBUG_SHADERS
-    flags1 |= D3DCOMPILE_DEBUG;
-    flags1 |= D3DCOMPILE_SKIP_OPTIMIZATION;
-    // flags1 |= D3DCOMPILE_RESOURCES_MAY_ALIAS;
-    // flags1 |= D3DCOMPILE_ALL_RESOURCES_BOUND;
-#endif
 
     // dump_shader(source);
+    if (dx_hlsl6_compiler != nullptr)
+    {
+        DxcBuffer source_buffer;
+        source_buffer.Ptr = source;
+        source_buffer.Size = source_size;
+        source_buffer.Encoding = DXC_CP_ACP; // Assume BOM says UTF8 or UTF16 or this is ANSI text.
 
-    HRESULT result = D3DCompile(source, source_size, shaderName, pDefines, includeHandler, entryPoint, target, flags1, flags2, &shaderBlob, &errorMsgs);
+        LPCWSTR pszArgs[] =
+        {
+            L"-E", name,              // Entry point.
+            L"-T", "cs_6_0",         // Target.
+            //L"-Zs",                   // Enable debug information (slim format)
+            L"-D", (SS[0] << "__GROUPSHARED_SIZE_IN_BYTES=" << shared_mem_bytes).str(),
+            L"-D", (SS[1] << "__NUM_TREADS_X=" << threadsX).str(),
+            L"-D", (SS[2] << "__NUM_TREADS_Y=" << threadsY).str(),
+            L"-D", (SS[3] << "__NUM_TREADS_Z=" << threadsY).str(),
+        };
 
-    if (FAILED(result) || (shaderBlob == nullptr)) {
-        TRACEPRINT("Unable to compile D3D12 compute shader (HRESULT=" << (void *)(int64_t)result << ", ShaderBlob=" << shaderBlob << " entry=" << entryPoint << ").\n");
-        dump_shader(source, errorMsgs);
-        Release_ID3D12Object(errorMsgs);
-        TRACEFATAL("[end-of-shader-dump]");
-        return nullptr;
+        IDxcIncludeHandler* include_handler;
+        dx_hlsl6_utils->CreateDefaultIncludeHandler(&include_handler);
+
+        IDxcResult* pResults;
+        dx_hlsl6_compiler->Compile(
+            &source_buffer,          // Source buffer.
+            pszArgs,                 // Array of pointers to arguments.
+            12,       // Number of arguments.
+            nullptr, //include_handler,         // User-provided interface to handle #include directives (optional).
+            IID_PPV_ARGS(&pResults)  // Compiler output status, buffer, and errors.
+        );
+    } else {
+        D3D_SHADER_MACRO pDefines[] = {
+            {"__GROUPSHARED_SIZE_IN_BYTES", (SS[0] << shared_mem_bytes).str()},
+            {"__NUM_TREADS_X", (SS[1] << threadsX).str()},
+            {"__NUM_TREADS_Y", (SS[2] << threadsY).str()},
+            {"__NUM_TREADS_Z", (SS[3] << threadsY).str()},
+            {nullptr, nullptr}};
+
+        const char *shaderName = name;  // only used for debug information
+        ID3DInclude *includeHandler = nullptr;
+        const char *entryPoint = name;
+        const char *target = "cs_5_1";  // all d3d12 hardware support SM 5.1
+        UINT flags1 = 0;
+        UINT flags2 = 0;  // flags related to effects (.fx files)
+        ID3DBlob *shaderBlob = nullptr;
+        ID3DBlob *errorMsgs = nullptr;
+
+        flags1 |= D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES;
+#if HALIDE_D3D12_DEBUG_SHADERS
+        flags1 |= D3DCOMPILE_DEBUG;
+        flags1 |= D3DCOMPILE_SKIP_OPTIMIZATION;
+        // flags1 |= D3DCOMPILE_RESOURCES_MAY_ALIAS;
+        // flags1 |= D3DCOMPILE_ALL_RESOURCES_BOUND;
+#endif
+
+        HRESULT result = D3DCompile(source, source_size, shaderName, pDefines, includeHandler, entryPoint, target, flags1, flags2, &shaderBlob, &errorMsgs);
+
+        if (FAILED(result) || (shaderBlob == nullptr)) {
+            TRACEPRINT("Unable to compile D3D12 compute shader (HRESULT=" << (void *)(int64_t)result << ", ShaderBlob=" << shaderBlob << " entry=" << entryPoint << ").\n");
+            dump_shader(source, errorMsgs);
+            Release_ID3D12Object(errorMsgs);
+            TRACEFATAL("[end-of-shader-dump]");
+            return nullptr;
+        }
+
+        TRACEPRINT("SUCCESS while compiling D3D12 compute shader with entry name '" << entryPoint << "'!\n");
+
+        // even though it was successful, there may have been warning messages emitted by the compiler:
+        if (errorMsgs != nullptr) {
+            dump_shader(source, errorMsgs);
+            Release_ID3D12Object(errorMsgs);
+        }
+
+        d3d12_function *function = malloct<d3d12_function>();
+        function->shaderBlob = shaderBlob;
+        function->rootSignature = rootSignature;
+        rootSignature->AddRef();
+
+        d3d12_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(device, function);
+        if (pipeline_state == nullptr) {
+            TRACEFATAL("D3D12Compute: Could not allocate pipeline state.");
+            release_object(function);
+            return nullptr;
+        }
+        function->pipeline_state = pipeline_state;
+
+        return function;
     }
-
-    TRACEPRINT("SUCCESS while compiling D3D12 compute shader with entry name '" << entryPoint << "'!\n");
-
-    // even though it was successful, there may have been warning messages emitted by the compiler:
-    if (errorMsgs != nullptr) {
-        dump_shader(source, errorMsgs);
-        Release_ID3D12Object(errorMsgs);
-    }
-
-    d3d12_function *function = malloct<d3d12_function>();
-    function->shaderBlob = shaderBlob;
-    function->rootSignature = rootSignature;
-    rootSignature->AddRef();
-
-    d3d12_compute_pipeline_state *pipeline_state = new_compute_pipeline_state_with_function(device, function);
-    if (pipeline_state == nullptr) {
-        TRACEFATAL("D3D12Compute: Could not allocate pipeline state.");
-        release_object(function);
-        return nullptr;
-    }
-    function->pipeline_state = pipeline_state;
-
-    return function;
 }
 
 WEAK d3d12_function *new_function_with_name(d3d12_device *device, d3d12_library *library, const char *name, size_t name_len,
