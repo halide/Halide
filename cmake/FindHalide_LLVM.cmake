@@ -44,7 +44,8 @@ if (LLVM_FOUND)
             find_package(LLD HINTS "${LLVM_INSTALL_PREFIX}" "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")
             if (NOT LLD_FOUND)
                 string(APPEND REASON_FAILURE_MESSAGE
-                       "WebAssembly was not found because liblld is missing. Did you install liblld-dev?\n")
+                       "WebAssembly was not found because liblld is missing. "
+                       "Did you `apt install liblld-dev` or `brew install lld`?\n")
                 continue()
             endif ()
 
