@@ -1431,23 +1431,23 @@ public:
         // into a static dispatch to the right-sized copy.)
         if (T_is_void ? (type().bytes() == 1) : (sizeof(not_void_T) == 1)) {
             using MemType = uint8_t;
-            auto &typed_dst = (Buffer<MemType, Dims, InClassDimStorage> &)dst;
-            auto &typed_src = (Buffer<const MemType, D2, S2> &)src;
+            auto &typed_dst = reinterpret_cast<Buffer<MemType, Dims, InClassDimStorage> &>(dst);
+            auto &typed_src = reinterpret_cast<Buffer<const MemType, D2, S2> &>(src);
             typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else if (T_is_void ? (type().bytes() == 2) : (sizeof(not_void_T) == 2)) {
             using MemType = uint16_t;
-            auto &typed_dst = (Buffer<MemType, Dims, InClassDimStorage> &)dst;
-            auto &typed_src = (Buffer<const MemType, D2, S2> &)src;
+            auto &typed_dst = reinterpret_cast<Buffer<MemType, Dims, InClassDimStorage> &>(dst);
+            auto &typed_src = reinterpret_cast<Buffer<const MemType, D2, S2> &>(src);
             typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else if (T_is_void ? (type().bytes() == 4) : (sizeof(not_void_T) == 4)) {
             using MemType = uint32_t;
-            auto &typed_dst = (Buffer<MemType, Dims, InClassDimStorage> &)dst;
-            auto &typed_src = (Buffer<const MemType, D2, S2> &)src;
+            auto &typed_dst = reinterpret_cast<Buffer<MemType, Dims, InClassDimStorage> &>(dst);
+            auto &typed_src = reinterpret_cast<Buffer<const MemType, D2, S2> &>(src);
             typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else if (T_is_void ? (type().bytes() == 8) : (sizeof(not_void_T) == 8)) {
             using MemType = uint64_t;
-            auto &typed_dst = (Buffer<MemType, Dims, InClassDimStorage> &)dst;
-            auto &typed_src = (Buffer<const MemType, D2, S2> &)src;
+            auto &typed_dst = reinterpret_cast<Buffer<MemType, Dims, InClassDimStorage> &>(dst);
+            auto &typed_src = reinterpret_cast<Buffer<const MemType, D2, S2> &>(src);
             typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else {
             assert(false && "type().bytes() must be 1, 2, 4, or 8");
