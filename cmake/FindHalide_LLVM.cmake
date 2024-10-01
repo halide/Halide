@@ -44,7 +44,8 @@ if (LLVM_FOUND)
             find_package(LLD HINTS "${LLVM_INSTALL_PREFIX}" "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")
             if (NOT LLD_FOUND)
                 string(APPEND REASON_FAILURE_MESSAGE
-                       "WebAssembly was not found because liblld is missing. Did you install liblld-dev?\n")
+                       "WebAssembly was not found because liblld is missing. "
+                       "Did you `apt install liblld-dev` or `brew install lld`?\n")
                 continue()
             endif ()
 
@@ -143,7 +144,8 @@ if (Halide_LLVM_FOUND)
             endif ()
 
             if (comp STREQUAL "WebAssembly")
-                target_link_libraries(Halide_LLVM::WebAssembly INTERFACE lldWasm)
+                target_include_directories(Halide_LLVM::WebAssembly INTERFACE ${LLD_INCLUDE_DIRS})
+                target_link_libraries(Halide_LLVM::WebAssembly INTERFACE lldWasm lldCommon)
             endif ()
         endif ()
     endforeach ()
