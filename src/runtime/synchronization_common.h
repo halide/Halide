@@ -816,10 +816,14 @@ protected:
 
 class fast_cond {
     uintptr_t state = 0;
+    uintptr_t counter = 0;
 
 public:
     ALWAYS_INLINE void signal() {
         if_tsan_pre_signal(this);
+
+        // Release any spinning waiters
+        atomic_fetch_add_acquire_release(&counter, (uintptr_t)1);
 
         uintptr_t val;
         atomic_load_relaxed(&state, &val);
@@ -834,6 +838,10 @@ public:
 
     ALWAYS_INLINE void broadcast() {
         if_tsan_pre_signal(this);
+
+        // Release any spinning waiters
+        atomic_fetch_add_acquire_release(&counter, (uintptr_t)1);
+
         uintptr_t val;
         atomic_load_relaxed(&state, &val);
         if (val == 0) {
@@ -846,6 +854,26 @@ public:
     }
 
     ALWAYS_INLINE void wait(fast_mutex *mutex) {
+        // Spin for a bit, waiting to see if someone else calls signal or
+        // broadcast.
+        uintptr_t initial;
+        atomic_load_acquire(&counter, &initial);
+        mutex->unlock();
+        spin_control spinner;
+        while (spinner.should_spin()) {
+            uintptr_t current;
+            atomic_load_relaxed(&counter, &current);
+            if (current != initial) {
+                mutex->lock();
+                return;
+            }
+            halide_thread_yield();
+        }
+        halide_abort_if_false(nullptr, mutex != nullptr);
+        mutex->lock();  // Can locking and then immediately waiting be
+                        // optimized?
+
+        // Go to sleep until signaled
         wait_parking_control control(&state, mutex);
         uintptr_t result = control.park((uintptr_t)this);
         if (result != (uintptr_t)mutex) {
