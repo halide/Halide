@@ -861,13 +861,13 @@ public:
         mutex->unlock();
         spin_control spinner;
         while (spinner.should_spin()) {
+            halide_thread_yield();
             uintptr_t current;
             atomic_load_relaxed(&counter, &current);
             if (current != initial) {
                 mutex->lock();
                 return;
             }
-            halide_thread_yield();
         }
         halide_abort_if_false(nullptr, mutex != nullptr);
         mutex->lock();  // Can locking and then immediately waiting be
