@@ -869,7 +869,7 @@ public:
                 return;
             }
         }
-        halide_abort_if_false(nullptr, mutex != nullptr);
+
         mutex->lock();  // Can locking and then immediately waiting be
                         // optimized?
 
