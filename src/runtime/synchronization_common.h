@@ -873,6 +873,15 @@ public:
         mutex->lock();  // Can locking and then immediately waiting be
                         // optimized?
 
+        // Check one final time with the lock held. This guarantees we won't
+        // miss an increment of the counter because it is only ever incremented
+        // with the lock held.
+        uintptr_t current;
+        atomic_load_relaxed(&counter, &current);
+        if (current != initial) {
+            return;
+        }
+
         // Go to sleep until signaled
         wait_parking_control control(&state, mutex);
         uintptr_t result = control.park((uintptr_t)this);
