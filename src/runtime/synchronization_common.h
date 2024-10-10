@@ -857,7 +857,7 @@ public:
         // Spin for a bit, waiting to see if someone else calls signal or
         // broadcast.
         uintptr_t initial;
-        atomic_load_acquire(&counter, &initial);
+        atomic_load_relaxed(&counter, &initial);
         mutex->unlock();
         spin_control spinner;
         while (spinner.should_spin()) {
