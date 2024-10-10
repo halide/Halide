@@ -202,6 +202,25 @@ WEAK void dump_job_state() {
 
 WEAK void worker_thread(void *);
 
+extern "C" {
+
+WEAK NEVER_INLINE void halide_reacquire_lock_after_work() {
+    halide_mutex_lock(&work_queue.mutex);
+}
+
+WEAK NEVER_INLINE void halide_owner_sleep() {
+    halide_cond_wait(&work_queue.wake_owners, &work_queue.mutex);
+}
+
+WEAK NEVER_INLINE void halide_worker_sleep_a() {
+    halide_cond_wait(&work_queue.wake_a_team, &work_queue.mutex);
+}
+
+WEAK NEVER_INLINE void halide_worker_sleep_b() {
+    halide_cond_wait(&work_queue.wake_a_team, &work_queue.mutex);
+}
+}
+
 WEAK void worker_thread_already_locked(work *owned_job) {
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
         work *job = work_queue.jobs;
@@ -282,7 +301,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             if (owned_job) {
                 work_queue.owners_sleeping++;
                 owned_job->owner_is_sleeping = true;
-                halide_cond_wait(&work_queue.wake_owners, &work_queue.mutex);
+                halide_owner_sleep();
                 owned_job->owner_is_sleeping = false;
                 work_queue.owners_sleeping--;
             } else {
@@ -290,10 +309,10 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                 if (work_queue.a_team_size > work_queue.target_a_team_size) {
                     // Transition to B team
                     work_queue.a_team_size--;
-                    halide_cond_wait(&work_queue.wake_b_team, &work_queue.mutex);
+                    halide_worker_sleep_b();
                     work_queue.a_team_size++;
                 } else {
-                    halide_cond_wait(&work_queue.wake_a_team, &work_queue.mutex);
+                    halide_worker_sleep_a();
                 }
                 work_queue.workers_sleeping--;
             }
@@ -342,7 +361,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                 total_iters += iters;
                 iters = 0;
             }
-            halide_mutex_lock(&work_queue.mutex);
+            halide_reacquire_lock_after_work();
 
             job->task.min += total_iters;
             job->task.extent -= total_iters;
@@ -376,7 +395,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                                              myjob.task.min, 1,
                                              myjob.task.closure, job);
             }
-            halide_mutex_lock(&work_queue.mutex);
+            halide_reacquire_lock_after_work();
         }
 
         if (result != halide_error_code_success) {
@@ -587,6 +606,10 @@ WEAK int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
     return f(user_context, min, extent, closure, task_parent);
 }
 
+WEAK NEVER_INLINE void halide_acquire_lock_to_enqueue_work() {
+    halide_mutex_lock(&work_queue.mutex);
+}
+
 WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
                                    int min, int size, uint8_t *closure) {
     if (size <= 0) {
@@ -612,7 +635,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.siblings = &job;  // guarantees no other job points to the same siblings.
     job.sibling_count = 0;
     job.parent_job = nullptr;
-    halide_mutex_lock(&work_queue.mutex);
+    halide_acquire_lock_to_enqueue_work();
     enqueue_work_already_locked(1, &job, nullptr);
     worker_thread_already_locked(&job);
     halide_mutex_unlock(&work_queue.mutex);

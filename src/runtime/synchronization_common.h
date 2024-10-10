@@ -175,6 +175,12 @@ public:
     }
 };
 
+extern "C" {
+WEAK NEVER_INLINE void halide_thread_yield_mutex_lock() {
+    halide_thread_yield();
+}
+}
+
 WEAK void word_lock::lock_full() {
     spin_control spinner;
     uintptr_t expected;
@@ -191,7 +197,7 @@ WEAK void word_lock::lock_full() {
         }
 
         if (((expected & ~(uintptr_t)(queue_lock_bit | lock_bit)) != 0) && spinner.should_spin()) {
-            halide_thread_yield();
+            halide_thread_yield_mutex_lock();
             atomic_load_relaxed(&state, &expected);
             continue;
         }
@@ -351,7 +357,7 @@ static ALWAYS_INLINE uintptr_t addr_hash(uintptr_t addr) {
     }
 }
 
-WEAK hash_bucket &lock_bucket(uintptr_t addr) {
+WEAK NEVER_INLINE hash_bucket &lock_bucket(uintptr_t addr) {
     uintptr_t hash = addr_hash(addr);
 
     halide_debug_assert(nullptr, hash < HASH_TABLE_SIZE);
@@ -373,7 +379,7 @@ struct bucket_pair {
     }
 };
 
-WEAK bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
+WEAK NEVER_INLINE bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
     // TODO: if resizing is implemented, loop, etc.
     uintptr_t hash_from = addr_hash(addr_from);
     uintptr_t hash_to = addr_hash(addr_to);
@@ -444,7 +450,7 @@ protected:
 };
 
 // TODO: Do we need a park_result thing here?
-WEAK uintptr_t parking_control::park(uintptr_t addr) {
+WEAK NEVER_INLINE uintptr_t parking_control::park(uintptr_t addr) {
     queue_data queue_data;
 
     hash_bucket &bucket = lock_bucket(addr);
@@ -475,7 +481,7 @@ WEAK uintptr_t parking_control::park(uintptr_t addr) {
     // TODO: handling timeout.
 }
 
-WEAK uintptr_t parking_control::unpark_one(uintptr_t addr) {
+WEAK NEVER_INLINE uintptr_t parking_control::unpark_one(uintptr_t addr) {
     hash_bucket &bucket = lock_bucket(addr);
 
     queue_data **data_location = &bucket.head;
@@ -526,7 +532,7 @@ WEAK uintptr_t parking_control::unpark_one(uintptr_t addr) {
     return 0;
 }
 
-WEAK int parking_control::unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, uintptr_t unpark_info) {
+WEAK NEVER_INLINE int parking_control::unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, uintptr_t unpark_info) {
     bucket_pair buckets = lock_bucket_pair(addr_from, addr_to);
 
     validate_action action;
@@ -622,6 +628,10 @@ protected:
     }
 };
 
+WEAK NEVER_INLINE void halide_lock_full_thread_yield() {
+    halide_thread_yield();
+}
+
 class fast_mutex {
     uintptr_t state = 0;
 
@@ -644,7 +654,7 @@ class fast_mutex {
             // threads are parked. We're prioritizing throughput over
             // fairness by letting sleeping threads lie.
             if (spinner.should_spin()) {
-                halide_thread_yield();
+                halide_lock_full_thread_yield();
                 atomic_load_relaxed(&state, &expected);
                 continue;
             }
@@ -814,6 +824,52 @@ protected:
     }
 };
 
+extern "C" {
+WEAK NEVER_INLINE void halide_thread_yield_cond_spin() {
+    halide_thread_yield();
+}
+
+WEAK NEVER_INLINE void halide_mutex_lock_after_cond_spin_success(fast_mutex *mutex) {
+    mutex->lock();
+}
+
+WEAK NEVER_INLINE void halide_mutex_lock_after_cond_spin_failure(fast_mutex *mutex) {
+    mutex->lock();
+}
+
+WEAK NEVER_INLINE void halide_mutex_lock_after_cond_wake(fast_mutex *mutex) {
+    mutex->lock();
+}
+}
+
+// Temporarily pulled into a separate function for ease of profiling
+WEAK NEVER_INLINE bool halide_cond_spin(fast_mutex *mutex, uintptr_t *counter) {
+    // Spin for a bit, waiting to see if someone else calls signal or
+    // broadcast.
+    uintptr_t initial;
+    atomic_load_relaxed(counter, &initial);
+    mutex->unlock();
+    spin_control spinner;
+    while (spinner.should_spin()) {
+        halide_thread_yield_cond_spin();
+        uintptr_t current;
+        atomic_load_relaxed(counter, &current);
+        if (current != initial) {
+            halide_mutex_lock_after_cond_spin_success(mutex);
+            return true;
+        }
+    }
+
+    halide_mutex_lock_after_cond_spin_failure(mutex);
+
+    // Check one final time with the lock held. This guarantees we won't
+    // miss an increment of the counter because it is only ever incremented
+    // with the lock held.
+    uintptr_t current;
+    atomic_load_relaxed(counter, &current);
+    return current != initial;
+}
+
 class fast_cond {
     uintptr_t state = 0;
     uintptr_t counter = 0;
@@ -854,31 +910,7 @@ public:
     }
 
     ALWAYS_INLINE void wait(fast_mutex *mutex) {
-        // Spin for a bit, waiting to see if someone else calls signal or
-        // broadcast.
-        uintptr_t initial;
-        atomic_load_acquire(&counter, &initial);
-        mutex->unlock();
-        spin_control spinner;
-        while (spinner.should_spin()) {
-            halide_thread_yield();
-            uintptr_t current;
-            atomic_load_relaxed(&counter, &current);
-            if (current != initial) {
-                mutex->lock();
-                return;
-            }
-        }
-
-        mutex->lock();  // Can locking and then immediately waiting be
-                        // optimized?
-
-        // Check one final time with the lock held. This guarantees we won't
-        // miss an increment of the counter because it is only ever incremented
-        // with the lock held.
-        uintptr_t current;
-        atomic_load_relaxed(&counter, &current);
-        if (current != initial) {
+        if (halide_cond_spin(mutex, &counter)) {
             return;
         }
 
@@ -886,7 +918,7 @@ public:
         wait_parking_control control(&state, mutex);
         uintptr_t result = control.park((uintptr_t)this);
         if (result != (uintptr_t)mutex) {
-            mutex->lock();
+            halide_mutex_lock_after_cond_wake(mutex);
         } else {
             if_tsan_pre_lock(mutex);
 
