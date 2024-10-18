@@ -2793,8 +2793,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         arg_type[0] = llvm_type_of(op->args[0].type());
 #if LLVM_VERSION >= 200
         llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(),
-                                                             (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
-                                                             arg_type);
+                                                                     (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
+                                                                     arg_type);
 #else
         llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(),
                                                              (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
