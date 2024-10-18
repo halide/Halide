@@ -63,8 +63,8 @@ inline void do_cost_model_schedule(Halide::Pipeline pipeline) {
     Var n(sum.get_schedule().dims()[0].var);
     Var ni("ni");
     Var nii("nii");
-    Var r1010_z(filter1_im_0_d_def__.update(0).get_schedule().dims()[2].var);
-    Var r1207_y(filter1_im_0_d_def__.update(1).get_schedule().dims()[1].var);
+    RVar r1010_z(filter1_im_0_d_def__.update(0).get_schedule().dims()[2].var);
+    RVar r1207_y(filter1_im_0_d_def__.update(1).get_schedule().dims()[1].var);
     Var s(squashed_head1_filter_0_d_def__.get_schedule().dims()[1].var);
     Var si("si");
     Var v12(head2_bias_im_0_d_def__.get_schedule().dims()[0].var);

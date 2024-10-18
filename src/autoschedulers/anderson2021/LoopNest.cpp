@@ -3931,7 +3931,7 @@ void LoopNest::apply(LoopLevel here,
             for (size_t i = 0; i < symbolic_loop.size(); i++) {
                 StageScheduleState::FuncVar fv;
                 const auto &l = symbolic_loop[i];
-                fv.var = VarOrRVar(l.var, !l.pure);
+                fv.var = VarOrRVar(l.var, l.rvar);
                 fv.orig = fv.var;
                 fv.accessor = l.accessor;
                 const auto &p = parent_bounds->loops(stage->index, i);

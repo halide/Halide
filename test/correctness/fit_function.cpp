@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
                 // Find a pure var to vectorize over
                 for (auto d : df.update(i).get_schedule().dims()) {
                     if (d.is_pure()) {
-                        df.update(i).vectorize(Var(d.var), 4);
+                        df.update(i).vectorize(VarOrRVar(d.var, d.is_rvar()), 4);
                         break;
                     }
                 }
