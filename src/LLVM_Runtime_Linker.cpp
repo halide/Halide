@@ -394,7 +394,11 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             } else if (target.os == Target::Windows) {
                 return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128-Fn32");
             } else {
+#if LLVM_VERSION >= 200
+                return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32");
+#else
                 return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32");
+#endif
             }
 #else
             if (target.os == Target::IOS) {
