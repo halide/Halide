@@ -867,7 +867,7 @@ void CodeGen_Hexagon::init_module() {
         llvm::Intrinsic::ID id = i.id;
         internal_assert(id != llvm::Intrinsic::not_intrinsic);
         // Get the real intrinsic.
-        llvm::Function *intrin = llvm::Intrinsic::getDeclaration(module.get(), id);
+        llvm::Function *intrin = llvm::Intrinsic::getOrInsertDeclaration(module.get(), id);
         halide_type_t ret_type = fix_lanes(i.ret_type);
         arg_types.clear();
         for (const auto &a : i.arg_types) {
@@ -1016,7 +1016,7 @@ Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty, llvm::Function *F,
 Value *CodeGen_Hexagon::call_intrin_cast(llvm::Type *ret_ty, int id,
                                          vector<Value *> Ops) {
     llvm::Function *intrin =
-        llvm::Intrinsic::getDeclaration(module.get(), (llvm::Intrinsic::ID)id);
+        llvm::Intrinsic::getOrInsertDeclaration(module.get(), (llvm::Intrinsic::ID)id);
     return call_intrin_cast(ret_ty, intrin, std::move(Ops));
 }
 
@@ -1182,7 +1182,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     if (max < a_elements) {
         BitCastInst *a_cast = dyn_cast<BitCastInst>(a);
         CallInst *a_call = dyn_cast<CallInst>(a_cast ? a_cast->getOperand(0) : a);
-        llvm::Function *vcombine = llvm::Intrinsic::getDeclaration(
+        llvm::Function *vcombine = llvm::Intrinsic::getOrInsertDeclaration(
             module.get(),
             INTRINSIC_128B(vcombine));
         if (a_call && a_call->getCalledFunction() == vcombine) {
