@@ -2778,7 +2778,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type *> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
+#if LLVM_VERSION >= 200
+        llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::ctpop, arg_type);
+#else
         llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::ctpop, arg_type);
+#endif
         Value *a = codegen(op->args[0]);
         CallInst *call = builder->CreateCall(fn, a);
         value = call;
@@ -2787,9 +2791,15 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type *> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
+#if LLVM_VERSION >= 200
+        llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(),
+                                                                     (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
+                                                                     arg_type);
+#else
         llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(),
                                                              (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
                                                              arg_type);
+#endif
         llvm::Value *is_const_zero_poison = llvm::ConstantInt::getFalse(*context);
         llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_poison};
         CallInst *call = builder->CreateCall(fn, args);
