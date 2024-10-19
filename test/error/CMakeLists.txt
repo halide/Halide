@@ -105,6 +105,7 @@ tests(GROUPS error
       store_at_without_compute_at.cpp
       thread_id_outside_block_id.cpp
       too_many_args.cpp
+      treat_rvar_as_var.cpp
       tuple_arg_select_undef.cpp
       tuple_output_bounds_check.cpp
       tuple_realization_to_buffer.cpp
