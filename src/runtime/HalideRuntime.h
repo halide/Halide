@@ -194,7 +194,7 @@ struct halide_mutex {
 
 /** Cross platform condition variable. Must be initialized to 0. */
 struct halide_cond {
-    uintptr_t _private[1];
+    uintptr_t _private[2];
 };
 
 /** A basic set of mutex and condition variable functions, which call
