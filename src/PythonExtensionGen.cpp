@@ -159,8 +159,10 @@ bool unpack_buffer(PyObject *py_obj,
                    Py_buffer &py_buf,
                    halide_dimension_t *halide_dim,
                    halide_buffer_t &halide_buf,
-                   bool &py_buf_valid) {
+                   bool &py_buf_valid,
+                   bool &needs_device_free) {
     py_buf_valid = false;
+    needs_device_free = false;
 
     memset(&py_buf, 0, sizeof(py_buf));
     if (PyObject_GetBuffer(py_obj, &py_buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | PyBUF_ANY_CONTIGUOUS | py_getbuffer_flags) < 0) {
@@ -213,6 +215,7 @@ bool unpack_buffer(PyObject *py_obj,
     }
 
     memset(&halide_buf, 0, sizeof(halide_buf));
+    needs_device_free = true;
     if (!py_buf.format) {
         halide_buf.type.code = halide_type_uint;
         halide_buf.type.bits = 8;
@@ -306,7 +309,8 @@ extern bool unpack_buffer(PyObject *py_obj,
                           Py_buffer &py_buf,
                           halide_dimension_t *halide_dim,
                           halide_buffer_t &halide_buf,
-                          bool &py_buf_valid);
+                          bool &py_buf_valid,
+                          bool &needs_device_free);
 }  // namespace Halide::PythonRuntime
 
 namespace {
@@ -320,12 +324,18 @@ struct PyHalideBuffer {
     halide_dimension_t halide_dim[dims_to_allocate];
     halide_buffer_t halide_buf;
     bool py_buf_needs_release = false;
+    bool needs_device_free = false;
 
     bool unpack(PyObject *py_obj, int py_getbuffer_flags, const char *name) {
-        return Halide::PythonRuntime::unpack_buffer(py_obj, py_getbuffer_flags, name, dimensions, py_buf, halide_dim, halide_buf, py_buf_needs_release);
+        return Halide::PythonRuntime::unpack_buffer(py_obj, py_getbuffer_flags,
+            name, dimensions, py_buf, halide_dim, halide_buf, py_buf_needs_release,
+            needs_device_free);
     }
 
     ~PyHalideBuffer() {
+        if (needs_device_free) {
+            halide_device_free(nullptr, &halide_buf);
+        }
         if (py_buf_needs_release) {
             PyBuffer_Release(&py_buf);
         }
