@@ -529,6 +529,24 @@ void JITModule::reuse_device_allocations(bool b) const {
     }
 }
 
+int JITModule::get_num_threads() const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_get_num_threads");
+    if (f != exports().end()) {
+        return (reinterpret_bits<int (*)()>(f->second.address))();
+    }
+    return 1;
+}
+
+int JITModule::set_num_threads(int n) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_set_num_threads");
+    if (f != exports().end()) {
+        return (reinterpret_bits<int (*)(int)>(f->second.address))(n);
+    }
+    return 1;
+}
+
 bool JITModule::compiled() const {
     return jit_module->JIT != nullptr;
 }
@@ -1073,6 +1091,16 @@ void JITSharedRuntime::memoization_cache_evict(uint64_t eviction_key) {
 void JITSharedRuntime::reuse_device_allocations(bool b) {
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).reuse_device_allocations(b);
+}
+
+int JITSharedRuntime::get_num_threads() {
+    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    return shared_runtimes(MainShared).get_num_threads();
+}
+
+int JITSharedRuntime::set_num_threads(int n) {
+    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    return shared_runtimes(MainShared).set_num_threads(n);
 }
 
 JITCache::JITCache(Target jit_target,
