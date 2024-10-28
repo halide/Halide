@@ -126,7 +126,7 @@ RegionAllocator *RegionAllocator::create(void *user_context, BlockResource *bloc
 
 int RegionAllocator::destroy(void *user_context, RegionAllocator *instance) {
     halide_abort_if_false(user_context, instance != nullptr);
-    const MemoryAllocators &allocators = instance->allocators;
+    MemoryAllocators allocators = instance->allocators;
     instance->destroy(user_context);
     halide_abort_if_false(user_context, allocators.system.deallocate != nullptr);
     allocators.system.deallocate(user_context, instance);
