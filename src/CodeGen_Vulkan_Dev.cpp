@@ -1569,6 +1569,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Store *op) {
     user_assert(is_const_one(op->predicate)) << "Predicated stores not supported by SPIR-V codegen!\n";
 
     debug(2) << "    value_type=" << op->value.type() << " value=" << op->value << "\n";
+    debug(2) << "    index_type=" << op->index.type() << " index=" << op->index << "\n";
     op->value.accept(this);
     SpvId value_id = builder.current_id();
 
@@ -2682,7 +2683,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
             SpvId runtime_arr_type_id = builder.add_runtime_array(array_element_type_id);
 
             // Annotate the array with its stride
-            SpvBuilder::Literals array_stride = {(uint32_t)(arg.type.bytes())};
+            SpvBuilder::Literals array_stride = {(uint32_t)(arg.type.bytes() * lanes)};
             builder.add_annotation(runtime_arr_type_id, SpvDecorationArrayStride, array_stride);
 
             // Wrap the runtime array in a struct (required with SPIR-V buffer block semantics)
