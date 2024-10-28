@@ -36,6 +36,7 @@ tests(GROUPS performance multithreaded
       matrix_multiplication.cpp
       memory_profiler.cpp
       parallel_performance.cpp
+      parallel_scenarios.cpp
       profiler.cpp
       rfactor.cpp
       sort.cpp
