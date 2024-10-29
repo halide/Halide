@@ -1199,7 +1199,7 @@ int main(int argc, char **argv) {
     // Most of the schedules used in this test are terrible for large
     // thread count machines, due to massive amounts of
     // contention. We'll just set the thread count to 4.
-    Halide::Internal::JITSharedModule::set_num_threads(4);
+    Halide::Internal::JITSharedRuntime::set_num_threads(4);
     test_all<uint8_t>(Backend::CPU);
     test_all<uint8_t>(Backend::CPUVectorize);
     test_all<int8_t>(Backend::CPU);

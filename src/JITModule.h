@@ -287,7 +287,7 @@ public:
     static void release_all();
 
     /** Get the number of threads in the Halide thread pool. Includes the
-     * calling thread. Meaningless if a custom do par for has been set. */
+     * calling thread. Meaningless if a custom_do_par_for has been set. */
     static int get_num_threads();
 
     /** Set the number of threads to use in the Halide thread pool, inclusive of
