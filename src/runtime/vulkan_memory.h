@@ -163,7 +163,10 @@ int VulkanMemoryAllocator::destroy(void *user_context, VulkanMemoryAllocator *in
     }
     BlockAllocator::MemoryAllocators allocators = instance->block_allocator->current_allocators();
     instance->destroy(user_context);
-    halide_abort_if_false(user_context, allocators.system.deallocate != nullptr);
+    if (allocators.system.deallocate == nullptr) {
+        error(user_context) << "VulkanBlockAllocator: Unable to destroy instance! Missing system allocator interface!\n";
+        return halide_error_code_internal_error;
+    }
     allocators.system.deallocate(user_context, instance);
     return halide_error_code_success;
 }
