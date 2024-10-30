@@ -161,9 +161,8 @@ int VulkanMemoryAllocator::destroy(void *user_context, VulkanMemoryAllocator *in
         error(user_context) << "VulkanBlockAllocator: Unable to destroy instance! Invalide instance pointer!\n";
         return halide_error_code_internal_error;
     }
-    const BlockAllocator::MemoryAllocators &allocators = instance->block_allocator->current_allocators();
+    BlockAllocator::MemoryAllocators allocators = instance->block_allocator->current_allocators();
     instance->destroy(user_context);
-    BlockAllocator::destroy(user_context, instance->block_allocator);
     if (allocators.system.deallocate == nullptr) {
         error(user_context) << "VulkanBlockAllocator: Unable to destroy instance! Missing system allocator interface!\n";
         return halide_error_code_internal_error;
@@ -521,7 +520,8 @@ int VulkanMemoryAllocator::destroy(void *user_context) {
                    << "user_context=" << user_context << ") ... \n";
 #endif
     if (block_allocator != nullptr) {
-        block_allocator->destroy(this);
+        BlockAllocator::destroy(user_context, block_allocator);
+        block_allocator = nullptr;
     }
     region_count = 0;
     region_byte_count = 0;
