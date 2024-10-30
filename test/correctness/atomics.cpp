@@ -1196,15 +1196,10 @@ int main(int argc, char **argv) {
     }
 
     Target target = get_jit_target_from_environment();
-// Most of the schedules used in this test are terrible for large
-// thread count machines, due to massive amounts of
-// contention. We'll just set the thread count to 4. Unfortunately
-// there's no JIT api for this yet.
-#ifdef _WIN32
-    _putenv_s("HL_NUM_THREADS", "4");
-#else
-    setenv("HL_NUM_THREADS", "4", 1);
-#endif
+    // Most of the schedules used in this test are terrible for large
+    // thread count machines, due to massive amounts of
+    // contention. We'll just set the thread count to 4.
+    Halide::Internal::JITSharedRuntime::set_num_threads(4);
     test_all<uint8_t>(Backend::CPU);
     test_all<uint8_t>(Backend::CPUVectorize);
     test_all<int8_t>(Backend::CPU);

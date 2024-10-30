@@ -247,6 +247,12 @@ struct JITModule {
     /** See JITSharedRuntime::reuse_device_allocations */
     void reuse_device_allocations(bool) const;
 
+    /** See JITSharedRuntime::get_num_threads */
+    int get_num_threads() const;
+
+    /** See JITSharedRuntime::set_num_threads */
+    int set_num_threads(int) const;
+
     /** Return true if compile_module has been called on this module. */
     bool compiled() const;
 };
@@ -279,6 +285,18 @@ public:
     static void reuse_device_allocations(bool);
 
     static void release_all();
+
+    /** Get the number of threads in the Halide thread pool. Includes the
+     * calling thread. Meaningless if a custom_do_par_for has been set. */
+    static int get_num_threads();
+
+    /** Set the number of threads to use in the Halide thread pool, inclusive of
+     * the calling thread. Pass zero to use a reasonable default (typically the
+     * number of CPUs online). Calling this is meaningless if custom_do_par_for
+     * has been set. Halide may launch more threads than this if necessary to
+     * avoid deadlock when using the async scheduling directive. Returns the old
+     * number. */
+    static int set_num_threads(int);
 };
 
 void *get_symbol_address(const char *s);

@@ -693,6 +693,13 @@ WEAK int halide_set_num_threads(int n) {
     return old;
 }
 
+WEAK int halide_get_num_threads() {
+    halide_mutex_lock(&work_queue.mutex);
+    int n = work_queue.desired_threads_working;
+    halide_mutex_unlock(&work_queue.mutex);
+    return n;
+}
+
 WEAK void halide_shutdown_thread_pool() {
     if (work_queue.initialized) {
         // Wake everyone up and tell them the party's over and it's time
