@@ -103,10 +103,8 @@ int main(int argc, char **argv) {
         std::sort(times.begin(), times.end());
         auto [m, c, i, o] = p.first;
         printf("%d %d %d %d %d ", m, c, i, o, (int)times.size());
-        const int n = 9;
-        size_t off = (times.size() / n) / 2;
-        for (int i = 0; i < n; i++) {
-            printf("%g ", times[off + (times.size() * i) / n]);
+        for (int decile = 10; decile <= 90; decile += 10) {
+            printf("%g ", times[(decile * times.size()) / 100]);
         }
         printf("\n");
         
