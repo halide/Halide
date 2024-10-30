@@ -32,23 +32,23 @@ int main(int argc, char **argv) {
     int native_threads = Halide::Internal::JITSharedRuntime::get_num_threads();
 
     std::map<std::tuple<bool, bool, int, int>, std::vector<float>> results;
-    
+
     auto bench = [&](bool m, bool c, int i, int o) {
         const int memory_limit = m ? max_memory : 128;
 
         auto now = std::chrono::high_resolution_clock::now;
-        auto to_ns = [](auto delta) {return 1e9 * std::chrono::duration<float>(delta).count();};
-        
+        auto to_ns = [](auto delta) { return 1e9 * std::chrono::duration<float>(delta).count(); };
+
         auto bench_one = [&]() {
             auto t1 = now();
             callable(i, o, memory_limit, in, out);
             auto t2 = now();
             return to_ns(t2 - t1) / (i * o);
         };
-        
+
         const int num_tasks = 8;
-        const int min_samples = 32;        
-        
+        const int min_samples = 32;
+
         std::vector<float> times[num_tasks];
         if (c) {
             Halide::Tools::ThreadPool<void> thread_pool;
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
             for (size_t t = 0; t < futures.size(); t++) {
                 futures[t] = thread_pool.async(
                     [&](size_t t) {
-                        bench_one();                        
+                        bench_one();
                         auto t_start = now();
                         while (to_ns(now() - t_start) < 1e7 || times[t].size() < min_samples / num_tasks) {
                             times[t].push_back(bench_one());
@@ -81,7 +81,6 @@ int main(int argc, char **argv) {
         for (int i = 0; i < num_tasks; i++) {
             r.insert(r.end(), times[i].begin(), times[i].end());
         }
-        
     };
 
     // The output is designed to be copy-pasted into a spreadsheet, not read by a human
@@ -107,7 +106,6 @@ int main(int argc, char **argv) {
             printf("%g ", times[(decile * times.size()) / 100]);
         }
         printf("\n");
-        
     }
 
     printf("Success!\n");
