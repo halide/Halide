@@ -1,5 +1,6 @@
 #include <algorithm>
-#include <fstream>  // for dump to file
+#include <filesystem> // for dump to file
+#include <fstream>    // for dump to file
 #include <sstream>
 #include <unordered_set>
 
@@ -114,9 +115,9 @@ protected:
 
         // Top-level function for adding kernels
         void add_kernel(const Stmt &s, const std::string &name, const std::vector<DeviceArgument> &args);
-        void init_module();
-        void compile(std::vector<char> &binary);
-        void dump() const;
+        void init_spirv_module();
+        void encode_spirv_module(std::vector<char> &binary);
+        void dump_spirv_module() const;
 
         // Encode the descriptor sets into a sidecar which will be added
         // as a header to the module prior to the actual SPIR-V binary
@@ -286,6 +287,25 @@ protected:
     } emitter;
 
     std::string current_kernel_name;
+
+    // In order to avoid using up all descriptor sets for complicated pipelines,
+    // we will encode each Kernel entry-point into it's own SPIR-V module and
+    // bind them as separate shaders to avoid running out of resources on 
+    // constrained devices.
+    struct KernelModule {
+        std::string kernel_name;
+        std::vector<char> spirv_module; // header + binary
+    };
+    using KernelModuleTable = std::vector<KernelModule>;
+    KernelModuleTable kernel_module_table;
+
+    // merge the contents of the kernel module table into a single binary
+    // containing a header followed by the SPIR-V modules for each kernel
+    void encode_module(std::vector<char> &module);
+
+    // dump the contents of the combined module, outputting separate
+    // SPIR-V binary files for each kernel
+    void dump_module(const std::vector<char> &module);
 };
 
 // Check if all loads and stores to the member 'buffer' are dense, aligned, and
@@ -2244,7 +2264,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::reset() {
     reset_workgroup_size();
 }
 
-void CodeGen_Vulkan_Dev::SPIRV_Emitter::init_module() {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::init_spirv_module() {
     reset();
 
     if (target.has_feature(Target::VulkanV13)) {
@@ -2287,6 +2307,11 @@ std::vector<char> encode_header_string(const std::string &str) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header(SpvBinary &spirv_header) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header\n";
 
+    // NOTE: This header is a pre-amble to the actual SPIR-V module that's passed
+    //       to the driver.  It describes the descriptor sets and other metadata
+    //       that's necessary to bind the compiled shader.  This is combined with
+    //       the actual SPIR-V module to form a "kernel module".
+    //
     // Encode a sidecar for the module that lists the descriptor sets
     // corresponding to each entry point contained in the module.
     //
@@ -2724,8 +2749,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
     descriptor_set_table.push_back(descriptor_set);
 }
 
-void CodeGen_Vulkan_Dev::SPIRV_Emitter::compile(std::vector<char> &module) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::compile\n";
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_spirv_module(std::vector<char> &module) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_spirv_module\n";
 
     // First encode the descriptor set bindings for each entry point
     // as a sidecar which we will add as a preamble header to the actual
@@ -2826,8 +2851,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     storage_access_map.clear();
 }
 
-void CodeGen_Vulkan_Dev::SPIRV_Emitter::dump() const {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::dump()\n";
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::dump_spirv_module() const {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::dump_spirv_module()\n";
     std::cerr << builder.current_module();
 }
 
@@ -2838,7 +2863,8 @@ CodeGen_Vulkan_Dev::CodeGen_Vulkan_Dev(Target t)
 
 void CodeGen_Vulkan_Dev::init_module() {
     debug(2) << "CodeGen_Vulkan_Dev::init_module\n";
-    emitter.init_module();
+    kernel_module_table.clear();
+//    emitter.init_module();
 }
 
 void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
@@ -2854,19 +2880,129 @@ void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
              << stmt;
 
     current_kernel_name = name;
+    
+    emitter.init_spirv_module();
     emitter.add_kernel(stmt, name, args);
+    
+    std::vector<char> spirv_module;
+    emitter.encode_spirv_module(spirv_module);
 
-    // dump the SPIRV file if requested
-    if (getenv("HL_SPIRV_DUMP_FILE")) {
-        dump();
-    }
+    KernelModule kernel_module;
+    kernel_module.kernel_name = name;
+    kernel_module.spirv_module = spirv_module;
+    kernel_module_table.push_back(kernel_module);    
 }
 
 std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
     debug(2) << "CodeGen_Vulkan_Dev::compile_to_src\n";
+
     std::vector<char> module;
-    emitter.compile(module);
+    encode_module(module);
     return module;
+}
+
+void CodeGen_Vulkan_Dev::encode_module(std::vector<char>& module) {
+
+    debug(2) << "CodeGen_Vulkan_Dev::encode_module\n";
+
+    // NOTE: The module generated by this method is an amalgamation of all the
+    //       "kernel modules".  It consists of a simple header indicating the
+    //       number of "kernel modules" and their respective sizes, followed by 
+    //       a "SPIR-V module" for each kernel. Each "SPIR-V module" contains a
+    //       pre-amble header describing the descriptor sets and metadata necessary
+    //       for binding the shader, followed by the actual SPIR-V binary that's 
+    //       submitted to the driver. 
+    //
+    //       Previously, we encoded everything into a single "SPIR-V module" with 
+    //       entry-points for each kernel in the pipeline, but for complex pipelines, 
+    //       this could easily exceed the number of available descriptor sets available
+    //       at runtime on resource constrained devices.  As a compromise, we only
+    //       generate a single SPIR-V module per entry-point to reduce the number
+    //       of required descriptor sets needed to bind the shader.  However, this 
+    //       requires us to merge them into an amalgation, which is why this two-level
+    //       encoding exists.
+    //       
+    //
+    // [0] Number of Kernel Modules (uint32_t)
+    // ... For each kernel module ...
+    // ... [0] Byte count indicating size of "Kernel Module" entry (uint32_t)
+    // [1] Kernel Module Table    
+    // ... For each kernel module ...
+    // ....[0] The SPIR-V Module for the kernel
+    // ....... (see encode_spirv_module() for details)
+    //
+    // NOTE: Halide's Vulkan runtime consumes this module prior to compiling.
+    //
+    // Both vk_decode_shader_bindings() and vk_compile_shader_module() will
+    // need to be updated if this encoding ever changes!
+    //
+
+    // Encode a module header consisting of the number of kernels, followed by the binary size of each
+    size_t binary_bytes = 0;
+    SpvBinary module_header;
+    uint32_t kernel_count = (uint32_t)kernel_module_table.size();
+    debug(1) << "  kernel_count = " << kernel_count << "\n";
+
+    module_header.push_back(kernel_count);
+    uint32_t n = 0;
+    for(const KernelModule &kernel_module : kernel_module_table) {
+        uint32_t spirv_module_size = (uint32_t)kernel_module.spirv_module.size();
+        debug(1) << "  spirv_module_size[" << n++ << "] = " << spirv_module_size << " bytes\n";
+        module_header.push_back(spirv_module_size);
+        binary_bytes += spirv_module_size;
+    }
+
+    size_t header_bytes = module_header.size() * sizeof(uint32_t);
+
+    debug(2) << "    encoding module ("
+             << "header_size: " << (uint32_t)(header_bytes) << ", "
+             << "binary_size: " << (uint32_t)(binary_bytes) << ")\n";
+
+    // Combine the header and each kernel module into the binary we will be returning
+    module.reserve(header_bytes + binary_bytes);
+    module.insert(module.end(), (const char *)module_header.data(), (const char *)(module_header.data() + module_header.size()));
+    for(const KernelModule &kernel_module : kernel_module_table) {
+        module.insert(module.end(), (const char *)kernel_module.spirv_module.data(), (const char *)(kernel_module.spirv_module.data() + kernel_module.spirv_module.size()));
+    }
+
+}
+
+void CodeGen_Vulkan_Dev::dump_module(const std::vector<char> &module) {
+    // Get the dump file name from the env (default to out.spv if unspecified)
+    const char *dump_file = getenv("HL_SPIRV_DUMP_FILE") ? getenv("HL_SPIRV_DUMP_FILE") : "out.spv";
+    std::filesystem::path dump_file_path(dump_file);
+
+    // Determine the number of kernels and their binary sizes
+    uint32_t word_offset = 0;
+    const uint32_t *module_header = (const uint32_t *)(module.data());
+    uint32_t kernel_count = module_header[word_offset++];
+    std::vector<uint32_t> binary_sizes;
+    for(uint32_t i = 0; (i < kernel_count) && ((word_offset * sizeof(uint32_t)) < module.size()); ++i) {
+        binary_sizes.push_back(module_header[word_offset++]);
+    }
+
+    // Dump the SPIR-V binary for each kernel as a separate file
+    size_t byte_offset = word_offset * sizeof(uint32_t);
+    for(uint32_t i = 0; (i < kernel_count) && (byte_offset < module.size()); ++i) {
+
+        // Skip the header and only output the SPIR-V binary for the kernel       
+        const uint32_t *decode = (const uint32_t *)(module.data() + byte_offset);
+        uint32_t header_word_count = decode[0];
+        size_t header_size = header_word_count * sizeof(uint32_t);
+        const uint32_t *spirv_ptr = (decode + header_word_count);
+        size_t spirv_size = (binary_sizes[i] - header_size);
+
+        // Add the kernel index to the dump filename
+        std::string dump_kernel_file = dump_file_path.stem();
+        dump_kernel_file += "_k" + std::to_string(i) + dump_file_path.extension().native();
+
+        debug(1) << "Vulkan: Dumping SPIRV module to file: '" << dump_kernel_file << "'\n";
+        std::ofstream f(dump_kernel_file.c_str(), std::ios::out | std::ios::binary);
+        f.write((const char *)(spirv_ptr), spirv_size);
+        f.close();
+
+        byte_offset += binary_sizes[i];
+    }
 }
 
 std::string CodeGen_Vulkan_Dev::get_current_kernel_name() {
@@ -2878,23 +3014,9 @@ std::string CodeGen_Vulkan_Dev::print_gpu_name(const std::string &name) {
 }
 
 void CodeGen_Vulkan_Dev::dump() {
-    std::vector<char> module = compile_to_src();
-
-    // Print the contents of the compiled SPIR-V module
-    emitter.dump();
-
-    // Skip the header and only output the SPIR-V binary
-    const uint32_t *decode = (const uint32_t *)(module.data());
-    uint32_t header_word_count = decode[0];
-    size_t header_size = header_word_count * sizeof(uint32_t);
-    const uint32_t *binary_ptr = (decode + header_word_count);
-    size_t binary_size = (module.size() - header_size);
-
-    const char *filename = getenv("HL_SPIRV_DUMP_FILE") ? getenv("HL_SPIRV_DUMP_FILE") : "out.spv";
-    debug(1) << "Vulkan: Dumping SPIRV module to file: '" << filename << "'\n";
-    std::ofstream f(filename, std::ios::out | std::ios::binary);
-    f.write((const char *)(binary_ptr), binary_size);
-    f.close();
+    std::vector<char> module;
+    encode_module(module);
+    dump_module(module);
 }
 
 }  // namespace

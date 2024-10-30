@@ -24,6 +24,7 @@ namespace Vulkan {
 // Declarations
 class VulkanMemoryAllocator;
 struct VulkanShaderBinding;
+struct VulkanCompiledShaderModule;
 struct VulkanCompilationCacheEntry;
 
 // --------------------------------------------------------------------------
@@ -217,11 +218,15 @@ int vk_destroy_compute_pipeline(void *user_context,
                                 VulkanMemoryAllocator *allocator,
                                 VkPipeline compute_pipeline);
 
+// -- Kernel Module
+VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, VulkanMemoryAllocator *allocator,
+                                                      const char *ptr, int size);
+
 // -- Shader Module
 VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryAllocator *allocator,
                                                const uint32_t *module_ptr, uint32_t module_size);
 
-VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
+VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
                                                       const char *src, int size);
 
 int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocator);

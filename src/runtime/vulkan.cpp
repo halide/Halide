@@ -144,11 +144,11 @@ WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, 
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
-
     debug(user_context) << "halide_vulkan_initialize_kernels got compilation_cache mutex.\n";
+
     VulkanCompilationCacheEntry *cache_entry = nullptr;
     if (!compilation_cache.kernel_state_setup(user_context, state_ptr, ctx.device, cache_entry,
-                                              Halide::Runtime::Internal::Vulkan::vk_compile_shader_module,
+                                              Halide::Runtime::Internal::Vulkan::vk_compile_kernel_module,
                                               user_context, ctx.allocator, src, size)) {
         error(user_context) << "Vulkan: Failed to setup compilation cache!\n";
         return halide_error_code_generic_error;
@@ -1090,6 +1090,7 @@ WEAK int halide_vulkan_run(void *user_context,
 #ifdef DEBUG_RUNTIME
     debug(user_context)
         << "halide_vulkan_run (user_context: " << user_context << ", "
+        << "state_ptr: " << state_ptr << ", "
         << "entry: " << entry_name << ", "
         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
@@ -1147,36 +1148,43 @@ WEAK int halide_vulkan_run(void *user_context,
     // 1a. Locate the correct entry point from the cache
     bool found_entry_point = false;
     uint32_t entry_point_index = 0;
-    for (uint32_t n = 0; (n < cache_entry->shader_count) && !found_entry_point; ++n) {
-        if (strcmp(cache_entry->shader_bindings[n].entry_point_name, entry_name) == 0) {
-            entry_point_index = n;
-            found_entry_point = true;
+    VulkanCompiledShaderModule *shader_module = nullptr;
+    for (uint32_t m = 0; m < cache_entry->module_count; m++) {
+        VulkanCompiledShaderModule *compiled_shader = cache_entry->compiled_modules[m];
+        for (uint32_t n = 0; (n < compiled_shader->shader_count) && !found_entry_point; ++n) {
+            if (strcmp(compiled_shader->shader_bindings[n].entry_point_name, entry_name) == 0) {
+                shader_module = compiled_shader;
+                entry_point_index = n;
+                found_entry_point = true;
+            }
         }
     }
-    if (!found_entry_point || (entry_point_index >= cache_entry->shader_count)) {
+
+    if (!found_entry_point || (entry_point_index >= shader_module->shader_count) || (shader_module == nullptr)) {
         error(user_context) << "Vulkan: Failed to locate shader entry point! Unable to proceed!\n";
         return halide_error_code_internal_error;
     }
+
     debug(user_context) << " found entry point ["
-                        << (entry_point_index + 1) << " of " << cache_entry->shader_count
+                        << (entry_point_index + 1) << " of " << shader_module->shader_count
                         << "] '" << entry_name << "'\n";
 
     // 2. Create objects for execution
-    if (cache_entry->descriptor_set_layouts == nullptr) {
+    if (shader_module->descriptor_set_layouts == nullptr) {
         error(user_context) << "Vulkan: Missing descriptor set layouts! Unable to proceed!\n";
         return halide_error_code_internal_error;
     }
 
     int error_code = halide_error_code_success;
-    if (cache_entry->pipeline_layout == 0) {
+    if (shader_module->pipeline_layout == 0) {
 
         // 2a. Create all descriptor set layouts
-        for (uint32_t n = 0; n < cache_entry->shader_count; ++n) {
-            if (((void *)cache_entry->descriptor_set_layouts[n]) == nullptr) {
-                uint32_t uniform_buffer_count = cache_entry->shader_bindings[n].uniform_buffer_count;
-                uint32_t storage_buffer_count = cache_entry->shader_bindings[n].storage_buffer_count;
-                debug(user_context) << " creating descriptor set layout [" << n << "] " << cache_entry->shader_bindings[n].entry_point_name << "\n";
-                error_code = vk_create_descriptor_set_layout(user_context, ctx.allocator, uniform_buffer_count, storage_buffer_count, &(cache_entry->descriptor_set_layouts[n]));
+        for (uint32_t n = 0; n < shader_module->shader_count; ++n) {
+            if (((void *)shader_module->descriptor_set_layouts[n]) == nullptr) {
+                uint32_t uniform_buffer_count = shader_module->shader_bindings[n].uniform_buffer_count;
+                uint32_t storage_buffer_count = shader_module->shader_bindings[n].storage_buffer_count;
+                debug(user_context) << " creating descriptor set layout [" << n << "] " << shader_module->shader_bindings[n].entry_point_name << "\n";
+                error_code = vk_create_descriptor_set_layout(user_context, ctx.allocator, uniform_buffer_count, storage_buffer_count, &(shader_module->descriptor_set_layouts[n]));
                 if (error_code != halide_error_code_success) {
                     error(user_context) << "Vulkan: Failed to create descriptor set layout!\n";
                     return error_code;
@@ -1185,7 +1193,7 @@ WEAK int halide_vulkan_run(void *user_context,
         }
 
         // 2b. Create the pipeline layout
-        error_code = vk_create_pipeline_layout(user_context, ctx.allocator, cache_entry->shader_count, cache_entry->descriptor_set_layouts, &(cache_entry->pipeline_layout));
+        error_code = vk_create_pipeline_layout(user_context, ctx.allocator, shader_module->shader_count, shader_module->descriptor_set_layouts, &(shader_module->pipeline_layout));
         if (error_code != halide_error_code_success) {
             error(user_context) << "Vulkan: Failed to create pipeline layout!\n";
             return error_code;
@@ -1201,10 +1209,10 @@ WEAK int halide_vulkan_run(void *user_context,
     dispatch_data.local_size[1] = threadsY;
     dispatch_data.local_size[2] = threadsZ;
 
-    VulkanShaderBinding *entry_point_binding = (cache_entry->shader_bindings + entry_point_index);
+    VulkanShaderBinding *entry_point_binding = (shader_module->shader_bindings + entry_point_index);
 
     // 2c. Setup the compute pipeline (eg override any specializations for shared mem or workgroup size)
-    error_code = vk_setup_compute_pipeline(user_context, ctx.allocator, entry_point_binding, &dispatch_data, cache_entry->shader_module, cache_entry->pipeline_layout, &(entry_point_binding->compute_pipeline));
+    error_code = vk_setup_compute_pipeline(user_context, ctx.allocator, entry_point_binding, &dispatch_data, shader_module->shader_module, shader_module->pipeline_layout, &(entry_point_binding->compute_pipeline));
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to setup compute pipeline!\n";
         return error_code;
@@ -1227,7 +1235,7 @@ WEAK int halide_vulkan_run(void *user_context,
         }
 
         // Create the descriptor set
-        error_code = vk_create_descriptor_set(user_context, ctx.allocator, cache_entry->descriptor_set_layouts[entry_point_index], entry_point_binding->descriptor_pool, &(entry_point_binding->descriptor_set));
+        error_code = vk_create_descriptor_set(user_context, ctx.allocator, shader_module->descriptor_set_layouts[entry_point_index], entry_point_binding->descriptor_pool, &(entry_point_binding->descriptor_set));
         if (error_code != halide_error_code_success) {
             error(user_context) << "Vulkan: Unable to create shader module ... failed to create descriptor set!\n";
             return error_code;
@@ -1281,7 +1289,7 @@ WEAK int halide_vulkan_run(void *user_context,
     error_code = vk_fill_command_buffer_with_dispatch_call(user_context,
                                                            ctx.device, command_buffer,
                                                            entry_point_binding->compute_pipeline,
-                                                           cache_entry->pipeline_layout,
+                                                           shader_module->pipeline_layout,
                                                            entry_point_binding->descriptor_set,
                                                            entry_point_index,
                                                            blocksX, blocksY, blocksZ);
