@@ -284,8 +284,12 @@ protected:
         // Target for codegen
         Target target;
 
-    } emitter;
+    };
 
+    // Current target for codegen
+    Target current_target;
+
+    // Current kernel name for CodeGen
     std::string current_kernel_name;
 
     // In order to avoid using up all descriptor sets for complicated pipelines,
@@ -2857,14 +2861,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::dump_spirv_module() const {
 }
 
 CodeGen_Vulkan_Dev::CodeGen_Vulkan_Dev(Target t)
-    : emitter(t) {
+    : current_target(t) {
     // Empty
 }
 
 void CodeGen_Vulkan_Dev::init_module() {
     debug(2) << "CodeGen_Vulkan_Dev::init_module\n";
     kernel_module_table.clear();
-//    emitter.init_module();
 }
 
 void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
@@ -2881,12 +2884,21 @@ void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
 
     current_kernel_name = name;
     
+    // Create the SPIR-V emitter
+    SPIRV_Emitter emitter(current_target);
     emitter.init_spirv_module();
     emitter.add_kernel(stmt, name, args);
     
+    // Encode the SPIR-V module (header + binary)
     std::vector<char> spirv_module;
     emitter.encode_spirv_module(spirv_module);
 
+    // Dump the SPIR-V if debug is enabled
+    if (debug::debug_level() >= 2) {
+        emitter.dump_spirv_module();
+    }    
+
+    // Copy the SPIR-V module into the Kernel Module table 
     KernelModule kernel_module;
     kernel_module.kernel_name = name;
     kernel_module.spirv_module = spirv_module;
@@ -2898,6 +2910,12 @@ std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
 
     std::vector<char> module;
     encode_module(module);
+
+    // dump the SPIRV file if requested
+    if (getenv("HL_SPIRV_DUMP_FILE")) {
+        dump_module(module);
+    }
+
     return module;
 }
 
@@ -2936,6 +2954,11 @@ void CodeGen_Vulkan_Dev::encode_module(std::vector<char>& module) {
     // Both vk_decode_shader_bindings() and vk_compile_shader_module() will
     // need to be updated if this encoding ever changes!
     //
+
+    // Nothing to do if table is empty
+    if(kernel_module_table.empty()) {
+        return;
+    }
 
     // Encode a module header consisting of the number of kernels, followed by the binary size of each
     size_t binary_bytes = 0;
