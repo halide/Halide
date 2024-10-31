@@ -3014,7 +3014,7 @@ void CodeGen_Vulkan_Dev::dump_module(const std::vector<char> &module) {
         size_t spirv_size = (binary_sizes[i] - header_size);
 
         // Add the kernel index to the dump filename
-        std::string dump_kernel_file = dump_file_path.stem();
+        std::string dump_kernel_file = dump_file_path.stem().string();
         dump_kernel_file += "_k" + std::to_string(i) + dump_file_path.extension().string();
 
         debug(1) << "Vulkan: Dumping SPIRV module to file: '" << dump_kernel_file << "'\n";
