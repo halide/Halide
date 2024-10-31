@@ -227,7 +227,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
                                                const uint32_t *module_ptr, uint32_t module_size);
 
 VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
-                                                      const char *src, int size);
+                                                     const char *src, int size);
 
 int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocator);
 

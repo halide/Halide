@@ -1379,7 +1379,7 @@ VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, Vulkan
     // Decode the header and the kernel modules
     uint32_t word_offset = 0;
     const uint32_t *module_header = (const uint32_t *)(ptr);
-    if((size_t)size < sizeof(uint32_t)) {
+    if ((size_t)size < sizeof(uint32_t)) {
         debug(user_context) << "Vulkan: Code module size is invalid!\n";
         return nullptr;
     }
@@ -1389,34 +1389,33 @@ VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, Vulkan
     debug(user_context) << "  kernel_count=" << kernel_count << "\n";
 
     // Allocate enough space to store the compiled modules
-    cache_entry->compiled_modules = (VulkanCompiledShaderModule**)vk_host_malloc(user_context, sizeof(VulkanCompiledShaderModule*) * kernel_count, 0, alloc_scope, allocator->callbacks());
+    cache_entry->compiled_modules = (VulkanCompiledShaderModule **)vk_host_malloc(user_context, sizeof(VulkanCompiledShaderModule *) * kernel_count, 0, alloc_scope, allocator->callbacks());
     if (cache_entry->compiled_modules == nullptr) {
         debug(user_context) << "Vulkan: Failed to allocate host memory!\n";
         return nullptr;
     }
     cache_entry->module_count = kernel_count;
 
-
-    // Allocate a temp buffer to decode the binary sizes of each "SPIR-V Module" 
-    uint32_t* binary_sizes = (uint32_t*)vk_system_malloc(user_context, sizeof(uint32_t) * kernel_count);
-    if(binary_sizes == nullptr) {
+    // Allocate a temp buffer to decode the binary sizes of each "SPIR-V Module"
+    uint32_t *binary_sizes = (uint32_t *)vk_system_malloc(user_context, sizeof(uint32_t) * kernel_count);
+    if (binary_sizes == nullptr) {
         debug(user_context) << "Vulkan: Failed to allocate system memory!\n";
         return nullptr;
     }
 
     // Extract the size of each "SPIR-V Module" for each kernel
     size_t byte_offset = 0;
-    for(uint32_t i = 0; (i < kernel_count) && (byte_offset < (size_t)size); ++i) {
+    for (uint32_t i = 0; (i < kernel_count) && (byte_offset < (size_t)size); ++i) {
         binary_sizes[i] = module_header[word_offset++];
         byte_offset = (word_offset * sizeof(uint32_t));
         debug(user_context) << "  binary_size[" << i << "] = " << binary_sizes[i] << " bytes\n";
     }
-   
+
     // Compile each "SPIR-V Module" for each kernel
     halide_error_code_t error_code = halide_error_code_success;
-    for(uint32_t i = 0; (i < kernel_count) && (byte_offset < (size_t)size); ++i) {
+    for (uint32_t i = 0; (i < kernel_count) && (byte_offset < (size_t)size); ++i) {
 
-        // Skip the header and determine the start address of the "SPIR-V Module"      
+        // Skip the header and determine the start address of the "SPIR-V Module"
         const uint32_t *spirv_ptr = (const uint32_t *)(ptr + byte_offset);
         size_t spirv_size = binary_sizes[i];
 
@@ -1424,7 +1423,7 @@ VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, Vulkan
         debug(user_context) << "  spirv_ptr[" << i << "] = " << spirv_ptr << "\n";
 
         // Compile the "SPIR-V Module" for the kernel
-        cache_entry->compiled_modules[i] = vk_compile_shader_module(user_context, allocator, (const char*)spirv_ptr, (int)spirv_size);
+        cache_entry->compiled_modules[i] = vk_compile_shader_module(user_context, allocator, (const char *)spirv_ptr, (int)spirv_size);
         if (cache_entry->compiled_modules[i] == nullptr) {
             debug(user_context) << "Vulkan: Failed to compile shader module!\n";
             error_code = halide_error_code_generic_error;
@@ -1434,11 +1433,11 @@ VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, Vulkan
         byte_offset += binary_sizes[i];
     }
 
-    // Free temp buffer 
+    // Free temp buffer
     vk_system_free(user_context, binary_sizes);
 
     // Cleanup if compile failed
-    if(error_code != halide_error_code_success) {
+    if (error_code != halide_error_code_success) {
         vk_host_free(user_context, cache_entry->compiled_modules, allocator->callbacks());
         vk_host_free(user_context, cache_entry, allocator->callbacks());
         cache_entry = nullptr;
@@ -1453,7 +1452,7 @@ VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, Vulkan
 }
 
 VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
-                                                      const char *ptr, int size) {
+                                                     const char *ptr, int size) {
 #ifdef DEBUG_RUNTIME
     debug(user_context)
         << " vk_compile_shader_module (user_context: " << user_context << ", "
@@ -1585,7 +1584,7 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
         }
 
         void operator()(VulkanCompilationCacheEntry *cache_entry) {
-            if(cache_entry != nullptr) {
+            if (cache_entry != nullptr) {
                 for (uint32_t m = 0; m < cache_entry->module_count; m++) {
                     VulkanCompiledShaderModule *shader_module = cache_entry->compiled_modules[m];
                     if (shader_module != nullptr) {
