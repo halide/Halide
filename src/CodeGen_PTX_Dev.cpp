@@ -671,7 +671,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     llvm::PassBuilder pb(target_machine.get(), pto);
 
-    bool debug_pass_manager = false;
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;
     llvm::FunctionAnalysisManager fam;
@@ -695,7 +694,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     target_machine->registerPassBuilderCallbacks(pb);
 #endif
 
-    mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
+    mpm = pb.buildPerModuleDefaultPipeline(level);
     mpm.run(*module, mam);
 
     if (llvm::verifyModule(*module, &errs())) {
