@@ -29,6 +29,7 @@ if (NOT TARGET Halide::ExpectAbort)
     # Add an OBJECT (not static) library to convert abort calls into exit(1).
     add_library(Halide_expect_abort OBJECT ${Halide_SOURCE_DIR}/test/common/expect_abort.cpp)
     add_library(Halide::ExpectAbort ALIAS Halide_expect_abort)
+    target_link_libraries(Halide_expect_abort PRIVATE Halide::Halide)
 endif ()
 
 if (NOT TARGET Halide::TerminateHandler)
