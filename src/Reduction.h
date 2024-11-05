@@ -79,7 +79,7 @@ public:
      * for more details. */
     void where(Expr predicate);
 
-    /** Return the predicate defined on this reducation demain. */
+    /** Return the predicate defined on this reduction domain. */
     Expr predicate() const;
 
     /** Set the predicate, replacing any previously set predicate. */

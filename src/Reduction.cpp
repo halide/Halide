@@ -147,10 +147,10 @@ ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain)
     contents->domain = domain;
 }
 
-ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain, const Expr &predictate, bool frozen)
+ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain, const Expr &predicate, bool frozen)
     : contents(new ReductionDomainContents) {
     contents->domain = domain;
-    contents->predicate = predictate;
+    contents->predicate = predicate;
     contents->frozen = frozen;
 }
 
