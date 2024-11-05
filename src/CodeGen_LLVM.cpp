@@ -420,8 +420,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
     module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
     if (effective_vscale != 0) {
-        module->addModuleFlag(llvm::Module::Warning, "halide_vscale_range",
-                              MDString::get(*context, std::to_string(effective_vscale) + ", " + std::to_string(effective_vscale)));
+        module->addModuleFlag(llvm::Module::Warning, "halide_effective_vscale", effective_vscale);
     }
 
     // Ensure some types we need are defined
