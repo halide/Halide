@@ -134,6 +134,9 @@ public:
     /** emit a statement on the output stream */
     void print(const Stmt &);
 
+    /** emit a statement summary on the output stream */
+    void print_summary(const Stmt &);
+
     /** emit a comma delimited list of exprs, without any leading or
      * trailing punctuation. */
     void print_list(const std::vector<Expr> &exprs);
@@ -157,6 +160,10 @@ protected:
      * surrounding set of parens. */
     bool implicit_parens = false;
 
+    /** Print only a summary of a statement, with sub-statements replaced by
+     * ellipses (...). */
+    bool is_summary = false;
+
     /** Either emits "(" or "", depending on the value of implicit_parens */
     void open();
 
@@ -169,6 +176,9 @@ protected:
 
     /** A helper for printing a chain of lets with line breaks */
     void print_lets(const Let *let);
+
+    /** A helper for printing a braced statement */
+    void print_braced_stmt(const Stmt &, int extra_indent=2);
 
     void visit(const IntImm *) override;
     void visit(const UIntImm *) override;
@@ -219,6 +229,13 @@ protected:
     void visit(const Atomic *) override;
     void visit(const HoistedStorage *) override;
 };
+
+/** Debugging helpers for LLDB */
+/// @{
+std::string lldb_string(const Expr &);
+std::string lldb_string(const Internal::BaseExprNode *);
+std::string lldb_string(const Stmt &);
+/// @}
 
 }  // namespace Internal
 }  // namespace Halide
