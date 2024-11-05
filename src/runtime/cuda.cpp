@@ -1010,7 +1010,9 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
             }
         }
 
-        auto result = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host, stream);
+        auto result = cuda_do_multidimensional_copy(
+            user_context, c, c.src + c.src_begin, c.dst + c.dst_begin,
+            dst->dimensions, from_host, to_host, stream);
         if (result) {
             return result;
         }
