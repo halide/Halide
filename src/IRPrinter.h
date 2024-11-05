@@ -178,7 +178,7 @@ protected:
     void print_lets(const Let *let);
 
     /** A helper for printing a braced statement */
-    void print_braced_stmt(const Stmt &, int extra_indent=2);
+    void print_braced_stmt(const Stmt &, int extra_indent = 2);
 
     void visit(const IntImm *) override;
     void visit(const UIntImm *) override;
