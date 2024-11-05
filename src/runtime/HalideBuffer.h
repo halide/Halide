@@ -2055,9 +2055,7 @@ private:
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE
-        storage_T *
-        address_of(Args... args) const {
+    HALIDE_ALWAYS_INLINE storage_T *address_of(Args... args) const {
         if (T_is_void) {
             return (storage_T *)(this->buf.host) + offset_of(0, args...) * type().bytes();
         } else {
@@ -2112,8 +2110,7 @@ public:
     }
 
     HALIDE_ALWAYS_INLINE
-    const not_void_T &
-    operator()() const {
+    const not_void_T & operator()() const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 0;
@@ -2133,9 +2130,8 @@ public:
 
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    HALIDE_ALWAYS_INLINE
-        not_void_T &
-        operator()(int first, Args... rest) {
+    HALIDE_ALWAYS_INLINE not_void_T &
+    operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 1 + (int)(sizeof...(rest));
