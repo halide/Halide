@@ -4954,11 +4954,18 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
 
 Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
                                      const std::vector<int> &indices) {
-    internal_assert(a->getType() == b->getType());
+    if (isa<llvm::ScalableVectorType>(a->getType())) {
+        a = scalable_to_fixed_vector_type(a);
+    }
+    if (isa<llvm::ScalableVectorType>(b->getType())) {
+        b = scalable_to_fixed_vector_type(b);
+    }
     if (!a->getType()->isVectorTy()) {
         a = create_broadcast(a, 1);
         b = create_broadcast(b, 1);
     }
+    // Check for type identity *after* normalizing to fixed vectors
+    internal_assert(a->getType() == b->getType());
     vector<Constant *> llvm_indices(indices.size());
     for (size_t i = 0; i < llvm_indices.size(); i++) {
         if (indices[i] >= 0) {
@@ -4969,12 +4976,6 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
             internal_assert(indices[i] == -1);
             llvm_indices[i] = PoisonValue::get(i32_t);
         }
-    }
-    if (isa<llvm::ScalableVectorType>(a->getType())) {
-        a = scalable_to_fixed_vector_type(a);
-    }
-    if (isa<llvm::ScalableVectorType>(b->getType())) {
-        b = scalable_to_fixed_vector_type(b);
     }
     return builder->CreateShuffleVector(a, b, ConstantVector::get(llvm_indices));
 }
