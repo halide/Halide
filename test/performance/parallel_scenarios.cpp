@@ -37,6 +37,7 @@ int main(int argc, char **argv) {
 
         auto bench_one = [&]() {
             auto t1 = std::chrono::high_resolution_clock::now();
+            // Ignore error code because default halide_error() will abort on failure
             (void)callable(i, o, memory_limit, in, out);
             auto t2 = std::chrono::high_resolution_clock::now();
             return 1e9 * std::chrono::duration<float>(t2 - t1).count() / (i * o);
