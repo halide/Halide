@@ -622,7 +622,6 @@ class VectorSubs : public IRMutator {
             // Widen the true and false values, but we don't have to widen the condition
             true_value = widen(true_value, lanes);
             false_value = widen(false_value, lanes);
-            condition = widen(condition, lanes);
             return Select::make(condition, true_value, false_value);
         }
     }

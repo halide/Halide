@@ -1879,6 +1879,12 @@ void CodeGen_LLVM::visit(const Not *op) {
 
 void CodeGen_LLVM::visit(const Select *op) {
     Value *cmp = codegen(op->condition);
+    if (use_llvm_vp_intrinsics &&
+        op->type.is_vector() &&
+        op->condition.type().is_scalar()) {
+        cmp = create_broadcast(cmp, op->type.lanes());
+    }
+
     Value *a = codegen(op->true_value);
     Value *b = codegen(op->false_value);
     if (a->getType()->isVectorTy()) {
