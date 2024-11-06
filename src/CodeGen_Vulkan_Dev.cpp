@@ -2149,23 +2149,23 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const VectorReduce *) {
-    internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const VectorReduce *): VectorReduce not implemented for codegen\n";
+    user_assert(false) << "VectorReduce is not supported inside Vulkan kernels";
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Prefetch *) {
-    internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Prefetch *): Prefetch not implemented for codegen\n";
+    user_assert(false) << "Prefetch is not supported inside Vulkan kernels";
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Fork *) {
-    internal_error << "void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Fork *): Fork not implemented for codegen";
+    user_assert(false) << "Fork is not supported inside Vulkan kernels";
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Acquire *) {
-    internal_error << "void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Acquire *): Acquire not implemented for codegen";
+    user_assert(false) << "Acquire is not supported inside Vulkan kernels";
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Atomic *) {
-    internal_error << "void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Atomic *): Atomic not implemented for codegen";
+    user_assert(false) << "Atomic updates are not supported inside Vulkan kernels";
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_unary_op(SpvOp op_code, Type t, const Expr &a) {
