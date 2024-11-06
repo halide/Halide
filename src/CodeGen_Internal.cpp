@@ -580,7 +580,8 @@ bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!get_md_int(value, r)) {
         return false;
     }
-    return r != 0;
+    result = r != 0;
+    return true;
 }
 bool get_md_string(llvm::Metadata *value, std::string &result) {
     if (!value) {
