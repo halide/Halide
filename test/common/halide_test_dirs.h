@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <string>
+#include <stdlib.h>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
