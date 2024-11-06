@@ -489,7 +489,9 @@ protected:
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
-    /** Create an LLVM shuffle vectors instruction. */
+    /** Create an LLVM shuffle vectors instruction. Takes a combination of
+     * fixed or scalable vectors as input, so long as the effective lengths match,
+     * but always returns a fixed vector. */
     virtual llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                          const std::vector<int> &indices);
     /** Shorthand for shuffling a single vector. */
