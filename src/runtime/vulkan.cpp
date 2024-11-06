@@ -801,7 +801,9 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             // Need to make sure all reads and writes to/from source are complete.
             MemoryRequest request = {0};
             request.size = src->size_in_bytes();
-            request.properties.usage = MemoryUsage::TransferSrc;
+
+            // NOTE: We may re-use this buffer so enable both src and dst
+            request.properties.usage = MemoryUsage::TransferSrcDst; 
             request.properties.caching = MemoryCaching::UncachedCoherent;
             request.properties.visibility = MemoryVisibility::DeviceToHost;
 
@@ -823,7 +825,9 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             // Need to make sure all reads and writes to/from destination are complete.
             MemoryRequest request = {0};
             request.size = src->size_in_bytes();
-            request.properties.usage = MemoryUsage::TransferSrc;
+
+            // NOTE: We may re-use this buffer so enable both src and dst
+            request.properties.usage = MemoryUsage::TransferSrcDst; 
             request.properties.caching = MemoryCaching::UncachedCoherent;
             request.properties.visibility = MemoryVisibility::HostToDevice;
 
