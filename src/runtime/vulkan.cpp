@@ -45,7 +45,7 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
     halide_debug_assert(user_context, device != nullptr);
     halide_debug_assert(user_context, queue != nullptr);
     halide_debug_assert(user_context, &thread_lock != nullptr);
-    while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {}
+    halide_mutex_lock(&thread_lock);
 
     // If the context has not been initialized, initialize it now.
     if ((cached_instance == nullptr) && create) {
@@ -59,7 +59,7 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
                                            &cached_queue_family_index);
         if (error_code != halide_error_code_success) {
             debug(user_context) << "halide_vulkan_acquire_context: FAILED to create context!\n";
-            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+            halide_mutex_unlock(&thread_lock);
             return error_code;
         }
     }
@@ -75,7 +75,7 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
 }
 
 WEAK int halide_vulkan_release_context(void *user_context, VkInstance instance, VkDevice device, VkQueue queue) {
-    __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+    halide_mutex_unlock(&thread_lock);
     return halide_error_code_success;
 }
 

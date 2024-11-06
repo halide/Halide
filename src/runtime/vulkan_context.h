@@ -30,7 +30,7 @@ VkPhysicalDevice WEAK cached_physical_device = nullptr;
 uint32_t WEAK cached_queue_family_index = 0;
 
 // A Vulkan context/queue/synchronization lock defined in this module with weak linkage
-volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
+WEAK halide_mutex thread_lock;
 
 // --------------------------------------------------------------------------
 
