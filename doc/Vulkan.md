@@ -75,7 +75,7 @@ $ sudo add-apt-repository ppa:graphics-drivers/ppa
 $ sudo apt update
 $ sudo apt upgrade
 # - replace ### with latest driver release (e.g. 515)
-$ sudo apt install nvidia-driver-### nvidia-settings vulkan vulkan-tools
+$ sudo apt install nvidia-driver-### nvidia-settings libvulkan1 vulkan-tools
 ```
 
 Note that only valid drivers for your system should be installed since there are
@@ -236,6 +236,26 @@ validated and disassembled via the SPIR-V tools:
 
 https://github.com/KhronosGroup/SPIRV-Tools
 
+
+In addition to the SPIR-V Tools, you may also wish to install the Khronos Validation 
+Layers which provide an exhaustive suite of runtime checks that can be injected
+by adding `VK_LAYER_KHRONOS_validation` to the `VK_INSTANCE_LAYERS=` environment
+variable. 
+
+To install the validation layers and the SPIR-V tools on Ubuntu v22.04:
+
+```
+$ sudo apt install vulkan-validationlayers vulkan-validationlayers-dev spirv-tools
+```
+
+To test the validation layer, you can prepend your shell command for any Vulkan
+enabled binary with the appropriate environment settings.  For example, 
+you can run one of the JIT-enabled correctness tests w/debug output and validation
+layers enabled like so:
+
+```
+$ VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation HL_JIT_TARGET=host-vulkan-vk_int8-vk_int16-vk_int64-vk_float16-vk_float64-vk_v13-debug ./build/test/correctness/correctness_hello_gpu
+```
 
 # Current Status
 
