@@ -1131,7 +1131,6 @@ void CodeGen_LLVM::optimize_module() {
 
     llvm::PassBuilder pb(tm.get(), pto);
 
-    bool debug_pass_manager = false;
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;
     llvm::FunctionAnalysisManager fam;
@@ -1154,7 +1153,12 @@ void CodeGen_LLVM::optimize_module() {
         // Add a pass that converts lookup tables to relative lookup tables to make them PIC-friendly.
         // See https://bugs.llvm.org/show_bug.cgi?id=45244
         pb.registerOptimizerLastEPCallback(
-            [&](ModulePassManager &mpm, OptimizationLevel level) {
+#if LLVM_VERSION >= 200
+            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
+#else
+            [&](ModulePassManager &mpm, OptimizationLevel)
+#endif
+            {
                 mpm.addPass(RelLookupTableConverterPass());
             });
     }
@@ -1162,7 +1166,12 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::SanitizerCoverage)) {
         pb.registerOptimizerLastEPCallback(
-            [&](ModulePassManager &mpm, OptimizationLevel level) {
+#if LLVM_VERSION >= 200
+            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
+#else
+            [&](ModulePassManager &mpm, OptimizationLevel)
+#endif
+            {
                 SanitizerCoverageOptions sanitizercoverage_options;
                 // Mirror what -fsanitize=fuzzer-no-link would enable.
                 // See https://github.com/halide/Halide/issues/6528
@@ -1180,15 +1189,16 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (get_target().has_feature(Target::ASAN)) {
-        pb.registerPipelineStartEPCallback([](ModulePassManager &mpm, OptimizationLevel) {
-            AddressSanitizerOptions asan_options;  // default values are good...
-            asan_options.UseAfterScope = true;     // ...except this one
-            constexpr bool use_global_gc = false;
-            constexpr bool use_odr_indicator = true;
-            constexpr auto destructor_kind = AsanDtorKind::Global;
-            mpm.addPass(AddressSanitizerPass(
-                asan_options, use_global_gc, use_odr_indicator, destructor_kind));
-        });
+        pb.registerPipelineStartEPCallback(
+            [](ModulePassManager &mpm, OptimizationLevel) {
+                AddressSanitizerOptions asan_options;  // default values are good...
+                asan_options.UseAfterScope = true;     // ...except this one
+                constexpr bool use_global_gc = false;
+                constexpr bool use_odr_indicator = true;
+                constexpr auto destructor_kind = AsanDtorKind::Global;
+                mpm.addPass(AddressSanitizerPass(
+                    asan_options, use_global_gc, use_odr_indicator, destructor_kind));
+            });
     }
 
     // Target::MSAN handling is sprinkled throughout the codebase,
@@ -1196,7 +1206,12 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::TSAN)) {
         pb.registerOptimizerLastEPCallback(
-            [](ModulePassManager &mpm, OptimizationLevel level) {
+#if LLVM_VERSION >= 200
+            [](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
+#else
+            [](ModulePassManager &mpm, OptimizationLevel)
+#endif
+            {
                 mpm.addPass(
                     createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
             });
@@ -1233,7 +1248,7 @@ void CodeGen_LLVM::optimize_module() {
 #endif
     }
 
-    mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
+    mpm = pb.buildPerModuleDefaultPipeline(level);
     mpm.run(*module, mam);
 
     if (llvm::verifyModule(*module, &errs())) {
@@ -1865,12 +1880,6 @@ void CodeGen_LLVM::visit(const Not *op) {
 
 void CodeGen_LLVM::visit(const Select *op) {
     Value *cmp = codegen(op->condition);
-    if (use_llvm_vp_intrinsics &&
-        op->type.is_vector() &&
-        op->condition.type().is_scalar()) {
-        cmp = create_broadcast(cmp, op->type.lanes());
-    }
-
     Value *a = codegen(op->true_value);
     Value *b = codegen(op->false_value);
     if (a->getType()->isVectorTy()) {

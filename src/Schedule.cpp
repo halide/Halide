@@ -292,7 +292,7 @@ void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
     delete p;
 }
 
-/** A schedule for a sigle halide stage_index, which defines where, when, and
+/** A schedule for a single halide stage_index, which defines where, when, and
  * how it should be evaluated. */
 struct StageScheduleContents {
     mutable RefCount ref_count;

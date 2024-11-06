@@ -133,6 +133,12 @@ public:
                             unconditionally_set_current_func(stack.back())});
     }
 
+    Stmt suspend_thread_but_keep_task_id(const Stmt &s) {
+        return Block::make({decr_active_threads(profiler_instance),
+                            s,
+                            incr_active_threads(profiler_instance)});
+    }
+
 private:
     using IRMutator::visit;
 
@@ -499,7 +505,11 @@ private:
         Stmt stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
 
         if (update_active_threads) {
-            stmt = suspend_thread(stmt);
+            if (Internal::is_gpu(op->for_type)) {
+                stmt = suspend_thread_but_keep_task_id(stmt);
+            } else {
+                stmt = suspend_thread(stmt);
+            }
         }
 
         return stmt;

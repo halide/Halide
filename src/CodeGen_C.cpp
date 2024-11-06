@@ -2038,7 +2038,7 @@ void CodeGen_C::visit(const Select *op) {
 
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
-    if (op->condition.type().is_scalar()) {
+    if (op->type.is_scalar()) {
         rhs << "(" << type << ")"
             << "(" << cond
             << " ? " << true_val
