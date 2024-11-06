@@ -578,6 +578,7 @@ bool get_md_int(llvm::Metadata *value, int64_t &result) {
 bool get_md_bool(llvm::Metadata *value, bool &result) {
     int64_t r;
     if (!get_md_int(value, r)) {
+        result = false;
         return false;
     }
     result = r != 0;
