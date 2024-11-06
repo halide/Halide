@@ -2104,10 +2104,11 @@ void CodeGen_Hexagon::visit(const Min *op) {
 }
 
 void CodeGen_Hexagon::visit(const Select *op) {
-    if (op->condition.type().is_scalar() && op->type.is_vector()) {
+    const Broadcast *b = op->condition.as<Broadcast>();
+    if (op->type.is_vector() && b && b->type.is_scalar()) {
         // Implement scalar conditions on vector values with if-then-else.
         value = codegen(Call::make(op->type, Call::if_then_else,
-                                   {op->condition, op->true_value, op->false_value},
+                                   {b->value, op->true_value, op->false_value},
                                    Call::PureIntrinsic));
     } else {
         CodeGen_Posix::visit(op);

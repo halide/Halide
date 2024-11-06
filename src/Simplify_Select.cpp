@@ -17,7 +17,6 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
     }
 
     if (may_simplify(op->type)) {
-        int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type);
 
         // clang-format off
@@ -40,8 +39,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(select(broadcast(x, lanes), y, z), select(x, y, z)) ||
-             rewrite(select(x != y, z, w), select(x == y, w, z)) ||
+            (rewrite(select(x != y, z, w), select(x == y, w, z)) ||
              rewrite(select(x <= y, z, w), select(y < x, w, z)) ||
              rewrite(select(x, select(y, z, w), z), select(x && !y, w, z)) ||
              rewrite(select(x, select(y, z, w), w), select(x && y, z, w)) ||
