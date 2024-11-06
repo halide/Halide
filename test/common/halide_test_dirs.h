@@ -5,8 +5,8 @@
 // include Halide.h
 
 #include <cassert>
-#include <string>
 #include <stdlib.h>
+#include <string>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
