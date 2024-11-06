@@ -148,7 +148,7 @@ StringStorage *StringStorage::create(void *user_context, const SystemMemoryAlloc
 
 void StringStorage::destroy(void *user_context, StringStorage *instance) {
     halide_abort_if_false(user_context, instance != nullptr);
-    const SystemMemoryAllocatorFns &system_allocator = instance->current_allocator();
+    SystemMemoryAllocatorFns system_allocator = instance->current_allocator();
     instance->destroy(user_context);
     halide_abort_if_false(user_context, system_allocator.deallocate != nullptr);
     system_allocator.deallocate(user_context, instance);

@@ -25,12 +25,7 @@ int main(int argc, char **argv) {
     for (int t = 2; t <= 64; t *= 2) {
         std::ostringstream ss;
         ss << "HL_NUM_THREADS=" << t;
-        std::string str = ss.str();
-        char buf[32] = {0};
-        memcpy(buf, str.c_str(), str.size());
-        putenv(buf);
-        p.invalidate_cache();
-        Halide::Internal::JITSharedRuntime::release_all();
+        Halide::Internal::JITSharedRuntime::set_num_threads(t);
 
         p.compile_jit();
         // Start the thread pool without giving any hints as to the

@@ -484,7 +484,7 @@ void CodeGen_X86::visit(const NE *op) {
 }
 
 void CodeGen_X86::visit(const Select *op) {
-    if (op->condition.type().is_vector()) {
+    if (op->type.is_vector()) {
         // LLVM handles selects on vector conditions much better at native width
         Value *cond = codegen(op->condition);
         Value *true_val = codegen(op->true_value);

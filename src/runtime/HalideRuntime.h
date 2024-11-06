@@ -390,7 +390,7 @@ extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closur
 /** Join a thread. */
 extern void halide_join_thread(struct halide_thread *);
 
-/** Set the number of threads used by Halide's thread pool. Returns
+/** Get or set the number of threads used by Halide's thread pool. Set returns
  * the old number.
  *
  * n < 0  : error condition
@@ -402,7 +402,10 @@ extern void halide_join_thread(struct halide_thread *);
  * of halide_do_par_for(); custom implementations may completely ignore values
  * passed to halide_set_num_threads().)
  */
+// @{
+extern int halide_get_num_threads();
 extern int halide_set_num_threads(int n);
+// @}
 
 /** Halide calls these functions to allocate and free memory. To
  * replace in AOT code, use the halide_set_custom_malloc and
@@ -907,7 +910,8 @@ extern int halide_device_sync(void *user_context, struct halide_buffer_t *buf);
  * without specifying any buffer to synchronize on.
  * Calling this with a null device_interface is always illegal.
  */
-extern int halide_device_sync_global(void *user_context, const struct halide_device_interface_t *device_interface);
+extern int halide_device_sync_global(void *user_context,
+                                     const struct halide_device_interface_t *device_interface);
 
 /** Allocate device memory to back a halide_buffer_t. */
 extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,

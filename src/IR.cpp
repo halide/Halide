@@ -236,9 +236,8 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     internal_assert(false_value.defined()) << "Select of undefined\n";
     internal_assert(condition.type().is_bool()) << "First argument to Select is not a bool: " << condition.type() << "\n";
     internal_assert(false_value.type() == true_value.type()) << "Select of mismatched types\n";
-    internal_assert(condition.type().is_scalar() ||
-                    condition.type().lanes() == true_value.type().lanes())
-        << "In Select, vector lanes of condition must either be 1, or equal to vector lanes of arguments\n";
+    internal_assert(condition.type().lanes() == true_value.type().lanes())
+        << "In Select, vector lanes of condition must be equal to vector lanes of arguments\n";
 
     Select *node = new Select;
     node->type = true_value.type();

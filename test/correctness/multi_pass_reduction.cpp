@@ -122,10 +122,8 @@ int main(int argc, char **argv) {
         // Walk down the image in vectors
         f.update(0).vectorize(x, 4);
 
-        // Walk across the image in parallel. We need to do an unsafe
-        // reorder operation here to move y to the outer loop, because
-        // we don't have the ability to reorder vars with rvars yet.
-        f.update(1).reorder(Var(r.x.name()), y).parallel(y);
+        // Walk across the image in parallel.
+        f.update(1).reorder(r.x, y).parallel(y);
 
         Buffer<float> result = f.realize({100, 100});
 

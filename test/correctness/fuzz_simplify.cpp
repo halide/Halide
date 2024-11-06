@@ -136,7 +136,7 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
             auto c = random_condition(rng, t, depth, true);
             auto e1 = random_expr(rng, t, depth, overflow_undef);
             auto e2 = random_expr(rng, t, depth, overflow_undef);
-            return Select::make(c, e1, e2);
+            return select(c, e1, e2);
         },
         [&]() {
             if (t.lanes() != 1) {

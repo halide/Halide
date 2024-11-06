@@ -420,8 +420,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
     module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
     if (effective_vscale != 0) {
-        module->addModuleFlag(llvm::Module::Warning, "halide_vscale_range",
-                              MDString::get(*context, std::to_string(effective_vscale) + ", " + std::to_string(effective_vscale)));
+        module->addModuleFlag(llvm::Module::Warning, "halide_effective_vscale", effective_vscale);
     }
 
     // Ensure some types we need are defined
@@ -1131,7 +1130,6 @@ void CodeGen_LLVM::optimize_module() {
 
     llvm::PassBuilder pb(tm.get(), pto);
 
-    bool debug_pass_manager = false;
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;
     llvm::FunctionAnalysisManager fam;
@@ -1154,7 +1152,12 @@ void CodeGen_LLVM::optimize_module() {
         // Add a pass that converts lookup tables to relative lookup tables to make them PIC-friendly.
         // See https://bugs.llvm.org/show_bug.cgi?id=45244
         pb.registerOptimizerLastEPCallback(
-            [&](ModulePassManager &mpm, OptimizationLevel level) {
+#if LLVM_VERSION >= 200
+            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
+#else
+            [&](ModulePassManager &mpm, OptimizationLevel)
+#endif
+            {
                 mpm.addPass(RelLookupTableConverterPass());
             });
     }
@@ -1162,7 +1165,12 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::SanitizerCoverage)) {
         pb.registerOptimizerLastEPCallback(
-            [&](ModulePassManager &mpm, OptimizationLevel level) {
+#if LLVM_VERSION >= 200
+            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
+#else
+            [&](ModulePassManager &mpm, OptimizationLevel)
+#endif
+            {
                 SanitizerCoverageOptions sanitizercoverage_options;
                 // Mirror what -fsanitize=fuzzer-no-link would enable.
                 // See https://github.com/halide/Halide/issues/6528
@@ -1180,15 +1188,16 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (get_target().has_feature(Target::ASAN)) {
-        pb.registerPipelineStartEPCallback([](ModulePassManager &mpm, OptimizationLevel) {
-            AddressSanitizerOptions asan_options;  // default values are good...
-            asan_options.UseAfterScope = true;     // ...except this one
-            constexpr bool use_global_gc = false;
-            constexpr bool use_odr_indicator = true;
-            constexpr auto destructor_kind = AsanDtorKind::Global;
-            mpm.addPass(AddressSanitizerPass(
-                asan_options, use_global_gc, use_odr_indicator, destructor_kind));
-        });
+        pb.registerPipelineStartEPCallback(
+            [](ModulePassManager &mpm, OptimizationLevel) {
+                AddressSanitizerOptions asan_options;  // default values are good...
+                asan_options.UseAfterScope = true;     // ...except this one
+                constexpr bool use_global_gc = false;
+                constexpr bool use_odr_indicator = true;
+                constexpr auto destructor_kind = AsanDtorKind::Global;
+                mpm.addPass(AddressSanitizerPass(
+                    asan_options, use_global_gc, use_odr_indicator, destructor_kind));
+            });
     }
 
     // Target::MSAN handling is sprinkled throughout the codebase,
@@ -1196,7 +1205,12 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::TSAN)) {
         pb.registerOptimizerLastEPCallback(
-            [](ModulePassManager &mpm, OptimizationLevel level) {
+#if LLVM_VERSION >= 200
+            [](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
+#else
+            [](ModulePassManager &mpm, OptimizationLevel)
+#endif
+            {
                 mpm.addPass(
                     createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
             });
@@ -1233,7 +1247,7 @@ void CodeGen_LLVM::optimize_module() {
 #endif
     }
 
-    mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
+    mpm = pb.buildPerModuleDefaultPipeline(level);
     mpm.run(*module, mam);
 
     if (llvm::verifyModule(*module, &errs())) {
@@ -1865,12 +1879,6 @@ void CodeGen_LLVM::visit(const Not *op) {
 
 void CodeGen_LLVM::visit(const Select *op) {
     Value *cmp = codegen(op->condition);
-    if (use_llvm_vp_intrinsics &&
-        op->type.is_vector() &&
-        op->condition.type().is_scalar()) {
-        cmp = create_broadcast(cmp, op->type.lanes());
-    }
-
     Value *a = codegen(op->true_value);
     Value *b = codegen(op->false_value);
     if (a->getType()->isVectorTy()) {
@@ -2778,7 +2786,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type *> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
+#if LLVM_VERSION >= 200
+        llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::ctpop, arg_type);
+#else
         llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::ctpop, arg_type);
+#endif
         Value *a = codegen(op->args[0]);
         CallInst *call = builder->CreateCall(fn, a);
         value = call;
@@ -2787,9 +2799,15 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type *> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
+#if LLVM_VERSION >= 200
+        llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(),
+                                                                     (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
+                                                                     arg_type);
+#else
         llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(),
                                                              (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
                                                              arg_type);
+#endif
         llvm::Value *is_const_zero_poison = llvm::ConstantInt::getFalse(*context);
         llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_poison};
         CallInst *call = builder->CreateCall(fn, args);
@@ -4929,11 +4947,18 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
 
 Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
                                      const std::vector<int> &indices) {
-    internal_assert(a->getType() == b->getType());
+    if (isa<llvm::ScalableVectorType>(a->getType())) {
+        a = scalable_to_fixed_vector_type(a);
+    }
+    if (isa<llvm::ScalableVectorType>(b->getType())) {
+        b = scalable_to_fixed_vector_type(b);
+    }
     if (!a->getType()->isVectorTy()) {
         a = create_broadcast(a, 1);
         b = create_broadcast(b, 1);
     }
+    // Check for type identity *after* normalizing to fixed vectors
+    internal_assert(a->getType() == b->getType());
     vector<Constant *> llvm_indices(indices.size());
     for (size_t i = 0; i < llvm_indices.size(); i++) {
         if (indices[i] >= 0) {
@@ -4944,12 +4969,6 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
             internal_assert(indices[i] == -1);
             llvm_indices[i] = PoisonValue::get(i32_t);
         }
-    }
-    if (isa<llvm::ScalableVectorType>(a->getType())) {
-        a = scalable_to_fixed_vector_type(a);
-    }
-    if (isa<llvm::ScalableVectorType>(b->getType())) {
-        b = scalable_to_fixed_vector_type(b);
     }
     return builder->CreateShuffleVector(a, b, ConstantVector::get(llvm_indices));
 }
