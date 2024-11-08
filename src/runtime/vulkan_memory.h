@@ -24,7 +24,7 @@ WEAK const VkAllocationCallbacks *custom_allocation_callbacks = nullptr;  // nul
 // Runtime configuration parameters to adjust the behaviour of the block allocator
 struct VulkanMemoryConfig {
     size_t maximum_pool_size = 0;                  //< Maximum number of bytes to allocate for the entire pool (including all blocks). Specified in bytes. Zero means no constraint
-    size_t minimum_block_size = 32 * 1024 * 1024;  //< Default block size is 32MB
+    size_t minimum_block_size = 4 * 1024;          //< Default block size is 4KB
     size_t maximum_block_size = 0;                 //< Specified in bytes. Zero means no constraint
     size_t maximum_block_count = 0;                //< Maximum number of blocks to allocate. Zero means no constraint
     size_t nearest_multiple = 32;                  //< Always round up the requested region sizes to the given integer value. Zero means no constraint
@@ -1260,6 +1260,7 @@ VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context,
 
 int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *allocator) {
     if (allocator != nullptr) {
+        allocator->collect(user_context);
         VulkanMemoryAllocator::destroy(user_context, allocator);
         allocator = nullptr;
     }
