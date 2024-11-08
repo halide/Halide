@@ -2231,7 +2231,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
 
         // Fix the type to avoid pointless bitcasts later
         call = builder->CreatePointerCast(
-            call, llvm_type_of(alloc->type)->getPointerTo());
+            call, PointerType::get(llvm_type_of(alloc->type), 0));
         allocation.ptr = call;
 
         // Assert that the allocation worked.
