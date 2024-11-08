@@ -578,9 +578,11 @@ bool get_md_int(llvm::Metadata *value, int64_t &result) {
 bool get_md_bool(llvm::Metadata *value, bool &result) {
     int64_t r;
     if (!get_md_int(value, r)) {
+        result = false;
         return false;
     }
-    return r != 0;
+    result = r != 0;
+    return true;
 }
 bool get_md_string(llvm::Metadata *value, std::string &result) {
     if (!value) {
@@ -742,7 +744,7 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
     SmallVector<GlobalValue *, 4> used_globals;
-    llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
+    llvm::Type *used_element_type = PointerType::get(llvm::Type::getInt8Ty(M->getContext()), 0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
         if (GV->getName() != "llvm.embedded.module" &&
