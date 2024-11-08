@@ -203,7 +203,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // allocation that occurs conditionally. TODO: Why not
             // just register the destructor at entry?
 
-            builder->CreateStore(builder->CreatePointerCast(slot, i8_t->getPointerTo()), allocation.destructor);
+            builder->CreateStore(builder->CreatePointerCast(slot, PointerType::get(i8_t, 0)), allocation.destructor);
             free_stack_allocs.erase(it);
         } else {
             // Stack allocation with a dynamic size
@@ -226,7 +226,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         llvm_size = builder->CreateIntCast(llvm_size, size_type, false);
         Value *args[3] = {get_user_context(), slot, llvm_size};
         Value *call = builder->CreateCall(alloc_fn, args);
-        llvm::Type *ptr_type = llvm_type_of(type)->getPointerTo();
+        llvm::Type *ptr_type = PointerType::get(llvm_type_of(type), 0);
         call = builder->CreatePointerCast(call, ptr_type);
 
         // Figure out how much we need to allocate on the real stack
@@ -240,14 +240,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         builder->SetInsertPoint(need_alloca_bb);
 
         // Allocate it. It's zero most of the time.
-        AllocaInst *alloca_inst = builder->CreateAlloca(i8_t->getPointerTo(), llvm_size);
+        AllocaInst *alloca_inst = builder->CreateAlloca(PointerType::get(i8_t, 0), llvm_size);
         // Give it the right alignment
         alloca_inst->setAlignment(llvm::Align(native_vector_bits() / 8));
 
         // Set the pseudostack slot ptr to the right thing so we reuse
         // this pointer next time around.
         Value *stack_ptr = builder->CreatePointerCast(alloca_inst, ptr_type);
-        Value *slot_ptr_ptr = builder->CreatePointerCast(slot, ptr_type->getPointerTo());
+        Value *slot_ptr_ptr = builder->CreatePointerCast(slot, PointerType::get(ptr_type, 0));
         builder->CreateStore(stack_ptr, slot_ptr_ptr);
 
         builder->CreateBr(after_bb);
@@ -283,7 +283,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             Value *call = builder->CreateCall(malloc_fn, args);
 
             // Fix the type to avoid pointless bitcasts later
-            call = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());
+            call = builder->CreatePointerCast(call, PointerType::get(llvm_type_of(type), 0));
 
             allocation.ptr = call;
         }
