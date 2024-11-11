@@ -3,10 +3,11 @@
 namespace Halide {
 namespace Internal {
 
-// clang-format off
+namespace {
+
 // Generate this table with:
 //   python3 src/polynomial_optimizer.py atan --order 1 2 3 4 5 6 7 8 --loss mse mae mulpe mulpe_mae --no-gui --format table
-static std::vector<Approximation> table_atan = {
+std::vector<Approximation> table_atan = {
     {ApproximationPrecision::MSE, 9.249650e-04, 7.078984e-02, 2.411547e+06, {+8.56188008e-01}},
     {ApproximationPrecision::MSE, 1.026356e-05, 9.214909e-03, 3.985505e+05, {+9.76213454e-01, -2.00030200e-01}},
     {ApproximationPrecision::MSE, 1.577588e-07, 1.323851e-03, 6.724566e+04, {+9.95982073e-01, -2.92278128e-01, +8.30180680e-02}},
@@ -34,7 +35,6 @@ static std::vector<Approximation> table_atan = {
     {ApproximationPrecision::MULPE, 6.348880e-14, 4.882649e-07, 8.276351e+00, {+9.99999499e-01, -3.33273408e-01, +1.98895454e-01, -1.35153794e-01, +8.43185278e-02, -3.73434598e-02, +7.95583230e-03}},
     {ApproximationPrecision::MULPE, 1.369569e-15, 7.585036e-08, 1.284979e+00, {+9.99999922e-01, -3.33320840e-01, +1.99708563e-01, -1.40257063e-01, +9.93094012e-02, -5.97138046e-02, +2.44056181e-02, -4.73371006e-03}},
 
-
     {ApproximationPrecision::MULPE_MAE, 9.548909e-04, 6.131488e-02, 2.570520e+06, {+8.46713042e-01}},
     {ApproximationPrecision::MULPE_MAE, 1.159917e-05, 6.746680e-03, 3.778023e+05, {+9.77449762e-01, -1.98798279e-01}},
     {ApproximationPrecision::MULPE_MAE, 1.783646e-07, 8.575388e-04, 6.042236e+04, {+9.96388826e-01, -2.92591679e-01, +8.24585555e-02}},
@@ -44,7 +44,7 @@ static std::vector<Approximation> table_atan = {
     {ApproximationPrecision::MULPE_MAE, 3.053218e-14, 3.784868e-07, 4.181995e+01, {+9.99997480e-01, -3.33205127e-01, +1.98309644e-01, -1.33094430e-01, +8.08643094e-02, -3.45859503e-02, +7.11261604e-03}},
     {ApproximationPrecision::MULPE_MAE, 7.018877e-16, 5.862915e-08, 6.942196e+00, {+9.99999581e-01, -3.33306326e-01, +1.99542180e-01, -1.39433369e-01, +9.72462857e-02, -5.69734398e-02, +2.25639390e-02, -4.24074590e-03}},
 };
-// clang-format on
+}  // namespace
 
 const Approximation *find_best_approximation(const std::vector<Approximation> &table, ApproximationPrecision precision) {
     const Approximation *best = nullptr;
