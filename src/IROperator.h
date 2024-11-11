@@ -1003,13 +1003,13 @@ Expr fast_cos(const Expr &x);
  */
 struct ApproximationPrecision {
     enum OptimizationObjective {
-        MSE, //< Mean Squared Error Optimized.
-        MAE, //< Optimized for Max Absolute Error.
-        MULPE, //< Optimized for Max ULP Error. ULP is "Units in Last Place", measured in IEEE 32-bit floats.
-        MULPE_MAE, //< Optimized for simultaneously Max ULP Error, and Max Absolute Error, each with a weight of 50%.
+        MSE,        //< Mean Squared Error Optimized.
+        MAE,        //< Optimized for Max Absolute Error.
+        MULPE,      //< Optimized for Max ULP Error. ULP is "Units in Last Place", measured in IEEE 32-bit floats.
+        MULPE_MAE,  //< Optimized for simultaneously Max ULP Error, and Max Absolute Error, each with a weight of 50%.
     } optimized_for;
-    int constraint_min_poly_terms{0}; //< Number of terms in polynomial (zero for no constraint).
-    float constraint_max_absolute_error{0.0f}; //< Max absolute error (zero for no constraint).
+    int constraint_min_poly_terms{0};           //< Number of terms in polynomial (zero for no constraint).
+    float constraint_max_absolute_error{0.0f};  //< Max absolute error (zero for no constraint).
 };
 
 /** Fast vectorizable approximations for arctan and arctan2 for Float(32).
