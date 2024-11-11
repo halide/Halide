@@ -14,12 +14,10 @@ int main(int argc, char **argv) {
     if (target.has_feature(Target::WebGPU)) {
         printf("WebGPU seems to perform bad, and fast_atan is not always faster (won't error if it's not faster).\n");
         performance_is_expected_to_be_poor = true;
-        return 0;
     }
     if (target.has_feature(Target::Metal)) {
         printf("fast_atan is not always faster on Metal (won't error if it's not faster).\n");
         performance_is_expected_to_be_poor = true;
-        return 0;
     }
 
     Var x, y;
@@ -68,13 +66,13 @@ int main(int argc, char **argv) {
         double atan_time{0.0f};
         double atan2_time{0.0f};
     } precisions_to_test[] = {
-        {ApproximationPrecision::MULPE_Poly2, "Poly2"},
-        {ApproximationPrecision::MULPE_Poly3, "Poly3"},
-        {ApproximationPrecision::MULPE_Poly4, "Poly4"},
-        {ApproximationPrecision::MULPE_Poly5, "Poly5"},
-        {ApproximationPrecision::MULPE_Poly6, "Poly6"},
-        {ApproximationPrecision::MULPE_Poly7, "Poly7"},
-        {ApproximationPrecision::MULPE_Poly8, "Poly8"},
+        {{ApproximationPrecision::MULPE, 2}, "Poly2"},
+        {{ApproximationPrecision::MULPE, 3}, "Poly3"},
+        {{ApproximationPrecision::MULPE, 4}, "Poly4"},
+        {{ApproximationPrecision::MULPE, 5}, "Poly5"},
+        {{ApproximationPrecision::MULPE, 6}, "Poly6"},
+        {{ApproximationPrecision::MULPE, 7}, "Poly7"},
+        {{ApproximationPrecision::MULPE, 8}, "Poly8"},
     };
 
     for (Prec &precision : precisions_to_test) {
