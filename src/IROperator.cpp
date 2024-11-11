@@ -5,6 +5,7 @@
 #include <sstream>
 #include <utility>
 
+#include "ApproximationTables.h"
 #include "CSE.h"
 #include "ConstantBounds.h"
 #include "Debug.h"
@@ -15,7 +16,6 @@
 #include "IRPrinter.h"
 #include "Interval.h"
 #include "Util.h"
-#include "ApproximationTables.h"
 #include "Var.h"
 
 using namespace Halide::Internal;
