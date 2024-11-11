@@ -51,7 +51,7 @@ const Approximation *find_best_approximation(const std::vector<Approximation> &t
     constexpr int term_cost = 20;
     constexpr int extra_term_cost = 200;
     double best_score = 0;
-    //std::printf("Looking for min_terms=%d, max_absolute_error=%f\n", precision.constraint_min_poly_terms, precision.constraint_max_absolute_error);
+    // std::printf("Looking for min_terms=%d, max_absolute_error=%f\n", precision.constraint_min_poly_terms, precision.constraint_max_absolute_error);
     for (size_t i = 0; i < table.size(); ++i) {
         const Approximation &e = table[i];
 
@@ -90,13 +90,13 @@ const Approximation *find_best_approximation(const std::vector<Approximation> &t
         }
 
         double score = obj_score + term_count_score + precision_score - penalty;
-        //std::printf("Score for %zu (%zu terms): %f = %d + %d + %f - penalty %f\n", i, e.coefficients.size(), score, obj_score, term_count_score, precision_score, penalty);
+        // std::printf("Score for %zu (%zu terms): %f = %d + %d + %f - penalty %f\n", i, e.coefficients.size(), score, obj_score, term_count_score, precision_score, penalty);
         if (score > best_score) {
             best = &e;
             best_score = score;
         }
     }
-    //std::printf("Best score: %f\n", best_score);
+    // std::printf("Best score: %f\n", best_score);
     return best;
 }
 
