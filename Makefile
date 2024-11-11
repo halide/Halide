@@ -421,6 +421,7 @@ SOURCE_FILES = \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
+  ApproximationTables.cpp \
   Argument.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
