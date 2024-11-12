@@ -73,6 +73,14 @@ int main(int argc, char **argv) {
         {{ApproximationPrecision::MULPE, 6}, "Poly6"},
         {{ApproximationPrecision::MULPE, 7}, "Poly7"},
         {{ApproximationPrecision::MULPE, 8}, "Poly8"},
+
+        {{ApproximationPrecision::MULPE, 0, 1e-2}, "MAE 1e-2"},
+        {{ApproximationPrecision::MULPE, 0, 1e-3}, "MAE 1e-3"},
+        {{ApproximationPrecision::MULPE, 0, 1e-4}, "MAE 1e-4"},
+        {{ApproximationPrecision::MULPE, 0, 1e-5}, "MAE 1e-5"},
+        {{ApproximationPrecision::MULPE, 0, 1e-6}, "MAE 1e-6"},
+        {{ApproximationPrecision::MULPE, 0, 1e-7}, "MAE 1e-7"},
+        {{ApproximationPrecision::MULPE, 0, 1e-8}, "MAE 1e-8"},
     };
 
     for (Prec &precision : precisions_to_test) {

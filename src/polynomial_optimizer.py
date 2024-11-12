@@ -281,7 +281,7 @@ for loss in args.loss:
             print()
 
         if args.format in ["all", "table"]:
-            print("{ApproximationPrecision::" + loss.upper() + f", {mean_squared_error:.6e}, {max_abs_error:.6e}, {max_ulp_error:.6e}, "
+            print("{ApproximationPrecision::" + loss.upper() + f", {mean_squared_error:.6e}, {max_abs_error:.6e}, {max_ulp_error:.3e}, "
                    + "{" + ", ".join([f"{c:+.8e}" for c in coeffs]) + "}},")
             print()
 
