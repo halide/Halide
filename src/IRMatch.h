@@ -183,7 +183,7 @@ Expr make_const_expr(halide_scalar_value_t val, halide_type_t ty) {
         return Expr();
     }
     if (lanes > 1) {
-        e = Broadcast::make(e, lanes);
+        e = Broadcast::make(std::move(e), lanes);
     }
     return e;
 }
@@ -713,14 +713,6 @@ struct BinOp {
             ea = a.make(state, type_hint);
             eb = b.make(state, ea.type());
         }
-        // We sometimes mix vectors and scalars in the rewrite rules,
-        // so insert a broadcast if necessary.
-        if (ea.type().is_vector() && !eb.type().is_vector()) {
-            eb = Broadcast::make(eb, ea.type().lanes());
-        }
-        if (eb.type().is_vector() && !ea.type().is_vector()) {
-            ea = Broadcast::make(ea, eb.type().lanes());
-        }
         return Op::make(std::move(ea), std::move(eb));
     }
 };
@@ -814,14 +806,6 @@ struct CmpOp {
         } else {
             ea = a.make(state, {});
             eb = b.make(state, ea.type());
-        }
-        // We sometimes mix vectors and scalars in the rewrite rules,
-        // so insert a broadcast if necessary.
-        if (ea.type().is_vector() && !eb.type().is_vector()) {
-            eb = Broadcast::make(eb, ea.type().lanes());
-        }
-        if (eb.type().is_vector() && !ea.type().is_vector()) {
-            ea = Broadcast::make(ea, eb.type().lanes());
         }
         return Op::make(std::move(ea), std::move(eb));
     }
@@ -1405,55 +1389,55 @@ struct Intrin {
     Expr make(MatcherState &state, halide_type_t type_hint) const {
         Expr arg0 = std::get<0>(args).make(state, type_hint);
         if (intrin == Call::likely) {
-            return likely(arg0);
+            return likely(std::move(arg0));
         } else if (intrin == Call::likely_if_innermost) {
-            return likely_if_innermost(arg0);
+            return likely_if_innermost(std::move(arg0));
         } else if (intrin == Call::abs) {
-            return abs(arg0);
+            return abs(std::move(arg0));
         } else if (intrin == Call::saturating_cast) {
-            return saturating_cast(optional_type_hint, arg0);
+            return saturating_cast(optional_type_hint, std::move(arg0));
         }
 
         Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::absd) {
-            return absd(arg0, arg1);
+            return absd(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::widen_right_add) {
-            return widen_right_add(arg0, arg1);
+            return widen_right_add(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::widen_right_mul) {
-            return widen_right_mul(arg0, arg1);
+            return widen_right_mul(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::widen_right_sub) {
-            return widen_right_sub(arg0, arg1);
+            return widen_right_sub(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::widening_add) {
-            return widening_add(arg0, arg1);
+            return widening_add(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::widening_sub) {
-            return widening_sub(arg0, arg1);
+            return widening_sub(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::widening_mul) {
-            return widening_mul(arg0, arg1);
+            return widening_mul(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::saturating_add) {
-            return saturating_add(arg0, arg1);
+            return saturating_add(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::saturating_sub) {
-            return saturating_sub(arg0, arg1);
+            return saturating_sub(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::halving_add) {
-            return halving_add(arg0, arg1);
+            return halving_add(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::halving_sub) {
-            return halving_sub(arg0, arg1);
+            return halving_sub(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::rounding_halving_add) {
-            return rounding_halving_add(arg0, arg1);
+            return rounding_halving_add(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::shift_left) {
-            return arg0 << arg1;
+            return std::move(arg0) << std::move(arg1);
         } else if (intrin == Call::shift_right) {
-            return arg0 >> arg1;
+            return std::move(arg0) >> std::move(arg1);
         } else if (intrin == Call::rounding_shift_left) {
-            return rounding_shift_left(arg0, arg1);
+            return rounding_shift_left(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::rounding_shift_right) {
-            return rounding_shift_right(arg0, arg1);
+            return rounding_shift_right(std::move(arg0), std::move(arg1));
         }
 
         Expr arg2 = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::mul_shift_right) {
-            return mul_shift_right(arg0, arg1, arg2);
+            return mul_shift_right(std::move(arg0), std::move(arg1), std::move(arg2));
         } else if (intrin == Call::rounding_mul_shift_right) {
-            return rounding_mul_shift_right(arg0, arg1, arg2);
+            return rounding_mul_shift_right(std::move(arg0), std::move(arg1), std::move(arg2));
         }
 
         internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
@@ -1840,7 +1824,7 @@ struct RampOp {
         Expr ea, eb;
         eb = b.make(state, type_hint);
         ea = a.make(state, eb.type());
-        return Ramp::make(ea, eb, l);
+        return Ramp::make(std::move(ea), std::move(eb), l);
     }
 
     constexpr static bool foldable = false;
@@ -2210,8 +2194,7 @@ struct Fold {
             ty.bits = type_hint.bits;
         }
 
-        Expr e = make_const_expr(c, ty);
-        return e;
+        return make_const_expr(c, ty);
     }
 
     constexpr static bool foldable = A::foldable;
@@ -2864,6 +2847,9 @@ struct Rewriter {
 
     template<typename After>
     HALIDE_NEVER_INLINE void build_replacement(After after) {
+#if HALIDE_DEBUG_MATCHED_RULES
+        debug(0) << instance << " -> " << after << "\n";
+#endif
         result = after.make(state, output_type);
     }
 

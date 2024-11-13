@@ -114,7 +114,7 @@ MemoryArena *MemoryArena::create(void *user_context, const Config &cfg, const Sy
 
 void MemoryArena::destroy(void *user_context, MemoryArena *instance) {
     halide_debug_assert(user_context, instance != nullptr);
-    const SystemMemoryAllocatorFns &system_allocator = instance->blocks.current_allocator();
+    SystemMemoryAllocatorFns system_allocator = instance->blocks.current_allocator();
     instance->destroy(user_context);
     halide_debug_assert(user_context, system_allocator.deallocate != nullptr);
     system_allocator.deallocate(user_context, instance);

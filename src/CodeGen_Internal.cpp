@@ -560,7 +560,7 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
 }
 
 namespace {
-bool get_md_bool(llvm::Metadata *value, bool &result) {
+bool get_md_int(llvm::Metadata *value, int64_t &result) {
     if (!value) {
         return false;
     }
@@ -572,10 +572,18 @@ bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!c) {
         return false;
     }
-    result = !c->isZero();
+    result = c->getSExtValue();
     return true;
 }
-
+bool get_md_bool(llvm::Metadata *value, bool &result) {
+    int64_t r;
+    if (!get_md_int(value, r)) {
+        result = false;
+        return false;
+    }
+    result = r != 0;
+    return true;
+}
 bool get_md_string(llvm::Metadata *value, std::string &result) {
     if (!value) {
         result = "";
@@ -698,11 +706,14 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     llvm::Module &module = *fn.getParent();
 
-    std::string mcpu_target, mcpu_tune, mattrs, vscale_range;
+    std::string mcpu_target, mcpu_tune, mattrs;
     get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
     get_md_string(module.getModuleFlag("halide_mcpu_tune"), mcpu_tune);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
-    get_md_string(module.getModuleFlag("halide_vscale_range"), vscale_range);
+    int64_t vscale_range;
+    if (!get_md_int(module.getModuleFlag("halide_effective_vscale"), vscale_range)) {
+        vscale_range = 0;
+    }
 
     fn.addFnAttr("target-cpu", mcpu_target);
     fn.addFnAttr("tune-cpu", mcpu_tune);
@@ -723,8 +734,9 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     fn.addFnAttr("reciprocal-estimates", "none");
 
     // If a fixed vscale is asserted, add it as an attribute on the function.
-    if (!vscale_range.empty()) {
-        fn.addFnAttr("vscale_range", vscale_range);
+    if (vscale_range != 0) {
+        fn.addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(
+            module.getContext(), vscale_range, vscale_range));
     }
 }
 
@@ -732,7 +744,7 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
     SmallVector<GlobalValue *, 4> used_globals;
-    llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
+    llvm::Type *used_element_type = PointerType::get(llvm::Type::getInt8Ty(M->getContext()), 0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
         if (GV->getName() != "llvm.embedded.module" &&

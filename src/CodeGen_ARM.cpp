@@ -1500,7 +1500,7 @@ void CodeGen_ARM::visit(const Store *op) {
                   << (t.is_float() ? 'f' : 'i')
                   << t.bits();
             arg_types = vector<llvm::Type *>(num_vecs + 2, intrin_llvm_type);
-            arg_types.front() = i8_t->getPointerTo();
+            arg_types.front() = PointerType::get(i8_t, 0);
             arg_types.back() = i32_t;
         } else {
             if (is_sve) {
@@ -1512,7 +1512,7 @@ void CodeGen_ARM::visit(const Store *op) {
                       << t.bits();
                 arg_types = vector<llvm::Type *>(num_vecs, intrin_llvm_type);
                 arg_types.emplace_back(get_vector_type(i1_t, intrin_type.lanes() / target_vscale(), VectorTypeConstraint::VScale));  // predicate
-                arg_types.emplace_back(llvm_type_of(intrin_type.element_of())->getPointerTo());
+                arg_types.emplace_back(PointerType::get(llvm_type_of(intrin_type.element_of()), 0));
             } else {
                 instr << "llvm.aarch64.neon.st"
                       << num_vecs
@@ -1522,7 +1522,7 @@ void CodeGen_ARM::visit(const Store *op) {
                       << t.bits()
                       << ".p0";
                 arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
-                arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
+                arg_types.back() = PointerType::get(llvm_type_of(intrin_type.element_of()), 0);
             }
         }
         llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
@@ -1546,7 +1546,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
             if (target.bits == 32) {
                 // The arm32 versions take an i8*, regardless of the type stored.
-                ptr = builder->CreatePointerCast(ptr, i8_t->getPointerTo());
+                ptr = builder->CreatePointerCast(ptr, PointerType::get(i8_t, 0));
                 // Set the pointer argument
                 slice_args.insert(slice_args.begin(), ptr);
                 // Set the alignment argument
