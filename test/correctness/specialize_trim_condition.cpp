@@ -17,8 +17,6 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
     return 0;
 }
 
-
-
 int main(int argc, char **argv) {
     Param<float> scale_factor_x, scale_factor_y;
     ImageParam input(UInt(8), 2);
