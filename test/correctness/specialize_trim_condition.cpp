@@ -19,11 +19,11 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
 
 
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     Param<float> scale_factor_x, scale_factor_y;
     ImageParam input(UInt(8), 2);
 
-    Var x,y;
+    Var x, y;
 
     Func f;
     Expr upsample_x = scale_factor_x > cast<float>(1.0f);
@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
     f.specialize(!upsample && !downsample);
     f.specialize_fail("Unreachable condition");
 
-    Buffer<uint8_t> img(16,16);
+    Buffer<uint8_t> img(16, 16);
     input.set(img);
 
     {
