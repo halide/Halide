@@ -103,6 +103,7 @@ public:
     size_t regions_allocated() const;
 
 private:
+    static constexpr uint32_t invalid_memory_heap = uint32_t(-1);
     static constexpr uint32_t invalid_usage_flags = uint32_t(-1);
     static constexpr uint32_t invalid_memory_type = uint32_t(VK_MAX_MEMORY_TYPES);
 
@@ -114,10 +115,24 @@ private:
 
     uint32_t select_memory_usage(void *user_context, MemoryProperties properties) const;
 
-    uint32_t select_memory_type(void *user_context,
-                                VkPhysicalDevice physical_device,
-                                MemoryProperties properties,
-                                uint32_t required_flags) const;
+    uint32_t preferred_flags_for_memory_properties(void *user_context, MemoryProperties properties) const;
+    uint32_t required_flags_for_memory_properties(void *user_context, MemoryProperties properties) const;
+
+    bool is_valid_memory_type_for_heap(void *user_context,
+                                       VkPhysicalDeviceMemoryProperties *memory_properties,
+                                       uint32_t memory_type_index,
+                                       uint32_t heap_index) const;
+
+    bool is_preferred_memory_type_for_flags(void *user_context,
+                                            VkPhysicalDeviceMemoryProperties *memory_properties,
+                                            uint32_t memory_type_index,
+                                            uint32_t preferred_flags,
+                                            uint32_t required_flags) const;
+
+    bool is_valid_memory_type_for_flags(void *user_context,
+                                        VkPhysicalDeviceMemoryProperties *memory_properties,
+                                        uint32_t memory_type_index,
+                                        uint32_t required_flags) const;
 
     int lookup_requirements(void *user_context, size_t size, uint32_t usage_flags, VkMemoryRequirements *memory_requirements);
 
@@ -561,6 +576,7 @@ int VulkanMemoryAllocator::lookup_requirements(void *user_context, size_t size, 
         debug(nullptr) << "VulkanMemoryAllocator: Failed to create buffer to find requirements!\n\t"
                        << "vkCreateBuffer returned: " << vk_get_error_name(result) << "\n";
 #endif
+        error(user_context) << "VulkanRegionAllocator: Failed to create buffer to gather memory requirements!\n";
         return halide_error_code_device_malloc_failed;
     }
 
@@ -573,6 +589,7 @@ int VulkanMemoryAllocator::conform_block_request(void *instance_ptr, MemoryReque
 
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
+        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
         return halide_error_code_internal_error;
     }
 
@@ -614,6 +631,7 @@ int VulkanMemoryAllocator::conform_block_request(void *instance_ptr, MemoryReque
 int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block) {
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
+        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
         return halide_error_code_internal_error;
     }
 
@@ -639,32 +657,114 @@ int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block
                    << "visibility=" << halide_memory_visibility_name(block->properties.visibility) << ")\n";
 #endif
 
-    // Find an appropriate memory type given the flags
-    uint32_t memory_type = instance->select_memory_type(user_context, instance->physical_device, block->properties, 0);
-    if (memory_type == invalid_memory_type) {
-        error(user_context) << "VulkanMemoryAllocator: Unable to find appropriate memory type for device!\n";
-        return halide_error_code_generic_error;
-    }
-
-    // Allocate memory
-    VkMemoryAllocateInfo alloc_info = {
-        VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,  // struct type
-        nullptr,                                 // struct extending this
-        block->size,                             // size of allocation in bytes
-        memory_type                              // memory type index from physical device
-    };
-
     VkDeviceMemory *device_memory = (VkDeviceMemory *)vk_host_malloc(nullptr, sizeof(VkDeviceMemory), 0, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, instance->alloc_callbacks);
     if (device_memory == nullptr) {
-        debug(nullptr) << "VulkanBlockAllocator: Unable to allocate block! Failed to allocate device memory handle!\n";
+        error(user_context) << "VulkanBlockAllocator: Unable to allocate block! Failed to allocate device memory handle!\n";
         return halide_error_code_out_of_memory;
     }
 
-    VkResult result = vkAllocateMemory(instance->device, &alloc_info, instance->alloc_callbacks, device_memory);
-    if (result != VK_SUCCESS) {
-        debug(nullptr) << "VulkanMemoryAllocator: Allocation failed! vkAllocateMemory returned: " << vk_get_error_name(result) << "\n";
+    VkPhysicalDeviceMemoryProperties memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(instance->physical_device, &memory_properties);
+
+    // Attempt to allocate device memory with the requested flags, trying each type until successful
+    uint32_t selected_type = invalid_memory_type;
+    uint32_t preferred_flags = instance->preferred_flags_for_memory_properties(user_context, block->properties);
+    uint32_t required_flags = instance->required_flags_for_memory_properties(user_context, block->properties);
+
+    // Try preferred flags first
+    for (uint32_t type_index = 0; type_index < memory_properties.memoryTypeCount; type_index++) {
+        if (!instance->is_preferred_memory_type_for_flags(user_context, &memory_properties, type_index, preferred_flags, required_flags)) {
+            continue;
+        }
+
+        // Allocate memory
+        VkMemoryAllocateInfo alloc_info = {
+            VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,  // struct type
+            nullptr,                                 // struct extending this
+            block->size,                             // size of allocation in bytes
+            type_index                               // memory type index from physical device
+        };
+
+        VkResult result = vkAllocateMemory(instance->device, &alloc_info, instance->alloc_callbacks, device_memory);
+        if (result == VK_SUCCESS) {
+            selected_type = type_index;
+            break;
+        }
+
+#if defined(HL_VK_DEBUG_MEM)
+        debug(user_context) << "VulkanMemoryAllocator: Allocation request for preferred flags was not successful (\n"
+                            << "\tblock=" << (void *)(block) << "\n"
+                            << "\ttype_index=" << type_index << "\n"
+                            << "\tsize=" << (uint64_t)block->size << "\n"
+                            << "\tdedicated=" << (block->dedicated ? "true" : "false") << "\n"
+                            << "\tusage=" << halide_memory_usage_name(block->properties.usage) << "\n"
+                            << "\tcaching=" << halide_memory_caching_name(block->properties.caching) << "\n"
+                            << "\tvisibility=" << halide_memory_visibility_name(block->properties.visibility) << "\n"
+                            << "\tblocks_allocated=" << (uint64_t)instance->blocks_allocated() << "\n"
+                            << "\tbytes_allocated_for_blocks=" << (uint64_t)instance->bytes_allocated_for_blocks() << "\n"
+                            << "\tregions_allocated=" << (uint64_t)instance->regions_allocated() << "\n"
+                            << "\tbytes_allocated_for_regions=" << (uint64_t)instance->bytes_allocated_for_regions() << "\n)\n"
+                            << "vkAllocateMemory returned: "
+                            << vk_get_error_name(result) << "\n";
+#endif
+    }
+
+    // try any valid type on any valid pool
+    if (selected_type == invalid_memory_type) {
+        for (uint32_t type_index = 0; type_index < memory_properties.memoryTypeCount; type_index++) {
+            if (!instance->is_valid_memory_type_for_flags(user_context, &memory_properties, type_index, required_flags)) {
+                continue;
+            }
+
+            // Allocate memory
+            VkMemoryAllocateInfo alloc_info = {
+                VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,  // struct type
+                nullptr,                                 // struct extending this
+                block->size,                             // size of allocation in bytes
+                type_index                               // memory type index from physical device
+            };
+
+            VkResult result = vkAllocateMemory(instance->device, &alloc_info, instance->alloc_callbacks, device_memory);
+            if (result == VK_SUCCESS) {
+                selected_type = type_index;
+                break;
+            }
+#if defined(HL_VK_DEBUG_MEM)
+            debug(user_context) << "VulkanMemoryAllocator: Allocation request for valid flags was not successful (\n"
+                                << "\tblock=" << (void *)(block) << "\n"
+                                << "\ttype_index=" << type_index << "\n"
+                                << "\tsize=" << (uint64_t)block->size << "\n"
+                                << "\tdedicated=" << (block->dedicated ? "true" : "false") << "\n"
+                                << "\tusage=" << halide_memory_usage_name(block->properties.usage) << "\n"
+                                << "\tcaching=" << halide_memory_caching_name(block->properties.caching) << "\n"
+                                << "\tvisibility=" << halide_memory_visibility_name(block->properties.visibility) << "\n"
+                                << "\tblocks_allocated=" << (uint64_t)instance->blocks_allocated() << "\n"
+                                << "\tbytes_allocated_for_blocks=" << (uint64_t)instance->bytes_allocated_for_blocks() << "\n"
+                                << "\tregions_allocated=" << (uint64_t)instance->regions_allocated() << "\n"
+                                << "\tbytes_allocated_for_regions=" << (uint64_t)instance->bytes_allocated_for_regions() << "\n)\n"
+                                << "vkAllocateMemory returned: "
+                                << vk_get_error_name(result) << "\n";
+#endif
+        }
+    }
+
+    if (selected_type == invalid_memory_type) {
+        vk_host_free(nullptr, device_memory, instance->alloc_callbacks);
+        device_memory = nullptr;
+        error(user_context) << "VulkanMemoryAllocator: Allocation failed for block (\n"
+                            << "\tblock=" << (void *)(block) << "\n"
+                            << "\tsize=" << (uint64_t)block->size << "\n"
+                            << "\tdedicated=" << (block->dedicated ? "true" : "false") << "\n"
+                            << "\tusage=" << halide_memory_usage_name(block->properties.usage) << "\n"
+                            << "\tcaching=" << halide_memory_caching_name(block->properties.caching) << "\n"
+                            << "\tvisibility=" << halide_memory_visibility_name(block->properties.visibility) << "\n"
+                            << "\tblocks_allocated=" << (uint64_t)instance->blocks_allocated() << "\n"
+                            << "\tbytes_allocated_for_blocks=" << (uint64_t)instance->bytes_allocated_for_blocks() << "\n"
+                            << "\tregions_allocated=" << (uint64_t)instance->regions_allocated() << "\n"
+                            << "\tbytes_allocated_for_regions=" << (uint64_t)instance->bytes_allocated_for_regions() << "\n)\n";
         return halide_error_code_device_malloc_failed;
     }
+
 #ifdef DEBUG_RUNTIME
     debug(nullptr) << "vkAllocateMemory: Allocated memory for device region (" << (uint64_t)block->size << " bytes) ...\n";
 #endif
@@ -678,6 +778,7 @@ int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block
 int VulkanMemoryAllocator::deallocate_block(void *instance_ptr, MemoryBlock *block) {
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
+        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
         return halide_error_code_internal_error;
     }
 
@@ -707,9 +808,9 @@ int VulkanMemoryAllocator::deallocate_block(void *instance_ptr, MemoryBlock *blo
                    << "visibility=" << halide_memory_visibility_name(block->properties.visibility) << ")\n";
 #endif
 
+    // Nothing to do if device memory was already freed
     if (block->handle == nullptr) {
-        error(user_context) << "VulkanBlockAllocator: Unable to deallocate block! Invalid handle!\n";
-        return halide_error_code_internal_error;
+        return halide_error_code_success;
     }
 
     VkDeviceMemory *device_memory = reinterpret_cast<VkDeviceMemory *>(block->handle);
@@ -751,49 +852,67 @@ size_t VulkanMemoryAllocator::bytes_allocated_for_blocks() const {
     return block_byte_count;
 }
 
-uint32_t VulkanMemoryAllocator::select_memory_type(void *user_context,
-                                                   VkPhysicalDevice physical_device,
-                                                   MemoryProperties properties,
-                                                   uint32_t required_flags) const {
+uint32_t VulkanMemoryAllocator::required_flags_for_memory_properties(
+    void *user_context, MemoryProperties properties) const {
 
-    uint32_t want_flags = 0;  //< preferred memory flags for requested access type
-    uint32_t need_flags = 0;  //< must have in order to enable requested access
+    uint32_t required_flags = 0;  //< must have in order to enable requested access
     switch (properties.visibility) {
-    case MemoryVisibility::HostOnly:
-        want_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        break;
     case MemoryVisibility::DeviceOnly:
-        need_flags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        required_flags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         break;
     case MemoryVisibility::DeviceToHost:
-        need_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        want_flags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        required_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
         break;
     case MemoryVisibility::HostToDevice:
-        need_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        required_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
         break;
     case MemoryVisibility::DefaultVisibility:
+    case MemoryVisibility::HostOnly:
+        break;
     case MemoryVisibility::InvalidVisibility:
-    default:
-        error(nullptr) << "VulkanMemoryAllocator: Unable to convert type! Invalid memory visibility request!\n\t"
-                       << "visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+        error(user_context) << "VulkanMemoryAllocator: Unable to convert type! Invalid memory visibility request!\n\t"
+                            << "caching=" << halide_memory_caching_name(properties.caching) << "\n";
+        return invalid_memory_type;
+    };
+    return required_flags;
+}
+
+uint32_t VulkanMemoryAllocator::preferred_flags_for_memory_properties(
+    void *user_context, MemoryProperties properties) const {
+
+    uint32_t preferred_flags = 0;  //< preferred memory flags for requested access type
+    switch (properties.visibility) {
+    case MemoryVisibility::HostOnly:
+        preferred_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        break;
+    case MemoryVisibility::DeviceToHost:
+        preferred_flags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        break;
+    case MemoryVisibility::HostToDevice:
+    case MemoryVisibility::DefaultVisibility:
+    case MemoryVisibility::DeviceOnly:
+        break;
+    case MemoryVisibility::InvalidVisibility:
+        error(user_context) << "VulkanMemoryAllocator: Unable to convert type! Invalid memory visibility request!\n\t"
+                            << "caching=" << halide_memory_caching_name(properties.caching) << "\n";
         return invalid_memory_type;
     };
 
+    uint32_t required_flags = required_flags_for_memory_properties(user_context, properties);
     switch (properties.caching) {
     case MemoryCaching::CachedCoherent:
-        if (need_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-            want_flags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        if (required_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+            preferred_flags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         }
         break;
     case MemoryCaching::UncachedCoherent:
-        if (need_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-            want_flags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        if (required_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+            preferred_flags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         }
         break;
     case MemoryCaching::Cached:
-        if (need_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-            want_flags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        if (required_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+            preferred_flags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         }
         break;
     case MemoryCaching::Uncached:
@@ -805,46 +924,61 @@ uint32_t VulkanMemoryAllocator::select_memory_type(void *user_context,
                             << "caching=" << halide_memory_caching_name(properties.caching) << "\n";
         return invalid_memory_type;
     };
+    return preferred_flags;
+}
 
-    VkPhysicalDeviceMemoryProperties device_memory_properties;
-    vkGetPhysicalDeviceMemoryProperties(physical_device, &device_memory_properties);
+bool VulkanMemoryAllocator::is_valid_memory_type_for_heap(void *user_context,
+                                                          VkPhysicalDeviceMemoryProperties *memory_properties,
+                                                          uint32_t memory_type_index,
+                                                          uint32_t heap_index) const {
 
-    uint32_t result = invalid_memory_type;
-    for (uint32_t i = 0; i < device_memory_properties.memoryTypeCount; ++i) {
+    if (memory_type_index < memory_properties->memoryTypeCount) {
+        if (memory_properties->memoryTypes[memory_type_index].heapIndex == heap_index) {
+            return true;
+        }
+    }
+    return false;
+}
 
-        // if required flags are given, see if the memory type matches the requirement
+bool VulkanMemoryAllocator::is_valid_memory_type_for_flags(void *user_context,
+                                                           VkPhysicalDeviceMemoryProperties *memory_properties,
+                                                           uint32_t memory_type_index,
+                                                           uint32_t required_flags) const {
+
+    if (memory_type_index < memory_properties->memoryTypeCount) {
+        const VkMemoryPropertyFlags property_flags = memory_properties->memoryTypes[memory_type_index].propertyFlags;
         if (required_flags) {
-            if (((required_flags >> i) & 1) == 0) {
-                continue;
+            if ((property_flags & required_flags) != required_flags) {
+                return false;
             }
         }
-
-        const VkMemoryPropertyFlags properties = device_memory_properties.memoryTypes[i].propertyFlags;
-        if (need_flags) {
-            if ((properties & need_flags) != need_flags) {
-                continue;
-            }
-        }
-
-        if (want_flags) {
-            if ((properties & want_flags) != want_flags) {
-                continue;
-            }
-        }
-
-        result = i;
-        break;
+        return true;
     }
+    return false;
+}
 
-    if (result == invalid_memory_type) {
-        error(user_context) << "VulkanBlockAllocator: Failed to find appropriate memory type for given properties:\n\t"
-                            << "usage=" << halide_memory_usage_name(properties.usage) << " "
-                            << "caching=" << halide_memory_caching_name(properties.caching) << " "
-                            << "visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
-        return invalid_memory_type;
+bool VulkanMemoryAllocator::is_preferred_memory_type_for_flags(void *user_context,
+                                                               VkPhysicalDeviceMemoryProperties *memory_properties,
+                                                               uint32_t memory_type_index,
+                                                               uint32_t preferred_flags,
+                                                               uint32_t required_flags) const {
+
+    if (memory_type_index < memory_properties->memoryTypeCount) {
+        const VkMemoryPropertyFlags property_flags = memory_properties->memoryTypes[memory_type_index].propertyFlags;
+        if (required_flags) {
+            if ((property_flags & required_flags) != required_flags) {
+                return false;
+            }
+        }
+
+        if (preferred_flags) {
+            if ((property_flags & preferred_flags) != preferred_flags) {
+                return false;
+            }
+        }
+        return true;
     }
-
-    return result;
+    return false;
 }
 
 // --
@@ -913,6 +1047,7 @@ int VulkanMemoryAllocator::conform_region_request(void *instance_ptr, MemoryRequ
 
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
+        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
         return halide_error_code_internal_error;
     }
 
@@ -945,6 +1080,7 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
 
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
+        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
         return halide_error_code_internal_error;
     }
 
@@ -994,6 +1130,13 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
 
     VkResult result = vkCreateBuffer(instance->device, &create_info, instance->alloc_callbacks, buffer);
     if (result != VK_SUCCESS) {
+        // Allocation failed ... collect unused regions and try again ...
+        instance->collect(user_context);
+        result = vkCreateBuffer(instance->device, &create_info, instance->alloc_callbacks, buffer);
+    }
+    if (result != VK_SUCCESS) {
+        vk_host_free(nullptr, buffer, instance->alloc_callbacks);
+        buffer = nullptr;
         error(user_context) << "VulkanRegionAllocator: Failed to create buffer!\n\t"
                             << "vkCreateBuffer returned: " << vk_get_error_name(result) << "\n";
         return halide_error_code_device_malloc_failed;
@@ -1069,6 +1212,7 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
 int VulkanMemoryAllocator::deallocate_region(void *instance_ptr, MemoryRegion *region) {
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
+        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
         return halide_error_code_internal_error;
     }
 
@@ -1114,25 +1258,26 @@ int VulkanMemoryAllocator::deallocate_region(void *instance_ptr, MemoryRegion *r
 #ifdef DEBUG_RUNTIME
     debug(nullptr) << "vkDestroyBuffer: Destroyed buffer for device region (" << (uint64_t)region->size << " bytes) ...\n";
 #endif
+    halide_error_code_t error_code = halide_error_code_success;
     region->handle = nullptr;
     if (instance->region_count > 0) {
         instance->region_count--;
     } else {
-        error(nullptr) << "VulkanRegionAllocator: Region counter invalid ... reseting to zero!\n";
+        error(user_context) << "VulkanRegionAllocator: Region counter invalid ... reseting to zero!\n";
         instance->region_count = 0;
-        return halide_error_code_internal_error;
+        error_code = halide_error_code_internal_error;
     }
 
     if (int64_t(instance->region_byte_count) - int64_t(region->size) >= 0) {
         instance->region_byte_count -= region->size;
     } else {
-        error(nullptr) << "VulkanRegionAllocator: Region byte counter invalid ... reseting to zero!\n";
+        error(user_context) << "VulkanRegionAllocator: Region byte counter invalid ... reseting to zero!\n";
         instance->region_byte_count = 0;
-        return halide_error_code_internal_error;
+        error_code = halide_error_code_internal_error;
     }
     vk_host_free(nullptr, buffer, instance->alloc_callbacks);
     buffer = nullptr;
-    return halide_error_code_success;
+    return error_code;
 }
 
 size_t VulkanMemoryAllocator::regions_allocated() const {
