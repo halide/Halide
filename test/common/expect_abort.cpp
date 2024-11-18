@@ -1,15 +1,36 @@
+#include <Halide.h>
+
 #include <csignal>
 #include <cstdlib>
+#include <exception>
+#include <iostream>
 
-// This is a hack to implement death tests in CTest.
-extern "C" void hl_error_test_handle_abort(int) {
-    std::_Exit(EXIT_FAILURE);
-}
+std::atomic<bool> suppress_abort{true};
 
-struct hl_override_abort {
-    hl_override_abort() noexcept {
-        std::signal(SIGABRT, hl_error_test_handle_abort);
-    }
-};
+auto handler = ([]() {
+#ifdef HALIDE_WITH_EXCEPTIONS
+    std::set_terminate([]() {  //
+        try {
+            if (const auto e = std::current_exception()) {
+                std::rethrow_exception(e);
+            }
+        } catch (const Halide::InternalError &e) {
+            std::cerr << e.what() << "\n"
+                      << std::flush;
+            suppress_abort = false;
+            std::abort();  // We should never EXPECT an internal error
+        } catch (const std::exception &e) {
+            std::cerr << e.what() << "\n"
+                      << std::flush;
+        } catch (...) {}
+        std::_Exit(EXIT_FAILURE);
+    });
+#endif
 
-hl_override_abort handler{};
+    // If exceptions are disabled, we just hope for the best.
+    return std::signal(SIGABRT, [](int) {
+        if (suppress_abort) {
+            std::_Exit(EXIT_FAILURE);
+        }
+    });
+})();

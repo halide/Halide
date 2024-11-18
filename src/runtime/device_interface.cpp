@@ -237,11 +237,12 @@ WEAK int halide_device_sync(void *user_context, struct halide_buffer_t *buf) {
  * This variation of the synchronizing is useful when a synchronization is desirable
  * without specifying any buffer to synchronize on.
  */
-WEAK int halide_device_sync_global(void *user_context, const struct halide_device_interface_t *device_interface) {
+WEAK int halide_device_sync_global(void *user_context,
+                                   const struct halide_device_interface_t *device_interface) {
     if (device_interface == nullptr) {
         return halide_error_code_no_device_interface;
     }
-    // This function calls immediately the device_interface implementation to syncrhonize on
+    // This function calls immediately the device_interface implementation to synchronize on
     //  "no buffer" (i.e., nullptr buffer) to trigger a "global" device sync.
     return device_interface->impl->device_sync(user_context, nullptr);
 }

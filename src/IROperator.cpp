@@ -1497,7 +1497,7 @@ Expr saturating_cast(Type t, Expr e) {
 Expr select(Expr condition, Expr true_value, Expr false_value) {
     if (as_const_int(condition)) {
         // Why are you doing this? We'll preserve the select node until constant folding for you.
-        condition = cast(Bool(), std::move(condition));
+        condition = cast(Bool(true_value.type().lanes()), std::move(condition));
     }
 
     // Coerce int literals to the type of the other argument
@@ -1516,6 +1516,10 @@ Expr select(Expr condition, Expr true_value, Expr false_value) {
         << "The second and third arguments to a select do not have a matching type:\n"
         << "  " << true_value << " has type " << true_value.type() << "\n"
         << "  " << false_value << " has type " << false_value.type() << "\n";
+
+    if (true_value.type().is_vector() && condition.type().is_scalar()) {
+        condition = Broadcast::make(std::move(condition), true_value.type().lanes());
+    }
 
     return Select::make(std::move(condition), std::move(true_value), std::move(false_value));
 }

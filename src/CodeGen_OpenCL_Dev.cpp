@@ -753,7 +753,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
-    if (!op->condition.type().is_scalar()) {
+    if (op->type.is_vector()) {
         // A vector of bool was recursively introduced while
         // performing codegen. Eliminate it.
         Expr equiv = eliminate_bool_vectors(op);
