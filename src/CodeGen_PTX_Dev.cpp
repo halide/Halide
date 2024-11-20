@@ -138,7 +138,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            arg_types[i] = llvm_type_of(UInt(8))->getPointerTo();
+            arg_types[i] = PointerType::get(llvm_type_of(UInt(8)), 0);
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
         }

@@ -276,6 +276,24 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 learn_lower_bound(v, i.bounds.min + 1);
             }
         }
+        const Min *min = lt->b.as<Min>();
+        if (min) {
+            // c < min(a, b) -> c < a, c < b
+            learn_true(lt->a < min->a);
+            learn_true(lt->a < min->b);
+            // c < min(a, b) -> !(a <= c), !(b <= c)
+            learn_false(min->a <= lt->a);
+            learn_false(min->b <= lt->a);
+        }
+        const Max *max = lt->a.as<Max>();
+        if (max) {
+            // max(a, b) < c -> a < c, b < c
+            learn_true(max->a < lt->b);
+            learn_true(max->b < lt->b);
+            // max(a, b) < c -> !(c <= a), !(c <= b)
+            learn_false(lt->b <= max->a);
+            learn_false(lt->b <= max->b);
+        }
     } else if (const LE *le = fact.as<LE>()) {
         const Variable *v = le->a.as<Variable>();
         Simplify::ExprInfo i;
@@ -293,6 +311,24 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 // i <= v
                 learn_lower_bound(v, i.bounds.min);
             }
+        }
+        const Min *min = le->b.as<Min>();
+        if (min) {
+            // c <= min(a, b) -> c <= a, c <= b
+            learn_true(le->a <= min->a);
+            learn_true(le->a <= min->b);
+            // c <= min(a, b) -> !(a < c), !(b < c)
+            learn_false(min->a < le->a);
+            learn_false(min->b < le->a);
+        }
+        const Max *max = le->a.as<Max>();
+        if (max) {
+            // max(a, b) <= c -> a <= c, b <= c
+            learn_true(max->a <= le->b);
+            learn_true(max->b <= le->b);
+            // max(a, b) <= c -> !(c < a), !(c < b)
+            learn_false(le->b < max->a);
+            learn_false(le->b < max->b);
         }
     } else if (const Call *c = Call::as_tag(fact)) {
         learn_true(c->args[0]);
