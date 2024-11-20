@@ -555,47 +555,42 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
 }
 
 namespace {
-bool get_md_bool(llvm::Metadata *value, bool &result) {
+std::optional<bool> get_md_bool(llvm::Metadata *value) {
     if (!value) {
-        return false;
+        return {};
     }
     llvm::ConstantAsMetadata *cam = llvm::cast<llvm::ConstantAsMetadata>(value);
     if (!cam) {
-        return false;
+        return {};
     }
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(cam->getValue());
     if (!c) {
-        return false;
+        return {};
     }
-    result = !c->isZero();
-    return true;
+    return !c->isZero();
 }
 
-bool get_md_string(llvm::Metadata *value, std::string &result) {
+std::optional<std::string> get_md_string(llvm::Metadata *value) {
     if (!value) {
-        result = "";
-        return false;
+        return {};
     }
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
-        result = c->getString().str();
-        return true;
+        return c->getString().str();
     }
-    return false;
+    return {};
 }
 }  // namespace
 
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options) {
-    bool use_soft_float_abi = false;
-    get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
-    std::string mabi;
-    get_md_string(module.getModuleFlag("halide_mabi"), mabi);
-    bool use_pic = true;
-    get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
+    bool use_soft_float_abi =
+        get_md_bool(module.getModuleFlag("halide_use_soft_float_abi")).value_or(false);
+    std::string mabi =
+        get_md_string(module.getModuleFlag("halide_mabi")).value_or(std::string{});
 
     // FIXME: can this be migrated into `set_function_attributes_from_halide_target_options()`?
-    bool per_instruction_fast_math_flags = false;
-    get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
+    bool per_instruction_fast_math_flags =
+        get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags")).value_or(false);
 
     options = llvm::TargetOptions();
     options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
@@ -622,29 +617,22 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
 
     llvm::LLVMContext &context = to.getContext();
 
-    bool use_soft_float_abi = false;
-    if (get_md_bool(from.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi)) {
-        to.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi ? 1 : 0);
+    // Clone bool metadata
+    for (const char *s : {"halide_use_soft_float_abi",
+                          "halide_use_pic"}) {
+        if (auto md = get_md_bool(from.getModuleFlag(s))) {
+            to.addModuleFlag(llvm::Module::Warning, s, *md ? 1 : 0);
+        }
     }
 
-    std::string mcpu_target;
-    if (get_md_string(from.getModuleFlag("halide_mcpu_target"), mcpu_target)) {
-        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", llvm::MDString::get(context, mcpu_target));
-    }
+    // Clone string metadata
+    for (const char *s : {"halide_mcpu_target",
+                          "halide_mcpu_tune",
+                          "halide_mattrs"}) {
 
-    std::string mcpu_tune;
-    if (get_md_string(from.getModuleFlag("halide_mcpu_tune"), mcpu_tune)) {
-        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", llvm::MDString::get(context, mcpu_tune));
-    }
-
-    std::string mattrs;
-    if (get_md_string(from.getModuleFlag("halide_mattrs"), mattrs)) {
-        to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
-    }
-
-    bool use_pic = true;
-    if (get_md_bool(from.getModuleFlag("halide_use_pic"), use_pic)) {
-        to.addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic ? 1 : 0);
+        if (auto md = get_md_string(from.getModuleFlag(s))) {
+            to.addModuleFlag(llvm::Module::Warning, s, llvm::MDString::get(context, *md));
+        }
     }
 }
 
@@ -662,11 +650,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     llvm::TargetOptions options;
     get_target_options(module, options);
 
-    bool use_pic = true;
-    get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
+    bool use_pic =
+        get_md_bool(module.getModuleFlag("halide_use_pic")).value_or(true);
 
-    bool use_large_code_model = false;
-    get_md_bool(module.getModuleFlag("halide_use_large_code_model"), use_large_code_model);
+    bool use_large_code_model =
+        get_md_bool(module.getModuleFlag("halide_use_large_code_model")).value_or(false);
 
 #if LLVM_VERSION >= 180
     const auto opt_level = llvm::CodeGenOptLevel::Aggressive;
@@ -675,10 +663,10 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 #endif
 
     // Get module mcpu_target and mattrs.
-    std::string mcpu_target;
-    get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
-    std::string mattrs;
-    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    std::string mcpu_target =
+        get_md_string(module.getModuleFlag("halide_mcpu_target")).value_or(std::string{});
+    std::string mattrs =
+        get_md_string(module.getModuleFlag("halide_mattrs")).value_or(std::string{});
 
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 mcpu_target,
@@ -693,11 +681,14 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     llvm::Module &module = *fn.getParent();
 
-    std::string mcpu_target, mcpu_tune, mattrs, vscale_range;
-    get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
-    get_md_string(module.getModuleFlag("halide_mcpu_tune"), mcpu_tune);
-    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
-    get_md_string(module.getModuleFlag("halide_vscale_range"), vscale_range);
+    std::string mcpu_target =
+        get_md_string(module.getModuleFlag("halide_mcpu_target")).value_or(std::string{});
+    std::string mcpu_tune =
+        get_md_string(module.getModuleFlag("halide_mcpu_tune")).value_or(std::string{});
+    std::string mattrs =
+        get_md_string(module.getModuleFlag("halide_mattrs")).value_or(std::string{});
+    std::string vscale_range =
+        get_md_string(module.getModuleFlag("halide_vscale_range")).value_or(std::string{});
 
     fn.addFnAttr("target-cpu", mcpu_target);
     fn.addFnAttr("tune-cpu", mcpu_tune);
