@@ -654,7 +654,7 @@ private:
                     const auto &candidate_group = mem_allocs[free_spaces[i]];
                     Expr size = alloc_size * alloc.type.bytes();
                     Expr dist = candidate_group.max_size * candidate_group.widest_type.bytes() - size;
-                    dist = simplify(dist)
+                    dist = simplify(dist);
                     const int64_t *current_diff = as_const_int(dist);
                     internal_assert(current_diff != nullptr);
                     int64_t abs_diff = std::abs(*current_diff);
