@@ -261,7 +261,7 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
             return true;
         }
     } else if (const Mul *mul = e.as<Mul>()) {
-        const int64_t *b = nullptr;
+        std::optional<int64_t> b;
         if (is_interleaved_ramp(mul->a, scope, result) &&
             (b = as_const_int(mul->b))) {
             result->base = simplify(result->base * (int)(*b));
@@ -269,7 +269,7 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
             return true;
         }
     } else if (const Div *div = e.as<Div>()) {
-        const int64_t *b = nullptr;
+        std::optional<int64_t> b;
         if (is_interleaved_ramp(div->a, scope, result) &&
             (b = as_const_int(div->b)) &&
             is_const_one(result->stride) &&
@@ -284,7 +284,7 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
             return true;
         }
     } else if (const Mod *mod = e.as<Mod>()) {
-        const int64_t *b = nullptr;
+        std::optional<int64_t> b;
         if (is_interleaved_ramp(mod->a, scope, result) &&
             (b = as_const_int(mod->b)) &&
             (result->outer_repetitions == 1 ||
@@ -655,8 +655,8 @@ class VectorSubs : public IRMutator {
         if (!changed) {
             return op;
         } else if (op->name == Call::trace) {
-            const int64_t *event = as_const_int(op->args[6]);
-            internal_assert(event != nullptr);
+            auto event = as_const_int(op->args[6]);
+            internal_assert(event);
             if (*event == halide_trace_begin_realization || *event == halide_trace_end_realization) {
                 // Call::trace vectorizes uniquely for begin/end realization, because the coordinates
                 // for these are actually min/extent pairs; we need to maintain the proper dimensionality

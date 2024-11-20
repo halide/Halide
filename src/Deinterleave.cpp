@@ -658,14 +658,14 @@ class Interleaver : public IRMutator {
             return Stmt();
         }
 
-        const int64_t *stride_ptr = as_const_int(r0->stride);
+        auto optional_stride = as_const_int(r0->stride);
 
         // The stride isn't a constant or is <= 1
-        if (!stride_ptr || *stride_ptr <= 1) {
+        if (!optional_stride || *optional_stride <= 1) {
             return Stmt();
         }
 
-        const int64_t stride = *stride_ptr;
+        const int64_t stride = *optional_stride;
         const int lanes = r0->lanes;
         const int64_t expected_stores = stride;
 
@@ -715,8 +715,7 @@ class Interleaver : public IRMutator {
                 return Stmt();
             }
 
-            Expr diff = simplify(ri->base - r0->base);
-            const int64_t *offs = as_const_int(diff);
+            auto offs = as_const_int(simplify(ri->base - r0->base));
 
             // Difference between bases is not constant.
             if (!offs) {

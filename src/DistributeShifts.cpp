@@ -121,7 +121,7 @@ private:
 
     Expr distribute_shift(const Call *op) {
         if (op->is_intrinsic(Call::shift_left)) {
-            if (const uint64_t *const_b = as_const_uint(op->args[1])) {
+            if (auto const_b = as_const_uint(op->args[1])) {
                 Expr a = op->args[0];
                 // Only rewrite widening shifts.
                 const Cast *cast_a = a.as<Cast>();
@@ -133,7 +133,7 @@ private:
                 }
             }
         } else if (op->is_intrinsic(Call::widening_shift_left)) {
-            if (const uint64_t *const_b = as_const_uint(op->args[1])) {
+            if (auto const_b = as_const_uint(op->args[1])) {
                 const uint64_t const_m = 1ull << *const_b;
                 Expr b = make_const(op->type, const_m);
                 Expr a = Cast::make(op->type, op->args[0]);

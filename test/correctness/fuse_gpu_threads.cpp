@@ -8,8 +8,8 @@ class CheckThreadExtent : public IRVisitor {
     void visit(const For *op) override {
         if (op->for_type == ForType::GPUThread) {
             // Assert the min and extent to be 0 and 16 for this particular test case
-            const int64_t *min = as_const_int(op->min);
-            const int64_t *extent = as_const_int(op->extent);
+            auto min = as_const_int(op->min);
+            auto extent = as_const_int(op->extent);
             assert(min && (*min == 0));
             assert(extent && (*extent == 16));
         }

@@ -392,7 +392,7 @@ private:
         const Mul *mul_a = a.as<Mul>();
         Expr expr;
         if (a_uses_var && !b_uses_var) {
-            const int64_t *ib = as_const_int(b);
+            auto ib = as_const_int(b);
             auto is_multiple_of_b = [&](const Expr &e) {
                 if (ib && op->type.is_scalar()) {
                     int64_t r = 0;

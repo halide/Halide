@@ -379,7 +379,7 @@ class LowerWarpShuffles : public IRMutator {
             bool should_mask = false;
             ScopedValue<Expr> old_warp_size(warp_size);
             if (op->for_type == ForType::GPULane) {
-                const int64_t *loop_size = as_const_int(op->extent);
+                auto loop_size = as_const_int(op->extent);
                 user_assert(loop_size && *loop_size <= 32)
                     << "CUDA gpu lanes loop must have constant extent of at most 32: " << op->extent << "\n";
 
@@ -411,7 +411,7 @@ class LowerWarpShuffles : public IRMutator {
                 Expr new_size = (alloc->extents[0] + op->extent - 1) / op->extent;
                 new_size = simplify(new_size, true, bounds);
                 new_size = find_constant_bound(new_size, Direction::Upper, bounds);
-                const int64_t *sz = as_const_int(new_size);
+                auto sz = as_const_int(new_size);
                 user_assert(sz) << "Warp-level allocation with non-constant size: "
                                 << alloc->extents[0] << ". Use Func::bound_extent.";
                 DetermineAllocStride stride(alloc->name, op->name, warp_size);
@@ -587,7 +587,7 @@ class LowerWarpShuffles : public IRMutator {
 
         Expr wild = Variable::make(Int(32), "*");
         vector<Expr> result;
-        int bits = 0;
+        std::optional<int> bits;
 
         // Move this_lane as far left as possible in the expression to
         // reduce the number of cases to check below.
@@ -602,18 +602,18 @@ class LowerWarpShuffles : public IRMutator {
                                    shfl_args({membermask, base_val, result[0], 31}), Call::PureExtern);
             shuffled = down;
         } else if (expr_match((this_lane + wild) % wild, lane, result) &&
-                   is_const_power_of_two_integer(result[1], &bits) &&
-                   bits <= 5) {
+                   (bits = is_const_power_of_two_integer(result[1])) &&
+                   *bits <= 5) {
             result[0] = simplify(result[0] % result[1], true, bounds);
             // Rotate. Mux a shuffle up and a shuffle down. Uses fewer
             // intermediate registers than using a general gather for
             // this.
-            Expr mask = (1 << bits) - 1;
+            Expr mask = (1 << *bits) - 1;
             Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".down" + intrin_suffix,
                                    shfl_args({membermask, base_val, result[0], mask}), Call::PureExtern);
             Expr up = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".up" + intrin_suffix,
-                                 shfl_args({membermask, base_val, (1 << bits) - result[0], 0}), Call::PureExtern);
-            Expr cond = (this_lane >= (1 << bits) - result[0]);
+                                 shfl_args({membermask, base_val, (1 << *bits) - result[0], 0}), Call::PureExtern);
+            Expr cond = (this_lane >= (1 << *bits) - result[0]);
             Expr equiv = select(cond, up, down);
             shuffled = simplify(equiv, true, bounds);
         } else {

@@ -116,25 +116,23 @@ bool can_allocation_fit_on_stack(int64_t size) {
 Expr lower_int_uint_div(const Expr &a, const Expr &b, bool round_to_zero) {
     // Detect if it's a small int division
     internal_assert(a.type() == b.type());
-    const int64_t *const_int_divisor = as_const_int(b);
-    const uint64_t *const_uint_divisor = as_const_uint(b);
+    auto const_int_divisor = as_const_int(b);
+    auto const_uint_divisor = as_const_uint(b);
 
     Type t = a.type();
     internal_assert(!t.is_float())
         << "lower_int_uint_div is not meant to handle floating-point case.\n";
 
-    int shift_amount;
-    if (is_const_power_of_two_integer(b, &shift_amount) &&
-        (t.is_int() || t.is_uint())) {
+    if (auto shift_amount = is_const_power_of_two_integer(b)) {
         if (round_to_zero) {
             Expr result = a;
             // Normally a right-shift isn't right for division rounding to
             // zero. It does the wrong thing for negative values. Add a fudge so
             // that a right-shift becomes correct.
             result += (result >> (t.bits() - 1)) & (b - 1);
-            return result >> shift_amount;
+            return result >> *shift_amount;
         } else {
-            return a >> make_const(UInt(a.type().bits()), shift_amount);
+            return a >> make_const(UInt(a.type().bits()), *shift_amount);
         }
     } else if (const_int_divisor &&
                t.is_int() &&
@@ -262,15 +260,14 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b, bool round_to_zero) {
 
 Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     // Detect if it's a small int modulus
-    const int64_t *const_int_divisor = as_const_int(b);
-    const uint64_t *const_uint_divisor = as_const_uint(b);
+    auto const_int_divisor = as_const_int(b);
+    auto const_uint_divisor = as_const_uint(b);
 
     Type t = a.type();
     internal_assert(!t.is_float())
         << "lower_int_uint_div is not meant to handle floating-point case.\n";
 
-    int bits;
-    if (is_const_power_of_two_integer(b, &bits)) {
+    if (is_const_power_of_two_integer(b)) {
         return a & simplify(b - 1);
     } else if (const_int_divisor &&
                t.is_int() &&
@@ -294,7 +291,7 @@ Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
 
 namespace {
 std::pair<Expr, Expr> unsigned_long_div_mod_round_to_zero(Expr &num, const Expr &den,
-                                                          const uint64_t *upper_bound) {
+                                                          std::optional<uint64_t> upper_bound) {
     internal_assert(num.type() == den.type());
     internal_assert(num.type().is_uint());
     Type ty = num.type();
@@ -333,7 +330,7 @@ std::pair<Expr, Expr> unsigned_long_div_mod_round_to_zero(Expr &num, const Expr 
 }  // namespace
 
 std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &num, const Expr &den,
-                                                 const uint64_t *max_abs) {
+                                                 std::optional<uint64_t> max_abs) {
     debug(1) << "Using long div: (num: " << num << "); (den: " << den << ")\n";
     internal_assert(num.type() == den.type());
     Expr abs_num = (num.type().is_int()) ? abs(num) : num;
@@ -476,8 +473,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
 
 Expr lower_signed_shift_left(const Expr &a, const Expr &b) {
     internal_assert(b.type().is_int());
-    const int64_t *const_int_b = as_const_int(b);
-    if (const_int_b) {
+    if (auto const_int_b = as_const_int(b)) {
         Expr val;
         const uint64_t b_unsigned = std::abs(*const_int_b);
         if (*const_int_b >= 0) {
@@ -497,8 +493,7 @@ Expr lower_signed_shift_left(const Expr &a, const Expr &b) {
 
 Expr lower_signed_shift_right(const Expr &a, const Expr &b) {
     internal_assert(b.type().is_int());
-    const int64_t *const_int_b = as_const_int(b);
-    if (const_int_b) {
+    if (auto const_int_b = as_const_int(b)) {
         Expr val;
         const uint64_t b_unsigned = std::abs(*const_int_b);
         if (*const_int_b >= 0) {

@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <map>
+#include <optional>
 
 #include "Expr.h"
 #include "Target.h"
@@ -27,21 +28,25 @@ bool is_const(const Expr &e);
 bool is_const(const Expr &e, int64_t v);
 
 /** If an expression is an IntImm or a Broadcast of an IntImm, return
- * a pointer to its value. Otherwise returns nullptr. */
-const int64_t *as_const_int(const Expr &e);
+ * a its value. Otherwise returns std::nullopt. */
+std::optional<int64_t> as_const_int(const Expr &e);
 
 /** If an expression is a UIntImm or a Broadcast of a UIntImm, return
- * a pointer to its value. Otherwise returns nullptr. */
-const uint64_t *as_const_uint(const Expr &e);
+ * its value. Otherwise returns std::nullopt. */
+std::optional<uint64_t> as_const_uint(const Expr &e);
 
 /** If an expression is a FloatImm or a Broadcast of a FloatImm,
- * return a pointer to its value. Otherwise returns nullptr. */
-const double *as_const_float(const Expr &e);
+ * return its value. Otherwise returns std::nullopt. */
+std::optional<double> as_const_float(const Expr &e);
 
-/** Is the expression a constant integer power of two. Also returns
- * log base two of the expression if it is. Only returns true for
- * integer types. */
-bool is_const_power_of_two_integer(const Expr &e, int *bits);
+/** Is the expression a constant integer power of two. Returns log base two of
+ * the expression if it is, or std::nullopt if not. Also returns std::nullopt
+ * for non-integer types. */
+// @{
+std::optional<int> is_const_power_of_two_integer(const Expr &e);
+std::optional<int> is_const_power_of_two_integer(uint64_t);
+std::optional<int> is_const_power_of_two_integer(int64_t);
+// @}
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */

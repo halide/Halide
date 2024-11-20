@@ -1928,7 +1928,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     // aliasing analysis, especially for backends that do address
     // computation in 32 bits but use 64-bit pointers.
     if (const Add *add = index.as<Add>()) {
-        if (const int64_t *offset = as_const_int(add->b)) {
+        if (auto offset = as_const_int(add->b)) {
             Value *base = codegen_buffer_pointer(base_address, type, add->a);
             Value *off = codegen(make_const(Int(8 * d.getPointerSize()), *offset));
             return CreateInBoundsGEP(builder.get(), llvm_type_of(type), base, off);
@@ -1988,8 +1988,8 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
 
     if (index.defined()) {
         if (const Ramp *ramp = index.as<Ramp>()) {
-            const int64_t *pstride = as_const_int(ramp->stride);
-            const int64_t *pbase = as_const_int(ramp->base);
+            auto pstride = as_const_int(ramp->stride);
+            auto pbase = as_const_int(ramp->base);
             if (pstride && pbase) {
                 // We want to find the smallest aligned width and offset
                 // that contains this ramp.
@@ -2005,7 +2005,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
                 constant_index = true;
             }
         } else {
-            const int64_t *pbase = as_const_int(index);
+            auto pbase = as_const_int(index);
             if (pbase) {
                 base = *pbase;
                 constant_index = true;
@@ -2915,7 +2915,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::Value *struct_instance = codegen(op->args[0]);
         llvm::Value *struct_prototype = codegen(op->args[1]);
         llvm::Value *typed_struct_instance = builder->CreatePointerCast(struct_instance, struct_prototype->getType());
-        const int64_t *index = as_const_int(op->args[2]);
+        auto index = as_const_int(op->args[2]);
 
         // make_struct can use a fixed-size struct, an array type, or a scalar
         llvm::Type *pointee_type;
@@ -2928,7 +2928,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::StructType *struct_type = llvm::dyn_cast<llvm::StructType>(pointee_type);
         llvm::Type *array_type = llvm::dyn_cast<llvm::ArrayType>(pointee_type);
         if (struct_type || array_type) {
-            internal_assert(index != nullptr);
+            internal_assert(index);
             llvm::Value *gep = CreateInBoundsGEP(builder.get(), pointee_type, typed_struct_instance,
                                                  {ConstantInt::get(i32_t, 0),
                                                   ConstantInt::get(i32_t, (int)*index)});
@@ -2936,7 +2936,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             value = builder->CreateLoad(result_type, gep);
         } else {
             // The struct is actually just a scalar
-            internal_assert(index == nullptr || *index == 0);
+            internal_assert(!index || *index == 0);
             value = builder->CreateLoad(pointee_type, typed_struct_instance);
         }
     } else if (op->is_intrinsic(Call::get_user_context)) {
@@ -3100,7 +3100,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // restrictions if we recognize the most common types we
         // expect to get alloca'd.
         const Call *call = op->args[0].as<Call>();
-        const int64_t *sz = as_const_int(op->args[0]);
+        auto sz = as_const_int(op->args[0]);
         if (op->type == type_of<struct halide_buffer_t *>() &&
             call && call->is_intrinsic(Call::size_of_halide_buffer_t)) {
             value = create_alloca_at_entry(halide_buffer_t_type, 1);
@@ -3109,7 +3109,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                    sz && *sz == 16) {
             value = create_alloca_at_entry(semaphore_t_type, 1);
         } else {
-            internal_assert(sz != nullptr);
+            internal_assert(sz);
             if (op->type == type_of<struct halide_dimension_t *>()) {
                 value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
             } else {
@@ -3828,10 +3828,10 @@ void CodeGen_LLVM::visit(const Store *op) {
             int store_lanes = value_type.lanes();
             int native_lanes = maximum_vector_bits() / value_type.bits();
 
-            Expr base = (ramp != nullptr) ? ramp->base : 0;
-            Expr stride = (ramp != nullptr) ? ramp->stride : 0;
-            Value *stride_val = (!is_dense && ramp != nullptr) ? codegen(stride) : nullptr;
-            Value *index = (ramp == nullptr) ? codegen(op->index) : nullptr;
+            Expr base = ramp ? ramp->base : 0;
+            Expr stride = ramp ? ramp->stride : 0;
+            Value *stride_val = (!is_dense && ramp) ? codegen(stride) : nullptr;
+            Value *index = !ramp ? codegen(op->index) : nullptr;
 
             for (int i = 0; i < store_lanes; i += native_lanes) {
                 int slice_lanes = std::min(native_lanes, store_lanes - i);
@@ -3849,7 +3849,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                         StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, llvm::Align(alignment));
                         annotate_store(store, slice_index);
                     }
-                } else if (ramp != nullptr) {
+                } else if (ramp) {
                     if (get_target().bits == 64 && !stride_val->getType()->isIntegerTy(64)) {
                         stride_val = builder->CreateIntCast(stride_val, i64_t, true);
                     }
@@ -3996,7 +3996,7 @@ void CodeGen_LLVM::visit(const IfThenElse *op) {
     vector<int> rhs;
     for (auto &block : blocks) {
         const EQ *eq = block.first.as<EQ>();
-        const int64_t *r = eq ? as_const_int(eq->b) : nullptr;
+        auto r = eq ? as_const_int(eq->b) : std::nullopt;
         if (eq &&
             r &&
             Int(32).can_represent(*r) &&
@@ -5190,12 +5190,12 @@ llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg)
     internal_assert(effective_vscale != 0);
     internal_assert(isa<llvm::FixedVectorType>(fixed_arg->getType()));
     const llvm::FixedVectorType *fixed_type = cast<llvm::FixedVectorType>(fixed_arg->getType());
-    internal_assert(fixed_type != nullptr);
+    internal_assert(fixed_type);
     auto lanes = fixed_type->getNumElements();
 
     llvm::ScalableVectorType *scalable_type = cast<llvm::ScalableVectorType>(get_vector_type(fixed_type->getElementType(),
                                                                                              lanes / effective_vscale, VectorTypeConstraint::VScale));
-    internal_assert(fixed_type != nullptr);
+    internal_assert(fixed_type);
 
     internal_assert(fixed_type->getElementType() == scalable_type->getElementType());
     internal_assert(lanes == (scalable_type->getMinNumElements() * effective_vscale));
@@ -5227,11 +5227,11 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
     internal_assert(effective_vscale != 0);
     internal_assert(isa<llvm::ScalableVectorType>(scalable_arg->getType()));
     const llvm::ScalableVectorType *scalable_type = cast<llvm::ScalableVectorType>(scalable_arg->getType());
-    internal_assert(scalable_type != nullptr);
+    internal_assert(scalable_type);
 
     llvm::FixedVectorType *fixed_type = cast<llvm::FixedVectorType>(get_vector_type(scalable_type->getElementType(),
                                                                                     scalable_type->getMinNumElements() * effective_vscale, VectorTypeConstraint::Fixed));
-    internal_assert(fixed_type != nullptr);
+    internal_assert(fixed_type);
 
     internal_assert(fixed_type->getElementType() == scalable_type->getElementType());
     internal_assert(fixed_type->getNumElements() == (scalable_type->getMinNumElements() * effective_vscale));
@@ -5444,7 +5444,7 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, VPR
 
     if (!std::holds_alternative<NoMask>(mask)) {
         if (std::holds_alternative<AllEnabledMask>(mask)) {
-            internal_assert(base_vector_type != nullptr) << "Requested all enabled mask without any vector type to use for type/length.\n";
+            internal_assert(base_vector_type) << "Requested all enabled mask without any vector type to use for type/length.\n";
             llvm::ElementCount llvm_vector_ec;
             if (is_scalable) {
                 const auto *vt = cast<llvm::ScalableVectorType>(base_vector_type);

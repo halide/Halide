@@ -87,16 +87,16 @@ protected:
             // CSE).
             Expr idx = substitute_in_all_lets(simplify(common_subexpression_elimination(op->index)));
             if (const Ramp *r = idx.as<Ramp>()) {
-                const int64_t *stride_ptr = as_const_int(r->stride);
-                int64_t stride = stride_ptr ? *stride_ptr : 0;
+                int64_t stride = as_const_int(r->stride).value_or(0);
                 Expr base = r->base;
                 int64_t offset = 0;
-                const Add *base_add = base.as<Add>();
-                const int64_t *offset_ptr = base_add ? as_const_int(base_add->b) : nullptr;
-                if (offset_ptr) {
-                    base = base_add->a;
-                    offset = *offset_ptr;
+                if (const Add *base_add = base.as<Add>()) {
+                    if (auto off = as_const_int(base_add->b)) {
+                        base = base_add->a;
+                        offset = *off;
+                    }
                 }
+
                 // TODO: We do not yet handle nested vectorization here for
                 // ramps which have not already collapsed. We could potentially
                 // handle more interesting types of shuffle than simple flat slices.

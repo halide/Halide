@@ -40,8 +40,8 @@ std::vector<int> get_int_bounds(const Box &bounds) {
         const Interval &interval = bounds[i];
         Expr extent = simplify(interval.max - interval.min + 1);
         extent = simplify(substitute_var_estimates(extent));
-        const int64_t *extent_int = as_const_int(extent);
-        user_assert(extent_int != nullptr)
+        auto extent_int = as_const_int(extent);
+        user_assert(extent_int)
             << "extent:" << extent << " is not constant.\n";
         int_bounds.push_back(*extent_int);
     }
@@ -53,8 +53,8 @@ std::vector<int> get_rvar_bounds(const std::vector<ReductionVariable> &rvars) {
     rvar_bounds.reserve(rvars.size());
     for (const auto &rvar : rvars) {
         Expr extent = simplify(substitute_var_estimates(rvar.extent));
-        const int64_t *extent_int = as_const_int(extent);
-        user_assert(extent_int != nullptr)
+        auto extent_int = as_const_int(extent);
+        user_assert(extent_int)
             << "extent:" << extent << " is not constant.\n";
         rvar_bounds.push_back(*extent_int);
     }

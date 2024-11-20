@@ -82,22 +82,24 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return mutate(unbroadcast, info);
         }
 
-        uint64_t ua = 0;
-        if (const_int(a, (int64_t *)(&ua)) || const_uint(a, &ua)) {
+        auto ia = as_const_int(a);
+        auto ua = as_const_uint(a);
+        uint64_t u = ua.value_or(reinterpret_bits<uint64_t>(ia.value_or(0)));
+        if (ia || ua) {
             const int bits = op->type.bits();
             const uint64_t mask = std::numeric_limits<uint64_t>::max() >> (64 - bits);
-            ua &= mask;
+            u &= mask;
             static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
             int r = 0;
             if (op->is_intrinsic(Call::popcount)) {
                 // popcount *is* well-defined for ua = 0
-                r = popcount64(ua);
+                r = popcount64(u);
             } else if (op->is_intrinsic(Call::count_leading_zeros)) {
                 // clz64() is undefined for 0, but Halide's count_leading_zeros defines clz(0) = bits
-                r = ua == 0 ? bits : (clz64(ua) - (64 - bits));
+                r = u == 0 ? bits : (clz64(u) - (64 - bits));
             } else /* if (op->is_intrinsic(Call::count_trailing_zeros)) */ {
                 // ctz64() is undefined for 0, but Halide's count_trailing_zeros defines clz(0) = bits
-                r = ua == 0 ? bits : (ctz64(ua));
+                r = u == 0 ? bits : (ctz64(u));
             }
             return make_const(op->type, r);
         }
@@ -140,16 +142,15 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         }
 
         // If the shift is by a constant, it should now be unsigned.
-        uint64_t ub = 0;
-        if (const_uint(b, &ub)) {
+        if (auto ub = as_const_uint(b)) {
             // LLVM shl and shr instructions produce poison for
             // shifts >= typesize, so we will follow suit in our simplifier.
-            if (ub >= (uint64_t)(t.bits())) {
+            if (*ub >= (uint64_t)(t.bits())) {
                 clear_expr_info(info);
                 return make_signed_integer_overflow(t);
             }
-            if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
-                b = make_const(t, ((int64_t)1LL) << ub);
+            if (a.type().is_uint() || *ub < ((uint64_t)t.bits() - 1)) {
+                b = make_const(t, ((int64_t)1LL) << *ub);
                 if (result_op == Call::get_intrinsic_name(Call::shift_left)) {
                     return mutate(Mul::make(a, b), info);
                 } else {
@@ -160,7 +161,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
                 // (-32768 >> (t.bits() - 1)) propagates the sign bit, making decomposition
                 // into mul or div problematic, so just special-case them here.
                 if (result_op == Call::get_intrinsic_name(Call::shift_left)) {
-                    return mutate(select((a & 1) != 0, make_const(t, ((int64_t)1LL) << ub), make_zero(t)), info);
+                    return mutate(select((a & 1) != 0, make_const(t, ((int64_t)1LL) << *ub), make_zero(t)), info);
                 } else {
                     return mutate(select(a < 0, make_const(t, -1), make_zero(t)), info);
                 }
@@ -193,29 +194,24 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return mutate(unbroadcast, info);
         }
 
-        int64_t ia, ib = 0;
-        uint64_t ua, ub = 0;
-        int bits;
+        auto ia = as_const_int(a), ib = as_const_int(b);
+        auto ua = as_const_uint(a), ub = as_const_uint(b);
 
-        if (const_int(a, &ia) &&
-            const_int(b, &ib)) {
-            return make_const(op->type, ia & ib);
-        } else if (const_uint(a, &ua) &&
-                   const_uint(b, &ub)) {
-            return make_const(op->type, ua & ub);
-        } else if (const_int(b, &ib) &&
-                   !b.type().is_max(ib) &&
-                   is_const_power_of_two_integer(make_const(a.type(), ib + 1), &bits)) {
-            return Mod::make(a, make_const(a.type(), ib + 1));
-        } else if (const_uint(b, &ub) &&
-                   b.type().is_max(ub)) {
+        if (ia && ib) {
+            return make_const(op->type, *ia & *ib);
+        } else if (ua && ub) {
+            return make_const(op->type, *ua & *ub);
+        } else if (ib &&
+                   !b.type().is_max(*ib) &&
+                   is_const_power_of_two_integer(*ib + 1)) {
+            return Mod::make(a, make_const(a.type(), *ib + 1));
+        } else if (ub && b.type().is_max(*ub)) {
             return a;
-        } else if (const_int(b, &ib) &&
-                   ib == -1) {
+        } else if (ib && *ib == -1) {
             return a;
-        } else if (const_uint(b, &ub) &&
-                   is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
-            return Mod::make(a, make_const(a.type(), ub + 1));
+        } else if (ub &&
+                   is_const_power_of_two_integer(*ub + 1)) {
+            return Mod::make(a, make_const(a.type(), *ub + 1));
         } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
             return op;
         } else {
@@ -230,14 +226,12 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return mutate(unbroadcast, info);
         }
 
-        int64_t ia, ib;
-        uint64_t ua, ub;
-        if (const_int(a, &ia) &&
-            const_int(b, &ib)) {
-            return make_const(op->type, ia | ib);
-        } else if (const_uint(a, &ua) &&
-                   const_uint(b, &ub)) {
-            return make_const(op->type, ua | ub);
+        auto ia = as_const_int(a), ib = as_const_int(b);
+        auto ua = as_const_uint(a), ub = as_const_uint(b);
+        if (ia && ib) {
+            return make_const(op->type, *ia | *ib);
+        } else if (ua && ub) {
+            return make_const(op->type, *ua | *ub);
         } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
             return op;
         } else {
@@ -251,12 +245,10 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return mutate(unbroadcast, info);
         }
 
-        int64_t ia;
-        uint64_t ua;
-        if (const_int(a, &ia)) {
-            return make_const(op->type, ~ia);
-        } else if (const_uint(a, &ua)) {
-            return make_const(op->type, ~ua);
+        if (auto ia = as_const_int(a)) {
+            return make_const(op->type, ~(*ia));
+        } else if (auto ua = as_const_uint(a)) {
+            return make_const(op->type, ~(*ua));
         } else if (a.same_as(op->args[0])) {
             return op;
         } else {
@@ -271,14 +263,12 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return mutate(unbroadcast, info);
         }
 
-        int64_t ia, ib;
-        uint64_t ua, ub;
-        if (const_int(a, &ia) &&
-            const_int(b, &ib)) {
-            return make_const(op->type, ia ^ ib);
-        } else if (const_uint(a, &ua) &&
-                   const_uint(b, &ub)) {
-            return make_const(op->type, ua ^ ub);
+        auto ia = as_const_int(a), ib = as_const_int(b);
+        auto ua = as_const_uint(a), ub = as_const_uint(b);
+        if (ia && ib) {
+            return make_const(op->type, *ia ^ *ib);
+        } else if (ua && ub) {
+            return make_const(op->type, *ua ^ *ub);
         } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
             return op;
         } else {
@@ -300,21 +290,19 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         }
 
         Type ta = a.type();
-        int64_t ia = 0;
-        double fa = 0;
-        if (ta.is_int() && const_int(a, &ia)) {
-            if (ia < 0 && !(Int(64).is_min(ia))) {
-                ia = -ia;
+        if (auto ia = as_const_int(a)) {
+            if (*ia < 0 && !(Int(64).is_min(*ia))) {
+                *ia = -(*ia);
             }
-            return make_const(op->type, ia);
+            return make_const(op->type, *ia);
         } else if (ta.is_uint()) {
             // abs(uint) is a no-op.
             return a;
-        } else if (const_float(a, &fa)) {
-            if (fa < 0) {
-                fa = -fa;
+        } else if (auto fa = as_const_float(a)) {
+            if (*fa < 0) {
+                *fa = -(*fa);
             }
-            return make_const(a.type(), fa);
+            return make_const(a.type(), *fa);
         } else if (a.type().is_int() && a_info.bounds >= 0) {
             return cast(op->type, a);
         } else if (a.type().is_int() && a_info.bounds <= 0) {
@@ -339,19 +327,19 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         // absd() should enforce identical types for a and b when the node is created
         internal_assert(ta == b.type());
 
-        int64_t ia = 0, ib = 0;
-        uint64_t ua = 0, ub = 0;
-        double fa = 0, fb = 0;
-        if (ta.is_int() && const_int(a, &ia) && const_int(b, &ib)) {
+        auto ia = as_const_int(a), ib = as_const_int(b);
+        auto ua = as_const_uint(a), ub = as_const_uint(b);
+        auto fa = as_const_float(a), fb = as_const_float(b);
+        if (ta.is_int() && ia && ib) {
             // Note that absd(int, int) always produces a uint result
             internal_assert(op->type.is_uint());
-            const uint64_t d = ia > ib ? (uint64_t)(ia - ib) : (uint64_t)(ib - ia);
+            const uint64_t d = *ia > *ib ? (uint64_t)(*ia - *ib) : (uint64_t)(*ib - *ia);
             return make_const(op->type, d);
-        } else if (ta.is_uint() && const_uint(a, &ua) && const_uint(b, &ub)) {
-            const uint64_t d = ua > ub ? ua - ub : ub - ua;
+        } else if (ta.is_uint() && ua && ub) {
+            const uint64_t d = *ua > *ub ? *ua - *ub : *ub - *ua;
             return make_const(op->type, d);
-        } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            const double d = fa > fb ? fa - fb : fb - fa;
+        } else if (fa && fb) {
+            const double d = *fa > *fb ? *fa - *fb : *fb - *fa;
             return make_const(op->type, d);
         } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
             return op;
@@ -664,10 +652,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             auto it = pure_externs_f1b.find(op->name);
             if (it != pure_externs_f1b.end()) {
                 Expr arg = mutate(op->args[0], nullptr);
-                double f = 0.0;
-                if (const_float(arg, &f)) {
+                if (auto f = as_const_float(arg)) {
                     auto fn = it->second;
-                    return make_bool(fn(f));
+                    return make_bool(fn(*f));
                 } else if (arg.same_as(op->args[0])) {
                     return op;
                 } else {
@@ -703,7 +690,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             auto it = pure_externs_f1.find(op->name);
             if (it != pure_externs_f1.end()) {
                 Expr arg = mutate(op->args[0], nullptr);
-                if (const double *f = as_const_float(arg)) {
+                if (auto f = as_const_float(arg)) {
                     auto fn = it->second;
                     return make_const(arg.type(), fn(*f));
                 } else if (arg.same_as(op->args[0])) {
@@ -735,7 +722,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
                 Expr arg = mutate(op->args[0], nullptr);
 
                 const Call *call = arg.as<Call>();
-                if (const double *f = as_const_float(arg)) {
+                if (auto f = as_const_float(arg)) {
                     auto fn = it->second;
                     return make_const(arg.type(), fn(*f));
                 } else if (call && (call->call_type == Call::PureExtern || call->call_type == Call::PureIntrinsic) &&
@@ -765,8 +752,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
                 Expr arg0 = mutate(op->args[0], nullptr);
                 Expr arg1 = mutate(op->args[1], nullptr);
 
-                const double *f0 = as_const_float(arg0);
-                const double *f1 = as_const_float(arg1);
+                auto f0 = as_const_float(arg0);
+                auto f1 = as_const_float(arg1);
                 if (f0 && f1) {
                     auto fn = it->second;
                     return make_const(arg0.type(), fn(*f0, *f1));

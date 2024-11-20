@@ -21,11 +21,11 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
         ExprInfo info;
-        if (const int64_t *i_min = as_const_int(iter.value().min)) {
+        if (auto i_min = as_const_int(iter.value().min)) {
             info.bounds.min_defined = true;
             info.bounds.min = *i_min;
         }
-        if (const int64_t *i_max = as_const_int(iter.value().max)) {
+        if (auto i_max = as_const_int(iter.value().max)) {
             info.bounds.max_defined = true;
             info.bounds.max = *i_max;
         }
@@ -84,33 +84,6 @@ void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
 
     if (auto *info = var_info.shallow_find(name)) {
         info->old_uses++;
-    }
-}
-
-bool Simplify::const_float(const Expr &e, double *f) {
-    if (const double *p = as_const_float(e)) {
-        *f = *p;
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool Simplify::const_int(const Expr &e, int64_t *i) {
-    if (const int64_t *p = as_const_int(e)) {
-        *i = *p;
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool Simplify::const_uint(const Expr &e, uint64_t *u) {
-    if (const uint64_t *p = as_const_uint(e)) {
-        *u = *p;
-        return true;
-    } else {
-        return false;
     }
 }
 
@@ -211,8 +184,8 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     } else if (const EQ *eq = fact.as<EQ>()) {
         const Variable *v = eq->a.as<Variable>();
         const Mod *m = eq->a.as<Mod>();
-        const int64_t *modulus = m ? as_const_int(m->b) : nullptr;
-        const int64_t *remainder = m ? as_const_int(eq->b) : nullptr;
+        auto modulus = m ? as_const_int(m->b) : std::nullopt;
+        auto remainder = m ? as_const_int(eq->b) : std::nullopt;
         if (v) {
             if (is_const(eq->b) || eq->b.as<Variable>()) {
                 // TODO: consider other cases where we might want to entirely substitute

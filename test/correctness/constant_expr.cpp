@@ -17,17 +17,17 @@ bool bit_flip(T a) {
 template<typename T>
 bool scalar_from_constant_expr(Expr e, T *val) {
     if (type_of<T>().is_int()) {
-        const int64_t *i = as_const_int(e);
+        auto i = as_const_int(e);
         if (!i) return false;
         *val = (T)(*i);
         return true;
     } else if (type_of<T>().is_uint()) {
-        const uint64_t *u = as_const_uint(e);
+        auto u = as_const_uint(e);
         if (!u) return false;
         *val = (T)(*u);
         return true;
     } else if (type_of<T>().is_float()) {
-        const double *f = as_const_float(e);
+        auto f = as_const_float(e);
         if (!f) return false;
         *val = (T)(*f);
         return true;

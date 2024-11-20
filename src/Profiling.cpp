@@ -286,8 +286,8 @@ private:
             } else {
                 idx = get_func_id(op->name);
             }
-            const uint64_t *int_size = as_const_uint(size);
-            internal_assert(int_size != nullptr);  // Stack size is always a const int
+            auto int_size = as_const_uint(size);
+            internal_assert(int_size);  // Stack size is always a const int
             func_stack_current[idx] += *int_size;
             func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
             debug(3) << "  Allocation on stack: " << op->name
@@ -355,8 +355,8 @@ private:
                     stmt = Block::make(tasks);
                 }
             } else {
-                const uint64_t *int_size = as_const_uint(alloc.size);
-                internal_assert(int_size != nullptr);
+                auto int_size = as_const_uint(alloc.size);
+                internal_assert(int_size);
 
                 int idx;
                 Function func = lookup_function(op->name);
