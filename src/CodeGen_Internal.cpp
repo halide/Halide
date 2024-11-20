@@ -555,7 +555,7 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
 }
 
 namespace {
-std::optional<bool> get_md_bool(llvm::Metadata *value) {
+std::optional<int64_t> get_md_int(llvm::Metadata *value) {
     if (!value) {
         return {};
     }
@@ -567,7 +567,15 @@ std::optional<bool> get_md_bool(llvm::Metadata *value) {
     if (!c) {
         return {};
     }
-    return !c->isZero();
+    return c->getSExtValue();
+}
+
+std::optional<bool> get_md_bool(llvm::Metadata *value) {
+    if (auto r = get_md_int(value)) {
+        return *r != 0;
+    } else {
+        return {};
+    }
 }
 
 std::optional<std::string> get_md_string(llvm::Metadata *value) {
@@ -687,8 +695,8 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
         get_md_string(module.getModuleFlag("halide_mcpu_tune")).value_or(std::string{});
     std::string mattrs =
         get_md_string(module.getModuleFlag("halide_mattrs")).value_or(std::string{});
-    std::string vscale_range =
-        get_md_string(module.getModuleFlag("halide_vscale_range")).value_or(std::string{});
+    int64_t vscale_range =
+        get_md_int(module.getModuleFlag("halide_effective_vscale")).value_or(0);
 
     fn.addFnAttr("target-cpu", mcpu_target);
     fn.addFnAttr("tune-cpu", mcpu_tune);
@@ -709,8 +717,9 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     fn.addFnAttr("reciprocal-estimates", "none");
 
     // If a fixed vscale is asserted, add it as an attribute on the function.
-    if (!vscale_range.empty()) {
-        fn.addFnAttr("vscale_range", vscale_range);
+    if (vscale_range != 0) {
+        fn.addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(
+            module.getContext(), vscale_range, vscale_range));
     }
 }
 
@@ -718,7 +727,7 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
     SmallVector<GlobalValue *, 4> used_globals;
-    llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
+    llvm::Type *used_element_type = PointerType::get(llvm::Type::getInt8Ty(M->getContext()), 0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
         if (GV->getName() != "llvm.embedded.module" &&

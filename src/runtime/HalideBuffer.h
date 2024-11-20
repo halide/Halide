@@ -14,6 +14,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #ifdef __APPLE__
