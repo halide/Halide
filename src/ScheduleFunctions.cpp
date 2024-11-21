@@ -253,7 +253,7 @@ Stmt build_loop_nest(
     // This is not a generic loop invariant code motion step.
     // In particular there are dangling references to bound
     // variables that are not defined yet, so we can't rely
-    // the loop invariant code motion pass.
+    // on the loop invariant code motion pass.
 
     // All containing lets and fors. Outermost first.
     vector<Container> nest;
@@ -284,7 +284,7 @@ Stmt build_loop_nest(
     // Add appropriate predicates on the fused loop vars to ensure we don't
     // go out of bounds. Ignore the __outermost dims since it's going to be
     // removed later anyway. These have to be added as outermost as possible as
-    // some let stmts (e.g. the rebase let stmt) might depend on this vars;
+    // some let stmts (e.g. the rebase let stmt) might depend on these vars;
     // otherwise, this may mess up the bounds_touched computation.
     int n_predicates_inner = 0;
     for (int i = start_fuse; (i >= 0) && (i < (int)stage_s.dims().size() - 1); ++i) {
@@ -335,7 +335,7 @@ Stmt build_loop_nest(
     }
 
     // Sort the predicate guards for the fused loops so they are as far outwards
-    // as possible. IfInnner should not be reordered to outside of a for loop.
+    // as possible. IfInner should not be reordered to outside a for loop.
     for (int i = (int)nest.size() - n_predicates_inner - n_predicates;
          i < (int)nest.size() - n_predicates;
          i++) {
@@ -1848,7 +1848,7 @@ private:
         auto bounds = CollectBounds::collect_bounds(producer);
 
         // Compute the shift factors based on the alignment strategies
-        // starting from the the parent (root loop) to the children. The root
+        // starting from the parent (root loop) to the children. The root
         // loop bounds should remain unchanged.
         map<string, Expr> shifts;
         for (auto i = funcs.size(); i-- > 0;) {
