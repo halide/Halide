@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
                     [&](size_t t) {
                         bench_one();
                         auto t_start = now();
-                        while (to_ns(now() - t_start) < 1e7 || times[t].size() < min_samples / num_tasks) {
+                        while (to_ns(now() - t_start) < 1e3 || times[t].size() < min_samples / num_tasks) {
                             times[t].push_back(bench_one());
                         }
                     },
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
             Halide::Internal::JITSharedRuntime::set_num_threads(native_threads);
             bench_one();
             auto t_start = now();
-            while (to_ns(now() - t_start) < 1e7 || times[0].size() < min_samples) {
+            while (to_ns(now() - t_start) < 1e3 || times[0].size() < min_samples) {
                 times[0].push_back(bench_one());
             }
         }
@@ -86,10 +86,11 @@ int main(int argc, char **argv) {
     // The output is designed to be copy-pasted into a spreadsheet, not read by a human
     printf("memory_bound contended inner outer num_samples 10%% 20%% 30%% 40%% 50%% 60%% 70%% 80%% 90%%\n");
     for (int repeat = 0; repeat < 10; repeat++) {
-        for (bool contended : {false, true}) {
-            for (bool memory_bound : {false, true}) {
-                for (int i : {1 << 6, 1 << 9, 1 << 12, 1 << 15}) {
-                    for (int o : {1, 2, 4, 8, 16, 32, 64, 128, 256}) {
+        usleep(10000);
+        for (bool contended : {false}) {
+            for (bool memory_bound : {false}) {
+                for (int i : {512}) {
+                    for (int o : {8}) {
                         bench(memory_bound, contended, i, o);
                     }
                 }
@@ -107,6 +108,8 @@ int main(int argc, char **argv) {
         }
         printf("\n");
     }
+
+    Internal::JITSharedRuntime::release_all();
 
     printf("Success!\n");
 

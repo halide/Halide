@@ -94,8 +94,12 @@ WEAK int default_desired_num_threads() {
 
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
 struct work_queue_t {
+    char padding1[256];
+
     // all fields are protected by this mutex.
     halide_mutex mutex;
+
+    char padding2[256];
 
     // The desired number threads doing work (HL_NUM_THREADS).
     int desired_threads_working;
@@ -203,9 +207,13 @@ WEAK void dump_job_state() {
 WEAK void worker_thread(void *);
 
 WEAK void worker_thread_already_locked(work *owned_job) {
+    ThreadEventLog::start_logging();
+
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
+
+        ThreadEventLog::log("selecting work");
 
         if (owned_job) {
             if (owned_job->exit_status != halide_error_code_success) {
@@ -280,6 +288,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         if (!job) {
             // There is no runnable job. Go to sleep.
             if (owned_job) {
+                ThreadEventLog::log("owner sleeping");
                 work_queue.owners_sleeping++;
                 owned_job->owner_is_sleeping = true;
                 halide_cond_wait(&work_queue.wake_owners, &work_queue.mutex);
@@ -290,15 +299,20 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                 if (work_queue.a_team_size > work_queue.target_a_team_size) {
                     // Transition to B team
                     work_queue.a_team_size--;
+                    ThreadEventLog::log("worker sleeping b");
                     halide_cond_wait(&work_queue.wake_b_team, &work_queue.mutex);
                     work_queue.a_team_size++;
                 } else {
+                    ThreadEventLog::log("worker sleeping a");
                     halide_cond_wait(&work_queue.wake_a_team, &work_queue.mutex);
                 }
                 work_queue.workers_sleeping--;
             }
             continue;
         }
+
+
+        ThreadEventLog::log("preparing");
 
         log_message("Working on job " << job->task.name);
 
@@ -367,7 +381,9 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             }
 
             // Release the lock and do the task.
+            ThreadEventLog::log("unlocking");
             halide_mutex_unlock(&work_queue.mutex);
+            ThreadEventLog::log("doing work");
             if (myjob.task_fn) {
                 result = halide_do_task(myjob.user_context, myjob.task_fn,
                                         myjob.task.min, myjob.task.closure);
@@ -376,7 +392,9 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                                              myjob.task.min, 1,
                                              myjob.task.closure, job);
             }
+            ThreadEventLog::log("locking");
             halide_mutex_lock(&work_queue.mutex);
+            ThreadEventLog::log("locked");
         }
 
         if (result != halide_error_code_success) {
@@ -417,6 +435,10 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             // The job is done or some owned job failed via sibling linkage. Wake up the owner.
             halide_cond_broadcast(&work_queue.wake_owners);
         }
+    }
+
+    if (!owned_job) {
+        ThreadEventLog::end_logging();
     }
 }
 
@@ -616,6 +638,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     enqueue_work_already_locked(1, &job, nullptr);
     worker_thread_already_locked(&job);
     halide_mutex_unlock(&work_queue.mutex);
+    ThreadEventLog::log("owner done");
     return job.exit_status;
 }
 
@@ -656,6 +679,7 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
         }
     }
     halide_mutex_unlock(&work_queue.mutex);
+    ThreadEventLog::log("owner done");
     return exit_status;
 }
 
@@ -703,6 +727,10 @@ WEAK void halide_shutdown_thread_pool() {
         // Tidy up
         work_queue.reset();
     }
+
+    // Flush any event logs
+    ThreadEventLog::end_logging();
+
 }
 
 struct halide_semaphore_impl_t {

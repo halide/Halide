@@ -670,6 +670,13 @@ void *get_library_symbol_handler(void *lib, const char *name) {
     return (*active_handlers.custom_get_library_symbol)(lib, name);
 }
 
+thread_local struct thread_event_log_t {
+    void *begin = nullptr, *next = nullptr, *end = nullptr;
+} event_log;
+void *get_event_log_handler() {
+    return &event_log;
+}
+
 int cuda_acquire_context_handler(JITUserContext *context, void **cuda_context_ptr, bool create) {
     if (context && context->handlers.custom_cuda_acquire_context) {
         return context->handlers.custom_cuda_acquire_context(context, cuda_context_ptr, create);
@@ -913,6 +920,8 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
             runtime_internal_handlers.custom_get_library_symbol =
                 hook_function(runtime.exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
+
+            hook_function(runtime.exports(), "halide_set_custom_get_event_log", get_event_log_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);

@@ -50,6 +50,83 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
+// Helpers for logging events to diagnose parallelism and synchronization
+// issues. We fill a per-thread circular buffer with events, which can be
+// flushed to a json file to load in chrome://tracing in a chrome browser.
+namespace ThreadEventLog {
+struct thread_event_t {
+    int64_t time;
+    int64_t id;
+    const char *event;
+};
+
+struct thread_event_log_t {
+    thread_event_t *begin, *next, *end;
+};
+
+constexpr int log_buffer_size = 1024 * 1024;
+
+WEAK thread_event_log_t *default_get_event_log() {
+    return nullptr;
+}
+
+thread_event_log_t *(*get_log)() = &default_get_event_log;
+
+extern "C" WEAK void halide_set_custom_get_event_log(thread_event_log_t *(*callback)()) {
+    get_log = callback;
+}
+
+WEAK void start_logging() {
+    auto log = get_log();
+    if (log && !log->begin) {
+        halide_start_clock(nullptr);
+        log->next = log->begin = (thread_event_t *)malloc(log_buffer_size * sizeof(thread_event_t));
+        memset(log->begin, 0, log_buffer_size * sizeof(thread_event_t));
+    }
+}
+
+
+// Must be called on every thread
+WEAK void end_logging() {
+    auto log = get_log();
+    if (!log || !log->begin) {
+        return;
+    }
+    // TODO: configure filename
+    void *file = halide_fopen("trace.json", "a");
+    StackStringStreamPrinter<256> p(nullptr);
+    for (int i = 0; i < log_buffer_size - 1; i++) {
+        if (!log->begin[i].event || !log->begin[i+1].event) {
+            break;
+        }
+        p.clear();
+        p << "{\"name\": \"" << log->begin[i].event << "\", \"cat\": \"PERF\", \"ph\": \"B\", \"pid\": 1000, \"tid\": " << log->begin[i].id << ", \"ts\": " << log->begin[i].time << "},\n";
+        p << "{\"name\": \"" << log->begin[i].event << "\", \"cat\": \"PERF\", \"ph\": \"E\", \"pid\": 1000, \"tid\": " << log->begin[i].id << ", \"ts\": " << log->begin[i+1].time << "},\n";
+        fwrite(p.str(), 1, p.size(), file);
+    }
+    fclose(file);
+    free(log->begin);
+    log->begin = log->next = log->end = nullptr;
+}
+
+ALWAYS_INLINE
+void log(const char *msg) {
+    auto log = get_log();
+    if (!log || !log->begin) {
+        return;
+    }
+    log->next->event = msg;
+    log->next->time = halide_current_time_ns(nullptr);
+    log->next->id = (int64_t)((intptr_t)(log));
+    log->next++;
+    if (log->next == log->end) {
+        log->next = log->begin;
+    }
+}
+
+}
+
+
 namespace Synchronization {
 
 namespace {
@@ -180,6 +257,7 @@ WEAK void word_lock::lock_full() {
     uintptr_t expected;
     atomic_load_relaxed(&state, &expected);
 
+    ThreadEventLog::log("mutex spin");
     while (true) {
         if (!(expected & lock_bit)) {
             uintptr_t desired = expected | lock_bit;
@@ -191,10 +269,13 @@ WEAK void word_lock::lock_full() {
         }
 
         if (((expected & ~(uintptr_t)(queue_lock_bit | lock_bit)) != 0) && spinner.should_spin()) {
+            //ThreadEventLog::log("mutex yield");
             halide_thread_yield();
             atomic_load_relaxed(&state, &expected);
             continue;
         }
+
+        ThreadEventLog::log("mutex sleep");
 
         word_lock_queue_data node;
 
@@ -476,7 +557,9 @@ WEAK uintptr_t parking_control::park(uintptr_t addr) {
 }
 
 WEAK uintptr_t parking_control::unpark_one(uintptr_t addr) {
+    ThreadEventLog::log("unpark_one lock");
     hash_bucket &bucket = lock_bucket(addr);
+    ThreadEventLog::log("unpark_one");
 
     queue_data **data_location = &bucket.head;
     queue_data *prev = nullptr;
@@ -485,6 +568,7 @@ WEAK uintptr_t parking_control::unpark_one(uintptr_t addr) {
         uintptr_t cur_addr;
         atomic_load_relaxed(&data->sleep_address, &cur_addr);
         if (cur_addr == addr) {
+            ThreadEventLog::log("outer while 1");
             queue_data *next = data->next;
             *data_location = next;
 
@@ -495,6 +579,7 @@ WEAK uintptr_t parking_control::unpark_one(uintptr_t addr) {
             } else {
                 queue_data *data2 = next;
                 while (data2 != nullptr && !more_waiters) {
+                    ThreadEventLog::log("inner while 1");
                     uintptr_t cur_addr2;
                     atomic_load_relaxed(&data2->sleep_address, &cur_addr2);
                     more_waiters = (cur_addr2 == addr);
@@ -502,16 +587,24 @@ WEAK uintptr_t parking_control::unpark_one(uintptr_t addr) {
                 }
             }
 
+            ThreadEventLog::log("calling unpark 1");
             data->unpark_info = unpark(1, more_waiters);
 
             data->parker.unpark_start();
+            ThreadEventLog::log("unlock bucket mutex");
             bucket.mutex.unlock();
+
+            ThreadEventLog::log("calling unpark 2");
             data->parker.unpark();
+
+            ThreadEventLog::log("calling unpark finish");
             data->parker.unpark_finish();
 
             // TODO: Figure out ret type.
+            ThreadEventLog::log("unpark_one done");
             return more_waiters ? 1 : 0;
         } else {
+            ThreadEventLog::log("outer while 2");
             data_location = &data->next;
             prev = data;
             data = data->next;
@@ -631,7 +724,22 @@ class fast_mutex {
         uintptr_t expected;
         atomic_load_relaxed(&state, &expected);
 
+        ThreadEventLog::log("mutex start spin");
+
+        auto t1 = halide_current_time_ns(nullptr);
+        int64_t time_step = 1;
+
         while (true) {
+            auto t2 = halide_current_time_ns(nullptr);
+            if (t2 - t1 < time_step) {
+                continue;
+            }
+            ThreadEventLog::log("mutex spin");
+            if (time_step < 10000) {
+                time_step *= 2;
+                time_step += 100;
+            }
+
             if (!(expected & lock_bit)) {
                 uintptr_t desired = expected | lock_bit;
                 if (atomic_cas_weak_acquire_relaxed(&state, &expected, &desired)) {
@@ -643,11 +751,17 @@ class fast_mutex {
             // Spin with spin count. Note that this occurs even if
             // threads are parked. We're prioritizing throughput over
             // fairness by letting sleeping threads lie.
-            if (spinner.should_spin()) {
-                halide_thread_yield();
+
+            if (true || spinner.should_spin() || t2 - t1 < 1000000) {
+                ThreadEventLog::log("mutex yield");
+                if (t2 - t1 > 5000) {
+                    halide_thread_yield();
+                }
                 atomic_load_relaxed(&state, &expected);
                 continue;
             }
+
+            ThreadEventLog::log("mutex park");
 
             // Mark mutex as having parked threads if not already done.
             if ((expected & parked_bit) == 0) {
@@ -660,6 +774,7 @@ class fast_mutex {
             // TODO: consider handling fairness, timeout
             mutex_parking_control control(&state);
             uintptr_t result = control.park((uintptr_t)this);
+            ThreadEventLog::log("mutex wake");
             if (result == (uintptr_t)this) {
                 return;
             }
@@ -670,6 +785,7 @@ class fast_mutex {
     }
 
     ALWAYS_INLINE void unlock_full() {
+        ThreadEventLog::log("mutex unlock full");
         uintptr_t expected = lock_bit;
         uintptr_t desired = 0;
         // Try for a fast release of the lock. Redundant with code in lock, but done
@@ -677,7 +793,7 @@ class fast_mutex {
         if (atomic_cas_strong_release_relaxed(&state, &expected, &desired)) {
             return;
         }
-
+        ThreadEventLog::log("mutex unlock full slow path");
         mutex_parking_control control(&state);
         control.unpark_one((uintptr_t)this);
     }
@@ -693,10 +809,12 @@ public:
     }
 
     ALWAYS_INLINE void unlock() {
+        ThreadEventLog::log("mutex unlock");
         uintptr_t expected = lock_bit;
         uintptr_t desired = 0;
         // Try for a fast grab of the lock bit. If this does not work, call the full adaptive looping code.
         if (!atomic_cas_weak_release_relaxed(&state, &expected, &desired)) {
+            ThreadEventLog::log("mutex unlock slow path");
             unlock_full();
         }
     }
@@ -856,11 +974,13 @@ public:
     ALWAYS_INLINE void wait(fast_mutex *mutex) {
         // Spin for a bit, waiting to see if someone else calls signal or
         // broadcast.
+        // ThreadEventLog::log("cond spin");
         uintptr_t initial;
         atomic_load_relaxed(&counter, &initial);
         mutex->unlock();
         spin_control spinner;
         while (spinner.should_spin()) {
+            ThreadEventLog::log("cond yield");
             halide_thread_yield();
             uintptr_t current;
             atomic_load_relaxed(&counter, &current);
@@ -884,6 +1004,7 @@ public:
 
         // Go to sleep until signaled
         wait_parking_control control(&state, mutex);
+        ThreadEventLog::log("cond park");
         uintptr_t result = control.park((uintptr_t)this);
         if (result != (uintptr_t)mutex) {
             mutex->lock();
@@ -897,6 +1018,7 @@ public:
 
             if_tsan_post_lock(mutex);
         }
+        ThreadEventLog::log("cond wake");
     }
 };
 
