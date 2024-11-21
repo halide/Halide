@@ -18,13 +18,6 @@ int main(int argc, char *argv[]) {
 
     Target target = get_jit_target_from_environment();
 
-    // Disable the Vulkan validation layer or we'll leak
-    // https://github.com/halide/Halide/issues/8290
-    if (target.has_feature(Target::Vulkan)) {
-        char clear_env_var[] = "VK_INSTANCE_LAYERS=";
-        putenv(clear_env_var);
-    }
-
     // We need to hook the default handler too, to catch the frees done by release_all
     JITHandlers handlers;
     handlers.custom_print = halide_print;
@@ -59,6 +52,12 @@ int main(int argc, char *argv[]) {
         Func output = f[stage_count - 1];
 
         output.realize({256}, target);
+    }
+
+    // Manually invoke the Vulkan destructor (since we can't do this automatically at exit)
+    if (target.has_feature(Target::Vulkan)) {
+        const auto *interface = get_device_interface_for_device_api(DeviceAPI::Vulkan, target);
+        interface->device_release(nullptr, interface);
     }
 
     Internal::JITSharedRuntime::release_all();

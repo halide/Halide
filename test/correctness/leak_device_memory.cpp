@@ -21,13 +21,6 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
 
-    // Disable the Vulkan validation layer or we'll leak
-    // https://github.com/halide/Halide/issues/8290
-    if (target.has_feature(Target::Vulkan)) {
-        char clear_env_var[] = "VK_INSTANCE_LAYERS=";
-        putenv(clear_env_var);
-    }
-
     // We need debug output to record object creation.
     target.set_feature(Target::Debug);
 
@@ -68,6 +61,12 @@ int main(int argc, char **argv) {
             if (target.has_gpu_feature()) {
                 assert(copy.has_device_allocation());
             }
+        }
+
+        // Manually invoke the Vulkan destructor (since we can't do this automatically at exit)
+        if (target.has_feature(Target::Vulkan)) {
+            const auto *interface = get_device_interface_for_device_api(DeviceAPI::Vulkan, target);
+            interface->device_release(nullptr, interface);
         }
 
         Halide::Internal::JITSharedRuntime::release_all();
