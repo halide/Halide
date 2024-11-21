@@ -1310,9 +1310,8 @@ class VectorSubs : public IRMutator {
             s = SerializeLoops().mutate(s);
         }
         // We'll need the original scalar versions of any containing lets.
-        for (size_t i = containing_lets.size(); i > 0; i--) {
-            const auto &l = containing_lets[i - 1];
-            s = LetStmt::make(l.first, l.second, s);
+        for (const auto &[var, value] : reverse_view(containing_lets)) {
+            s = LetStmt::make(var, value, s);
         }
 
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {

@@ -554,8 +554,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     }
 
     // Traverse functions from producers to consumers for reverse accumulation
-    for (int func_id = funcs.size() - 1; func_id >= 0; func_id--) {
-        const Func &func = funcs[func_id];
+    for (const auto &func : reverse_view(funcs)) {
         current_func = func;
 
         FuncKey func_key{func.name(), func.num_update_definitions() - 1};

@@ -576,8 +576,8 @@ void StubEmitter::emit() {
     stream << get_indent() << "};\n";
     stream << "\n";
 
-    for (int i = (int)namespaces.size() - 1; i >= 0; --i) {
-        stream << get_indent() << "}  // namespace " << namespaces[i] << "\n";
+    for (const auto &ns : reverse_view(namespaces)) {
+        stream << get_indent() << "}  // namespace " << ns << "\n";
     }
     stream << "\n";
 

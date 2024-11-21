@@ -537,11 +537,7 @@ private:
             Expr value = mutate(let->value);
             Stmt body = mutate(let->body);
 
-            std::vector<const Allocate *> &allocations = pending_memoized_allocations[innermost_realization_name];
-
-            for (size_t i = allocations.size(); i > 0; i--) {
-                const Allocate *allocation = allocations[i - 1];
-
+            for (const auto *allocation : reverse_view(pending_memoized_allocations[innermost_realization_name])) {
                 // Make the allocation node
                 body = Allocate::make(allocation->name, allocation->type, allocation->memory_type, allocation->extents, allocation->condition, body,
                                       Call::make(Handle(), Call::buffer_get_host,

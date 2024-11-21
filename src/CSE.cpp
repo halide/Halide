@@ -336,13 +336,11 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     debug(4) << "With variables " << e << "\n";
 
     // Wrap the final expr in the lets.
-    for (size_t i = lets.size(); i > 0; i--) {
-        Expr value = lets[i - 1].second;
+    for (const auto &[var, value] : reverse_view(lets)) {
         // Drop this variable as an acceptable replacement for this expr.
         replacer.erase(value);
         // Use containing lets in the value.
-        value = replacer.mutate(lets[i - 1].second);
-        e = Let::make(lets[i - 1].first, value, e);
+        e = Let::make(var, replacer.mutate(value), e);
     }
 
     debug(4) << "With lets: " << e << "\n";

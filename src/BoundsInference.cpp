@@ -328,10 +328,9 @@ public:
                 }
             }
 
-            const vector<Specialization> &specializations = def.specializations();
-            for (size_t i = specializations.size(); i > 0; i--) {
-                Expr s_cond = specializations[i - 1].condition;
-                const Definition &s_def = specializations[i - 1].definition;
+            for (const auto &s : def.specializations()) {
+                const Expr s_cond = s.condition;
+                const Definition &s_def = s.definition;
 
                 // Else case (i.e. specialization condition is false)
                 for (auto &vec : result) {
@@ -1309,12 +1308,11 @@ public:
                                  old_inner_productions.end());
 
         // Rewrap the let/if statements
-        for (size_t i = wrappers.size(); i > 0; i--) {
-            const auto &p = wrappers[i - 1];
-            if (p.first.empty()) {
-                body = IfThenElse::make(p.second, body);
+        for (const auto &[var, value] : reverse_view(wrappers)) {
+            if (var.empty()) {
+                body = IfThenElse::make(value, body);
             } else {
-                body = LetStmt::make(p.first, p.second, body);
+                body = LetStmt::make(var, value, body);
             }
         }
 

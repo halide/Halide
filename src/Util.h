@@ -458,6 +458,30 @@ struct IsRoundtrippable {
     }
 };
 
+template<typename T>
+struct reverse_adaptor {
+    T &range;
+};
+
+template<typename T>
+auto begin(reverse_adaptor<T> i) {
+    return std::rbegin(i.range);
+}
+
+template<typename T>
+auto end(reverse_adaptor<T> i) {
+    return std::rend(i.range);
+}
+
+/**
+ * Reverse-order adaptor for range-based for-loops.
+ * TODO: Replace with std::ranges::reverse_view when upgrading to C++20.
+ */
+template<typename T>
+reverse_adaptor<T> reverse_view(T &&range) {
+    return {range};
+}
+
 /** Emit a version of a string that is a valid identifier in C (. is replaced with _)
  * If prefix_underscore is true (the default), an underscore will be prepended if the
  * input starts with an alphabetic character to avoid reserved word clashes.
