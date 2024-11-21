@@ -79,7 +79,7 @@ struct ApplySplitResult {
  * defined the values of variables referred by the predicates and substitutions
  * (ordered from innermost to outermost let). */
 std::vector<ApplySplitResult> apply_split(
-    const Split &split, bool is_update, const std::string &prefix,
+    const Split &split, const std::string &prefix,
     std::map<std::string, Expr> &dim_extent_alignment);
 
 /** Compute the loop bounds of the new dimensions resulting from applying the

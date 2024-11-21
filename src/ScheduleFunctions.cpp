@@ -174,8 +174,7 @@ Stmt build_loop_nest(
     const string &prefix,
     int start_fuse,
     const Function &func,
-    const Definition &def,
-    bool is_update) {
+    const Definition &def) {
     const auto &dims = func.args();
     const auto &func_s = func.schedule();
     const auto &stage_s = def.schedule();
@@ -220,7 +219,7 @@ Stmt build_loop_nest(
         user_assert(predicated_vars.count(split.old_var) == 0)
             << "Cannot split a loop variable resulting from a split using PredicateLoads or PredicateStores.";
 
-        vector<ApplySplitResult> splits_result = apply_split(split, is_update, prefix, dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(split, prefix, dim_extent_alignment);
 
         // To ensure we substitute all indices used in call or provide,
         // we need to substitute all lets in, so we correctly guard x in
@@ -503,7 +502,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     }
 
     // Default schedule/values if there is no specialization
-    Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def, is_update);
+    Stmt stmt = build_loop_nest(body, prefix, start_fuse, func, def);
     stmt = inject_placeholder_prefetch(stmt, env, prefix, def.schedule().prefetches());
 
     // Make any specialized copies
@@ -847,7 +846,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
 
     Definition f_def_no_pred = f.definition().get_copy();
     f_def_no_pred.predicate() = const_true();
-    return build_loop_nest(check, f.name() + ".s0.", -1, f, f_def_no_pred, false);
+    return build_loop_nest(check, f.name() + ".s0.", -1, f, f_def_no_pred);
 }
 
 // A schedule may include explicit bounds on some dimension. This
