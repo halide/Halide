@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <unordered_set>
 #include <utility>
 
 #ifdef _MSC_VER
@@ -609,201 +610,6 @@ Expr substitute_self_reference(Expr val, const string &func, const Function &sub
     return val;
 }
 
-// Substitute the occurrence of 'name' in 'exprs' with 'value'.
-void substitute_var_in_exprs(const string &name, const Expr &value, vector<Expr> &exprs) {
-    for (auto &expr : exprs) {
-        expr = substitute(name, value, expr);
-    }
-}
-
-void apply_split_result(const vector<pair<string, Expr>> &bounds_let_stmts,
-                        const vector<ApplySplitResult> &splits_result,
-                        vector<Expr> &predicates, vector<Expr> &args,
-                        vector<Expr> &values) {
-
-    for (const auto &res : splits_result) {
-        switch (res.type) {
-        case ApplySplitResult::Substitution:
-        case ApplySplitResult::LetStmt:
-            // Apply substitutions to the list of predicates, args, and values.
-            // Make sure we substitute in all the let stmts as well since we are
-            // not going to add them to the exprs.
-            substitute_var_in_exprs(res.name, res.value, predicates);
-            substitute_var_in_exprs(res.name, res.value, args);
-            substitute_var_in_exprs(res.name, res.value, values);
-            break;
-        default:
-            internal_assert(res.type == ApplySplitResult::Predicate);
-            predicates.push_back(res.value);
-            break;
-        }
-    }
-
-    // Make sure we substitute in all the let stmts from 'bounds_let_stmts'
-    // since we are not going to add them to the exprs.
-    for (const auto &let : bounds_let_stmts) {
-        substitute_var_in_exprs(let.first, let.second, predicates);
-        substitute_var_in_exprs(let.first, let.second, args);
-        substitute_var_in_exprs(let.first, let.second, values);
-    }
-}
-
-/** Apply split directives on the reduction variables. Remove the old RVar from
- * the list and add the split result (inner and outer RVars) to the list. Add
- * new predicates corresponding to the TailStrategy to the RDom predicate list. */
-bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
-                 vector<Expr> &predicates, vector<Expr> &args,
-                 vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
-    internal_assert(s.split_type == Split::SplitVar);
-    const auto it = std::find_if(rvars.begin(), rvars.end(),
-                                 [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
-
-    Expr old_max, old_min, old_extent;
-
-    if (it != rvars.end()) {
-        debug(4) << "  Splitting " << it->var << " into " << s.outer << " and " << s.inner << "\n";
-
-        old_max = simplify(it->min + it->extent - 1);
-        old_min = it->min;
-        old_extent = it->extent;
-
-        it->var = s.inner;
-        it->min = 0;
-        it->extent = s.factor;
-
-        rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor) / s.factor)});
-
-        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
-        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
-        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
-
-        return true;
-    }
-    return false;
-}
-
-/** Apply fuse directives on the reduction variables. Remove the
- * fused RVars from the list and add the fused RVar to the list. */
-bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
-                vector<Expr> &predicates, vector<Expr> &args,
-                vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
-    internal_assert(s.split_type == Split::FuseVars);
-    const auto &iter_outer = std::find_if(rvars.begin(), rvars.end(),
-                                          [&s](const ReductionVariable &rv) { return (s.outer == rv.var); });
-    const auto &iter_inner = std::find_if(rvars.begin(), rvars.end(),
-                                          [&s](const ReductionVariable &rv) { return (s.inner == rv.var); });
-
-    Expr inner_min, inner_extent, outer_min, outer_extent;
-    if ((iter_outer != rvars.end()) && (iter_inner != rvars.end())) {
-        debug(4) << "  Fusing " << s.outer << " and " << s.inner << " into " << s.old_var << "\n";
-
-        inner_min = iter_inner->min;
-        inner_extent = iter_inner->extent;
-        outer_min = iter_outer->min;
-        outer_extent = iter_outer->extent;
-
-        Expr extent = iter_outer->extent * iter_inner->extent;
-        iter_outer->var = s.old_var;
-        iter_outer->min = 0;
-        iter_outer->extent = extent;
-        rvars.erase(iter_inner);
-
-        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
-        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
-        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
-
-        return true;
-    }
-    return false;
-}
-
-/** Apply purify directives on the reduction variables and predicates. Purify
- * replace a RVar with a Var, thus, the RVar needs to be removed from the list.
- * Any reference to the RVar in the predicates will be replaced with reference
- * to a Var. */
-bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
-                  vector<Expr> &predicates, vector<Expr> &args,
-                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
-    internal_assert(s.split_type == Split::PurifyRVar);
-    const auto &iter = std::find_if(rvars.begin(), rvars.end(),
-                                    [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
-    if (iter != rvars.end()) {
-        debug(4) << "  Purify RVar " << iter->var << " into Var " << s.outer
-                 << ", deleting it from the rvars list\n";
-        rvars.erase(iter);
-
-        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
-        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
-        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
-
-        return true;
-    }
-    return false;
-}
-
-/** Apply rename directives on the reduction variables. */
-bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
-                  vector<Expr> &predicates, vector<Expr> &args,
-                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
-    internal_assert(s.split_type == Split::RenameVar);
-    const auto &iter = std::find_if(rvars.begin(), rvars.end(),
-                                    [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
-    if (iter != rvars.end()) {
-        debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
-        iter->var = s.outer;
-
-        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
-        vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
-        apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
-
-        return true;
-    }
-    return false;
-}
-
-/** Apply scheduling directives (e.g. split, fuse, etc.) on the reduction
- * variables. */
-bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
-                           vector<Expr> &predicates, vector<Expr> &args,
-                           vector<Expr> &values) {
-    map<string, Expr> dim_extent_alignment;
-    for (const ReductionVariable &rv : rvars) {
-        dim_extent_alignment[rv.var] = rv.extent;
-    }
-
-    vector<pair<string, Expr>> rvar_bounds;
-    for (const ReductionVariable &rv : rvars) {
-        rvar_bounds.emplace_back(rv.var + ".loop_min", rv.min);
-        rvar_bounds.emplace_back(rv.var + ".loop_max", simplify(rv.min + rv.extent - 1));
-        rvar_bounds.emplace_back(rv.var + ".loop_extent", rv.extent);
-    }
-
-    bool found = false;
-    switch (s.split_type) {
-    case Split::SplitVar:
-        found = apply_split(s, rvars, predicates, args, values, dim_extent_alignment);
-        break;
-    case Split::FuseVars:
-        found = apply_fuse(s, rvars, predicates, args, values, dim_extent_alignment);
-        break;
-    case Split::PurifyRVar:
-        found = apply_purify(s, rvars, predicates, args, values, dim_extent_alignment);
-        break;
-    case Split::RenameVar:
-        found = apply_rename(s, rvars, predicates, args, values, dim_extent_alignment);
-        break;
-    }
-
-    if (found) {
-        for (const auto &let : rvar_bounds) {
-            substitute_var_in_exprs(let.first, let.second, predicates);
-            substitute_var_in_exprs(let.first, let.second, args);
-            substitute_var_in_exprs(let.first, let.second, values);
-        }
-    }
-    return found;
-}
-
 }  // anonymous namespace
 
 Func Stage::rfactor(const RVar &r, const Var &v) {
@@ -811,320 +617,434 @@ Func Stage::rfactor(const RVar &r, const Var &v) {
     return rfactor({{r, v}});
 }
 
-Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
-    user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
+// Helpers for rfactor implementation
+namespace {
 
-    definition.schedule().touched() = true;
+struct DimHash {
+    std::size_t operator()(const Dim &s) const noexcept {
+        return std::hash<std::string>{}(s.var);
+    }
+};
+struct DimEq {
+    bool operator()(const Dim &lhs, const Dim &rhs) const noexcept {
+        return lhs.var == rhs.var;
+    }
+};
+using DimSet = std::unordered_set<Dim, DimHash, DimEq>;
 
-    const string &func_name = function.name();
-    vector<Expr> &args = definition.args();
-    vector<Expr> &values = definition.values();
+template<class T, class = void>
+struct has_name : std::false_type {};
 
-    // Figure out which pure vars were used in this update definition.
-    std::set<string> pure_vars_used;
-    internal_assert(args.size() == dim_vars.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        if (const Internal::Variable *var = args[i].as<Variable>()) {
-            if (var->name == dim_vars[i].name()) {
-                pure_vars_used.insert(var->name);
-            }
+template<class T>
+struct has_name<T, std::void_t<decltype(&T::name)>> : std::true_type {};
+
+template<typename T>
+std::optional<T> match_by_dim_name(const std::string &dim, const std::vector<T> &items) {
+    const auto has_v = std::find_if(items.begin(), items.end(), [&dim](auto &x) {
+        if constexpr (has_name<T>::value) {
+            return var_name_match(dim, x.name());
+        } else {
+            return var_name_match(dim, x.var);
         }
+    });
+    return has_v == items.end() ? std::nullopt : std::make_optional(*has_v);
+}
+
+template<typename T>
+std::optional<T> find_by_var_name(const std::vector<T> &items, const std::string &name) {
+    const auto has_v = std::find_if(items.begin(), items.end(), [&name](auto &x) {
+        if constexpr (has_name<T>::value) {
+            return var_name_match(x.name(), name);
+        } else {
+            return var_name_match(x.var, name);
+        }
+    });
+    return has_v == items.end() ? std::nullopt : std::make_optional(*has_v);
+}
+
+template<typename T>
+std::optional<T> find_by_var_name(const std::vector<T> &items, const VarOrRVar &v) {
+    return find_by_var_name(items, v.name());
+}
+
+std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved, const AssociativeOp &prover_result, const std::vector<Dim> &dims) {
+    if (!prover_result.associative()) {
+        return "can't perform rfactor() because we can't prove associativity of the operator";
     }
 
-    // Check whether the operator is associative and determine the operator and
-    // its identity for each value in the definition if it is a Tuple
-    const auto &prover_result = prove_associativity(func_name, args, values);
-
-    user_assert(prover_result.associative())
-        << "Failed to call rfactor() on " << name()
-        << " since it can't prove associativity of the operator\n";
-    internal_assert(prover_result.size() == values.size());
-
-    vector<Split> &splits = definition.schedule().splits();
-    vector<Dim> &dims = definition.schedule().dims();
-    vector<ReductionVariable> &rvars = definition.schedule().rvars();
-    vector<Expr> predicates = definition.split_predicate();
-
-    Scope<string> scope;  // Contains list of RVars lifted to the intermediate Func
-    vector<string> rvars_removed;
-
-    vector<bool> is_rfactored(dims.size(), false);
-    for (const pair<RVar, Var> &i : preserved) {
-        const RVar &rv = i.first;
-        const Var &v = i.second;
-        {
-            // Check that the RVar are in the dims list
-            const auto &iter = std::find_if(dims.begin(), dims.end(),
-                                            [&rv](const Dim &dim) { return var_name_match(dim.var, rv.name()); });
-            user_assert((iter != dims.end()) && (*iter).is_rvar())
-                << "In schedule for " << name()
-                << ", can't perform rfactor() on " << rv.name()
-                << " since it is not in the reduction domain\n"
-                << dump_argument_list();
-            is_rfactored[iter - dims.begin()] = true;
+    DimSet is_rfactored;
+    for (const auto &[rv, v] : preserved) {
+        // Check that the RVar are in the dims list
+        const auto &rv_dim = find_by_var_name(dims, rv);
+        if (!(rv_dim && rv_dim->is_rvar())) {
+            std::stringstream s;
+            s << "can't perform rfactor() on " << rv.name() << " since it is not in the reduction domain";
+            return s.str();
         }
-        {
-            // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
-            const auto &iter = std::find_if(dims.begin(), dims.end(),
-                                            [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
-            user_assert(iter == dims.end())
-                << "In schedule for " << name()
-                << ", can't rename the rvars " << rv.name() << " into " << v.name()
-                << ", since it is already used in this Func's schedule elsewhere.\n"
-                << dump_argument_list();
+        is_rfactored.insert(*rv_dim);
+
+        // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
+        const auto &v_dim = find_by_var_name(dims, v);
+        if (v_dim) {
+            std::stringstream s;
+            s << "can't rename the rvars " << rv.name() << " into " << v.name()
+              << ", since it is already used in this Func's schedule elsewhere.";
+            return s.str();
         }
     }
 
     // If the operator is associative but non-commutative, rfactor() on inner
     // dimensions (excluding the outer dimensions) is not valid.
     if (!prover_result.commutative()) {
-        int last_rvar = -1;
-        for (int i = dims.size() - 1; i >= 0; --i) {
-            if ((last_rvar != -1) && is_rfactored[i]) {
-                user_assert(is_rfactored[last_rvar])
-                    << "In schedule for " << name()
-                    << ", can't rfactor an inner dimension " << dims[i].var
-                    << " without rfactoring the outer dimensions, since the "
-                    << "operator is non-commutative.\n"
-                    << dump_argument_list();
+        std::optional<Dim> last_rvar;
+        for (const auto &d : reverse_view(dims)) {
+            if (is_rfactored.count(d) && last_rvar && !is_rfactored.count(*last_rvar)) {
+                std::stringstream s;
+                s << "can't rfactor an inner dimension " << d.var
+                  << " without rfactoring the outer dimensions, since the "
+                  << "operator is non-commutative.";
+                return s.str();
             }
-            if (dims[i].is_rvar()) {
-                last_rvar = i;
+            if (d.is_rvar()) {
+                last_rvar = d;
             }
         }
     }
 
-    // We need to apply the split directives on the reduction vars, so that we can
-    // correctly lift the RVars not in 'rvars_kept' and distribute the RVars to the
-    // intermediate and merge Funcs.
+    return std::nullopt;
+}
+
+template<typename T>
+std::vector<T> &operator+=(std::vector<T> &base, const std::vector<T> &other) {
+    base.insert(base.end(), other.begin(), other.end());
+    return base;
+}
+
+template<typename T, typename U>
+std::vector<T> &operator+=(std::vector<T> &base, const std::vector<U> &other) {
+    std::copy(other.begin(), other.end(), std::back_inserter(base));
+    return base;
+}
+
+template<typename T>
+std::vector<T> operator+(const std::vector<T> &base, const std::vector<T> &other) {
+    std::vector<T> merged = base;
+    merged += other;
+    return merged;
+}
+
+template<typename T, typename U>
+std::vector<T> operator+(const std::vector<T> &base, const std::vector<U> &other) {
+    std::vector<T> merged = base;
+    merged += other;
+    return merged;
+}
+
+template<typename U, typename V>
+std::vector<U> copy_convert(const std::vector<V> &vec) {
+    return std::vector<U>{} + vec;
+}
+
+using SubstitutionMap = std::map<std::string, Expr>;
+
+// This is a helper function for building up a substitution map that
+// corresponds to pushing down a nest of lets. The lets should be fed
+// to this function from innermost to outermost. This is equivalent to
+// building a let-nest as a one-hole context and then simplifying.
+void add_let(SubstitutionMap &proj, const std::string &name, const Expr &value) {
+    for (auto &[_, e] : proj) {
+        e = substitute(name, value, e);
+    }
+    proj.emplace(name, value);
+}
+
+void rebind(SubstitutionMap &proj, const std::string &name, const Expr &value) {
+    for (auto &[_, e] : proj) {
+        e = substitute(name, value, e);
+    }
+    if (!proj.count(name)) {
+        proj.emplace(name, value);
+    }
+}
+
+std::pair<ReductionDomain, SubstitutionMap> project_rdom(const std::vector<Dim> &dims, const Definition &def) {
+    const auto &rdom = def.schedule().rvars();
+    const auto &splits = def.schedule().splits();
+    const auto &predicate = def.predicate();
+
+    // Compute new bounds for the RDom by walking backwards through the splits.
+    SubstitutionMap bounds_projection{};
+    for (const Split &split : reverse_view(splits)) {
+        for (const auto &[name, value] : compute_loop_bounds_after_split(split, "")) {
+            add_let(bounds_projection, name, value);
+        }
+    }
+    for (const ReductionVariable &rv : rdom) {
+        add_let(bounds_projection, rv.var + ".loop_min", rv.min);
+        add_let(bounds_projection, rv.var + ".loop_max", rv.min + rv.extent - 1);
+        add_let(bounds_projection, rv.var + ".loop_extent", rv.extent);
+    }
+
+    // Build the new RDom
+    std::vector<ReductionVariable> new_rvars;
+    for (const Dim &dim : dims) {
+        Expr new_min = substitute(bounds_projection, Variable::make(Int(32), dim.var + ".loop_min"));
+        Expr new_extent = substitute(bounds_projection, Variable::make(Int(32), dim.var + ".loop_extent"));
+        new_rvars.push_back(ReductionVariable{dim.var, simplify(new_min), simplify(new_extent)});
+    }
+    ReductionDomain new_rdom{new_rvars};
+    new_rdom.where(predicate);
+
+    // Compute the mapping of old dimensions to the projected RDom values.
+    SubstitutionMap dim_projection{};
+    SubstitutionMap dim_extent_alignment{};
+    for (const ReductionVariable &rv : rdom) {
+        add_let(dim_projection, rv.var, Variable::make(Int(32), rv.var));
+        dim_extent_alignment[rv.var] = rv.extent;
+    }
+    for (const Split &split : splits) {
+        for (const auto &result : apply_split(split, "", dim_extent_alignment)) {
+            switch (result.type) {
+            case ApplySplitResult::Substitution:
+            case ApplySplitResult::SubstitutionInCalls:
+            case ApplySplitResult::SubstitutionInProvides:
+            case ApplySplitResult::LetStmt:
+                add_let(dim_projection, result.name, result.value);
+                break;
+            case ApplySplitResult::PredicateCalls:
+            case ApplySplitResult::PredicateProvides:
+            case ApplySplitResult::Predicate:
+                new_rdom.where(substitute(bounds_projection, result.value));
+                break;
+            case ApplySplitResult::BlendProvides:
+                // TODO: what to do here? BlendProvides is not included in the above checks.
+                break;
+            }
+        }
+    }
+    for (auto &[_, e] : dim_projection) {
+        e = substitute(bounds_projection, e);
+    }
+    for (const ReductionVariable &rv : new_rdom.domain()) {
+        rebind(dim_projection, rv.var, Variable::make(Int(32), rv.var, new_rdom));
+    }
+
+    return std::make_pair(new_rdom, dim_projection);
+}
+
+}  // namespace
+
+Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
+    user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
+
+    definition.schedule().touched() = true;
+
+    // Check whether the operator is associative and determine the operator and
+    // its identity for each value in the definition if it is a Tuple
+    const auto &prover_result = prove_associativity(function.name(), definition.args(), definition.values());
+
+    const auto &error = rfactor_validate_args(preserved, prover_result, definition.schedule().dims());
+    user_assert(!error) << "In schedule for " << name() << ": " << *error << "\n"
+                        << dump_argument_list();
+
+    // sort preserved by the dimension ordering
+    vector<RVar> preserved_rvars;
+    vector<Var> preserved_vars;
+    vector<Dim> preserved_rdims;
+    vector<Dim> intermediate_rdims;
     {
-        vector<Split> temp;
-        for (const Split &s : splits) {
-            // If it's already applied, we should remove it from the split list.
-            if (!apply_split_directive(s, rvars, predicates, args, values)) {
-                temp.push_back(s);
+        std::unordered_map<std::string, int> dim_ordering;
+        for (int i = 0; i < definition.schedule().dims().size(); i++) {
+            dim_ordering.emplace(definition.schedule().dims()[i].var, i);
+        }
+
+        std::vector<std::tuple<RVar, Var, Dim>> preserved_with_dims;
+        for (const auto &[rv, v] : preserved) {
+            const std::optional<Dim> rdim = find_by_var_name(definition.schedule().dims(), rv);
+            internal_assert(rdim);
+            preserved_with_dims.emplace_back(rv, v, *rdim);
+        }
+
+        std::sort(preserved_with_dims.begin(), preserved_with_dims.end(), [&](const auto &lhs, const auto &rhs) {
+            return dim_ordering.at(std::get<2>(lhs).var) < dim_ordering.at(std::get<2>(rhs).var);
+        });
+
+        for (const auto &[rv, v, dim] : preserved_with_dims) {
+            preserved_rvars.push_back(rv);
+            preserved_vars.push_back(v);
+            preserved_rdims.push_back(dim);
+        }
+
+        for (const Dim &dim : definition.schedule().dims()) {
+            if (dim.is_rvar() && !match_by_dim_name(dim.var, preserved_rvars)) {
+                intermediate_rdims.push_back(dim);
             }
         }
-        splits = temp;
     }
 
-    // Reduction domain of the intermediate update definition
-    vector<ReductionVariable> intm_rvars;
-    for (const auto &rv : rvars) {
-        const auto &iter = std::find_if(preserved.begin(), preserved.end(),
-                                        [&rv](const pair<RVar, Var> &pair) { return var_name_match(rv.var, pair.first.name()); });
-        if (iter == preserved.end()) {
-            intm_rvars.push_back(rv);
-            scope.push(rv.var, rv.var);
-        }
-    }
-    RDom intm_rdom(intm_rvars);
+    // Intermediate func
+    Func intm(function.name() + "_intm");
 
-    // Sort the Rvars kept and their Vars replacement based on the RVars of
-    // the reduction domain AFTER applying the split directives, so that we
-    // can have a consistent args order for the update definition of the
-    // intermediate and new merge Funcs.
-    std::sort(preserved.begin(), preserved.end(),
-              [&](const pair<RVar, Var> &lhs, const pair<RVar, Var> &rhs) {
-                  const auto &iter_lhs = std::find_if(rvars.begin(), rvars.end(),
-                                                      [&lhs](const ReductionVariable &rv) { return var_name_match(rv.var, lhs.first.name()); });
-                  const auto &iter_rhs = std::find_if(rvars.begin(), rvars.end(),
-                                                      [&rhs](const ReductionVariable &rv) { return var_name_match(rv.var, rhs.first.name()); });
-                  return iter_lhs < iter_rhs;
-              });
-    // The list of RVars to keep in the new update definition
-    vector<RVar> rvars_kept(preserved.size());
-    // List of pure Vars to replace the RVars in the intermediate's update definition
-    vector<Var> vars_rename(preserved.size());
-    for (size_t i = 0; i < preserved.size(); ++i) {
-        const auto &val = preserved[i];
-        rvars_kept[i] = val.first;
-        vars_rename[i] = val.second;
-    }
-
-    // List of RVars for the new reduction domain. Any RVars not in 'rvars_kept'
-    // are removed from the RDom
+    // Intermediate pure definition
     {
-        vector<ReductionVariable> temp;
-        for (const auto &rv : rvars) {
-            const auto &iter = std::find_if(rvars_kept.begin(), rvars_kept.end(),
-                                            [&rv](const RVar &rvar) { return var_name_match(rv.var, rvar.name()); });
-            if (iter != rvars_kept.end()) {
-                temp.push_back(rv);
+        intm(dim_vars + preserved_vars) = Tuple(prover_result.pattern.identities);
+    }
+
+    // Intermediate update definition
+    {
+        auto [intermediate_rdom, intermediate_map] = project_rdom(intermediate_rdims, definition);
+        for (int i = 0; i < preserved.size(); i++) {
+            rebind(intermediate_map, preserved_rdims[i].var, preserved_vars[i]);
+        }
+        for (const auto &var : dim_vars) {
+            intermediate_map.erase(var.name());
+        }
+
+        intermediate_rdom.set_predicate(simplify(substitute(intermediate_map, intermediate_rdom.predicate())));
+
+        vector<Expr> args = definition.args() + preserved_vars;
+        vector<Expr> values;
+        for (const auto &val : definition.values()) {
+            values.push_back(substitute_self_reference(val, function.name(), intm.function(), preserved_vars));
+        }
+        args = substitute(intermediate_map, args);
+        values = substitute(intermediate_map, values);
+        intm.function().define_update(args, values, intermediate_rdom);
+
+        // Intermediate schedule
+        intm.function().update(0).schedule() = definition.schedule().get_copy();
+
+        auto &intm_dims = intm.function().update(0).schedule().dims();
+
+        // Replace rvar dims IN the preserved list with their Vars in the INTERMEDIATE Func
+        for (auto &dim : intm_dims) {
+            const auto it = std::find_if(preserved_rvars.begin(), preserved_rvars.end(), [&](const auto &rv) {
+                return var_name_match(dim.var, rv.name());
+            });
+            if (it != preserved_rvars.end()) {
+                const auto offset = it - preserved_rvars.begin();
+                const auto &var = preserved_vars[offset];
+                const auto &pure_dim = find_by_var_name(intm.function().definition().schedule().dims(), var);
+                internal_assert(pure_dim);
+                dim = *pure_dim;
+            }
+        }
+
+        // Add factored pure dims to the INTERMEDIATE func just before outermost
+        DimSet dims;
+        dims.insert(intm_dims.begin(), intm_dims.end());
+        for (const Var &dim_v : preserved_vars) {
+            const std::optional<Dim> &dim = find_by_var_name(intm.function().definition().schedule().dims(), dim_v);
+            internal_assert(dim) << "Failed to find " << dim_v.name() << " in list of pure dims";
+            if (!dims.count(*dim)) {
+                intm_dims.insert(intm_dims.end() - 1, *dim);
+            }
+        }
+
+        intm.function().update(0).schedule().rvars() = intermediate_rdom.domain();
+    }
+
+    // Preserved update definition
+    {
+        auto [preserved_rdom, _] = project_rdom(preserved_rdims, definition);
+
+        // Replace the current definition with calls to the intermediate func.
+        vector<Expr> dim_exprs = copy_convert<Expr>(dim_vars);
+        vector<Expr> f_load_args = dim_exprs;
+        for (const ReductionVariable &rv : preserved_rdom.domain()) {
+            f_load_args.push_back(Variable::make(Int(32), rv.var, preserved_rdom));
+        }
+
+        SubstitutionMap replacements;
+        for (size_t i = 0; i < preserved.size(); i++) {
+            replacements.emplace(preserved_rdims[i].var, preserved_vars[i]);
+        }
+        for (size_t i = 0; i < definition.values().size(); ++i) {
+            if (!prover_result.ys[i].var.empty()) {
+                Expr r = (definition.values().size() == 1) ? Expr(intm(f_load_args)) : Expr(intm(f_load_args)[i]);
+                replacements.emplace(prover_result.ys[i].var, r);
+            }
+
+            if (!prover_result.xs[i].var.empty()) {
+                Expr prev_val = Call::make(intm.types()[i], function.name(),
+                                           dim_exprs, Call::CallType::Halide,
+                                           FunctionPtr(), i);
+                replacements.emplace(prover_result.xs[i].var, prev_val);
             } else {
-                rvars_removed.push_back(rv.var);
+                user_warning << "Update definition of " << name() << " at index " << i
+                             << " doesn't depend on the previous value. This isn't a"
+                             << " reduction operation\n";
             }
         }
-        rvars.swap(temp);
-    }
-    RDom f_rdom(rvars);
 
-    // Init definition of the intermediate Func
+        std::vector<Dim> reducing_dims;
+        {
+            DimSet preserved_rdim_set;
+            preserved_rdim_set.insert(preserved_rdims.begin(), preserved_rdims.end());
 
-    // Compute args of the init definition of the intermediate Func.
-    // Replace the RVars, which are in 'rvars_kept', with the specified new pure
-    // Vars. Also, add the pure Vars of the original init definition as part of
-    // the args.
-    // For example, if we have the following Func f:
-    //   f(x, y) = 10
-    //   f(r.x, r.y) += h(r.x, r.y)
-    // Calling f.update(0).rfactor({{r.y, u}}) will generate the following
-    // intermediate Func:
-    //   f_intm(x, y, u) = 0
-    //   f_intm(r.x, u, u) += h(r.x, u)
+            // Remove rvar dims NOT IN the preserved list from the REDUCING Func
+            for (const auto &dim : definition.schedule().dims()) {
+                if (!dim.is_rvar() || preserved_rdim_set.count(dim)) {
+                    reducing_dims.push_back(dim);
+                }
+            }
 
-    vector<Var> init_args;
-    init_args.insert(init_args.end(), dim_vars.begin(), dim_vars.end());
-    init_args.insert(init_args.end(), vars_rename.begin(), vars_rename.end());
-
-    vector<Expr> init_vals(values.size());
-    for (size_t i = 0; i < init_vals.size(); ++i) {
-        init_vals[i] = prover_result.pattern.identities[i];
-    }
-
-    Func intm(func_name + "_intm");
-    intm(init_args) = Tuple(init_vals);
-
-    // Args of the update definition of the intermediate Func
-    vector<Expr> update_args(args.size() + vars_rename.size());
-
-    // We need to substitute the reference to the old RDom's RVars with
-    // the new RDom's RVars. Also, substitute the reference to RVars which
-    // are in 'rvars_kept' with their corresponding new pure Vars
-    map<string, Expr> substitution_map;
-    for (size_t i = 0; i < intm_rvars.size(); ++i) {
-        substitution_map[intm_rvars[i].var] = intm_rdom[i];
-    }
-    for (size_t i = 0; i < vars_rename.size(); i++) {
-        update_args[i + args.size()] = vars_rename[i];
-        RVar rvar_kept = rvars_kept[i];
-        // Find the full name of rvar_kept in rvars
-        const auto &iter = std::find_if(rvars.begin(), rvars.end(),
-                                        [&rvar_kept](const ReductionVariable &rv) { return var_name_match(rv.var, rvar_kept.name()); });
-        substitution_map[iter->var] = vars_rename[i];
-    }
-    for (size_t i = 0; i < args.size(); i++) {
-        Expr arg = substitute(substitution_map, args[i]);
-        update_args[i] = arg;
-    }
-
-    // Compute the predicates for the intermediate Func and the new update definition
-    for (const Expr &pred : predicates) {
-        Expr subs_pred = substitute(substitution_map, pred);
-        intm_rdom.where(subs_pred);
-        if (!expr_uses_vars(pred, scope)) {
-            // Only keep the predicate that does not depend on the lifted RVars
-            // (either explicitly or implicitly). For example, if 'rx' is split
-            // into 'rxo' and 'rxi' and 'rxo' is part of the lifted RVars, we'll
-            // ignore every predicate that depends on 'rx'
-            f_rdom.where(pred);
-        }
-    }
-    definition.predicate() = f_rdom.domain().predicate();
-
-    // The update values the intermediate Func should compute
-    vector<Expr> update_vals(values.size());
-    for (size_t i = 0; i < update_vals.size(); i++) {
-        Expr val = substitute(substitution_map, values[i]);
-        // Need to update the self-reference in the update definition to point
-        // to the new intermediate Func
-        val = substitute_self_reference(val, func_name, intm.function(), vars_rename);
-        update_vals[i] = val;
-    }
-    // There may not actually be a reference to the RDom in the args or values,
-    // so we use Function::define_update, which lets pass pass an explicit RDom.
-    intm.function().define_update(update_args, update_vals, intm_rdom.domain());
-
-    // Determine the dims and schedule of the update definition of the
-    // intermediate Func. We copy over the schedule from the original
-    // update definition (e.g. split, parallelize, vectorize, etc.)
-    intm.function().update(0).schedule().dims() = dims;
-    intm.function().update(0).schedule().splits() = splits;
-
-    // Copy over the storage order of the original pure dims
-    vector<StorageDim> &intm_storage_dims = intm.function().schedule().storage_dims();
-    internal_assert(intm_storage_dims.size() ==
-                    function.schedule().storage_dims().size() + vars_rename.size());
-    for (size_t i = 0; i < function.schedule().storage_dims().size(); ++i) {
-        intm_storage_dims[i] = function.schedule().storage_dims()[i];
-    }
-
-    for (size_t i = 0; i < rvars_kept.size(); ++i) {
-        // Apply the purify directive that replaces the RVar in rvars_kept
-        // with a pure Var
-        intm.update(0).purify(rvars_kept[i], vars_rename[i]);
-    }
-
-    // Determine the dims of the new update definition
-
-    // The new update definition needs all the pure vars of the Func, but the
-    // one we're rfactoring may not have used them all. Add any missing ones to
-    // the dims list.
-
-    // Add pure Vars from the original init definition to the dims list
-    // if they are not already in the list
-    for (const Var &v : dim_vars) {
-        if (!pure_vars_used.count(v.name())) {
-            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
-            // Insert it just before Var::outermost
-            dims.insert(dims.end() - 1, d);
-        }
-    }
-
-    // Then, we need to remove lifted RVars from the dims list
-    for (const string &rv : rvars_removed) {
-        remove(rv);
-    }
-
-    // Define the new update definition which refers to the intermediate Func.
-    // Using the same example as above, the new update definition is:
-    //   f(x, y) += f_intm(x, y, r.y)
-
-    // Args for store in the new update definition
-    vector<Expr> f_store_args(dim_vars.size());
-    for (size_t i = 0; i < f_store_args.size(); ++i) {
-        f_store_args[i] = dim_vars[i];
-    }
-
-    // Call's args to the intermediate Func in the new update definition
-    vector<Expr> f_load_args;
-    f_load_args.insert(f_load_args.end(), dim_vars.begin(), dim_vars.end());
-    for (int i = 0; i < f_rdom.dimensions(); ++i) {
-        f_load_args.push_back(f_rdom[i]);
-    }
-    internal_assert(f_load_args.size() == init_args.size());
-
-    // Update value of the new update definition. It loads values from
-    // the intermediate Func.
-    vector<Expr> f_values(values.size());
-
-    // There might be cross-dependencies between tuple elements, so we need
-    // to collect all substitutions first.
-    map<string, Expr> replacements;
-    for (size_t i = 0; i < f_values.size(); ++i) {
-        if (!prover_result.ys[i].var.empty()) {
-            Expr r = (values.size() == 1) ? Expr(intm(f_load_args)) : Expr(intm(f_load_args)[i]);
-            replacements.emplace(prover_result.ys[i].var, r);
+            // Add missing pure vars to the REDUCING func just before outermost
+            for (int i = 0; i < dim_vars.size(); i++) {
+                if (!expr_uses_var(definition.args()[i], dim_vars[i].name())) {
+                    Dim d = {dim_vars[i].name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
+                    reducing_dims.insert(reducing_dims.end() - 1, d);
+                }
+            }
         }
 
-        if (!prover_result.xs[i].var.empty()) {
-            Expr prev_val = Call::make(intm.types()[i], func_name,
-                                       f_store_args, Call::CallType::Halide,
-                                       FunctionPtr(), i);
-            replacements.emplace(prover_result.xs[i].var, prev_val);
-        } else {
-            user_warning << "Update definition of " << name() << " at index " << i
-                         << " doesn't depend on the previous value. This isn't a"
-                         << " reduction operation\n";
-        }
-    }
-    for (size_t i = 0; i < f_values.size(); ++i) {
-        f_values[i] = substitute(replacements, prover_result.pattern.ops[i]);
+        definition.args() = dim_exprs;
+        definition.predicate() = const_true();  // TODO: replace with strongest postcondition of the intermediate predicate with the eliminated rvars havoc'd
+        definition.schedule().dims() = std::move(reducing_dims);
+        definition.schedule().rvars() = preserved_rdom.domain();
+        definition.values() = substitute(replacements, prover_result.pattern.ops);
     }
 
-    // Update the definition
-    args.swap(f_store_args);
-    values.swap(f_values);
+    // Clean up the splits lists
+    for (Stage st : {*this, intm.update(0)}) {
+        Scope<> dims;
+        for (const Var &v : st.dim_vars) {
+            dims.push(v.name());
+        }
+        for (const ReductionVariable &rv : st.definition.schedule().rvars()) {
+            dims.push(rv.var);
+        }
+        std::vector<Split> new_splits;
+        for (const Split &split : st.definition.schedule().splits()) {
+            switch (split.split_type) {
+            case Split::SplitVar:
+                if (dims.contains(split.old_var)) {
+                    dims.pop(split.old_var);
+                    dims.push(split.outer);
+                    dims.push(split.inner);
+                    new_splits.push_back(split);
+                }
+                break;
+            case Split::FuseVars:
+                if (dims.contains(split.outer) && dims.contains(split.inner)) {
+                    dims.pop(split.outer);
+                    dims.pop(split.inner);
+                    dims.push(split.old_var);
+                    new_splits.push_back(split);
+                }
+                break;
+            case Split::PurifyRVar:
+            case Split::RenameVar:
+                if (dims.contains(split.old_var)) {
+                    dims.pop(split.old_var);
+                    dims.push(split.outer);
+                    new_splits.push_back(split);
+                }
+                break;
+            }
+        }
+        st.definition.schedule().splits().swap(new_splits);
+    }
 
     return intm;
 }
@@ -1187,7 +1107,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     bool round_up_ok = !exact;
     if (round_up_ok && !definition.is_init()) {
         // If it's the outermost split in this dimension, RoundUp
-        // is OK. Otherwise we need GuardWithIf to avoid
+        // is OK. Otherwise, we need GuardWithIf to avoid
         // recomputing values in the case where the inner split
         // factor does not divide the outer split factor.
         std::set<string> inner_vars;
@@ -1224,7 +1144,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     bool predicate_loads_ok = !exact;
     if (predicate_loads_ok && tail == TailStrategy::PredicateLoads) {
         // If it's the outermost split in this dimension, PredicateLoads
-        // is OK. Otherwise we can't prove it's safe.
+        // is OK. Otherwise, we can't prove it's safe.
         std::set<string> inner_vars;
         for (const Split &s : definition.schedule().splits()) {
             switch (s.split_type) {

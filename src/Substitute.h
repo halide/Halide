@@ -37,6 +37,16 @@ Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr);
 Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt);
 // @}
 
+/** Substitute a container of Exprs or Stmts out of place */
+template<typename T>
+T substitute(const std::map<std::string, Expr> &replacements, const T &container) {
+    T output;
+    std::transform(container.begin(), container.end(), std::back_inserter(output), [&](const auto &expr_or_stmt) {
+        return substitute(replacements, expr_or_stmt);
+    });
+    return output;
+}
+
 /** Substitutions where the IR may be a general graph (and not just a
  * DAG). */
 // @{
