@@ -353,13 +353,12 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 expr_adjoints[output_expr] = 1.f;
             }
 
-            // Traverse the expressions in reverse order
-            for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
-                if (it->type().is_handle()) {
+            for (Expr &e : reverse_view(expr_list)) {
+                if (e.type().is_handle()) {
                     // Ignore pointer types
                     continue;
                 }
-                it->accept(this);
+                e.accept(this);
             }
 
             auto error = [&]() {
@@ -700,14 +699,13 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                     }
                 }
 
-                // Traverse the expressions in reverse order
-                for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
-                    if (it->type().is_handle()) {
+                for (Expr &e : reverse_view(expr_list)) {
+                    if (e.type().is_handle()) {
                         // Ignore pointer types
                         continue;
                     }
                     // Propagate adjoints
-                    it->accept(this);
+                    e.accept(this);
                 }
             }
             if (is_current_non_overwriting_scan) {
@@ -742,14 +740,13 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                                    update_args, i);
                 }
 
-                // Traverse the expressions in reverse order
-                for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
-                    if (it->type().is_handle()) {
+                for (Expr &e : reverse_view(expr_list)) {
+                    if (e.type().is_handle()) {
                         // Ignore pointer types
                         continue;
                     }
                     // Propagate adjoints
-                    it->accept(this);
+                    e.accept(this);
                 }
             }
         }

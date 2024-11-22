@@ -61,8 +61,8 @@ class BoundLoops : public IRMutator {
             if (e == nullptr) {
                 // We're about to hard fail. Get really aggressive
                 // with the simplifier.
-                for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                    extent = Let::make(it->first, it->second, extent);
+                for (const auto &[var, value] : reverse_view(lets)) {
+                    extent = Let::make(var, value, extent);
                 }
                 extent = remove_likelies(extent);
                 extent = substitute_in_all_lets(extent);

@@ -239,8 +239,8 @@ class CSEEveryExprInStmt : public IRMutator {
         internal_assert(bundle && bundle->args.size() == 2);
         Stmt s = Store::make(op->name, bundle->args[0], bundle->args[1],
                              op->param, mutate(op->predicate), op->alignment);
-        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-            s = LetStmt::make(it->first, it->second, s);
+        for (const auto &[var, value] : reverse_view(lets)) {
+            s = LetStmt::make(var, value, s);
         }
         return s;
     }

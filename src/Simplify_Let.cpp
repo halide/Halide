@@ -280,33 +280,33 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
     }
     find_var_uses(result, unused_vars);
 
-    for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-        if (it->value_bounds_tracked) {
-            bounds_and_alignment_info.pop(it->op->name);
+    for (const auto &frame : reverse_view(frames)) {
+        if (frame.value_bounds_tracked) {
+            bounds_and_alignment_info.pop(frame.op->name);
         }
-        if (it->new_value_bounds_tracked) {
-            bounds_and_alignment_info.pop(it->new_name);
+        if (frame.new_value_bounds_tracked) {
+            bounds_and_alignment_info.pop(frame.new_name);
         }
 
-        if (it->new_value.defined() && (it->info.new_uses > 0 && !unused_vars.count(it->new_name))) {
+        if (frame.new_value.defined() && (frame.info.new_uses > 0 && !unused_vars.count(frame.new_name))) {
             // The new name/value may be used
-            result = LetOrLetStmt::make(it->new_name, it->new_value, result);
-            find_var_uses(it->new_value, unused_vars);
+            result = LetOrLetStmt::make(frame.new_name, frame.new_value, result);
+            find_var_uses(frame.new_value, unused_vars);
         }
 
         if ((!remove_dead_code && std::is_same<LetOrLetStmt, LetStmt>::value) ||
-            (it->info.old_uses > 0 && !unused_vars.count(it->op->name))) {
+            (frame.info.old_uses > 0 && !unused_vars.count(frame.op->name))) {
             // The old name is still in use. We'd better keep it as well.
-            result = LetOrLetStmt::make(it->op->name, it->value, result);
-            find_var_uses(it->value, unused_vars);
+            result = LetOrLetStmt::make(frame.op->name, frame.value, result);
+            find_var_uses(frame.value, unused_vars);
         }
 
         const LetOrLetStmt *new_op = result.template as<LetOrLetStmt>();
         if (new_op &&
-            new_op->name == it->op->name &&
-            new_op->body.same_as(it->op->body) &&
-            new_op->value.same_as(it->op->value)) {
-            result = it->op;
+            new_op->name == frame.op->name &&
+            new_op->body.same_as(frame.op->body) &&
+            new_op->value.same_as(frame.op->value)) {
+            result = frame.op;
         }
     }
 

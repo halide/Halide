@@ -1000,12 +1000,12 @@ class VectorSubs : public IRMutator {
             body = mutate(body);
 
             // Append vectorized lets for this loop level.
-            for (auto let = containing_lets.rbegin(); let != containing_lets.rend(); let++) {
+            for (const auto &[var, _] : reverse_view(containing_lets)) {
                 // Skip if this var wasn't vectorized.
-                if (!scope.contains(let->first)) {
+                if (!scope.contains(var)) {
                     continue;
                 }
-                string vectorized_name = get_widened_var_name(let->first);
+                string vectorized_name = get_widened_var_name(var);
                 Expr vectorized_value = vector_scope.get(vectorized_name);
                 vector_scope.pop(vectorized_name);
                 InterleavedRamp ir;
