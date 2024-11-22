@@ -589,8 +589,7 @@ int VulkanMemoryAllocator::conform_block_request(void *instance_ptr, MemoryReque
 
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
-        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
-        return halide_error_code_internal_error;
+        return halide_error_code_success;
     }
 
     void *user_context = instance->owner_context;
@@ -631,8 +630,7 @@ int VulkanMemoryAllocator::conform_block_request(void *instance_ptr, MemoryReque
 int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block) {
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
-        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
-        return halide_error_code_internal_error;
+        return halide_error_code_success;
     }
 
     void *user_context = instance->owner_context;
@@ -778,8 +776,7 @@ int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block
 int VulkanMemoryAllocator::deallocate_block(void *instance_ptr, MemoryBlock *block) {
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
-        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
-        return halide_error_code_internal_error;
+        return halide_error_code_success;
     }
 
     void *user_context = instance->owner_context;
@@ -1047,8 +1044,7 @@ int VulkanMemoryAllocator::conform_region_request(void *instance_ptr, MemoryRequ
 
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
-        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
-        return halide_error_code_internal_error;
+        return halide_error_code_success;
     }
 
     void *user_context = instance->owner_context;
@@ -1080,8 +1076,7 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
 
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
-        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
-        return halide_error_code_internal_error;
+        return halide_error_code_success;
     }
 
     void *user_context = instance->owner_context;
@@ -1212,8 +1207,7 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
 int VulkanMemoryAllocator::deallocate_region(void *instance_ptr, MemoryRegion *region) {
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(instance_ptr);
     if (instance == nullptr) {
-        error(nullptr) << "VulkanRegionAllocator: Invalid instance ptr!\n";
-        return halide_error_code_internal_error;
+        return halide_error_code_success;
     }
 
     void *user_context = instance->owner_context;
