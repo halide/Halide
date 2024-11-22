@@ -916,7 +916,7 @@ void IRPrinter::visit(const For *op) {
     print_no_parens(op->extent);
     stream << ") ";
 
-    print_braced_stmt(op->body);
+    print_braced_stmt(op->body, 1);
 }
 
 void IRPrinter::visit(const Acquire *op) {
