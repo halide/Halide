@@ -67,6 +67,7 @@ struct VulkanCompiledShaderModule {
 
 // Compilation cache for compiled shader modules
 struct VulkanCompilationCacheEntry {
+    VulkanMemoryAllocator *allocator = nullptr;
     VulkanCompiledShaderModule **compiled_modules = nullptr;
     uint32_t module_count = 0;
 };
@@ -1395,6 +1396,7 @@ VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, Vulkan
         return nullptr;
     }
     cache_entry->module_count = kernel_count;
+    cache_entry->allocator = allocator;
 
     // Allocate a temp buffer to decode the binary sizes of each "SPIR-V Module"
     uint32_t *binary_sizes = (uint32_t *)vk_system_malloc(user_context, sizeof(uint32_t) * kernel_count);
@@ -1558,96 +1560,111 @@ VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanM
     return compiled_module;
 }
 
+void vk_destroy_compiled_shader_module(VulkanCompiledShaderModule *shader_module, VulkanMemoryAllocator *allocator) {
+    void *user_context = nullptr;
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << " vk_destroy_compiled_shader_module (shader_module: "
+        << shader_module << ", allocator: " << allocator << ")\n";
+#endif
+
+    if (shader_module == nullptr) {
+        return;
+    }
+
+    if (allocator == nullptr) {
+        return;
+    }
+
+    if (shader_module->descriptor_set_layouts) {
+        for (uint32_t n = 0; n < shader_module->shader_count; n++) {
+            debug(user_context) << "  destroying descriptor set layout [" << n << "] " << shader_module->shader_bindings[n].entry_point_name << "\n";
+            vk_destroy_descriptor_set_layout(user_context, allocator, shader_module->descriptor_set_layouts[n]);
+            shader_module->descriptor_set_layouts[n] = {0};
+        }
+        vk_host_free(user_context, shader_module->descriptor_set_layouts, allocator->callbacks());
+        shader_module->descriptor_set_layouts = nullptr;
+    }
+    if (shader_module->pipeline_layout) {
+        debug(user_context) << "  destroying pipeline layout " << (void *)shader_module->pipeline_layout << "\n";
+        vk_destroy_pipeline_layout(user_context, allocator, shader_module->pipeline_layout);
+        shader_module->pipeline_layout = {0};
+    }
+
+    if (shader_module->shader_bindings) {
+        for (uint32_t n = 0; n < shader_module->shader_count; n++) {
+            if (shader_module->shader_bindings[n].args_region) {
+                vk_destroy_scalar_uniform_buffer(user_context, allocator, shader_module->shader_bindings[n].args_region);
+                shader_module->shader_bindings[n].args_region = nullptr;
+            }
+            if (shader_module->shader_bindings[n].descriptor_pool) {
+                vk_destroy_descriptor_pool(user_context, allocator, shader_module->shader_bindings[n].descriptor_pool);
+                shader_module->shader_bindings[n].descriptor_pool = {0};
+            }
+            if (shader_module->shader_bindings[n].specialization_constants) {
+                vk_host_free(user_context, shader_module->shader_bindings[n].specialization_constants, allocator->callbacks());
+                shader_module->shader_bindings[n].specialization_constants = nullptr;
+            }
+            if (shader_module->shader_bindings[n].shared_memory_allocations) {
+                vk_host_free(user_context, shader_module->shader_bindings[n].shared_memory_allocations, allocator->callbacks());
+                shader_module->shader_bindings[n].shared_memory_allocations = nullptr;
+            }
+            if (shader_module->shader_bindings[n].compute_pipeline) {
+                vk_destroy_compute_pipeline(user_context, allocator, shader_module->shader_bindings[n].compute_pipeline);
+                shader_module->shader_bindings[n].compute_pipeline = {0};
+            }
+        }
+        vk_host_free(user_context, shader_module->shader_bindings, allocator->callbacks());
+        shader_module->shader_bindings = nullptr;
+    }
+    if (shader_module->shader_module) {
+        debug(user_context) << " . destroying shader module " << (void *)shader_module->shader_module << "\n";
+        vkDestroyShaderModule(allocator->current_device(), shader_module->shader_module, allocator->callbacks());
+        shader_module->shader_module = {0};
+    }
+    shader_module->shader_count = 0;
+    vk_host_free(user_context, shader_module, allocator->callbacks());
+    shader_module = nullptr;
+}
+
+void vk_destroy_compilation_cache_entry(VulkanCompilationCacheEntry *cache_entry) {
+    void *user_context = nullptr;
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << " vk_destroy_compilation_cache_entry (cache_entry: " << cache_entry << ")\n";
+#endif
+
+    if (cache_entry == nullptr) {
+        return;
+    }
+
+    VulkanMemoryAllocator *allocator = cache_entry->allocator;
+    if (allocator == nullptr) {
+        return;
+    }
+
+    for (uint32_t m = 0; m < cache_entry->module_count; m++) {
+        VulkanCompiledShaderModule *shader_module = cache_entry->compiled_modules[m];
+        vk_destroy_compiled_shader_module(shader_module, allocator);
+    }
+
+    cache_entry->module_count = 0;
+    cache_entry->allocator = nullptr;
+    vk_host_free(user_context, cache_entry, allocator->callbacks());
+    cache_entry = nullptr;
+    return;
+}
+
 int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocator) {
 
 #ifdef DEBUG_RUNTIME
     debug(user_context)
-        << " vk_destroy_shader_modules (user_context: " << user_context << ", "
-        << "allocator: " << (void *)allocator << ", "
-        << "device: " << (void *)allocator->current_device() << ")\n";
+        << " vk_destroy_shader_modules (user_context: " << user_context << ")\n";
 
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to destroy shader modules ... invalid allocator pointer!\n";
-        return halide_error_code_generic_error;
-    }
-
-    // Functor to match compilation cache destruction call with scoped params
-    struct DestroyShaderModule {
-        void *user_context = nullptr;
-        VulkanMemoryAllocator *allocator = nullptr;
-
-        DestroyShaderModule(void *ctx, VulkanMemoryAllocator *allocator)
-            : user_context(ctx), allocator(allocator) {
-        }
-
-        void operator()(VulkanCompilationCacheEntry *cache_entry) {
-            if (cache_entry != nullptr) {
-                for (uint32_t m = 0; m < cache_entry->module_count; m++) {
-                    VulkanCompiledShaderModule *shader_module = cache_entry->compiled_modules[m];
-                    if (shader_module != nullptr) {
-                        if (shader_module->descriptor_set_layouts) {
-                            for (uint32_t n = 0; n < shader_module->shader_count; n++) {
-                                debug(user_context) << "  destroying descriptor set layout [" << n << "] " << shader_module->shader_bindings[n].entry_point_name << "\n";
-                                vk_destroy_descriptor_set_layout(user_context, allocator, shader_module->descriptor_set_layouts[n]);
-                                shader_module->descriptor_set_layouts[n] = {0};
-                            }
-                            vk_host_free(user_context, shader_module->descriptor_set_layouts, allocator->callbacks());
-                            shader_module->descriptor_set_layouts = nullptr;
-                        }
-                        if (shader_module->pipeline_layout) {
-                            debug(user_context) << "  destroying pipeline layout " << (void *)shader_module->pipeline_layout << "\n";
-                            vk_destroy_pipeline_layout(user_context, allocator, shader_module->pipeline_layout);
-                            shader_module->pipeline_layout = {0};
-                        }
-                        if (shader_module->shader_bindings) {
-                            for (uint32_t n = 0; n < shader_module->shader_count; n++) {
-                                if (shader_module->shader_bindings[n].args_region) {
-                                    vk_destroy_scalar_uniform_buffer(user_context, allocator, shader_module->shader_bindings[n].args_region);
-                                    shader_module->shader_bindings[n].args_region = nullptr;
-                                }
-                                if (shader_module->shader_bindings[n].descriptor_pool) {
-                                    vk_destroy_descriptor_pool(user_context, allocator, shader_module->shader_bindings[n].descriptor_pool);
-                                    shader_module->shader_bindings[n].descriptor_pool = {0};
-                                }
-                                if (shader_module->shader_bindings[n].specialization_constants) {
-                                    vk_host_free(user_context, shader_module->shader_bindings[n].specialization_constants, allocator->callbacks());
-                                    shader_module->shader_bindings[n].specialization_constants = nullptr;
-                                }
-                                if (shader_module->shader_bindings[n].shared_memory_allocations) {
-                                    vk_host_free(user_context, shader_module->shader_bindings[n].shared_memory_allocations, allocator->callbacks());
-                                    shader_module->shader_bindings[n].shared_memory_allocations = nullptr;
-                                }
-                                if (shader_module->shader_bindings[n].compute_pipeline) {
-                                    vk_destroy_compute_pipeline(user_context, allocator, shader_module->shader_bindings[n].compute_pipeline);
-                                    shader_module->shader_bindings[n].compute_pipeline = {0};
-                                }
-                            }
-
-                            vk_host_free(user_context, shader_module->shader_bindings, allocator->callbacks());
-                            shader_module->shader_bindings = nullptr;
-                        }
-                        if (shader_module->shader_module) {
-                            debug(user_context) << " . destroying shader module " << (void *)shader_module->shader_module << "\n";
-                            vkDestroyShaderModule(allocator->current_device(), shader_module->shader_module, allocator->callbacks());
-                            shader_module->shader_module = {0};
-                        }
-                        shader_module->shader_count = 0;
-                        vk_host_free(user_context, shader_module, allocator->callbacks());
-                        shader_module = nullptr;
-                    }
-                }
-                cache_entry->module_count = 0;
-                vk_host_free(user_context, cache_entry, allocator->callbacks());
-                cache_entry = nullptr;
-            }
-        }
-    };
-
-    DestroyShaderModule module_destructor(user_context, allocator);
-    compilation_cache.delete_context(user_context, allocator->current_device(), module_destructor);
+    compilation_cache.delete_context(user_context, allocator->current_device(), vk_destroy_compilation_cache_entry);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
