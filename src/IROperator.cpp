@@ -181,43 +181,43 @@ bool is_pure(const Expr &e) {
 
 std::optional<int64_t> as_const_int(const Expr &e) {
     if (!e.defined()) {
-        return {};
+        return std::nullopt;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_int(b->value);
     } else if (const IntImm *i = e.as<IntImm>()) {
         return i->value;
     } else {
-        return {};
+        return std::nullopt;
     }
 }
 
 std::optional<uint64_t> as_const_uint(const Expr &e) {
     if (!e.defined()) {
-        return {};
+        return std::nullopt;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_uint(b->value);
     } else if (const UIntImm *i = e.as<UIntImm>()) {
         return i->value;
     } else {
-        return {};
+        return std::nullopt;
     }
 }
 
 std::optional<double> as_const_float(const Expr &e) {
     if (!e.defined()) {
-        return {};
+        return std::nullopt;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_float(b->value);
     } else if (const FloatImm *f = e.as<FloatImm>()) {
         return f->value;
     } else {
-        return {};
+        return std::nullopt;
     }
 }
 
 std::optional<int> is_const_power_of_two_integer(const Expr &e) {
     if (!(e.type().is_int() || e.type().is_uint())) {
-        return {};
+        return std::nullopt;
     }
 
     if (const Broadcast *b = e.as<Broadcast>()) {
@@ -229,7 +229,7 @@ std::optional<int> is_const_power_of_two_integer(const Expr &e) {
     } else if (auto u = as_const_uint(e)) {
         return is_const_power_of_two_integer(*u);
     } else {
-        return {};
+        return std::nullopt;
     }
 }
 
@@ -237,7 +237,7 @@ std::optional<int> is_const_power_of_two_integer(uint64_t val) {
     if (val && ((val & (val - 1)) == 0)) {
         return ctz64(val);
     } else {
-        return {};
+        return std::nullopt;
     }
 }
 

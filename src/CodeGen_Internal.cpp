@@ -557,15 +557,15 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
 namespace {
 std::optional<int64_t> get_md_int(llvm::Metadata *value) {
     if (!value) {
-        return {};
+        return std::nullopt;
     }
     llvm::ConstantAsMetadata *cam = llvm::cast<llvm::ConstantAsMetadata>(value);
     if (!cam) {
-        return {};
+        return std::nullopt;
     }
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(cam->getValue());
     if (!c) {
-        return {};
+        return std::nullopt;
     }
     return c->getSExtValue();
 }
@@ -574,19 +574,19 @@ std::optional<bool> get_md_bool(llvm::Metadata *value) {
     if (auto r = get_md_int(value)) {
         return *r != 0;
     } else {
-        return {};
+        return std::nullopt;
     }
 }
 
 std::optional<std::string> get_md_string(llvm::Metadata *value) {
     if (!value) {
-        return {};
+        return std::nullopt;
     }
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
         return c->getString().str();
     }
-    return {};
+    return std::nullopt;
 }
 }  // namespace
 
