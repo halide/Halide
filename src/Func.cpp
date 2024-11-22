@@ -479,7 +479,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                 if (!definition.schedule().allow_race_conditions() &&
                     definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
-                        // We only allow allow associative atomic operations
+                        // We only allow associative atomic operations
                         const string &func_name = function.name();
                         vector<Expr> &args = definition.args();
                         vector<Expr> &values = definition.values();
