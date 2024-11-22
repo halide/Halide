@@ -1652,7 +1652,6 @@ void vk_destroy_compilation_cache_entry(VulkanCompilationCacheEntry *cache_entry
     cache_entry->allocator = nullptr;
     vk_host_free(user_context, cache_entry, allocator->callbacks());
     cache_entry = nullptr;
-    return;
 }
 
 int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocator) {
