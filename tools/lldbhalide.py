@@ -9,14 +9,6 @@ def normalize(raw):
     return raw.lstrip('"').rstrip('"').replace(r'\n', ' ').replace('  ', ' ')
 
 
-def addr(value):
-    if ptr := value.GetValueAsUnsigned(0):
-        return f"0x{ptr:x}"
-    if ptr := value.AddressOf().GetValueAsUnsigned(0):
-        return f"0x{ptr:x}"
-    raise ValueError(f'Could not determine address for: {value}')
-
-
 def summary_string(summary_fn):
     @functools.wraps(summary_fn)
     def wrapper(value, _):
