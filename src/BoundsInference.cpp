@@ -328,7 +328,7 @@ public:
                 }
             }
 
-            for (const auto &s : def.specializations()) {
+            for (const auto &s : reverse_view(def.specializations())) {
                 const Expr s_cond = s.condition;
                 const Definition &s_def = s.definition;
 
