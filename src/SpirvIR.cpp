@@ -1,5 +1,6 @@
 #include "SpirvIR.h"
 #include <iostream>
+#include <type_traits>
 
 #ifdef WITH_SPIRV
 
@@ -1864,8 +1865,19 @@ SpvId SpvBuilder::declare_scalar_constant_of_type(const Type &scalar_type, const
              << "type=" << scalar_type << " "
              << "data=" << stringify_constant(value) << "\n";
 
-    SpvInstruction inst = SpvFactory::constant(result_id, type_id, scalar_type.bytes(), &value, value_type);
-    module.add_constant(inst);
+    // small signed integers have to be sign extended to fit 32-bits
+    if constexpr (std::is_same<int8_t, T>::value) {
+        uint32_t sext_value = uint32_t(value);
+        SpvInstruction inst = SpvFactory::constant(result_id, type_id, sizeof(uint32_t), &sext_value, value_type);
+        module.add_constant(inst);
+    } else if constexpr (std::is_same<int16_t, T>::value) {
+        uint32_t sext_value = uint32_t(value);
+        SpvInstruction inst = SpvFactory::constant(result_id, type_id, sizeof(uint32_t), &sext_value, value_type);
+        module.add_constant(inst);
+    } else {
+        SpvInstruction inst = SpvFactory::constant(result_id, type_id, scalar_type.bytes(), &value, value_type);
+        module.add_constant(inst);
+    }
     constant_map[constant_key] = result_id;
     return result_id;
 }

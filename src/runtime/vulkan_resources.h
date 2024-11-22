@@ -1408,9 +1408,17 @@ VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, Vulkan
     // Extract the size of each "SPIR-V Module" for each kernel
     size_t byte_offset = 0;
     for (uint32_t i = 0; (i < kernel_count) && (byte_offset < (size_t)size); ++i) {
+        // Extract binary size
         binary_sizes[i] = module_header[word_offset++];
+
+        // Skip past the kernel name
+        uint32_t kernel_name_entry_size = module_header[word_offset++];
+        const char *kernel_name = (const char *)(module_header + word_offset);
+        word_offset += kernel_name_entry_size;
+
+        // Compute byte offset for loop range check
         byte_offset = (word_offset * sizeof(uint32_t));
-        debug(user_context) << "  binary_size[" << i << "] = " << binary_sizes[i] << " bytes\n";
+        debug(user_context) << "  kernel[" << i << "] name: " << kernel_name << " binary_size: " << binary_sizes[i] << " bytes\n";
     }
 
     // Compile each "SPIR-V Module" for each kernel

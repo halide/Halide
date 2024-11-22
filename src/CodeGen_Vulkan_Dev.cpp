@@ -2943,6 +2943,8 @@ void CodeGen_Vulkan_Dev::encode_module(std::vector<char> &module) {
     // [0] Number of Kernel Modules (uint32_t)
     // ... For each kernel module ...
     // ... [0] Byte count indicating size of "Kernel Module" entry (uint32_t)
+    // ... [1] Length of entry point name (padded to nearest word size)
+    // ... [*] Entry point string data (padded with null chars)
     // [1] Kernel Module Table
     // ... For each kernel module ...
     // ....[0] The SPIR-V Module for the kernel
@@ -2965,13 +2967,28 @@ void CodeGen_Vulkan_Dev::encode_module(std::vector<char> &module) {
     uint32_t kernel_count = (uint32_t)kernel_module_table.size();
     debug(1) << "  kernel_count = " << kernel_count << "\n";
 
+    // [0] Number of Kernel Modules (uint32_t)
     module_header.push_back(kernel_count);
+
+    // For each kernel module ...
     uint32_t n = 0;
     for (const KernelModule &kernel_module : kernel_module_table) {
+
+        // [0] Byte count indicating size of "Kernel Module" entry (uint32_t)
         uint32_t spirv_module_size = (uint32_t)kernel_module.spirv_module.size();
         debug(1) << "  spirv_module_size[" << n++ << "] = " << spirv_module_size << " bytes\n";
         module_header.push_back(spirv_module_size);
         binary_bytes += spirv_module_size;
+
+        // encode the kernel name into an array of chars (padded to the next word entry)
+        std::vector<char> kernel_name = encode_header_string(kernel_module.kernel_name);
+        uint32_t kernel_name_entries = (uint32_t)(kernel_name.size() / sizeof(uint32_t));
+
+        // [1] Length of entry point name (padded to nearest word size)
+        module_header.push_back(kernel_name_entries);
+
+        // [*] Entry point string data (padded with null chars)
+        module_header.insert(module_header.end(), (const uint32_t *)kernel_name.data(), (const uint32_t *)(kernel_name.data() + kernel_name.size()));
     }
 
     size_t header_bytes = module_header.size() * sizeof(uint32_t);
@@ -2998,8 +3015,15 @@ void CodeGen_Vulkan_Dev::dump_module(const std::vector<char> &module) {
     const uint32_t *module_header = (const uint32_t *)(module.data());
     uint32_t kernel_count = module_header[word_offset++];
     std::vector<uint32_t> binary_sizes;
+    std::vector<const char *> kernel_names;
     for (uint32_t i = 0; (i < kernel_count) && ((word_offset * sizeof(uint32_t)) < module.size()); ++i) {
         binary_sizes.push_back(module_header[word_offset++]);
+
+        uint32_t kernel_name_entry_size = module_header[word_offset++];
+        kernel_names.push_back((const char *)(module_header + word_offset));
+
+        // Skip past the kernel name
+        word_offset += kernel_name_entry_size;
     }
 
     // Dump the SPIR-V binary for each kernel as a separate file
@@ -3014,8 +3038,9 @@ void CodeGen_Vulkan_Dev::dump_module(const std::vector<char> &module) {
         size_t spirv_size = (binary_sizes[i] - header_size);
 
         // Add the kernel index to the dump filename
+        std::string dump_kernel_name = std::string(kernel_names[i]);
         std::string dump_kernel_file = dump_file_path.stem().string();
-        dump_kernel_file += "_k" + std::to_string(i) + dump_file_path.extension().string();
+        dump_kernel_file += "_k" + std::to_string(i) + dump_kernel_name + dump_file_path.extension().string();
 
         debug(1) << "Vulkan: Dumping SPIRV module to file: '" << dump_kernel_file << "'\n";
         std::ofstream f(dump_kernel_file.c_str(), std::ios::out | std::ios::binary);
