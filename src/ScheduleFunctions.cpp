@@ -226,21 +226,27 @@ Stmt build_loop_nest(
         // an example like let a = 2*x in a + f[a].
         stmt = substitute_in_all_lets(stmt);
         for (const auto &res : splits_result) {
-            if (res.is_substitution()) {
+            switch (res.type) {
+            case ApplySplitResult::Substitution:
                 stmt = graph_substitute(res.name, res.value, stmt);
-            } else if (res.is_substitution_in_calls()) {
+                break;
+            case ApplySplitResult::SubstitutionInCalls:
                 stmt = substitute_in(res.name, res.value, true, false, stmt);
-            } else if (res.is_substitution_in_provides()) {
+                break;
+            case ApplySplitResult::SubstitutionInProvides:
                 stmt = substitute_in(res.name, res.value, false, true, stmt);
-            } else if (res.is_blend_provides() ||
-                       res.is_predicate_calls() ||
-                       res.is_predicate_provides()) {
+                break;
+            case ApplySplitResult::BlendProvides:
+            case ApplySplitResult::PredicateCalls:
+            case ApplySplitResult::PredicateProvides:
                 stmt = add_predicates(res.value, func, res.type, stmt);
-            } else if (res.is_let()) {
+                break;
+            case ApplySplitResult::LetStmt:
                 stmt = LetStmt::make(res.name, res.value, stmt);
-            } else {
-                internal_assert(res.is_predicate());
+                break;
+            case ApplySplitResult::Predicate:
                 stmt = IfThenElse::make(res.value, stmt, Stmt());
+                break;
             }
         }
         stmt = common_subexpression_elimination(stmt);
@@ -2230,13 +2236,24 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
 
         // (Note that the splits are ordered, so a single reverse-pass catches all these cases.)
         for (const auto &split : reverse_view(s.splits())) {
-            if (split.is_split() && (parallel_vars.count(split.outer) || parallel_vars.count(split.inner))) {
-                parallel_vars.insert(split.old_var);
-            } else if (split.is_fuse() && parallel_vars.count(split.old_var)) {
-                parallel_vars.insert(split.inner);
-                parallel_vars.insert(split.outer);
-            } else if ((split.is_rename() || split.is_purify()) && parallel_vars.count(split.outer)) {
-                parallel_vars.insert(split.old_var);
+            switch (split.split_type) {
+            case Split::SplitVar:
+                if (parallel_vars.count(split.outer) || parallel_vars.count(split.inner)) {
+                    parallel_vars.insert(split.old_var);
+                }
+                break;
+            case Split::FuseVars:
+                if (parallel_vars.count(split.old_var)) {
+                    parallel_vars.insert(split.inner);
+                    parallel_vars.insert(split.outer);
+                }
+                break;
+            case Split::RenameVar:
+            case Split::PurifyRVar:
+                if (parallel_vars.count(split.outer)) {
+                    parallel_vars.insert(split.old_var);
+                }
+                break;
             }
         }
 

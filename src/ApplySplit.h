@@ -46,31 +46,6 @@ struct ApplySplitResult {
     ApplySplitResult(Expr val, Type t = Predicate)
         : name(""), value(std::move(val)), type(t) {
     }
-
-    bool is_substitution() const {
-        return (type == Substitution);
-    }
-    bool is_substitution_in_calls() const {
-        return (type == SubstitutionInCalls);
-    }
-    bool is_substitution_in_provides() const {
-        return (type == SubstitutionInProvides);
-    }
-    bool is_let() const {
-        return (type == LetStmt);
-    }
-    bool is_predicate() const {
-        return (type == Predicate);
-    }
-    bool is_predicate_calls() const {
-        return (type == PredicateCalls);
-    }
-    bool is_predicate_provides() const {
-        return (type == PredicateProvides);
-    }
-    bool is_blend_provides() const {
-        return (type == BlendProvides);
-    }
 };
 
 /** Given a Split schedule on a definition (init or update), return a list of
