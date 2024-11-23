@@ -11,7 +11,7 @@ using std::map;
 using std::string;
 using std::vector;
 
-vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const string &prefix,
+vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
                                      map<string, Expr> &dim_extent_alignment) {
     vector<ApplySplitResult> result;
 
