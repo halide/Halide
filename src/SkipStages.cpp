@@ -543,10 +543,10 @@ protected:
         }
 
         // Rewrap any uninteresting lets
-        for (auto it = containing_lets.rbegin(); it != containing_lets.rend(); it++) {
-            mutate(it->second);  // Visit the value of each let
+        for (auto &[var, value] : reverse_view(containing_lets)) {
+            mutate(value);  // Visit the value of each let
             if (changed) {
-                body = T::make(it->first, std::move(it->second), std::move(body));
+                body = T::make(var, std::move(value), std::move(body));
             }
         }
 

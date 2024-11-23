@@ -218,8 +218,7 @@ private:
             // If there are multiple prefetches of the same Func or ImageParam,
             // use the most recent one
             set<string> seen;
-            for (int i = prefetch_list.size() - 1; i >= 0; --i) {
-                const PrefetchDirective &p = prefetch_list[i];
+            for (const PrefetchDirective &p : reverse_view(prefetch_list)) {
                 if (!ends_with(op->name, "." + p.at) || (seen.find(p.name) != seen.end())) {
                     continue;
                 }
@@ -231,9 +230,9 @@ private:
                 // Note that it is not good enough to just prepend use 'prefix + from', as there may be splits involved, e.g.,
                 // prefix = g.s0, from = xo, but the var we seek is actually g.s0.x.xo (because 'g' was split at x).
                 string from_var;
-                for (int j = (int)loop_nest.size() - 1; j >= 0; --j) {
-                    if (starts_with(loop_nest[j], prefix) && ends_with(loop_nest[j], "." + p.from)) {
-                        from_var = loop_nest[j];
+                for (const auto &var : reverse_view(loop_nest)) {
+                    if (starts_with(var, prefix) && ends_with(var, "." + p.from)) {
+                        from_var = var;
                         debug(5) << "Prefetch from " << p.from << " -> from_var " << from_var << "\n";
                         break;
                     }

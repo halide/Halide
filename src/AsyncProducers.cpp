@@ -543,20 +543,20 @@ class InitializeSemaphores : public IRMutator {
                 body = LetStmt::make(op->name, std::move(sema_allocate), std::move(body));
 
                 // Re-wrap any other lets
-                for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                    body = LetStmt::make(it->first, it->second, std::move(body));
+                for (const auto &[var, value] : reverse_view(lets)) {
+                    body = LetStmt::make(var, value, std::move(body));
                 }
             }
         } else {
             body = mutate(frames.back()->body);
         }
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            Expr value = mutate((*it)->value);
-            if (value.same_as((*it)->value) && body.same_as((*it)->body)) {
-                body = *it;
+        for (const auto *frame : reverse_view(frames)) {
+            Expr value = mutate(frame->value);
+            if (value.same_as(frame->value) && body.same_as(frame->body)) {
+                body = frame;
             } else {
-                body = LetStmt::make((*it)->name, std::move(value), std::move(body));
+                body = LetStmt::make(frame->name, std::move(value), std::move(body));
             }
         }
         return body;
@@ -654,8 +654,8 @@ class TightenProducerConsumerNodes : public IRMutator {
                 body = make_producer_consumer(name, is_producer, body, scope, uses_vars);
             }
 
-            for (auto it = containing_lets.rbegin(); it != containing_lets.rend(); it++) {
-                body = LetStmt::make((*it)->name, (*it)->value, body);
+            for (const auto *container : reverse_view(containing_lets)) {
+                body = LetStmt::make(container->name, container->value, body);
             }
 
             return body;
@@ -846,8 +846,7 @@ class ExpandAcquireNodes : public IRMutator {
         result = mutate(result);
 
         vector<pair<Expr, Expr>> semaphores;
-        for (auto it = stmts.rbegin(); it != stmts.rend(); it++) {
-            Stmt s = *it;
+        for (Stmt s : reverse_view(stmts)) {
             while (const Acquire *a = s.as<Acquire>()) {
                 semaphores.emplace_back(a->semaphore, a->count);
                 s = a->body;
@@ -916,8 +915,8 @@ class ExpandAcquireNodes : public IRMutator {
         }
 
         // Rewrap the rest of the lets
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            s = LetStmt::make((*it)->name, (*it)->value, s);
+        for (const auto *let : reverse_view(frames)) {
+            s = LetStmt::make(let->name, let->value, s);
         }
 
         return s;

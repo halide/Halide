@@ -3245,8 +3245,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // Build the not-already-inited case
         builder->SetInsertPoint(global_not_inited_bb);
         llvm::Value *selected_value = nullptr;
-        for (int i = sub_fns.size() - 1; i >= 0; i--) {
-            const auto &sub_fn = sub_fns[i];
+        for (const auto &sub_fn : reverse_view(sub_fns)) {
             if (!selected_value) {
                 selected_value = sub_fn.fn_ptr;
             } else {

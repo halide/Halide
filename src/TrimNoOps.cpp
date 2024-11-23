@@ -197,43 +197,42 @@ class SimplifyUsingBounds : public IRMutator {
     // Can we prove a condition over the non-rectangular domain of the for loops we're in?
     bool provably_true_over_domain(Expr test) {
         debug(3) << "Attempting to prove: " << test << "\n";
-        for (size_t i = containing_loops.size(); i > 0; i--) {
+        for (const auto &[var, interval] : reverse_view(containing_loops)) {
             // Because the domain is potentially non-rectangular, we
             // need to take each variable one-by-one, simplifying in
             // between to allow for cancellations of the bounds of
             // inner loops with outer loop variables.
-            auto loop = containing_loops[i - 1];
             if (is_const(test)) {
                 break;
-            } else if (!expr_uses_var(test, loop.var)) {
+            } else if (!expr_uses_var(test, var)) {
                 continue;
-            } else if (loop.i.is_bounded() &&
-                       can_prove(loop.i.min == loop.i.max) &&
-                       expr_uses_var(test, loop.var)) {
+            } else if (interval.is_bounded() &&
+                       can_prove(interval.min == interval.max) &&
+                       expr_uses_var(test, var)) {
                 // If min == max then either the domain only has one correct value, which we
                 // can substitute directly.
                 // Need to call CSE here since simplify() is sometimes unable to simplify expr with
                 // non-trivial 'let' value, e.g. (let x = min(10, y-1) in (x < y))
-                test = common_subexpression_elimination(Let::make(loop.var, loop.i.min, test));
-            } else if (loop.i.is_bounded() &&
-                       can_prove(loop.i.min >= loop.i.max) &&
-                       expr_uses_var(test, loop.var)) {
+                test = common_subexpression_elimination(Let::make(var, interval.min, test));
+            } else if (interval.is_bounded() &&
+                       can_prove(interval.min >= interval.max) &&
+                       expr_uses_var(test, var)) {
                 // If min >= max then either the domain only has one correct value,
                 // or the domain is empty, which implies both min/max are true under
                 // the domain.
                 // Need to call CSE here since simplify() is sometimes unable to simplify expr with
                 // non-trivial 'let' value, e.g. (let x = 10 in x < y) || (let x = min(10, y-1) in (x < y))
-                test = common_subexpression_elimination(Let::make(loop.var, loop.i.min, test) ||
-                                                        Let::make(loop.var, loop.i.max, test));
+                test = common_subexpression_elimination(Let::make(var, interval.min, test) ||
+                                                        Let::make(var, interval.max, test));
             } else {
                 Scope<Interval> s;
                 // Rearrange the expression if possible so that the
                 // loop var only occurs once.
-                SolverResult solved = solve_expression(test, loop.var);
+                SolverResult solved = solve_expression(test, var);
                 if (solved.fully_solved) {
                     test = solved.result;
                 }
-                s.push(loop.var, loop.i);
+                s.push(var, interval);
                 test = and_condition_over_domain(test, s);
             }
             test = simplify(test);

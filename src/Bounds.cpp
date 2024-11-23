@@ -2104,14 +2104,14 @@ class SolveIfThenElse : public IRMutator {
         Stmt s = mutate(body);
 
         if (s.same_as(body)) {
-            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-                pop_var((*it)->name);
+            for (const auto *frame : reverse_view(frames)) {
+                pop_var(frame->name);
             }
             return orig;
         } else {
-            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-                pop_var((*it)->name);
-                s = LetStmt::make((*it)->name, (*it)->value, s);
+            for (const auto *frame : reverse_view(frames)) {
+                pop_var(frame->name);
+                s = LetStmt::make(frame->name, frame->value, s);
             }
             return s;
         }
@@ -2590,15 +2590,15 @@ private:
 
         result.accept(this);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+        for (const auto &frame : reverse_view(frames)) {
             // Pop the value bounds
-            scope.pop(it->op->name);
+            scope.pop(frame.op->name);
 
-            if (it->op->value.type() == type_of<struct halide_buffer_t *>()) {
-                buffer_lets.erase(it->op->name);
+            if (frame.op->value.type() == type_of<struct halide_buffer_t *>()) {
+                buffer_lets.erase(frame.op->name);
             }
 
-            if (!it->min_name.empty()) {
+            if (!frame.min_name.empty()) {
                 // We made up new names for the bounds of the
                 // value, and need to rewrap any boxes we're
                 // returning with appropriate lets.
@@ -2606,19 +2606,19 @@ private:
                     Box &box = i.second;
                     for (size_t i = 0; i < box.size(); i++) {
                         if (box[i].has_lower_bound()) {
-                            if (expr_uses_var(box[i].min, it->max_name)) {
-                                box[i].min = Let::make(it->max_name, it->value_bounds.max, box[i].min);
+                            if (expr_uses_var(box[i].min, frame.max_name)) {
+                                box[i].min = Let::make(frame.max_name, frame.value_bounds.max, box[i].min);
                             }
-                            if (expr_uses_var(box[i].min, it->min_name)) {
-                                box[i].min = Let::make(it->min_name, it->value_bounds.min, box[i].min);
+                            if (expr_uses_var(box[i].min, frame.min_name)) {
+                                box[i].min = Let::make(frame.min_name, frame.value_bounds.min, box[i].min);
                             }
                         }
                         if (box[i].has_upper_bound()) {
-                            if (expr_uses_var(box[i].max, it->max_name)) {
-                                box[i].max = Let::make(it->max_name, it->value_bounds.max, box[i].max);
+                            if (expr_uses_var(box[i].max, frame.max_name)) {
+                                box[i].max = Let::make(frame.max_name, frame.value_bounds.max, box[i].max);
                             }
-                            if (expr_uses_var(box[i].max, it->min_name)) {
-                                box[i].max = Let::make(it->min_name, it->value_bounds.min, box[i].max);
+                            if (expr_uses_var(box[i].max, frame.min_name)) {
+                                box[i].max = Let::make(frame.min_name, frame.value_bounds.min, box[i].max);
                             }
                         }
                     }
@@ -2626,28 +2626,28 @@ private:
             }
 
             if (is_let_stmt::value) {
-                let_stmts.pop(it->op->name);
+                let_stmts.pop(frame.op->name);
 
                 // If this let stmt shadowed an outer one, we need
                 // to re-insert the children from the previous let
                 // stmt into the map.
-                if (!it->old_let_vars.empty()) {
-                    internal_assert(it->vi.instance > 0);
-                    VarInstance old_vi = VarInstance(it->vi.var, it->vi.instance - 1);
-                    for (const auto &v : it->old_let_vars) {
+                if (!frame.old_let_vars.empty()) {
+                    internal_assert(frame.vi.instance > 0);
+                    VarInstance old_vi = VarInstance(frame.vi.var, frame.vi.instance - 1);
+                    for (const auto &v : frame.old_let_vars) {
                         internal_assert(vars_renaming.count(v));
                         children[get_var_instance(v)].insert(old_vi);
                     }
                 }
 
                 // Remove the children from the current let stmt.
-                for (const auto &v : it->collect.vars) {
+                for (const auto &v : frame.collect.vars) {
                     internal_assert(vars_renaming.count(v));
-                    children[get_var_instance(v)].erase(it->vi);
+                    children[get_var_instance(v)].erase(frame.vi);
                 }
             }
 
-            pop_var(it->op->name);
+            pop_var(frame.op->name);
         }
     }
 
@@ -3151,8 +3151,8 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
                     return s;
                 } else {
                     // Rewrap the lets around the mutated body
-                    for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-                        s = LetStmt::make((*it)->name, (*it)->value, s);
+                    for (const auto *frame : reverse_view(frames)) {
+                        s = LetStmt::make(frame->name, frame->value, s);
                     }
                     return s;
                 }

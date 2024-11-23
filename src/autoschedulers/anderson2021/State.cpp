@@ -59,28 +59,28 @@ const LoopNest *State::deepest_valid_compute_location(const Anderson2021Params &
     int64_t new_shared_mem_alloc_size = 0;
     int64_t new_register_alloc_size = 0;
 
-    for (auto it = ancestors.rbegin(); it != ancestors.rend(); it++) {
+    for (const auto *ancestor : reverse_view(ancestors)) {
         if (first) {
             first = false;
             continue;
         }
 
-        if ((*it)->gpu_label == GPU_parallelism::Block) {
+        if (ancestor->gpu_label == GPU_parallelism::Block) {
             new_shared_mem_alloc_size = node.bytes_per_point;
             for (int i = 0; i < node.dimensions; ++i) {
-                new_shared_mem_alloc_size *= (*it)->get_bounds(&node)->region_computed(i).extent();
+                new_shared_mem_alloc_size *= ancestor->get_bounds(&node)->region_computed(i).extent();
             }
 
-            int64_t total = new_shared_mem_alloc_size + total_shared_mem_alloc_sizes.get((*it)->stage);
+            int64_t total = new_shared_mem_alloc_size + total_shared_mem_alloc_sizes.get(ancestor->stage);
             if (total > get_shared_memory_limit(params)) {
                 continue;
             }
         }
 
-        if ((*it)->gpu_label == GPU_parallelism::Thread || (*it)->gpu_label == GPU_parallelism::Serial) {
+        if (ancestor->gpu_label == GPU_parallelism::Thread || ancestor->gpu_label == GPU_parallelism::Serial) {
             int64_t total = node.bytes_per_point;
             for (int i = 0; i < node.dimensions; ++i) {
-                total *= (*it)->get_bounds(&node)->region_computed(i).extent();
+                total *= ancestor->get_bounds(&node)->region_computed(i).extent();
             }
 
             if (total > get_register_mem_alloc_limit()) {
@@ -93,11 +93,11 @@ const LoopNest *State::deepest_valid_compute_location(const Anderson2021Params &
         // If the region_computed does not shrink, ancestors.at(i) (the loop
         // nest one level further in) will never be considered as a compute
         // location
-        if (!(*it)->region_computed_shrinks(&node, candidate)) {
+        if (!ancestor->region_computed_shrinks(&node, candidate)) {
             break;
         }
 
-        candidate = *it;
+        candidate = ancestor;
     }
 
     if (candidate->gpu_label == GPU_parallelism::Block) {
@@ -216,8 +216,7 @@ void State::FeatureLoopNestMutator::split_compute_root_loops(LoopNest *loop_nest
         return;
     }
 
-    for (auto it = loop_nest->children.rbegin(); it != loop_nest->children.rend(); ++it) {
-        auto &c = *it;
+    for (auto &c : reverse_view(loop_nest->children)) {
         if (c->gpu_label != GPU_parallelism::None) {
             continue;
         }
@@ -1094,12 +1093,12 @@ void State::apply_schedule(const FunctionDAG &dag, const Anderson2021Params &par
         }
     }
 
-    for (auto &p : state_map) {
-        if (p.first->node->is_input) {
+    for (auto &[stage_ptr, schedule] : state_map) {
+        if (stage_ptr->node->is_input) {
             continue;
         }
 
-        Stage stage(p.first->stage);
+        Stage stage(stage_ptr->stage);
 
         // Do all the reorders and pick which vars to
         // parallelize.
@@ -1108,35 +1107,35 @@ void State::apply_schedule(const FunctionDAG &dag, const Anderson2021Params &par
         vector<int64_t> parallel_extents;
         vector<int> constant_extents;
         bool any_parallel_vars = false, any_parallel_rvars = false;
-        for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-            if (!it->exists) {
+        for (const auto &func_var : reverse_view(schedule->vars)) {
+            if (!func_var.exists) {
                 continue;
             }
-            if (!it->parallel) {
+            if (!func_var.parallel) {
                 break;
             }
-            any_parallel_rvars |= it->var.is_rvar;
-            any_parallel_vars |= !it->var.is_rvar;
-            parallel_extents.push_back(it->extent);
-            parallel_vars.push_back(it->var);
-            constant_extents.push_back(it->constant_extent);
+            any_parallel_rvars |= func_var.var.is_rvar;
+            any_parallel_vars |= !func_var.var.is_rvar;
+            parallel_extents.push_back(func_var.extent);
+            parallel_vars.push_back(func_var.var);
+            constant_extents.push_back(func_var.constant_extent);
         }
 
-        if (p.second->vars.size() > 1) {
-            p.second->schedule_source << "\n    .reorder(";
+        if (schedule->vars.size() > 1) {
+            schedule->schedule_source << "\n    .reorder(";
             bool first = true;
-            for (auto &v : p.second->vars) {
+            for (auto &v : schedule->vars) {
                 if (v.exists) {
                     vars.push_back(v.var);
-                    p.second->ordered_vars.push_back(v);
+                    schedule->ordered_vars.push_back(v);
                     if (!first) {
-                        p.second->schedule_source << ", ";
+                        schedule->schedule_source << ", ";
                     }
                     first = false;
-                    p.second->schedule_source << v.var.name();
+                    schedule->schedule_source << v.var.name();
                 }
             }
-            p.second->schedule_source << ")";
+            schedule->schedule_source << ")";
             stage.reorder(vars);
         }
 
@@ -1144,39 +1143,39 @@ void State::apply_schedule(const FunctionDAG &dag, const Anderson2021Params &par
         // they are both pure.
         bool can_fuse = !(any_parallel_vars && any_parallel_rvars);
         if (can_fuse) {
-            fuse_gpu_blocks(p.second.get(), stage, parallel_vars, parallel_extents, constant_extents);
+            fuse_gpu_blocks(schedule.get(), stage, parallel_vars, parallel_extents, constant_extents);
         } else {
             if (target.has_gpu_feature()) {
-                mark_gpu_blocks(p.second.get(), stage, parallel_vars, parallel_extents);
+                mark_gpu_blocks(schedule.get(), stage, parallel_vars, parallel_extents);
             } else {
                 for (const auto &v : parallel_vars) {
-                    p.second->schedule_source << "\n    .parallel(" << v.name() << ")";
+                    schedule->schedule_source << "\n    .parallel(" << v.name() << ")";
                     stage.parallel(v);
                 }
             }
         }
 
         if (!parallel_vars.empty()) {
-            p.second->parallel = true;
+            schedule->parallel = true;
         }
 
         // Reorder the vector dimension innermost
-        if (p.first->index == 0 && p.second->vector_dim > 0) {
-            vector<Var> storage_vars = Func(p.first->node->func).args();
-            for (int i = p.second->vector_dim; i > 0; i--) {
+        if (stage_ptr->index == 0 && schedule->vector_dim > 0) {
+            vector<Var> storage_vars = Func(stage_ptr->node->func).args();
+            for (int i = schedule->vector_dim; i > 0; i--) {
                 std::swap(storage_vars[i], storage_vars[i - 1]);
             }
-            p.second->schedule_source << "\n    .reorder_storage(";
+            schedule->schedule_source << "\n    .reorder_storage(";
             bool first = true;
             for (const auto &v : storage_vars) {
                 if (!first) {
-                    p.second->schedule_source << ", ";
+                    schedule->schedule_source << ", ";
                 }
                 first = false;
-                p.second->schedule_source << v.name();
+                schedule->schedule_source << v.name();
             }
-            p.second->schedule_source << ")";
-            Func(p.first->node->func).reorder_storage(storage_vars);
+            schedule->schedule_source << ")";
+            Func(stage_ptr->node->func).reorder_storage(storage_vars);
         }
     }
 

@@ -390,28 +390,26 @@ Stmt build_loop_nest(
     }
 
     // Rewrap the statement in the containing lets and fors.
-    for (int i = (int)nest.size() - 1; i >= 0; i--) {
-        if (nest[i].type == Container::Let) {
-            internal_assert(nest[i].value.defined());
-            stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
-        } else if ((nest[i].type == Container::If) || (nest[i].type == Container::IfInner)) {
-            internal_assert(nest[i].value.defined());
-            stmt = IfThenElse::make(nest[i].value, stmt, Stmt());
+    for (const auto &container : reverse_view(nest)) {
+        if (container.type == Container::Let) {
+            internal_assert(container.value.defined());
+            stmt = LetStmt::make(container.name, container.value, stmt);
+        } else if ((container.type == Container::If) || (container.type == Container::IfInner)) {
+            internal_assert(container.value.defined());
+            stmt = IfThenElse::make(container.value, stmt, Stmt());
         } else {
-            internal_assert(nest[i].type == Container::For);
-            const Dim &dim = stage_s.dims()[nest[i].dim_idx];
-            Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
-            Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.partition_policy, dim.device_api, stmt);
+            internal_assert(container.type == Container::For);
+            const Dim &dim = stage_s.dims()[container.dim_idx];
+            Expr min = Variable::make(Int(32), container.name + ".loop_min");
+            Expr extent = Variable::make(Int(32), container.name + ".loop_extent");
+            stmt = For::make(container.name, min, extent, dim.for_type, dim.partition_policy, dim.device_api, stmt);
         }
     }
 
     // Define the bounds on the split dimensions using the bounds
     // on the function args. If it is a purify, we should use the bounds
     // from the dims instead.
-    for (size_t i = splits.size(); i > 0; i--) {
-        const Split &split = splits[i - 1];
-
+    for (const Split &split : reverse_view(splits)) {
         vector<std::pair<string, Expr>> let_stmts = compute_loop_bounds_after_split(split, prefix);
         for (const auto &let_stmt : let_stmts) {
             stmt = LetStmt::make(let_stmt.first, let_stmt.second, stmt);
@@ -1309,12 +1307,11 @@ protected:
         }
 
         // Reinstate the let/if statements
-        for (size_t i = containers.size(); i > 0; i--) {
-            const auto &p = containers[i - 1];
-            if (p.first.empty()) {
-                body = IfThenElse::make(p.second, body);
+        for (const auto &[var, value] : reverse_view(containers)) {
+            if (var.empty()) {
+                body = IfThenElse::make(value, body);
             } else {
-                body = LetStmt::make(p.first, p.second, body);
+                body = LetStmt::make(var, value, body);
             }
         }
 
@@ -1838,9 +1835,8 @@ private:
         internal_assert(producer.defined());
 
         // Rewrap the loop in the containing lets.
-        for (size_t i = add_lets.size(); i > 0; --i) {
-            const auto &b = add_lets[i - 1];
-            producer = LetStmt::make(b.first, b.second, producer);
+        for (const auto &[var, value] : reverse_view(add_lets)) {
+            producer = LetStmt::make(var, value, producer);
         }
 
         // The original bounds of the loop nests (without any loop-fusion)
@@ -2233,14 +2229,14 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         // (@abadams comments: "I acknowledge that this is gross and should be refactored.")
 
         // (Note that the splits are ordered, so a single reverse-pass catches all these cases.)
-        for (auto split = s.splits().rbegin(); split != s.splits().rend(); split++) {
-            if (split->is_split() && (parallel_vars.count(split->outer) || parallel_vars.count(split->inner))) {
-                parallel_vars.insert(split->old_var);
-            } else if (split->is_fuse() && parallel_vars.count(split->old_var)) {
-                parallel_vars.insert(split->inner);
-                parallel_vars.insert(split->outer);
-            } else if ((split->is_rename() || split->is_purify()) && parallel_vars.count(split->outer)) {
-                parallel_vars.insert(split->old_var);
+        for (const auto &split : reverse_view(s.splits())) {
+            if (split.is_split() && (parallel_vars.count(split.outer) || parallel_vars.count(split.inner))) {
+                parallel_vars.insert(split.old_var);
+            } else if (split.is_fuse() && parallel_vars.count(split.old_var)) {
+                parallel_vars.insert(split.inner);
+                parallel_vars.insert(split.outer);
+            } else if ((split.is_rename() || split.is_purify()) && parallel_vars.count(split.outer)) {
+                parallel_vars.insert(split.old_var);
             }
         }
 
@@ -2576,8 +2572,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
     validate_fused_groups_schedule(fused_groups, env);
 
-    for (size_t i = fused_groups.size(); i > 0; --i) {
-        const vector<string> &group = fused_groups[i - 1];
+    for (const auto &group : reverse_view(fused_groups)) {
         vector<Function> funcs;
         vector<bool> is_output_list;
 
