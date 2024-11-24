@@ -853,7 +853,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     vector<Dim> intermediate_rdims;
     {
         std::unordered_map<std::string, int> dim_ordering;
-        for (int i = 0; i < definition.schedule().dims().size(); i++) {
+        for (size_t i = 0; i < definition.schedule().dims().size(); i++) {
             dim_ordering.emplace(definition.schedule().dims()[i].var, i);
         }
 
@@ -892,7 +892,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     // Intermediate update definition
     {
         auto [intermediate_rdom, intermediate_map] = project_rdom(intermediate_rdims, definition);
-        for (int i = 0; i < preserved.size(); i++) {
+        for (size_t i = 0; i < preserved.size(); i++) {
             rebind(intermediate_map, preserved_rdims[i].var, preserved_vars[i]);
         }
         for (const auto &var : dim_vars) {
@@ -989,7 +989,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             }
 
             // Add missing pure vars to the REDUCING func just before outermost
-            for (int i = 0; i < dim_vars.size(); i++) {
+            for (size_t i = 0; i < dim_vars.size(); i++) {
                 if (!expr_uses_var(definition.args()[i], dim_vars[i].name())) {
                     Dim d = {dim_vars[i].name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
                     reducing_dims.insert(reducing_dims.end() - 1, d);
