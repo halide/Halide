@@ -684,8 +684,7 @@ std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &
         is_rfactored.insert(*rv_dim);
 
         // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
-        const auto &v_dim = find_by_var_name(dims, v);
-        if (v_dim) {
+        if (find_by_var_name(dims, v)) {
             std::stringstream s;
             s << "can't rename the rvars " << rv.name() << " into " << v.name()
               << ", since it is already used in this Func's schedule elsewhere.";
@@ -714,29 +713,10 @@ std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &
     return std::nullopt;
 }
 
-template<typename T>
-std::vector<T> &operator+=(std::vector<T> &base, const std::vector<T> &other) {
-    base.insert(base.end(), other.begin(), other.end());
-    return base;
-}
-
-template<typename T, typename U>
-std::vector<T> &operator+=(std::vector<T> &base, const std::vector<U> &other) {
-    std::copy(other.begin(), other.end(), std::back_inserter(base));
-    return base;
-}
-
-template<typename T>
-std::vector<T> operator+(const std::vector<T> &base, const std::vector<T> &other) {
-    std::vector<T> merged = base;
-    merged += other;
-    return merged;
-}
-
 template<typename T, typename U>
 std::vector<T> operator+(const std::vector<T> &base, const std::vector<U> &other) {
     std::vector<T> merged = base;
-    merged += other;
+    merged.insert(merged.end(), other.begin(), other.end());
     return merged;
 }
 
