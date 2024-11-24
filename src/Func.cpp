@@ -632,39 +632,19 @@ struct DimEq {
 };
 using DimSet = std::unordered_set<Dim, DimHash, DimEq>;
 
-template<class T, class = void>
-struct has_name : std::false_type {};
-
-template<class T>
-struct has_name<T, std::void_t<decltype(&T::name)>> : std::true_type {};
-
-template<typename T>
-std::optional<T> match_by_dim_name(const std::string &dim, const std::vector<T> &items) {
-    const auto has_v = std::find_if(items.begin(), items.end(), [&dim](auto &x) {
-        if constexpr (has_name<T>::value) {
-            return var_name_match(dim, x.name());
-        } else {
-            return var_name_match(dim, x.var);
-        }
+std::optional<RVar> find_rvar(const std::vector<RVar> &items, const Dim &dim) {
+    const auto has_v = std::find_if(items.begin(), items.end(), [&](auto &x) {
+        return var_name_match(dim.var, x.name());
     });
     return has_v == items.end() ? std::nullopt : std::make_optional(*has_v);
 }
 
-template<typename T>
-std::optional<T> find_by_var_name(const std::vector<T> &items, const std::string &name) {
-    const auto has_v = std::find_if(items.begin(), items.end(), [&name](auto &x) {
-        if constexpr (has_name<T>::value) {
-            return var_name_match(x.name(), name);
-        } else {
-            return var_name_match(x.var, name);
-        }
+std::optional<Dim> find_dim(const std::vector<Dim> &items, const VarOrRVar &v) {
+    const std::string &name = v.name();
+    const auto has_v = std::find_if(items.begin(), items.end(), [&](auto &x) {
+        return var_name_match(x.var, name);
     });
     return has_v == items.end() ? std::nullopt : std::make_optional(*has_v);
-}
-
-template<typename T>
-std::optional<T> find_by_var_name(const std::vector<T> &items, const VarOrRVar &v) {
-    return find_by_var_name(items, v.name());
 }
 
 std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved, const AssociativeOp &prover_result, const std::vector<Dim> &dims) {
@@ -675,7 +655,7 @@ std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &
     DimSet is_rfactored;
     for (const auto &[rv, v] : preserved) {
         // Check that the RVar are in the dims list
-        const auto &rv_dim = find_by_var_name(dims, rv);
+        const auto &rv_dim = find_dim(dims, rv);
         if (!(rv_dim && rv_dim->is_rvar())) {
             std::stringstream s;
             s << "can't perform rfactor() on " << rv.name() << " since it is not in the reduction domain";
@@ -684,7 +664,7 @@ std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &
         is_rfactored.insert(*rv_dim);
 
         // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
-        if (find_by_var_name(dims, v)) {
+        if (find_dim(dims, v)) {
             std::stringstream s;
             s << "can't rename the rvars " << rv.name() << " into " << v.name()
               << ", since it is already used in this Func's schedule elsewhere.";
@@ -840,7 +820,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
 
         std::vector<std::tuple<RVar, Var, Dim>> preserved_with_dims;
         for (const auto &[rv, v] : preserved) {
-            const std::optional<Dim> rdim = find_by_var_name(definition.schedule().dims(), rv);
+            const std::optional<Dim> rdim = find_dim(definition.schedule().dims(), rv);
             internal_assert(rdim);
             preserved_with_dims.emplace_back(rv, v, *rdim);
         }
@@ -856,7 +836,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         for (const Dim &dim : definition.schedule().dims()) {
-            if (dim.is_rvar() && !match_by_dim_name(dim.var, preserved_rvars)) {
+            if (dim.is_rvar() && !find_rvar(preserved_rvars, dim)) {
                 intermediate_rdims.push_back(dim);
             }
         }
@@ -882,12 +862,11 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
 
         intermediate_rdom.set_predicate(simplify(substitute(intermediate_map, intermediate_rdom.predicate())));
 
-        vector<Expr> args = definition.args() + preserved_vars;
+        vector<Expr> args = substitute(intermediate_map, definition.args() + preserved_vars);
         vector<Expr> values;
         for (const auto &val : definition.values()) {
             values.push_back(substitute_self_reference(val, function.name(), intm.function(), preserved_vars));
         }
-        args = substitute(intermediate_map, args);
         values = substitute(intermediate_map, values);
         intm.function().define_update(args, values, intermediate_rdom);
 
@@ -904,7 +883,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             if (it != preserved_rvars.end()) {
                 const auto offset = it - preserved_rvars.begin();
                 const auto &var = preserved_vars[offset];
-                const auto &pure_dim = find_by_var_name(intm.function().definition().schedule().dims(), var);
+                const auto &pure_dim = find_dim(intm.function().definition().schedule().dims(), var);
                 internal_assert(pure_dim);
                 dim = *pure_dim;
             }
@@ -914,7 +893,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         DimSet dims;
         dims.insert(intm_dims.begin(), intm_dims.end());
         for (const Var &dim_v : preserved_vars) {
-            const std::optional<Dim> &dim = find_by_var_name(intm.function().definition().schedule().dims(), dim_v);
+            const std::optional<Dim> &dim = find_dim(intm.function().definition().schedule().dims(), dim_v);
             internal_assert(dim) << "Failed to find " << dim_v.name() << " in list of pure dims";
             if (!dims.count(*dim)) {
                 intm_dims.insert(intm_dims.end() - 1, *dim);
