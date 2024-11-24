@@ -647,14 +647,16 @@ std::optional<Dim> find_dim(const std::vector<Dim> &items, const VarOrRVar &v) {
     return has_v == items.end() ? std::nullopt : std::make_optional(*has_v);
 }
 
-std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved, const AssociativeOp &prover_result, const std::vector<Dim> &dims) {
+std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved, const AssociativeOp &prover_result, const Definition &definition) {
+    const std::vector<Dim> &dims = definition.schedule().dims();
+
     if (!prover_result.associative()) {
         return "can't perform rfactor() because we can't prove associativity of the operator";
     }
 
     DimSet is_rfactored;
     for (const auto &[rv, v] : preserved) {
-        // Check that the RVar are in the dims list
+        // Check that the RVars are in the dims list
         const auto &rv_dim = find_dim(dims, rv);
         if (!(rv_dim && rv_dim->is_rvar())) {
             std::stringstream s;
@@ -687,6 +689,43 @@ std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &
             if (d.is_rvar()) {
                 last_rvar = d;
             }
+        }
+    }
+
+    // Check that no Vars were fused into RVars
+    Scope<> rdims;
+    for (const ReductionVariable &rv : definition.schedule().rvars()) {
+        rdims.push(rv.var);
+    }
+    for (const Split &split : definition.schedule().splits()) {
+        switch (split.split_type) {
+        case Split::SplitVar:
+            if (rdims.contains(split.old_var)) {
+                rdims.pop(split.old_var);
+                rdims.push(split.outer);
+                rdims.push(split.inner);
+            }
+            break;
+        case Split::FuseVars:
+            if (rdims.contains(split.outer) || rdims.contains(split.inner)) {
+                if (!(rdims.contains(split.outer) && rdims.contains(split.inner))) {
+                    std::stringstream s;
+                    s << "Cannot rfactor a Func that has fused a Var into an RVar ("
+                      << split.outer << ", " << split.inner << ")";
+                    return s.str();
+                }
+                rdims.pop(split.outer);
+                rdims.pop(split.inner);
+                rdims.push(split.old_var);
+            }
+            break;
+        case Split::PurifyRVar:
+        case Split::RenameVar:
+            if (rdims.contains(split.old_var)) {
+                rdims.pop(split.old_var);
+                rdims.push(split.outer);
+            }
+            break;
         }
     }
 
@@ -803,7 +842,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     // its identity for each value in the definition if it is a Tuple
     const auto &prover_result = prove_associativity(function.name(), definition.args(), definition.values());
 
-    const auto &error = rfactor_validate_args(preserved, prover_result, definition.schedule().dims());
+    const auto &error = rfactor_validate_args(preserved, prover_result, definition);
     user_assert(!error) << "In schedule for " << name() << ": " << *error << "\n"
                         << dump_argument_list();
 
