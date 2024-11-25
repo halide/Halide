@@ -178,7 +178,6 @@ Stmt build_loop_nest(
     const auto &dims = func.args();
     const auto &func_s = func.schedule();
     const auto &stage_s = def.schedule();
-    const auto &predicates = def.split_predicate();
 
     // We'll build it from inside out, starting from the body,
     // then wrapping it in for loops.
@@ -306,7 +305,7 @@ Stmt build_loop_nest(
     }
 
     // Put all the reduction domain predicates into the containers vector.
-    for (Expr pred : predicates) {
+    for (Expr pred : def.split_predicate()) {
         pred = qualify(prefix, pred);
         // Add a likely qualifier if there isn't already one
         if (Call::as_intrinsic(pred, {Call::likely, Call::likely_if_innermost})) {
