@@ -607,11 +607,14 @@ public:
 /** Substitute all self-reference calls to 'func' with 'substitute' which
  * args (LHS) is the old args (LHS) plus 'new_args' in that order.
  * Expect this method to be called on the value (RHS) of an update definition. */
-Expr substitute_self_reference(Expr val, const string &func, const Function &substitute,
-                               const vector<Var> &new_args) {
+vector<Expr> substitute_self_reference(const vector<Expr> &values, const string &func,
+                                       const Function &substitute, const vector<Var> &new_args) {
     SubstituteSelfReference subs(func, substitute, new_args);
-    val = subs.mutate(val);
-    return val;
+    vector<Expr> result;
+    for (const auto &val : values) {
+        result.push_back(subs.mutate(val));
+    }
+    return result;
 }
 
 }  // anonymous namespace
@@ -716,18 +719,6 @@ optional<string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved,
     return std::nullopt;
 }
 
-template<typename T, typename U>
-vector<T> operator+(const vector<T> &base, const vector<U> &other) {
-    vector<T> merged = base;
-    merged.insert(merged.end(), other.begin(), other.end());
-    return merged;
-}
-
-template<typename U, typename V>
-vector<U> copy_convert(const vector<V> &vec) {
-    return vector<U>{} + vec;
-}
-
 using SubstitutionMap = std::map<string, Expr>;
 
 // This is a helper function for building up a substitution map that
@@ -821,6 +812,12 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     user_assert(!error) << "In schedule for " << name() << ": " << *error << "\n"
                         << dump_argument_list();
 
+    const vector<Expr> dim_vars_exprs = [&] {
+        vector<Expr> result;
+        result.insert(result.end(), dim_vars.begin(), dim_vars.end());
+        return result;
+    }();
+
     // sort preserved by the dimension ordering
     vector<RVar> preserved_rvars;
     vector<Var> preserved_vars;
@@ -887,16 +884,19 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
 
     // Intermediate pure definition
     {
-        intm(dim_vars + preserved_vars) = Tuple(prover_result.pattern.identities);
+        vector<Expr> args = dim_vars_exprs;
+        args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
+        intm(args) = Tuple(prover_result.pattern.identities);
     }
 
     // Intermediate update definition
     {
-        vector<Expr> args = substitute(intermediate_map, definition.args() + preserved_vars);
-        vector<Expr> values;
-        for (const auto &val : definition.values()) {
-            values.push_back(substitute_self_reference(val, function.name(), intm.function(), preserved_vars));
-        }
+        vector<Expr> args = definition.args();
+        args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
+        args = substitute(intermediate_map, args);
+
+        vector<Expr> values = definition.values();
+        values = substitute_self_reference(values, function.name(), intm.function(), preserved_vars);
         values = substitute(intermediate_map, values);
         intm.function().define_update(args, values, intermediate_rdom);
 
@@ -938,8 +938,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     // Preserved update definition
     {
         // Replace the current definition with calls to the intermediate func.
-        vector<Expr> dim_exprs = copy_convert<Expr>(dim_vars);
-        vector<Expr> f_load_args = dim_exprs;
+        vector<Expr> f_load_args = dim_vars_exprs;
         for (const ReductionVariable &rv : preserved_rdom.domain()) {
             f_load_args.push_back(Variable::make(Int(32), rv.var, preserved_rdom));
         }
@@ -952,7 +951,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
 
             if (!prover_result.xs[i].var.empty()) {
                 Expr prev_val = Call::make(intm.types()[i], function.name(),
-                                           dim_exprs, Call::CallType::Halide,
+                                           dim_vars_exprs, Call::CallType::Halide,
                                            FunctionPtr(), i);
                 add_let(preserved_map, prover_result.xs[i].var, prev_val);
             } else {
@@ -980,7 +979,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             }
         }
 
-        definition.args() = dim_exprs;
+        definition.args() = dim_vars_exprs;
         definition.predicate() = preserved_rdom.predicate();
         definition.schedule().dims() = std::move(reducing_dims);
         definition.schedule().rvars() = preserved_rdom.domain();
