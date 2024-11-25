@@ -36,8 +36,11 @@ namespace Halide {
 
 using std::map;
 using std::ofstream;
+using std::optional;
 using std::pair;
 using std::string;
+using std::tuple;
+using std::unordered_map;
 using std::vector;
 
 using namespace Internal;
@@ -632,23 +635,23 @@ struct DimEq {
 };
 using DimSet = std::unordered_set<Dim, DimHash, DimEq>;
 
-std::optional<RVar> find_rvar(const std::vector<RVar> &items, const Dim &dim) {
+optional<RVar> find_rvar(const vector<RVar> &items, const Dim &dim) {
     const auto has_v = std::find_if(items.begin(), items.end(), [&](auto &x) {
         return var_name_match(dim.var, x.name());
     });
     return has_v == items.end() ? std::nullopt : std::make_optional(*has_v);
 }
 
-std::optional<Dim> find_dim(const std::vector<Dim> &items, const VarOrRVar &v) {
-    const std::string &name = v.name();
+optional<Dim> find_dim(const vector<Dim> &items, const VarOrRVar &v) {
+    const string &name = v.name();
     const auto has_v = std::find_if(items.begin(), items.end(), [&](auto &x) {
         return var_name_match(x.var, name);
     });
     return has_v == items.end() ? std::nullopt : std::make_optional(*has_v);
 }
 
-std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved, const AssociativeOp &prover_result, const Definition &definition) {
-    const std::vector<Dim> &dims = definition.schedule().dims();
+optional<string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved, const AssociativeOp &prover_result, const Definition &definition) {
+    const vector<Dim> &dims = definition.schedule().dims();
 
     if (!prover_result.associative()) {
         return "can't perform rfactor() because we can't prove associativity of the operator";
@@ -677,7 +680,7 @@ std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &
     // If the operator is associative but non-commutative, rfactor() on inner
     // dimensions (excluding the outer dimensions) is not valid.
     if (!prover_result.commutative()) {
-        std::optional<Dim> last_rvar;
+        optional<Dim> last_rvar;
         for (const auto &d : reverse_view(dims)) {
             if (is_rfactored.count(d) && last_rvar && !is_rfactored.count(*last_rvar)) {
                 std::stringstream s;
@@ -733,31 +736,31 @@ std::optional<std::string> rfactor_validate_args(const vector<pair<RVar, Var>> &
 }
 
 template<typename T, typename U>
-std::vector<T> operator+(const std::vector<T> &base, const std::vector<U> &other) {
-    std::vector<T> merged = base;
+vector<T> operator+(const vector<T> &base, const vector<U> &other) {
+    vector<T> merged = base;
     merged.insert(merged.end(), other.begin(), other.end());
     return merged;
 }
 
 template<typename U, typename V>
-std::vector<U> copy_convert(const std::vector<V> &vec) {
-    return std::vector<U>{} + vec;
+vector<U> copy_convert(const vector<V> &vec) {
+    return vector<U>{} + vec;
 }
 
-using SubstitutionMap = std::map<std::string, Expr>;
+using SubstitutionMap = std::map<string, Expr>;
 
 // This is a helper function for building up a substitution map that
 // corresponds to pushing down a nest of lets. The lets should be fed
 // to this function from innermost to outermost. This is equivalent to
 // building a let-nest as a one-hole context and then simplifying.
-void add_let(SubstitutionMap &proj, const std::string &name, const Expr &value) {
+void add_let(SubstitutionMap &proj, const string &name, const Expr &value) {
     for (auto &[_, e] : proj) {
         e = substitute(name, value, e);
     }
     proj.emplace(name, value);
 }
 
-void rebind(SubstitutionMap &proj, const std::string &name, const Expr &value) {
+void rebind(SubstitutionMap &proj, const string &name, const Expr &value) {
     for (auto &[_, e] : proj) {
         e = substitute(name, value, e);
     }
@@ -766,7 +769,7 @@ void rebind(SubstitutionMap &proj, const std::string &name, const Expr &value) {
     }
 }
 
-std::pair<ReductionDomain, SubstitutionMap> project_rdom(const std::vector<Dim> &dims, const Definition &def) {
+pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const Definition &def) {
     const auto &rdom = def.schedule().rvars();
     const auto &splits = def.schedule().splits();
     const auto &predicate = def.predicate();
@@ -785,7 +788,7 @@ std::pair<ReductionDomain, SubstitutionMap> project_rdom(const std::vector<Dim> 
     }
 
     // Build the new RDom
-    std::vector<ReductionVariable> new_rvars;
+    vector<ReductionVariable> new_rvars;
     for (const Dim &dim : dims) {
         Expr new_min = substitute(bounds_projection, Variable::make(Int(32), dim.var + ".loop_min"));
         Expr new_extent = substitute(bounds_projection, Variable::make(Int(32), dim.var + ".loop_extent"));
@@ -828,7 +831,7 @@ std::pair<ReductionDomain, SubstitutionMap> project_rdom(const std::vector<Dim> 
         rebind(dim_projection, rv.var, Variable::make(Int(32), rv.var, new_rdom));
     }
 
-    return std::make_pair(new_rdom, dim_projection);
+    return {new_rdom, dim_projection};
 }
 
 }  // namespace
@@ -852,14 +855,14 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     vector<Dim> preserved_rdims;
     vector<Dim> intermediate_rdims;
     {
-        std::unordered_map<std::string, int> dim_ordering;
+        unordered_map<string, int> dim_ordering;
         for (size_t i = 0; i < definition.schedule().dims().size(); i++) {
             dim_ordering.emplace(definition.schedule().dims()[i].var, i);
         }
 
-        std::vector<std::tuple<RVar, Var, Dim>> preserved_with_dims;
+        vector<tuple<RVar, Var, Dim>> preserved_with_dims;
         for (const auto &[rv, v] : preserved) {
-            const std::optional<Dim> rdim = find_dim(definition.schedule().dims(), rv);
+            const optional<Dim> rdim = find_dim(definition.schedule().dims(), rv);
             internal_assert(rdim);
             preserved_with_dims.emplace_back(rv, v, *rdim);
         }
@@ -932,7 +935,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         DimSet dims;
         dims.insert(intm_dims.begin(), intm_dims.end());
         for (const Var &dim_v : preserved_vars) {
-            const std::optional<Dim> &dim = find_dim(intm.function().definition().schedule().dims(), dim_v);
+            const optional<Dim> &dim = find_dim(intm.function().definition().schedule().dims(), dim_v);
             internal_assert(dim) << "Failed to find " << dim_v.name() << " in list of pure dims";
             if (!dims.count(*dim)) {
                 intm_dims.insert(intm_dims.end() - 1, *dim);
@@ -976,7 +979,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             }
         }
 
-        std::vector<Dim> reducing_dims;
+        vector<Dim> reducing_dims;
         {
             DimSet preserved_rdim_set;
             preserved_rdim_set.insert(preserved_rdims.begin(), preserved_rdims.end());
@@ -1018,7 +1021,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         for (const ReductionVariable &rv : st.definition.schedule().rvars()) {
             dims.push(rv.var);
         }
-        std::vector<Split> new_splits;
+        vector<Split> new_splits;
         for (const Split &split : st.definition.schedule().splits()) {
             switch (split.split_type) {
             case Split::SplitVar:
