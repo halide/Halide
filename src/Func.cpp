@@ -741,15 +741,6 @@ void add_let(SubstitutionMap &proj, const string &name, const Expr &value) {
     proj.emplace(name, value);
 }
 
-void rebind(SubstitutionMap &proj, const string &name, const Expr &value) {
-    for (auto &[_, e] : proj) {
-        e = substitute(name, value, e);
-    }
-    if (!proj.count(name)) {
-        proj.emplace(name, value);
-    }
-}
-
 pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const Definition &def) {
     const auto &rdom = def.schedule().rvars();
     const auto &splits = def.schedule().splits();
@@ -788,9 +779,6 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
     for (const Split &split : splits) {
         for (const auto &result : apply_split(split, "", dim_extent_alignment)) {
             switch (result.type) {
-            case ApplySplitResult::Substitution:
-            case ApplySplitResult::SubstitutionInCalls:
-            case ApplySplitResult::SubstitutionInProvides:
             case ApplySplitResult::LetStmt:
                 add_let(dim_projection, result.name, result.value);
                 break;
@@ -799,6 +787,9 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
             case ApplySplitResult::Predicate:
                 new_rdom.where(substitute(bounds_projection, result.value));
                 break;
+            case ApplySplitResult::Substitution:
+            case ApplySplitResult::SubstitutionInCalls:
+            case ApplySplitResult::SubstitutionInProvides:
             case ApplySplitResult::BlendProvides:
                 // TODO: what to do here? BlendProvides is not included in the above checks.
                 break;
@@ -809,7 +800,7 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
         e = substitute(bounds_projection, e);
     }
     for (const ReductionVariable &rv : new_rdom.domain()) {
-        rebind(dim_projection, rv.var, Variable::make(Int(32), rv.var, new_rdom));
+        add_let(dim_projection, rv.var, Variable::make(Int(32), rv.var, new_rdom));
     }
 
     return {new_rdom, dim_projection};
@@ -875,7 +866,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         // Intermediate
         std::tie(intermediate_rdom, intermediate_map) = project_rdom(intermediate_rdims, definition);
         for (size_t i = 0; i < preserved.size(); i++) {
-            rebind(intermediate_map, preserved_rdims[i].var, preserved_vars[i]);
+            add_let(intermediate_map, preserved_rdims[i].var, preserved_vars[i]);
         }
         for (const auto &var : dim_vars) {
             intermediate_map.erase(var.name());
