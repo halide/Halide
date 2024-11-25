@@ -772,9 +772,9 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
     // Compute the mapping of old dimensions to the projected RDom values.
     SubstitutionMap dim_projection{};
     SubstitutionMap dim_extent_alignment{};
-    for (const ReductionVariable &rv : rdom) {
-        add_let(dim_projection, rv.var, Variable::make(Int(32), rv.var));
-        dim_extent_alignment[rv.var] = rv.extent;
+    for (const auto &[var, _, extent] : rdom) {
+        add_let(dim_projection, var, Variable::make(Int(32), var));
+        dim_extent_alignment[var] = extent;
     }
     for (const Split &split : splits) {
         for (const auto &result : apply_split(split, "", dim_extent_alignment)) {
@@ -791,7 +791,7 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
             case ApplySplitResult::SubstitutionInCalls:
             case ApplySplitResult::SubstitutionInProvides:
             case ApplySplitResult::BlendProvides:
-                // TODO: what to do here? BlendProvides is not included in the above checks.
+                // The lets returned by ApplySplit are sufficient
                 break;
             }
         }
@@ -799,7 +799,7 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
     for (auto &[_, e] : dim_projection) {
         e = substitute(bounds_projection, e);
     }
-    for (const ReductionVariable &rv : new_rdom.domain()) {
+    for (const auto &rv : new_rdom.domain()) {
         add_let(dim_projection, rv.var, Variable::make(Int(32), rv.var, new_rdom));
     }
 
