@@ -41,6 +41,7 @@ using std::pair;
 using std::string;
 using std::tuple;
 using std::unordered_map;
+using std::unordered_set;
 using std::vector;
 
 using namespace Internal;
@@ -623,18 +624,6 @@ Func Stage::rfactor(const RVar &r, const Var &v) {
 // Helpers for rfactor implementation
 namespace {
 
-struct DimHash {
-    std::size_t operator()(const Dim &s) const noexcept {
-        return std::hash<std::string>{}(s.var);
-    }
-};
-struct DimEq {
-    bool operator()(const Dim &lhs, const Dim &rhs) const noexcept {
-        return lhs.var == rhs.var;
-    }
-};
-using DimSet = std::unordered_set<Dim, DimHash, DimEq>;
-
 optional<RVar> find_rvar(const vector<RVar> &items, const Dim &dim) {
     const auto has_v = std::find_if(items.begin(), items.end(), [&](auto &x) {
         return dim_match(dim, x);
@@ -656,7 +645,7 @@ optional<string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved,
         return "can't perform rfactor() because we can't prove associativity of the operator";
     }
 
-    DimSet is_rfactored;
+    unordered_set<string> is_rfactored;
     for (const auto &[rv, v] : preserved) {
         // Check that the RVars are in the dims list
         const auto &rv_dim = find_dim(dims, rv);
@@ -665,7 +654,7 @@ optional<string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved,
             s << "can't perform rfactor() on " << rv.name() << " since it is not in the reduction domain";
             return s.str();
         }
-        is_rfactored.insert(*rv_dim);
+        is_rfactored.insert(rv_dim->var);
 
         // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
         if (find_dim(dims, v)) {
@@ -681,7 +670,7 @@ optional<string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved,
     if (!prover_result.commutative()) {
         optional<Dim> last_rvar;
         for (const auto &d : reverse_view(dims)) {
-            if (is_rfactored.count(d) && last_rvar && !is_rfactored.count(*last_rvar)) {
+            if (is_rfactored.count(d.var) && last_rvar && !is_rfactored.count(last_rvar->var)) {
                 std::stringstream s;
                 s << "can't rfactor an inner dimension " << d.var
                   << " without rfactoring the outer dimensions, since the "
@@ -931,12 +920,14 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         // Add factored pure dims to the INTERMEDIATE func just before outermost
-        DimSet dims;
-        dims.insert(intm_dims.begin(), intm_dims.end());
+        unordered_set<string> dims;
+        for (const auto &dim : intm_dims) {
+            dims.insert(dim.var);
+        }
         for (const Var &dim_v : preserved_vars) {
             const optional<Dim> &dim = find_dim(intm.function().definition().schedule().dims(), dim_v);
             internal_assert(dim) << "Failed to find " << dim_v.name() << " in list of pure dims";
-            if (!dims.count(*dim)) {
+            if (!dims.count(dim->var)) {
                 intm_dims.insert(intm_dims.end() - 1, *dim);
             }
         }
@@ -980,12 +971,14 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
 
         vector<Dim> reducing_dims;
         {
-            DimSet preserved_rdim_set;
-            preserved_rdim_set.insert(preserved_rdims.begin(), preserved_rdims.end());
+            unordered_set<string> preserved_rdim_set;
+            for (const auto &dim : preserved_rdims) {
+                preserved_rdim_set.insert(dim.var);
+            }
 
             // Remove rvar dims NOT IN the preserved list from the REDUCING Func
             for (const auto &dim : definition.schedule().dims()) {
-                if (!dim.is_rvar() || preserved_rdim_set.count(dim)) {
+                if (!dim.is_rvar() || preserved_rdim_set.count(dim.var)) {
                     reducing_dims.push_back(dim);
                 }
             }
