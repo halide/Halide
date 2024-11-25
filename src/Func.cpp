@@ -637,15 +637,14 @@ using DimSet = std::unordered_set<Dim, DimHash, DimEq>;
 
 optional<RVar> find_rvar(const vector<RVar> &items, const Dim &dim) {
     const auto has_v = std::find_if(items.begin(), items.end(), [&](auto &x) {
-        return var_name_match(dim.var, x.name());
+        return dim_match(dim, x);
     });
     return has_v == items.end() ? std::nullopt : std::make_optional(*has_v);
 }
 
 optional<Dim> find_dim(const vector<Dim> &items, const VarOrRVar &v) {
-    const string &name = v.name();
     const auto has_v = std::find_if(items.begin(), items.end(), [&](auto &x) {
-        return var_name_match(x.var, name);
+        return dim_match(x, v);
     });
     return has_v == items.end() ? std::nullopt : std::make_optional(*has_v);
 }
@@ -920,7 +919,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         // Replace rvar dims IN the preserved list with their Vars in the INTERMEDIATE Func
         for (auto &dim : intm_dims) {
             const auto it = std::find_if(preserved_rvars.begin(), preserved_rvars.end(), [&](const auto &rv) {
-                return var_name_match(dim.var, rv.name());
+                return dim_match(dim, rv);
             });
             if (it != preserved_rvars.end()) {
                 const auto offset = it - preserved_rvars.begin();
