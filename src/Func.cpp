@@ -868,6 +868,29 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
     }
 
+    // Project the RDom into each side
+    ReductionDomain intermediate_rdom, preserved_rdom;
+    SubstitutionMap intermediate_map, preserved_map;
+    {
+        // Intermediate
+        std::tie(intermediate_rdom, intermediate_map) = project_rdom(intermediate_rdims, definition);
+        for (size_t i = 0; i < preserved.size(); i++) {
+            rebind(intermediate_map, preserved_rdims[i].var, preserved_vars[i]);
+        }
+        for (const auto &var : dim_vars) {
+            intermediate_map.erase(var.name());
+        }
+        intermediate_rdom.set_predicate(simplify(substitute(intermediate_map, intermediate_rdom.predicate())));
+
+        // Preserved
+        std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, definition);
+        Scope<Interval> intm_rdom;
+        for (const auto &[var, min, extent] : intermediate_rdom.domain()) {
+            intm_rdom.push(var, Interval{min, min + extent - 1});
+        }
+        preserved_rdom.set_predicate(!and_condition_over_domain(simplify(substitute(preserved_map, !preserved_rdom.predicate())), intm_rdom));
+    }
+
     // Intermediate func
     Func intm(function.name() + "_intm");
 
@@ -878,16 +901,6 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
 
     // Intermediate update definition
     {
-        auto [intermediate_rdom, intermediate_map] = project_rdom(intermediate_rdims, definition);
-        for (size_t i = 0; i < preserved.size(); i++) {
-            rebind(intermediate_map, preserved_rdims[i].var, preserved_vars[i]);
-        }
-        for (const auto &var : dim_vars) {
-            intermediate_map.erase(var.name());
-        }
-
-        intermediate_rdom.set_predicate(simplify(substitute(intermediate_map, intermediate_rdom.predicate())));
-
         vector<Expr> args = substitute(intermediate_map, definition.args() + preserved_vars);
         vector<Expr> values;
         for (const auto &val : definition.values()) {
@@ -933,9 +946,6 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
 
     // Preserved update definition
     {
-        auto [preserved_rdom, preserved_map] = project_rdom(preserved_rdims, definition);
-        preserved_rdom.set_predicate(simplify(substitute(preserved_map, preserved_rdom.predicate())));
-
         // Replace the current definition with calls to the intermediate func.
         vector<Expr> dim_exprs = copy_convert<Expr>(dim_vars);
         vector<Expr> f_load_args = dim_exprs;
@@ -943,21 +953,17 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             f_load_args.push_back(Variable::make(Int(32), rv.var, preserved_rdom));
         }
 
-        SubstitutionMap replacements;
-        for (size_t i = 0; i < preserved.size(); i++) {
-            replacements.emplace(preserved_rdims[i].var, preserved_vars[i]);
-        }
         for (size_t i = 0; i < definition.values().size(); ++i) {
             if (!prover_result.ys[i].var.empty()) {
                 Expr r = (definition.values().size() == 1) ? Expr(intm(f_load_args)) : Expr(intm(f_load_args)[i]);
-                replacements.emplace(prover_result.ys[i].var, r);
+                add_let(preserved_map, prover_result.ys[i].var, r);
             }
 
             if (!prover_result.xs[i].var.empty()) {
                 Expr prev_val = Call::make(intm.types()[i], function.name(),
                                            dim_exprs, Call::CallType::Halide,
                                            FunctionPtr(), i);
-                replacements.emplace(prover_result.xs[i].var, prev_val);
+                add_let(preserved_map, prover_result.xs[i].var, prev_val);
             } else {
                 user_warning << "Update definition of " << name() << " at index " << i
                              << " doesn't depend on the previous value. This isn't a"
@@ -983,16 +989,11 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             }
         }
 
-        Scope<Interval> intm_rdom;
-        for (const auto &[var, min, extent] : intm.update(0).definition.schedule().rvars()) {
-            intm_rdom.push(var, Interval{min, min + extent - 1});
-        }
-
         definition.args() = dim_exprs;
-        definition.predicate() = !and_condition_over_domain(simplify(!preserved_rdom.predicate()), intm_rdom);
+        definition.predicate() = preserved_rdom.predicate();
         definition.schedule().dims() = std::move(reducing_dims);
         definition.schedule().rvars() = preserved_rdom.domain();
-        definition.values() = substitute(replacements, prover_result.pattern.ops);
+        definition.values() = substitute(preserved_map, prover_result.pattern.ops);
     }
 
     // Clean up the splits lists
