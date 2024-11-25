@@ -762,10 +762,10 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
             add_let(bounds_projection, name, value);
         }
     }
-    for (const ReductionVariable &rv : rdom) {
-        add_let(bounds_projection, rv.var + ".loop_min", rv.min);
-        add_let(bounds_projection, rv.var + ".loop_max", rv.min + rv.extent - 1);
-        add_let(bounds_projection, rv.var + ".loop_extent", rv.extent);
+    for (const auto &[var, min, extent] : rdom) {
+        add_let(bounds_projection, var + ".loop_min", min);
+        add_let(bounds_projection, var + ".loop_max", min + extent - 1);
+        add_let(bounds_projection, var + ".loop_extent", extent);
     }
 
     // Build the new RDom
