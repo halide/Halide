@@ -43,7 +43,7 @@ VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context, VkDevice d
 int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *allocator);
 int vk_clear_device_buffer(void *user_context,
                            VulkanMemoryAllocator *allocator,
-                           VkCommandPool command_pool,
+                           VkCommandBuffer command_buffer,
                            VkQueue command_queue,
                            VkBuffer device_buffer);
 // --------------------------------------------------------------------------
@@ -103,6 +103,8 @@ int vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator
 // -- Command Buffer
 int vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool pool, VkCommandBuffer *command_buffer);
 int vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool, VkCommandBuffer command_buffer);
+
+struct ScopedVulkanCommandBufferAndPool;
 
 int vk_fill_command_buffer_with_dispatch_call(void *user_context,
                                               VkDevice device,

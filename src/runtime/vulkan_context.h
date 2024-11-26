@@ -118,15 +118,6 @@ int vk_find_compute_capability(void *user_context, int *major, int *minor) {
         return 0;
     }
 
-    if (vkCreateDevice == nullptr) {
-        vk_load_vulkan_device_functions(user_context, instance);
-        if (vkCreateDevice == nullptr) {
-            debug(user_context) << "  no valid vulkan runtime was found ...\n";
-            *major = *minor = 0;
-            return halide_error_code_success;
-        }
-    }
-
     status = vk_select_device_for_context(user_context, &instance, &device, &physical_device, &queue_family_index);
     if (status != halide_error_code_success) {
         debug(user_context) << "  no valid vulkan device was found ...\n";
@@ -196,12 +187,19 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
         return halide_error_code_device_interface_no_device;
     }
 
+    vk_load_vulkan_instance_functions(user_context, *instance);
+    if (vkCreateDevice == nullptr) {
+        error(user_context) << "Vulkan: Failed to resolve instance API methods to create device!\n";
+        return halide_error_code_symbol_not_found;
+    }
+
     return halide_error_code_success;
 }
 
 int vk_destroy_instance(void *user_context, VkInstance instance, const VkAllocationCallbacks *alloc_callbacks) {
-    debug(user_context) << " vk_destroy_instance (user_context: " << user_context << ")\n";
+    debug(user_context) << " vk_destroy_instance (user_context: " << user_context << ", device: " << (void*)instance << ", alloc_callbacks: " << (void*)alloc_callbacks << ")\n";
     vkDestroyInstance(instance, alloc_callbacks);
+    vk_unload_vulkan_instance_functions(user_context);
     return halide_error_code_success;
 }
 
@@ -436,7 +434,20 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         return halide_error_code_device_interface_no_device;
     }
 
-    vkGetDeviceQueue(cached_device, *queue_family_index, 0, queue);
+    vk_load_vulkan_device_functions(user_context, *device);
+    if (vkAllocateMemory == nullptr) {
+        error(user_context) << "Vulkan: Failed to resolve device API methods for driver!\n";
+        return halide_error_code_symbol_not_found;
+    }
+
+    vkGetDeviceQueue(*device, *queue_family_index, 0, queue);
+    return halide_error_code_success;
+}
+
+int vk_destroy_device(void *user_context, VkDevice device, const VkAllocationCallbacks *alloc_callbacks) {
+    debug(user_context) << " vk_destroy_device (user_context: " << user_context << ", device: " << (void*)device << ", alloc_callbacks: " << (void*)alloc_callbacks << ")\n";
+    vkDestroyDevice(device, alloc_callbacks);
+    vk_unload_vulkan_device_functions(user_context);
     return halide_error_code_success;
 }
 
@@ -469,14 +480,6 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
         return error_code;
     }
 
-    if (vkCreateDevice == nullptr) {
-        vk_load_vulkan_device_functions(user_context, *instance);
-        if (vkCreateDevice == nullptr) {
-            error(user_context) << "Vulkan: Failed to resolve API library methods to create device!\n";
-            return halide_error_code_symbol_not_found;
-        }
-    }
-
     error_code = vk_select_device_for_context(user_context, instance, device, physical_device, queue_family_index);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to select device for context!\n";
@@ -507,18 +510,46 @@ int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
     debug(user_context)
         << "vk_destroy_context (user_context: " << user_context << ")\n";
 
+    // NOTE: Lifetime management is an issue here since we don't have a
+    //       reference count on the driver lib, only the Vulkan Loader ICD.
+    //       So, when this is called in the module destructor, we need to 
+    //       make sure the function pointers are still valid.
+    //
+    //       In some cases, we've observed the (NVIDIA) driver registering
+    //       an atexit() call that gets invoked via __run_exit_handlers()
+    //       *before* this method gets called (via _dl_fini()). At that point
+    //       all the function pointers are invalid since the call chain has
+    //       been destroyed and any call to a Vulkan API method will segfault.
+    //
+    //       So, always try and reload the device functions for the current
+    //       device to guarantee they are valid, or at least detect that the
+    //       driver interface has been lost.
+    //
+    if (device != nullptr) {
+        vk_load_vulkan_device_functions(user_context, device);
+        if(vkAllocateMemory == nullptr){
+            debug(user_context) << "Vulkan: Lost device interface ... \n";
+            vk_unload_vulkan_device_functions(user_context);
+            vk_unload_vulkan_instance_functions(user_context);
+            return halide_error_code_device_interface_no_device;
+        }
+    }
+
     if (device != nullptr) {
         vkDeviceWaitIdle(device);
     }
+
     if (allocator != nullptr) {
         vk_destroy_shader_modules(user_context, allocator);
         vk_destroy_memory_allocator(user_context, allocator);
     }
+
+    const VkAllocationCallbacks *alloc_callbacks = halide_vulkan_get_allocation_callbacks(user_context);
     if (device != nullptr) {
-        vkDestroyDevice(device, nullptr);
+        vk_destroy_device(user_context, device, alloc_callbacks);
     }
     if (instance != nullptr) {
-        vkDestroyInstance(instance, nullptr);
+        vk_destroy_instance(user_context, instance, alloc_callbacks);
     }
     return halide_error_code_success;
 }

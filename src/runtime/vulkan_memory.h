@@ -1410,7 +1410,7 @@ int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *alloc
 
 int vk_clear_device_buffer(void *user_context,
                            VulkanMemoryAllocator *allocator,
-                           VkCommandPool command_pool,
+                           VkCommandBuffer command_buffer,
                            VkQueue command_queue,
                            VkBuffer device_buffer) {
 
@@ -1418,18 +1418,10 @@ int vk_clear_device_buffer(void *user_context,
     debug(user_context)
         << " vk_clear_device_buffer (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
-        << "command_pool: " << (void *)command_pool << ", "
+        << "command_buffer: " << (void *)command_buffer << ", "
         << "command_queue: " << (void *)command_queue << ", "
         << "device_buffer: " << (void *)device_buffer << ")\n";
 #endif
-
-    // create a command buffer
-    VkCommandBuffer command_buffer;
-    int error_code = vk_create_command_buffer(user_context, allocator, command_pool, &command_buffer);
-    if (error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to create command buffer!\n";
-        return error_code;
-    }
 
     // begin the command buffer
     VkCommandBufferBeginInfo command_buffer_begin_info =
@@ -1481,12 +1473,6 @@ int vk_clear_device_buffer(void *user_context,
     if (result != VK_SUCCESS) {
         error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
         return halide_error_code_generic_error;
-    }
-
-    error_code = vk_destroy_command_buffer(user_context, allocator, command_pool, command_buffer);
-    if (error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to destroy command buffer!\n";
-        return error_code;
     }
 
     return halide_error_code_success;

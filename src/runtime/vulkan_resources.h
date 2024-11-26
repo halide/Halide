@@ -173,6 +173,34 @@ int vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocat
     return halide_error_code_success;
 }
 
+// Struct for handling destruction of a transient command buffer ... gets destroyed when object goes out of scope
+struct ScopedVulkanCommandBufferAndPool {
+    void* user_context = nullptr;
+    VulkanMemoryAllocator *allocator = nullptr;
+    VkCommandPool command_pool = VK_NULL_HANDLE;
+    VkCommandBuffer command_buffer = VK_NULL_HANDLE;
+    int error_code = halide_error_code_success;
+
+    ScopedVulkanCommandBufferAndPool(void* uc, VulkanMemoryAllocator *vma, uint32_t queue_family_index) : user_context(uc), allocator(vma) {
+        error_code = vk_create_command_pool(user_context, allocator, queue_family_index, &command_pool);
+        if (error_code == halide_error_code_success) {
+            error_code = vk_create_command_buffer(user_context, allocator, command_pool, &command_buffer);
+        }
+    }
+    ~ScopedVulkanCommandBufferAndPool() {
+        if((allocator != nullptr) && (command_pool != VK_NULL_HANDLE)) {
+            if(command_buffer != VK_NULL_HANDLE) {
+                vk_destroy_command_buffer(user_context, allocator, command_pool, command_buffer);
+            }
+            vk_destroy_command_pool(user_context, allocator, command_pool);
+        }
+        user_context = nullptr;
+        allocator = nullptr;
+        command_pool = VK_NULL_HANDLE;
+        command_buffer = VK_NULL_HANDLE;
+    }
+};
+
 int vk_fill_command_buffer_with_dispatch_call(void *user_context,
                                               VkDevice device,
                                               VkCommandBuffer command_buffer,
