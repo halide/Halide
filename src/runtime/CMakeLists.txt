@@ -1,3 +1,9 @@
+find_package(
+    VulkanHeaders 1.3.296 REQUIRED
+    HINTS "${Halide_SOURCE_DIR}/dependencies/vulkan"
+)
+get_target_property(VulkanHeaders_INCLUDE_DIR Vulkan::Headers INTERFACE_INCLUDE_DIRECTORIES)
+
 # Keep these lists in alphabetical order.
 set(RUNTIME_CPP
     aarch64_cpu_features
@@ -177,7 +183,7 @@ set(RUNTIME_CXX_FLAGS
     -Wsign-compare
     -Wimplicit-fallthrough
     -Wno-sync-alignment
-    -isystem "${Halide_SOURCE_DIR}/dependencies/vulkan/include"
+    -isystem "${VulkanHeaders_INCLUDE_DIR}"
 )
 
 Halide_feature(
