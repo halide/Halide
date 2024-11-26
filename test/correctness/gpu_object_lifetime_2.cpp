@@ -45,12 +45,6 @@ int main(int argc, char *argv[]) {
         h.realize({256}, target);
     }
 
-    // Manually invoke the Vulkan destructor (since we can't do this automatically at exit)
-    if (target.has_feature(Target::Vulkan)) {
-        const auto *interface = get_device_interface_for_device_api(DeviceAPI::Vulkan, target);
-        interface->device_release(nullptr, interface);
-    }
-
     Internal::JITSharedRuntime::release_all();
 
     int ret = tracker.validate_gpu_object_lifetime(true /* allow_globals */, true /* allow_none */, 1 /* max_globals */);
