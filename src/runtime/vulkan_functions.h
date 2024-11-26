@@ -3,16 +3,16 @@
 //       2. Instance Functions: Used to query and create a device to use
 //       3. Device Functions: Used to interact directly with the device driver
 #ifdef HL_USE_VULKAN_LOADER_FNS
- // v1.0+ 
+// v1.0+
 VULKAN_FN(vkCreateInstance)
 VULKAN_FN(vkGetInstanceProcAddr)
 VULKAN_FN(vkEnumerateInstanceExtensionProperties)
 VULKAN_FN(vkEnumerateInstanceLayerProperties)
- // v1.1+
+// v1.1+
 VULKAN_FN(vkEnumerateInstanceVersion)
 #endif
 #ifdef HL_USE_VULKAN_INSTANCE_FNS
- // v1.0+
+// v1.0+
 VULKAN_FN(vkCreateDevice)
 VULKAN_FN(vkDestroyInstance)
 VULKAN_FN(vkEnumerateDeviceExtensionProperties)
@@ -26,7 +26,7 @@ VULKAN_FN(vkGetPhysicalDeviceMemoryProperties)
 VULKAN_FN(vkGetPhysicalDeviceProperties)
 VULKAN_FN(vkGetPhysicalDeviceQueueFamilyProperties)
 // VULKAN_FN(vkGetPhysicalDeviceSparseImageFormatProperties)
- // v1.1+
+// v1.1+
 VULKAN_FN(vkEnumeratePhysicalDeviceGroups)
 VULKAN_FN(vkGetPhysicalDeviceExternalBufferProperties)
 VULKAN_FN(vkGetPhysicalDeviceExternalFenceProperties)
@@ -38,7 +38,7 @@ VULKAN_FN(vkGetPhysicalDeviceMemoryProperties2)
 VULKAN_FN(vkGetPhysicalDeviceProperties2)
 VULKAN_FN(vkGetPhysicalDeviceQueueFamilyProperties2)
 // VULKAN_FN(vkGetPhysicalDeviceSparseImageFormatProperties2)
- // v1.3+
+// v1.3+
 VULKAN_FN(vkGetPhysicalDeviceToolProperties)
 #endif
 #ifdef HL_USE_VULKAN_DEVICE_FNS

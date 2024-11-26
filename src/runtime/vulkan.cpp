@@ -635,9 +635,9 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 
     // enqueue the copy operation, using the allocated buffers
     int error_code = vk_do_multidimensional_copy(user_context, cmds.command_buffer, copy_helper,
-                                                src_offset, dst_offset,
-                                                halide_buffer->dimensions,
-                                                from_host, to_host);
+                                                 src_offset, dst_offset,
+                                                 halide_buffer->dimensions,
+                                                 from_host, to_host);
 
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: vk_do_multidimensional_copy failed!\n";
@@ -878,7 +878,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         VkBuffer *dst_device_buffer = reinterpret_cast<VkBuffer *>(dst_memory_region->handle);
 
         ScopedVulkanCommandBufferAndPool cmds(user_context, ctx.allocator, ctx.queue_family_index);
-        if(cmds.error_code != halide_error_code_success) {
+        if (cmds.error_code != halide_error_code_success) {
             error(user_context) << "Vulkan: Failed to create command buffer and pool!\n";
             if (to_host) {
                 return halide_error_code_copy_to_host_failed;

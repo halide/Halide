@@ -197,7 +197,7 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
 }
 
 int vk_destroy_instance(void *user_context, VkInstance instance, const VkAllocationCallbacks *alloc_callbacks) {
-    debug(user_context) << " vk_destroy_instance (user_context: " << user_context << ", device: " << (void*)instance << ", alloc_callbacks: " << (void*)alloc_callbacks << ")\n";
+    debug(user_context) << " vk_destroy_instance (user_context: " << user_context << ", device: " << (void *)instance << ", alloc_callbacks: " << (void *)alloc_callbacks << ")\n";
     vkDestroyInstance(instance, alloc_callbacks);
     vk_unload_vulkan_instance_functions(user_context);
     return halide_error_code_success;
@@ -445,7 +445,7 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
 }
 
 int vk_destroy_device(void *user_context, VkDevice device, const VkAllocationCallbacks *alloc_callbacks) {
-    debug(user_context) << " vk_destroy_device (user_context: " << user_context << ", device: " << (void*)device << ", alloc_callbacks: " << (void*)alloc_callbacks << ")\n";
+    debug(user_context) << " vk_destroy_device (user_context: " << user_context << ", device: " << (void *)device << ", alloc_callbacks: " << (void *)alloc_callbacks << ")\n";
     vkDestroyDevice(device, alloc_callbacks);
     vk_unload_vulkan_device_functions(user_context);
     return halide_error_code_success;
@@ -512,7 +512,7 @@ int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
 
     // NOTE: Lifetime management is an issue here since we don't have a
     //       reference count on the driver lib, only the Vulkan Loader ICD.
-    //       So, when this is called in the module destructor, we need to 
+    //       So, when this is called in the module destructor, we need to
     //       make sure the function pointers are still valid.
     //
     //       In some cases, we've observed the (NVIDIA) driver registering
@@ -527,7 +527,7 @@ int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
     //
     if (device != nullptr) {
         vk_load_vulkan_device_functions(user_context, device);
-        if(vkAllocateMemory == nullptr){
+        if (vkAllocateMemory == nullptr) {
             debug(user_context) << "Vulkan: Lost device interface ... \n";
             vk_unload_vulkan_device_functions(user_context);
             vk_unload_vulkan_instance_functions(user_context);

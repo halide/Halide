@@ -102,7 +102,7 @@ void WEAK vk_load_vulkan_instance_functions(void *user_context, VkInstance insta
 }
 
 // Reset the instance function pointers
-void WEAK vk_unload_vulkan_instance_functions(void *user_context) { 
+void WEAK vk_unload_vulkan_instance_functions(void *user_context) {
 #define VULKAN_FN(fn) fn = (PFN_##fn)(nullptr);
 #define HL_USE_VULKAN_INSTANCE_FNS
 #include "vulkan_functions.h"
@@ -121,7 +121,7 @@ void WEAK vk_load_vulkan_device_functions(void *user_context, VkDevice device) {
 }
 
 // Reset the device function pointers
-void WEAK vk_unload_vulkan_device_functions(void *user_context) { 
+void WEAK vk_unload_vulkan_device_functions(void *user_context) {
 #define VULKAN_FN(fn) fn = (PFN_##fn)(nullptr);
 #define HL_USE_VULKAN_DEVICE_FNS
 #include "vulkan_functions.h"
