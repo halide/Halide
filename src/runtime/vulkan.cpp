@@ -204,7 +204,7 @@ WEAK int halide_vulkan_device_sync(void *user_context, halide_buffer_t *) {
 }
 
 WEAK int halide_vulkan_device_release(void *user_context) {
-    print(user_context)
+    debug(user_context)
         << "halide_vulkan_device_release (user_context: " << user_context << ")\n";
 
     VulkanMemoryAllocator *allocator = nullptr;
