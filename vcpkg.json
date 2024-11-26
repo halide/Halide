@@ -25,7 +25,7 @@
       ]
     },
     "spirv-headers",
-    "vulkan-headers",
+    "vulkan-headers"
   ],
   "features": {
     "developer": {
