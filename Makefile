@@ -1090,7 +1090,7 @@ RUNTIME_CXX_FLAGS = \
     -Wvla \
     -Wsign-compare \
     -Wno-sync-alignment \
-	-isystem $(ROOT_DIR)/dependencies/vulkan/include
+    -isystem $(ROOT_DIR)/dependencies/vulkan/include
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
