@@ -513,7 +513,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
             nullptr                         // the semaphores to signal
         };
 
-    result = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
+    result = vkQueueSubmit(ctx.queue, 1, &submit_info, VK_NULL_HANDLE);
     if (result != VK_SUCCESS) {
         error(user_context) << "Vulkan: vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
         return halide_error_code_device_buffer_copy_failed;
@@ -632,7 +632,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
         << "  into halide buffer=" << halide_buffer << "\n";
 #endif
 
-    VkCommandPool command_pool;
+    VkCommandPool command_pool = VK_NULL_HANDLE;
     int error_code = vk_create_command_pool(user_context, ctx.allocator, ctx.queue_family_index, &command_pool);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to create command pool!\n";
@@ -640,7 +640,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     }
 
     // create a command buffer
-    VkCommandBuffer command_buffer;
+    VkCommandBuffer command_buffer = VK_NULL_HANDLE;
     error_code = vk_create_command_buffer(user_context, ctx.allocator, command_pool, &command_buffer);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to create command buffer!\n";
@@ -703,7 +703,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
             nullptr                         // the semaphores to signal
         };
 
-    result = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
+    result = vkQueueSubmit(ctx.queue, 1, &submit_info, VK_NULL_HANDLE);
     if (result != VK_SUCCESS) {
         error(user_context) << "Vulkan: vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
         return halide_error_code_copy_to_device_failed;
@@ -1005,7 +1005,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
                 nullptr                         // the semaphores to signal
             };
 
-        result = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
+        result = vkQueueSubmit(ctx.queue, 1, &submit_info, VK_NULL_HANDLE);
         if (result != VK_SUCCESS) {
             error(user_context) << "vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
             return result;
@@ -1224,11 +1224,11 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     int error_code = halide_error_code_success;
-    if (shader_module->pipeline_layout == 0) {
+    if (shader_module->pipeline_layout == VK_NULL_HANDLE) {
 
         // 2a. Create all descriptor set layouts
         for (uint32_t n = 0; n < shader_module->shader_count; ++n) {
-            if (((void *)shader_module->descriptor_set_layouts[n]) == nullptr) {
+            if (((void *)shader_module->descriptor_set_layouts[n]) == VK_NULL_HANDLE) {
                 uint32_t uniform_buffer_count = shader_module->shader_bindings[n].uniform_buffer_count;
                 uint32_t storage_buffer_count = shader_module->shader_bindings[n].storage_buffer_count;
                 debug(user_context) << " creating descriptor set layout [" << n << "] " << shader_module->shader_bindings[n].entry_point_name << "\n";
@@ -1267,7 +1267,7 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 2d. Create a descriptor set
-    if (entry_point_binding->descriptor_set == 0) {
+    if (entry_point_binding->descriptor_set == VK_NULL_HANDLE) {
 
         // Construct a descriptor pool
         //
@@ -1326,7 +1326,7 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 4a. Create a command pool
-    VkCommandPool command_pool;
+    VkCommandPool command_pool= VK_NULL_HANDLE;
     error_code = vk_create_command_pool(user_context, ctx.allocator, ctx.queue_family_index, &command_pool);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to create command pool!\n";
@@ -1334,7 +1334,7 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 4b. Create a command buffer from the command pool
-    VkCommandBuffer command_buffer;
+    VkCommandBuffer command_buffer = VK_NULL_HANDLE;
     error_code = vk_create_command_buffer(user_context, ctx.allocator, command_pool, &command_buffer);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to create command buffer!\n";

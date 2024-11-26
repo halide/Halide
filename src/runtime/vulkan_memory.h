@@ -569,7 +569,7 @@ int VulkanMemoryAllocator::lookup_requirements(void *user_context, size_t size, 
         0, nullptr};
 
     // Create a buffer to determine alignment requirements
-    VkBuffer buffer = {0};
+    VkBuffer buffer = VK_NULL_HANDLE;
     VkResult result = vkCreateBuffer(this->device, &create_info, this->alloc_callbacks, &buffer);
     if (result != VK_SUCCESS) {
 #if defined(HL_VK_DEBUG_MEM)
@@ -748,7 +748,7 @@ int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block
 
     if (selected_type == invalid_memory_type) {
         vk_host_free(nullptr, device_memory, instance->alloc_callbacks);
-        device_memory = nullptr;
+        device_memory = VK_NULL_HANDLE;
         error(user_context) << "VulkanMemoryAllocator: Allocation failed for block (\n"
                             << "\tblock=" << (void *)(block) << "\n"
                             << "\tsize=" << (uint64_t)block->size << "\n"
@@ -1470,7 +1470,7 @@ int vk_clear_device_buffer(void *user_context,
             nullptr                         // the semaphores to signal
         };
 
-    result = vkQueueSubmit(command_queue, 1, &submit_info, 0);
+    result = vkQueueSubmit(command_queue, 1, &submit_info, VK_NULL_HANDLE);
     if (result != VK_SUCCESS) {
         error(user_context) << "Vulkan: vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
         return halide_error_code_generic_error;
