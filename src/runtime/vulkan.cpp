@@ -1326,7 +1326,7 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 4a. Create a command pool
-    VkCommandPool command_pool= VK_NULL_HANDLE;
+    VkCommandPool command_pool = VK_NULL_HANDLE;
     error_code = vk_create_command_pool(user_context, ctx.allocator, ctx.queue_family_index, &command_pool);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to create command pool!\n";
