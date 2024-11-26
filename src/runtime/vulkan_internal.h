@@ -56,7 +56,6 @@ int vk_create_context(
     VkInstance *instance,
     VkDevice *device,
     VkPhysicalDevice *physical_device,
-    VkCommandPool *command_pool,
     VkQueue *queue, uint32_t *queue_family_index);
 
 int vk_destroy_context(
@@ -65,7 +64,6 @@ int vk_destroy_context(
     VkInstance instance,
     VkDevice device,
     VkPhysicalDevice physical_device,
-    VkCommandPool command_pool,
     VkQueue queue);
 
 int vk_find_compute_capability(void *user_context, int *major, int *minor);
@@ -101,9 +99,6 @@ bool vk_validate_required_extension_support(void *user_context,
 // -- Command Pool
 int vk_create_command_pool(void *user_context, VulkanMemoryAllocator *allocator, uint32_t queue_index, VkCommandPool *command_pool);
 int vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool);
-
-// Command pools are uint64_t and zero may be valid, so use this as a sentinel for invalid
-const VkCommandPool VkInvalidCommandPool(uint64_t(-1));
 
 // -- Command Buffer
 int vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool pool, VkCommandBuffer *command_buffer);

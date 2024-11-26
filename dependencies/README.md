@@ -18,3 +18,19 @@ build it, and extract the necessary files. It takes a single argument, the
 name of the branch to clone.
 
 [SPIR-V]: https://www.khronos.org/registry/spir-v
+
+## Vulkan
+
+This folder contains a copy of the officially released v1.3.296 SDK headers
+for [Vulkan], obtained from the `vulkan-sdk-v1.3.296` branch
+of https://github.com/KhronosGroup/Vulkan-Headers.
+
+The directory structure within this folder matches that of the official
+version's install tree, plus the upstream `LICENSE.md` notice, minus files
+that Halide doesn't need.
+
+The `update-vulkan.sh` script will automatically acquire the upstream repo,
+build it, and extract the necessary files. It takes a single argument, the
+name of the branch to clone.
+
+[Vulkan]: https://www.vulkan.org/

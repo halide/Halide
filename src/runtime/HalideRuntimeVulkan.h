@@ -56,7 +56,6 @@ extern void halide_vulkan_finalize_kernels(void *user_context, void *state_ptr);
 //      instance: the vulkan instance handle
 //      device: the vulkan device handle
 //      physical_device: the vulkan physical device handle
-//      command_pool: the vulkan command pool handle (strangely doesn't have a VkCommandPool_T typedef)
 //      queue: the vulkan queue handle
 //      queue_family_index: the index corresponding to the device queue properties for the device (as described by vkGetPhysicalDeviceQueueFamilyProperties)
 //      create: if set to true, attempt to create a new vulkan context, otherwise acquire the current one
@@ -66,7 +65,6 @@ extern int halide_vulkan_acquire_context(void *user_context,
                                          struct VkInstance_T **instance,
                                          struct VkDevice_T **device,
                                          struct VkPhysicalDevice_T **physical_device,
-                                         uint64_t *command_pool,
                                          struct VkQueue_T **queue,
                                          uint32_t *queue_family_index,
                                          bool create = true);

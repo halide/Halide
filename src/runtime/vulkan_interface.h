@@ -7,13 +7,6 @@
 // Vulkan Specific Definitions
 // --------------------------------------------------------------------------
 
-// Vulkan API version identifier macro
-#define VK_MAKE_API_VERSION(variant, major, minor, patch) \
-    ((((uint32_t)(variant)) << 29) | (((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
-
-// Vulkan API version 1.0.0
-#define VK_API_VERSION_1_0 VK_MAKE_API_VERSION(0, 1, 0, 0)  // Patch version should always be set to 0
-
 // Environment variable string delimiter
 #ifdef WINDOWS
 #define HL_VK_ENV_DELIM ";"
@@ -24,7 +17,7 @@
 // Prototypes for the subset of the Vulkan API we need
 #define VK_NO_PROTOTYPES
 // NOLINTNEXTLINE
-#include "mini_vulkan.h"
+#include <vulkan/vulkan.h>
 
 // --------------------------------------------------------------------------
 // Vulkan API Definition
@@ -94,8 +87,16 @@ void WEAK vk_load_vulkan_loader_functions(void *user_context) {
 }
 
 // Get the function pointers from the Vulkan instance for the resolved driver API methods.
-void WEAK vk_load_vulkan_functions(void *user_context, VkInstance instance) {
-    debug(user_context) << "    vk_load_vulkan_functions (user_context: " << user_context << ")\n";
+void WEAK vk_load_vulkan_instance_functions(void *user_context, VkInstance instance) {
+    debug(user_context) << "    vk_load_vulkan_instance_functions (user_context: " << user_context << ")\n";
+#define VULKAN_FN(fn) fn = (PFN_##fn)vkGetInstanceProcAddr(instance, #fn);
+#include "vulkan_functions.h"
+#undef VULKAN_FN
+}
+
+// Get the function pointers from the Vulkan instance for the resolved driver API methods.
+void WEAK vk_load_vulkan_device_functions(void *user_context, VkInstance instance) {
+    debug(user_context) << "    vk_load_vulkan_device_functions (user_context: " << user_context << ")\n";
 #define VULKAN_FN(fn) fn = (PFN_##fn)vkGetInstanceProcAddr(instance, #fn);
 #include "vulkan_functions.h"
 #undef VULKAN_FN

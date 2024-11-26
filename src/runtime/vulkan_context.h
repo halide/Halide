@@ -24,7 +24,6 @@ halide_vulkan_memory_allocator *WEAK cached_allocator = nullptr;
 // Cached instance related handles for device resources
 VkInstance WEAK cached_instance = nullptr;
 VkDevice WEAK cached_device = nullptr;
-VkCommandPool WEAK cached_command_pool = VkInvalidCommandPool;
 VkQueue WEAK cached_queue = nullptr;
 VkPhysicalDevice WEAK cached_physical_device = nullptr;
 uint32_t WEAK cached_queue_family_index = 0;
@@ -42,7 +41,6 @@ public:
     VulkanMemoryAllocator *allocator = nullptr;
     VkInstance instance = nullptr;
     VkDevice device = nullptr;
-    VkCommandPool command_pool = VkInvalidCommandPool;
     VkPhysicalDevice physical_device = nullptr;
     VkQueue queue = nullptr;
     uint32_t queue_family_index = 0;  // used for operations requiring queue family
@@ -53,7 +51,7 @@ public:
 
         int result = halide_vulkan_acquire_context(user_context,
                                                    reinterpret_cast<halide_vulkan_memory_allocator **>(&allocator),
-                                                   &instance, &device, &physical_device, &command_pool, &queue, &queue_family_index);
+                                                   &instance, &device, &physical_device, &queue, &queue_family_index);
         if (result != halide_error_code_success) {
             error = halide_error_code_device_interface_no_device;
             halide_error_no_device_interface(user_context);
@@ -61,7 +59,6 @@ public:
         halide_debug_assert(user_context, allocator != nullptr);
         halide_debug_assert(user_context, instance != nullptr);
         halide_debug_assert(user_context, device != nullptr);
-        halide_debug_assert(user_context, command_pool != 0);
         halide_debug_assert(user_context, queue != nullptr);
         halide_debug_assert(user_context, physical_device != nullptr);
     }
@@ -122,7 +119,7 @@ int vk_find_compute_capability(void *user_context, int *major, int *minor) {
     }
 
     if (vkCreateDevice == nullptr) {
-        vk_load_vulkan_functions(user_context, instance);
+        vk_load_vulkan_device_functions(user_context, instance);
         if (vkCreateDevice == nullptr) {
             debug(user_context) << "  no valid vulkan runtime was found ...\n";
             *major = *minor = 0;
@@ -446,7 +443,7 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
 // Initializes the context (used by the default implementation of halide_acquire_context)
 int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
                       VkInstance *instance, VkDevice *device, VkPhysicalDevice *physical_device,
-                      VkCommandPool *command_pool, VkQueue *queue, uint32_t *queue_family_index) {
+                      VkQueue *queue, uint32_t *queue_family_index) {
 
     debug(user_context) << " vk_create_context (user_context: " << user_context << ")\n";
 
@@ -473,7 +470,7 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
     }
 
     if (vkCreateDevice == nullptr) {
-        vk_load_vulkan_functions(user_context, *instance);
+        vk_load_vulkan_device_functions(user_context, *instance);
         if (vkCreateDevice == nullptr) {
             error(user_context) << "Vulkan: Failed to resolve API library methods to create device!\n";
             return halide_error_code_symbol_not_found;
@@ -498,12 +495,6 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
         return halide_error_code_generic_error;
     }
 
-    error_code = vk_create_command_pool(user_context, *allocator, *queue_family_index, command_pool);
-    if (error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to create command pool for context!\n";
-        return error_code;
-    }
-
     return halide_error_code_success;
 }
 
@@ -511,7 +502,7 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
 // NOTE: This should be called inside an acquire_context/release_context scope
 int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
                        VkInstance instance, VkDevice device, VkPhysicalDevice physical_device,
-                       VkCommandPool command_pool, VkQueue queue) {
+                       VkQueue queue) {
 
     debug(user_context)
         << "vk_destroy_context (user_context: " << user_context << ")\n";
@@ -519,8 +510,7 @@ int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
     if (device != nullptr) {
         vkDeviceWaitIdle(device);
     }
-    if ((command_pool != VkInvalidCommandPool) && (allocator != nullptr)) {
-        vk_destroy_command_pool(user_context, allocator, command_pool);
+    if (allocator != nullptr) {
         vk_destroy_shader_modules(user_context, allocator);
         vk_destroy_memory_allocator(user_context, allocator);
     }

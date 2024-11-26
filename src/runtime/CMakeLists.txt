@@ -177,6 +177,7 @@ set(RUNTIME_CXX_FLAGS
     -Wsign-compare
     -Wimplicit-fallthrough
     -Wno-sync-alignment
+    -I "${Halide_SOURCE_DIR}/dependencies/vulkan/include"
 )
 
 Halide_feature(

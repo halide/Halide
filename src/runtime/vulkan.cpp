@@ -34,7 +34,6 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
                                        VkInstance *instance,
                                        VkDevice *device,
                                        VkPhysicalDevice *physical_device,
-                                       VkCommandPool *command_pool,
                                        VkQueue *queue,
                                        uint32_t *queue_family_index,
                                        bool create) {
@@ -54,7 +53,6 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
                                            &cached_instance,
                                            &cached_device,
                                            &cached_physical_device,
-                                           &cached_command_pool,
                                            &cached_queue,
                                            &cached_queue_family_index);
         if (error_code != halide_error_code_success) {
@@ -68,7 +66,6 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
     *instance = cached_instance;
     *device = cached_device;
     *physical_device = cached_physical_device;
-    *command_pool = cached_command_pool;
     *queue = cached_queue;
     *queue_family_index = cached_queue_family_index;
     return halide_error_code_success;
@@ -213,7 +210,6 @@ WEAK int halide_vulkan_device_release(void *user_context) {
     VulkanMemoryAllocator *allocator = nullptr;
     VkInstance instance = nullptr;
     VkDevice device = nullptr;
-    VkCommandPool command_pool = VkInvalidCommandPool;
     VkPhysicalDevice physical_device = nullptr;
     VkQueue queue = nullptr;
     uint32_t queue_family_index = 0;
@@ -221,13 +217,12 @@ WEAK int halide_vulkan_device_release(void *user_context) {
     int destroy_status = halide_error_code_success;
     int acquire_status = halide_vulkan_acquire_context(user_context,
                                                        reinterpret_cast<halide_vulkan_memory_allocator **>(&allocator),
-                                                       &instance, &device, &physical_device, &command_pool, &queue, &queue_family_index, false);
+                                                       &instance, &device, &physical_device, &queue, &queue_family_index, false);
 
     if (acquire_status == halide_error_code_success) {
         // Destroy the context if we created it
         if ((instance == cached_instance) && (device == cached_device)) {
-            destroy_status = vk_destroy_context(user_context, allocator, instance, device, physical_device, command_pool, queue);
-            cached_command_pool = VkInvalidCommandPool;
+            destroy_status = vk_destroy_context(user_context, allocator, instance, device, physical_device, queue);
             cached_allocator = nullptr;
             cached_device = nullptr;
             cached_physical_device = nullptr;
@@ -325,9 +320,22 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
         return halide_error_code_internal_error;
     }
 
-    int error_code = vk_clear_device_buffer(user_context, ctx.allocator, ctx.command_pool, ctx.queue, *device_buffer);
+    VkCommandPool command_pool;
+    int error_code = vk_create_command_pool(user_context, ctx.allocator, ctx.queue_family_index, &command_pool);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to create command pool for context!\n";
+        return error_code;
+    }
+
+    error_code = vk_clear_device_buffer(user_context, ctx.allocator, command_pool, ctx.queue, *device_buffer);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to destroy command buffer!\n";
+        return error_code;
+    }
+
+    error_code = vk_destroy_command_pool(user_context, ctx.allocator, command_pool);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to destroy command pool for context!\n";
         return error_code;
     }
 
@@ -435,9 +443,16 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
         << "  from halide buffer=" << halide_buffer << "\n";
 #endif
 
+    VkCommandPool command_pool;
+    error_code = vk_create_command_pool(user_context, ctx.allocator, ctx.queue_family_index, &command_pool);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to create command pool for context!\n";
+        return error_code;
+    }
+
     // create a command buffer
     VkCommandBuffer command_buffer;
-    error_code = vk_create_command_buffer(user_context, ctx.allocator, ctx.command_pool, &command_buffer);
+    error_code = vk_create_command_buffer(user_context, ctx.allocator, command_pool, &command_buffer);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to create command buffer!\n";
         return error_code;
@@ -518,9 +533,15 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
         ctx.allocator->reclaim(user_context, staging_region);
     }
 
-    error_code = vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
+    error_code = vk_destroy_command_buffer(user_context, ctx.allocator, command_pool, command_buffer);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to destroy command buffer!\n";
+        return error_code;
+    }
+
+    error_code = vk_destroy_command_pool(user_context, ctx.allocator, command_pool);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to destroy command pool for context!\n";
         return error_code;
     }
 
@@ -611,9 +632,16 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
         << "  into halide buffer=" << halide_buffer << "\n";
 #endif
 
+    VkCommandPool command_pool;
+    int error_code = vk_create_command_pool(user_context, ctx.allocator, ctx.queue_family_index, &command_pool);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to create command pool!\n";
+        return error_code;
+    }
+
     // create a command buffer
     VkCommandBuffer command_buffer;
-    int error_code = vk_create_command_buffer(user_context, ctx.allocator, ctx.command_pool, &command_buffer);
+    error_code = vk_create_command_buffer(user_context, ctx.allocator, command_pool, &command_buffer);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to create command buffer!\n";
         return error_code;
@@ -712,7 +740,8 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     } else {
         ctx.allocator->reclaim(user_context, staging_region);
     }
-    vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
+    vk_destroy_command_buffer(user_context, ctx.allocator, command_pool, command_buffer);
+    vk_destroy_command_pool(user_context, ctx.allocator, command_pool);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -888,9 +917,16 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         VkBuffer *src_device_buffer = reinterpret_cast<VkBuffer *>(src_memory_region->handle);
         VkBuffer *dst_device_buffer = reinterpret_cast<VkBuffer *>(dst_memory_region->handle);
 
+        VkCommandPool command_pool;
+        error_code = vk_create_command_pool(user_context, ctx.allocator, ctx.queue_family_index, &command_pool);
+        if (error_code != halide_error_code_success) {
+            error(user_context) << "Vulkan: Failed to create command pool!\n";
+            return error_code;
+        }
+
         // create a command buffer
         VkCommandBuffer command_buffer;
-        error_code = vk_create_command_buffer(user_context, ctx.allocator, ctx.command_pool, &command_buffer);
+        error_code = vk_create_command_buffer(user_context, ctx.allocator, command_pool, &command_buffer);
         if (error_code != halide_error_code_success) {
             error(user_context) << "Vulkan: Failed to create command buffer!\n";
             if (to_host) {
@@ -1016,7 +1052,13 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             return error_code;
         }
 
-        error_code = vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
+        error_code = vk_destroy_command_buffer(user_context, ctx.allocator, command_pool, command_buffer);
+        if (error_code != halide_error_code_success) {
+            error(user_context) << "Vulkan: Failed to destroy command buffer!\n";
+            return error_code;
+        }
+
+        error_code = vk_destroy_command_pool(user_context, ctx.allocator, command_pool);
         if (error_code != halide_error_code_success) {
             error(user_context) << "Vulkan: Failed to destroy command buffer!\n";
             return error_code;
@@ -1283,9 +1325,17 @@ WEAK int halide_vulkan_run(void *user_context,
         return error_code;
     }
 
-    // 4. Create a command buffer from the command pool
+    // 4a. Create a command pool
+    VkCommandPool command_pool;
+    error_code = vk_create_command_pool(user_context, ctx.allocator, ctx.queue_family_index, &command_pool);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to create command pool!\n";
+        return error_code;
+    }
+
+    // 4b. Create a command buffer from the command pool
     VkCommandBuffer command_buffer;
-    error_code = vk_create_command_buffer(user_context, ctx.allocator, ctx.command_pool, &command_buffer);
+    error_code = vk_create_command_buffer(user_context, ctx.allocator, command_pool, &command_buffer);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to create command buffer!\n";
         return error_code;
@@ -1319,8 +1369,13 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 8. Cleanup
-    error_code = vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
-    vkResetCommandPool(ctx.device, ctx.command_pool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
+    error_code = vk_destroy_command_buffer(user_context, ctx.allocator, command_pool, command_buffer);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to destroy command buffer!\n";
+        return error_code;
+    }
+
+    error_code = vk_destroy_command_pool(user_context, ctx.allocator, command_pool);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to destroy command buffer!\n";
         return error_code;
