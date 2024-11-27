@@ -30,6 +30,9 @@
 // Vulkan API Definition
 // --------------------------------------------------------------------------
 
+extern "C" WEAK void atexit(void (*fn)());
+WEAK void halide_vulkan_cleanup();
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
@@ -66,6 +69,7 @@ extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *n
         lib_vulkan = halide_load_library(lib_name);
         if (lib_vulkan) {
             debug(user_context) << "    Loaded Vulkan loader library: " << lib_name << "\n";
+            atexit(halide_vulkan_cleanup);
             break;
         } else {
             debug(user_context) << "    Missing Vulkan loader library: " << lib_name << "\n";

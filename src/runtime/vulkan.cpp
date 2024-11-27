@@ -1397,21 +1397,6 @@ WEAK __attribute__((constructor)) void register_vulkan_allocation_pool() {
     halide_register_device_allocation_pool(&vulkan_allocation_pool);
 }
 
-WEAK __attribute__((destructor)) void halide_vulkan_cleanup() {
-    // FIXME: When the VK_LAYER_KHRONOS_validation is intercepting calls to the API, it will
-    //        cause a segfault if it's invoked inside the destructor since it uses it's own global
-    //        state to track object usage which is no longer valid once this call is invoked.
-    //        Calling this destructor with the validator hooks in place will cause an uncaught
-    //        exception for an uninitialized mutex lock. We can avoid the crash on exit by \
-    //        bypassing the device release call and leak (!!!!)
-    // ISSUE: https://github.com/halide/Halide/issues/8290
-    const char *layer_names = vk_get_layer_names_internal(nullptr);
-    bool has_validation_layer = strstr(layer_names, "VK_LAYER_KHRONOS_validation");
-    if (!has_validation_layer) {
-        halide_vulkan_device_release(nullptr);
-    }
-}
-
 // --------------------------------------------------------------------------
 
 }  // namespace
@@ -1472,3 +1457,7 @@ WEAK halide_device_interface_t vulkan_device_interface = {
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
+
+WEAK void halide_vulkan_cleanup() {
+    halide_vulkan_device_release(nullptr);
+}
