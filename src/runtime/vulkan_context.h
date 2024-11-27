@@ -9,6 +9,9 @@
 #include "vulkan_internal.h"
 #include "vulkan_memory.h"
 
+extern "C" WEAK void atexit(void (*fn)());
+WEAK void halide_vulkan_cleanup();
+
 // --------------------------------------------------------------------------
 
 namespace Halide {
@@ -503,6 +506,9 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
         error(user_context) << "Vulkan: Failed to create command pool for context!\n";
         return error_code;
     }
+
+    // Proof-of-concept cleanup mechanism.
+    atexit(halide_vulkan_cleanup);
 
     return halide_error_code_success;
 }
