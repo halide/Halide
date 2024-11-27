@@ -132,11 +132,11 @@ class LiftLoopInvariants : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
-                result = it->op;
+        for (const auto &frame : reverse_view(frames)) {
+            if (frame.new_value.same_as(frame.op->value) && result.same_as(frame.op->body)) {
+                result = frame.op;
             } else {
-                result = T::make(it->op->name, std::move(it->new_value), result);
+                result = T::make(frame.op->name, std::move(frame.new_value), result);
             }
         }
 
@@ -502,11 +502,11 @@ class GroupLoopInvariants : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
-                result = it->op;
+        for (const auto &frame : reverse_view(frames)) {
+            if (frame.new_value.same_as(frame.op->value) && result.same_as(frame.op->body)) {
+                result = frame.op;
             } else {
-                result = T::make(it->op->name, it->new_value, result);
+                result = T::make(frame.op->name, frame.new_value, result);
             }
         }
 

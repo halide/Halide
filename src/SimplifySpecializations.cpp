@@ -118,9 +118,9 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         specializations.insert(specializations.end(), s_def.specializations().begin(), s_def.specializations().end());
     }
 
-    for (size_t i = specializations.size(); i > 0; i--) {
-        Expr c = specializations[i - 1].condition;
-        Definition &s_def = specializations[i - 1].definition;
+    for (auto &s : reverse_view(specializations)) {
+        Expr c = s.condition;
+        Definition &s_def = s.definition;
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 

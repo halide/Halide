@@ -64,14 +64,14 @@ class UniquifyVariableNames : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            renaming.pop(it->op->name);
-            if (it->new_name == it->op->name &&
-                result.same_as(it->op->body) &&
-                it->op->value.same_as(it->value)) {
-                result = it->op;
+        for (const auto &frame : reverse_view(frames)) {
+            renaming.pop(frame.op->name);
+            if (frame.new_name == frame.op->name &&
+                result.same_as(frame.op->body) &&
+                frame.op->value.same_as(frame.value)) {
+                result = frame.op;
             } else {
-                result = LetOrLetStmt::make(it->new_name, it->value, result);
+                result = LetOrLetStmt::make(frame.new_name, frame.value, result);
             }
         }
 
@@ -176,11 +176,11 @@ namespace {
 void check(vector<pair<Var, Expr>> in,
            vector<pair<Var, Expr>> out) {
     Stmt in_stmt = Evaluate::make(0), out_stmt = Evaluate::make(0);
-    for (auto it = in.rbegin(); it != in.rend(); it++) {
-        in_stmt = LetStmt::make(it->first.name(), it->second, in_stmt);
+    for (const auto &[var, value] : reverse_view(in)) {
+        in_stmt = LetStmt::make(var.name(), value, in_stmt);
     }
-    for (auto it = out.rbegin(); it != out.rend(); it++) {
-        out_stmt = LetStmt::make(it->first.name(), it->second, out_stmt);
+    for (const auto &[var, value] : reverse_view(out)) {
+        out_stmt = LetStmt::make(var.name(), value, out_stmt);
     }
 
     Stmt s = uniquify_variable_names(in_stmt);

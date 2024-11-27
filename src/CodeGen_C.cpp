@@ -1123,8 +1123,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
 
     if (!namespaces.empty()) {
         stream << "\n";
-        for (size_t i = namespaces.size(); i > 0; i--) {
-            stream << "}  // namespace " << namespaces[i - 1] << "\n";
+        for (const auto &ns : reverse_view(namespaces)) {
+            stream << "}  // namespace " << ns << "\n";
         }
         stream << "\n";
     }

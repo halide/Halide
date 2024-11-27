@@ -348,19 +348,6 @@ struct Split {
     // If split_type is Fuse, then this does the opposite of a
     // split, it joins the outer and inner into the old_var.
     SplitType split_type;
-
-    bool is_rename() const {
-        return split_type == RenameVar;
-    }
-    bool is_split() const {
-        return split_type == SplitVar;
-    }
-    bool is_fuse() const {
-        return split_type == FuseVars;
-    }
-    bool is_purify() const {
-        return split_type == PurifyRVar;
-    }
 };
 
 /** Each Dim below has a dim_type, which tells you what

@@ -264,15 +264,15 @@ private:
         result = mutate(result);
 
         if (result.defined()) {
-            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-                if (!it->new_value.defined()) {
+            for (const auto &frame : reverse_view(frames)) {
+                if (!frame.new_value.defined()) {
                     continue;
                 }
-                predicate = substitute(it->op->name, it->new_value, predicate);
-                if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
-                    result = it->op;
+                predicate = substitute(frame.op->name, frame.new_value, predicate);
+                if (frame.new_value.same_as(frame.op->value) && result.same_as(frame.op->body)) {
+                    result = frame.op;
                 } else {
-                    result = T::make(it->op->name, std::move(it->new_value), result);
+                    result = T::make(frame.op->name, std::move(frame.new_value), result);
                 }
             }
         }
@@ -540,13 +540,12 @@ private:
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            op = it->first;
-            Stmt new_first = std::move(it->second);
+        for (const auto &[block, stmt] : reverse_view(frames)) {
+            Stmt new_first = stmt;
             if (!result.defined()) {
                 result = new_first;
-            } else if (new_first.same_as(op->first) && result.same_as(op->rest)) {
-                result = op;
+            } else if (new_first.same_as(block->first) && result.same_as(block->rest)) {
+                result = block;
             } else {
                 result = Block::make(new_first, result);
             }

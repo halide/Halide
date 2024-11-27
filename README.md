@@ -436,3 +436,4 @@ code to Halide:
 |------------------------------------------|---------------------------------------------------------------------------------------------------------------|
 | [CMake developer](doc/CodeStyleCMake.md) | Guidelines for authoring new CMake code.                                                                      |
 | [FuzzTesting](doc/FuzzTesting.md)        | Information about fuzz testing the Halide compiler (rather than pipelines). Intended for internal developers. |
+| [Testing](doc/Testing.md)                | Information about our test organization and debugging tips. Intended for internal developers.                 |
