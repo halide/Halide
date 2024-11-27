@@ -131,13 +131,13 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            if (it->new_value.defined()) {
-                result = LetStmtOrLet::make(it->op->name, it->new_value, result);
+        for (const auto &frame : reverse_view(frames)) {
+            if (frame.new_value.defined()) {
+                result = LetStmtOrLet::make(frame.op->name, frame.new_value, result);
             } else {
-                result = LetStmtOrLet::make(it->op->name, it->op->value, result);
+                result = LetStmtOrLet::make(frame.op->name, frame.op->value, result);
             }
-            if (it->binding.bound()) {
+            if (frame.binding.bound()) {
                 lets.pop_back();
             }
         }
@@ -210,8 +210,8 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             std::set<std::string> vars;
             track_free_vars(e, &vars);
 
-            for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                if (!it->may_substitute && vars.count(it->name)) {
+            for (const auto &[var, value, may_substitute] : reverse_view(lets)) {
+                if (!may_substitute && vars.count(var)) {
                     // We have to stop here. Can't continue
                     // because there might be an outer let with
                     // the same name that we *can* substitute in,
@@ -219,8 +219,8 @@ class SimplifyCorrelatedDifferences : public IRMutator {
                     // value.
                     break;
                 }
-                track_free_vars(it->value, &vars);
-                e = Let::make(it->name, it->value, e);
+                track_free_vars(value, &vars);
+                e = Let::make(var, value, e);
             }
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;

@@ -38,8 +38,8 @@ class BoundSmallAllocations : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            result = T::make(it->op->name, it->op->value, result);
+        for (const auto &frame : reverse_view(frames)) {
+            result = T::make(frame.op->name, frame.op->value, result);
         }
 
         return result;

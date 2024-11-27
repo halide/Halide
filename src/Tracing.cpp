@@ -386,10 +386,10 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
             builder.func = trace_tags.first;  // func name
             builder.event = halide_trace_tag;
             // We must reverse-iterate to preserve order
-            for (auto it = trace_tags.second.rbegin(); it != trace_tags.second.rend(); ++it) {
-                user_assert(it->find('\0') == string::npos)
+            for (const auto &tag : reverse_view(trace_tags.second)) {
+                user_assert(tag.find('\0') == string::npos)
                     << "add_trace_tag() may not contain the null character.";
-                builder.trace_tag_expr = Expr(*it);
+                builder.trace_tag_expr = Expr(tag);
                 s = Block::make(Evaluate::make(builder.build()), s);
             }
         }
@@ -409,9 +409,8 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
         Expr space = Expr(" ");
 
         std::map<std::string, Box> bt = boxes_touched(s);
-        for (auto topo_it = order.rbegin(); topo_it != order.rend(); ++topo_it) {
-            const string &o = *topo_it;
-            auto p = tracing.funcs_touched.find(*topo_it);
+        for (const auto &o : reverse_view(order)) {
+            auto p = tracing.funcs_touched.find(o);
             if (p == tracing.funcs_touched.end() && ends_with(o, "_im")) {
                 p = tracing.funcs_touched.find(o.substr(0, o.size() - 3));
             }

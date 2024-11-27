@@ -908,11 +908,11 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     std::ostringstream schedule_source;
     // Traverse from the consumers to the producers
-    for (auto it = order.rbegin(); it != order.rend(); it++) {
-        Func func(env[*it]);
-        debug(1) << "[gradient_autoscheduler] Processing function:" << *it << "\n";
+    for (const auto &func_name : reverse_view(order)) {
+        Func func(env[func_name]);
+        debug(1) << "[gradient_autoscheduler] Processing function:" << func_name << "\n";
         // Get the bounds in integer constant by substitute all the parameters' estimates.
-        Box bounds = func_bounds[*it];
+        Box bounds = func_bounds[func_name];
         std::vector<int> int_bounds = get_int_bounds(bounds);
         // Scheduling pure definition
         apply_schedule(params, target, func, -1, int_bounds, target.has_gpu_feature(), schedule_source);

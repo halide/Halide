@@ -65,8 +65,7 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
         if (n.is_input) {
             continue;
         }
-        for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-            const auto &s = *it;
+        for (const auto &s : Internal::reverse_view(n.stages)) {
             const int *pipeline_feats = (const int *)(&(s.features)) + 7;
             // skip the first 7 features
             for (int i = 0; i < pipeline_feat_size; i++) {
@@ -130,9 +129,9 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
         }
 
         // Load up the schedule features for all stages of this Func.
-        for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
-            internal_assert(schedule_feats.contains(&*it)) << n.func.name() << "\n";
-            const auto &feat = schedule_feats.get(&*it);
+        for (const auto &s : Internal::reverse_view(n.stages)) {
+            internal_assert(schedule_feats.contains(&s)) << n.func.name() << "\n";
+            const auto &feat = schedule_feats.get(&s);
             for (size_t i = 0; i < ScheduleFeatures::num_features(); i++) {
                 schedule_features(i, stage) = feat[i];
             }

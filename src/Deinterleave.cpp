@@ -481,21 +481,21 @@ class Interleaver : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            Expr value = std::move(it->new_value);
+        for (const auto &frame : reverse_view(frames)) {
+            Expr value = std::move(frame.new_value);
 
-            result = T::make(it->op->name, value, result);
+            result = T::make(frame.op->name, value, result);
 
             // For vector lets, we may additionally need a let defining the even and odd lanes only
             if (value.type().is_vector()) {
                 if (value.type().lanes() % 2 == 0) {
-                    result = T::make(it->op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
-                    result = T::make(it->op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
+                    result = T::make(frame.op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
+                    result = T::make(frame.op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
                 }
                 if (value.type().lanes() % 3 == 0) {
-                    result = T::make(it->op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
-                    result = T::make(it->op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
-                    result = T::make(it->op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+                    result = T::make(frame.op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
+                    result = T::make(frame.op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
+                    result = T::make(frame.op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
                 }
             }
         }

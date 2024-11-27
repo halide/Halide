@@ -210,8 +210,8 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
 
     if (!namespaces.empty()) {
         stream << "\n";
-        for (size_t i = namespaces.size(); i > 0; i--) {
-            stream << "}  // namespace " << namespaces[i - 1] << "\n";
+        for (const auto &ns : reverse_view(namespaces)) {
+            stream << "}  // namespace " << ns << "\n";
         }
         stream << "\n";
     }

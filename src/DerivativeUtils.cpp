@@ -250,11 +250,11 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
         bounds[func.name()] = output_bounds[i];
     }
     // Traverse from the consumers to the producers
-    for (auto it = order.rbegin(); it != order.rend(); it++) {
-        Func func = Func(env[*it]);
+    for (const auto &func_name : reverse_view(order)) {
+        auto func = Func(env[func_name]);
         // We should already have the bounds of this function
-        internal_assert(bounds.find(*it) != bounds.end()) << *it << "\n";
-        const Box &current_bounds = bounds[*it];
+        internal_assert(bounds.find(func_name) != bounds.end()) << func_name << "\n";
+        const Box &current_bounds = bounds[func_name];
         internal_assert(func.args().size() == current_bounds.size());
         // We know the range for each argument of this function
         for (int i = 0; i < (int)current_bounds.size(); i++) {
