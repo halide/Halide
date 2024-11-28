@@ -1375,6 +1375,11 @@ WEAK int halide_vulkan_release_unused_device_allocations(void *user_context) {
     return halide_error_code_success;
 }
 
+WEAK void halide_vulkan_release_all() {
+    debug(nullptr) << "halide_vulkan_release_all()\n";
+    halide_vulkan_device_release(nullptr);
+}
+
 namespace {
 
 WEAK __attribute__((constructor)) void register_vulkan_allocation_pool() {
@@ -1383,7 +1388,24 @@ WEAK __attribute__((constructor)) void register_vulkan_allocation_pool() {
 }
 
 WEAK __attribute__((destructor)) void halide_vulkan_cleanup() {
-    halide_vulkan_device_release(nullptr);
+    // NOTE: Lifetime management is an issue here since we don't have a
+    //       reference count on the driver lib, only the Vulkan Loader ICD.
+    //       So, when this is called in the module destructor, we need to
+    //       make sure the function pointers are still valid.
+    //
+    //       In some cases, we've observed the (NVIDIA) driver registering
+    //       an atexit() call that gets invoked via __run_exit_handlers()
+    //       *before* this method gets called (via _dl_fini()). At that point
+    //       all the function pointers are invalid since the call chain has
+    //       been destroyed and any call to a Vulkan API method will segfault.
+    //
+    //       So, we leave this destructor empty so that in the AOT case
+    //       we let the OS handle the cleanup via the dlclose() and atexit()
+    //       handlers.
+    //
+    //       For JIT, we register a custom destructor in JITModule.cpp that
+    //       calls halide_vulkan_release_all() when the module refcount
+    //       reaches zero and the module is destroyed.
 }
 
 // --------------------------------------------------------------------------

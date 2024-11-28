@@ -99,6 +99,9 @@ extern const char *halide_vulkan_get_device_type(void *user_context);
 extern void halide_vulkan_set_build_options(const char *n);
 extern const char *halide_vulkan_get_build_options(void *user_context);
 
+// Runtime invoked destructor to destroy the context and cleanup all resources
+extern void halide_vulkan_release_all();
+
 #ifdef __cplusplus
 }  // End extern "C"
 #endif

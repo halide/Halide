@@ -510,21 +510,10 @@ int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
     debug(user_context)
         << "vk_destroy_context (user_context: " << user_context << ")\n";
 
-    // NOTE: Lifetime management is an issue here since we don't have a
-    //       reference count on the driver lib, only the Vulkan Loader ICD.
-    //       So, when this is called in the module destructor, we need to
-    //       make sure the function pointers are still valid.
-    //
-    //       In some cases, we've observed the (NVIDIA) driver registering
-    //       an atexit() call that gets invoked via __run_exit_handlers()
-    //       *before* this method gets called (via _dl_fini()). At that point
-    //       all the function pointers are invalid since the call chain has
-    //       been destroyed and any call to a Vulkan API method will segfault.
-    //
-    //       So, always try and reload the device functions for the current
-    //       device to guarantee they are valid, or at least detect that the
-    //       driver interface has been lost.
-    //
+    if (vkCreateInstance == nullptr) {
+        return halide_error_code_success;
+    }
+
     if (device != nullptr) {
         vk_load_vulkan_device_functions(user_context, device);
         if (vkAllocateMemory == nullptr) {
