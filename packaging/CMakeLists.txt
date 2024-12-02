@@ -274,7 +274,16 @@ set(CPACK_RESOURCE_FILE_WELCOME "${CMAKE_CURRENT_LIST_DIR}/common/Welcome.txt")
 set(CPACK_RESOURCE_FILE_LICENSE "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(CPACK_RESOURCE_FILE_README "${Halide_SOURCE_DIR}/README.md")
 
-set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${Halide_VERSION}-${Halide_HOST_TARGET}")
+if (NOT CPACK_PACKAGE_FILE_NAME)
+    set(arch_tag "${Halide_CMAKE_TARGET}")
+    list(REMOVE_DUPLICATES arch_tag)
+    list(SORT arch_tag)
+    if (arch_tag MATCHES "arm-64-osx;x86-64-osx")
+        set(arch_tag "universal2")
+    endif ()
+    string(REPLACE ";" "_" arch_tag "${arch_tag}")
+    set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${Halide_VERSION}-${arch_tag}")
+endif ()
 
 include(CPack)
 
