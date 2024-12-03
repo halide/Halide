@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 
         auto bench_one = [&]() {
             auto t1 = now();
-            callable(i, o, memory_limit, in, out);
+            (void)callable(i, o, memory_limit, in, out);
             auto t2 = now();
             return to_ns(t2 - t1) / (i * o);
         };

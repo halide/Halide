@@ -21,11 +21,11 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
         ExprInfo info;
-        if (const int64_t *i_min = as_const_int(iter.value().min)) {
+        if (auto i_min = as_const_int(iter.value().min)) {
             info.bounds.min_defined = true;
             info.bounds.min = *i_min;
         }
-        if (const int64_t *i_max = as_const_int(iter.value().max)) {
+        if (auto i_max = as_const_int(iter.value().max)) {
             info.bounds.max_defined = true;
             info.bounds.max = *i_max;
         }
@@ -84,33 +84,6 @@ void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
 
     if (auto *info = var_info.shallow_find(name)) {
         info->old_uses++;
-    }
-}
-
-bool Simplify::const_float(const Expr &e, double *f) {
-    if (const double *p = as_const_float(e)) {
-        *f = *p;
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool Simplify::const_int(const Expr &e, int64_t *i) {
-    if (const int64_t *p = as_const_int(e)) {
-        *i = *p;
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool Simplify::const_uint(const Expr &e, uint64_t *u) {
-    if (const uint64_t *p = as_const_uint(e)) {
-        *u = *p;
-        return true;
-    } else {
-        return false;
     }
 }
 
@@ -211,8 +184,8 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     } else if (const EQ *eq = fact.as<EQ>()) {
         const Variable *v = eq->a.as<Variable>();
         const Mod *m = eq->a.as<Mod>();
-        const int64_t *modulus = m ? as_const_int(m->b) : nullptr;
-        const int64_t *remainder = m ? as_const_int(eq->b) : nullptr;
+        auto modulus = m ? as_const_int(m->b) : std::nullopt;
+        auto remainder = m ? as_const_int(eq->b) : std::nullopt;
         if (v) {
             if (is_const(eq->b) || eq->b.as<Variable>()) {
                 // TODO: consider other cases where we might want to entirely substitute
@@ -276,6 +249,24 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 learn_lower_bound(v, i.bounds.min + 1);
             }
         }
+        const Min *min = lt->b.as<Min>();
+        if (min) {
+            // c < min(a, b) -> c < a, c < b
+            learn_true(lt->a < min->a);
+            learn_true(lt->a < min->b);
+            // c < min(a, b) -> !(a <= c), !(b <= c)
+            learn_false(min->a <= lt->a);
+            learn_false(min->b <= lt->a);
+        }
+        const Max *max = lt->a.as<Max>();
+        if (max) {
+            // max(a, b) < c -> a < c, b < c
+            learn_true(max->a < lt->b);
+            learn_true(max->b < lt->b);
+            // max(a, b) < c -> !(c <= a), !(c <= b)
+            learn_false(lt->b <= max->a);
+            learn_false(lt->b <= max->b);
+        }
     } else if (const LE *le = fact.as<LE>()) {
         const Variable *v = le->a.as<Variable>();
         Simplify::ExprInfo i;
@@ -293,6 +284,24 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 // i <= v
                 learn_lower_bound(v, i.bounds.min);
             }
+        }
+        const Min *min = le->b.as<Min>();
+        if (min) {
+            // c <= min(a, b) -> c <= a, c <= b
+            learn_true(le->a <= min->a);
+            learn_true(le->a <= min->b);
+            // c <= min(a, b) -> !(a < c), !(b < c)
+            learn_false(min->a < le->a);
+            learn_false(min->b < le->a);
+        }
+        const Max *max = le->a.as<Max>();
+        if (max) {
+            // max(a, b) <= c -> a <= c, b <= c
+            learn_true(max->a <= le->b);
+            learn_true(max->b <= le->b);
+            // max(a, b) <= c -> !(c < a), !(c < b)
+            learn_false(le->b < max->a);
+            learn_false(le->b < max->b);
         }
     } else if (const Call *c = Call::as_tag(fact)) {
         learn_true(c->args[0]);

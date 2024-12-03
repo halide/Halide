@@ -422,8 +422,8 @@ Stmt Simplify::visit(const Evaluate *op) {
     } else {
         // Rewrap the lets outside the evaluate node
         Stmt stmt = Evaluate::make(value);
-        for (size_t i = lets.size(); i > 0; i--) {
-            stmt = LetStmt::make(lets[i - 1].first, lets[i - 1].second, stmt);
+        for (const auto &[var, value] : reverse_view(lets)) {
+            stmt = LetStmt::make(var, value, stmt);
         }
         return stmt;
     }

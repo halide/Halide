@@ -250,11 +250,11 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
         bounds[func.name()] = output_bounds[i];
     }
     // Traverse from the consumers to the producers
-    for (auto it = order.rbegin(); it != order.rend(); it++) {
-        Func func = Func(env[*it]);
+    for (const auto &func_name : reverse_view(order)) {
+        auto func = Func(env[func_name]);
         // We should already have the bounds of this function
-        internal_assert(bounds.find(*it) != bounds.end()) << *it << "\n";
-        const Box &current_bounds = bounds[*it];
+        internal_assert(bounds.find(func_name) != bounds.end()) << func_name << "\n";
+        const Box &current_bounds = bounds[func_name];
         internal_assert(func.args().size() == current_bounds.size());
         // We know the range for each argument of this function
         for (int i = 0; i < (int)current_bounds.size(); i++) {
@@ -381,13 +381,13 @@ pair<bool, Expr> solve_inverse(Expr expr,
     Expr rmax = simplify(interval.max);
     Expr rextent = simplify(rmax - rmin + 1);
 
-    const int64_t *extent_int = as_const_int(rextent);
-    if (extent_int == nullptr) {
+    auto extent_int = as_const_int(rextent);
+    if (!extent_int) {
         return {false, Expr()};
     }
 
     // For some reason interval.is_single_point() doesn't work
-    if (extent_int != nullptr && *extent_int == 1) {
+    if (extent_int && *extent_int == 1) {
         return {true, rmin};
     }
 

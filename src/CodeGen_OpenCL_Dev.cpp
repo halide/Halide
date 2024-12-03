@@ -317,7 +317,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        auto fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
@@ -753,7 +753,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
-    if (!op->condition.type().is_scalar()) {
+    if (op->type.is_vector()) {
         // A vector of bool was recursively introduced while
         // performing codegen. Eliminate it.
         Expr equiv = eliminate_bool_vectors(op);

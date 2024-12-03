@@ -484,7 +484,7 @@ void CodeGen_X86::visit(const NE *op) {
 }
 
 void CodeGen_X86::visit(const Select *op) {
-    if (op->condition.type().is_vector()) {
+    if (op->type.is_vector()) {
         // LLVM handles selects on vector conditions much better at native width
         Value *cond = codegen(op->condition);
         Value *true_val = codegen(op->true_value);
@@ -594,7 +594,7 @@ void CodeGen_X86::visit(const Call *op) {
          op->type.element_of() == Int(16)) &&
         op->is_intrinsic(Call::mul_shift_right)) {
         internal_assert(op->args.size() == 3);
-        const uint64_t *shift = as_const_uint(op->args[2]);
+        auto shift = as_const_uint(op->args[2]);
         if (shift && *shift < 16 && *shift >= 8) {
             Type narrow = op->type.with_bits(8);
             Expr narrow_a = lossless_cast(narrow, op->args[0]);

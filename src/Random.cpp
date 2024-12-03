@@ -55,7 +55,7 @@ Expr rng32(const Expr &x) {
     // So I declare this good enough for image processing.
 
     // If it's just a const (which it often is), save the simplifier some work:
-    if (const uint64_t *i = as_const_uint(x)) {
+    if (auto i = as_const_uint(x)) {
         return make_const(UInt(32), ((C2 * (*i)) + C1) * (*i) + C0);
     }
 
@@ -73,8 +73,8 @@ Expr random_int(const vector<Expr> &e) {
         // Add in the next term and permute again
         string name = unique_name('R');
         // If it's a const, save the simplifier some work
-        const uint64_t *ir = as_const_uint(result);
-        const uint64_t *ie = as_const_uint(e[i]);
+        auto ir = as_const_uint(result);
+        auto ie = as_const_uint(e[i]);
         if (ir && ie) {
             result = rng32(make_const(UInt(32), (*ir) + (*ie)));
         } else {

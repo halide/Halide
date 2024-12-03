@@ -6,17 +6,15 @@ namespace Internal {
 Expr Simplify::visit(const Reinterpret *op, ExprInfo *info) {
     Expr a = mutate(op->value, nullptr);
 
-    int64_t ia;
-    uint64_t ua;
     bool vector = op->type.is_vector() || a.type().is_vector();
     if (op->type == a.type()) {
         return a;
-    } else if (const_int(a, &ia) && op->type.is_uint() && !vector) {
+    } else if (auto ia = as_const_int(a); ia && op->type.is_uint() && !vector) {
         // int -> uint
-        return make_const(op->type, (uint64_t)ia);
-    } else if (const_uint(a, &ua) && op->type.is_int() && !vector) {
+        return make_const(op->type, reinterpret_bits<uint64_t>(*ia));
+    } else if (auto ua = as_const_uint(a); ua && op->type.is_int() && !vector) {
         // uint -> int
-        return make_const(op->type, (int64_t)ua);
+        return make_const(op->type, reinterpret_bits<int64_t>(*ua));
     } else if (const Reinterpret *as_r = a.as<Reinterpret>()) {
         // Fold double-reinterprets.
         return mutate(reinterpret(op->type, as_r->value), info);

@@ -137,7 +137,7 @@ BlockAllocator *BlockAllocator::create(void *user_context, const Config &cfg, co
 
 void BlockAllocator::destroy(void *user_context, BlockAllocator *instance) {
     halide_abort_if_false(user_context, instance != nullptr);
-    const MemoryAllocators &allocators = instance->allocators;
+    MemoryAllocators allocators = instance->allocators;
     instance->destroy(user_context);
     halide_abort_if_false(user_context, allocators.system.deallocate != nullptr);
     allocators.system.deallocate(user_context, instance);

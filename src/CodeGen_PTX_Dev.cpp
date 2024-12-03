@@ -138,7 +138,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            arg_types[i] = llvm_type_of(UInt(8))->getPointerTo();
+            arg_types[i] = PointerType::get(llvm_type_of(UInt(8)), 0);
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
         }
@@ -257,7 +257,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         // arguments
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        auto fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
 
         llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
@@ -671,7 +671,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     llvm::PassBuilder pb(target_machine.get(), pto);
 
-    bool debug_pass_manager = false;
     // These analysis managers have to be declared in this order.
     llvm::LoopAnalysisManager lam;
     llvm::FunctionAnalysisManager fam;
@@ -695,7 +694,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     target_machine->registerPassBuilderCallbacks(pb);
 #endif
 
-    mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
+    mpm = pb.buildPerModuleDefaultPipeline(level);
     mpm.run(*module, mam);
 
     if (llvm::verifyModule(*module, &errs())) {

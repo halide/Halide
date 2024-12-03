@@ -241,10 +241,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const VectorReduce *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
-    int bits;
-    if (is_const_power_of_two_integer(op->b, &bits)) {
+    if (auto bits = is_const_power_of_two_integer(op->b)) {
         ostringstream oss;
-        oss << print_expr(op->a) << " >> " << bits;
+        oss << print_expr(op->a) << " >> " << *bits;
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_div(op->a, op->b));
@@ -254,10 +253,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
-    int bits;
-    if (is_const_power_of_two_integer(op->b, &bits)) {
+    if (auto bits = is_const_power_of_two_integer(op->b)) {
         ostringstream oss;
-        oss << print_expr(op->a) << " & " << ((1 << bits) - 1);
+        oss << print_expr(op->a) << " & " << (((uint64_t)1 << *bits) - 1);
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
@@ -312,7 +310,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        auto fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 

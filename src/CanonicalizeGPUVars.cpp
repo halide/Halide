@@ -156,13 +156,13 @@ class CanonicalizeGPUVars : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-            std::string name = canonicalize_let(it->first);
-            if (name != it->first) {
+        for (const auto &[var, value] : reverse_view(lets)) {
+            std::string name = canonicalize_let(var);
+            if (name != var) {
                 Expr new_var = Variable::make(Int(32), name);
-                result = substitute(it->first, new_var, result);
+                result = substitute(var, new_var, result);
             }
-            result = LetStmt::make(name, it->second, result);
+            result = LetStmt::make(name, value, result);
         }
 
         return result;

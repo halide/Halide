@@ -53,7 +53,7 @@ bool can_allocation_fit_on_stack(int64_t size);
  *  max_abs is the maximum absolute value of (a/b).
  *  Returns the pair {div_round_to_zero, mod_round_to_zero}. */
 std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &a, const Expr &b,
-                                                 const uint64_t *max_abs = nullptr);
+                                                 std::optional<uint64_t> max_abs = std::nullopt);
 
 /** Given a Halide Euclidean division/mod operation, do constant optimizations
  * and possibly call lower_euclidean_div/lower_euclidean_mod if necessary.

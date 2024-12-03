@@ -481,21 +481,21 @@ class Interleaver : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            Expr value = std::move(it->new_value);
+        for (const auto &frame : reverse_view(frames)) {
+            Expr value = std::move(frame.new_value);
 
-            result = T::make(it->op->name, value, result);
+            result = T::make(frame.op->name, value, result);
 
             // For vector lets, we may additionally need a let defining the even and odd lanes only
             if (value.type().is_vector()) {
                 if (value.type().lanes() % 2 == 0) {
-                    result = T::make(it->op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
-                    result = T::make(it->op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
+                    result = T::make(frame.op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
+                    result = T::make(frame.op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
                 }
                 if (value.type().lanes() % 3 == 0) {
-                    result = T::make(it->op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
-                    result = T::make(it->op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
-                    result = T::make(it->op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+                    result = T::make(frame.op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
+                    result = T::make(frame.op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
+                    result = T::make(frame.op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
                 }
             }
         }
@@ -658,14 +658,14 @@ class Interleaver : public IRMutator {
             return Stmt();
         }
 
-        const int64_t *stride_ptr = as_const_int(r0->stride);
+        auto optional_stride = as_const_int(r0->stride);
 
         // The stride isn't a constant or is <= 1
-        if (!stride_ptr || *stride_ptr <= 1) {
+        if (!optional_stride || *optional_stride <= 1) {
             return Stmt();
         }
 
-        const int64_t stride = *stride_ptr;
+        const int64_t stride = *optional_stride;
         const int lanes = r0->lanes;
         const int64_t expected_stores = stride;
 
@@ -715,8 +715,7 @@ class Interleaver : public IRMutator {
                 return Stmt();
             }
 
-            Expr diff = simplify(ri->base - r0->base);
-            const int64_t *offs = as_const_int(diff);
+            auto offs = as_const_int(simplify(ri->base - r0->base));
 
             // Difference between bases is not constant.
             if (!offs) {

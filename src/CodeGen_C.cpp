@@ -1123,8 +1123,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
 
     if (!namespaces.empty()) {
         stream << "\n";
-        for (size_t i = namespaces.size(); i > 0; i--) {
-            stream << "}  // namespace " << namespaces[i - 1] << "\n";
+        for (const auto &ns : reverse_view(namespaces)) {
+            stream << "}  // namespace " << ns << "\n";
         }
         stream << "\n";
     }
@@ -1325,9 +1325,8 @@ void CodeGen_C::visit(const Mul *op) {
 }
 
 void CodeGen_C::visit(const Div *op) {
-    int bits;
-    if (is_const_power_of_two_integer(op->b, &bits)) {
-        visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
+    if (auto bits = is_const_power_of_two_integer(op->b)) {
+        visit_binop(op->type, op->a, make_const(op->a.type(), *bits), ">>");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_div(op->a, op->b));
     } else {
@@ -1336,9 +1335,8 @@ void CodeGen_C::visit(const Div *op) {
 }
 
 void CodeGen_C::visit(const Mod *op) {
-    int bits;
-    if (is_const_power_of_two_integer(op->b, &bits)) {
-        visit_binop(op->type, op->a, make_const(op->a.type(), (1 << bits) - 1), "&");
+    if (auto bits = is_const_power_of_two_integer(op->b)) {
+        visit_binop(op->type, op->a, make_const(op->a.type(), ((uint64_t)1 << *bits) - 1), "&");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
     } else if (op->type.is_float()) {
@@ -1613,7 +1611,7 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::alloca)) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->type.is_handle());
-        const int64_t *sz = as_const_int(op->args[0]);
+        auto sz = as_const_int(op->args[0]);
         if (op->type == type_of<struct halide_buffer_t *>() &&
             Call::as_intrinsic(op->args[0], {Call::size_of_halide_buffer_t})) {
             stream << get_indent();
@@ -1752,8 +1750,8 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 3);
         std::string struct_instance = print_expr(op->args[0]);
         std::string struct_prototype = print_expr(op->args[1]);
-        const int64_t *index = as_const_int(op->args[2]);
-        internal_assert(index != nullptr);
+        auto index = as_const_int(op->args[2]);
+        internal_assert(index);
         rhs << "((decltype(" << struct_prototype << "))"
             << struct_instance << ")->f_" << *index;
     } else if (op->is_intrinsic(Call::get_user_context)) {
@@ -2038,7 +2036,7 @@ void CodeGen_C::visit(const Select *op) {
 
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
-    if (op->condition.type().is_scalar()) {
+    if (op->type.is_scalar()) {
         rhs << "(" << type << ")"
             << "(" << cond
             << " ? " << true_val

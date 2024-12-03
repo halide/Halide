@@ -517,9 +517,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             for (int i = 0; i < p->num_funcs; i++) {
                 halide_profiler_func_stats *fs = p->funcs + i;
 
-                // The first id is always a catch-all overhead
-                // slot. Only report overhead time if it's non-zero
-                if (i == 0 && fs->time == 0) {
+                // The first id is always a catch-all overhead slot (notably containing the asserts).
+                // The second id is always the "wait for parallel tasks" slot.
+                // Only report these time if it's non-zero
+                if ((i == 0 || i == 1) && fs->time == 0) {
                     continue;
                 }
 

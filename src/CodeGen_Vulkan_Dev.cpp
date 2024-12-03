@@ -755,12 +755,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mod): " << op->type << " ((" << op->a << ") % (" << op->b << "))\n";
-    int bits = 0;
-    if (is_const_power_of_two_integer(op->b, &bits) && op->type.is_int_or_uint()) {
+    if (auto bits = is_const_power_of_two_integer(op->b)) {
         op->a.accept(this);
         SpvId src_a_id = builder.current_id();
 
-        int bitwise_value = ((1 << bits) - 1);
+        int bitwise_value = ((1 << *bits) - 1);
         Expr expr = make_const(op->type, bitwise_value);
         expr.accept(this);
         SpvId src_b_id = builder.current_id();
@@ -1020,7 +1019,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        auto fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
@@ -1569,6 +1568,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Store *op) {
     user_assert(is_const_one(op->predicate)) << "Predicated stores not supported by SPIR-V codegen!\n";
 
     debug(2) << "    value_type=" << op->value.type() << " value=" << op->value << "\n";
+    debug(2) << "    index_type=" << op->index.type() << " index=" << op->index << "\n";
     op->value.accept(this);
     SpvId value_id = builder.current_id();
 
@@ -2682,7 +2682,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
             SpvId runtime_arr_type_id = builder.add_runtime_array(array_element_type_id);
 
             // Annotate the array with its stride
-            SpvBuilder::Literals array_stride = {(uint32_t)(arg.type.bytes())};
+            SpvBuilder::Literals array_stride = {(uint32_t)(arg.type.bytes() * lanes)};
             builder.add_annotation(runtime_arr_type_id, SpvDecorationArrayStride, array_stride);
 
             // Wrap the runtime array in a struct (required with SPIR-V buffer block semantics)

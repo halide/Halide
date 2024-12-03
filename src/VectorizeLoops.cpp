@@ -261,7 +261,7 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
             return true;
         }
     } else if (const Mul *mul = e.as<Mul>()) {
-        const int64_t *b = nullptr;
+        std::optional<int64_t> b;
         if (is_interleaved_ramp(mul->a, scope, result) &&
             (b = as_const_int(mul->b))) {
             result->base = simplify(result->base * (int)(*b));
@@ -269,7 +269,7 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
             return true;
         }
     } else if (const Div *div = e.as<Div>()) {
-        const int64_t *b = nullptr;
+        std::optional<int64_t> b;
         if (is_interleaved_ramp(div->a, scope, result) &&
             (b = as_const_int(div->b)) &&
             is_const_one(result->stride) &&
@@ -284,7 +284,7 @@ bool is_interleaved_ramp(const Expr &e, const Scope<Expr> &scope, InterleavedRam
             return true;
         }
     } else if (const Mod *mod = e.as<Mod>()) {
-        const int64_t *b = nullptr;
+        std::optional<int64_t> b;
         if (is_interleaved_ramp(mod->a, scope, result) &&
             (b = as_const_int(mod->b)) &&
             (result->outer_repetitions == 1 ||
@@ -622,6 +622,7 @@ class VectorSubs : public IRMutator {
             // Widen the true and false values, but we don't have to widen the condition
             true_value = widen(true_value, lanes);
             false_value = widen(false_value, lanes);
+            condition = widen(condition, lanes);
             return Select::make(condition, true_value, false_value);
         }
     }
@@ -654,8 +655,8 @@ class VectorSubs : public IRMutator {
         if (!changed) {
             return op;
         } else if (op->name == Call::trace) {
-            const int64_t *event = as_const_int(op->args[6]);
-            internal_assert(event != nullptr);
+            auto event = as_const_int(op->args[6]);
+            internal_assert(event);
             if (*event == halide_trace_begin_realization || *event == halide_trace_end_realization) {
                 // Call::trace vectorizes uniquely for begin/end realization, because the coordinates
                 // for these are actually min/extent pairs; we need to maintain the proper dimensionality
@@ -999,12 +1000,12 @@ class VectorSubs : public IRMutator {
             body = mutate(body);
 
             // Append vectorized lets for this loop level.
-            for (auto let = containing_lets.rbegin(); let != containing_lets.rend(); let++) {
+            for (const auto &[var, _] : reverse_view(containing_lets)) {
                 // Skip if this var wasn't vectorized.
-                if (!scope.contains(let->first)) {
+                if (!scope.contains(var)) {
                     continue;
                 }
-                string vectorized_name = get_widened_var_name(let->first);
+                string vectorized_name = get_widened_var_name(var);
                 Expr vectorized_value = vector_scope.get(vectorized_name);
                 vector_scope.pop(vectorized_name);
                 InterleavedRamp ir;
@@ -1309,9 +1310,8 @@ class VectorSubs : public IRMutator {
             s = SerializeLoops().mutate(s);
         }
         // We'll need the original scalar versions of any containing lets.
-        for (size_t i = containing_lets.size(); i > 0; i--) {
-            const auto &l = containing_lets[i - 1];
-            s = LetStmt::make(l.first, l.second, s);
+        for (const auto &[var, value] : reverse_view(containing_lets)) {
+            s = LetStmt::make(var, value, s);
         }
 
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {

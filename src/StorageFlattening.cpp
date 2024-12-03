@@ -296,9 +296,9 @@ private:
 
             auto expand_and_bound = [&](Expr e) {
                 // Iterate from innermost outwards
-                for (auto it = hoisted_storages.rbegin(); it != hoisted_storages.rend(); it++) {
-                    e = expand_expr(e, it->scope);
-                    if (it->name == op->name) {
+                for (const auto &storage : reverse_view(hoisted_storages)) {
+                    e = expand_expr(e, storage.scope);
+                    if (storage.name == op->name) {
                         break;
                     }
                 }
@@ -307,9 +307,9 @@ private:
                 // Find bounds of expression using the intervals of the loop variables. The loop variables may depend on
                 // the other loop variables, so we just call bounds_of_expr_in_scope for each loop variable separately
                 // in a reverse order.
-                for (auto it = hoisted_storage_data.loop_vars.rbegin(); it != hoisted_storage_data.loop_vars.rend(); ++it) {
+                for (const auto &[var, interval] : reverse_view(hoisted_storage_data.loop_vars)) {
                     Scope<Interval> one_loop_var;
-                    one_loop_var.push(it->first, it->second);
+                    one_loop_var.push(var, interval);
                     Interval bounds = bounds_of_expr_in_scope(e, one_loop_var);
                     e = bounds.max;
                 }
@@ -538,11 +538,11 @@ private:
         Expr expanded_min = op->min;
         Expr expanded_extent = op->extent;
         // Iterate from innermost outwards
-        for (auto it = hoisted_storages.rbegin(); it != hoisted_storages.rend(); it++) {
-            expanded_min = simplify(expand_expr(expanded_min, it->scope));
-            expanded_extent = expand_expr(expanded_extent, it->scope);
-            Interval loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
-            it->loop_vars.emplace_back(op->name, loop_bounds);
+        for (auto &storage : reverse_view(hoisted_storages)) {
+            expanded_min = simplify(expand_expr(expanded_min, storage.scope));
+            expanded_extent = expand_expr(expanded_extent, storage.scope);
+            auto loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
+            storage.loop_vars.emplace_back(op->name, loop_bounds);
         }
 
         ScopedValue<bool> old_in_gpu(in_gpu, in_gpu || is_gpu(op->for_type));

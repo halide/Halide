@@ -70,7 +70,7 @@ Checks: >
     bugprone-terminating-continue,
     bugprone-throw-keyword-missing,
     bugprone-too-small-loop-variable,
-    bugprone-unchecked-optional-access,
+    -bugprone-unchecked-optional-access, # Too many false-positives
     bugprone-undefined-memory-manipulation,
     bugprone-undelegated-constructor,
     bugprone-unhandled-exception-at-new,
