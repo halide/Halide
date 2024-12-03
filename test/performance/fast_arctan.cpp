@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 
     Expr t0 = x / float(test_w);
     Expr t1 = y / float(test_h);
-    // To make sure we time mostely the computation of the arctan, and not memory bandwidth,
+    // To make sure we time mostly the computation of the arctan, and not memory bandwidth,
     // we will compute many arctans per output and sum them. In my testing, GPUs suffer more
     // from bandwith with this test, so we give it more arctangents to compute per output.
     const int test_d = target.has_gpu_feature() ? 1024 : 64;
