@@ -6,6 +6,7 @@
  * Defines methods for substituting out variables in expressions and
  * statements. */
 
+#include <algorithm>
 #include <map>
 
 #include "Expr.h"
