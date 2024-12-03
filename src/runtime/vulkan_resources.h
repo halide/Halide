@@ -1693,10 +1693,10 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
-    if(allocator != nullptr) {
+    if (allocator != nullptr) {
         compilation_cache.delete_context(user_context, allocator->current_device(), vk_destroy_compilation_cache_entry);
     }
-    
+
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
