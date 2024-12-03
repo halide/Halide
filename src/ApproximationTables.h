@@ -1,4 +1,5 @@
-#pragma once
+#ifndef HALIDE_APPROXIMATION_TABLES_H
+#define HALIDE_APPROXIMATION_TABLES_H
 
 #include <vector>
 
@@ -19,3 +20,5 @@ const Approximation *best_atan_approximation(Halide::ApproximationPrecision prec
 
 }  // namespace Internal
 }  // namespace Halide
+
+#endif

@@ -983,8 +983,7 @@ Expr fast_sin(const Expr &x);
 Expr fast_cos(const Expr &x);
 // @}
 
-/**
- * Struct that allows the user to specify several requirements for functions
+/** Struct that allows the user to specify several requirements for functions
  * that are approximated by polynomial expansions. These polynomials can be
  * optimized for four different metrics: Mean Squared Error, Maximum Absolute Error,
  * Maximum Units in Last Place (ULP) Error, or a 50%/50% blend of MAE and MULPE.
@@ -992,9 +991,9 @@ Expr fast_cos(const Expr &x);
  * Orthogonally to the optimization objective, these polynomials can vary
  * in degree. Higher degree polynomials will give more precise results.
  * Note that instead of specifying the degree, the number of terms is used instead.
- * E.g., even symmetric functions may be implemented using only even powers, for which
- * A number of terms of 4 would actually mean that terms in [1, x^2, x^4, x^6] are used,
- * which is degree 6.
+ * E.g., even (i.e., symmetric) functions may be implemented using only even powers,
+ * for which a number of terms of 4 would actually mean that terms
+ * in [1, x^2, x^4, x^6] are used, which is degree 6.
  *
  * Additionally, if you don't care about number of terms in the polynomial
  * and you do care about the maximal absolute error the approximation may have
@@ -1025,8 +1024,8 @@ struct ApproximationPrecision {
  * For more info on the available approximations and their precisions, see the table in ApproximationTables.cpp.
  *
  * Note: the polynomial uses odd powers, so the number of terms is not the degree of the polynomial.
- * Note: Poly8 is only useful to increase precision for atan, and not for atan2.
- * Note: The performance of this functions seem to be not reliably faster on WebGPU (for now, August 2024).
+ * Note: the polynomial with 8 terms is only useful to increase precision for fast_atan, and not for fast_atan2.
+ * Note: the performance of this functions seem to be not reliably faster on WebGPU (for now, August 2024).
  */
 // @{
 Expr fast_atan(const Expr &x, ApproximationPrecision precision = {ApproximationPrecision::MULPE, 6});
