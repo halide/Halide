@@ -12,12 +12,7 @@ private:
     Internal::Stmt visit(const Internal::Allocate *op) override {
         int total_size = 1;
         for (const auto &e : op->extents) {
-            const auto *size = Internal::as_const_int(e);
-            if (size) {
-                total_size = total_size * (*size);
-            } else {
-                total_size = 0;
-            }
+            total_size *= Internal::as_const_int(e).value_or(0);
         }
         // Trim of the suffix.
         std::string name = op->name.substr(0, op->name.find("$"));

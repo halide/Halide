@@ -148,7 +148,7 @@ Expr as_mul(const Expr &a) {
     } else if (const Call *wm = Call::as_intrinsic(a, {Call::widening_mul})) {
         return simplify(Mul::make(cast(wm->type, wm->args[0]), cast(wm->type, wm->args[1])));
     } else if (const Call *s = Call::as_intrinsic(a, {Call::shift_left, Call::widening_shift_left})) {
-        const uint64_t *log2_b = as_const_uint(s->args[1]);
+        auto log2_b = as_const_uint(s->args[1]);
         if (log2_b) {
             Expr b = make_one(s->type) << cast(UInt(s->type.bits()), (int)*log2_b);
             return simplify(Mul::make(cast(s->type, s->args[0]), b));
@@ -1076,7 +1076,7 @@ class OptimizePatterns : public IRMutator {
             // Run bounds analysis to estimate the range of result.
             Expr abs_result = op->type.is_int() ? abs(a / b) : a / b;
             Expr extent_upper = find_constant_bound(abs_result, Direction::Upper, bounds);
-            const uint64_t *upper_bound = as_const_uint(extent_upper);
+            auto upper_bound = as_const_uint(extent_upper);
             a = mutate(a);
             b = mutate(b);
             std::pair<Expr, Expr> div_mod = long_div_mod_round_to_zero(a, b, upper_bound);

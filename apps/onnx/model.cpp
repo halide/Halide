@@ -174,7 +174,7 @@ void prepare_random_input(
     const Tensor &t = pipeline.model->tensors.at(input_name);
     std::vector<int> input_shape;
     for (int i = 0; i < t.shape.size(); ++i) {
-        const int64_t *dim = Halide::Internal::as_const_int(t.shape[i]);
+        auto dim = Halide::Internal::as_const_int(t.shape[i]);
         if (!dim) {
             // The dimension isn't fixed: use the estimated typical value instead if
             // one was provided.

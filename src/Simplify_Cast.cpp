@@ -27,74 +27,74 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
         const Ramp *ramp_value = value.as<Ramp>();
-        double f = 0.0;
-        int64_t i = 0;
-        uint64_t u = 0;
+        std::optional<double> f;
+        std::optional<int64_t> i;
+        std::optional<uint64_t> u;
         if (Call::as_intrinsic(value, {Call::signed_integer_overflow})) {
             clear_expr_info(info);
             return make_signed_integer_overflow(op->type);
         } else if (value.type() == op->type) {
             return value;
         } else if (op->type.is_int() &&
-                   const_float(value, &f) &&
-                   std::isfinite(f)) {
+                   (f = as_const_float(value)) &&
+                   std::isfinite(*f)) {
             // float -> int
             // Recursively call mutate just to set the bounds
-            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(f)), info);
+            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(*f)), info);
         } else if (op->type.is_uint() &&
-                   const_float(value, &f) &&
-                   std::isfinite(f)) {
+                   (f = as_const_float(value)) &&
+                   std::isfinite(*f)) {
             // float -> uint
             // Recursively call mutate just to set the bounds
-            return mutate(make_const(op->type, safe_numeric_cast<uint64_t>(f)), info);
+            return mutate(make_const(op->type, safe_numeric_cast<uint64_t>(*f)), info);
         } else if (op->type.is_float() &&
-                   const_float(value, &f)) {
+                   (f = as_const_float(value))) {
             // float -> float
-            return make_const(op->type, f);
+            return make_const(op->type, *f);
         } else if (op->type.is_int() &&
-                   const_int(value, &i)) {
+                   (i = as_const_int(value))) {
             // int -> int
             // Recursively call mutate just to set the bounds
-            return mutate(make_const(op->type, i), info);
+            return mutate(make_const(op->type, *i), info);
         } else if (op->type.is_uint() &&
-                   const_int(value, &i)) {
+                   (i = as_const_int(value))) {
             // int -> uint
-            return make_const(op->type, safe_numeric_cast<uint64_t>(i));
+            return make_const(op->type, safe_numeric_cast<uint64_t>(*i));
         } else if (op->type.is_float() &&
-                   const_int(value, &i)) {
+                   (i = as_const_int(value))) {
             // int -> float
-            return mutate(make_const(op->type, safe_numeric_cast<double>(i)), info);
+            return mutate(make_const(op->type, safe_numeric_cast<double>(*i)), info);
         } else if (op->type.is_int() &&
-                   const_uint(value, &u) &&
+                   (u = as_const_uint(value)) &&
                    op->type.bits() < value.type().bits()) {
             // uint -> int narrowing
             // Recursively call mutate just to set the bounds
-            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), info);
+            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(*u)), info);
         } else if (op->type.is_int() &&
-                   const_uint(value, &u) &&
+                   (u = as_const_uint(value)) &&
                    op->type.bits() == value.type().bits()) {
             // uint -> int reinterpret
             // Recursively call mutate just to set the bounds
-            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), info);
+            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(*u)), info);
         } else if (op->type.is_int() &&
-                   const_uint(value, &u) &&
+                   (u = as_const_uint(value)) &&
                    op->type.bits() > value.type().bits()) {
             // uint -> int widening
-            if (op->type.can_represent(u) || op->type.bits() < 32) {
+            if (op->type.can_represent(*u) || op->type.bits() < 32) {
                 // If the type can represent the value or overflow is well-defined.
                 // Recursively call mutate just to set the bounds
-                return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), info);
+                return mutate(make_const(op->type, safe_numeric_cast<int64_t>(*u)), info);
             } else {
                 return make_signed_integer_overflow(op->type);
             }
         } else if (op->type.is_uint() &&
-                   const_uint(value, &u)) {
+                   (u = as_const_uint(value))) {
             // uint -> uint
-            return mutate(make_const(op->type, u), info);
+            return mutate(make_const(op->type, *u), info);
         } else if (op->type.is_float() &&
-                   const_uint(value, &u)) {
+                   (u = as_const_uint(value))) {
             // uint -> float
-            return make_const(op->type, safe_numeric_cast<double>(u));
+            return make_const(op->type, safe_numeric_cast<double>(*u));
         } else if (cast &&
                    op->type.code() == cast->type.code() &&
                    op->type.bits() < cast->type.bits()) {

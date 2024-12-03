@@ -355,18 +355,18 @@ private:
                 // each other; however, if the bounds can be simplified to
                 // constants, they might fit regardless of types.
                 a = simplify(a);
-                const auto *umin = as_const_uint(a.min);
-                const auto *umax = as_const_uint(a.max);
+                auto umin = as_const_uint(a.min);
+                auto umax = as_const_uint(a.max);
                 if (umin && umax && to.can_represent(*umin) && to.can_represent(*umax)) {
                     could_overflow = false;
                 } else {
-                    const auto *imin = as_const_int(a.min);
-                    const auto *imax = as_const_int(a.max);
+                    auto imin = as_const_int(a.min);
+                    auto imax = as_const_int(a.max);
                     if (imin && imax && to.can_represent(*imin) && to.can_represent(*imax)) {
                         could_overflow = false;
                     } else {
-                        const auto *fmin = as_const_float(a.min);
-                        const auto *fmax = as_const_float(a.max);
+                        auto fmin = as_const_float(a.min);
+                        auto fmax = as_const_float(a.max);
                         if (fmin && fmax && to.can_represent(*fmin) && to.can_represent(*fmax)) {
                             could_overflow = false;
                         }

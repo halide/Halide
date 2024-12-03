@@ -500,7 +500,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
         internal_assert(op->args.size() == 1)
             << "gpu_thread_barrier() intrinsic must specify fence type.\n";
 
-        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        auto fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr)
             << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
@@ -549,11 +549,10 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Cast *op) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Div *op) {
-    int bits;
-    if (is_const_power_of_two_integer(op->b, &bits)) {
+    if (auto bits = is_const_power_of_two_integer(op->b)) {
         // WGSL requires the RHS of a shift to be unsigned.
         Type uint_type = op->a.type().with_code(halide_type_uint);
-        visit_binop(op->type, op->a, make_const(uint_type, bits), ">>");
+        visit_binop(op->type, op->a, make_const(uint_type, *bits), ">>");
     } else {
         CodeGen_GPU_C::visit(op);
     }

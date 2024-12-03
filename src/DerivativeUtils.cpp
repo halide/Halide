@@ -381,13 +381,13 @@ pair<bool, Expr> solve_inverse(Expr expr,
     Expr rmax = simplify(interval.max);
     Expr rextent = simplify(rmax - rmin + 1);
 
-    const int64_t *extent_int = as_const_int(rextent);
-    if (extent_int == nullptr) {
+    auto extent_int = as_const_int(rextent);
+    if (!extent_int) {
         return {false, Expr()};
     }
 
     // For some reason interval.is_single_point() doesn't work
-    if (extent_int != nullptr && *extent_int == 1) {
+    if (extent_int && *extent_int == 1) {
         return {true, rmin};
     }
 
