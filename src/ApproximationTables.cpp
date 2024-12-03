@@ -7,9 +7,17 @@ namespace {
 
 using OO = ApproximationPrecision::OptimizationObjective;
 
+// clang-format off
 // Generate this table with:
 //   python3 src/polynomial_optimizer.py atan --order 1 2 3 4 5 6 7 8 --loss mse mae mulpe mulpe_mae --no-gui --format table
-std::vector<Approximation> table_atan = {
+//
+// Note that the maximal errors are computed with numpy with double precision.
+// The real errors are a bit larger with single-precision floats (see correctness/fast_arctan.cpp).
+// Also note that ULP distances which are not units are bogus, but this is because this error
+// was again measured with double precision, so the actual reconstruction had more bits of
+// precision than the actual float32 target value. So in practice the MaxULP Error
+// will be close to round(MaxUlpE).
+const std::vector<Approximation> table_atan = {
     {OO::MSE, 9.249650e-04, 7.078984e-02, 2.411e+06, {+8.56188008e-01}},
     {OO::MSE, 1.026356e-05, 9.214909e-03, 3.985e+05, {+9.76213454e-01, -2.00030200e-01}},
     {OO::MSE, 1.577588e-07, 1.323851e-03, 6.724e+04, {+9.95982073e-01, -2.92278128e-01, +8.30180680e-02}},
@@ -46,21 +54,28 @@ std::vector<Approximation> table_atan = {
     {OO::MULPE_MAE, 3.053218e-14, 3.784868e-07, 4.181e+01, {+9.99997480e-01, -3.33205127e-01, +1.98309644e-01, -1.33094430e-01, +8.08643094e-02, -3.45859503e-02, +7.11261604e-03}},
     {OO::MULPE_MAE, 7.018877e-16, 5.862915e-08, 6.942e+00, {+9.99999581e-01, -3.33306326e-01, +1.99542180e-01, -1.39433369e-01, +9.72462857e-02, -5.69734398e-02, +2.25639390e-02, -4.24074590e-03}},
 };
+// clang-format on
 }  // namespace
 
-const Approximation *find_best_approximation(const std::vector<Approximation> &table, ApproximationPrecision precision) {
+const Approximation *find_best_approximation(const std::vector<Approximation> &table,
+                                             ApproximationPrecision precision) {
+#define DEBUG_APPROXIMATION_SEARCH 0
     const Approximation *best = nullptr;
     constexpr int term_cost = 20;
     constexpr int extra_term_cost = 200;
     double best_score = 0;
-    // std::printf("Looking for min_terms=%d, max_absolute_error=%f\n", precision.constraint_min_poly_terms, precision.constraint_max_absolute_error);
+#if DEBUG_APPROXIMATION_SEARCH
+    std::printf("Looking for min_terms=%d, max_absolute_error=%f\n",
+                precision.constraint_min_poly_terms, precision.constraint_max_absolute_error);
+#endif
     for (size_t i = 0; i < table.size(); ++i) {
         const Approximation &e = table[i];
 
         double penalty = 0.0;
 
         int obj_score = e.objective == precision.optimized_for ? 100 * term_cost : 0;
-        if (precision.optimized_for == ApproximationPrecision::MULPE_MAE && e.objective == ApproximationPrecision::MULPE) {
+        if (precision.optimized_for == ApproximationPrecision::MULPE_MAE &&
+            e.objective == ApproximationPrecision::MULPE) {
             obj_score = 50 * term_cost;  // When MULPE_MAE is not available, prefer MULPE.
         }
 
@@ -87,19 +102,26 @@ const Approximation *find_best_approximation(const std::vector<Approximation> &t
             break;
         }
 
-        if (precision.constraint_max_absolute_error > 0.0 && precision.constraint_max_absolute_error < e.mae) {
+        if (precision.constraint_max_absolute_error > 0.0 &&
+            precision.constraint_max_absolute_error < e.mae) {
             float error_ratio = e.mae / precision.constraint_max_absolute_error;
             penalty += 20 * error_ratio * extra_term_cost;  // penalty for not getting the required precision.
         }
 
         double score = obj_score + term_count_score + precision_score - penalty;
-        // std::printf("Score for %zu (%zu terms): %f = %d + %d + %f - penalty %f\n", i, e.coefficients.size(), score, obj_score, term_count_score, precision_score, penalty);
+#if DEBUG_APPROXIMATION_SEARCH
+        std::printf("Score for %zu (%zu terms): %f = %d + %d + %f - penalty %f\n",
+                    i, e.coefficients.size(), score, obj_score, term_count_score,
+                    precision_score, penalty);
+#endif
         if (score > best_score || best == nullptr) {
             best = &e;
             best_score = score;
         }
     }
-    // std::printf("Best score: %f\n", best_score);
+#if DEBUG_APPROXIMATION_SEARCH
+    std::printf("Best score: %f\n", best_score);
+#endif
     return best;
 }
 
