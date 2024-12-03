@@ -76,6 +76,13 @@ WEAK int halide_vulkan_release_context(void *user_context, VkInstance instance, 
     return halide_error_code_success;
 }
 
+WEAK bool halide_vulkan_is_initialized() {
+    halide_mutex_lock(&thread_lock);
+    bool is_initialized = (cached_instance != nullptr) && (cached_device != nullptr);
+    halide_mutex_unlock(&thread_lock);
+    return is_initialized;
+}
+
 WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *halide_buffer) {
     debug(user_context)
         << "halide_vulkan_device_free (user_context: " << user_context
@@ -1377,7 +1384,9 @@ WEAK int halide_vulkan_release_unused_device_allocations(void *user_context) {
 
 WEAK void halide_vulkan_release_all() {
     debug(nullptr) << "halide_vulkan_release_all()\n";
-    halide_vulkan_device_release(nullptr);
+    if(halide_vulkan_is_initialized()) {
+        halide_vulkan_device_release(nullptr);
+    }
 }
 
 namespace {
