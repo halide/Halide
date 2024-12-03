@@ -24,7 +24,7 @@ endfunction()
 
 function(_bundle_static_is_apple_libtool result_var item)
     _bundle_static_check_output(version_info "${item}" -V)
-    if (NOT version_info MATCHES "Apple, Inc.")
+    if (NOT version_info MATCHES "Apple,? Inc\\.")
         set(${result_var} 0 PARENT_SCOPE)
     endif ()
 endfunction()
