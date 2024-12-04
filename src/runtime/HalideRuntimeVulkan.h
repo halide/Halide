@@ -17,6 +17,36 @@ extern "C" {
 
 #define HALIDE_RUNTIME_VULKAN
 
+// Guard against redefining handles if vulkan.h was included elsewhere
+#ifndef VK_DEFINE_HANDLE
+
+#define HALIDE_VULKAN_DEFINE_HANDLE(object) typedef struct object##_T *object;
+
+#ifndef HALIDE_VULKAN_USE_64_BIT_PTR_DEFINES
+#if defined(__LP64__) || defined(_WIN64) || (defined(__x86_64__) && !defined(__ILP32__)) || defined(_M_X64) || defined(__ia64) || defined(_M_IA64) || defined(__aarch64__) || defined(__powerpc64__) || (defined(__riscv) && __riscv_xlen == 64)
+#define HALIDE_VULKAN_USE_64_BIT_PTR_DEFINES 1
+#else
+#define HALIDE_VULKAN_USE_64_BIT_PTR_DEFINES 0
+#endif
+#endif
+
+#ifndef HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE
+#if (HALIDE_VULKAN_USE_64_BIT_PTR_DEFINES == 1)
+#define HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(object) typedef struct object##_T *object;
+#else
+#define HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(object) typedef uint64_t object;
+#endif
+#endif
+
+HALIDE_VULKAN_DEFINE_HANDLE(VkInstance)
+HALIDE_VULKAN_DEFINE_HANDLE(VkPhysicalDevice)
+HALIDE_VULKAN_DEFINE_HANDLE(VkDevice)
+HALIDE_VULKAN_DEFINE_HANDLE(VkQueue)
+HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(VkCommandPool)
+HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(VkDebugUtilsMessengerEXT)
+
+#endif
+
 extern const struct halide_device_interface_t *halide_vulkan_device_interface();
 
 /** These are forward declared here to allow clients to override the
@@ -62,18 +92,19 @@ extern void halide_vulkan_finalize_kernels(void *user_context, void *state_ptr);
 struct halide_vulkan_memory_allocator;
 extern int halide_vulkan_acquire_context(void *user_context,
                                          struct halide_vulkan_memory_allocator **allocator,
-                                         struct VkInstance_T **instance,
-                                         struct VkDevice_T **device,
-                                         struct VkPhysicalDevice_T **physical_device,
-                                         struct VkQueue_T **queue,
+                                         VkInstance *instance,
+                                         VkDevice *device,
+                                         VkPhysicalDevice *physical_device,
+                                         VkQueue *queue,
                                          uint32_t *queue_family_index,
+                                         VkDebugUtilsMessengerEXT *messenger,
                                          bool create = true);
 
 extern int halide_vulkan_release_context(void *user_context,
-                                         struct VkInstance_T *instance,
-                                         struct VkDevice_T *device,
-                                         struct VkQueue_T *queue);
-
+                                         VkInstance instance,
+                                         VkDevice device,
+                                         VkQueue queue,
+                                         VkDebugUtilsMessengerEXT messenger);
 // --
 
 // Override the default allocation callbacks (default uses Vulkan runtime implementation)

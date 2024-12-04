@@ -234,8 +234,11 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
                                 int d, bool from_host, bool to_host);
 
 // --------------------------------------------------------------------------
-// Errors
+// Debug & Errors
 // --------------------------------------------------------------------------
+
+VkResult vk_create_debug_utils_messenger(void *user_context, VkInstance instance, VulkanMemoryAllocator *allocator, VkDebugUtilsMessengerEXT *messenger);
+void vk_destroy_debug_utils_messenger(void *user_context, VkInstance instance, VulkanMemoryAllocator *allocator, VkDebugUtilsMessengerEXT messenger);
 
 // Returns the corresponding string for a given vulkan error code
 const char *vk_get_error_name(VkResult error) {

@@ -36,6 +36,7 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
                                        VkPhysicalDevice *physical_device,
                                        VkQueue *queue,
                                        uint32_t *queue_family_index,
+                                       VkDebugUtilsMessengerEXT *messenger,
                                        bool create) {
 #ifdef DEBUG_RUNTIME
     halide_start_clock(user_context);
@@ -54,7 +55,8 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
                                            &cached_device,
                                            &cached_physical_device,
                                            &cached_queue,
-                                           &cached_queue_family_index);
+                                           &cached_queue_family_index,
+                                           &cached_messenger);
         if (error_code != halide_error_code_success) {
             debug(user_context) << "halide_vulkan_acquire_context: FAILED to create context!\n";
             halide_mutex_unlock(&thread_lock);
@@ -68,10 +70,11 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
     *physical_device = cached_physical_device;
     *queue = cached_queue;
     *queue_family_index = cached_queue_family_index;
+    *messenger = cached_messenger;
     return halide_error_code_success;
 }
 
-WEAK int halide_vulkan_release_context(void *user_context, VkInstance instance, VkDevice device, VkQueue queue) {
+WEAK int halide_vulkan_release_context(void *user_context, VkInstance instance, VkDevice device, VkQueue queue, VkDebugUtilsMessengerEXT messenger) {
     halide_mutex_unlock(&thread_lock);
     return halide_error_code_success;
 }
@@ -224,25 +227,27 @@ WEAK int halide_vulkan_device_release(void *user_context) {
     VkPhysicalDevice physical_device = nullptr;
     VkQueue queue = nullptr;
     uint32_t queue_family_index = 0;
+    VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
 
     int destroy_status = halide_error_code_success;
     int acquire_status = halide_vulkan_acquire_context(user_context,
                                                        reinterpret_cast<halide_vulkan_memory_allocator **>(&allocator),
-                                                       &instance, &device, &physical_device, &queue, &queue_family_index, false);
+                                                       &instance, &device, &physical_device, &queue, &queue_family_index, &messenger, false);
 
     if (acquire_status == halide_error_code_success) {
         // Destroy the context if we created it
         if ((instance == cached_instance) && (device == cached_device)) {
-            destroy_status = vk_destroy_context(user_context, allocator, instance, device, physical_device, queue);
+            destroy_status = vk_destroy_context(user_context, allocator, instance, device, physical_device, queue, messenger);
             cached_allocator = nullptr;
             cached_device = nullptr;
             cached_physical_device = nullptr;
             cached_queue = nullptr;
             cached_queue_family_index = 0;
             cached_instance = nullptr;
+            cached_messenger = VK_NULL_HANDLE;
         }
 
-        halide_vulkan_release_context(user_context, instance, device, queue);
+        halide_vulkan_release_context(user_context, instance, device, queue, messenger);
     }
 
     return destroy_status;
@@ -1387,7 +1392,10 @@ WEAK int halide_vulkan_release_unused_device_allocations(void *user_context) {
 }
 
 WEAK void halide_vulkan_release_all() {
-    // Disable custom JIT destructor until we resolve driver issues for segfaults on cleanup
+    debug(nullptr) << "halide_vulkan_cleanup()\n";
+    if (halide_vulkan_is_initialized()) {
+        halide_vulkan_device_release(nullptr);
+    }
 }
 
 namespace {
@@ -1417,12 +1425,6 @@ WEAK __attribute__((destructor)) void halide_vulkan_cleanup() {
     //       calls halide_vulkan_release_all() when the module refcount
     //       reaches zero and the module is destroyed.
     //
-
-    // WIP: Attempt cleanup to see if driver issues are still present.
-    debug(nullptr) << "halide_vulkan_cleanup()\n";
-    if (halide_vulkan_is_initialized()) {
-        halide_vulkan_device_release(nullptr);
-    }
 }
 
 // --------------------------------------------------------------------------
