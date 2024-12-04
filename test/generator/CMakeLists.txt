@@ -36,7 +36,12 @@ function(add_wasm_executable TARGET)
     # TODO: this is currently hardcoded to settings that are sensible for most of Halide's
     # internal purposes. Consider adding ways to customize this as appropriate.
     set(EMCC_FLAGS
-        -O3
+        # TODO: This is a temporary setting to work around an incompatibility
+        # between top-of-tree LLVM and Emscripten 3.1.73, in which the link
+        # optimizer gets handed new flags it doesn't understand. Cranking
+        # down optimization temporarily skips the link optimizer step that
+        # is failing. We should be able to revert this once the tooling catches up.
+        -O1
         -std=c++17
         -Wall
         -Wcast-qual
