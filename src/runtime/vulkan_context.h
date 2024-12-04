@@ -528,7 +528,7 @@ int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
             return halide_error_code_generic_error;
         }
     }
-    
+
     if (allocator != nullptr) {
         vk_destroy_shader_modules(user_context, allocator);
         vk_destroy_memory_allocator(user_context, allocator);
