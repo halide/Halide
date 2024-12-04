@@ -1383,10 +1383,13 @@ WEAK int halide_vulkan_release_unused_device_allocations(void *user_context) {
 }
 
 WEAK void halide_vulkan_release_all() {
+// Disable custom JIT destructor until we resolve driver issues for segfaults on cleanup
+#if 0
     debug(nullptr) << "halide_vulkan_release_all()\n";
     if (halide_vulkan_is_initialized()) {
         halide_vulkan_device_release(nullptr);
     }
+#endif
 }
 
 namespace {
