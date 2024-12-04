@@ -246,10 +246,15 @@ Halide_feature(WITH_UTILS "Optional utility programs for Halide, including Halid
 # FIXME: Disable other GPU backends 
 if (Halide_TARGET MATCHES "vulkan")
     message(WARNING "Building Vulkan runtime support!")
-else ()
+endif()
+
+if (Halide_TARGET MATCHES "cuda")
     message(FATAL_ERROR "Target disabled for testing ...")
 endif()
 
+if (Halide_TARGET MATCHES "opencl")
+    message(FATAL_ERROR "Target disabled for testing ...")
+endif()
 
 ##
 # Add source directories
