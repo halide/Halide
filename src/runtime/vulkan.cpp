@@ -200,7 +200,11 @@ WEAK int halide_vulkan_device_sync(void *user_context, halide_buffer_t *) {
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    vkQueueWaitIdle(ctx.queue);
+    VkResult result = vkQueueWaitIdle(ctx.queue);
+    if (result != VK_SUCCESS) {
+        error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
+        return halide_error_code_generic_error;
+    }
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -1383,13 +1387,7 @@ WEAK int halide_vulkan_release_unused_device_allocations(void *user_context) {
 }
 
 WEAK void halide_vulkan_release_all() {
-// Disable custom JIT destructor until we resolve driver issues for segfaults on cleanup
-#if 0
-    debug(nullptr) << "halide_vulkan_release_all()\n";
-    if (halide_vulkan_is_initialized()) {
-        halide_vulkan_device_release(nullptr);
-    }
-#endif
+    // Disable custom JIT destructor until we resolve driver issues for segfaults on cleanup
 }
 
 namespace {
@@ -1418,6 +1416,13 @@ WEAK __attribute__((destructor)) void halide_vulkan_cleanup() {
     //       For JIT, we register a custom destructor in JITModule.cpp that
     //       calls halide_vulkan_release_all() when the module refcount
     //       reaches zero and the module is destroyed.
+    //
+
+    // WIP: Attempt cleanup to see if driver issues are still present.
+    debug(nullptr) << "halide_vulkan_cleanup()\n";
+    if (halide_vulkan_is_initialized()) {
+        halide_vulkan_device_release(nullptr);
+    }
 }
 
 // --------------------------------------------------------------------------

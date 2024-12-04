@@ -514,30 +514,31 @@ int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
         return halide_error_code_success;
     }
 
-    if (device != nullptr) {
-        vk_load_vulkan_device_functions(user_context, device);
-        if (vkAllocateMemory == nullptr) {
-            debug(user_context) << "Vulkan: Lost device interface ... \n";
-            vk_unload_vulkan_device_functions(user_context);
-            vk_unload_vulkan_instance_functions(user_context);
-            return halide_error_code_device_interface_no_device;
+    if (queue != VK_NULL_HANDLE) {
+        VkResult result = vkQueueWaitIdle(queue);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
+            return halide_error_code_generic_error;
         }
     }
-
-    if (device != nullptr) {
-        vkDeviceWaitIdle(device);
+    if (device != VK_NULL_HANDLE) {
+        VkResult result = vkDeviceWaitIdle(device);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "Vulkan: vkDeviceWaitIdle returned " << vk_get_error_name(result) << "\n";
+            return halide_error_code_generic_error;
+        }
     }
-
+    
     if (allocator != nullptr) {
         vk_destroy_shader_modules(user_context, allocator);
         vk_destroy_memory_allocator(user_context, allocator);
     }
 
     const VkAllocationCallbacks *alloc_callbacks = halide_vulkan_get_allocation_callbacks(user_context);
-    if (device != nullptr) {
+    if (device != VK_NULL_HANDLE) {
         vk_destroy_device(user_context, device, alloc_callbacks);
     }
-    if (instance != nullptr) {
+    if (instance != VK_NULL_HANDLE) {
         vk_destroy_instance(user_context, instance, alloc_callbacks);
     }
     return halide_error_code_success;
