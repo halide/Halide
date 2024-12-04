@@ -242,19 +242,6 @@ Halide_feature(WITH_TESTS "Halide's unit test suite" TOP_LEVEL)
 Halide_feature(WITH_TUTORIALS "Halide's tutorial code" TOP_LEVEL)
 Halide_feature(WITH_UTILS "Optional utility programs for Halide, including HalideTraceViz" TOP_LEVEL)
 
-##
-# FIXME: Disable other GPU backends 
-if (Halide_TARGET MATCHES "vulkan")
-    message(WARNING "Building Vulkan runtime support!")
-endif()
-
-if (Halide_TARGET MATCHES "cuda")
-    message(FATAL_ERROR "Target disabled for testing ...")
-endif()
-
-if (Halide_TARGET MATCHES "opencl")
-    message(FATAL_ERROR "Target disabled for testing ...")
-endif()
 
 ##
 # Add source directories
