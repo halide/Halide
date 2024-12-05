@@ -7,13 +7,6 @@
 // Vulkan Specific Definitions
 // --------------------------------------------------------------------------
 
-// Vulkan API version identifier macro
-#define VK_MAKE_API_VERSION(variant, major, minor, patch) \
-    ((((uint32_t)(variant)) << 29) | (((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
-
-// Vulkan API version 1.0.0
-#define VK_API_VERSION_1_0 VK_MAKE_API_VERSION(0, 1, 0, 0)  // Patch version should always be set to 0
-
 // Environment variable string delimiter
 #ifdef WINDOWS
 #define HL_VK_ENV_DELIM ";"
@@ -24,7 +17,7 @@
 // Prototypes for the subset of the Vulkan API we need
 #define VK_NO_PROTOTYPES
 // NOLINTNEXTLINE
-#include "mini_vulkan.h"
+#include <vulkan/vulkan.h>
 
 // --------------------------------------------------------------------------
 // Vulkan API Definition
@@ -77,27 +70,62 @@ extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *n
 
 // Declare all the function pointers for the Vulkan API methods that will be resolved dynamically
 // clang-format off
-#define VULKAN_FN(fn) WEAK PFN_##fn fn; 
-VULKAN_FN(vkCreateInstance)
-VULKAN_FN(vkGetInstanceProcAddr)
+#define VULKAN_FN(fn) WEAK PFN_##fn fn = nullptr;
+#define HL_USE_VULKAN_LOADER_FNS
+#define HL_USE_VULKAN_INSTANCE_FNS
+#define HL_USE_VULKAN_DEVICE_FNS
 #include "vulkan_functions.h"
+#undef HL_USE_VULKAN_DEVICE_FNS
+#undef HL_USE_VULKAN_INSTANCE_FNS
+#undef HL_USE_VULKAN_LOADER_FNS
 #undef VULKAN_FN
 // clang-format on
 
-// Get the function pointers from the Vulkan loader to create an Instance (to find all available driver implementations)
+// Get the function pointers to the Vulkan loader (to find all available instances)
 void WEAK vk_load_vulkan_loader_functions(void *user_context) {
     debug(user_context) << "    vk_load_vulkan_loader_functions (user_context: " << user_context << ")\n";
 #define VULKAN_FN(fn) fn = (PFN_##fn)halide_vulkan_get_symbol(user_context, #fn);
-    VULKAN_FN(vkCreateInstance)
-    VULKAN_FN(vkGetInstanceProcAddr)
+#define HL_USE_VULKAN_LOADER_FNS
+#include "vulkan_functions.h"
+#undef HL_USE_VULKAN_LOADER_FNS
+#undef VULKAN_FN
+}
+
+// Get the function pointers from the Vulkan loader for the resolved instance API methods.
+void WEAK vk_load_vulkan_instance_functions(void *user_context, VkInstance instance) {
+    debug(user_context) << "    vk_load_vulkan_instance_functions (user_context: " << user_context << ")\n";
+#define VULKAN_FN(fn) fn = (PFN_##fn)vkGetInstanceProcAddr(instance, #fn);
+#define HL_USE_VULKAN_INSTANCE_FNS
+#include "vulkan_functions.h"
+#undef HL_USE_VULKAN_INSTANCE_FNS
+#undef VULKAN_FN
+}
+
+// Reset the instance function pointers
+void WEAK vk_unload_vulkan_instance_functions(void *user_context) {
+#define VULKAN_FN(fn) fn = (PFN_##fn)(nullptr);
+#define HL_USE_VULKAN_INSTANCE_FNS
+#include "vulkan_functions.h"
+#undef HL_USE_VULKAN_INSTANCE_FNS
 #undef VULKAN_FN
 }
 
 // Get the function pointers from the Vulkan instance for the resolved driver API methods.
-void WEAK vk_load_vulkan_functions(void *user_context, VkInstance instance) {
-    debug(user_context) << "    vk_load_vulkan_functions (user_context: " << user_context << ")\n";
-#define VULKAN_FN(fn) fn = (PFN_##fn)vkGetInstanceProcAddr(instance, #fn);
+void WEAK vk_load_vulkan_device_functions(void *user_context, VkDevice device) {
+    debug(user_context) << "    vk_load_vulkan_device_functions (user_context: " << user_context << ")\n";
+#define VULKAN_FN(fn) fn = (PFN_##fn)vkGetDeviceProcAddr(device, #fn);
+#define HL_USE_VULKAN_DEVICE_FNS
 #include "vulkan_functions.h"
+#undef HL_USE_VULKAN_DEVICE_FNS
+#undef VULKAN_FN
+}
+
+// Reset the device function pointers
+void WEAK vk_unload_vulkan_device_functions(void *user_context) {
+#define VULKAN_FN(fn) fn = (PFN_##fn)(nullptr);
+#define HL_USE_VULKAN_DEVICE_FNS
+#include "vulkan_functions.h"
+#undef HL_USE_VULKAN_DEVICE_FNS
 #undef VULKAN_FN
 }
 

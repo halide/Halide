@@ -148,6 +148,11 @@ public:
 
     ~JITModuleContents() {
         if (JIT != nullptr) {
+            if (custom_dtor.address) {
+                void (*dtor_fn_ptr)() = (void (*)())(custom_dtor.address);
+                dtor_fn_ptr();
+            }
+
             auto err = dtorRunner->run();
             internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
         }
@@ -160,6 +165,7 @@ public:
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
+    JITModule::Symbol custom_dtor;
 
     std::string name;
 };
@@ -267,7 +273,8 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
 
 void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
                                const std::vector<JITModule> &dependencies,
-                               const std::vector<std::string> &requested_exports) {
+                               const std::vector<std::string> &requested_exports,
+                               const std::string &custom_dtor_name) {
 
     // Ensure that LLVM is initialized
     CodeGen_LLVM::initialize_llvm();
@@ -389,6 +396,16 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         exports[function_name + "_argv"] = argv_entrypoint;
     }
 
+    Symbol custom_dtor;
+    if (!custom_dtor_name.empty()) {
+        auto addr = JIT->lookup(custom_dtor_name);
+        if (!addr) {
+            debug(2) << "Symbol not found, skipping custom dtor: " << llvm::toString(addr.takeError()) << "\n";
+        } else {
+            custom_dtor = compile_and_get_function(*JIT, custom_dtor_name);
+        }
+    }
+
     for (const auto &requested_export : requested_exports) {
         exports[requested_export] = compile_and_get_function(*JIT, requested_export);
     }
@@ -399,6 +416,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     jit_module->exports = exports;
     jit_module->JIT = std::move(JIT);
+    jit_module->custom_dtor = custom_dtor;
     jit_module->dtorRunner = std::move(dtorRunner);
     jit_module->dependencies = dependencies;
     jit_module->entrypoint = entrypoint;
@@ -780,6 +798,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::Vulkan, false);
         one_gpu.set_feature(Target::WebGPU, false);
         string module_name;
+        string custom_dtor_name;
         switch (runtime_kind) {
         case OpenCLDebug:
             one_gpu.set_feature(Target::Debug);
@@ -836,11 +855,13 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             one_gpu.set_feature(Target::Vulkan);
             load_vulkan();
             module_name = "debug_vulkan";
+            custom_dtor_name = "halide_vulkan_release_all";
             break;
         case Vulkan:
             one_gpu.set_feature(Target::Vulkan);
             load_vulkan();
             module_name += "vulkan";
+            custom_dtor_name = "halide_vulkan_release_all";
             break;
         case WebGPUDebug:
             one_gpu.set_feature(Target::Debug);
@@ -881,7 +902,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
         std::vector<std::string> halide_exports(halide_exports_unique.begin(), halide_exports_unique.end());
 
-        runtime.compile_module(std::move(module), "", target, deps, halide_exports);
+        runtime.compile_module(std::move(module), "", target, deps, halide_exports, custom_dtor_name);
 
         if (runtime_kind == MainShared) {
             runtime_internal_handlers.custom_print =

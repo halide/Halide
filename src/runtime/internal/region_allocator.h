@@ -633,8 +633,10 @@ int RegionAllocator::alloc_block_region(void *user_context, BlockRegion *block_r
                             << ")";
 #endif
     }
-    block_region->status = block_region->memory.dedicated ? AllocationStatus::Dedicated : AllocationStatus::InUse;
-    block->reserved += block_region->memory.size;
+    if (error_code == 0) {
+        block_region->status = block_region->memory.dedicated ? AllocationStatus::Dedicated : AllocationStatus::InUse;
+        block->reserved += block_region->memory.size;
+    }
     return error_code;
 }
 
@@ -649,6 +651,7 @@ int RegionAllocator::free_block_region(void *user_context, BlockRegion *block_re
                         << "usage_count=" << (uint32_t)block_region->usage_count << " "
                         << "block_reserved=" << (uint32_t)block->reserved << ")";
 #endif
+    int error_code = 0;
     if ((block_region->usage_count == 0) && (block_region->memory.handle != nullptr)) {
 #ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "    deallocating region ("
@@ -661,12 +664,12 @@ int RegionAllocator::free_block_region(void *user_context, BlockRegion *block_re
         // NOTE: Deallocate but leave memory size as is, so that coalesce can compute region merging sizes
         halide_abort_if_false(user_context, allocators.region.deallocate != nullptr);
         MemoryRegion *memory_region = &(block_region->memory);
-        allocators.region.deallocate(user_context, memory_region);
+        error_code = allocators.region.deallocate(user_context, memory_region);
         block_region->memory.handle = nullptr;
     }
     block_region->usage_count = 0;
     block_region->status = AllocationStatus::Available;
-    return 0;
+    return error_code;
 }
 
 int RegionAllocator::release(void *user_context) {
