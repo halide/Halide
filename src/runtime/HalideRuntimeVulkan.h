@@ -20,7 +20,7 @@ extern "C" {
 // Guard against redefining handles if vulkan.h was included elsewhere
 #ifndef VK_DEFINE_HANDLE
 
-#define HALIDE_VULKAN_DEFINE_HANDLE(object) typedef struct object##_T *object;
+#define HALIDE_VULKAN_DEFINE_HANDLE(object) typedef struct object##_T *(object);
 
 #ifndef HALIDE_VULKAN_USE_64_BIT_PTR_DEFINES
 #if defined(__LP64__) || defined(_WIN64) || (defined(__x86_64__) && !defined(__ILP32__)) || defined(_M_X64) || defined(__ia64) || defined(_M_IA64) || defined(__aarch64__) || defined(__powerpc64__) || (defined(__riscv) && __riscv_xlen == 64)
@@ -34,7 +34,7 @@ extern "C" {
 #if (HALIDE_VULKAN_USE_64_BIT_PTR_DEFINES == 1)
 #define HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(object) typedef struct object##_T *(object);
 #else
-#define HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(object) typedef uint64_t (object);
+#define HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(object) typedef uint64_t(object);
 #endif
 #endif
 
