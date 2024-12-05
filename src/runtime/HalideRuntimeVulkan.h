@@ -32,9 +32,9 @@ extern "C" {
 
 #ifndef HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE
 #if (HALIDE_VULKAN_USE_64_BIT_PTR_DEFINES == 1)
-#define HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(object) typedef struct object##_T *object;
+#define HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(object) typedef struct object##_T *(object);
 #else
-#define HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(object) typedef uint64_t object;
+#define HALIDE_VULKAN_DEFINE_NON_DISPATCHABLE_HANDLE(object) typedef uint64_t (object);
 #endif
 #endif
 
