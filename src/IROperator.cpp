@@ -5,6 +5,7 @@
 #include <sstream>
 #include <utility>
 
+#include "ApproximationTables.h"
 #include "CSE.h"
 #include "ConstantBounds.h"
 #include "Debug.h"
@@ -1379,7 +1380,7 @@ Expr fast_sin_cos(const Expr &x_full, bool is_sin) {
     Expr sin_usecos = is_sin ? ((k_mod4 == 1) || (k_mod4 == 3)) : ((k_mod4 == 0) || (k_mod4 == 2));
     Expr flip_sign = is_sin ? (k_mod4 > 1) : ((k_mod4 == 1) || (k_mod4 == 2));
 
-    // Reduce the angle modulo pi/2.
+    // Reduce the angle modulo pi/2: i.e., to the angle within the quadrant.
     Expr x = x_full - k_real * pi_over_two;
 
     const float sin_c2 = -0.16666667163372039794921875f;
@@ -1414,6 +1415,61 @@ Expr fast_sin(const Expr &x_full) {
 
 Expr fast_cos(const Expr &x_full) {
     return fast_sin_cos(x_full, false);
+}
+
+// A vectorizable atan and atan2 implementation.
+// Based on the ideas presented in https://mazzo.li/posts/vectorized-atan2.html.
+Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precision, bool between_m1_and_p1) {
+    const float pi_over_two = 1.57079632679489661923f;
+    Expr x;
+    // if x > 1 -> atan(x) = Pi/2 - atan(1/x)
+    Expr x_gt_1 = abs(x_full) > 1.0f;
+    if (between_m1_and_p1) {
+        x = x_full;
+    } else {
+        x = select(x_gt_1, 1.0f / x_full, x_full);
+    }
+    const Internal::Approximation *approx = Internal::best_atan_approximation(precision);
+    const std::vector<double> &c = approx->coefficients;
+    Expr x2 = x * x;
+    Expr result = float(c.back());
+    for (size_t i = 1; i < c.size(); ++i) {
+        result = x2 * result + float(c[c.size() - i - 1]);
+    }
+    result *= x;
+
+    if (!between_m1_and_p1) {
+        result = select(x_gt_1, select(x_full < 0, -pi_over_two, pi_over_two) - result, result);
+    }
+    return common_subexpression_elimination(result);
+}
+
+Expr fast_atan(const Expr &x_full, ApproximationPrecision precision) {
+    return fast_atan_approximation(x_full, precision, false);
+}
+
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) {
+    const float pi = 3.14159265358979323846f;
+    const float pi_over_two = 1.57079632679489661923f;
+    // Making sure we take the ratio of the biggest number by the smallest number (in absolute value)
+    // will always give us a number between -1 and +1, which is the range over which the approximation
+    // works well. We can therefore also skip the inversion logic in the fast_atan_approximation function
+    // by passing true for "between_m1_and_p1". This increases both speed (1 division instead of 2) and
+    // numerical precision.
+    Expr swap = abs(y) > abs(x);
+    Expr atan_input = select(swap, x, y) / select(swap, y, x);
+    Expr ati = fast_atan_approximation(atan_input, precision, true);
+    Expr at = select(swap, select(atan_input >= 0.0f, pi_over_two, -pi_over_two) - ati, ati);
+    // This select statement is literally taken over from the definition on Wikipedia.
+    // There might be optimizations to be done here, but I haven't tried that yet. -- Martijn
+    Expr result = select(
+        x > 0.0f, at,
+        x < 0.0f && y >= 0.0f, at + pi,
+        x < 0.0f && y < 0.0f, at - pi,
+        x == 0.0f && y > 0.0f, pi_over_two,
+        x == 0.0f && y < 0.0f, -pi_over_two,
+        0.0f);
+    return common_subexpression_elimination(result);
 }
 
 Expr fast_exp(const Expr &x_full) {
