@@ -834,6 +834,7 @@ public:
 
     ALWAYS_INLINE void broadcast() {
         if_tsan_pre_signal(this);
+
         uintptr_t val;
         atomic_load_relaxed(&state, &val);
         if (val == 0) {
@@ -846,6 +847,7 @@ public:
     }
 
     ALWAYS_INLINE void wait(fast_mutex *mutex) {
+        // Go to sleep until signaled
         wait_parking_control control(&state, mutex);
         uintptr_t result = control.park((uintptr_t)this);
         if (result != (uintptr_t)mutex) {
