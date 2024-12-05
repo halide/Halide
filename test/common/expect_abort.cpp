@@ -19,6 +19,9 @@ auto handler = ([]() {
                       << std::flush;
             suppress_abort = false;
             std::abort();  // We should never EXPECT an internal error
+        } catch (const Halide::Error &e) {
+            std::cerr << e.what() << "\n"
+                      << std::flush;
         } catch (const std::exception &e) {
             std::cerr << e.what() << "\n"
                       << std::flush;
