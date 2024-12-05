@@ -22,28 +22,41 @@ void define_expr(py::module &m) {
 
     auto expr_class =
         py::class_<Expr>(m, "Expr")
+            // Default ctor
             .def(py::init<>())
-            .def(py::init([](bool b) {
-                return Internal::make_bool(b);
-            }))
-            // PyBind11 searches in declared order,
-            // int should be tried before float conversion
-            .def(py::init<int>())
-            .def(py::init<int64_t>())
-            // Python float is implemented by double
-            // But Halide prohibits implicitly construct by double.
-            .def(py::init([](double v) {
-                return double_to_expr_check(v);
-            }))
-            .def(py::init<std::string>())
 
-            // for implicitly_convertible
+            // For implicitly_convertible
             .def(py::init([](const FuncRef &f) -> Expr { return f; }))
             .def(py::init([](const FuncTupleElementRef &f) -> Expr { return f; }))
             .def(py::init([](const Param<> &p) -> Expr { return p; }))
             .def(py::init([](const RDom &r) -> Expr { return r; }))
             .def(py::init([](const RVar &r) -> Expr { return r; }))
             .def(py::init([](const Var &v) -> Expr { return v; }))
+
+            // Weird types
+            .def(py::init<std::string>())
+
+            // Numeric types.
+            // This is tricky. PyBind11 tries the conversions in declared order,
+            // and we generally want to prefer int over float conversion (to avoid
+            // accidental promotion). However, we want to keep a float32 as a float32
+            // (e.g. specified via numpy.float32()) and the implicit Expr conversion
+            // will confuse PyBind, hence the apparently wrong order.
+            .def(py::init<float>())
+            .def(py::init([](bool b) {
+                return Internal::make_bool(b);
+            }))
+            .def(py::init<int32_t>())
+            .def(py::init<int64_t>())
+            // Most scalar fp values we get from Python will actually be doubles;
+            // for efficiency, we want to store these as float32 instead of float64.
+            // This may not always be the right decision -- e.g., if someone
+            // constructs something via numpy.float64() they will be unhappy --
+            // but changing the behavior now would likely cause lots of subtle
+            // regressions.
+            .def(py::init([](double v) {
+                return double_to_expr_check(v);
+            }))
 
             .def("__bool__", to_bool)
             .def("__nonzero__", to_bool)
