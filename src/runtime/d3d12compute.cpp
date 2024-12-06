@@ -3263,7 +3263,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
             d3d12_buffer *dsrc = peel_buffer(src);
             d3d12_buffer *ddst = peel_buffer(dst);
             size_t src_offset = dsrc->offsetInBytes + c.src_begin;
-            size_t dst_offset = ddst->offsetInBytes;
+            size_t dst_offset = ddst->offsetInBytes + c.dst_begin;
             D3D12ContextHolder d3d12_context(user_context, true);
             if (d3d12_context.error()) {
                 return d3d12_context.error();
