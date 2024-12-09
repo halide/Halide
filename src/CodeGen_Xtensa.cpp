@@ -290,9 +290,8 @@ void CodeGen_Xtensa::visit(const IntImm *op) {
     }
 }
 void CodeGen_Xtensa::visit(const Mul *op) {
-    int bits;
-    if (is_const_power_of_two_integer(op->b, &bits)) {
-        print_expr(Call::make(op->type, Call::shift_left, {op->a, Expr(bits)}, Call::PureIntrinsic));
+    if (auto bits = is_const_power_of_two_integer(op->b)) {
+        print_expr(Call::make(op->type, Call::shift_left, {op->a, Expr(*bits)}, Call::PureIntrinsic));
     } else {
         if (is_native_xtensa_vector<int16_t>(op->type)) {
             string sa = print_expr(op->a);
@@ -462,9 +461,8 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
 }
 
 void CodeGen_Xtensa::visit(const Div *op) {
-    int bits;
-    if (is_const_power_of_two_integer(op->b, &bits)) {
-        print_expr(Call::make(op->type, Call::shift_right, {op->a, Expr(bits)}, Call::PureIntrinsic));
+    if (auto bits = is_const_power_of_two_integer(op->b)) {
+        print_expr(Call::make(op->type, Call::shift_right, {op->a, Expr(*bits)}, Call::PureIntrinsic));
     } else if (is_native_xtensa_vector<float16_t>(op->type)) {
         ostringstream rhs;
         rhs << "IVP_DIVNXF16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
@@ -495,11 +493,11 @@ void CodeGen_Xtensa::visit(const Div *op) {
 }
 
 void CodeGen_Xtensa::visit(const Mod *op) {
-    int bits;
-    if (is_native_vector_type(op->type) && is_const_power_of_two_integer(op->b, &bits)) {
+    std::optional<int> bits;
+    if (is_native_vector_type(op->type) && (bits = is_const_power_of_two_integer(op->b))) {
         print_expr(op->a &
                    Broadcast::make(
-                       Cast::make(op->type.with_lanes(1), Expr((1 << bits) - 1)), op->type.lanes()));
+                       Cast::make(op->type.with_lanes(1), Expr((1 << *bits) - 1)), op->type.lanes()));
     } else if (is_native_xtensa_vector<int32_t>(op->type)) {
         string sa = print_expr(op->a);
         string sb = print_expr(op->b);
@@ -1069,7 +1067,7 @@ void CodeGen_Xtensa::visit(const Call *op) {
     if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
-        const int64_t *bits = as_const_int(op->args[1]);
+        auto bits = as_const_int(op->args[1]);
         if (is_native_xtensa_vector<uint8_t>(op->type) && bits) {
             rhs << "IVP_SLLI2NX8U(" << a0 << ", " << std::to_string(*bits) << ")";
         } else if (is_native_xtensa_vector<int8_t>(op->type) && bits) {
@@ -1115,7 +1113,7 @@ void CodeGen_Xtensa::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
-        const int64_t *bits = as_const_int(op->args[1]);
+        auto bits = as_const_int(op->args[1]);
         if (is_native_xtensa_vector<uint8_t>(op->type) && bits) {
             rhs << "IVP_SRLI2NX8U(" << a0 << ", " << std::to_string(*bits) << ")";
         } else if (is_native_xtensa_vector<int8_t>(op->type) && bits) {
