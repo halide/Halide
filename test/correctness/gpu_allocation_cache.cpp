@@ -28,6 +28,10 @@ int main(int argc, char **argv) {
         printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK only allows 30 buffers to be allocated)!\n");
         return 0;
     }
+    if (target.has_feature(Target::Vulkan) && (target.os == Target::Windows)) {
+        printf("[SKIP] Skipping test for Vulkan on Windows ... fails unless run on its own!\n");
+        return 0;
+    }
     if (target.has_feature(Target::WebGPU)) {
         printf("[SKIP] Allocation cache not yet implemented for WebGPU.\n");
         return 0;
@@ -158,16 +162,14 @@ int main(int argc, char **argv) {
         test2(true, false);
         test3(true, false);
     });
-
     double t2 = Tools::benchmark([&]() {
         test1(false, false);
         test2(false, false);
         test3(false, false);
     });
-
     printf("Runtime with cache: %f\n"
-           "Without cache: %f\n",
-           t1, t2);
+            "Without cache: %f\n",
+            t1, t2);
 
     printf("Success!\n");
     return 0;

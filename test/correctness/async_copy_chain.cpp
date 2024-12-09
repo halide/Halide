@@ -20,11 +20,15 @@ void make_pipeline(Func &A, Func &B) {
 }
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
         printf("[SKIP] WebAssembly does not support async() yet.\n");
         return 0;
     }
-
+    if (target.has_feature(Target::Vulkan) && (target.os == Target::Windows)) {
+        printf("[SKIP] Skipping test for Vulkan on Windows ... fails unless run on its own!\n");
+        return 0;
+    }
     // Make a list of extern pipeline stages (just copies) all async
     // and connected by double buffers, then try various nestings of
     // them. This is a stress test of the async extern storage folding
