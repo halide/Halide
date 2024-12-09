@@ -153,11 +153,11 @@ public:
             if (b) {
                 debug(1)
                     << spaces << "Bounds: " << b->bounds << " " << b->alignment << "\n";
-                if (const int64_t *i = as_const_int(new_e)) {
+                if (auto i = as_const_int(new_e)) {
                     internal_assert(b->bounds.contains(*i)) << e << "\n"
                                                             << new_e << "\n"
                                                             << b->bounds;
-                } else if (const uint64_t *i = as_const_uint(new_e)) {
+                } else if (auto i = as_const_uint(new_e)) {
                     internal_assert(b->bounds.contains(*i)) << e << "\n"
                                                             << new_e << "\n"
                                                             << b->bounds;
@@ -258,12 +258,6 @@ public:
     // or Provide), there's an implicit dependence on some associated
     // symbols.
     void found_buffer_reference(const std::string &name, size_t dimensions = 0);
-
-    // Wrappers for as_const_foo that are more convenient to use in
-    // the large chains of conditions in the visit methods below.
-    bool const_float(const Expr &e, double *f);
-    bool const_int(const Expr &e, int64_t *i);
-    bool const_uint(const Expr &e, uint64_t *u);
 
     // Put the args to a commutative op in a canonical order
     HALIDE_ALWAYS_INLINE

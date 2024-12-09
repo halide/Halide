@@ -210,7 +210,7 @@ class Featurizer : public IRVisitor {
             return a;
         } else if (const Mul *op = e.as<Mul>()) {
             auto a = differentiate(op->a, v);
-            if (const int64_t *ib = as_const_int(op->b)) {
+            if (auto ib = as_const_int(op->b)) {
                 a.numerator *= *ib;
                 return a;
             } else {
@@ -218,7 +218,7 @@ class Featurizer : public IRVisitor {
             }
         } else if (const Div *op = e.as<Div>()) {
             auto a = differentiate(op->a, v);
-            if (const int64_t *ib = as_const_int(op->b)) {
+            if (auto ib = as_const_int(op->b)) {
                 if (a.numerator != 0) {
                     a.denominator *= *ib;
                 }
@@ -414,8 +414,8 @@ void FunctionDAG::Node::loop_nest_for_region(int stage_idx, const Span *computed
         } else {
             Expr min = simplify(substitute(computed_map, l.min));
             Expr max = simplify(substitute(computed_map, l.max));
-            const int64_t *imin = as_const_int(min);
-            const int64_t *imax = as_const_int(max);
+            auto imin = as_const_int(min);
+            auto imax = as_const_int(max);
             internal_assert(imin && imax) << min << ", " << max << "\n";
             loop[i] = Span(*imin, *imax, false);
         }
@@ -442,8 +442,8 @@ void FunctionDAG::Node::required_to_computed(const Span *required, Span *compute
         } else {
             Expr min = simplify(substitute(required_map, comp.in.min));
             Expr max = simplify(substitute(required_map, comp.in.max));
-            const int64_t *imin = as_const_int(min);
-            const int64_t *imax = as_const_int(max);
+            auto imin = as_const_int(min);
+            auto imax = as_const_int(max);
             internal_assert(imin && imax) << min << ", " << max << "\n";
             computed[i] = Span(*imin, *imax, false);
         }
@@ -542,7 +542,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
             } else {
                 Expr substituted = substitute(s, b.expr);
                 Expr e = simplify(substituted);
-                const int64_t *i = as_const_int(e);
+                auto i = as_const_int(e);
                 internal_assert(i) << "Should be constant: " << b.expr << " -> " << substituted << " -> " << e << "\n";
                 bounds_are_constant = false;
                 return *i;
@@ -702,8 +702,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                     } else {
                         const Min *min = comp.in.min.as<Min>();
                         const Max *max = comp.in.max.as<Max>();
-                        const int64_t *min_b = min ? as_const_int(min->b) : nullptr;
-                        const int64_t *max_b = max ? as_const_int(max->b) : nullptr;
+                        auto min_b = min ? as_const_int(min->b) : std::nullopt;
+                        auto max_b = max ? as_const_int(max->b) : std::nullopt;
                         if (min_b && max_b && equal(min->a, req.min) && equal(max->a, req.max)) {
                             comp.equals_union_of_required_with_constants = true;
                             comp.c_min = *min_b;
@@ -758,7 +758,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                 }
 
                 if (!l.equals_region_computed) {
-                    const int64_t *c_min = as_const_int(l.min), *c_max = as_const_int(l.max);
+                    auto c_min = as_const_int(l.min);
+                    auto c_max = as_const_int(l.max);
                     if (c_min && c_max) {
                         l.bounds_are_constant = true;
                         l.c_min = *c_min;
@@ -876,8 +877,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                 // Get the bounds estimate
                 map<string, Span> estimates;
                 for (const auto &b : consumer.schedule().estimates()) {
-                    const int64_t *i_min = as_const_int(b.min);
-                    const int64_t *i_extent = as_const_int(b.extent);
+                    auto i_min = as_const_int(b.min);
+                    auto i_extent = as_const_int(b.extent);
                     user_assert(i_min && i_extent)
                         << "Min/extent of estimate or bound is not constant in \"" << consumer.name()
                         << "\", var:" << b.var << ", min:" << b.min << ", extent:" << b.extent;
@@ -902,8 +903,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                     }
                 }
                 for (const auto &b : consumer.schedule().bounds()) {
-                    const int64_t *i_min = as_const_int(b.min);
-                    const int64_t *i_extent = as_const_int(b.extent);
+                    auto i_min = as_const_int(b.min);
+                    auto i_extent = as_const_int(b.extent);
                     if (i_min && i_extent) {
                         // It's a true bound, not just an estimate
                         estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, true);

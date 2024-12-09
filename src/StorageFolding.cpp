@@ -740,7 +740,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 scope.pop(op->name);
 
                 const int max_fold = 1024;
-                const int64_t *const_max_extent = as_const_int(max_extent);
+                auto const_max_extent = as_const_int(max_extent);
                 if (const_max_extent && *const_max_extent <= max_fold) {
                     factor = static_cast<int>(next_power_of_two(*const_max_extent));
                 } else {

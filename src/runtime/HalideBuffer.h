@@ -14,6 +14,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #ifdef __APPLE__
@@ -1331,9 +1332,12 @@ public:
 
     /** Make a new image which is a deep copy of this image. Use crop
      * or slice followed by copy to make a copy of only a portion of
-     * the image. The new image uses the same memory layout as the
-     * original, with holes compacted away. Note that the returned
-     * Buffer is always of a non-const type T (ie:
+     * the image. The new image has the same nesting order of dimensions
+     * (e.g. channels innermost), but resets the strides to the default
+     * (each stride is the product of the extents of the inner dimensions).
+     * Note that this means any strides of zero get broadcast into a non-zero stride.
+     *
+     * Note that the returned Buffer is always of a non-const type T (ie:
      *
      *     Buffer<const T>.copy() -> Buffer<T> rather than Buffer<const T>
      *

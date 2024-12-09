@@ -55,16 +55,19 @@ void validate_schedule_inlined_function(Function f) {
     }
 
     for (const auto &split : stage_s.splits()) {
-        if (split.is_rename()) {
+        switch (split.split_type) {
+        case Split::RenameVar:
             user_warning << "It is meaningless to rename variable "
                          << split.old_var << " of function "
                          << f.name() << " to " << split.outer
                          << " because " << f.name() << " is scheduled inline.\n";
-        } else if (split.is_fuse()) {
+            break;
+        case Split::FuseVars:
             user_warning << "It is meaningless to fuse variables "
                          << split.inner << " and " << split.outer
                          << " because " << f.name() << " is scheduled inline.\n";
-        } else {
+            break;
+        case Split::SplitVar:
             user_warning << "It is meaningless to split variable "
                          << split.old_var << " of function "
                          << f.name() << " into "
@@ -72,6 +75,10 @@ void validate_schedule_inlined_function(Function f) {
                          << split.factor << " + "
                          << split.inner << " because "
                          << f.name() << " is scheduled inline.\n";
+
+            break;
+        case Split::PurifyRVar:
+            break;
         }
     }
 

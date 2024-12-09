@@ -416,47 +416,57 @@ void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
 
     // Process the splits in reverse order to figure out which root vars have a
     // parallel child.
-    for (auto it = sched.splits().rbegin(); it != sched.splits().rend(); it++) {
-        if (it->is_fuse()) {
-            if (parallel.count(it->old_var)) {
-                parallel.insert(it->inner);
-                parallel.insert(it->old_var);
+    for (const auto &split : reverse_view(sched.splits())) {
+        switch (split.split_type) {
+        case Split::FuseVars:
+            if (parallel.count(split.old_var)) {
+                parallel.insert(split.inner);
+                parallel.insert(split.old_var);
             }
-        } else if (it->is_rename() || it->is_purify()) {
-            if (parallel.count(it->outer)) {
-                parallel.insert(it->old_var);
+            break;
+        case Split::RenameVar:
+        case Split::PurifyRVar:
+            if (parallel.count(split.outer)) {
+                parallel.insert(split.old_var);
             }
-        } else {
-            if (parallel.count(it->inner) || parallel.count(it->outer)) {
-                parallel.insert(it->old_var);
+            break;
+        case Split::SplitVar:
+            if (parallel.count(split.inner) || parallel.count(split.outer)) {
+                parallel.insert(split.old_var);
             }
+            break;
         }
     }
 
     // Now propagate back to all children of the identified root vars, to assert
     // that none of them use a blending tail strategy.
-    for (auto it = sched.splits().begin(); it != sched.splits().end(); it++) {
-        if (it->is_fuse()) {
-            if (parallel.count(it->inner) || parallel.count(it->outer)) {
-                parallel.insert(it->old_var);
+    for (const auto &split : sched.splits()) {
+        switch (split.split_type) {
+        case Split::FuseVars:
+            if (parallel.count(split.inner) || parallel.count(split.outer)) {
+                parallel.insert(split.old_var);
             }
-        } else if (it->is_rename() || it->is_purify()) {
-            if (parallel.count(it->old_var)) {
-                parallel.insert(it->outer);
+            break;
+        case Split::RenameVar:
+        case Split::PurifyRVar:
+            if (parallel.count(split.old_var)) {
+                parallel.insert(split.outer);
             }
-        } else {
-            if (parallel.count(it->old_var)) {
-                parallel.insert(it->inner);
-                parallel.insert(it->old_var);
-                if (it->tail == TailStrategy::ShiftInwardsAndBlend ||
-                    it->tail == TailStrategy::RoundUpAndBlend) {
-                    user_error << "Tail strategy " << it->tail
-                               << " may not be used to split " << it->old_var
+            break;
+        case Split::SplitVar:
+            if (parallel.count(split.old_var)) {
+                parallel.insert(split.inner);
+                parallel.insert(split.old_var);
+                if (split.tail == TailStrategy::ShiftInwardsAndBlend ||
+                    split.tail == TailStrategy::RoundUpAndBlend) {
+                    user_error << "Tail strategy " << split.tail
+                               << " may not be used to split " << split.old_var
                                << " because other vars stemming from the same original "
                                << "Var or RVar are marked as parallel."
                                << "This could cause a race condition.\n";
                 }
             }
+            break;
         }
     }
 }
@@ -479,7 +489,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                 if (!definition.schedule().allow_race_conditions() &&
                     definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
-                        // We only allow allow associative atomic operations
+                        // We only allow associative atomic operations
                         const string &func_name = function.name();
                         vector<Expr> &args = definition.args();
                         vector<Expr> &values = definition.values();
@@ -612,16 +622,20 @@ void apply_split_result(const vector<pair<string, Expr>> &bounds_let_stmts,
                         vector<Expr> &values) {
 
     for (const auto &res : splits_result) {
-        if (res.is_substitution() || res.is_let()) {
+        switch (res.type) {
+        case ApplySplitResult::Substitution:
+        case ApplySplitResult::LetStmt:
             // Apply substitutions to the list of predicates, args, and values.
             // Make sure we substitute in all the let stmts as well since we are
             // not going to add them to the exprs.
             substitute_var_in_exprs(res.name, res.value, predicates);
             substitute_var_in_exprs(res.name, res.value, args);
             substitute_var_in_exprs(res.name, res.value, values);
-        } else {
-            internal_assert(res.is_predicate());
+            break;
+        default:
+            internal_assert(res.type == ApplySplitResult::Predicate);
             predicates.push_back(res.value);
+            break;
         }
     }
 
@@ -640,7 +654,7 @@ void apply_split_result(const vector<pair<string, Expr>> &bounds_let_stmts,
 bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
                  vector<Expr> &predicates, vector<Expr> &args,
                  vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
-    internal_assert(s.is_split());
+    internal_assert(s.split_type == Split::SplitVar);
     const auto it = std::find_if(rvars.begin(), rvars.end(),
                                  [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
 
@@ -659,7 +673,7 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
 
         rvars.insert(it + 1, {s.outer, 0, simplify((old_extent - 1 + s.factor) / s.factor)});
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -673,7 +687,7 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
 bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
                 vector<Expr> &predicates, vector<Expr> &args,
                 vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
-    internal_assert(s.is_fuse());
+    internal_assert(s.split_type == Split::FuseVars);
     const auto &iter_outer = std::find_if(rvars.begin(), rvars.end(),
                                           [&s](const ReductionVariable &rv) { return (s.outer == rv.var); });
     const auto &iter_inner = std::find_if(rvars.begin(), rvars.end(),
@@ -694,7 +708,7 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
         iter_outer->extent = extent;
         rvars.erase(iter_inner);
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -710,7 +724,7 @@ bool apply_fuse(const Split &s, vector<ReductionVariable> &rvars,
 bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
                   vector<Expr> &predicates, vector<Expr> &args,
                   vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
-    internal_assert(s.is_purify());
+    internal_assert(s.split_type == Split::PurifyRVar);
     const auto &iter = std::find_if(rvars.begin(), rvars.end(),
                                     [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
@@ -718,7 +732,7 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
                  << ", deleting it from the rvars list\n";
         rvars.erase(iter);
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -731,14 +745,14 @@ bool apply_purify(const Split &s, vector<ReductionVariable> &rvars,
 bool apply_rename(const Split &s, vector<ReductionVariable> &rvars,
                   vector<Expr> &predicates, vector<Expr> &args,
                   vector<Expr> &values, map<string, Expr> &dim_extent_alignment) {
-    internal_assert(s.is_rename());
+    internal_assert(s.split_type == Split::RenameVar);
     const auto &iter = std::find_if(rvars.begin(), rvars.end(),
                                     [&s](const ReductionVariable &rv) { return (s.old_var == rv.var); });
     if (iter != rvars.end()) {
         debug(4) << "  Renaming " << iter->var << " into " << s.outer << "\n";
         iter->var = s.outer;
 
-        vector<ApplySplitResult> splits_result = apply_split(s, true, "", dim_extent_alignment);
+        vector<ApplySplitResult> splits_result = apply_split(s, "", dim_extent_alignment);
         vector<pair<string, Expr>> bounds_let_stmts = compute_loop_bounds_after_split(s, "");
         apply_split_result(bounds_let_stmts, splits_result, predicates, args, values);
 
@@ -765,14 +779,19 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
     }
 
     bool found = false;
-    if (s.is_split()) {
+    switch (s.split_type) {
+    case Split::SplitVar:
         found = apply_split(s, rvars, predicates, args, values, dim_extent_alignment);
-    } else if (s.is_fuse()) {
+        break;
+    case Split::FuseVars:
         found = apply_fuse(s, rvars, predicates, args, values, dim_extent_alignment);
-    } else if (s.is_purify()) {
+        break;
+    case Split::PurifyRVar:
         found = apply_purify(s, rvars, predicates, args, values, dim_extent_alignment);
-    } else {
+        break;
+    case Split::RenameVar:
         found = apply_rename(s, rvars, predicates, args, values, dim_extent_alignment);
+        break;
     }
 
     if (found) {
@@ -1173,19 +1192,24 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
         // factor does not divide the outer split factor.
         std::set<string> inner_vars;
         for (const Split &s : definition.schedule().splits()) {
-            if (s.is_split()) {
+            switch (s.split_type) {
+            case Split::SplitVar:
                 inner_vars.insert(s.inner);
                 if (inner_vars.count(s.old_var)) {
                     inner_vars.insert(s.outer);
                 }
-            } else if (s.is_rename() || s.is_purify()) {
+                break;
+            case Split::RenameVar:
+            case Split::PurifyRVar:
                 if (inner_vars.count(s.old_var)) {
                     inner_vars.insert(s.outer);
                 }
-            } else if (s.is_fuse()) {
+                break;
+            case Split::FuseVars:
                 if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
                     inner_vars.insert(s.old_var);
                 }
+                break;
             }
         }
         round_up_ok = !inner_vars.count(old_name);
@@ -1203,19 +1227,24 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
         // is OK. Otherwise we can't prove it's safe.
         std::set<string> inner_vars;
         for (const Split &s : definition.schedule().splits()) {
-            if (s.is_split()) {
+            switch (s.split_type) {
+            case Split::SplitVar:
                 inner_vars.insert(s.inner);
                 if (inner_vars.count(s.old_var)) {
                     inner_vars.insert(s.outer);
                 }
-            } else if (s.is_rename() || s.is_purify()) {
+                break;
+            case Split::RenameVar:
+            case Split::PurifyRVar:
                 if (inner_vars.count(s.old_var)) {
                     inner_vars.insert(s.outer);
                 }
-            } else if (s.is_fuse()) {
+                break;
+            case Split::FuseVars:
                 if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
                     inner_vars.insert(s.old_var);
                 }
+                break;
             }
         }
         predicate_loads_ok = !inner_vars.count(old_name);
@@ -1258,14 +1287,24 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
             std::map<string, Expr> descends_from_shiftinwards_outer;
             for (const Split &s : definition.schedule().splits()) {
                 auto it = descends_from_shiftinwards_outer.find(s.old_var);
-                if (s.is_split() && s.tail == TailStrategy::ShiftInwards) {
-                    descends_from_shiftinwards_outer[s.outer] = s.factor;
-                } else if (s.is_split() && it != descends_from_shiftinwards_outer.end()) {
-                    descends_from_shiftinwards_outer[s.inner] = it->second;
-                    descends_from_shiftinwards_outer[s.outer] = it->second;
-                } else if ((s.is_rename() || s.is_purify()) &&
-                           it != descends_from_shiftinwards_outer.end()) {
-                    descends_from_shiftinwards_outer[s.outer] = it->second;
+                switch (s.split_type) {
+                case Split::SplitVar:
+                    if (s.tail == TailStrategy::ShiftInwards) {
+                        descends_from_shiftinwards_outer[s.outer] = s.factor;
+                    } else if (it != descends_from_shiftinwards_outer.end()) {
+                        descends_from_shiftinwards_outer[s.inner] = it->second;
+                        descends_from_shiftinwards_outer[s.outer] = it->second;
+                    }
+                    break;
+                case Split::RenameVar:
+                case Split::PurifyRVar:
+                    if (it != descends_from_shiftinwards_outer.end()) {
+                        descends_from_shiftinwards_outer[s.outer] = it->second;
+                    }
+                    break;
+                case Split::FuseVars:
+                    // Do nothing
+                    break;
                 }
             }
             auto it = descends_from_shiftinwards_outer.find(old_name);
@@ -1522,59 +1561,64 @@ void Stage::remove(const string &var) {
 
     vector<Split> &splits = schedule.splits();
     vector<Split> temp;
-    for (size_t i = splits.size(); i > 0; i--) {
+    for (const auto &split : reverse_view(splits)) {
         bool is_removed = false;
-        if (splits[i - 1].is_fuse()) {
-            debug(4) << "    checking fuse " << splits[i - 1].inner << " and "
-                     << splits[i - 1].inner << " into " << splits[i - 1].old_var << "\n";
-            if (splits[i - 1].inner == old_name ||
-                splits[i - 1].outer == old_name) {
+        switch (split.split_type) {
+        case Split::FuseVars:
+            debug(4) << "    checking fuse " << split.inner << " and "
+                     << split.inner << " into " << split.old_var << "\n";
+            if (split.inner == old_name ||
+                split.outer == old_name) {
                 user_error
                     << "In schedule for " << name()
                     << ", can't remove variable " << old_name
                     << " because it has already been fused into "
-                    << splits[i - 1].old_var << "\n"
+                    << split.old_var << "\n"
                     << dump_argument_list();
             }
-            if (should_remove(splits[i - 1].old_var)) {
+            if (should_remove(split.old_var)) {
                 is_removed = true;
-                removed_vars.insert(splits[i - 1].outer);
-                removed_vars.insert(splits[i - 1].inner);
+                removed_vars.insert(split.outer);
+                removed_vars.insert(split.inner);
             }
-        } else if (splits[i - 1].is_split()) {
-            debug(4) << "    splitting " << splits[i - 1].old_var << " into "
-                     << splits[i - 1].outer << " and " << splits[i - 1].inner << "\n";
-            if (should_remove(splits[i - 1].inner)) {
+            break;
+        case Split::SplitVar:
+            debug(4) << "    splitting " << split.old_var << " into "
+                     << split.outer << " and " << split.inner << "\n";
+            if (should_remove(split.inner)) {
                 is_removed = true;
-                removed_vars.insert(splits[i - 1].old_var);
-            } else if (should_remove(splits[i - 1].outer)) {
+                removed_vars.insert(split.old_var);
+            } else if (should_remove(split.outer)) {
                 is_removed = true;
-                removed_vars.insert(splits[i - 1].old_var);
+                removed_vars.insert(split.old_var);
             }
-            if (splits[i - 1].old_var == old_name) {
+            if (split.old_var == old_name) {
                 user_error
                     << "In schedule for " << name()
                     << ", can't remove a variable " << old_name
                     << " because it has already been renamed or split.\n"
                     << dump_argument_list();
             }
-        } else {
-            debug(4) << "    replace/rename " << splits[i - 1].old_var
-                     << " into " << splits[i - 1].outer << "\n";
-            if (should_remove(splits[i - 1].outer)) {
+            break;
+        case Split::RenameVar:
+        case Split::PurifyRVar:
+            debug(4) << "    replace/rename " << split.old_var
+                     << " into " << split.outer << "\n";
+            if (should_remove(split.outer)) {
                 is_removed = true;
-                removed_vars.insert(splits[i - 1].old_var);
+                removed_vars.insert(split.old_var);
             }
-            if (splits[i - 1].old_var == old_name) {
+            if (split.old_var == old_name) {
                 user_error
                     << "In schedule for " << name()
                     << ", can't remove a variable " << old_name
                     << " because it has already been renamed or split.\n"
                     << dump_argument_list();
             }
+            break;
         }
         if (!is_removed) {
-            temp.insert(temp.begin(), splits[i - 1]);
+            temp.insert(temp.begin(), split);
         }
     }
     splits.swap(temp);
@@ -1625,41 +1669,46 @@ Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
 
     // If possible, rewrite the split or rename that defines it.
     found = false;
-    vector<Split> &splits = schedule.splits();
-    for (size_t i = splits.size(); i > 0; i--) {
-        if (splits[i - 1].is_fuse()) {
-            if (splits[i - 1].inner == old_name ||
-                splits[i - 1].outer == old_name) {
+    for (auto &split : reverse_view(schedule.splits())) {
+        switch (split.split_type) {
+        case Split::FuseVars:
+            if (split.inner == old_name ||
+                split.outer == old_name) {
                 user_error
                     << "In schedule for " << name()
                     << ", can't rename variable " << old_name
                     << " because it has already been fused into "
-                    << splits[i - 1].old_var << "\n"
+                    << split.old_var << "\n"
                     << dump_argument_list();
             }
-            if (splits[i - 1].old_var == old_name) {
-                splits[i - 1].old_var = new_name;
+            if (split.old_var == old_name) {
+                split.old_var = new_name;
                 found = true;
                 break;
             }
-        } else {
-            if (splits[i - 1].inner == old_name) {
-                splits[i - 1].inner = new_name;
+
+            break;
+        case Split::SplitVar:
+        case Split::RenameVar:
+        case Split::PurifyRVar:
+            if (split.inner == old_name) {
+                split.inner = new_name;
                 found = true;
                 break;
             }
-            if (splits[i - 1].outer == old_name) {
-                splits[i - 1].outer = new_name;
+            if (split.outer == old_name) {
+                split.outer = new_name;
                 found = true;
                 break;
             }
-            if (splits[i - 1].old_var == old_name) {
+            if (split.old_var == old_name) {
                 user_error
                     << "In schedule for " << name()
                     << ", can't rename a variable " << old_name
                     << " because it has already been renamed or split.\n"
                     << dump_argument_list();
             }
+            break;
         }
     }
 

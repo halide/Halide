@@ -385,11 +385,10 @@ protected:
 
         // Rewrite multiplies to shifts if possible.
         if (op->type.is_int() || op->type.is_uint()) {
-            int pow2 = 0;
-            if (is_const_power_of_two_integer(a, &pow2)) {
-                return mutate(b << cast(UInt(b.type().bits()), pow2));
-            } else if (is_const_power_of_two_integer(b, &pow2)) {
-                return mutate(a << cast(UInt(a.type().bits()), pow2));
+            if (auto pow2 = is_const_power_of_two_integer(a)) {
+                return mutate(b << cast(UInt(b.type().bits()), *pow2));
+            } else if (auto pow2 = is_const_power_of_two_integer(b)) {
+                return mutate(a << cast(UInt(a.type().bits()), *pow2));
             }
         }
 
@@ -467,9 +466,8 @@ protected:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        int shift_amount;
-        if (is_const_power_of_two_integer(b, &shift_amount) && op->type.is_int_or_uint()) {
-            return mutate(a >> make_const(UInt(a.type().bits()), shift_amount));
+        if (auto shift_amount = is_const_power_of_two_integer(b)) {
+            return mutate(a >> make_const(UInt(a.type().bits()), *shift_amount));
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {

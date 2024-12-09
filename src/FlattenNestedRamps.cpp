@@ -70,8 +70,7 @@ class FlattenRamps : public IRMutator {
             int max_constant_offset = 0;
             for (Expr &idx : indices) {
                 idx = simplify(common_subexpression_elimination(idx - min_lane));
-                const int64_t *i = as_const_int(idx);
-                if (i) {
+                if (auto i = as_const_int(idx)) {
                     const_indices.push_back((int)(*i));
                     max_constant_offset = std::max((int)(*i), max_constant_offset);
                 } else {

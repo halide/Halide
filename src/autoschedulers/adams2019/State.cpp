@@ -321,8 +321,7 @@ void State::generate_children(const FunctionDAG &dag,
             int num_dims = output.dimensions();
             for (int i = 0; i < num_dims; ++i) {
                 const Expr stride = output.stride_constraint(i);
-                const int64_t *s = as_const_int(stride);
-                if (s && *s == 1) {
+                if (stride.defined() && is_const_one(stride)) {
                     vector_dims.push_back(i);
                 }
             }
@@ -585,46 +584,46 @@ void State::apply_schedule(const FunctionDAG &dag, const Adams2019Params &params
         }
     }
 
-    for (auto &p : state_map) {
-        if (p.first->node->is_input) {
+    for (auto &[stage_ptr, schedule] : state_map) {
+        if (stage_ptr->node->is_input) {
             continue;
         }
 
-        Stage stage(p.first->stage);
+        Stage stage(stage_ptr->stage);
 
         // Do all the reorders and pick which vars to
         // parallelize.
         vector<VarOrRVar> vars;
         vector<VarOrRVar> parallel_vars;
         bool any_parallel_vars = false, any_parallel_rvars = false;
-        for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-            if (!it->exists || it->extent == 1) {
+        for (const auto &func_var : reverse_view(schedule->vars)) {
+            if (!func_var.exists || func_var.extent == 1) {
                 continue;
             }
-            if (!it->parallel) {
+            if (!func_var.parallel) {
                 break;
             }
-            any_parallel_rvars |= it->var.is_rvar;
-            any_parallel_vars |= !it->var.is_rvar;
-            parallel_vars.push_back(it->var);
+            any_parallel_rvars |= func_var.var.is_rvar;
+            any_parallel_vars |= !func_var.var.is_rvar;
+            parallel_vars.push_back(func_var.var);
         }
 
-        if (p.second->vars.size() > 1) {
-            p.second->schedule_source << "\n    .reorder(";
+        if (schedule->vars.size() > 1) {
+            schedule->schedule_source << "\n    .reorder(";
             bool first = true;
-            for (auto &v : p.second->vars) {
+            for (auto &v : schedule->vars) {
                 if (v.exists) {
                     vars.push_back(v.var);
                     if (!first) {
-                        p.second->schedule_source << ", ";
+                        schedule->schedule_source << ", ";
                     } else {
-                        p.second->schedule_source << "{";
+                        schedule->schedule_source << "{";
                     }
                     first = false;
-                    p.second->schedule_source << v.var.name();
+                    schedule->schedule_source << v.var.name();
                 }
             }
-            p.second->schedule_source << "})";
+            schedule->schedule_source << "})";
             stage.reorder(vars);
         }
 
@@ -635,44 +634,44 @@ void State::apply_schedule(const FunctionDAG &dag, const Adams2019Params &params
             for (size_t i = 1; i < parallel_vars.size(); i++) {
                 // Outermost, and next outermost. Preserve the inner
                 // name to not invalidate any compute_ats.
-                p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
+                schedule->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
                                           << ", " << parallel_vars[i - 1].name()
                                           << ", " << parallel_vars[i].name() << ")";
                 stage.fuse(parallel_vars[i], parallel_vars[i - 1], parallel_vars[i]);
             }
             if (!parallel_vars.empty()) {
-                p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
+                schedule->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
                 stage.parallel(parallel_vars.back());
             }
         } else {
             for (const auto &v : parallel_vars) {
-                p.second->schedule_source << "\n    .parallel(" << v.name() << ")";
+                schedule->schedule_source << "\n    .parallel(" << v.name() << ")";
                 stage.parallel(v);
             }
         }
 
         // Reorder the vector dimension innermost
-        if (p.first->index == 0 && p.second->vector_dim > 0) {
-            vector<Var> storage_vars = Func(p.first->node->func).args();
-            for (int i = p.second->vector_dim; i > 0; i--) {
+        if (stage_ptr->index == 0 && schedule->vector_dim > 0) {
+            vector<Var> storage_vars = Func(stage_ptr->node->func).args();
+            for (int i = schedule->vector_dim; i > 0; i--) {
                 std::swap(storage_vars[i], storage_vars[i - 1]);
             }
-            p.second->schedule_source << "\n    .reorder_storage(";
+            schedule->schedule_source << "\n    .reorder_storage(";
             bool first = true;
             for (const auto &v : storage_vars) {
                 if (!first) {
-                    p.second->schedule_source << ", ";
+                    schedule->schedule_source << ", ";
                 }
                 first = false;
-                p.second->schedule_source << v.name();
+                schedule->schedule_source << v.name();
             }
-            p.second->schedule_source << ")";
-            Func(p.first->node->func).reorder_storage(storage_vars);
+            schedule->schedule_source << ")";
+            Func(stage_ptr->node->func).reorder_storage(storage_vars);
         }
 
         // Dump the schedule source string
-        src << p.first->name
-            << p.second->schedule_source.str()
+        src << stage_ptr->name
+            << schedule->schedule_source.str()
             << ";\n";
     }
     // Sanitize the names of things to make them legal source code.

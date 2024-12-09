@@ -353,13 +353,12 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                 expr_adjoints[output_expr] = 1.f;
             }
 
-            // Traverse the expressions in reverse order
-            for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
-                if (it->type().is_handle()) {
+            for (Expr &e : reverse_view(expr_list)) {
+                if (e.type().is_handle()) {
                     // Ignore pointer types
                     continue;
                 }
-                it->accept(this);
+                e.accept(this);
             }
 
             auto error = [&]() {
@@ -554,8 +553,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
     }
 
     // Traverse functions from producers to consumers for reverse accumulation
-    for (int func_id = funcs.size() - 1; func_id >= 0; func_id--) {
-        const Func &func = funcs[func_id];
+    for (const auto &func : reverse_view(funcs)) {
         current_func = func;
 
         FuncKey func_key{func.name(), func.num_update_definitions() - 1};
@@ -701,14 +699,13 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                     }
                 }
 
-                // Traverse the expressions in reverse order
-                for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
-                    if (it->type().is_handle()) {
+                for (Expr &e : reverse_view(expr_list)) {
+                    if (e.type().is_handle()) {
                         // Ignore pointer types
                         continue;
                     }
                     // Propagate adjoints
-                    it->accept(this);
+                    e.accept(this);
                 }
             }
             if (is_current_non_overwriting_scan) {
@@ -743,14 +740,13 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                                    update_args, i);
                 }
 
-                // Traverse the expressions in reverse order
-                for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
-                    if (it->type().is_handle()) {
+                for (Expr &e : reverse_view(expr_list)) {
+                    if (e.type().is_handle()) {
                         // Ignore pointer types
                         continue;
                     }
                     // Propagate adjoints
-                    it->accept(this);
+                    e.accept(this);
                 }
             }
         }

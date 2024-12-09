@@ -38,8 +38,8 @@ class BoundSmallAllocations : public IRMutator {
 
         result = mutate(result);
 
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            result = T::make(it->op->name, it->op->value, result);
+        for (const auto &frame : reverse_view(frames)) {
+            result = T::make(frame.op->name, frame.op->value, result);
         }
 
         return result;
@@ -125,7 +125,7 @@ class BoundSmallAllocations : public IRMutator {
                 << "Try storing on the heap or stack instead.";
         }
 
-        const int64_t *size_ptr = bound.defined() ? as_const_int(bound) : nullptr;
+        auto size_ptr = bound.defined() ? as_const_int(bound) : std::nullopt;
         int64_t size = size_ptr ? *size_ptr : 0;
 
         if (size_ptr && size == 0 && !op->new_expr.defined()) {

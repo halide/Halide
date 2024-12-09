@@ -1178,7 +1178,7 @@ void CodeGen_ARM::visit(const Cast *op) {
             if (expr_match(pattern.pattern, op, matches)) {
                 if (pattern.intrin.find("shift_right_narrow") != string::npos) {
                     // The shift_right_narrow patterns need the shift to be constant in [1, output_bits].
-                    const uint64_t *const_b = as_const_uint(matches[1]);
+                    auto const_b = as_const_uint(matches[1]);
                     if (!const_b || *const_b == 0 || (int)*const_b > op->type.bits()) {
                         continue;
                     }
@@ -2015,7 +2015,7 @@ void CodeGen_ARM::visit(const Call *op) {
             if (expr_match(pattern.pattern, op, matches)) {
                 if (pattern.intrin.find("shift_right_narrow") != string::npos) {
                     // The shift_right_narrow patterns need the shift to be constant in [1, output_bits].
-                    const uint64_t *const_b = as_const_uint(matches[1]);
+                    auto const_b = as_const_uint(matches[1]);
                     if (!const_b || *const_b == 0 || (int)*const_b > op->type.bits()) {
                         continue;
                     }
