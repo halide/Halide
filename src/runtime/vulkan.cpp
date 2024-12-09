@@ -1387,7 +1387,7 @@ WEAK int halide_vulkan_release_unused_device_allocations(void *user_context) {
     }
 
     // collect all unused allocations
-    if(ctx.allocator) {
+    if (ctx.allocator) {
         ctx.allocator->collect(user_context);
     }
     return halide_error_code_success;
@@ -1402,14 +1402,14 @@ WEAK __attribute__((constructor)) void register_vulkan_allocation_pool() {
 
 WEAK __attribute__((destructor)) void halide_vulkan_cleanup() {
     // NOTE: In some cases, we've observed the NVIDIA driver causing a segfault
-    //       at process exit.  It appears to be triggered by running multiple 
-    //       processes that use the Vulkan API, whereupon, one of the libs in 
+    //       at process exit.  It appears to be triggered by running multiple
+    //       processes that use the Vulkan API, whereupon, one of the libs in
     //       their driver stack may crash inside the finalizer.  Unfortunately,
     //       any attempt to avoid it may also crash, since the function pointers
     //       obtained from the Vulkan loader appear to be invalid.
     //
     //       https://github.com/halide/Halide/issues/8497
-    //       
+    //
     //       So, we don't do any special handling here ... just clean up like
     //       the other runtimes do.
     //
