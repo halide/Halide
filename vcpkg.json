@@ -5,7 +5,7 @@
   "homepage": "https://github.com/halide/Halide",
   "license": "MIT",
   "supports": "!uwp",
-  "builtin-baseline": "4fa096bce24561bf869e56384e655f4b2bab71a8",
+  "builtin-baseline": "d567b667adba0e72c5c3931ddbe745b66aa34b73",
   "default-features": [
     "jit",
     "serialization"
@@ -24,7 +24,8 @@
         "tools"
       ]
     },
-    "spirv-headers"
+    "spirv-headers",
+    "vulkan-headers"
   ],
   "features": {
     "developer": {

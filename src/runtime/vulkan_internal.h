@@ -24,6 +24,7 @@ namespace Vulkan {
 // Declarations
 class VulkanMemoryAllocator;
 struct VulkanShaderBinding;
+struct VulkanCompiledShaderModule;
 struct VulkanCompilationCacheEntry;
 
 // --------------------------------------------------------------------------
@@ -42,7 +43,7 @@ VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context, VkDevice d
 int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *allocator);
 int vk_clear_device_buffer(void *user_context,
                            VulkanMemoryAllocator *allocator,
-                           VkCommandPool command_pool,
+                           VkCommandBuffer command_buffer,
                            VkQueue command_queue,
                            VkBuffer device_buffer);
 // --------------------------------------------------------------------------
@@ -55,7 +56,6 @@ int vk_create_context(
     VkInstance *instance,
     VkDevice *device,
     VkPhysicalDevice *physical_device,
-    VkCommandPool *command_pool,
     VkQueue *queue, uint32_t *queue_family_index);
 
 int vk_destroy_context(
@@ -64,7 +64,6 @@ int vk_destroy_context(
     VkInstance instance,
     VkDevice device,
     VkPhysicalDevice physical_device,
-    VkCommandPool command_pool,
     VkQueue queue);
 
 int vk_find_compute_capability(void *user_context, int *major, int *minor);
@@ -101,12 +100,11 @@ bool vk_validate_required_extension_support(void *user_context,
 int vk_create_command_pool(void *user_context, VulkanMemoryAllocator *allocator, uint32_t queue_index, VkCommandPool *command_pool);
 int vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool);
 
-// Command pools are uint64_t and zero may be valid, so use this as a sentinel for invalid
-const VkCommandPool VkInvalidCommandPool(uint64_t(-1));
-
 // -- Command Buffer
 int vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool pool, VkCommandBuffer *command_buffer);
 int vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool, VkCommandBuffer command_buffer);
+
+struct ScopedVulkanCommandBufferAndPool;
 
 int vk_fill_command_buffer_with_dispatch_call(void *user_context,
                                               VkDevice device,
@@ -217,12 +215,16 @@ int vk_destroy_compute_pipeline(void *user_context,
                                 VulkanMemoryAllocator *allocator,
                                 VkPipeline compute_pipeline);
 
+// -- Kernel Module
+VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, VulkanMemoryAllocator *allocator,
+                                                      const char *ptr, int size);
+
 // -- Shader Module
 VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryAllocator *allocator,
                                                const uint32_t *module_ptr, uint32_t module_size);
 
-VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
-                                                      const char *src, int size);
+VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
+                                                     const char *src, int size);
 
 int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocator);
 
@@ -232,8 +234,11 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
                                 int d, bool from_host, bool to_host);
 
 // --------------------------------------------------------------------------
-// Errors
+// Debug & Errors
 // --------------------------------------------------------------------------
+
+VkResult vk_create_debug_utils_messenger(void *user_context, VkInstance instance, VulkanMemoryAllocator *allocator, VkDebugUtilsMessengerEXT *messenger);
+void vk_destroy_debug_utils_messenger(void *user_context, VkInstance instance, VulkanMemoryAllocator *allocator, VkDebugUtilsMessengerEXT messenger);
 
 // Returns the corresponding string for a given vulkan error code
 const char *vk_get_error_name(VkResult error) {

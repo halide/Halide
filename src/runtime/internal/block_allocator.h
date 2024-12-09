@@ -24,7 +24,7 @@ namespace Internal {
  */
 class BlockAllocator {
 public:
-    // disable copy constructors and assignment
+    // disable copy constructors and assignment for
     BlockAllocator(const BlockAllocator &) = delete;
     BlockAllocator &operator=(const BlockAllocator &) = delete;
 
@@ -468,7 +468,9 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryRequest &requ
 
     BlockEntry *block_entry = block_list.append(user_context);
     if (block_entry == nullptr) {
+#ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "BlockAllocator: Failed to allocate new block entry\n";
+#endif
         return nullptr;
     }
 
@@ -491,7 +493,14 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryRequest &requ
     block->memory.dedicated = block_request.dedicated;
     block->reserved = 0;
     block->allocator = create_region_allocator(user_context, block);
-    alloc_memory_block(user_context, block);
+    int error_code = alloc_memory_block(user_context, block);
+    if (error_code != 0) {
+#ifdef DEBUG_RUNTIME_INTERNAL
+        debug(user_context) << "BlockAllocator: Failed to allocate memory block\n";
+#endif
+        destroy_block_entry(user_context, block_entry);
+        return nullptr;
+    }
     return block_entry;
 }
 
@@ -520,9 +529,9 @@ int BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::Bloc
         destroy_region_allocator(user_context, block->allocator);
         block->allocator = nullptr;
     }
-    free_memory_block(user_context, block);
+    int error_code = free_memory_block(user_context, block);
     block_list.remove(user_context, block_entry);
-    return 0;
+    return error_code;
 }
 
 int BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block) {
@@ -531,9 +540,9 @@ int BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block)
 #endif
     halide_abort_if_false(user_context, allocators.block.allocate != nullptr);
     MemoryBlock *memory_block = &(block->memory);
-    allocators.block.allocate(user_context, memory_block);
+    int error_code = allocators.block.allocate(user_context, memory_block);
     block->reserved = 0;
-    return 0;
+    return error_code;
 }
 
 int BlockAllocator::free_memory_block(void *user_context, BlockResource *block) {
@@ -542,11 +551,11 @@ int BlockAllocator::free_memory_block(void *user_context, BlockResource *block) 
 #endif
     halide_abort_if_false(user_context, allocators.block.deallocate != nullptr);
     MemoryBlock *memory_block = &(block->memory);
-    allocators.block.deallocate(user_context, memory_block);
+    int error_code = allocators.block.deallocate(user_context, memory_block);
     memory_block->handle = nullptr;
     block->reserved = 0;
     block->memory.size = 0;
-    return 0;
+    return error_code;
 }
 
 size_t BlockAllocator::constrain_requested_size(size_t size) const {

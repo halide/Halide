@@ -152,26 +152,22 @@ int main(int argc, char **argv) {
         f.get();
     }
 
-    // Vulkan will OOM unless allocation cache is used ... skip this since we just ran the same tests above concurrently
-    if (!target.has_feature(Target::Vulkan)) {
+    // Now benchmark with and without, (just informational, as this isn't a performance test)
+    double t1 = Tools::benchmark([&]() {
+        test1(true, false);
+        test2(true, false);
+        test3(true, false);
+    });
 
-        // Now benchmark with and without, (just informational, as this isn't a performance test)
-        double t1 = Tools::benchmark([&]() {
-            test1(true, false);
-            test2(true, false);
-            test3(true, false);
-        });
+    double t2 = Tools::benchmark([&]() {
+        test1(false, false);
+        test2(false, false);
+        test3(false, false);
+    });
 
-        double t2 = Tools::benchmark([&]() {
-            test1(false, false);
-            test2(false, false);
-            test3(false, false);
-        });
-
-        printf("Runtime with cache: %f\n"
-               "Without cache: %f\n",
-               t1, t2);
-    }
+    printf("Runtime with cache: %f\n"
+           "Without cache: %f\n",
+           t1, t2);
 
     printf("Success!\n");
     return 0;
