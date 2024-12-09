@@ -40,10 +40,10 @@ class VulkanContext {
 
 public:
     VulkanMemoryAllocator *allocator = nullptr;
-    VkInstance instance = nullptr;
-    VkDevice device = nullptr;
-    VkPhysicalDevice physical_device = nullptr;
-    VkQueue queue = nullptr;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    VkPhysicalDevice physical_device = VK_NULL_HANDLE;
+    VkQueue queue = VK_NULL_HANDLE;
     uint32_t queue_family_index = 0;  // used for operations requiring queue family
     VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
     halide_error_code_t error = halide_error_code_success;
@@ -59,10 +59,10 @@ public:
             halide_error_no_device_interface(user_context);
         }
         halide_debug_assert(user_context, allocator != nullptr);
-        halide_debug_assert(user_context, instance != nullptr);
-        halide_debug_assert(user_context, device != nullptr);
-        halide_debug_assert(user_context, queue != nullptr);
-        halide_debug_assert(user_context, physical_device != nullptr);
+        halide_debug_assert(user_context, instance != VK_NULL_HANDLE);
+        halide_debug_assert(user_context, device != VK_NULL_HANDLE);
+        halide_debug_assert(user_context, queue != VK_NULL_HANDLE);
+        halide_debug_assert(user_context, physical_device != VK_NULL_HANDLE);
     }
 
     HALIDE_ALWAYS_INLINE ~VulkanContext() {
@@ -82,9 +82,9 @@ namespace {
 int vk_find_compute_capability(void *user_context, int *major, int *minor) {
     debug(user_context) << " vk_find_compute_capability (user_context: " << user_context << ")\n";
 
-    VkInstance instance = nullptr;
-    VkDevice device = nullptr;
-    VkPhysicalDevice physical_device = nullptr;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    VkPhysicalDevice physical_device = VK_NULL_HANDLE;
     uint32_t queue_family_index = 0;
 
     if (!lib_vulkan) {
@@ -239,7 +239,7 @@ int vk_select_device_for_context(void *user_context,
     BlockStorage device_query_storage(user_context, device_query_storage_config);
     device_query_storage.resize(user_context, device_count);
 
-    VkPhysicalDevice chosen_device = nullptr;
+    VkPhysicalDevice chosen_device = VK_NULL_HANDLE;
     VkPhysicalDevice *avail_devices = (VkPhysicalDevice *)(device_query_storage.data());
     if (avail_devices == nullptr) {
         debug(user_context) << "Vulkan: Out of system memory!\n";
@@ -256,7 +256,7 @@ int vk_select_device_for_context(void *user_context,
 
     // try to find a matching device that supports compute.
     uint32_t queue_family = 0;
-    for (uint32_t i = 0; (chosen_device == nullptr) && (i < device_count); i++) {
+    for (uint32_t i = 0; (chosen_device == VK_NULL_HANDLE) && (i < device_count); i++) {
         VkPhysicalDeviceProperties properties;
         vkGetPhysicalDeviceProperties(avail_devices[i], &properties);
         debug(user_context) << "Vulkan: Checking device #" << i << "='" << properties.deviceName << "'\n";

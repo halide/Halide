@@ -222,10 +222,10 @@ WEAK int halide_vulkan_device_release(void *user_context) {
         << "halide_vulkan_device_release (user_context: " << user_context << ")\n";
 
     VulkanMemoryAllocator *allocator = nullptr;
-    VkInstance instance = nullptr;
-    VkDevice device = nullptr;
-    VkPhysicalDevice physical_device = nullptr;
-    VkQueue queue = nullptr;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    VkPhysicalDevice physical_device = VK_NULL_HANDLE;
+    VkQueue queue = VK_NULL_HANDLE;
     uint32_t queue_family_index = 0;
     VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
 
@@ -239,11 +239,11 @@ WEAK int halide_vulkan_device_release(void *user_context) {
         if ((instance == cached_instance) && (device == cached_device)) {
             destroy_status = vk_destroy_context(user_context, allocator, instance, device, physical_device, queue, messenger);
             cached_allocator = nullptr;
-            cached_device = nullptr;
-            cached_physical_device = nullptr;
-            cached_queue = nullptr;
+            cached_device = VK_NULL_HANDLE;
+            cached_physical_device = VK_NULL_HANDLE;
+            cached_queue = VK_NULL_HANDLE;
             cached_queue_family_index = 0;
-            cached_instance = nullptr;
+            cached_instance = VK_NULL_HANDLE;
             cached_messenger = VK_NULL_HANDLE;
         }
 
@@ -1387,15 +1387,10 @@ WEAK int halide_vulkan_release_unused_device_allocations(void *user_context) {
     }
 
     // collect all unused allocations
-    ctx.allocator->collect(user_context);
-    return halide_error_code_success;
-}
-
-WEAK void halide_vulkan_release_all() {
-    debug(nullptr) << "halide_vulkan_cleanup()\n";
-    if (halide_vulkan_is_initialized()) {
-        halide_vulkan_device_release(nullptr);
+    if(ctx.allocator) {
+        ctx.allocator->collect(user_context);
     }
+    return halide_error_code_success;
 }
 
 namespace {
@@ -1406,25 +1401,21 @@ WEAK __attribute__((constructor)) void register_vulkan_allocation_pool() {
 }
 
 WEAK __attribute__((destructor)) void halide_vulkan_cleanup() {
-    // NOTE: Lifetime management is an issue here since we don't have a
-    //       reference count on the driver lib, only the Vulkan Loader ICD.
-    //       So, when this is called in the module destructor, we need to
-    //       make sure the function pointers are still valid.
+    // NOTE: In some cases, we've observed the NVIDIA driver causing a segfault
+    //       at process exit.  It appears to be triggered by running multiple 
+    //       processes that use the Vulkan API, whereupon, one of the libs in 
+    //       their driver stack may crash inside the finalizer.  Unfortunately,
+    //       any attempt to avoid it may also crash, since the function pointers
+    //       obtained from the Vulkan loader appear to be invalid.
     //
-    //       In some cases, we've observed the (NVIDIA) driver registering
-    //       an atexit() call that gets invoked via __run_exit_handlers()
-    //       *before* this method gets called (via _dl_fini()). At that point
-    //       all the function pointers are invalid since the call chain has
-    //       been destroyed and any call to a Vulkan API method will segfault.
+    //       https://github.com/halide/Halide/issues/8497
+    //       
+    //       So, we don't do any special handling here ... just clean up like
+    //       the other runtimes do.
     //
-    //       So, we leave this destructor empty so that in the AOT case
-    //       we let the OS handle the cleanup via the dlclose() and atexit()
-    //       handlers.
-    //
-    //       For JIT, we register a custom destructor in JITModule.cpp that
-    //       calls halide_vulkan_release_all() when the module refcount
-    //       reaches zero and the module is destroyed.
-    //
+    if (halide_vulkan_is_initialized()) {
+        halide_vulkan_device_release(nullptr);
+    }
 }
 
 // --------------------------------------------------------------------------
