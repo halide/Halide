@@ -21,11 +21,6 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
 
-    if (target.has_feature(Target::Vulkan)) {
-        printf("[SKIP] Skipping test for Vulkan. Driver issues are preventing proper cleanup for shutdown.\n");
-        return 0;
-    }
-
     // We need debug output to record object creation.
     target.set_feature(Target::Debug);
 
