@@ -611,6 +611,9 @@ public:
     bool &async();
     bool async() const;
 
+    bool &dma();
+    bool dma() const;
+
     Expr &ring_buffer();
     Expr &ring_buffer() const;
 
