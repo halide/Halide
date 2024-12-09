@@ -168,8 +168,8 @@ int main(int argc, char **argv) {
         test3(false, false);
     });
     printf("Runtime with cache: %f\n"
-            "Without cache: %f\n",
-            t1, t2);
+           "Without cache: %f\n",
+           t1, t2);
 
     printf("Success!\n");
     return 0;
