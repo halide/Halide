@@ -211,9 +211,8 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
         // This flag is mainly to capture shifts. When the operand of a div or
         // mul is a power of 2, we can use a shift instead.
         if (flags & (Pattern::ExactLog2Op1 << (i - Pattern::BeginExactLog2Op))) {
-            int pow;
-            if (is_const_power_of_two_integer(matches[i], &pow)) {
-                matches[i] = cast(matches[i].type().with_lanes(1), pow);
+            if (auto pow = is_const_power_of_two_integer(matches[i])) {
+                matches[i] = cast(matches[i].type().with_lanes(1), *pow);
             } else {
                 return false;
             }
@@ -1010,7 +1009,7 @@ private:
             }
         } else if (op->is_intrinsic(Call::widening_shift_left)) {
             // Replace widening left shift with multiplication.
-            const uint64_t *c = as_const_uint(op->args[1]);
+            auto c = as_const_uint(op->args[1]);
             if (c && op->args[1].type().can_represent((uint64_t)1 << *c)) {
                 if (op->args[0].type().is_int() && (*c < (uint64_t)op->args[0].type().bits() - 1)) {
                     return mutate(widening_mul(op->args[0], bc(IntImm::make(op->args[1].type().with_code(halide_type_int).with_lanes(1), (int64_t)1 << *c), op->args[1].type().lanes())));
