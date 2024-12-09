@@ -16,16 +16,16 @@ class LowerTargetQueryOps : public IRMutator {
 
     Expr visit(const Call *call) override {
         if (call->is_intrinsic(Call::target_arch_is)) {
-            Target::Arch arch = (Target::Arch)*as_const_int(call->args[0]);
+            Target::Arch arch = (Target::Arch)as_const_int(call->args[0]).value();
             return make_bool(t.arch == arch);
         } else if (call->is_intrinsic(Call::target_has_feature)) {
-            Target::Feature feat = (Target::Feature)*as_const_int(call->args[0]);
+            Target::Feature feat = (Target::Feature)as_const_int(call->args[0]).value();
             return make_bool(t.has_feature(feat));
         } else if (call->is_intrinsic(Call::target_natural_vector_size)) {
             Expr zero = call->args[0];
             return Expr(t.natural_vector_size(zero.type()));
         } else if (call->is_intrinsic(Call::target_os_is)) {
-            Target::OS os = (Target::OS)*as_const_int(call->args[0]);
+            Target::OS os = (Target::OS)as_const_int(call->args[0]).value();
             return make_bool(t.os == os);
         } else if (call->is_intrinsic(Call::target_bits)) {
             return Expr(t.bits);

@@ -33,15 +33,15 @@ using std::string;
 
 namespace {
 
-const int64_t *as_const_int_or_uint(const Expr &e) {
-    if (const int64_t *i = as_const_int(e)) {
+std::optional<int64_t> as_const_int_or_uint(const Expr &e) {
+    if (auto i = as_const_int(e)) {
         return i;
-    } else if (const uint64_t *u = as_const_uint(e)) {
+    } else if (auto u = as_const_uint(e)) {
         if (*u <= (uint64_t)std::numeric_limits<int64_t>::max()) {
-            return (const int64_t *)u;
+            return (int64_t)(*u);
         }
     }
-    return nullptr;
+    return {};
 }
 
 bool is_constant(const ConstantInterval &x) {
@@ -154,9 +154,9 @@ class DerivativeBounds : public IRVisitor {
 
             // This is essentially the product rule: a*rb + b*ra
             // but only implemented for the case where a or b is constant.
-            if (const int64_t *b = as_const_int_or_uint(op->b)) {
+            if (auto b = as_const_int_or_uint(op->b)) {
                 result = ra * (*b);
-            } else if (const int64_t *a = as_const_int_or_uint(op->a)) {
+            } else if (auto a = as_const_int_or_uint(op->a)) {
                 result = rb * (*a);
             } else {
                 result = ConstantInterval::everything();
@@ -168,7 +168,7 @@ class DerivativeBounds : public IRVisitor {
 
     void visit(const Div *op) override {
         if (op->type.is_scalar()) {
-            if (const int64_t *b = as_const_int_or_uint(op->b)) {
+            if (auto b = as_const_int_or_uint(op->b)) {
                 op->a.accept(this);
                 // We don't just want to divide by b. For the min we want to
                 // take floor division, and for the max we want to use ceil

@@ -179,79 +179,70 @@ bool is_pure(const Expr &e) {
     return pure.result;
 }
 
-const int64_t *as_const_int(const Expr &e) {
+std::optional<int64_t> as_const_int(const Expr &e) {
     if (!e.defined()) {
-        return nullptr;
+        return std::nullopt;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_int(b->value);
     } else if (const IntImm *i = e.as<IntImm>()) {
-        return &(i->value);
+        return i->value;
     } else {
-        return nullptr;
+        return std::nullopt;
     }
 }
 
-const uint64_t *as_const_uint(const Expr &e) {
+std::optional<uint64_t> as_const_uint(const Expr &e) {
     if (!e.defined()) {
-        return nullptr;
+        return std::nullopt;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_uint(b->value);
     } else if (const UIntImm *i = e.as<UIntImm>()) {
-        return &(i->value);
+        return i->value;
     } else {
-        return nullptr;
+        return std::nullopt;
     }
 }
 
-const double *as_const_float(const Expr &e) {
+std::optional<double> as_const_float(const Expr &e) {
     if (!e.defined()) {
-        return nullptr;
+        return std::nullopt;
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return as_const_float(b->value);
     } else if (const FloatImm *f = e.as<FloatImm>()) {
-        return &(f->value);
+        return f->value;
     } else {
-        return nullptr;
+        return std::nullopt;
     }
 }
 
-bool is_const_power_of_two_integer(const Expr &e, int *bits) {
+std::optional<int> is_const_power_of_two_integer(const Expr &e) {
     if (!(e.type().is_int() || e.type().is_uint())) {
-        return false;
+        return std::nullopt;
     }
 
-    const Broadcast *b = e.as<Broadcast>();
-    if (b) {
-        return is_const_power_of_two_integer(b->value, bits);
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        return is_const_power_of_two_integer(b->value);
+    } else if (const Cast *c = e.as<Cast>()) {
+        return is_const_power_of_two_integer(c->value);
+    } else if (auto i = as_const_int(e)) {
+        return is_const_power_of_two_integer(*i);
+    } else if (auto u = as_const_uint(e)) {
+        return is_const_power_of_two_integer(*u);
+    } else {
+        return std::nullopt;
     }
+}
 
-    const Cast *c = e.as<Cast>();
-    if (c) {
-        return is_const_power_of_two_integer(c->value, bits);
-    }
-
-    uint64_t val = 0;
-
-    if (const int64_t *i = as_const_int(e)) {
-        if (*i < 0) {
-            return false;
-        }
-        val = (uint64_t)(*i);
-    } else if (const uint64_t *u = as_const_uint(e)) {
-        val = *u;
-    }
-
+std::optional<int> is_const_power_of_two_integer(uint64_t val) {
     if (val && ((val & (val - 1)) == 0)) {
-        *bits = 0;
-        for (; val; val >>= 1) {
-            if (val == 1) {
-                return true;
-            }
-            (*bits)++;
-        }
+        return ctz64(val);
+    } else {
+        return std::nullopt;
     }
+}
 
-    return false;
+std::optional<int> is_const_power_of_two_integer(int64_t val) {
+    return val < 0 ? std::nullopt : is_const_power_of_two_integer((uint64_t)val);
 }
 
 bool is_positive_const(const Expr &e) {
@@ -2001,13 +1992,13 @@ Expr cast(Type t, Expr a) {
     }
 
     // Fold constants early
-    if (const int64_t *i = as_const_int(a)) {
+    if (auto i = as_const_int(a)) {
         return make_const(t, *i);
     }
-    if (const uint64_t *u = as_const_uint(a)) {
+    if (auto u = as_const_uint(a)) {
         return make_const(t, *u);
     }
-    if (const double *f = as_const_float(a)) {
+    if (auto f = as_const_float(a)) {
         return make_const(t, *f);
     }
 
@@ -2263,7 +2254,7 @@ Expr log(Expr x) {
 Expr pow(Expr x, Expr y) {
     user_assert(x.defined() && y.defined()) << "pow of undefined Expr\n";
 
-    if (const int64_t *i = as_const_int(y)) {
+    if (auto i = as_const_int(y)) {
         return raise_to_integer_power(std::move(x), *i);
     }
 
@@ -2287,7 +2278,7 @@ Expr erf(const Expr &x) {
 }
 
 Expr fast_pow(Expr x, Expr y) {
-    if (const int64_t *i = as_const_int(y)) {
+    if (auto i = as_const_int(y)) {
         return raise_to_integer_power(std::move(x), *i);
     }
 
@@ -2558,8 +2549,7 @@ Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     // Compilation error for constant weight that is out of range for integer use
     // as this seems like an easy to catch gotcha.
     if (!zero_val.type().is_float()) {
-        const double *const_weight = as_const_float(weight);
-        if (const_weight) {
+        if (auto const_weight = as_const_float(weight)) {
             user_assert(*const_weight >= 0.0 && *const_weight <= 1.0)
                 << "Floating-point weight for lerp with integer arguments is "
                 << *const_weight << ", which is not in the range [0.0, 1.0].\n";

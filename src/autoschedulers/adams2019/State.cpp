@@ -321,8 +321,7 @@ void State::generate_children(const FunctionDAG &dag,
             int num_dims = output.dimensions();
             for (int i = 0; i < num_dims; ++i) {
                 const Expr stride = output.stride_constraint(i);
-                const int64_t *s = as_const_int(stride);
-                if (s && *s == 1) {
+                if (stride.defined() && is_const_one(stride)) {
                     vector_dims.push_back(i);
                 }
             }
