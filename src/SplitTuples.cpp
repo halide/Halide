@@ -53,12 +53,6 @@ public:
     bool result = false;
 };
 
-inline bool uses_extern_image(const Stmt &s) {
-    UsesExternImage uses;
-    s.accept(&uses);
-    return uses.result;
-}
-
 class SplitTuples : public IRMutator {
     using IRMutator::visit;
 
