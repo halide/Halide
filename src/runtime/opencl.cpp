@@ -503,6 +503,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     size_t max_work_item_sizes[4] = {
         0,
     };
+    cl_uint mem_base_addr_align = 0;
 
     struct {
         void *dst;
@@ -521,6 +522,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         {&max_work_group_size, sizeof(max_work_group_size), CL_DEVICE_MAX_WORK_GROUP_SIZE},
         {&max_work_item_dimensions, sizeof(max_work_item_dimensions), CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS},
         {&max_work_item_sizes[0], sizeof(max_work_item_sizes), CL_DEVICE_MAX_WORK_ITEM_SIZES},
+        {&mem_base_addr_align, sizeof(mem_base_addr_align), CL_DEVICE_MEM_BASE_ADDR_ALIGN},
         {nullptr}};
 
     // Do all the queries.
@@ -544,7 +546,8 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         << "      max work item sizes: " << (uint64_t)max_work_item_sizes[0]
         << "x" << (uint64_t)max_work_item_sizes[1]
         << "x" << (uint64_t)max_work_item_sizes[2]
-        << "x" << (uint64_t)max_work_item_sizes[3] << "\n";
+        << "x" << (uint64_t)max_work_item_sizes[3] << "\n"
+        << "      mem base addr align: " << mem_base_addr_align << "\n";
 #endif
 
     // Create context and command queue.
@@ -1035,7 +1038,9 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
         }
 #endif
 
-        auto result = opencl_do_multidimensional_copy(user_context, ctx, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
+        auto result = opencl_do_multidimensional_copy(
+            user_context, ctx, c, c.src_begin, c.dst_begin,
+            dst->dimensions, from_host, to_host);
         if (result) {
             return result;
         }
@@ -1155,6 +1160,8 @@ WEAK int halide_opencl_run(void *user_context,
                 // span the crop.
                 mem = clCreateSubBuffer(mem, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
                 sub_buffers[sub_buffers_saved++] = mem;
+                debug(user_context) << "Create subbuffer " << (void *)mem << ": "
+                                    << "offset=" << region.origin << ", size=" << region.size << "\n";
             }
             if (err == CL_SUCCESS) {
                 debug(user_context) << "Mapped dev handle is: " << (void *)mem << "\n";
