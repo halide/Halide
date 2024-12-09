@@ -236,8 +236,7 @@ struct JITModule {
     void compile_module(std::unique_ptr<llvm::Module> mod,
                         const std::string &function_name, const Target &target,
                         const std::vector<JITModule> &dependencies = std::vector<JITModule>(),
-                        const std::vector<std::string> &requested_exports = std::vector<std::string>(),
-                        const std::string &custom_dtor_name = std::string());
+                        const std::vector<std::string> &requested_exports = std::vector<std::string>());
 
     /** See JITSharedRuntime::memoization_cache_set_size */
     void memoization_cache_set_size(int64_t size) const;
