@@ -1857,20 +1857,6 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
     return b.interval;
 }
 
-Region region_union(const Region &a, const Region &b) {
-    internal_assert(a.size() == b.size()) << "Mismatched dimensionality in region union\n";
-    Region result;
-    for (size_t i = 0; i < a.size(); i++) {
-        Expr min = Min::make(a[i].min, b[i].min);
-        Expr max_a = a[i].min + a[i].extent;
-        Expr max_b = b[i].min + b[i].extent;
-        Expr max_plus_one = Max::make(max_a, max_b);
-        Expr extent = max_plus_one - min;
-        result.emplace_back(simplify(min), simplify(extent));
-    }
-    return result;
-}
-
 }  // namespace
 
 Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {

@@ -36,29 +36,6 @@ public:
     }
 };
 
-// Visitor and helper function to test if a piece of IR uses an extern image.
-class UsesExternImage : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Call *c) override {
-        if (c->call_type == Call::Image) {
-            result = true;
-        } else {
-            IRVisitor::visit(c);
-        }
-    }
-
-public:
-    UsesExternImage() = default;
-    bool result = false;
-};
-
-inline bool uses_extern_image(const Stmt &s) {
-    UsesExternImage uses;
-    s.accept(&uses);
-    return uses.result;
-}
-
 class SplitTuples : public IRMutator {
     using IRMutator::visit;
 
