@@ -727,6 +727,9 @@ using SubstitutionMap = std::map<string, Expr>;
 // to this function from innermost to outermost. This is equivalent to
 // building a let-nest as a one-hole context and then simplifying.
 void add_let(SubstitutionMap &proj, const string &name, const Expr &value) {
+    internal_assert(!proj.count(name)) << "would shadow " << name << " in let nest.\n"
+                                       << "\tPresent value: " << proj[name] << "\n"
+                                       << "\tProposed value: " << value;
     for (auto &[_, e] : proj) {
         e = substitute(name, value, e);
     }
@@ -762,12 +765,11 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
     new_rdom.where(predicate);
 
     // Compute the mapping of old dimensions to the projected RDom values.
-    SubstitutionMap dim_projection{};
     SubstitutionMap dim_extent_alignment{};
     for (const auto &[var, _, extent] : rdom) {
-        add_let(dim_projection, var, Variable::make(Int(32), var));
         dim_extent_alignment[var] = extent;
     }
+    SubstitutionMap dim_projection{};
     for (const Split &split : splits) {
         for (const auto &result : apply_split(split, "", dim_extent_alignment)) {
             switch (result.type) {
