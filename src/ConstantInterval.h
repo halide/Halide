@@ -22,7 +22,7 @@ struct ConstantInterval {
     bool min_defined = false, max_defined = false;
 
     /* A default-constructed Interval is everything */
-    ConstantInterval();
+    ConstantInterval() = default;
 
     /** Construct an interval from a lower and upper bound. */
     ConstantInterval(int64_t min, int64_t max);
