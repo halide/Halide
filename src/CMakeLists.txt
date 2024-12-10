@@ -255,6 +255,7 @@ target_sources(
     CodeGen_Internal.cpp
     CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
+    CodeGen_MLIR.cpp
     CodeGen_OpenCL_Dev.cpp
     CodeGen_Posix.cpp
     CodeGen_PowerPC.cpp
