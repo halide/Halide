@@ -648,7 +648,9 @@ optional<string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved,
         const auto &rv_dim = find_dim(dims, rv);
         if (!(rv_dim && rv_dim->is_rvar())) {
             std::stringstream s;
-            s << "can't perform rfactor() on " << rv.name() << " since it is not in the reduction domain";
+            s << "can't perform rfactor() on " << rv.name()
+              << " since either it is not in the reduction domain, or has"
+              << " already been consumed by another scheduling directive";
             return s.str();
         }
         is_rfactored.insert(rv_dim->var);
