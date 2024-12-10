@@ -876,7 +876,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         for (const auto &[var, min, extent] : intermediate_rdom.domain()) {
             intm_rdom.push(var, Interval{min, min + extent - 1});
         }
-        preserved_rdom.set_predicate(!and_condition_over_domain(simplify(substitute(preserved_map, !preserved_rdom.predicate())), intm_rdom));
+        preserved_rdom.set_predicate(simplify(!and_condition_over_domain(simplify(substitute(preserved_map, !preserved_rdom.predicate())), intm_rdom)));
     }
 
     // Intermediate func
