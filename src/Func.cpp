@@ -759,9 +759,9 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
     // Build the new RDom
     vector<ReductionVariable> new_rvars;
     for (const Dim &dim : dims) {
-        Expr new_min = substitute(bounds_projection, Variable::make(Int(32), dim.var + ".loop_min"));
-        Expr new_extent = substitute(bounds_projection, Variable::make(Int(32), dim.var + ".loop_extent"));
-        new_rvars.push_back(ReductionVariable{dim.var, simplify(new_min), simplify(new_extent)});
+        const Expr new_min = simplify(bounds_projection.at(dim.var + ".loop_min"));
+        const Expr new_extent = simplify(bounds_projection.at(dim.var + ".loop_extent"));
+        new_rvars.push_back(ReductionVariable{dim.var, new_min, new_extent});
     }
     ReductionDomain new_rdom{new_rvars};
     new_rdom.where(predicate);
@@ -776,7 +776,7 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
         for (const auto &result : apply_split(split, "", dim_extent_alignment)) {
             switch (result.type) {
             case ApplySplitResult::LetStmt:
-                add_let(dim_projection, result.name, result.value);
+                add_let(dim_projection, result.name, substitute(bounds_projection, result.value));
                 break;
             case ApplySplitResult::PredicateCalls:
             case ApplySplitResult::PredicateProvides:
@@ -792,13 +792,9 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
             }
         }
     }
-    for (auto &[_, e] : dim_projection) {
-        e = substitute(bounds_projection, e);
-    }
     for (const auto &rv : new_rdom.domain()) {
         add_let(dim_projection, rv.var, Variable::make(Int(32), rv.var, new_rdom));
     }
-
     return {new_rdom, dim_projection};
 }
 
