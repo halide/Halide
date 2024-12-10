@@ -594,6 +594,11 @@ void IRPrinter::visit(const UIntImm *op) {
 }
 
 void IRPrinter::visit(const FloatImm *op) {
+    const bool use_scientific_format = (op->value != 0.0) && (std::log10(std::abs(op->value)) < -6);
+    if (use_scientific_format) {
+        stream << std::scientific;
+    }
+
     switch (op->type.bits()) {
     case 64:
         stream << op->value;
@@ -606,6 +611,10 @@ void IRPrinter::visit(const FloatImm *op) {
         break;
     default:
         internal_error << "Bad bit-width for float: " << op->type << "\n";
+    }
+
+    if (use_scientific_format) {
+        stream << std::fixed;
     }
 }
 
