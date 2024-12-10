@@ -184,7 +184,7 @@ public:
      *
      */
     // @{
-    Func rfactor(std::vector<std::pair<RVar, Var>> preserved);
+    Func rfactor(const std::vector<std::pair<RVar, Var>> &preserved);
     Func rfactor(const RVar &r, const Var &v);
     // @}
 
