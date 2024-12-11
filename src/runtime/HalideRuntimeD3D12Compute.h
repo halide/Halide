@@ -51,6 +51,10 @@ extern int halide_d3d12compute_wrap_buffer(void *user_context, struct halide_buf
  */
 extern int halide_d3d12compute_detach_buffer(void *user_context, struct halide_buffer_t *buf);
 
+/** Return the version of the Shader Model, -1 if not found, 5.0 for default and from 6.0 to 6.8.
+*/
+extern int halide_d3d12compute_compute_capability(void *user_context, int *major, int *minor);
+
 /** Return the underlying ID3D12Resource for a halide_buffer_t. This resource
  * must be valid on an D3D12 device, unless halide_buffer_t has no associated
  * resource. If there is no device memory (device field is NULL), returns 0.
