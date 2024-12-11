@@ -1239,6 +1239,10 @@ Expr and_condition_over_domain(const Expr &e, const Scope<Interval> &varying) {
     return simplify(bounds.min);
 }
 
+Expr weaken_condition_under_domain(const Expr &c, const Scope<Interval> &varying) {
+    return simplify(!and_condition_over_domain(simplify(!c), varying));
+}
+
 // Testing code
 
 namespace {
