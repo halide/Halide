@@ -635,93 +635,6 @@ optional<Dim> find_dim(const vector<Dim> &items, const VarOrRVar &v) {
     return has_v == items.end() ? std::nullopt : std::make_optional(*has_v);
 }
 
-optional<string> rfactor_validate_args(const vector<pair<RVar, Var>> &preserved, const AssociativeOp &prover_result, const Definition &definition) {
-    const vector<Dim> &dims = definition.schedule().dims();
-
-    if (!prover_result.associative()) {
-        return "can't perform rfactor() because we can't prove associativity of the operator";
-    }
-
-    unordered_set<string> is_rfactored;
-    for (const auto &[rv, v] : preserved) {
-        // Check that the RVars are in the dims list
-        const auto &rv_dim = find_dim(dims, rv);
-        if (!(rv_dim && rv_dim->is_rvar())) {
-            std::stringstream s;
-            s << "can't perform rfactor() on " << rv.name()
-              << " since either it is not in the reduction domain, or has"
-              << " already been consumed by another scheduling directive";
-            return s.str();
-        }
-        is_rfactored.insert(rv_dim->var);
-
-        // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
-        if (find_dim(dims, v)) {
-            std::stringstream s;
-            s << "can't rename the rvars " << rv.name() << " into " << v.name()
-              << ", since it is already used in this Func's schedule elsewhere.";
-            return s.str();
-        }
-    }
-
-    // If the operator is associative but non-commutative, rfactor() on inner
-    // dimensions (excluding the outer dimensions) is not valid.
-    if (!prover_result.commutative()) {
-        optional<Dim> last_rvar;
-        for (const auto &d : reverse_view(dims)) {
-            if (is_rfactored.count(d.var) && last_rvar && !is_rfactored.count(last_rvar->var)) {
-                std::stringstream s;
-                s << "can't rfactor an inner dimension " << d.var
-                  << " without rfactoring the outer dimensions, since the "
-                  << "operator is non-commutative.";
-                return s.str();
-            }
-            if (d.is_rvar()) {
-                last_rvar = d;
-            }
-        }
-    }
-
-    // Check that no Vars were fused into RVars
-    Scope<> rdims;
-    for (const ReductionVariable &rv : definition.schedule().rvars()) {
-        rdims.push(rv.var);
-    }
-    for (const Split &split : definition.schedule().splits()) {
-        switch (split.split_type) {
-        case Split::SplitVar:
-            if (rdims.contains(split.old_var)) {
-                rdims.pop(split.old_var);
-                rdims.push(split.outer);
-                rdims.push(split.inner);
-            }
-            break;
-        case Split::FuseVars:
-            if (rdims.contains(split.outer) || rdims.contains(split.inner)) {
-                if (!(rdims.contains(split.outer) && rdims.contains(split.inner))) {
-                    std::stringstream s;
-                    s << "Cannot rfactor a Func that has fused a Var into an RVar ("
-                      << split.outer << ", " << split.inner << ")";
-                    return s.str();
-                }
-                rdims.pop(split.outer);
-                rdims.pop(split.inner);
-                rdims.push(split.old_var);
-            }
-            break;
-        case Split::PurifyRVar:
-        case Split::RenameVar:
-            if (rdims.contains(split.old_var)) {
-                rdims.pop(split.old_var);
-                rdims.push(split.outer);
-            }
-            break;
-        }
-    }
-
-    return std::nullopt;
-}
-
 using SubstitutionMap = std::map<string, Expr>;
 
 // This is a helper function for building up a substitution map that
@@ -800,6 +713,90 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
 
 }  // namespace
 
+void Stage::rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const AssociativeOp &prover_result) {
+    const vector<Dim> &dims = definition.schedule().dims();
+
+    user_assert(prover_result.associative())
+        << "In schedule for " << name() << ": can't perform rfactor() "
+        << "because we can't prove associativity of the operator\n"
+        << dump_argument_list();
+
+    unordered_set<string> is_rfactored;
+    for (const auto &[rv, v] : preserved) {
+        // Check that the RVars are in the dims list
+        const auto &rv_dim = find_dim(dims, rv);
+        user_assert(rv_dim && rv_dim->is_rvar())
+            << "In schedule for " << name() << ": can't perform rfactor() "
+            << "on " << rv.name() << " since either it is not in the reduction "
+            << "domain, or has already been consumed by another scheduling directive\n"
+            << dump_argument_list();
+
+        is_rfactored.insert(rv_dim->var);
+
+        // Check that the new pure Vars we used to rename the RVar aren't already in the dims list
+        user_assert(!find_dim(dims, v))
+            << "In schedule for " << name() << ": can't perform rfactor() "
+            << "on " << rv.name() << " because the name " << v.name()
+            << "is already used elsewhere in the Func's schedule.\n"
+            << dump_argument_list();
+    }
+
+    // If the operator is associative but non-commutative, rfactor() on inner
+    // dimensions (excluding the outer dimensions) is not valid.
+    if (!prover_result.commutative()) {
+        optional<Dim> last_rvar;
+        for (const auto &d : reverse_view(dims)) {
+            bool is_inner = is_rfactored.count(d.var) && last_rvar && !is_rfactored.count(last_rvar->var);
+            user_assert(!is_inner)
+                << "In schedule for " << name() << ": can't rfactor an inner "
+                << "dimension " << d.var << " without rfactoring the outer "
+                << "dimensions, since the operator is non-commutative.\n"
+                << dump_argument_list();
+
+            if (d.is_rvar()) {
+                last_rvar = d;
+            }
+        }
+    }
+
+    // Check that no Vars were fused into RVars
+    Scope<> rdims;
+    for (const ReductionVariable &rv : definition.schedule().rvars()) {
+        rdims.push(rv.var);
+    }
+    for (const Split &split : definition.schedule().splits()) {
+        switch (split.split_type) {
+        case Split::SplitVar:
+            if (rdims.contains(split.old_var)) {
+                rdims.pop(split.old_var);
+                rdims.push(split.outer);
+                rdims.push(split.inner);
+            }
+            break;
+        case Split::FuseVars:
+            if (rdims.contains(split.outer) || rdims.contains(split.inner)) {
+                user_assert(rdims.contains(split.outer) && rdims.contains(split.inner))
+                    << "In schedule for " << name() << ": can't rfactor an Func "
+                    << "that has fused a Var into an RVar: " << split.outer
+                    << ", " << split.inner << "\n"
+                    << dump_argument_list();
+
+                rdims.pop(split.outer);
+                rdims.pop(split.inner);
+                rdims.push(split.old_var);
+            }
+            break;
+        case Split::PurifyRVar:
+        case Split::RenameVar:
+            if (rdims.contains(split.old_var)) {
+                rdims.pop(split.old_var);
+                rdims.push(split.outer);
+            }
+            break;
+        }
+    }
+}
+
 Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
 
@@ -809,9 +806,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     // its identity for each value in the definition if it is a Tuple
     const auto &prover_result = prove_associativity(function.name(), definition.args(), definition.values());
 
-    const auto &error = rfactor_validate_args(preserved, prover_result, definition);
-    user_assert(!error) << "In schedule for " << name() << ": " << *error << "\n"
-                        << dump_argument_list();
+    rfactor_validate_args(preserved, prover_result);
 
     const vector<Expr> dim_vars_exprs = [&] {
         vector<Expr> result;

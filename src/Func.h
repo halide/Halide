@@ -60,6 +60,7 @@ struct VarOrRVar {
 class ImageParam;
 
 namespace Internal {
+struct AssociativeOp;
 class Function;
 struct Split;
 struct StorageDim;
@@ -88,6 +89,8 @@ class Stage {
     }
 
     Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
+
+    void rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const Internal::AssociativeOp &prover_result);
 
 public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
