@@ -166,10 +166,7 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
 }
 
 vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &split, const string &prefix) {
-    // Define the bounds on the split dimensions using the bounds
-    // on the function args. If it is a purify, we should use the bounds
-    // from the dims instead.
-
+    // Define the bounds on the split dimensions using the bounds on the function args.
     vector<std::pair<string, Expr>> let_stmts;
 
     Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
