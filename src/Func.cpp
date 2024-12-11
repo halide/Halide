@@ -649,11 +649,7 @@ void add_let(SubstitutionMap &proj, const string &name, const Expr &value) {
     proj.emplace(name, value);
 }
 
-pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const Definition &def) {
-    const auto &rdom = def.schedule().rvars();
-    const auto &splits = def.schedule().splits();
-    const auto &predicate = def.predicate();
-
+pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const ReductionDomain &rdom, const vector<Split> &splits) {
     // Compute new bounds for the RDom by walking backwards through the splits.
     SubstitutionMap bounds_projection{};
     for (const Split &split : reverse_view(splits)) {
@@ -661,7 +657,7 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
             add_let(bounds_projection, name, value);
         }
     }
-    for (const auto &[var, min, extent] : rdom) {
+    for (const auto &[var, min, extent] : rdom.domain()) {
         add_let(bounds_projection, var + ".loop_min", min);
         add_let(bounds_projection, var + ".loop_max", min + extent - 1);
         add_let(bounds_projection, var + ".loop_extent", extent);
@@ -675,11 +671,11 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
         new_rvars.push_back(ReductionVariable{dim.var, new_min, new_extent});
     }
     ReductionDomain new_rdom{new_rvars};
-    new_rdom.where(predicate);
+    new_rdom.where(rdom.predicate());
 
     // Compute the mapping of old dimensions to the projected RDom values.
     SubstitutionMap dim_extent_alignment{};
-    for (const auto &[var, _, extent] : rdom) {
+    for (const auto &[var, _, extent] : rdom.domain()) {
         dim_extent_alignment[var] = extent;
     }
     SubstitutionMap dim_projection{};
@@ -863,18 +859,17 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     ReductionDomain intermediate_rdom, preserved_rdom;
     SubstitutionMap intermediate_map, preserved_map;
     {
+        ReductionDomain rdom{definition.schedule().rvars(), definition.predicate(), true};
+
         // Intermediate
-        std::tie(intermediate_rdom, intermediate_map) = project_rdom(intermediate_rdims, definition);
+        std::tie(intermediate_rdom, intermediate_map) = project_rdom(intermediate_rdims, rdom, rvar_splits);
         for (size_t i = 0; i < preserved.size(); i++) {
             add_let(intermediate_map, preserved_rdims[i].var, preserved_vars[i]);
-        }
-        for (const auto &var : dim_vars) {
-            intermediate_map.erase(var.name());
         }
         intermediate_rdom.set_predicate(simplify(substitute(intermediate_map, intermediate_rdom.predicate())));
 
         // Preserved
-        std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, definition);
+        std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, rdom, rvar_splits);
         Scope<Interval> intm_rdom;
         for (const auto &[var, min, extent] : intermediate_rdom.domain()) {
             intm_rdom.push(var, Interval{min, min + extent - 1});
