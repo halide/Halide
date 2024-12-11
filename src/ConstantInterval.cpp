@@ -7,8 +7,6 @@
 namespace Halide {
 namespace Internal {
 
-ConstantInterval::ConstantInterval() = default;
-
 ConstantInterval::ConstantInterval(int64_t min, int64_t max)
     : min(min), max(max), min_defined(true), max_defined(true) {
     internal_assert(min <= max);
