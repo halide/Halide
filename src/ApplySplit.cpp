@@ -157,7 +157,6 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
         }
     } break;
     case Split::RenameVar:
-    case Split::PurifyRVar:
         result.emplace_back(prefix + split.old_var, outer, ApplySplitResult::Substitution);
         result.emplace_back(prefix + split.old_var, outer, ApplySplitResult::LetStmt);
         break;
@@ -200,9 +199,6 @@ vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &spl
         let_stmts.emplace_back(prefix + split.outer + ".loop_min", old_var_min);
         let_stmts.emplace_back(prefix + split.outer + ".loop_max", old_var_max);
         let_stmts.emplace_back(prefix + split.outer + ".loop_extent", old_var_extent);
-        break;
-    case Split::PurifyRVar:
-        // Do nothing for purify
         break;
     }
 

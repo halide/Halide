@@ -431,7 +431,6 @@ void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
             }
             break;
         case Split::RenameVar:
-        case Split::PurifyRVar:
             if (parallel.count(split.outer)) {
                 parallel.insert(split.old_var);
             }
@@ -454,7 +453,6 @@ void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
             }
             break;
         case Split::RenameVar:
-        case Split::PurifyRVar:
             if (parallel.count(split.old_var)) {
                 parallel.insert(split.outer);
             }
@@ -793,7 +791,6 @@ pair<vector<Split>, vector<Split>> Stage::rfactor_validate_args(const std::vecto
                 var_splits.emplace_back(split);
             }
             break;
-        case Split::PurifyRVar:
         case Split::RenameVar:
             if (rdims.contains(split.old_var)) {
                 rdims.pop(split.old_var);
@@ -1068,7 +1065,6 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
                 }
                 break;
             case Split::RenameVar:
-            case Split::PurifyRVar:
                 if (inner_vars.count(s.old_var)) {
                     inner_vars.insert(s.outer);
                 }
@@ -1103,7 +1099,6 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
                 }
                 break;
             case Split::RenameVar:
-            case Split::PurifyRVar:
                 if (inner_vars.count(s.old_var)) {
                     inner_vars.insert(s.outer);
                 }
@@ -1165,7 +1160,6 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
                     }
                     break;
                 case Split::RenameVar:
-                case Split::PurifyRVar:
                     if (it != descends_from_shiftinwards_outer.end()) {
                         descends_from_shiftinwards_outer[s.outer] = it->second;
                     }
@@ -1352,46 +1346,6 @@ void Stage::specialize_fail(const std::string &message) {
     s.failure_message = message;
 }
 
-Stage &Stage::purify(const VarOrRVar &old_var, const VarOrRVar &new_var) {
-    user_assert(old_var.is_rvar && !new_var.is_rvar)
-        << "In schedule for " << name()
-        << ", can't rename " << (old_var.is_rvar ? "RVar " : "Var ") << old_var.name()
-        << " to " << (new_var.is_rvar ? "RVar " : "Var ") << new_var.name()
-        << "; purify must take a RVar as old_Var and a Var as new_var\n";
-
-    debug(4) << "In schedule for " << name() << ", purify RVar "
-             << old_var.name() << " to Var " << new_var.name() << "\n";
-
-    StageSchedule &schedule = definition.schedule();
-
-    // Replace the old dimension with the new dimensions in the dims list
-    bool found = false;
-    string old_name, new_name = new_var.name();
-    vector<Dim> &dims = schedule.dims();
-
-    for (size_t i = 0; (!found) && i < dims.size(); i++) {
-        if (dim_match(dims[i], old_var)) {
-            found = true;
-            old_name = dims[i].var;
-            dims[i].var = new_name;
-            dims[i].dim_type = DimType::PureVar;
-        }
-    }
-
-    if (!found) {
-        user_error
-            << "In schedule for " << name()
-            << ", could not find rename dimension: "
-            << old_var.name()
-            << "\n"
-            << dump_argument_list();
-    }
-
-    Split split = {old_name, new_name, "", 1, false, TailStrategy::RoundUp, Split::PurifyRVar};
-    definition.schedule().splits().push_back(split);
-    return *this;
-}
-
 void Stage::remove(const string &var) {
     debug(4) << "In schedule for " << name() << ", remove " << var << "\n";
 
@@ -1469,7 +1423,6 @@ void Stage::remove(const string &var) {
             }
             break;
         case Split::RenameVar:
-        case Split::PurifyRVar:
             debug(4) << "    replace/rename " << split.old_var
                      << " into " << split.outer << "\n";
             if (should_remove(split.outer)) {
@@ -1558,7 +1511,6 @@ Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
             break;
         case Split::SplitVar:
         case Split::RenameVar:
-        case Split::PurifyRVar:
             if (split.inner == old_name) {
                 split.inner = new_name;
                 found = true;

@@ -2248,7 +2248,6 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
                 }
                 break;
             case Split::RenameVar:
-            case Split::PurifyRVar:
                 if (parallel_vars.count(split.outer)) {
                     parallel_vars.insert(split.old_var);
                 }

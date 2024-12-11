@@ -82,7 +82,6 @@ class Stage {
     void split(const std::string &old, const std::string &outer, const std::string &inner,
                const Expr &factor, bool exact, TailStrategy tail);
     void remove(const std::string &var);
-    Stage &purify(const VarOrRVar &old_name, const VarOrRVar &new_name);
 
     const std::vector<Internal::StorageDim> &storage_dims() const {
         return function.schedule().storage_dims();
