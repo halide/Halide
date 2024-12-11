@@ -720,7 +720,7 @@ WEAK int halide_webgpu_buffer_copy(void *user_context,
         ErrorScope error_scope(user_context, context.device);
 
         err = do_multidimensional_copy(user_context, &context, c,
-                                       c.src_begin, 0, dst->dimensions,
+                                       c.src_begin, c.dst_begin, dst->dimensions,
                                        from_host, to_host);
         if (err == halide_error_code_success) {
             err = error_scope.wait();
