@@ -516,8 +516,12 @@ protected:
             return IRMutator::visit(op);
         }
 
-        Expr value = mutate(op->value);
+        return visit_cast(op, mutate(op->value));
+    }
 
+    // Isolated in its own function to keep the (large) stack frame off the
+    // recursive path.
+    HALIDE_NEVER_INLINE Expr visit_cast(const Cast *op, Expr &&value) {
         // This mutator can generate redundant casts. We can't use the simplifier because it
         // undoes some of the intrinsic lowering here, and it causes some problems due to
         // factoring (instead of distributing) constants.
@@ -550,6 +554,7 @@ protected:
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
             auto x_y_same_sign = (is_int(x) && is_int(y)) || (is_uint(x) && is_uint(y));
+
             if (
                 // Saturating patterns
                 rewrite(max(min(widening_add(x, y), upper), lower),
@@ -566,11 +571,11 @@ protected:
 
                 rewrite(min(widening_add(x, y), upper),
                         saturating_add(x, y),
-                        op->type.is_uint() && is_x_same_uint) ||
+                        is_x_same_uint) ||
 
                 rewrite(max(widening_sub(x, y), lower),
                         saturating_sub(x, y),
-                        op->type.is_uint() && is_x_same_uint) ||
+                        is_x_same_uint) ||
 
                 // Saturating narrow patterns.
                 rewrite(max(min(x, upper), lower),
@@ -721,10 +726,17 @@ protected:
         op = mutated.as<Call>();
         if (!op) {
             return mutated;
+        } else {
+            return visit_call(op);
         }
+    }
 
+    // Isolated in its own function to keep the (large) stack frame off the
+    // recursive path. The Call node has already been mutated by the base class
+    // visitor.
+    HALIDE_NEVER_INLINE Expr visit_call(const Call *op) {
         auto rewrite = IRMatcher::rewriter(op, op->type);
-        if (rewrite(intrin(Call::abs, widening_sub(x, y)), cast(op->type, intrin(Call::absd, x, y))) ||
+        if (rewrite(abs(widening_sub(x, y)), cast(op->type, absd(x, y))) ||
             false) {
             return rewrite.result;
         }

@@ -91,10 +91,10 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
              rewrite(max(select(x, w, max(z, y)), z), max(select(x, w, y), z)) ||
              rewrite(max(select(x, w, max(z, y)), y), max(select(x, w, z), y)) ||
 
-             rewrite(max(intrin(Call::likely, x), x), b) ||
-             rewrite(max(x, intrin(Call::likely, x)), a) ||
-             rewrite(max(intrin(Call::likely_if_innermost, x), x), b) ||
-             rewrite(max(x, intrin(Call::likely_if_innermost, x)), a) ||
+             rewrite(max(likely(x), x), b) ||
+             rewrite(max(x, likely(x)), a) ||
+             rewrite(max(likely_if_innermost(x), x), b) ||
+             rewrite(max(x, likely_if_innermost(x)), a) ||
 
              (no_overflow(op->type) &&
               (rewrite(max(ramp(x, y, lanes), broadcast(z, lanes)), a,
