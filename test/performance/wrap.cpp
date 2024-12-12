@@ -115,11 +115,6 @@ int main(int argc, char **argv) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
-    if (target.has_feature(Target::Vulkan)) {
-        // FIXME: See issue #7559 : performance_wrap test results don't match
-        printf("[SKIP] Skipping test for Vulkan. Wrap results don't match ... \n");
-        return 0;
-    }
     if (!target.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;

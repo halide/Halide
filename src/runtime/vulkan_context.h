@@ -22,15 +22,15 @@ namespace Vulkan {
 halide_vulkan_memory_allocator *WEAK cached_allocator = nullptr;
 
 // Cached instance related handles for device resources
-VkInstance WEAK cached_instance = nullptr;
-VkDevice WEAK cached_device = nullptr;
-VkCommandPool WEAK cached_command_pool = VkInvalidCommandPool;
-VkQueue WEAK cached_queue = nullptr;
-VkPhysicalDevice WEAK cached_physical_device = nullptr;
+VkInstance WEAK cached_instance = VK_NULL_HANDLE;
+VkDevice WEAK cached_device = VK_NULL_HANDLE;
+VkQueue WEAK cached_queue = VK_NULL_HANDLE;
+VkPhysicalDevice WEAK cached_physical_device = VK_NULL_HANDLE;
 uint32_t WEAK cached_queue_family_index = 0;
+VkDebugUtilsMessengerEXT WEAK cached_messenger = VK_NULL_HANDLE;
 
 // A Vulkan context/queue/synchronization lock defined in this module with weak linkage
-volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
+WEAK halide_mutex thread_lock;
 
 // --------------------------------------------------------------------------
 
@@ -40,12 +40,12 @@ class VulkanContext {
 
 public:
     VulkanMemoryAllocator *allocator = nullptr;
-    VkInstance instance = nullptr;
-    VkDevice device = nullptr;
-    VkCommandPool command_pool = VkInvalidCommandPool;
-    VkPhysicalDevice physical_device = nullptr;
-    VkQueue queue = nullptr;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    VkPhysicalDevice physical_device = VK_NULL_HANDLE;
+    VkQueue queue = VK_NULL_HANDLE;
     uint32_t queue_family_index = 0;  // used for operations requiring queue family
+    VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
     halide_error_code_t error = halide_error_code_success;
 
     HALIDE_ALWAYS_INLINE explicit VulkanContext(void *user_context)
@@ -53,21 +53,20 @@ public:
 
         int result = halide_vulkan_acquire_context(user_context,
                                                    reinterpret_cast<halide_vulkan_memory_allocator **>(&allocator),
-                                                   &instance, &device, &physical_device, &command_pool, &queue, &queue_family_index);
+                                                   &instance, &device, &physical_device, &queue, &queue_family_index, &messenger);
         if (result != halide_error_code_success) {
             error = halide_error_code_device_interface_no_device;
             halide_error_no_device_interface(user_context);
         }
         halide_debug_assert(user_context, allocator != nullptr);
-        halide_debug_assert(user_context, instance != nullptr);
-        halide_debug_assert(user_context, device != nullptr);
-        halide_debug_assert(user_context, command_pool != 0);
-        halide_debug_assert(user_context, queue != nullptr);
-        halide_debug_assert(user_context, physical_device != nullptr);
+        halide_debug_assert(user_context, instance != VK_NULL_HANDLE);
+        halide_debug_assert(user_context, device != VK_NULL_HANDLE);
+        halide_debug_assert(user_context, queue != VK_NULL_HANDLE);
+        halide_debug_assert(user_context, physical_device != VK_NULL_HANDLE);
     }
 
     HALIDE_ALWAYS_INLINE ~VulkanContext() {
-        halide_vulkan_release_context(user_context, instance, device, queue);
+        halide_vulkan_release_context(user_context, instance, device, queue, messenger);
     }
 
     // For now, this is always nullptr
@@ -83,9 +82,9 @@ namespace {
 int vk_find_compute_capability(void *user_context, int *major, int *minor) {
     debug(user_context) << " vk_find_compute_capability (user_context: " << user_context << ")\n";
 
-    VkInstance instance = nullptr;
-    VkDevice device = nullptr;
-    VkPhysicalDevice physical_device = nullptr;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    VkPhysicalDevice physical_device = VK_NULL_HANDLE;
     uint32_t queue_family_index = 0;
 
     if (!lib_vulkan) {
@@ -121,15 +120,6 @@ int vk_find_compute_capability(void *user_context, int *major, int *minor) {
         return 0;
     }
 
-    if (vkCreateDevice == nullptr) {
-        vk_load_vulkan_functions(user_context, instance);
-        if (vkCreateDevice == nullptr) {
-            debug(user_context) << "  no valid vulkan runtime was found ...\n";
-            *major = *minor = 0;
-            return halide_error_code_success;
-        }
-    }
-
     status = vk_select_device_for_context(user_context, &instance, &device, &physical_device, &queue_family_index);
     if (status != halide_error_code_success) {
         debug(user_context) << "  no valid vulkan device was found ...\n";
@@ -155,6 +145,9 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
     StringTable required_instance_extensions;
     vk_get_required_instance_extensions(user_context, required_instance_extensions);
 
+    StringTable optional_instance_extensions;
+    vk_get_optional_instance_extensions(user_context, optional_instance_extensions);
+
     StringTable supported_instance_extensions;
     vk_get_supported_instance_extensions(user_context, supported_instance_extensions);
 
@@ -164,6 +157,15 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
     debug(user_context) << "  found " << (uint32_t)required_instance_extensions.size() << " required extensions for instance!\n";
     for (int n = 0; n < (int)required_instance_extensions.size(); ++n) {
         debug(user_context) << "  extension: " << required_instance_extensions[n] << "\n";
+    }
+
+    // enable all available optional extensions
+    debug(user_context) << "  checking for " << (uint32_t)optional_instance_extensions.size() << " optional extensions for instance ...\n";
+    for (uint32_t n = 0; n < optional_instance_extensions.size(); ++n) {
+        if (supported_instance_extensions.contains(optional_instance_extensions[n])) {
+            debug(user_context) << "   optional extension: " << optional_instance_extensions[n] << "\n";
+            required_instance_extensions.append(user_context, optional_instance_extensions[n]);
+        }
     }
 
     // If we're running under Molten VK, we must enable the portability extension and create flags
@@ -199,12 +201,19 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
         return halide_error_code_device_interface_no_device;
     }
 
+    vk_load_vulkan_instance_functions(user_context, *instance);
+    if (vkCreateDevice == nullptr) {
+        error(user_context) << "Vulkan: Failed to resolve instance API methods to create device!\n";
+        return halide_error_code_symbol_not_found;
+    }
+
     return halide_error_code_success;
 }
 
 int vk_destroy_instance(void *user_context, VkInstance instance, const VkAllocationCallbacks *alloc_callbacks) {
-    debug(user_context) << " vk_destroy_instance (user_context: " << user_context << ")\n";
+    debug(user_context) << " vk_destroy_instance (user_context: " << user_context << ", device: " << (void *)instance << ", alloc_callbacks: " << (void *)alloc_callbacks << ")\n";
     vkDestroyInstance(instance, alloc_callbacks);
+    vk_unload_vulkan_instance_functions(user_context);
     return halide_error_code_success;
 }
 
@@ -230,7 +239,7 @@ int vk_select_device_for_context(void *user_context,
     BlockStorage device_query_storage(user_context, device_query_storage_config);
     device_query_storage.resize(user_context, device_count);
 
-    VkPhysicalDevice chosen_device = nullptr;
+    VkPhysicalDevice chosen_device = VK_NULL_HANDLE;
     VkPhysicalDevice *avail_devices = (VkPhysicalDevice *)(device_query_storage.data());
     if (avail_devices == nullptr) {
         debug(user_context) << "Vulkan: Out of system memory!\n";
@@ -247,7 +256,7 @@ int vk_select_device_for_context(void *user_context,
 
     // try to find a matching device that supports compute.
     uint32_t queue_family = 0;
-    for (uint32_t i = 0; (chosen_device == nullptr) && (i < device_count); i++) {
+    for (uint32_t i = 0; (chosen_device == VK_NULL_HANDLE) && (i < device_count); i++) {
         VkPhysicalDeviceProperties properties;
         vkGetPhysicalDeviceProperties(avail_devices[i], &properties);
         debug(user_context) << "Vulkan: Checking device #" << i << "='" << properties.deviceName << "'\n";
@@ -439,14 +448,27 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         return halide_error_code_device_interface_no_device;
     }
 
-    vkGetDeviceQueue(cached_device, *queue_family_index, 0, queue);
+    vk_load_vulkan_device_functions(user_context, *device);
+    if (vkAllocateMemory == nullptr) {
+        error(user_context) << "Vulkan: Failed to resolve device API methods for driver!\n";
+        return halide_error_code_symbol_not_found;
+    }
+
+    vkGetDeviceQueue(*device, *queue_family_index, 0, queue);
+    return halide_error_code_success;
+}
+
+int vk_destroy_device(void *user_context, VkDevice device, const VkAllocationCallbacks *alloc_callbacks) {
+    debug(user_context) << " vk_destroy_device (user_context: " << user_context << ", device: " << (void *)device << ", alloc_callbacks: " << (void *)alloc_callbacks << ")\n";
+    vkDestroyDevice(device, alloc_callbacks);
+    vk_unload_vulkan_device_functions(user_context);
     return halide_error_code_success;
 }
 
 // Initializes the context (used by the default implementation of halide_acquire_context)
 int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
                       VkInstance *instance, VkDevice *device, VkPhysicalDevice *physical_device,
-                      VkCommandPool *command_pool, VkQueue *queue, uint32_t *queue_family_index) {
+                      VkQueue *queue, uint32_t *queue_family_index, VkDebugUtilsMessengerEXT *messenger) {
 
     debug(user_context) << " vk_create_context (user_context: " << user_context << ")\n";
 
@@ -472,14 +494,6 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
         return error_code;
     }
 
-    if (vkCreateDevice == nullptr) {
-        vk_load_vulkan_functions(user_context, *instance);
-        if (vkCreateDevice == nullptr) {
-            error(user_context) << "Vulkan: Failed to resolve API library methods to create device!\n";
-            return halide_error_code_symbol_not_found;
-        }
-    }
-
     error_code = vk_select_device_for_context(user_context, instance, device, physical_device, queue_family_index);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to select device for context!\n";
@@ -498,12 +512,7 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
         return halide_error_code_generic_error;
     }
 
-    error_code = vk_create_command_pool(user_context, *allocator, *queue_family_index, command_pool);
-    if (error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to create command pool for context!\n";
-        return error_code;
-    }
-
+    vk_create_debug_utils_messenger(user_context, *instance, *allocator, messenger);
     return halide_error_code_success;
 }
 
@@ -511,26 +520,97 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
 // NOTE: This should be called inside an acquire_context/release_context scope
 int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
                        VkInstance instance, VkDevice device, VkPhysicalDevice physical_device,
-                       VkCommandPool command_pool, VkQueue queue) {
+                       VkQueue queue, VkDebugUtilsMessengerEXT messenger) {
 
     debug(user_context)
         << "vk_destroy_context (user_context: " << user_context << ")\n";
 
-    if (device != nullptr) {
-        vkDeviceWaitIdle(device);
+    if (vkCreateInstance == nullptr) {
+        return halide_error_code_success;
     }
-    if ((command_pool != VkInvalidCommandPool) && (allocator != nullptr)) {
-        vk_destroy_command_pool(user_context, allocator, command_pool);
+
+    if (queue != VK_NULL_HANDLE) {
+        VkResult result = vkQueueWaitIdle(queue);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
+            return halide_error_code_generic_error;
+        }
+    }
+    if (device != VK_NULL_HANDLE) {
+        VkResult result = vkDeviceWaitIdle(device);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "Vulkan: vkDeviceWaitIdle returned " << vk_get_error_name(result) << "\n";
+            return halide_error_code_generic_error;
+        }
+    }
+
+    if (allocator != nullptr) {
         vk_destroy_shader_modules(user_context, allocator);
         vk_destroy_memory_allocator(user_context, allocator);
+        vk_destroy_debug_utils_messenger(user_context, instance, allocator, messenger);
     }
-    if (device != nullptr) {
-        vkDestroyDevice(device, nullptr);
+
+    const VkAllocationCallbacks *alloc_callbacks = halide_vulkan_get_allocation_callbacks(user_context);
+    if (device != VK_NULL_HANDLE) {
+        vk_destroy_device(user_context, device, alloc_callbacks);
     }
-    if (instance != nullptr) {
-        vkDestroyInstance(instance, nullptr);
+    if (instance != VK_NULL_HANDLE) {
+        vk_destroy_instance(user_context, instance, alloc_callbacks);
     }
     return halide_error_code_success;
+}
+
+// --------------------------------------------------------------------------
+
+VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_utils_messenger_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+    VkDebugUtilsMessageTypeFlagsEXT message_type,
+    const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
+    void *user_data) {
+    if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+        print(user_data) << "Vulkan [WARNING]: (user_context=" << user_data << ", "
+                         << "id=" << callback_data->messageIdNumber << ", "
+                         << "name:" << callback_data->pMessageIdName << ") "
+                         << callback_data->pMessage << "\n";
+    } else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        print(user_data) << "Vulkan [ERROR]: (user_context=" << user_data << ", "
+                         << "id=" << callback_data->messageIdNumber << ", "
+                         << "name:" << callback_data->pMessageIdName << ") "
+                         << callback_data->pMessage << "\n";
+    } else {
+
+        debug(user_data) << "Vulkan [DEBUG]: (user_context=" << user_data << ", "
+                         << "id=" << callback_data->messageIdNumber << ", "
+                         << "name:" << callback_data->pMessageIdName << ") "
+                         << callback_data->pMessage << "\n";
+    }
+    return VK_FALSE;
+}
+
+VkResult vk_create_debug_utils_messenger(void *user_context, VkInstance instance, VulkanMemoryAllocator *allocator, VkDebugUtilsMessengerEXT *messenger) {
+    PFN_vkCreateDebugUtilsMessengerEXT func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        debug(user_context) << "Vulkan: Registering Debug Utils Messenger ... \n";
+        VkDebugUtilsMessengerCreateInfoEXT create_info{};
+        create_info.flags = 0;
+        create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+        create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        create_info.pfnUserCallback = vk_debug_utils_messenger_callback;
+        create_info.pUserData = user_context;
+        return func(instance, &create_info, allocator->callbacks(), messenger);
+    } else {
+        debug(user_context) << "Vulkan: Debug Utils Messenger extension unavailable!\n";
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+}
+
+void vk_destroy_debug_utils_messenger(void *user_context, VkInstance instance, VulkanMemoryAllocator *allocator, VkDebugUtilsMessengerEXT messenger) {
+    PFN_vkDestroyDebugUtilsMessengerEXT func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        debug(user_context) << "Vulkan: Destroying Debug Utils Messenger ...\n";
+        func(instance, messenger, allocator->callbacks());
+    }
 }
 
 // --------------------------------------------------------------------------

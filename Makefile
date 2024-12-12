@@ -170,7 +170,7 @@ HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
 SPIRV_CXX_FLAGS=$(if $(WITH_SPIRV), -DWITH_SPIRV -isystem $(ROOT_DIR)/dependencies/spirv/include, )
 SPIRV_LLVM_CONFIG_LIB=$(if $(WITH_SPIRV), , )
 
-VULKAN_CXX_FLAGS=$(if $(WITH_VULKAN), -DWITH_VULKAN, )
+VULKAN_CXX_FLAGS=$(if $(WITH_VULKAN), -DWITH_VULKAN -isystem $(ROOT_DIR)/dependencies/vulkan/include, )
 VULKAN_LLVM_CONFIG_LIB=$(if $(WITH_VULKAN), , )
 
 WEBASSEMBLY_CXX_FLAGS=$(if $(WITH_WEBASSEMBLY), -DWITH_WEBASSEMBLY, )
@@ -1089,7 +1089,8 @@ RUNTIME_CXX_FLAGS = \
     -Wno-unused-function \
     -Wvla \
     -Wsign-compare \
-    -Wno-sync-alignment
+    -Wno-sync-alignment \
+    -isystem $(ROOT_DIR)/dependencies/vulkan/include
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
