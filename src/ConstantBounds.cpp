@@ -73,7 +73,6 @@ ConstantInterval bounds_helper(const Expr &e,
             ScopedBinding bind(scope, op->name, recurse(op->value));
             return recurse(op->body);
         } else if (const Call *op = e.as<Call>()) {
-            ConstantInterval result;
             if (op->is_intrinsic(Call::abs)) {
                 return abs(recurse(op->args[0]));
             } else if (op->is_intrinsic(Call::absd)) {
