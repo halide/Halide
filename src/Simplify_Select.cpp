@@ -21,17 +21,17 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(select(IRMatcher::intrin(Call::likely, true), x, y), x) ||
-             rewrite(select(IRMatcher::intrin(Call::likely, false), x, y), y) ||
-             rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, true), x, y), x) ||
-             rewrite(select(IRMatcher::intrin(Call::likely_if_innermost, false), x, y), y) ||
+            (rewrite(select(IRMatcher::likely(true), x, y), x) ||
+             rewrite(select(IRMatcher::likely(false), x, y), y) ||
+             rewrite(select(IRMatcher::likely_if_innermost(true), x, y), x) ||
+             rewrite(select(IRMatcher::likely_if_innermost(false), x, y), y) ||
              rewrite(select(1, x, y), x) ||
              rewrite(select(0, x, y), y) ||
              rewrite(select(x, y, y), y) ||
-             rewrite(select(x, intrin(Call::likely, y), y), false_value) ||
-             rewrite(select(x, y, intrin(Call::likely, y)), true_value) ||
-             rewrite(select(x, intrin(Call::likely_if_innermost, y), y), false_value) ||
-             rewrite(select(x, y, intrin(Call::likely_if_innermost, y)), true_value) ||
+             rewrite(select(x, likely(y), y), false_value) ||
+             rewrite(select(x, y, likely(y)), true_value) ||
+             rewrite(select(x, likely_if_innermost(y), y), false_value) ||
+             rewrite(select(x, y, likely_if_innermost(y)), true_value) ||
              false)) {
             return rewrite.result;
         }

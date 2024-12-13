@@ -1325,15 +1325,30 @@ constexpr int const_min(int a, int b) {
     return a < b ? a : b;
 }
 
-template<typename... Args>
+template<Call::IntrinsicOp intrin>
+struct OptionalIntrinType {
+    bool check(const Type &) const {
+        return true;
+    }
+};
+
+template<>
+struct OptionalIntrinType<Call::saturating_cast> {
+    halide_type_t type;
+    bool check(const Type &t) const {
+        return t == Type(type);
+    }
+};
+
+template<Call::IntrinsicOp intrin, typename... Args>
 struct Intrin {
     struct pattern_tag {};
-    Call::IntrinsicOp intrin;
     std::tuple<Args...> args;
     // The type of the output of the intrinsic node.
     // Only necessary in cases where it can't be inferred
     // from the input types (e.g. saturating_cast).
-    Type optional_type_hint;
+
+    OptionalIntrinType<intrin> optional_type_hint;
 
     static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
 
@@ -1362,7 +1377,7 @@ struct Intrin {
         }
         const Call &c = (const Call &)e;
         return (c.is_intrinsic(intrin) &&
-                ((optional_type_hint == Type()) || optional_type_hint == e.type) &&
+                optional_type_hint.check(e.type) &&
                 match_args<0, bound>(0, c, state));
     }
 
@@ -1394,8 +1409,8 @@ struct Intrin {
             return likely_if_innermost(std::move(arg0));
         } else if (intrin == Call::abs) {
             return abs(std::move(arg0));
-        } else if (intrin == Call::saturating_cast) {
-            return saturating_cast(optional_type_hint, std::move(arg0));
+        } else if constexpr (intrin == Call::saturating_cast) {
+            return saturating_cast(optional_type_hint.type, std::move(arg0));
         }
 
         Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
@@ -1489,98 +1504,113 @@ struct Intrin {
     }
 
     HALIDE_ALWAYS_INLINE
-    Intrin(Call::IntrinsicOp intrin, Args... args) noexcept
-        : intrin(intrin), args(args...) {
+    Intrin(Args... args) noexcept
+        : args(args...) {
     }
 };
 
-template<typename... Args>
-std::ostream &operator<<(std::ostream &s, const Intrin<Args...> &op) {
-    s << op.intrin << "(";
+template<Call::IntrinsicOp intrin, typename... Args>
+std::ostream &operator<<(std::ostream &s, const Intrin<intrin, Args...> &op) {
+    s << intrin << "(";
     op.print_args(s);
     s << ")";
     return s;
 }
 
-template<typename... Args>
-HALIDE_ALWAYS_INLINE auto intrin(Call::IntrinsicOp intrinsic_op, Args... args) noexcept -> Intrin<decltype(pattern_arg(args))...> {
-    return {intrinsic_op, pattern_arg(args)...};
+template<typename A, typename B>
+auto widen_right_add(A &&a, B &&b) noexcept -> Intrin<Call::widen_right_add, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widen_right_mul(A &&a, B &&b) noexcept -> Intrin<Call::widen_right_mul, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widen_right_sub(A &&a, B &&b) noexcept -> Intrin<Call::widen_right_sub, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 
 template<typename A, typename B>
-auto widen_right_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widen_right_add, pattern_arg(a), pattern_arg(b)};
+auto widening_add(A &&a, B &&b) noexcept -> Intrin<Call::widening_add, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto widen_right_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widen_right_mul, pattern_arg(a), pattern_arg(b)};
+auto widening_sub(A &&a, B &&b) noexcept -> Intrin<Call::widening_sub, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto widen_right_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widen_right_sub, pattern_arg(a), pattern_arg(b)};
-}
-
-template<typename A, typename B>
-auto widening_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widening_add, pattern_arg(a), pattern_arg(b)};
+auto widening_mul(A &&a, B &&b) noexcept -> Intrin<Call::widening_mul, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto widening_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widening_sub, pattern_arg(a), pattern_arg(b)};
+auto saturating_add(A &&a, B &&b) noexcept -> Intrin<Call::saturating_add, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto widening_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widening_mul, pattern_arg(a), pattern_arg(b)};
-}
-template<typename A, typename B>
-auto saturating_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::saturating_add, pattern_arg(a), pattern_arg(b)};
-}
-template<typename A, typename B>
-auto saturating_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::saturating_sub, pattern_arg(a), pattern_arg(b)};
+auto saturating_sub(A &&a, B &&b) noexcept -> Intrin<Call::saturating_sub, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A>
-auto saturating_cast(const Type &t, A &&a) noexcept -> Intrin<decltype(pattern_arg(a))> {
-    Intrin<decltype(pattern_arg(a))> p = {Call::saturating_cast, pattern_arg(a)};
-    p.optional_type_hint = t;
+auto saturating_cast(const Type &t, A &&a) noexcept -> Intrin<Call::saturating_cast, decltype(pattern_arg(a))> {
+    Intrin<Call::saturating_cast, decltype(pattern_arg(a))> p = {pattern_arg(a)};
+    p.optional_type_hint.type = t;
     return p;
 }
 template<typename A, typename B>
-auto halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::halving_add, pattern_arg(a), pattern_arg(b)};
+auto halving_add(A &&a, B &&b) noexcept -> Intrin<Call::halving_add, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto halving_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::halving_sub, pattern_arg(a), pattern_arg(b)};
+auto halving_sub(A &&a, B &&b) noexcept -> Intrin<Call::halving_sub, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto rounding_halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::rounding_halving_add, pattern_arg(a), pattern_arg(b)};
+auto rounding_halving_add(A &&a, B &&b) noexcept -> Intrin<Call::rounding_halving_add, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::shift_left, pattern_arg(a), pattern_arg(b)};
+auto shift_left(A &&a, B &&b) noexcept -> Intrin<Call::shift_left, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::shift_right, pattern_arg(a), pattern_arg(b)};
+auto shift_right(A &&a, B &&b) noexcept -> Intrin<Call::shift_right, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto rounding_shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::rounding_shift_left, pattern_arg(a), pattern_arg(b)};
+auto rounding_shift_left(A &&a, B &&b) noexcept -> Intrin<Call::rounding_shift_left, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-auto rounding_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::rounding_shift_right, pattern_arg(a), pattern_arg(b)};
+auto rounding_shift_right(A &&a, B &&b) noexcept -> Intrin<Call::rounding_shift_right, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B, typename C>
-auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
-    return {Call::mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<Call::mul_shift_right, decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    return {pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 template<typename A, typename B, typename C>
-auto rounding_mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
-    return {Call::rounding_mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+auto rounding_mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<Call::rounding_mul_shift_right, decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    return {pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+}
+
+template<typename A>
+auto abs(A &&a) noexcept -> Intrin<Call::abs, decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
+}
+
+template<typename A, typename B>
+auto absd(A &&a, B &&b) noexcept -> Intrin<Call::absd, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {pattern_arg(a), pattern_arg(b)};
+}
+
+template<typename A>
+auto likely(A &&a) noexcept -> Intrin<Call::likely, decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
+}
+
+template<typename A>
+auto likely_if_innermost(A &&a) noexcept -> Intrin<Call::likely_if_innermost, decltype(pattern_arg(a))> {
+    return {pattern_arg(a)};
 }
 
 template<typename A>
@@ -2425,7 +2455,8 @@ template<typename A>
 struct IsInt {
     struct pattern_tag {};
     A a;
-    int bits, lanes;
+    uint8_t bits;
+    uint16_t lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
@@ -2448,7 +2479,7 @@ struct IsInt {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_int(A &&a, int bits = 0, int lanes = 0) noexcept -> IsInt<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_int(A &&a, uint8_t bits = 0, uint16_t lanes = 0) noexcept -> IsInt<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
     return {pattern_arg(a), bits, lanes};
 }
@@ -2470,7 +2501,8 @@ template<typename A>
 struct IsUInt {
     struct pattern_tag {};
     A a;
-    int bits, lanes;
+    uint8_t bits;
+    uint16_t lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
@@ -2493,7 +2525,7 @@ struct IsUInt {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_uint(A &&a, int bits = 0, int lanes = 0) noexcept -> IsUInt<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_uint(A &&a, uint8_t bits = 0, uint16_t lanes = 0) noexcept -> IsUInt<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
     return {pattern_arg(a), bits, lanes};
 }

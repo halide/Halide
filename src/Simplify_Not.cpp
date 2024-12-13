@@ -18,8 +18,8 @@ Expr Simplify::visit(const Not *op, ExprInfo *info) {
     }
 
     if (rewrite(!broadcast(x, c0), broadcast(!x, c0)) ||
-        rewrite(!intrin(Call::likely, x), intrin(Call::likely, !x)) ||
-        rewrite(!intrin(Call::likely_if_innermost, x), intrin(Call::likely_if_innermost, !x)) ||
+        rewrite(!likely(x), likely(!x)) ||
+        rewrite(!likely_if_innermost(x), likely_if_innermost(!x)) ||
         rewrite(!(!x && y), x || !y) ||
         rewrite(!(!x || y), x && !y) ||
         rewrite(!(x && !y), !x || y) ||
