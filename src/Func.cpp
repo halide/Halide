@@ -969,7 +969,17 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
                 }
             }
 
-            // Add missing pure vars to the REDUCING func just before outermost
+            // Add missing pure vars to the REDUCING func just before outermost.
+            // This is necessary whenever the update does not reference one of the
+            // pure variables. For instance, factoring a histogram (clamps elided):
+            //     g(x) = 0; g(f(r.x, r.y)) += 1;
+            //     Func intm = g.rfactor(r.y, u);
+            // Here we generate an intermediate func intm that looks like:
+            //     intm(x, u) = 0; intm(f(r.x, u), u) += 1;
+            // And we need the reducing func to be:
+            //     g(x) += intm(x, r.y);
+            // But x was not referenced in the original update definition, so that
+            // dimension is added here.
             for (size_t i = 0; i < dim_vars.size(); i++) {
                 if (!expr_uses_var(definition.args()[i], dim_vars[i].name())) {
                     Dim d = {dim_vars[i].name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
