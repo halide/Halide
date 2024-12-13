@@ -52,7 +52,7 @@ Expr and_condition_over_domain(const Expr &c, const Scope<Interval> &varying);
  * that doesn't depend on those variables. Formally, the input expr
  * implies the output expr. Note that this function might be unable to
  * provide a better response than simply const_true(). */
-Expr weaken_condition_under_domain(const Expr &c, const Scope<Interval> &varying);
+Expr or_condition_over_domain(const Expr &c, const Scope<Interval> &varying);
 
 void solve_test();
 
