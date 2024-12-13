@@ -650,7 +650,11 @@ void add_let(SubstitutionMap &proj, const string &name, const Expr &value) {
 }
 
 pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, const ReductionDomain &rdom, const vector<Split> &splits) {
-    // Compute new bounds for the RDom by walking backwards through the splits.
+    // The bounds projections maps expressions that reference the old RDom
+    // bounds to expressions that reference the new RDom bounds (from dims).
+    // We call this a projection because we are computing the symbolic image
+    // of the N-dimensional RDom (dimensionality including splits) in the
+    // M < N - dimensional result.
     SubstitutionMap bounds_projection{};
     for (const Split &split : reverse_view(splits)) {
         for (const auto &[name, value] : compute_loop_bounds_after_split(split, "")) {
@@ -663,7 +667,7 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
         add_let(bounds_projection, var + ".loop_extent", extent);
     }
 
-    // Build the new RDom
+    // Build the new RDom from the bounds_projection.
     vector<ReductionVariable> new_rvars;
     for (const Dim &dim : dims) {
         const Expr new_min = simplify(bounds_projection.at(dim.var + ".loop_min"));
@@ -673,12 +677,17 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
     ReductionDomain new_rdom{new_rvars};
     new_rdom.where(rdom.predicate());
 
-    // Compute the mapping of old dimensions to the projected RDom values.
+    // Compute a mapping from old dimensions to equivalent values using only
+    // the new dimensions. For example, if we have an RDom {{0, 20}} and we
+    // split r.x by 2 into r.xo and r.xi, then this map will contain:
+    //     r.x ~> 2 * r.xo + r.xi
+    // Certain split tail cases can place additional predicates on the RDom.
+    // These are handled here, too.
+    SubstitutionMap dim_projection{};
     SubstitutionMap dim_extent_alignment{};
     for (const auto &[var, _, extent] : rdom.domain()) {
         dim_extent_alignment[var] = extent;
     }
-    SubstitutionMap dim_projection{};
     for (const Split &split : splits) {
         for (const auto &result : apply_split(split, "", dim_extent_alignment)) {
             switch (result.type) {
