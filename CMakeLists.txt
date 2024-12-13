@@ -16,7 +16,7 @@ if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
 endif ()
 
 project(Halide
-        VERSION 19.0.0
+        VERSION 20.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
