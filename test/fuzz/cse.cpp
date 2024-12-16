@@ -8,19 +8,24 @@
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 using namespace Halide::Internal;
+using std::pair;
 using std::vector;
 
 // Note that this deliberately uses int16 values everywhere --
 // *not* int32 -- because we want to test CSE, not the simplifier's
 // overflow behavior, and using int32 can end up with results
 // containing signed_integer_overflow(), which is not helpful here.
-Expr random_expr(FuzzedDataProvider &fdp, int depth, vector<Expr> &exprs) {
+Expr random_expr(FuzzedDataProvider &fdp, int depth, vector<pair<Expr, int>> &exprs) {
     if (depth <= 0) {
         return i16(fdp.ConsumeIntegralInRange<int>(-5, 4));
     }
     if (!exprs.empty() && fdp.ConsumeBool()) {
-        // Reuse an existing expression
-        return pick_value_in_vector(fdp, exprs);
+        // Reuse an existing expression that was generated under conditions at
+        // least as strict as our current depth limit.
+        auto p = pick_value_in_vector(fdp, exprs);
+        if (p.second <= depth) {
+            return p.first;
+        }
     }
     std::function<Expr()> build_next_expr[] = {
         [&]() {
@@ -67,13 +72,13 @@ Expr random_expr(FuzzedDataProvider &fdp, int depth, vector<Expr> &exprs) {
         },
     };
     Expr next = fdp.PickValueInArray(build_next_expr)();
-    exprs.push_back(next);
+    exprs.emplace_back(next, depth);
     return next;
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     FuzzedDataProvider fdp(data, size);
-    vector<Expr> exprs;
+    vector<pair<Expr, int>> exprs;
     Expr orig = random_expr(fdp, 5, exprs);
 
     Expr csed = common_subexpression_elimination(orig);
