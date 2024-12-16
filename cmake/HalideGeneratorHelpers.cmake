@@ -288,6 +288,9 @@ function(_Halide_library_from_generator TARGET)
         add_library("${TARGET}" STATIC ${local_out_${ARG_TYPE}})
         set_property(TARGET "${TARGET}" PROPERTY POSITION_INDEPENDENT_CODE ON)
         set_property(TARGET "${TARGET}" PROPERTY LINKER_LANGUAGE CXX)
+        set_source_files_properties(
+            "${local_out_${ARG_TYPE}}" PROPERTIES SKIP_LINTING ON
+        )
 
         if (NOT Halide_NO_DEFAULT_FLAGS)
             # Silence many useless warnings in generated C++ code compilation
