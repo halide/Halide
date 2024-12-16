@@ -53,7 +53,7 @@ public:
 };
 
 template<typename StmtOrExpr>
-void find_var_uses(StmtOrExpr x, std::unordered_set<std::string> &unused_vars) {
+void find_var_uses(const StmtOrExpr &x, std::unordered_set<std::string> &unused_vars) {
     FindVarUses counter(unused_vars);
     x.accept(&counter);
 }

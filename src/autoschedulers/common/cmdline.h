@@ -161,7 +161,7 @@ std::string readable_typename() {
 }
 
 template<class T>
-std::string default_value(T def) {
+std::string default_value(const T &def) {
     return detail::lexical_cast<std::string>(def);
 }
 
@@ -397,7 +397,7 @@ public:
              char short_name = 0,
              const std::string &desc = "",
              bool need = true,
-             const T def = T()) {
+             const T &def = T()) {
         add(name, short_name, desc, need, def, default_reader<T>());
     }
 
@@ -406,7 +406,7 @@ public:
              char short_name = 0,
              const std::string &desc = "",
              bool need = true,
-             const T def = T(),
+             const T &def = T(),
              F reader = F()) {
         if (options.count(name)) {
             throw_cmdline_error("multiple definition: " + name);
@@ -879,7 +879,7 @@ private:
         option_with_value_with_reader(const std::string &name,
                                       char short_name,
                                       bool need,
-                                      const T def,
+                                      const T &def,
                                       const std::string &desc,
                                       F reader)
             : option_with_value<T>(name, short_name, need, def, desc), reader(reader) {

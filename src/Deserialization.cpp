@@ -51,7 +51,7 @@ private:
     // does not apply to union types like Stmt and Expr or enum types like MemoryType
     template<typename src, typename dst>
     std::vector<dst> deserialize_vector(const flatbuffers::Vector<::flatbuffers::Offset<src>> *flatbuffer_vec,
-                                        std::function<dst(Deserializer &, const src *)> deserialize_func) {
+                                        const std::function<dst(Deserializer &, const src *)> &deserialize_func) {
         user_assert(flatbuffer_vec != nullptr) << "deserializing a null vector\n";
         std::vector<dst> result;
         result.reserve(flatbuffer_vec->size());

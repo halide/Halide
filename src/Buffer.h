@@ -222,7 +222,7 @@ public:
 
     template<typename... Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
-    explicit Buffer(int first, Args... rest)
+    explicit Buffer(int first, const Args &...rest)
         : Buffer(Runtime::Buffer<T, Dims>(Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                  Internal::get_name_from_end_of_parameter_pack(rest...)) {
     }
