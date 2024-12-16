@@ -30,11 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install clang-tidy
-        run: brew install llvm@17 ninja
+        run: brew install llvm@19 ninja
       - name: Run clang-tidy
         run: ./run-clang-tidy.sh
         env:
-          CLANG_TIDY_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@17
+          CLANG_TIDY_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@19
   check_cmake_file_lists:
     name: Check CMake file lists
     runs-on: ubuntu-20.04
