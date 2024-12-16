@@ -3313,7 +3313,7 @@ Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
 }
 
 template<typename BinaryOp>
-Stage FuncRef::func_ref_update(Expr e, int init_val) {
+Stage FuncRef::func_ref_update(const Expr &e, int init_val) {
     // Don't do this: we want to allow the RHS to be implicitly cast to the type of LHS.
     // func.check_types(e);
 
@@ -3323,8 +3323,8 @@ Stage FuncRef::func_ref_update(Expr e, int init_val) {
     return self_ref = BinaryOp()(Expr(self_ref), e);
 }
 
-Stage FuncRef::operator+=(Expr e) {
-    return func_ref_update<std::plus<Expr>>(std::move(e), 0);
+Stage FuncRef::operator+=(const Expr &e) {
+    return func_ref_update<std::plus<Expr>>(e, 0);
 }
 
 Stage FuncRef::operator+=(const Tuple &e) {
@@ -3343,8 +3343,8 @@ Stage FuncRef::operator+=(const FuncRef &e) {
     }
 }
 
-Stage FuncRef::operator*=(Expr e) {
-    return func_ref_update<std::multiplies<Expr>>(std::move(e), 1);
+Stage FuncRef::operator*=(const Expr &e) {
+    return func_ref_update<std::multiplies<Expr>>(e, 1);
 }
 
 Stage FuncRef::operator*=(const Tuple &e) {
@@ -3363,8 +3363,8 @@ Stage FuncRef::operator*=(const FuncRef &e) {
     }
 }
 
-Stage FuncRef::operator-=(Expr e) {
-    return func_ref_update<std::minus<Expr>>(std::move(e), 0);
+Stage FuncRef::operator-=(const Expr &e) {
+    return func_ref_update<std::minus<Expr>>(e, 0);
 }
 
 Stage FuncRef::operator-=(const Tuple &e) {
@@ -3383,8 +3383,8 @@ Stage FuncRef::operator-=(const FuncRef &e) {
     }
 }
 
-Stage FuncRef::operator/=(Expr e) {
-    return func_ref_update<std::divides<Expr>>(std::move(e), 1);
+Stage FuncRef::operator/=(const Expr &e) {
+    return func_ref_update<std::divides<Expr>>(e, 1);
 }
 
 Stage FuncRef::operator/=(const Tuple &e) {

@@ -217,7 +217,7 @@ public:
     }
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE RDom(Expr min, Expr extent, Args &&...args) {
+    HALIDE_NO_USER_CODE_INLINE RDom(const Expr &min, const Expr &extent, Args &&...args) {
         // This should really just be a delegating constructor, but I couldn't make
         // that work with variadic template unpacking in visual studio 2013
         Region region;
