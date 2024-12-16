@@ -16,7 +16,7 @@ if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
 endif ()
 
 project(Halide
-        VERSION 19.0.0
+        VERSION 20.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
@@ -241,6 +241,7 @@ Halide_feature(WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
 Halide_feature(WITH_TESTS "Halide's unit test suite" TOP_LEVEL)
 Halide_feature(WITH_TUTORIALS "Halide's tutorial code" TOP_LEVEL)
 Halide_feature(WITH_UTILS "Optional utility programs for Halide, including HalideTraceViz" TOP_LEVEL)
+
 
 ##
 # Add source directories

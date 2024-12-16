@@ -92,10 +92,10 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
              rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
              rewrite(min(select(x, w, min(z, y)), z), min(select(x, w, y), z)) ||
 
-             rewrite(min(intrin(Call::likely, x), x), b) ||
-             rewrite(min(x, intrin(Call::likely, x)), a) ||
-             rewrite(min(intrin(Call::likely_if_innermost, x), x), b) ||
-             rewrite(min(x, intrin(Call::likely_if_innermost, x)), a) ||
+             rewrite(min(likely(x), x), b) ||
+             rewrite(min(x, likely(x)), a) ||
+             rewrite(min(likely_if_innermost(x), x), b) ||
+             rewrite(min(x, likely_if_innermost(x)), a) ||
 
              (no_overflow(op->type) &&
               (rewrite(min(ramp(x, y, lanes), broadcast(z, lanes)), a,

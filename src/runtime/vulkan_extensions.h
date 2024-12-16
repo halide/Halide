@@ -137,10 +137,17 @@ uint32_t vk_get_requested_layers(void *user_context, StringTable &layer_table) {
 }
 
 uint32_t vk_get_required_instance_extensions(void *user_context, StringTable &ext_table) {
-    const char *required_ext_table[] = {"VK_KHR_get_physical_device_properties2"};
+    const char *required_ext_table[] = {VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME};
     const uint32_t required_ext_count = sizeof(required_ext_table) / sizeof(required_ext_table[0]);
     ext_table.fill(user_context, (const char **)required_ext_table, required_ext_count);
     return required_ext_count;
+}
+
+uint32_t vk_get_optional_instance_extensions(void *user_context, StringTable &ext_table) {
+    const char *optional_ext_table[] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+    const uint32_t optional_ext_count = sizeof(optional_ext_table) / sizeof(optional_ext_table[0]);
+    ext_table.fill(user_context, (const char **)optional_ext_table, optional_ext_count);
+    return optional_ext_count;
 }
 
 uint32_t vk_get_supported_instance_extensions(void *user_context, StringTable &ext_table) {
@@ -185,7 +192,9 @@ uint32_t vk_get_supported_instance_extensions(void *user_context, StringTable &e
 }
 
 uint32_t vk_get_required_device_extensions(void *user_context, StringTable &ext_table) {
-    const char *required_ext_table[] = {"VK_KHR_8bit_storage", "VK_KHR_storage_buffer_storage_class"};
+    const char *required_ext_table[] = {
+        VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME};
     const uint32_t required_ext_count = sizeof(required_ext_table) / sizeof(required_ext_table[0]);
     ext_table.fill(user_context, (const char **)required_ext_table, required_ext_count);
     return required_ext_count;
@@ -194,9 +203,10 @@ uint32_t vk_get_required_device_extensions(void *user_context, StringTable &ext_
 uint32_t vk_get_optional_device_extensions(void *user_context, StringTable &ext_table) {
     const char *optional_ext_table[] = {
         "VK_KHR_portability_subset",  //< necessary for running under Molten (aka Vulkan on Mac)
-        "VK_KHR_16bit_storage",
-        "VK_KHR_shader_float16_int8",
-        "VK_KHR_shader_float_controls"};
+        VK_KHR_MAINTENANCE_5_EXTENSION_NAME,
+        VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
+        VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME};
     const uint32_t optional_ext_count = sizeof(optional_ext_table) / sizeof(optional_ext_table[0]);
     ext_table.fill(user_context, (const char **)optional_ext_table, optional_ext_count);
     return optional_ext_count;
