@@ -406,8 +406,7 @@ bool CodeGen_WebAssembly::use_soft_float_abi() const {
 }
 
 bool CodeGen_WebAssembly::use_pic() const {
-#if LLVM_VERSION >= 180
-    // Issues with WASM PIC and dynamic linking only got fixed in LLVM v18.x (June 26th 2023)
+    // Issues with WASM PIC and dynamic linking were fixed in LLVM v18.x (June 26th 2023)
     // See https://reviews.llvm.org/D153293
 
     // Always emitting PIC "does add a little bloat to the object files, due to the extra
@@ -415,9 +414,6 @@ bool CodeGen_WebAssembly::use_pic() const {
     // wasm-opt in release builds."
     // See https://github.com/halide/Halide/issues/7796
     return true;
-#else
-    return false;
-#endif
 }
 
 int CodeGen_WebAssembly::native_vector_bits() const {

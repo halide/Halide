@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 170
+#if LLVM_VERSION >= 180
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 17.0 or newer"
+#error "Compiling Halide requires LLVM 18.0 or newer"
 #endif
 
 // No msvc warnings from llvm headers please
@@ -94,9 +94,7 @@
 #include <llvm/Transforms/Scalar/GVN.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
-#if LLVM_VERSION >= 180
 #include <llvm/Transforms/Utils/RelLookupTableConverter.h>
-#endif
 
 // IWYU pragma: end_exports
 
