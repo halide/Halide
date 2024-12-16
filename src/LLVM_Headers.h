@@ -93,8 +93,8 @@
 #include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
 #include <llvm/Transforms/Scalar/GVN.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
-#include <llvm/Transforms/Utils/SymbolRewriter.h>
 #include <llvm/Transforms/Utils/RelLookupTableConverter.h>
+#include <llvm/Transforms/Utils/SymbolRewriter.h>
 
 // IWYU pragma: end_exports
 
