@@ -141,24 +141,6 @@ string type_suffix(const vector<Expr> &ops, bool signed_variants) {
 
 namespace {
 
-// Helper to handle various forms of multiplication.
-Expr as_mul(const Expr &a) {
-    if (a.as<Mul>()) {
-        return a;
-    } else if (const Call *wm = Call::as_intrinsic(a, {Call::widening_mul})) {
-        return simplify(Mul::make(cast(wm->type, wm->args[0]), cast(wm->type, wm->args[1])));
-    } else if (const Call *s = Call::as_intrinsic(a, {Call::shift_left, Call::widening_shift_left})) {
-        auto log2_b = as_const_uint(s->args[1]);
-        if (log2_b) {
-            Expr b = make_one(s->type) << cast(UInt(s->type.bits()), (int)*log2_b);
-            return simplify(Mul::make(cast(s->type, s->args[0]), b));
-        }
-    } else if (const Call *wm = Call::as_intrinsic(a, {Call::widen_right_mul})) {
-        return simplify(Mul::make(wm->args[0], cast(wm->type, wm->args[1])));
-    }
-    return Expr();
-}
-
 // Helpers to generate horizontally reducing multiply operations.
 Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
     Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix,
