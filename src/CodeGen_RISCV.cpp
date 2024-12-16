@@ -382,20 +382,10 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
         left_arg,
         right_arg,
     };
-#if LLVM_VERSION >= 170
-    // LLVM 17+ has "intrinsics" that set csrw internally; the rounding_mode is before vlen.
+    // LLVM has "intrinsics" that set csrw internally; the rounding_mode is before vlen.
     if (round_any) {
         call_args.push_back(rounding_mode);
     }
-#else
-    // LLVM 16 requires explicitly setting csrw before calling the intrinsic
-    if (round_any) {
-        // Set vector fixed-point rounding flag for intrinsic.
-        llvm::FunctionType *csrw_llvm_type = llvm::FunctionType::get(void_t, {xlen_type}, false);
-        llvm::InlineAsm *inline_csrw = llvm::InlineAsm::get(csrw_llvm_type, "csrw vxrm,${0:z}", "rJ,~{memory}", true);
-        builder->CreateCall(inline_csrw, {rounding_mode});
-    }
-#endif
     call_args.push_back(actual_vlen);
 
     // Finally, make the call.
