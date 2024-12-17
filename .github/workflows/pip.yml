@@ -6,8 +6,9 @@ name: Build PyPI package
 
 on:
   push:
-    branches: [ main, build/pip-packaging ]
+    branches: [ main, release/*.x ]
   release:
+    types: [ published ]
 
 env:
   # TODO: detect this from repo somehow: https://github.com/halide/Halide/issues/8406
@@ -255,4 +256,4 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' && github.event.action == 'published'
