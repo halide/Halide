@@ -85,6 +85,8 @@ bool matmul(Halide::Target target) {
     // This means that the rows must always be divisible by 4 (or 2 for bf16).
     ImageParam B(rhs(8), 3, "rhs");
 
+    B.dim(1).set_stride(4);
+
     RDom r(0, acc);
 
     Func mm("matmul");
@@ -171,6 +173,8 @@ bool matmul_bf16(Halide::Target target) {
     Var x("x"), y("y");
     ImageParam A(BFloat(16), 2, "lhs");
     ImageParam B(BFloat(16), 3, "rhs");
+
+    B.dim(1).set_stride(2);
 
     RDom r(0, acc, "acc");
 
