@@ -256,4 +256,6 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
-        if: github.event_name == 'release' && github.event.action == 'published'
+        if: >
+          github.event_name == 'release' && github.event.action == 'published' ||
+          github.event_name == 'push' && (github.ref_name == 'release/19.x' || github.ref_name == 'v19.0.0')    
