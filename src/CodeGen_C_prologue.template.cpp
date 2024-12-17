@@ -46,6 +46,9 @@ inline double atanh_f64(double x) {
     return atanh(x);
 }
 #endif
+inline float sqrt_f16(float x) {
+    return sqrtf(x);
+}
 inline float sqrt_f32(float x) {
     return sqrtf(x);
 }
