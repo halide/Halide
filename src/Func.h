@@ -60,6 +60,7 @@ struct VarOrRVar {
 class ImageParam;
 
 namespace Internal {
+struct AssociativeOp;
 class Function;
 struct Split;
 struct StorageDim;
@@ -81,13 +82,15 @@ class Stage {
     void split(const std::string &old, const std::string &outer, const std::string &inner,
                const Expr &factor, bool exact, TailStrategy tail);
     void remove(const std::string &var);
-    Stage &purify(const VarOrRVar &old_name, const VarOrRVar &new_name);
 
     const std::vector<Internal::StorageDim> &storage_dims() const {
         return function.schedule().storage_dims();
     }
 
     Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
+
+    std::pair<std::vector<Internal::Split>, std::vector<Internal::Split>>
+    rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const Internal::AssociativeOp &prover_result);
 
 public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
@@ -184,7 +187,7 @@ public:
      *
      */
     // @{
-    Func rfactor(std::vector<std::pair<RVar, Var>> preserved);
+    Func rfactor(const std::vector<std::pair<RVar, Var>> &preserved);
     Func rfactor(const RVar &r, const Var &v);
     // @}
 

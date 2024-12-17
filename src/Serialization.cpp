@@ -338,8 +338,6 @@ Serialize::SplitType Serializer::serialize_split_type(const Split::SplitType &sp
         return Serialize::SplitType::RenameVar;
     case Split::SplitType::FuseVars:
         return Serialize::SplitType::FuseVars;
-    case Split::SplitType::PurifyRVar:
-        return Serialize::SplitType::PurifyRVar;
     default:
         user_error << "Unsupported split type\n";
         return Serialize::SplitType::SplitVar;

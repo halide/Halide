@@ -178,7 +178,6 @@ Stmt build_loop_nest(
     const auto &dims = func.args();
     const auto &func_s = func.schedule();
     const auto &stage_s = def.schedule();
-    const auto &predicates = def.split_predicate();
 
     // We'll build it from inside out, starting from the body,
     // then wrapping it in for loops.
@@ -306,7 +305,7 @@ Stmt build_loop_nest(
     }
 
     // Put all the reduction domain predicates into the containers vector.
-    for (Expr pred : predicates) {
+    for (Expr pred : def.split_predicate()) {
         pred = qualify(prefix, pred);
         // Add a likely qualifier if there isn't already one
         if (Call::as_intrinsic(pred, {Call::likely, Call::likely_if_innermost})) {
@@ -413,8 +412,7 @@ Stmt build_loop_nest(
     }
 
     // Define the bounds on the split dimensions using the bounds
-    // on the function args. If it is a purify, we should use the bounds
-    // from the dims instead.
+    // on the function args.
     for (const Split &split : reverse_view(splits)) {
         vector<std::pair<string, Expr>> let_stmts = compute_loop_bounds_after_split(split, prefix);
         for (const auto &let_stmt : let_stmts) {
@@ -2229,7 +2227,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         //
         // However, there are four types of Split, and the concept of a child var varies across them:
         // - For a vanilla split, inner and outer are the children and old_var is the parent.
-        // - For rename and purify, the outer is the child and the inner is meaningless.
+        // - For rename, the outer is the child and the inner is meaningless.
         // - For fuse, old_var is the child and inner/outer are the parents.
         //
         // (@abadams comments: "I acknowledge that this is gross and should be refactored.")
@@ -2249,7 +2247,6 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
                 }
                 break;
             case Split::RenameVar:
-            case Split::PurifyRVar:
                 if (parallel_vars.count(split.outer)) {
                     parallel_vars.insert(split.old_var);
                 }
