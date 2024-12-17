@@ -9,6 +9,7 @@ on:
     branches: [ main, build/pip-packaging ]
   release:
     types: [ published ]
+  workflow_dispatch:
 
 env:
   # TODO: detect this from repo somehow: https://github.com/halide/Halide/issues/8406
