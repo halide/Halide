@@ -14,21 +14,23 @@ if (NOT BUILD_SHARED_LIBS)
 endif ()
 
 # Set the (shared) library version
-set(Halide_VERSION_OVERRIDE "${Halide_VERSION}"
+set(Halide_VERSION_OVERRIDE "<default>"
     CACHE STRING "VERSION to set for custom Halide packaging")
 mark_as_advanced(Halide_VERSION_OVERRIDE)
 
-if (Halide_VERSION_OVERRIDE)
-    # Empty is considered a value distinct from not-defined
+if (Halide_VERSION_OVERRIDE STREQUAL "<default>")
+    set_target_properties(Halide PROPERTIES VERSION "${Halide_VERSION}")
+else ()
     set_target_properties(Halide PROPERTIES VERSION "${Halide_VERSION_OVERRIDE}")
 endif ()
 
-set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
+set(Halide_SOVERSION_OVERRIDE "<default>"
     CACHE STRING "SOVERSION to set for custom Halide packaging")
 mark_as_advanced(Halide_SOVERSION_OVERRIDE)
 
-if (Halide_SOVERSION_OVERRIDE)
-    # Empty is considered a value distinct from not-defined
+if (Halide_SOVERSION_OVERRIDE STREQUAL "<default>")
+    set_target_properties(Halide PROPERTIES SOVERSION "${Halide_VERSION_MAJOR}")
+else ()
     set_target_properties(Halide PROPERTIES SOVERSION "${Halide_SOVERSION_OVERRIDE}")
 endif ()
 
