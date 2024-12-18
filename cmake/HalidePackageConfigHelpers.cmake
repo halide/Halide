@@ -80,7 +80,7 @@ function(_Halide_install_pkgdeps)
     set(depFile "${CMAKE_CURRENT_BINARY_DIR}/${ARG_FILE_NAME}")
 
     _Halide_install_code(
-        "file(READ \"\${CMAKE_INSTALL_PREFIX}/${ARG_DESTINATION}/${ARG_EXPORT_FILE}\" target_cmake)"
+        "file(READ \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${ARG_DESTINATION}/${ARG_EXPORT_FILE}\" target_cmake)"
         "file(WRITE \"${depFile}.in\" \"\")"
     )
 
