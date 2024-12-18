@@ -41,18 +41,18 @@ if [ -n "${FIX}" ]; then
     echo "Operating in -fix mode!"
 fi
 
-# We are currently standardized on using LLVM/Clang 17 for this script.
+# We are currently standardized on using LLVM/Clang 19 for this script.
 # Note that this is totally independent of the version of LLVM that you
-# are using to build Halide itself. If you don't have LLVM17 installed,
+# are using to build Halide itself. If you don't have LLVM19 installed,
 # you can usually install what you need easily via:
 #
-# sudo apt-get install llvm-17 clang-17 libclang-17-dev clang-tidy-17
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-17
+# sudo apt-get install llvm-19 clang-19 libclang-19-dev clang-tidy-19
+# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-19
 #
 # On macOS:
 #
-# brew install llvm@17
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@17
+# brew install llvm@19
+# export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@19
 
 if [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ]; then
   echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script."
@@ -62,11 +62,11 @@ fi
 echo "CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}"
 
 VERSION=$("${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy" --version)
-if [[ ${VERSION} =~ .*version\ 17.* ]]
+if [[ ${VERSION} =~ .*version\ 19.* ]]
 then
-    echo "clang-tidy version 17 found."
+    echo "clang-tidy version 19 found."
 else
-    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 17 install!"
+    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 19 install!"
     exit 1
 fi
 

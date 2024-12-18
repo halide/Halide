@@ -1,16 +1,4 @@
-if (EXISTS "${V8_INCLUDE_PATH}")
-    message(DEPRECATION "V8_INCLUDE_PATH has been renamed to V8_INCLUDE_DIR")
-    set(V8_INCLUDE_DIR "${V8_INCLUDE_PATH}")
-    set(V8_INCLUDE_DIR "${V8_INCLUDE_PATH}" CACHE PATH "")
-endif ()
-
 find_path(V8_INCLUDE_DIR v8.h)
-
-if (EXISTS "${V8_LIB_PATH}")
-    message(DEPRECATION "V8_LIB_PATH has been renamed to V8_LIBRARY")
-    set(V8_LIBRARY "${V8_LIB_PATH}")
-    set(V8_LIBRARY "${V8_LIB_PATH}" CACHE FILEPATH "")
-endif ()
 
 find_library(
     V8_LIBRARY

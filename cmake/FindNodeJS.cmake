@@ -1,9 +1,3 @@
-if (EXISTS "${NODE_JS_EXECUTABLE}")
-    message(DEPRECATION "NODE_JS_EXECUTABLE has been renamed to NodeJS_EXECUTABLE")
-    set(NodeJS_EXECUTABLE "${NODE_JS_EXECUTABLE}")
-    set(NodeJS_EXECUTABLE "${NODE_JS_EXECUTABLE}" CACHE PATH "")
-endif ()
-
 find_program(
     NodeJS_EXECUTABLE
     NAMES node nodejs
