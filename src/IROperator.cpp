@@ -1048,49 +1048,41 @@ Expr strided_ramp_base(const Expr &e, int stride) {
 
 namespace {
 
-struct RemoveLikelies : public IRMutator {
+// Replace a specified list of intrinsics with their first arg.
+class RemoveIntrinsics : public IRMutator {
     using IRMutator::visit;
+    const std::initializer_list<Call::IntrinsicOp> &ops;
+
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::likely) ||
-            op->is_intrinsic(Call::likely_if_innermost)) {
+        if (op->is_intrinsic(ops)) {
             return mutate(op->args[0]);
         } else {
             return IRMutator::visit(op);
         }
     }
-};
 
-// TODO: There could just be one IRMutator that can remove
-// calls from a list. If we need more of these, it might be worth
-// doing that refactor.
-struct RemovePromises : public IRMutator {
-    using IRMutator::visit;
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::promise_clamped) ||
-            op->is_intrinsic(Call::unsafe_promise_clamped)) {
-            return mutate(op->args[0]);
-        } else {
-            return IRMutator::visit(op);
-        }
+public:
+    RemoveIntrinsics(const std::initializer_list<Call::IntrinsicOp> &ops)
+        : ops(ops) {
     }
 };
 
 }  // namespace
 
 Expr remove_likelies(const Expr &e) {
-    return RemoveLikelies().mutate(e);
+    return RemoveIntrinsics({Call::likely, Call::likely_if_innermost}).mutate(e);
 }
 
 Stmt remove_likelies(const Stmt &s) {
-    return RemoveLikelies().mutate(s);
+    return RemoveIntrinsics({Call::likely, Call::likely_if_innermost}).mutate(s);
 }
 
 Expr remove_promises(const Expr &e) {
-    return RemovePromises().mutate(e);
+    return RemoveIntrinsics({Call::promise_clamped, Call::unsafe_promise_clamped}).mutate(e);
 }
 
 Stmt remove_promises(const Stmt &s) {
-    return RemovePromises().mutate(s);
+    return RemoveIntrinsics({Call::promise_clamped, Call::unsafe_promise_clamped}).mutate(s);
 }
 
 Expr unwrap_tags(const Expr &e) {

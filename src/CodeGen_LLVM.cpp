@@ -234,9 +234,6 @@ void CodeGen_LLVM::initialize_llvm() {
             for (const std::string &s : arg_vec) {
                 c_arg_vec.push_back(s.c_str());
             }
-            // TODO: Remove after opaque pointers become the default in LLVM.
-            // This is here to document how to turn on opaque pointers, for testing, in LLVM 15
-            //            c_arg_vec.push_back("-opaque-pointers");
             cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
         }
 

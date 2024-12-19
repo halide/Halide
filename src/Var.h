@@ -25,7 +25,9 @@ class Var {
     Expr e;
 
 public:
-    /** Construct a Var with the given name */
+    /** Construct a Var with the given name. Unlike Funcs, this will be treated
+     * as the same Var as another other Var with the same name, including
+     * implicit Vars. */
     Var(const std::string &n);
 
     /** Construct a Var with an automatically-generated unique name. */
@@ -120,9 +122,6 @@ public:
     static Var implicit(int n);
 
     /** Return whether a variable name is of the form for an implicit argument.
-     * TODO: This is almost guaranteed to incorrectly fire on user
-     * declared variables at some point. We should likely prevent
-     * user Var declarations from making names of this form.
      */
     //{
     static bool is_implicit(const std::string &name);

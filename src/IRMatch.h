@@ -1320,11 +1320,6 @@ constexpr bool and_reduce(bool first, Args... rest) {
     return first && and_reduce(rest...);
 }
 
-// TODO: this can be replaced with std::min() once we require C++14 or later
-constexpr int const_min(int a, int b) {
-    return a < b ? a : b;
-}
-
 template<Call::IntrinsicOp intrin>
 struct OptionalIntrinType {
     bool check(const Type &) const {
@@ -1413,7 +1408,7 @@ struct Intrin {
             return saturating_cast(optional_type_hint.type, std::move(arg0));
         }
 
-        Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
+        Expr arg1 = std::get<std::min<size_t>(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::absd) {
             return absd(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::widen_right_add) {
@@ -1448,7 +1443,7 @@ struct Intrin {
             return rounding_shift_right(std::move(arg0), std::move(arg1));
         }
 
-        Expr arg2 = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
+        Expr arg2 = std::get<std::min<size_t>(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::mul_shift_right) {
             return mul_shift_right(std::move(arg0), std::move(arg1), std::move(arg2));
         } else if (intrin == Call::rounding_mul_shift_right) {
