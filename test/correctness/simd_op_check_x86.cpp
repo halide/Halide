@@ -236,7 +236,7 @@ public:
 
             // A uint without the top bit set can be reinterpreted as an int
             // so that packssdw can be used.
-            check(std::string("packssdw") + check_suffix, 8 * w, i16_sat(u32_1 >> 1));
+            check(std::string("packssdw") + check_suffix, 4 * w, i16_sat(u32_1 >> 1));
             check(std::string("packssdw") + check_suffix, 8 * w, i8_sat(u32_1 >> 1));
             check(std::string("packsswb") + check_suffix, 8 * w, i8_sat(u16_1 >> 1));
 
