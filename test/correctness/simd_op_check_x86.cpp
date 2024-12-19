@@ -234,6 +234,12 @@ public:
             check(std::string("packssdw") + check_suffix, 8 * w, u8_sat(i32_1));
             check(std::string("packssdw") + check_suffix, 8 * w, i8_sat(i32_1));
 
+            // A uint without the top bit set can be reinterpreted as an int
+            // so that packssdw can be used.
+            check(std::string("packssdw") + check_suffix, 4 * w, i16_sat(u32_1 >> 1));
+            check(std::string("packssdw") + check_suffix, 8 * w, i8_sat(u32_1 >> 1));
+            check(std::string("packsswb") + check_suffix, 8 * w, i8_sat(u16_1 >> 1));
+
             // Sum-of-absolute-difference ops
             {
                 const int f = 8;  // reduction factor.
