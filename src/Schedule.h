@@ -332,18 +332,13 @@ struct Split {
 
     enum SplitType { SplitVar = 0,
                      RenameVar,
-                     FuseVars,
-                     PurifyRVar };
+                     FuseVars };
 
     // If split_type is Rename, then this is just a renaming of the
     // old_var to the outer and not a split. The inner var should
     // be ignored, and factor should be one. Renames are kept in
     // the same list as splits so that ordering between them is
     // respected.
-
-    // If split type is Purify, this replaces the old_var RVar to
-    // the outer Var. The inner var should be ignored, and factor
-    // should be one.
 
     // If split_type is Fuse, then this does the opposite of a
     // split, it joins the outer and inner into the old_var.

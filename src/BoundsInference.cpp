@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <numeric>
 
 namespace Halide {
 namespace Internal {
@@ -297,7 +298,6 @@ public:
             }
 
             // Default case (no specialization)
-            vector<Expr> predicates = def.split_predicate();
             for (const ReductionVariable &rv : def.schedule().rvars()) {
                 rvars.insert(rv);
             }
@@ -308,23 +308,15 @@ public:
             }
             vecs[1] = def.values();
 
+            vector<Expr> predicates = def.split_predicate();
             for (size_t i = 0; i < result.size(); ++i) {
                 for (const Expr &val : vecs[i]) {
-                    if (!predicates.empty()) {
-                        Expr cond_val = Call::make(val.type(),
-                                                   Internal::Call::if_then_else,
-                                                   {likely(predicates[0]), val},
-                                                   Internal::Call::PureIntrinsic);
-                        for (size_t i = 1; i < predicates.size(); ++i) {
-                            cond_val = Call::make(cond_val.type(),
-                                                  Internal::Call::if_then_else,
-                                                  {likely(predicates[i]), cond_val},
-                                                  Internal::Call::PureIntrinsic);
-                        }
-                        result[i].emplace_back(const_true(), cond_val);
-                    } else {
-                        result[i].emplace_back(const_true(), val);
-                    }
+                    Expr cond_val = std::accumulate(
+                        predicates.begin(), predicates.end(), val,
+                        [](const auto &acc, const auto &pred) {
+                            return Call::make(acc.type(), Call::if_then_else, {likely(pred), acc}, Call::PureIntrinsic);
+                        });
+                    result[i].emplace_back(const_true(), cond_val);
                 }
             }
 

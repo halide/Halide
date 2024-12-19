@@ -77,8 +77,6 @@ void validate_schedule_inlined_function(Function f) {
                          << f.name() << " is scheduled inline.\n";
 
             break;
-        case Split::PurifyRVar:
-            break;
         }
     }
 
