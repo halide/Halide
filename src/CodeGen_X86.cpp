@@ -1083,11 +1083,9 @@ string CodeGen_X86::mattrs() const {
             attrs.emplace_back("+amx-bf16");
         }
     }
-#if LLVM_VERSION >= 180
     if (gather_might_be_slow(target)) {
         attrs.emplace_back("+prefer-no-gather");
     }
-#endif
 
     if (target.has_feature(Target::AVX10_1)) {
         switch (target.vector_bits) {

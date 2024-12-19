@@ -151,7 +151,7 @@ issue.
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, or trunk. At the time of writing,
-this means versions 19, 18, and 17 are supported, but 16 is not.
+this means versions 20, 19, and 18 are supported, but 17 is not.
 
 It is simplest to get a binary release of LLVM on macOS by using
 [Homebrew](https://brew.sh). Just run `brew install llvm`. On Debian flavors of
@@ -165,10 +165,10 @@ If your OS does not have packages for LLVM, or you want more control over the
 configuration, you can build it yourself. First check it out from GitHub:
 
 ```shell
-$ git clone --depth 1 --branch llvmorg-18.1.8 https://github.com/llvm/llvm-project.git
+$ git clone --depth 1 --branch llvmorg-19.1.5 https://github.com/llvm/llvm-project.git
 ```
 
-(LLVM 18.1.8 is the most recent released LLVM at the time of writing. For
+(LLVM 19.1.5 is the most recent released LLVM at the time of writing. For
 current trunk, use `main` instead)
 
 Then build it like so:
@@ -305,10 +305,10 @@ Subsets of the tests can be selected with `-L` and include `correctness`,
 #### Building LLVM (optional)
 
 Follow these steps if you want to build LLVM yourself. First, download LLVM's
-sources (these instructions use the 18.1.8 release).
+sources (these instructions use the 19.1.5 release).
 
 ```
-D:\> git clone --depth 1 --branch llvm-org-18.1.8 https://github.com/llvm/llvm-project.git
+D:\> git clone --depth 1 --branch llvm-org-19.1.5 https://github.com/llvm/llvm-project.git
 ```
 
 As above, run `vcvarsall.bat` to pick between x86 and x64. Then configure LLVM
