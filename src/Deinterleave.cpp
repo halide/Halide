@@ -223,7 +223,7 @@ private:
             }
         }
         if (op->value.type().lanes() > 1) {
-            // There is probably a more efficient way to this.
+            // There is probably a more efficient way to do this.
             return mutate(flatten_nested_ramps(op));
         }
 
@@ -236,7 +236,14 @@ private:
         } else {
             Type t = op->type.with_lanes(new_lanes);
             ModulusRemainder align = op->alignment;
-            // TODO: Figure out the alignment of every nth lane
+            // The alignment of a Load refers to the alignment of the first
+            // lane, so we can preserve the existing alignment metadata if the
+            // deinterleave is asking for any subset of lanes that includes the
+            // first. Otherwise we just drop it. We could check if the index is
+            // a ramp with constant stride or some other special case, but if
+            // that's the case, the simplifier is very good at figuring out the
+            // alignment, and it has access to context (e.g. the alignment of
+            // enclosing lets) that we do not have here.
             if (starting_lane != 0) {
                 align = ModulusRemainder();
             }
