@@ -220,8 +220,7 @@ target_sources(
     WrapCalls.h
 )
 
-# The sources that go into libHalide. For the sake of IDE support, headers that
-# exist in src/ but are not public should be included here.
+# The sources that go into libHalide.
 target_sources(
     Halide
     PRIVATE
@@ -233,6 +232,7 @@ target_sources(
     AlignLoads.cpp
     AllocationBoundsInference.cpp
     ApplySplit.cpp
+    ApproximationTables.cpp
     Argument.cpp
     AssociativeOpsTable.cpp
     Associativity.cpp
