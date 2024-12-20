@@ -1994,6 +1994,8 @@ public:
     static Buffer<T, Dims, InClassDimStorage> make_with_shape_of(Buffer<T2, D2, S2> src,
                                                                  void *(*allocate_fn)(size_t) = nullptr,
                                                                  void (*deallocate_fn)(void *) = nullptr) {
+        // Note that src is taken by value because its dims are mutated
+        // in-place by the helper. Do not change to taking it by reference.
         static_assert(Dims == D2 || Dims == AnyDims);
         const halide_type_t dst_type = T_is_void ? src.type() : halide_type_of<typename std::remove_cv<not_void_T>::type>();
         return Buffer<>::make_with_shape_of_helper(dst_type, src.dimensions(), src.buf.dim,
