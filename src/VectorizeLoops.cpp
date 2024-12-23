@@ -1411,8 +1411,8 @@ class FindVectorizableExprsInAtomicNode : public IRMutator {
 
     using IRMutator::visit;
 
-    template<typename T>
-    const T *visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    const LetOrLetStmt *visit_let(const LetOrLetStmt *op) {
         mutate(op->value);
         ScopedBinding<> bind_if(poison, poisoned_names, op->name);
         mutate(op->body);
@@ -1498,8 +1498,8 @@ class LiftVectorizableExprsOutOfSingleAtomicNode : public IRMutator {
 
     using IRMutator::visit;
 
-    template<typename StmtOrExpr, typename LetStmtOrLet>
-    StmtOrExpr visit_let(const LetStmtOrLet *op) {
+    template<typename LetStmtOrLet>
+    auto visit_let(const LetStmtOrLet *op) -> decltype(op->body) {
         if (liftable.count(op->value)) {
             // Lift it under its current name to avoid having to
             // rewrite the variables in other lifted exprs.
@@ -1512,11 +1512,11 @@ class LiftVectorizableExprsOutOfSingleAtomicNode : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<Stmt>(op);
+        return visit_let(op);
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Expr>(op);
+        return visit_let(op);
     }
 
 public:

@@ -241,25 +241,25 @@ private:
         }
     }
 
-    template<typename T, typename Body>
-    Body visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
-            const T *op;
+            const LetOrLetStmt *op;
             Expr new_value;
             ScopedBinding<> binding;
-            Frame(const T *op, Expr v, Scope<> &scope)
+            Frame(const LetOrLetStmt *op, Expr v, Scope<> &scope)
                 : op(op), new_value(std::move(v)),
                   binding(!new_value.defined(), scope, op->name) {
             }
         };
         vector<Frame> frames;
 
-        Body result;
+        decltype(op->body) result;
         do {
             frames.emplace_back(op, mutate(op->value), dead_vars);
             result = op->body;
-        } while ((op = result.template as<T>()));
+        } while ((op = result.template as<LetOrLetStmt>()));
 
         result = mutate(result);
 
@@ -272,7 +272,7 @@ private:
                 if (frame.new_value.same_as(frame.op->value) && result.same_as(frame.op->body)) {
                     result = frame.op;
                 } else {
-                    result = T::make(frame.op->name, std::move(frame.new_value), result);
+                    result = LetOrLetStmt::make(frame.op->name, std::move(frame.new_value), result);
                 }
             }
         }
@@ -281,11 +281,11 @@ private:
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Let, Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const AssertStmt *op) override {
