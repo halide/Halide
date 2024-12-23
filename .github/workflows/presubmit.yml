@@ -16,14 +16,15 @@ permissions:
 jobs:
   check_clang_format:
     name: Check clang-format
-    runs-on: ubuntu-20.04
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v3
-      - uses: DoozyX/clang-format-lint-action@v0.17
-        with:
-          source: '.'
-          extensions: 'h,c,cpp'
-          clangFormatVersion: 17
+      - name: Install clang-format
+        run: brew install llvm@19
+      - name: Check clang-format
+        run: ./run-clang-format.sh -c
+        env:
+          CLANG_FORMAT_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@19
   check_clang_tidy:
     name: Check clang-tidy
     runs-on: macos-14
