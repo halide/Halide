@@ -970,8 +970,9 @@ Expr pow(Expr x, Expr y);
  * mantissa. Vectorizes cleanly. */
 Expr erf(const Expr &x);
 
-/** Fast vectorizable approximation to some trigonometric functions for Float(32).
- * Absolute approximation error is less than 1e-5. */
+/** Fast vectorizable approximation to some trigonometric functions for
+ * Float(32).  Absolute approximation error is less than 1e-5. Slow on x86 if
+ * you don't have at least sse 4.1. */
 // @{
 Expr fast_sin(const Expr &x);
 Expr fast_cos(const Expr &x);
@@ -979,19 +980,22 @@ Expr fast_cos(const Expr &x);
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
- * mantissa. Vectorizes cleanly. */
+ * mantissa. Vectorizes cleanly. Slow on x86 if you don't
+ * have at least sse 4.1. */
 Expr fast_log(const Expr &x);
 
 /** Fast approximate cleanly vectorizable exp for Float(32). Returns
  * nonsense for inputs that would overflow or underflow. Typically
  * accurate up to the last 5 bits of the mantissa. Gets worse when
- * approaching overflow. Vectorizes cleanly. */
+ * approaching overflow. Vectorizes cleanly. Slow on x86 if you don't
+ * have at least sse 4.1. */
 Expr fast_exp(const Expr &x);
 
 /** Fast approximate cleanly vectorizable pow for Float(32). Returns
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
  * mantissa for typical exponents. Gets worse when approaching
- * overflow. Vectorizes cleanly. */
+ * overflow. Vectorizes cleanly. Slow on x86 if you don't
+ * have at least sse 4.1. */
 Expr fast_pow(Expr x, Expr y);
 
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
