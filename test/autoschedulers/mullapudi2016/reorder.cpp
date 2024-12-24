@@ -14,7 +14,6 @@ double run_test_1(bool auto_schedule) {
     Buffer<uint32_t> im(2048);
     im.fill(17);
 
-
     Func f("f");
     f(x, y, dx, dy) = im(x) + im(y + 1) + im(dx + search_area / 2) + im(dy + search_area / 2);
 
