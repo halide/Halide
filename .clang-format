@@ -1,7 +1,9 @@
 ---
 AccessModifierOffset: -4
 AlignEscapedNewlines: Left
-AlignTrailingComments: true
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
 AllowAllParametersOfDeclarationOnNextLine: true
 AllowShortBlocksOnASingleLine: Empty
 AllowShortFunctionsOnASingleLine: None
@@ -10,6 +12,7 @@ AllowShortLoopsOnASingleLine: false
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: Yes
 BinPackParameters: true
+BreakAfterReturnType: Automatic
 BreakBeforeBinaryOperators: None
 BreakBeforeBraces: Attach
 BreakBeforeTernaryOperators: false
@@ -23,6 +26,7 @@ IndentWrappedFunctionNames: false
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
 PackConstructorInitializers: BinPack
+PenaltyReturnTypeOnItsOwnLine: 9999999 # default: 200
 PointerAlignment: Right
 SpaceAfterCStyleCast: false
 SpaceAfterTemplateKeyword: false

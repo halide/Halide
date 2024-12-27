@@ -1164,7 +1164,7 @@ private:
                        int default_vec_factor,
                        bool is_enabled = true /* false to skip testing */)
             : parent(p), default_bits(default_bits), default_instr_lanes(default_instr_lanes),
-              default_vec_factor(default_vec_factor), is_enabled(is_enabled){};
+              default_vec_factor(default_vec_factor), is_enabled(is_enabled) {};
 
         AddTestFunctor(SimdOpCheckArmSve &p,
                        int default_bits,
@@ -1173,7 +1173,7 @@ private:
                        bool is_enabled = true /* false to skip testing */)
             : parent(p), default_bits(default_bits),
               default_instr_lanes(Instruction::get_instr_lanes(default_bits, default_vec_factor, p.target)),
-              default_vec_factor(default_vec_factor), is_enabled(is_enabled){};
+              default_vec_factor(default_vec_factor), is_enabled(is_enabled) {};
 
         // Constructs single Instruction with default parameters
         void operator()(const string &opcode, Expr e) {
