@@ -309,10 +309,10 @@ class SimplifyUsingBounds : public IRMutator {
         return visit_cmp(op);
     }
 
-    template<typename StmtOrExpr, typename LetStmtOrLet>
-    StmtOrExpr visit_let(const LetStmtOrLet *op) {
+    template<typename LetStmtOrLet>
+    auto visit_let(const LetStmtOrLet *op) -> decltype(op->body) {
         Expr value = mutate(op->value);
-        StmtOrExpr body;
+        decltype(op->body) body;
         if (value.type() == Int(32) && is_pure(value)) {
             containing_loops.push_back({op->name, {value, value}});
             body = mutate(op->body);
@@ -324,11 +324,11 @@ class SimplifyUsingBounds : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Expr, Let>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<Stmt, LetStmt>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const For *op) override {

@@ -691,10 +691,10 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         }
     }
 
-    template<typename ExprOrStmt, typename LetOrLetStmt>
-    ExprOrStmt visit_let(const LetOrLetStmt *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         Expr value = mutate(op->value);
-        ExprOrStmt body = mutate(op->body);
+        auto body = mutate(op->body);
 
         // If any of the lifted expressions use this, we also need to
         // lift this.
@@ -712,11 +712,11 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<Stmt>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const For *op) override {

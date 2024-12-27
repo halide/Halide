@@ -130,15 +130,15 @@ class FindFreeVars : public IRVisitor {
         }
     }
 
-    template<typename T>
-    void visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    void visit_let(const LetOrLetStmt *op) {
         vector<ScopedBinding<>> frame;
         decltype(op->body) body;
         do {
             op->value.accept(this);
             frame.emplace_back(scope, op->name);
             body = op->body;
-            op = body.template as<T>();
+            op = body.template as<LetOrLetStmt>();
         } while (op);
         body.accept(this);
     }

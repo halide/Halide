@@ -465,44 +465,44 @@ class Interleaver : public IRMutator {
         return Shuffle::make_interleave(exprs);
     }
 
-    template<typename T, typename Body>
-    Body visit_lets(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
-            const T *op;
+            const LetOrLetStmt *op;
             Expr new_value;
             ScopedBinding<> binding;
-            Frame(const T *op, Expr v, Scope<void> &scope)
+            Frame(const LetOrLetStmt *op, Expr v, Scope<void> &scope)
                 : op(op),
                   new_value(std::move(v)),
                   binding(new_value.type().is_vector(), scope, op->name) {
             }
         };
         std::vector<Frame> frames;
-        Body result;
+        decltype(op->body) result;
 
         do {
             result = op->body;
             frames.emplace_back(op, mutate(op->value), vector_lets);
-        } while ((op = result.template as<T>()));
+        } while ((op = result.template as<LetOrLetStmt>()));
 
         result = mutate(result);
 
         for (const auto &frame : reverse_view(frames)) {
             Expr value = std::move(frame.new_value);
 
-            result = T::make(frame.op->name, value, result);
+            result = LetOrLetStmt::make(frame.op->name, value, result);
 
             // For vector lets, we may additionally need a let defining the even and odd lanes only
             if (value.type().is_vector()) {
                 if (value.type().lanes() % 2 == 0) {
-                    result = T::make(frame.op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
-                    result = T::make(frame.op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
                 }
                 if (value.type().lanes() % 3 == 0) {
-                    result = T::make(frame.op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
-                    result = T::make(frame.op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
-                    result = T::make(frame.op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
                 }
             }
         }
@@ -511,11 +511,11 @@ class Interleaver : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        return visit_lets<Let, Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_lets<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 
     Expr visit(const Ramp *op) override {
