@@ -290,6 +290,13 @@ void test_one_source() {
 }
 
 int main(int argc, char **argv) {
+
+#if defined(__i386__) || defined(_M_IX86)
+    printf("[SKIP] Skipping test because it requires bit-exact int to float casts,\n"
+           "and on i386 without SSE it is hard to guarantee that the test binary won't use x87 instructions.\n");
+    return 0;
+#endif
+
     test_one_source<int8_t>();
     test_one_source<uint8_t>();
     test_one_source<int16_t>();
