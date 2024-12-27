@@ -26,7 +26,6 @@ IndentWrappedFunctionNames: false
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
 PackConstructorInitializers: BinPack
-PenaltyReturnTypeOnItsOwnLine: 9999999 # default: 200
 PointerAlignment: Right
 SpaceAfterCStyleCast: false
 SpaceAfterTemplateKeyword: false
