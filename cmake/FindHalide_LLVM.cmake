@@ -149,4 +149,18 @@ if (Halide_LLVM_FOUND)
             endif ()
         endif ()
     endforeach ()
+
+    find_package(MLIR CONFIG HINTS "${LLVM_INSTALL_PREFIX}" "${LLVM_DIR}/../mlir" "${LLVM_DIR}/../lib/cmake/mlir")
+    if (MLIR_FOUND)
+        target_include_directories(Halide_LLVM::Core INTERFACE "$<BUILD_INTERFACE:${MLIR_INCLUDE_DIRS}>")
+        target_link_libraries(Halide_LLVM::Core INTERFACE
+            MLIRAnalysis
+            MLIRIR
+            MLIRArithDialect
+            MLIRFuncDialect
+            MLIRMemRefDialect
+            MLIRSCFDialect
+            MLIRVectorDialect
+        )
+    endif ()
 endif ()
