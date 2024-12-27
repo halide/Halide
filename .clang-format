@@ -10,13 +10,13 @@ AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Always
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakBeforeMultilineStrings: false
-AlwaysBreakTemplateDeclarations: Yes
 BinPackParameters: true
 BreakAfterReturnType: Automatic
 BreakBeforeBinaryOperators: None
 BreakBeforeBraces: Attach
 BreakBeforeTernaryOperators: false
 BreakConstructorInitializers: BeforeColon
+BreakTemplateDeclarations: Yes
 ColumnLimit: 0
 ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
