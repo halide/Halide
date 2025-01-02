@@ -548,7 +548,6 @@ enum SplitType: ubyte {
     SplitVar,
     RenameVar,
     FuseVars,
-    PurifyRVar,
 }
 
 table Split {

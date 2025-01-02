@@ -18,8 +18,10 @@ set(Halide_VERSION_OVERRIDE "${Halide_VERSION}"
     CACHE STRING "VERSION to set for custom Halide packaging")
 mark_as_advanced(Halide_VERSION_OVERRIDE)
 
-if (Halide_VERSION_OVERRIDE)
-    # Empty is considered a value distinct from not-defined
+if (NOT Halide_VERSION_OVERRIDE STREQUAL "")
+    # CMake treats an empty VERSION property differently from leaving it unset.
+    # We also can't check the boolean-ness of Halide_VERSION_OVERRIDE because
+    # VERSION 0 is valid. See: https://github.com/halide/Halide/issues/8522
     set_target_properties(Halide PROPERTIES VERSION "${Halide_VERSION_OVERRIDE}")
 endif ()
 
@@ -27,8 +29,7 @@ set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
     CACHE STRING "SOVERSION to set for custom Halide packaging")
 mark_as_advanced(Halide_SOVERSION_OVERRIDE)
 
-if (Halide_SOVERSION_OVERRIDE)
-    # Empty is considered a value distinct from not-defined
+if (NOT Halide_SOVERSION_OVERRIDE STREQUAL "")
     set_target_properties(Halide PROPERTIES SOVERSION "${Halide_SOVERSION_OVERRIDE}")
 endif ()
 

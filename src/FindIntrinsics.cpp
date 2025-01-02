@@ -101,11 +101,10 @@ protected:
     Scope<ConstantInterval> let_var_bounds;
 
     Expr lossless_cast(Type t, const Expr &e) {
-        return Halide::Internal::lossless_cast(t, e, &bounds_cache);
+        return Halide::Internal::lossless_cast(t, e, let_var_bounds, &bounds_cache);
     }
 
     ConstantInterval constant_integer_bounds(const Expr &e) {
-        // TODO: Use the scope - add let visitors
         return Halide::Internal::constant_integer_bounds(e, let_var_bounds, &bounds_cache);
     }
 
@@ -208,6 +207,51 @@ protected:
         }
 
         return Expr();
+    }
+
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
+        struct Frame {
+            const LetOrLetStmt *orig;
+            Expr new_value;
+            ScopedBinding<ConstantInterval> bind;
+            Frame(const LetOrLetStmt *orig,
+                  Expr &&new_value,
+                  ScopedBinding<ConstantInterval> &&bind)
+                : orig(orig), new_value(std::move(new_value)), bind(std::move(bind)) {
+            }
+        };
+        std::vector<Frame> frames;
+        decltype(op->body) body;
+        while (op) {
+            Expr v = mutate(op->value);
+            ConstantInterval b = constant_integer_bounds(v);
+            frames.emplace_back(op,
+                                std::move(v),
+                                ScopedBinding<ConstantInterval>(let_var_bounds, op->name, b));
+            body = op->body;
+            op = body.template as<LetOrLetStmt>();
+        }
+
+        body = mutate(body);
+
+        for (const auto &f : reverse_view(frames)) {
+            if (f.new_value.same_as(f.orig->value) && body.same_as(f.orig->body)) {
+                body = f.orig;
+            } else {
+                body = LetOrLetStmt::make(f.orig->name, f.new_value, body);
+            }
+        }
+
+        return body;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
     }
 
     Expr visit(const Add *op) override {
@@ -697,7 +741,12 @@ protected:
                 bool is_saturated = op->value.as<Max>() || op->value.as<Min>();
                 Expr a = lossless_cast(op->type, shift->args[0]);
                 Expr b = lossless_cast(op->type.with_code(shift->args[1].type().code()), shift->args[1]);
-                if (a.defined() && b.defined()) {
+                // Doing the shift in the narrower type might introduce UB where
+                // there was no UB before, so we need to make sure b is bounded.
+                auto b_bounds = constant_integer_bounds(b);
+                const int max_shift = op->type.bits() - 1;
+
+                if (a.defined() && b.defined() && b_bounds >= -max_shift && b_bounds <= max_shift) {
                     if (!is_saturated ||
                         (shift->is_intrinsic(Call::rounding_shift_right) && can_prove(b >= 0)) ||
                         (shift->is_intrinsic(Call::rounding_shift_left) && can_prove(b <= 0))) {
@@ -1118,8 +1167,12 @@ class SubstituteInWideningLets : public IRMutator {
             std::string name;
             Expr new_value;
             ScopedBinding<Expr> bind;
-            Frame(const std::string &name, const Expr &new_value, ScopedBinding<Expr> &&bind)
-                : name(name), new_value(new_value), bind(std::move(bind)) {
+            Frame(const std::string &name,
+                  const Expr &new_value,
+                  ScopedBinding<Expr> &&bind)
+                : name(name),
+                  new_value(new_value),
+                  bind(std::move(bind)) {
             }
         };
         std::vector<Frame> frames;

@@ -6,13 +6,13 @@ name: Build PyPI package
 
 on:
   push:
-    branches: [ main, build/pip-packaging ]
+    branches: [ main ]
   release:
-    types: [ created ]
+    types: [ published ]
 
 env:
   # TODO: detect this from repo somehow: https://github.com/halide/Halide/issues/8406
-  LLVM_VERSION: 19.1.4
+  LLVM_VERSION: 19.1.6
   FLATBUFFERS_VERSION: 23.5.26
   WABT_VERSION: 1.0.36
 
@@ -253,7 +253,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         if: github.event_name == 'push' && github.ref_name == 'main'
         with:
-          repository_url: https://test.pypi.org/legacy/
+          repository-url: https://test.pypi.org/legacy/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
         if: github.event_name == 'release' && github.event.action == 'published'

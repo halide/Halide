@@ -255,17 +255,17 @@ int main(int argc, char **argv) {
     check((u64(u32x) + 8) / 16, u64(rounding_shift_right(u32x, 4)));
     check(u16(min((u64(u32x) + 8) / 16, 65535)), u16_sat(rounding_shift_right(u32x, 4)));
 
-    // And with variable shifts.
-    check(i8(widening_add(i8x, (i8(1) << u8y) / 2) >> u8y), rounding_shift_right(i8x, u8y));
+    // And with variable shifts. These won't match unless Halide can statically
+    // prove it's not an out-of-range shift.
+    Expr u8yc = Min::make(u8y, make_const(u8y.type(), 7));
+    Expr i8yc = Max::make(Min::make(i8y, make_const(i8y.type(), 7)), make_const(i8y.type(), -7));
+    check(i8(widening_add(i8x, (i8(1) << u8yc) / 2) >> u8yc), rounding_shift_right(i8x, u8yc));
     check((i32x + (i32(1) << u32y) / 2) >> u32y, rounding_shift_right(i32x, u32y));
-
-    check(i8(widening_add(i8x, (i8(1) << max(i8y, 0)) / 2) >> i8y), rounding_shift_right(i8x, i8y));
+    check(i8(widening_add(i8x, (i8(1) << max(i8yc, 0)) / 2) >> i8yc), rounding_shift_right(i8x, i8yc));
     check((i32x + (i32(1) << max(i32y, 0)) / 2) >> i32y, rounding_shift_right(i32x, i32y));
-
-    check(i8(widening_add(i8x, (i8(1) >> min(i8y, 0)) / 2) << i8y), rounding_shift_left(i8x, i8y));
+    check(i8(widening_add(i8x, (i8(1) >> min(i8yc, 0)) / 2) << i8yc), rounding_shift_left(i8x, i8yc));
     check((i32x + (i32(1) >> min(i32y, 0)) / 2) << i32y, rounding_shift_left(i32x, i32y));
-
-    check(i8(widening_add(i8x, (i8(1) << -min(i8y, 0)) / 2) << i8y), rounding_shift_left(i8x, i8y));
+    check(i8(widening_add(i8x, (i8(1) << -min(i8yc, 0)) / 2) << i8yc), rounding_shift_left(i8x, i8yc));
     check((i32x + (i32(1) << -min(i32y, 0)) / 2) << i32y, rounding_shift_left(i32x, i32y));
     check((i32x + (i32(1) << max(-i32y, 0)) / 2) << i32y, rounding_shift_left(i32x, i32y));
 
@@ -372,7 +372,7 @@ int main(int argc, char **argv) {
         f(x) = cast<uint8_t>(x);
         f.compute_root();
 
-        g(x) = rounding_shift_right(x, 0) + rounding_shift_left(x, 8);
+        g(x) = rounding_shift_right(f(x), 0) + u8(rounding_shift_left(u16(f(x)), 11));
 
         g.compile_jit();
     }

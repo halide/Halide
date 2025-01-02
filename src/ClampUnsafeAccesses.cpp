@@ -42,11 +42,11 @@ protected:
     }
 
     Expr visit(const Let *let) override {
-        return visit_let<Let, Expr>(let);
+        return visit_let(let);
     }
 
     Stmt visit(const LetStmt *let) override {
-        return visit_let<LetStmt, Stmt>(let);
+        return visit_let(let);
     }
 
     Expr visit(const Variable *var) override {
@@ -80,15 +80,15 @@ protected:
     }
 
 private:
-    template<typename L, typename Body>
-    Body visit_let(const L *let) {
-        ScopedBinding<bool> binding(let_var_inside_indexing, let->name, false);
-        Body body = mutate(let->body);
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
+        ScopedBinding<bool> binding(let_var_inside_indexing, op->name, false);
+        auto body = mutate(op->body);
 
-        ScopedValue<bool> s(is_inside_indexing, is_inside_indexing || let_var_inside_indexing.get(let->name));
-        Expr value = mutate(let->value);
+        ScopedValue<bool> s(is_inside_indexing, is_inside_indexing || let_var_inside_indexing.get(op->name));
+        Expr value = mutate(op->value);
 
-        return L::make(let->name, std::move(value), std::move(body));
+        return LetOrLetStmt::make(op->name, std::move(value), std::move(body));
     }
 
     bool bounds_smaller_than_type(const Interval &bounds, Type type) {

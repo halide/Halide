@@ -38,13 +38,13 @@ class OptimizeShuffles : public IRMutator {
         return IRMutator::visit(op);
     }
 
-    template<typename NodeType, typename T>
-    NodeType visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // We only care about vector lets.
         if (op->value.type().is_vector()) {
             bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
         }
-        NodeType node = IRMutator::visit(op);
+        auto node = IRMutator::visit(op);
         if (op->value.type().is_vector()) {
             bounds.pop(op->name);
         }
@@ -53,12 +53,12 @@ class OptimizeShuffles : public IRMutator {
 
     Expr visit(const Let *op) override {
         lets.emplace_back(op->name, op->value);
-        Expr expr = visit_let<Expr>(op);
+        Expr expr = visit_let(op);
         lets.pop_back();
         return expr;
     }
     Stmt visit(const LetStmt *op) override {
-        return visit_let<Stmt>(op);
+        return visit_let(op);
     }
 
     std::set<std::string> allocations_to_pad;

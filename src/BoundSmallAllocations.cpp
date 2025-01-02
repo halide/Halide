@@ -17,40 +17,40 @@ class BoundSmallAllocations : public IRMutator {
     // Track constant bounds
     Scope<Interval> scope;
 
-    template<typename T, typename Body>
-    Body visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
-            const T *op;
+            const LetOrLetStmt *op;
             ScopedBinding<Interval> binding;
-            Frame(const T *op, Scope<Interval> &scope)
+            Frame(const LetOrLetStmt *op, Scope<Interval> &scope)
                 : op(op),
                   binding(scope, op->name, find_constant_bounds(op->value, scope)) {
             }
         };
         std::vector<Frame> frames;
-        Body result;
+        decltype(op->body) result;
 
         do {
             result = op->body;
             frames.emplace_back(op, scope);
-        } while ((op = result.template as<T>()));
+        } while ((op = result.template as<LetOrLetStmt>()));
 
         result = mutate(result);
 
         for (const auto &frame : reverse_view(frames)) {
-            result = T::make(frame.op->name, frame.op->value, result);
+            result = LetOrLetStmt::make(frame.op->name, frame.op->value, result);
         }
 
         return result;
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Let, Expr>(op);
+        return visit_let(op);
     }
 
     bool in_thread_loop = false;

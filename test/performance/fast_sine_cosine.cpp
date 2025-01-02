@@ -10,6 +10,13 @@ using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
+
+    if (target.arch == Target::X86 &&
+        !target.has_feature(Target::SSE41)) {
+        printf("[SKIP] These intrinsics are known to be slow on x86 without sse 4.1.\n");
+        return 0;
+    }
+
     if (target.arch == Target::WebAssembly) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;

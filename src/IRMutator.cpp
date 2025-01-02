@@ -381,21 +381,33 @@ Stmt IRMutator::visit(const HoistedStorage *op) {
 }
 
 Stmt IRGraphMutator::mutate(const Stmt &s) {
-    auto p = stmt_replacements.emplace(s, Stmt());
-    if (p.second) {
-        // N.B: Inserting into a map (as the recursive mutate call
-        // does), does not invalidate existing iterators.
-        p.first->second = IRMutator::mutate(s);
+    if (s.is_sole_reference()) {
+        // There's no point in caching mutations of this Stmt. We can never
+        // possibly see it again, and it can't be in the cache already if this
+        // is the sole reference. Doing this here and in the Expr mutate method
+        // below speeds up lowering by about 5%
+        return IRMutator::mutate(s);
+    } else {
+        auto p = stmt_replacements.emplace(s, Stmt());
+        if (p.second) {
+            // N.B: Inserting into a map (as the recursive mutate call
+            // does), does not invalidate existing iterators.
+            p.first->second = IRMutator::mutate(s);
+        }
+        return p.first->second;
     }
-    return p.first->second;
 }
 
 Expr IRGraphMutator::mutate(const Expr &e) {
-    auto p = expr_replacements.emplace(e, Expr());
-    if (p.second) {
-        p.first->second = IRMutator::mutate(e);
+    if (e.is_sole_reference()) {
+        return IRMutator::mutate(e);
+    } else {
+        auto p = expr_replacements.emplace(e, Expr());
+        if (p.second) {
+            p.first->second = IRMutator::mutate(e);
+        }
+        return p.first->second;
     }
-    return p.first->second;
 }
 
 std::pair<std::vector<Expr>, bool> IRMutator::mutate_with_changes(const std::vector<Expr> &old_exprs) {

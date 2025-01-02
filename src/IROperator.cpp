@@ -427,17 +427,20 @@ Expr const_false(int w) {
     return make_zero(UInt(1, w));
 }
 
-Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare> *cache) {
+Expr lossless_cast(Type t,
+                   Expr e,
+                   const Scope<ConstantInterval> &scope,
+                   std::map<Expr, ConstantInterval, ExprCompare> *cache) {
     if (!e.defined() || t == e.type()) {
         return e;
     } else if (t.can_represent(e.type())) {
         return cast(t, std::move(e));
     } else if (const Cast *c = e.as<Cast>()) {
         if (c->type.can_represent(c->value.type())) {
-            return lossless_cast(t, c->value, cache);
+            return lossless_cast(t, c->value, scope, cache);
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
-        Expr v = lossless_cast(t.element_of(), b->value, cache);
+        Expr v = lossless_cast(t.element_of(), b->value, scope, cache);
         if (v.defined()) {
             return Broadcast::make(v, b->lanes);
         }
@@ -456,7 +459,7 @@ Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare>
     } else if (const Shuffle *shuf = e.as<Shuffle>()) {
         std::vector<Expr> vecs;
         for (const auto &vec : shuf->vectors) {
-            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec, cache));
+            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec, scope, cache));
             if (!vecs.back().defined()) {
                 return Expr();
             }
@@ -465,73 +468,73 @@ Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare>
     } else if (t.is_int_or_uint()) {
         // Check the bounds. If they're small enough, we can throw narrowing
         // casts around e, or subterms.
-        ConstantInterval ci = constant_integer_bounds(e, Scope<ConstantInterval>::empty_scope(), cache);
+        ConstantInterval ci = constant_integer_bounds(e, scope, cache);
 
         if (t.can_represent(ci)) {
             // There are certain IR nodes where if the result is expressible
             // using some type, and the args are expressible using that type,
             // then the operation can just be done in that type.
             if (const Add *op = e.as<Add>()) {
-                Expr a = lossless_cast(t, op->a, cache);
-                Expr b = lossless_cast(t, op->b, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache);
+                Expr b = lossless_cast(t, op->b, scope, cache);
                 if (a.defined() && b.defined()) {
                     return Add::make(a, b);
                 }
             } else if (const Sub *op = e.as<Sub>()) {
-                Expr a = lossless_cast(t, op->a, cache);
-                Expr b = lossless_cast(t, op->b, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache);
+                Expr b = lossless_cast(t, op->b, scope, cache);
                 if (a.defined() && b.defined()) {
                     return Sub::make(a, b);
                 }
             } else if (const Mul *op = e.as<Mul>()) {
-                Expr a = lossless_cast(t, op->a, cache);
-                Expr b = lossless_cast(t, op->b, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache);
+                Expr b = lossless_cast(t, op->b, scope, cache);
                 if (a.defined() && b.defined()) {
                     return Mul::make(a, b);
                 }
             } else if (const Min *op = e.as<Min>()) {
-                Expr a = lossless_cast(t, op->a, cache);
-                Expr b = lossless_cast(t, op->b, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache);
+                Expr b = lossless_cast(t, op->b, scope, cache);
                 if (a.defined() && b.defined()) {
                     debug(0) << a << " " << b << "\n";
                     return Min::make(a, b);
                 }
             } else if (const Max *op = e.as<Max>()) {
-                Expr a = lossless_cast(t, op->a, cache);
-                Expr b = lossless_cast(t, op->b, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache);
+                Expr b = lossless_cast(t, op->b, scope, cache);
                 if (a.defined() && b.defined()) {
                     return Max::make(a, b);
                 }
             } else if (const Mod *op = e.as<Mod>()) {
-                Expr a = lossless_cast(t, op->a, cache);
-                Expr b = lossless_cast(t, op->b, cache);
+                Expr a = lossless_cast(t, op->a, scope, cache);
+                Expr b = lossless_cast(t, op->b, scope, cache);
                 if (a.defined() && b.defined()) {
                     return Mod::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_add, Call::widen_right_add})) {
-                Expr a = lossless_cast(t, op->args[0], cache);
-                Expr b = lossless_cast(t, op->args[1], cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache);
+                Expr b = lossless_cast(t, op->args[1], scope, cache);
                 if (a.defined() && b.defined()) {
                     return Add::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_sub, Call::widen_right_sub})) {
-                Expr a = lossless_cast(t, op->args[0], cache);
-                Expr b = lossless_cast(t, op->args[1], cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache);
+                Expr b = lossless_cast(t, op->args[1], scope, cache);
                 if (a.defined() && b.defined()) {
                     return Sub::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::widening_mul, Call::widen_right_mul})) {
-                Expr a = lossless_cast(t, op->args[0], cache);
-                Expr b = lossless_cast(t, op->args[1], cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache);
+                Expr b = lossless_cast(t, op->args[1], scope, cache);
                 if (a.defined() && b.defined()) {
                     return Mul::make(a, b);
                 }
             } else if (const Call *op = Call::as_intrinsic(e, {Call::shift_left, Call::widening_shift_left,
                                                                Call::shift_right, Call::widening_shift_right})) {
-                Expr a = lossless_cast(t, op->args[0], cache);
-                Expr b = lossless_cast(t, op->args[1], cache);
+                Expr a = lossless_cast(t, op->args[0], scope, cache);
+                Expr b = lossless_cast(t, op->args[1], scope, cache);
                 if (a.defined() && b.defined()) {
-                    ConstantInterval cb = constant_integer_bounds(b, Scope<ConstantInterval>::empty_scope(), cache);
+                    ConstantInterval cb = constant_integer_bounds(b, scope, cache);
                     if (cb > -t.bits() && cb < t.bits()) {
                         if (op->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
                             return a << b;
@@ -544,7 +547,7 @@ Expr lossless_cast(Type t, Expr e, std::map<Expr, ConstantInterval, ExprCompare>
                 if (op->op == VectorReduce::Add ||
                     op->op == VectorReduce::Min ||
                     op->op == VectorReduce::Max) {
-                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, cache);
+                    Expr v = lossless_cast(t.with_lanes(op->value.type().lanes()), op->value, scope, cache);
                     if (v.defined()) {
                         return VectorReduce::make(op->op, v, op->type.lanes());
                     }
@@ -1048,49 +1051,41 @@ Expr strided_ramp_base(const Expr &e, int stride) {
 
 namespace {
 
-struct RemoveLikelies : public IRMutator {
+// Replace a specified list of intrinsics with their first arg.
+class RemoveIntrinsics : public IRMutator {
     using IRMutator::visit;
+    const std::initializer_list<Call::IntrinsicOp> &ops;
+
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::likely) ||
-            op->is_intrinsic(Call::likely_if_innermost)) {
+        if (op->is_intrinsic(ops)) {
             return mutate(op->args[0]);
         } else {
             return IRMutator::visit(op);
         }
     }
-};
 
-// TODO: There could just be one IRMutator that can remove
-// calls from a list. If we need more of these, it might be worth
-// doing that refactor.
-struct RemovePromises : public IRMutator {
-    using IRMutator::visit;
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::promise_clamped) ||
-            op->is_intrinsic(Call::unsafe_promise_clamped)) {
-            return mutate(op->args[0]);
-        } else {
-            return IRMutator::visit(op);
-        }
+public:
+    RemoveIntrinsics(const std::initializer_list<Call::IntrinsicOp> &ops)
+        : ops(ops) {
     }
 };
 
 }  // namespace
 
 Expr remove_likelies(const Expr &e) {
-    return RemoveLikelies().mutate(e);
+    return RemoveIntrinsics({Call::likely, Call::likely_if_innermost}).mutate(e);
 }
 
 Stmt remove_likelies(const Stmt &s) {
-    return RemoveLikelies().mutate(s);
+    return RemoveIntrinsics({Call::likely, Call::likely_if_innermost}).mutate(s);
 }
 
 Expr remove_promises(const Expr &e) {
-    return RemovePromises().mutate(e);
+    return RemoveIntrinsics({Call::promise_clamped, Call::unsafe_promise_clamped}).mutate(e);
 }
 
 Stmt remove_promises(const Stmt &s) {
-    return RemovePromises().mutate(s);
+    return RemoveIntrinsics({Call::promise_clamped, Call::unsafe_promise_clamped}).mutate(s);
 }
 
 Expr unwrap_tags(const Expr &e) {
