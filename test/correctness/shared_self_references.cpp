@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
             f(0) = e;
             f(1) = e;
         }  // Destroy e
-    }      // Destroy f
+    }  // Destroy f
 
     // f should have been cleaned up. valgrind will complain if it
     // hasn't been.

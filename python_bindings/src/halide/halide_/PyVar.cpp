@@ -25,7 +25,7 @@ void define_var(py::module &m) {
             .def("is_implicit", (bool(Var::*)() const) & Var::is_implicit)
             .def("implicit_index", (int(Var::*)() const) & Var::implicit_index)
             .def("is_placeholder", (bool(Var::*)() const) & Var::is_placeholder)
-            .def_static("implicit", (Var(*)(int)) & Var::implicit)
+            .def_static("implicit", (Var(*)(int))&Var::implicit)
             .def_static("outermost", &Var::outermost)
             .def("__repr__", &var_repr)
             .def("__str__", &Var::name);

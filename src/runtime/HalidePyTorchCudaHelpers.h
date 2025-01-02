@@ -17,7 +17,7 @@ namespace PyTorch {
 
 typedef struct UserContext {
     UserContext(int id, CUcontext *ctx, cudaStream_t *stream)
-        : device_id(id), cuda_context(ctx), stream(stream){};
+        : device_id(id), cuda_context(ctx), stream(stream) {};
 
     int device_id;
     CUcontext *cuda_context;

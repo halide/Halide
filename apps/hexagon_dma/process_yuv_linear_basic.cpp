@@ -55,9 +55,9 @@ typedef struct {
 #define _SCHEDULE_STR(s) #s
 #define _SCHEDULE_NAME(data, direction, schedule) pipeline_##data##_##direction##_##schedule
 #define _SCHEDULE_PAIR(data, direction, schedule) \
-    { _SCHEDULE_STR(scheduled - pipeline(data, direction, schedule)), _SCHEDULE_NAME(data, direction, schedule) }
+    {_SCHEDULE_STR(scheduled - pipeline(data, direction, schedule)), _SCHEDULE_NAME(data, direction, schedule)}
 #define _SCHEDULE_DUMMY_PAIR \
-    { NULL, NULL }
+    {NULL, NULL}
 #define SCHEDULE_FUNCTION_RW(type, schedule) _SCHEDULE_PAIR(type##_linear, rw, schedule)
 
 #ifdef SCHEDULE_ALL
