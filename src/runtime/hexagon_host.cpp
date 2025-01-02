@@ -105,7 +105,7 @@ ALWAYS_INLINE T *uint64_to_ptr(const uint64_t &u) {
 
 template<typename T>
 ALWAYS_INLINE uint64_t ptr_to_uint64(T *ptr) {
-    return (uint64_t) reinterpret_cast<uintptr_t>(ptr);
+    return (uint64_t)reinterpret_cast<uintptr_t>(ptr);
 }
 
 template<typename T>

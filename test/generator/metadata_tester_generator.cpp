@@ -39,10 +39,10 @@ public:
     Input<int32_t[2]> array2_i32{"array2_i32", 32, -32, 127};
     Input<void *[]> array_h{"array_h", nullptr};  // must be overridden to size=2
 
-    Input<Buffer<float, 3>[2]> buffer_array_input1 { "buffer_array_input1" };
-    Input<Buffer<float>[2]> buffer_array_input2 { "buffer_array_input2" };    // buffer_array_input2.dim must be set
-    Input<Buffer<void, 3>[2]> buffer_array_input3 { "buffer_array_input3" };  // buffer_array_input2.type must be set
-    Input<Buffer<>[2]> buffer_array_input4 { "buffer_array_input4" };         // dim and type must be set
+    Input<Buffer<float, 3>[2]> buffer_array_input1{"buffer_array_input1"};
+    Input<Buffer<float>[2]> buffer_array_input2{"buffer_array_input2"};    // buffer_array_input2.dim must be set
+    Input<Buffer<void, 3>[2]> buffer_array_input3{"buffer_array_input3"};  // buffer_array_input2.type must be set
+    Input<Buffer<>[2]> buffer_array_input4{"buffer_array_input4"};         // dim and type must be set
     // .size must be specified for all of these
     Input<Buffer<float, 3>[]> buffer_array_input5{"buffer_array_input5"};
     Input<Buffer<float>[]> buffer_array_input6{"buffer_array_input6"};    // buffer_array_input2.dim must be set
@@ -65,9 +65,9 @@ public:
     Output<Func[2]> array_outputs2{"array_outputs2", {Float(32), Float(32)}, 3};
     Output<float[2]> array_outputs3{"array_outputs3"};
 
-    Output<Buffer<float, 3>[2]> array_outputs4 { "array_outputs4" };
-    Output<Buffer<float>[2]> array_outputs5 { "array_outputs5" };  // dimensions will be inferred by usage
-    Output<Buffer<>[2]> array_outputs6 { "array_outputs6" };       // dimensions and type will be inferred by usage
+    Output<Buffer<float, 3>[2]> array_outputs4{"array_outputs4"};
+    Output<Buffer<float>[2]> array_outputs5{"array_outputs5"};  // dimensions will be inferred by usage
+    Output<Buffer<>[2]> array_outputs6{"array_outputs6"};       // dimensions and type will be inferred by usage
 
     // .size must be specified for all of these
     Output<Buffer<float, 3>[]> array_outputs7{"array_outputs7"};

@@ -32,7 +32,7 @@ public:
 
     Input<Buffer<uint8_t, 3>> typed_buffer_input{"typed_buffer_input"};
     Input<Buffer<>> untyped_buffer_input{"untyped_buffer_input"};
-    Input<Buffer<uint8_t, 3>[2]> array_buffer_input { "array_buffer_input" };
+    Input<Buffer<uint8_t, 3>[2]> array_buffer_input{"array_buffer_input"};
     Input<Func> simple_input{"simple_input", 3};  // require a 3-dimensional Func but leave Type unspecified
     Input<Func[]> array_input{"array_input", 3};  // require a 3-dimensional Func but leave Type and ArraySize unspecified
     // Note that Input<Func> does not (yet) support Tuples
@@ -46,7 +46,7 @@ public:
     Output<Buffer<>> untyped_buffer_output{"untyped_buffer_output"};
     Output<Buffer<void, 3>> tupled_output{"tupled_output", {Float(32), Int(32)}};
     Output<Buffer<uint8_t, 3>> static_compiled_buffer_output{"static_compiled_buffer_output"};
-    Output<Buffer<uint8_t, 3>[2]> array_buffer_output { "array_buffer_output" };
+    Output<Buffer<uint8_t, 3>[2]> array_buffer_output{"array_buffer_output"};
     Output<Buffer<Halide::float16_t, 3>> float16_output{"float16_output"};
     Output<Buffer<Halide::bfloat16_t, 3>> bfloat16_output{"bfloat16_output"};
 
