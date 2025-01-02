@@ -1991,6 +1991,7 @@ public:
     /** Make a buffer with the same shape and memory nesting order as
      * another buffer. It may have a different type. */
     template<typename T2, int D2, int S2>
+    // NOLINTNEXTLINE(performance-unnecessary-value-param)
     static Buffer<T, Dims, InClassDimStorage> make_with_shape_of(Buffer<T2, D2, S2> src,
                                                                  void *(*allocate_fn)(size_t) = nullptr,
                                                                  void (*deallocate_fn)(void *) = nullptr) {
