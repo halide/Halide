@@ -42,7 +42,7 @@ namespace {
 // If data too large, assert.
 // Return the offset at which 'data' was written.
 template<typename T>
-size_t emit_padded(std::ostream &out, T data, size_t size) {
+size_t emit_padded(std::ostream &out, const T &data, size_t size) {
     size_t pos = out.tellp();
     out << data;
     size_t written = (size_t)out.tellp() - pos;

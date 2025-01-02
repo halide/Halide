@@ -535,7 +535,7 @@ void parallelize_vars_and_rvars_cpu(
 template<typename FuncOrStage>
 void parallelize_vars_and_rvars(
     const GradientAutoschedulerParams &params,
-    FuncOrStage func_or_stage,
+    const FuncOrStage &func_or_stage,
     int natural_vector_size,
     bool is_pure_def,
     const std::vector<Var> &vars,

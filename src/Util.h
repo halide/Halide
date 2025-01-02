@@ -388,7 +388,7 @@ struct ScopedValue {
         : var(var), old_value(var) {
     }
     /** Preserve the old value, then set the var to a new value. */
-    ScopedValue(T &var, T new_value)
+    ScopedValue(T &var, const T &new_value)
         : var(var), old_value(var) {
         var = new_value;
     }

@@ -505,7 +505,7 @@ class FuncRef {
      * already have a pure definition, init_val will be used as RHS in
      * the initial function definition. */
     template<typename BinaryOp>
-    Stage func_ref_update(Expr e, int init_val);
+    Stage func_ref_update(const Expr &e, int init_val);
 
 public:
     FuncRef(const Internal::Function &, const std::vector<Expr> &,
@@ -528,7 +528,7 @@ public:
      * pure definition, this sets it to zero.
      */
     // @{
-    Stage operator+=(Expr);
+    Stage operator+=(const Expr &);
     Stage operator+=(const Tuple &);
     Stage operator+=(const FuncRef &);
     // @}
@@ -539,7 +539,7 @@ public:
      * not already have a pure definition, this sets it to zero.
      */
     // @{
-    Stage operator-=(Expr);
+    Stage operator-=(const Expr &);
     Stage operator-=(const Tuple &);
     Stage operator-=(const FuncRef &);
     // @}
@@ -550,7 +550,7 @@ public:
      * definition, this sets it to 1.
      */
     // @{
-    Stage operator*=(Expr);
+    Stage operator*=(const Expr &);
     Stage operator*=(const Tuple &);
     Stage operator*=(const FuncRef &);
     // @}
@@ -561,7 +561,7 @@ public:
      * function does not already have a pure definition, this sets it to 1.
      */
     // @{
-    Stage operator/=(Expr);
+    Stage operator/=(const Expr &);
     Stage operator/=(const Tuple &);
     Stage operator/=(const FuncRef &);
     // @}
