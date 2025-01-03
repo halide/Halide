@@ -412,11 +412,7 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
 }
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
-#if LLVM_VERSION >= 180
     emit_file(module, out, llvm::CodeGenFileType::ObjectFile);
-#else
-    emit_file(module, out, llvm::CGFT_ObjectFile);
-#endif
 }
 
 void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
@@ -592,15 +588,10 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
         return;
     }
 
-#if LLVM_VERSION >= 180
-    const llvm::SymtabWritingMode write_symtab = llvm::SymtabWritingMode::NormalSymtab;
-#else
-    const bool write_symtab = true;
-#endif
     const auto kind = Internal::get_triple_for_target(target).isOSDarwin() ? llvm::object::Archive::K_BSD : llvm::object::Archive::K_GNU;
     const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
-                                     write_symtab, kind,
+                                     llvm::SymtabWritingMode::NormalSymtab, kind,
                                      deterministic, thin, nullptr);
     internal_assert(!result)
         << "Failed to write archive: " << dst_file

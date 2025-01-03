@@ -1144,7 +1144,6 @@ void CodeGen_LLVM::optimize_module() {
     using OptimizationLevel = llvm::OptimizationLevel;
     OptimizationLevel level = OptimizationLevel::O3;
 
-#if LLVM_VERSION >= 180
     if (tm->isPositionIndependent()) {
         // Add a pass that converts lookup tables to relative lookup tables to make them PIC-friendly.
         // See https://bugs.llvm.org/show_bug.cgi?id=45244
@@ -1158,7 +1157,6 @@ void CodeGen_LLVM::optimize_module() {
                 mpm.addPass(RelLookupTableConverterPass());
             });
     }
-#endif
 
     if (get_target().has_feature(Target::SanitizerCoverage)) {
         pb.registerOptimizerLastEPCallback(
@@ -1237,7 +1235,7 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (tm) {
-#if LLVM_VERSION >= 180 && LLVM_VERSION < 190
+#if LLVM_VERSION < 190
         tm->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
 #else
         tm->registerPassBuilderCallbacks(pb);
