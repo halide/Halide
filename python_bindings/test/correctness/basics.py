@@ -450,6 +450,17 @@ def test_implicit_convert_int64():
     assert (hl.i32(0) + (0x7fffffff+1)).type() == hl.Int(64)
 
 
+def test_explicit_expr_ctors():
+    assert (hl.Expr(np.bool_(0))).type() == hl.Bool(), (hl.Expr(np.bool_(0))).type()
+    assert (hl.Expr(np.int32(0))).type() == hl.Int(32), (hl.Expr(np.int32(0))).type()
+    assert (hl.Expr(np.int64(0x7fffffff+1))).type() == hl.Int(64), (hl.Expr(np.int64(0x7fffffff+1))).type()
+    assert (hl.Expr(np.float32(0))).type() == hl.Float(32), (hl.Expr(np.float32(0))).type()
+    # Note that this is deliberate: we have aggressively downscaled scalar
+    # float64 values from Python into float32, and we aren't going to change
+    # that now.
+    assert (hl.Expr(np.float64(0))).type() == hl.Float(32), (hl.Expr(np.float64(0))).type()
+
+
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
@@ -469,3 +480,4 @@ if __name__ == "__main__":
     test_bool_conversion()
     test_requirements()
     test_implicit_convert_int64()
+    test_explicit_expr_ctors()
