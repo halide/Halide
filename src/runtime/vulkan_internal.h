@@ -181,15 +181,15 @@ int vk_create_descriptor_set(void *user_context,
                              VkDescriptorSet *descriptor_set);
 
 int vk_get_descriptor_buffer_info(void *user_context,
-                                 VulkanMemoryAllocator *allocator,
-                                 VkDescriptorSet descriptor_set,
-                                 VkBuffer *scalar_args_buffer,
-                                 size_t uniform_buffer_count,
-                                 size_t storage_buffer_count,
-                                 size_t arg_sizes[],
-                                 void *args[],
-                                 int8_t arg_is_buffer[],
-                                 BlockStorage *descriptor_buffer_info_result);
+                                  VulkanMemoryAllocator *allocator,
+                                  VkDescriptorSet descriptor_set,
+                                  VkBuffer *scalar_args_buffer,
+                                  size_t uniform_buffer_count,
+                                  size_t storage_buffer_count,
+                                  size_t arg_sizes[],
+                                  void *args[],
+                                  int8_t arg_is_buffer[],
+                                  BlockStorage *descriptor_buffer_info_result);
 
 int vk_get_write_descriptor_set_info(void *user_context,
                                      VulkanMemoryAllocator *allocator,
@@ -213,7 +213,7 @@ int vk_bind_descriptor_set(void *user_context,
                            VkPipelineLayout pipeline_layout,
                            VkDescriptorSet descriptor_set,
                            uint32_t descriptor_set_index);
-                           
+
 int vk_push_descriptor_set(void *user_context,
                            VulkanMemoryAllocator *allocator,
                            VkCommandBuffer command_buffer,
@@ -225,7 +225,7 @@ int vk_push_descriptor_set(void *user_context,
                            size_t storage_buffer_count,
                            size_t arg_sizes[],
                            void *args[],
-                           int8_t arg_is_buffer[]);                             
+                           int8_t arg_is_buffer[]);
 
 // -- Pipeline Layout
 int vk_create_pipeline_layout(void *user_context,

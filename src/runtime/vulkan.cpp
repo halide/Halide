@@ -1299,7 +1299,7 @@ WEAK int halide_vulkan_run(void *user_context,
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to bind compute pipeline to command buffer for dispatch call!\n";
         return error_code;
-    }   
+    }
 
     if (vkCmdPushDescriptorSetKHR != nullptr) {
         error_code = vk_push_descriptor_set(user_context, ctx.allocator, cmds.command_buffer, entry_point_binding->compute_pipeline, shader_module->pipeline_layout, entry_point_binding->descriptor_set, args_buffer, entry_point_binding->uniform_buffer_count, entry_point_binding->storage_buffer_count, arg_sizes, args, arg_is_buffer);
@@ -1312,7 +1312,7 @@ WEAK int halide_vulkan_run(void *user_context,
         if (error_code != halide_error_code_success) {
             error(user_context) << "Vulkan: Failed to bind descriptor set to command buffer for dispatch call!\n";
             return error_code;
-        }   
+        }
     }
 
     error_code = vk_fill_command_buffer_with_dispatch_call(user_context,

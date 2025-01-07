@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (t.has_feature(Target::Vulkan)){
+    if (t.has_feature(Target::Vulkan)) {
         if (!t.has_feature(Target::VulkanInt8)) {
             printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
             return 0;

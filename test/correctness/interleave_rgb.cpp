@@ -106,12 +106,12 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     for (int x_stride : {3, 4}) {
         if (target.supports_type(halide_type_of<uint8_t>()) && !test_interleave<uint8_t>(x_stride)) return 1;
-        if (target.supports_type(halide_type_of<uint16_t>())  && !test_interleave<uint16_t>(x_stride)) return 1;
-        if (target.supports_type(halide_type_of<uint32_t>())  && !test_interleave<uint32_t>(x_stride)) return 1;
+        if (target.supports_type(halide_type_of<uint16_t>()) && !test_interleave<uint16_t>(x_stride)) return 1;
+        if (target.supports_type(halide_type_of<uint32_t>()) && !test_interleave<uint32_t>(x_stride)) return 1;
 
-        if (target.supports_type(halide_type_of<uint8_t>())  && !test_deinterleave<uint8_t>(x_stride)) return 1;
-        if (target.supports_type(halide_type_of<uint16_t>())  && !test_deinterleave<uint16_t>(x_stride)) return 1;
-        if (target.supports_type(halide_type_of<uint32_t>())  && !test_deinterleave<uint32_t>(x_stride)) return 1;
+        if (target.supports_type(halide_type_of<uint8_t>()) && !test_deinterleave<uint8_t>(x_stride)) return 1;
+        if (target.supports_type(halide_type_of<uint16_t>()) && !test_deinterleave<uint16_t>(x_stride)) return 1;
+        if (target.supports_type(halide_type_of<uint32_t>()) && !test_deinterleave<uint32_t>(x_stride)) return 1;
     }
     printf("Success!\n");
     return 0;

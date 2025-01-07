@@ -540,7 +540,7 @@ void add_test_div_mod(int vector_width, ScheduleVariant scheduling, Target targe
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
-    if (target.has_feature(Target::Vulkan)){
+    if (target.has_feature(Target::Vulkan)) {
         if (!target.has_feature(Target::VulkanInt8)) {
             printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
             return 0;

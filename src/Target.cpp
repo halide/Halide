@@ -1304,7 +1304,7 @@ int Target::get_arm_v8_lower_bound() const {
 }
 
 bool Target::supports_type(const Type &t) const {
-    if(has_feature(Vulkan)) {
+    if (has_feature(Vulkan)) {
         if (t.is_float() && t.bits() == 64) {
             return has_feature(Target::VulkanFloat64);
         } else if (t.is_float() && t.bits() == 16) {

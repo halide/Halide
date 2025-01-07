@@ -6,12 +6,11 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.has_feature(Target::Vulkan)) {
-        if(!target.has_feature(Target::VulkanInt16)) {
+        if (!target.has_feature(Target::VulkanInt16)) {
             printf("[SKIP] Skipping test for Vulkan ... missing Int16 support!\n");
             return 0;
         }
     }
-
 
     // int W = 64*3, H = 64*3;
     const int W = 128, H = 48;

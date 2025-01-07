@@ -443,12 +443,12 @@ BlockRegion *RegionAllocator::coalesce_block_regions(void *user_context, BlockRe
     return block_region;
 }
 
-bool RegionAllocator::can_split(void* user_context, const BlockRegion *block_region, const MemoryRequest &split_request) const {
-        
+bool RegionAllocator::can_split(void *user_context, const BlockRegion *block_region, const MemoryRequest &split_request) const {
+
     // See if we can actually split the block region and create empty space big enough
     if (block_region && (block_region->memory.size > split_request.size) && (block_region->usage_count == 0)) {
 
-        // We can only split if there's still room left after conforming the allocation request since the 
+        // We can only split if there's still room left after conforming the allocation request since the
         // conform method may actually grow the requested size to accomodate alignment constraints
         MemoryRequest test_request = split_request;
         test_request.size = block_region->memory.size - test_request.size;
@@ -461,7 +461,7 @@ bool RegionAllocator::can_split(void* user_context, const BlockRegion *block_reg
             return false;
         }
 
-        if((block_region->memory.size - test_request.size) > 0){
+        if ((block_region->memory.size - test_request.size) > 0) {
             return true;
         }
     }
@@ -509,9 +509,9 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
 
 #ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "RegionAllocator: Split block region into ...\n\t"
-                        << "existing region (ptr=" << (void*)block_region << " prev_ptr=" << block_region->prev_ptr << " next_ptr=" << block_region->next_ptr << " offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes)\n\t"
-                        << "empty region    (ptr=" << (void*)empty_region << " prev_ptr=" << empty_region->prev_ptr << " next_ptr=" << empty_region->next_ptr << " offset=" << (int32_t)empty_region->memory.offset << " size=" << (int32_t)(empty_region->memory.size) << " bytes)\n";
-#endif 
+                        << "existing region (ptr=" << (void *)block_region << " prev_ptr=" << block_region->prev_ptr << " next_ptr=" << block_region->next_ptr << " offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes)\n\t"
+                        << "empty region    (ptr=" << (void *)empty_region << " prev_ptr=" << empty_region->prev_ptr << " next_ptr=" << empty_region->next_ptr << " offset=" << (int32_t)empty_region->memory.offset << " size=" << (int32_t)(empty_region->memory.size) << " bytes)\n";
+#endif
     return empty_region;
 }
 

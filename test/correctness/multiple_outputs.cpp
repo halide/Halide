@@ -94,8 +94,7 @@ int main(int argc, char **argv) {
     }
 
     // Now multiple output Funcs via inferred Realization
-    if(target.supports_type(halide_type_of<uint8_t>()) && target.supports_type(halide_type_of<int16_t>()))
-    {
+    if (target.supports_type(halide_type_of<uint8_t>()) && target.supports_type(halide_type_of<int16_t>())) {
         Func f, g;
         Var x, xi;
         f(x) = cast<float>(100 * x);
