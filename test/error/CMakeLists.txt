@@ -106,6 +106,10 @@ tests(GROUPS error
       split_same_var_names.cpp
       store_at_without_compute_at.cpp
       thread_id_outside_block_id.cpp
+      tiled_matmul_wrong_layout.cpp
+      tiled_matmul_wrong_modulo.cpp
+      tiled_matmul_wrong_pattern.cpp
+      tiled_matmul_wrong_tiling.cpp
       too_many_args.cpp
       treat_rvar_as_var.cpp
       tuple_arg_select_undef.cpp
