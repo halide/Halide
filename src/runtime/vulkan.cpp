@@ -1206,9 +1206,8 @@ WEAK int halide_vulkan_run(void *user_context,
 
     VulkanShaderBinding *entry_point_binding = (shader_module->shader_bindings + entry_point_index);
 
-    // 2c. Create a descriptor set
-    if (entry_point_binding->descriptor_set == VK_NULL_HANDLE) {
-
+    // 2c. If Push Descriptor Set isn't supported, then allocate a descriptor set
+    if ((vkCmdPushDescriptorSetKHR == nullptr) && (entry_point_binding->descriptor_set == VK_NULL_HANDLE)) {
         // Construct a descriptor pool
         //
         // NOTE: while this could be re-used across multiple pipelines, we only know the storage requirements of this kernel's
@@ -1258,11 +1257,13 @@ WEAK int halide_vulkan_run(void *user_context,
         }
     }
 
-    // 2f. Update buffer bindings for descriptor set
-    error_code = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, entry_point_binding->uniform_buffer_count, entry_point_binding->storage_buffer_count, arg_sizes, args, arg_is_buffer, entry_point_binding->descriptor_set);
-    if (error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to update descriptor set!\n";
-        return error_code;
+    // 2f. If Push Descriptor Set isn't supported, then update the buffer bindings for the allocated descriptor set
+    if (vkCmdPushDescriptorSetKHR == nullptr) {
+        error_code = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, entry_point_binding->uniform_buffer_count, entry_point_binding->storage_buffer_count, arg_sizes, args, arg_is_buffer, entry_point_binding->descriptor_set);
+        if (error_code != halide_error_code_success) {
+            error(user_context) << "Vulkan: Failed to update descriptor set!\n";
+            return error_code;
+        }
     }
 
     // 2b. Create the pipeline layout
