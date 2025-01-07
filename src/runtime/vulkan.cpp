@@ -1193,13 +1193,6 @@ WEAK int halide_vulkan_run(void *user_context,
                 }
             }
         }
-
-        // 2b. Create the pipeline layout
-        error_code = vk_create_pipeline_layout(user_context, ctx.allocator, shader_module->shader_count, shader_module->descriptor_set_layouts, &(shader_module->pipeline_layout));
-        if (error_code != halide_error_code_success) {
-            error(user_context) << "Vulkan: Failed to create pipeline layout!\n";
-            return error_code;
-        }
     }
 
     VulkanDispatchData dispatch_data = {};
@@ -1213,14 +1206,7 @@ WEAK int halide_vulkan_run(void *user_context,
 
     VulkanShaderBinding *entry_point_binding = (shader_module->shader_bindings + entry_point_index);
 
-    // 2c. Setup the compute pipeline (eg override any specializations for shared mem or workgroup size)
-    error_code = vk_setup_compute_pipeline(user_context, ctx.allocator, entry_point_binding, &dispatch_data, shader_module->shader_module, shader_module->pipeline_layout, &(entry_point_binding->compute_pipeline));
-    if (error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to setup compute pipeline!\n";
-        return error_code;
-    }
-
-    // 2d. Create a descriptor set
+    // 2c. Create a descriptor set
     if (entry_point_binding->descriptor_set == VK_NULL_HANDLE) {
 
         // Construct a descriptor pool
@@ -1244,7 +1230,7 @@ WEAK int halide_vulkan_run(void *user_context,
         }
     }
 
-    // 3a. Create a buffer for the scalar parameters
+    // 2d. Create a buffer for the scalar parameters
     if ((entry_point_binding->args_region == nullptr) && entry_point_binding->uniform_buffer_count) {
         size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context, arg_sizes, args, arg_is_buffer);
         if (scalar_buffer_size > 0) {
@@ -1256,7 +1242,7 @@ WEAK int halide_vulkan_run(void *user_context,
         }
     }
 
-    // 3b. Update uniform buffer with scalar parameters
+    // 2e. Update uniform buffer with scalar parameters
     VkBuffer *args_buffer = nullptr;
     if ((entry_point_binding->args_region != nullptr) && entry_point_binding->uniform_buffer_count) {
         error_code = vk_update_scalar_uniform_buffer(user_context, ctx.allocator, entry_point_binding->args_region, arg_sizes, args, arg_is_buffer);
@@ -1272,10 +1258,26 @@ WEAK int halide_vulkan_run(void *user_context,
         }
     }
 
-    // 3c. Update buffer bindings for descriptor set
+    // 2f. Update buffer bindings for descriptor set
     error_code = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, entry_point_binding->uniform_buffer_count, entry_point_binding->storage_buffer_count, arg_sizes, args, arg_is_buffer, entry_point_binding->descriptor_set);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to update descriptor set!\n";
+        return error_code;
+    }
+
+    // 2b. Create the pipeline layout
+    if (shader_module->pipeline_layout == VK_NULL_HANDLE) {
+        error_code = vk_create_pipeline_layout(user_context, ctx.allocator, shader_module->shader_count, shader_module->descriptor_set_layouts, &(shader_module->pipeline_layout));
+        if (error_code != halide_error_code_success) {
+            error(user_context) << "Vulkan: Failed to create pipeline layout!\n";
+            return error_code;
+        }
+    }
+
+    // 3. Setup the compute pipeline (eg override any specializations for shared mem or workgroup size)
+    error_code = vk_setup_compute_pipeline(user_context, ctx.allocator, entry_point_binding, &dispatch_data, shader_module->shader_module, shader_module->pipeline_layout, &(entry_point_binding->compute_pipeline));
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to setup compute pipeline!\n";
         return error_code;
     }
 
@@ -1287,6 +1289,31 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 5. Fill the command buffer
+    error_code = vk_start_command_buffer_for_dispatch_call(user_context, cmds.command_buffer);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to start command buffer for dispatch call!\n";
+        return error_code;
+    }
+    error_code = vk_bind_pipeline_to_command_buffer(user_context, cmds.command_buffer, entry_point_binding->compute_pipeline);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to bind compute pipeline to command buffer for dispatch call!\n";
+        return error_code;
+    }   
+
+    if (vkCmdPushDescriptorSetKHR != nullptr) {
+        error_code = vk_push_descriptor_set(user_context, ctx.allocator, cmds.command_buffer, entry_point_binding->compute_pipeline, shader_module->pipeline_layout, entry_point_binding->descriptor_set, args_buffer, entry_point_binding->uniform_buffer_count, entry_point_binding->storage_buffer_count, arg_sizes, args, arg_is_buffer);
+        if (error_code != halide_error_code_success) {
+            error(user_context) << "Vulkan: Failed to update descriptor set!\n";
+            return error_code;
+        }
+    } else {
+        error_code = vk_bind_descriptor_set(user_context, cmds.command_buffer, shader_module->pipeline_layout, entry_point_binding->descriptor_set, entry_point_index);
+        if (error_code != halide_error_code_success) {
+            error(user_context) << "Vulkan: Failed to bind descriptor set to command buffer for dispatch call!\n";
+            return error_code;
+        }   
+    }
+
     error_code = vk_fill_command_buffer_with_dispatch_call(user_context,
                                                            ctx.device, cmds.command_buffer,
                                                            entry_point_binding->compute_pipeline,
@@ -1296,6 +1323,12 @@ WEAK int halide_vulkan_run(void *user_context,
                                                            blocksX, blocksY, blocksZ);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to fill command buffer with dispatch call!\n";
+        return error_code;
+    }
+
+    error_code = vk_end_command_buffer_for_dispatch_call(user_context, cmds.command_buffer);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to end command buffer for dispatch call!\n";
         return error_code;
     }
 

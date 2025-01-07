@@ -106,6 +106,11 @@ int vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocat
 
 struct ScopedVulkanCommandBufferAndPool;
 
+int vk_start_command_buffer_for_dispatch_call(void *user_context, VkCommandBuffer command_buffer);
+int vk_end_command_buffer_for_dispatch_call(void *user_context, VkCommandBuffer command_buffer);
+int vk_bind_pipeline_to_command_buffer(void *user_context, VkCommandBuffer command_buffer, VkPipeline compute_pipeline);
+int vk_bind_descriptor_set_to_command_buffer(void *user_context, VkCommandBuffer command_buffer, VkPipeline compute_pipeline);
+
 int vk_fill_command_buffer_with_dispatch_call(void *user_context,
                                               VkDevice device,
                                               VkCommandBuffer command_buffer,
@@ -175,6 +180,24 @@ int vk_create_descriptor_set(void *user_context,
                              VkDescriptorPool descriptor_pool,
                              VkDescriptorSet *descriptor_set);
 
+int vk_get_descriptor_buffer_info(void *user_context,
+                                 VulkanMemoryAllocator *allocator,
+                                 VkDescriptorSet descriptor_set,
+                                 VkBuffer *scalar_args_buffer,
+                                 size_t uniform_buffer_count,
+                                 size_t storage_buffer_count,
+                                 size_t arg_sizes[],
+                                 void *args[],
+                                 int8_t arg_is_buffer[],
+                                 BlockStorage *descriptor_buffer_info_result);
+
+int vk_get_write_descriptor_set_info(void *user_context,
+                                     VulkanMemoryAllocator *allocator,
+                                     BlockStorage *descriptor_buffer_info,
+                                     VkDescriptorSet descriptor_set,
+                                     VkBuffer *scalar_args_buffer,
+                                     BlockStorage *write_descriptor_set_result);
+
 int vk_update_descriptor_set(void *user_context,
                              VulkanMemoryAllocator *allocator,
                              VkBuffer *scalar_args_buffer,
@@ -184,6 +207,25 @@ int vk_update_descriptor_set(void *user_context,
                              void *args[],
                              int8_t arg_is_buffer[],
                              VkDescriptorSet descriptor_set);
+
+int vk_bind_descriptor_set(void *user_context,
+                           VkCommandBuffer command_buffer,
+                           VkPipelineLayout pipeline_layout,
+                           VkDescriptorSet descriptor_set,
+                           uint32_t descriptor_set_index);
+                           
+int vk_push_descriptor_set(void *user_context,
+                           VulkanMemoryAllocator *allocator,
+                           VkCommandBuffer command_buffer,
+                           VkPipeline compute_pipeline,
+                           VkPipelineLayout pipeline_layout,
+                           VkDescriptorSet descriptor_set,
+                           VkBuffer *scalar_args_buffer,
+                           size_t uniform_buffer_count,
+                           size_t storage_buffer_count,
+                           size_t arg_sizes[],
+                           void *args[],
+                           int8_t arg_is_buffer[]);                             
 
 // -- Pipeline Layout
 int vk_create_pipeline_layout(void *user_context,
