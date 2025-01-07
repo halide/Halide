@@ -11,14 +11,20 @@ int main(int argc, char **argv) {
     }
 
     if (t.has_feature(Target::Vulkan)) {
+        if (!t.has_feature(Target::VulkanV13)) {
+            printf("[SKIP] Skipping test for Vulkan ... missing 1.3 feature in target!\n");
+            return 0;
+        }
+
         const auto *interface = get_device_interface_for_device_api(DeviceAPI::Vulkan);
         assert(interface->compute_capability != nullptr);
         int major, minor;
         int err = interface->compute_capability(nullptr, &major, &minor);
         if (err != 0 || (major == 1 && minor < 3)) {
-            printf("[SKIP] Vulkan %d.%d is less than required 1.3.\n", major, minor);
+            printf("[SKIP] Vulkan runtime support %d.%d is less than required 1.3.\n", major, minor);
             return 0;
         }
+
         if ((t.os == Target::IOS) || (t.os == Target::OSX)) {
             printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK doesn't support dynamic LocalSizeId yet)!\n");
             return 0;

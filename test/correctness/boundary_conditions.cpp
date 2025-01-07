@@ -392,6 +392,10 @@ int main(int argc, char **argv) {
         // The wasm jit is very slow, so shorten this test here.
         vector_width_max = 8;
     }
+    if (target.has_feature(Target::Vulkan) && (!target.has_feature(Target::VulkanInt8))) {
+        printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
+        return 0;
+    }
 
     std::vector<Task> tasks;
     for (int vector_width = 1; vector_width <= vector_width_max; vector_width *= 2) {

@@ -39,6 +39,11 @@ int main(int argc, char **argv) {
                  sum(cast<uint16_t>(box2(r.x, r.y)) * input(x + r.x, y + r.y));
 
     Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::Vulkan) && (!target.has_feature(Target::VulkanInt16))) {
+        printf("[SKIP] Skipping test for Vulkan ... missing Int16 support!\n");
+        return 0;
+    }
+
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
         blur.gpu_tile(x, y, xi, yi, 16, 16);

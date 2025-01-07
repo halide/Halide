@@ -9,11 +9,20 @@ using namespace Halide::Internal;
 int main(int arch, char **argv) {
 
     Halide::Target target = get_jit_target_from_environment();
-    if (target.has_feature(Target::Vulkan) && ((target.os == Target::IOS) || target.os == Target::OSX)) {
-        printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK fails to convert max/min intrinsics correctly)!\n");
-        return 0;
+    if (target.has_feature(Target::Vulkan)) {
+        if(!target.has_feature(Target::VulkanInt8)) {
+            printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
+            return 0;
+        }
+        if(!target.has_feature(Target::VulkanInt16)) {
+            printf("[SKIP] Skipping test for Vulkan ... missing Int16 support!\n");
+            return 0;
+        }
+        if((target.os == Target::IOS) || (target.os == Target::OSX)) {
+            printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK fails to convert max/min intrinsics correctly)!\n");
+            return 0;
+        }
     }
-
     const int W = 256, H = 256;
 
     Buffer<uint8_t> in(W, H);

@@ -172,6 +172,17 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (t.has_feature(Target::Vulkan)){
+        if (!t.has_feature(Target::VulkanInt8)) {
+            printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
+            return 0;
+        }
+        if (!t.has_feature(Target::VulkanInt16)) {
+            printf("[SKIP] Skipping test for Vulkan ... missing Int16 support!\n");
+            return 0;
+        }
+    }
+
     for (auto memory_type : {MemoryType::GPUShared, MemoryType::Heap}) {
         printf("Running multi thread type test\n");
         if (multi_thread_type_test(memory_type) != 0) {

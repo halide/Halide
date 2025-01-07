@@ -540,6 +540,21 @@ void add_test_div_mod(int vector_width, ScheduleVariant scheduling, Target targe
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
+    if (target.has_feature(Target::Vulkan)){
+        if (!target.has_feature(Target::VulkanInt8)) {
+            printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
+            return 0;
+        }
+        if (!target.has_feature(Target::VulkanInt16)) {
+            printf("[SKIP] Skipping test for Vulkan ... missing Int16 support!\n");
+            return 0;
+        }
+        if (!target.has_feature(Target::VulkanInt64)) {
+            printf("[SKIP] Skipping test for Vulkan ... missing Int64 support!\n");
+            return 0;
+        }
+    }
+
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
         scheduling = TiledGPU;
