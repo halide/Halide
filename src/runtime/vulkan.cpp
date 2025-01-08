@@ -1290,12 +1290,12 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 5. Fill the command buffer
-    error_code = vk_start_command_buffer_for_dispatch_call(user_context, cmds.command_buffer);
+    error_code = vk_begin_command_buffer(user_context, cmds.command_buffer);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to start command buffer for dispatch call!\n";
         return error_code;
     }
-    error_code = vk_bind_pipeline_to_command_buffer(user_context, cmds.command_buffer, entry_point_binding->compute_pipeline);
+    error_code = vk_bind_pipeline(user_context, cmds.command_buffer, entry_point_binding->compute_pipeline);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to bind compute pipeline to command buffer for dispatch call!\n";
         return error_code;
@@ -1308,26 +1308,26 @@ WEAK int halide_vulkan_run(void *user_context,
             return error_code;
         }
     } else {
-        error_code = vk_bind_descriptor_set(user_context, cmds.command_buffer, shader_module->pipeline_layout, entry_point_binding->descriptor_set, entry_point_index);
+        error_code = vk_bind_descriptor_sets(user_context, cmds.command_buffer, shader_module->pipeline_layout, entry_point_binding->descriptor_set, entry_point_index);
         if (error_code != halide_error_code_success) {
             error(user_context) << "Vulkan: Failed to bind descriptor set to command buffer for dispatch call!\n";
             return error_code;
         }
     }
 
-    error_code = vk_fill_command_buffer_with_dispatch_call(user_context,
-                                                           ctx.device, cmds.command_buffer,
-                                                           entry_point_binding->compute_pipeline,
-                                                           shader_module->pipeline_layout,
-                                                           entry_point_binding->descriptor_set,
-                                                           entry_point_index,
-                                                           blocksX, blocksY, blocksZ);
+    error_code = vk_dispatch_kernel(user_context,
+                                    ctx.device, cmds.command_buffer,
+                                    entry_point_binding->compute_pipeline,
+                                    shader_module->pipeline_layout,
+                                    entry_point_binding->descriptor_set,
+                                    entry_point_index,
+                                    blocksX, blocksY, blocksZ);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to fill command buffer with dispatch call!\n";
         return error_code;
     }
 
-    error_code = vk_end_command_buffer_for_dispatch_call(user_context, cmds.command_buffer);
+    error_code = vk_end_command_buffer(user_context, cmds.command_buffer);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to end command buffer for dispatch call!\n";
         return error_code;
