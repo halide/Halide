@@ -94,8 +94,10 @@ protected:
     // @}
 
 private:
-    /** The nodes visited so far */
-    std::set<IRHandle> visited;
+    /** The nodes visited so far. Only includes nodes with a ref count greater
+     * than one, because we know that nodes with a ref count of 1 will only be
+     * visited once if their parents are only visited once. */
+    std::set<const IRNode *> visited;
 
 protected:
     /** These methods should call 'include' on the children to only
