@@ -423,10 +423,16 @@ std::optional<llvm::VersionTuple> get_os_version_constraint(const llvm::Triple &
         return std::nullopt;
     }
 
-    if (triple.getOS() == llvm::Triple::MacOSX && triple.getArch() == llvm::Triple::x86_64) {
-        // At time of writing (June 2024), this is one version prior
+    if (triple.isMacOSX() && triple.isX86()) {
+        // At time of writing (January 2025), this is one version prior
         // to the oldest version still supported by Apple.
-        return llvm::VersionTuple(11, 0, 0);
+        return llvm::VersionTuple(12, 0, 0);
+    }
+
+    if (triple.isiOS()) {
+        // At time of writing (January 2025), this is one version prior
+        // to the oldest version still supported by Apple.
+        return llvm::VersionTuple(17, 0, 0);
     }
 
     llvm::VersionTuple t = triple.getMinimumSupportedOSVersion();
