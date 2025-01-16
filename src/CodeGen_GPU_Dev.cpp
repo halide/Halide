@@ -149,7 +149,12 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
             internal_assert(op->vectors[0].type() == op->vectors[i].type());
         }
         internal_assert(op->type.lanes() == (int)op->indices.size());
-        const int max_index = (int)(op->vectors[0].type().lanes() * op->vectors.size());
+        std::vector<int> vector_first_index;
+        int max_index = 0;
+        for (const Expr &v : op->vectors) {
+            vector_first_index.push_back(max_index);
+            max_index += v.type().lanes();
+        }
         for (int i : op->indices) {
             internal_assert(i >= 0 && i < max_index);
         }
@@ -162,25 +167,55 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
         std::string src = vecs[0];
         std::ostringstream rhs;
         std::string storage_name = unique_name('_');
-        if (vector_declaration_style == VectorDeclarationStyle::OpenCLSyntax) {
+        switch (vector_declaration_style) {
+        case VectorDeclarationStyle::OpenCLSyntax:
             rhs << "(" << print_type(op->type) << ")(";
-        } else if (vector_declaration_style == VectorDeclarationStyle::WGSLSyntax) {
+            break;
+        case VectorDeclarationStyle::WGSLSyntax:
             rhs << print_type(op->type) << "(";
-        } else {
+            break;
+        case VectorDeclarationStyle::CLikeSyntax:
             rhs << "{";
+            break;
         }
+        int elem_num = 0;
         for (int i : op->indices) {
-            rhs << vecs[i];
-            if (i < (int)(op->indices.size() - 1)) {
+            size_t vector_idx;
+            int lane_idx = -1;
+            for (vector_idx = 0; vector_idx < op->vectors.size(); ++vector_idx) {
+                if (i >= vector_first_index[vector_idx] && i < vector_first_index[vector_idx] + op->vectors[vector_idx].type().lanes()) {
+                    lane_idx = i - vector_first_index[vector_idx];
+                    break;
+                }
+            }
+            internal_assert(lane_idx != -1) << "Shuffle lane index not found.";
+            rhs << vecs[vector_idx];
+            if (op->vectors[vector_idx].type().lanes() > 1) {
+                switch (vector_declaration_style) {
+                case VectorDeclarationStyle::OpenCLSyntax:
+                    rhs << ".s" << lane_idx;
+                    break;
+                case VectorDeclarationStyle::WGSLSyntax:
+                case VectorDeclarationStyle::CLikeSyntax:
+                    rhs << "[" << lane_idx << "]";
+                    break;
+                }
+            }
+            if (elem_num < (int)(op->indices.size() - 1)) {
                 rhs << ", ";
             }
+            elem_num++;
         }
-        if (vector_declaration_style == VectorDeclarationStyle::OpenCLSyntax) {
+        switch (vector_declaration_style) {
+        case VectorDeclarationStyle::OpenCLSyntax:
             rhs << ")";
-        } else if (vector_declaration_style == VectorDeclarationStyle::WGSLSyntax) {
+            break;
+        case VectorDeclarationStyle::WGSLSyntax:
             rhs << ")";
-        } else {
+            break;
+        case VectorDeclarationStyle::CLikeSyntax:
             rhs << "}";
+            break;
         }
         print_assignment(op->type, rhs.str());
     }

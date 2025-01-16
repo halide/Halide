@@ -276,6 +276,7 @@ tests(GROUPS correctness
       shared_self_references.cpp
       shift_by_unsigned_negated.cpp
       shifted_image.cpp
+      shuffle.cpp
       side_effects.cpp
       simd_op_check_arm.cpp
       simd_op_check_hvx.cpp
