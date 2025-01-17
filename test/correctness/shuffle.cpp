@@ -50,10 +50,9 @@ int main(int argc, char **argv) {
     im.copy_to_host();
     for (int x = 0; x < 32; x++) {
         int exp = 0;
-        int halfway = int(indices0.size() / 2);
         for (size_t i = 0; i < indices0.size(); ++i) {
-            int v0 = x * (indices0[i] + (indices0[i] >= halfway ? 3 : 1));
-            int v1 = x * (indices1[i] + (indices1[i] >= halfway ? 3 : 1));
+            int v0 = x * (indices0[i] + (indices0[i] >= 4 ? 3 : 1));
+            int v1 = x * (indices1[i] + (indices1[i] >= 4 ? 3 : 1));
             exp += v0 * v1;
         }
         if (im(x) != exp) {
