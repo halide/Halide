@@ -185,7 +185,14 @@ void write_symbol_table(std::ostream &out,
             internal_assert(!err);
             std::string name = symbols.str().str();
             if (name_to_member_index.find(name) != name_to_member_index.end()) {
-                user_warning << "Warning: symbol '" << name << "' seen multiple times in library.\n";
+                bool is_constant = false;
+                is_constant |= name.find("__real@") == 0;
+                is_constant |= name.find("__xmm@") == 0;
+                is_constant |= name.find("__ymm@") == 0;
+                is_constant |= name.find("__zmm@") == 0;
+                if (!is_constant) {
+                    user_warning << "Warning: symbol '" << name << "' seen multiple times in library.\n";
+                }
                 continue;
             }
             name_to_member_index[name] = i;
