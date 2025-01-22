@@ -22,6 +22,25 @@ int main(int argc, char **argv) {
 
         Var x("x"), y("y");
 
+        // Reproduce issue #8256
+        // https://github.com/halide/Halide/issues/8256
+        if (true) {
+            ImageParam im(Float(32), 1);
+
+            Func f{"f"}, output{"output"};
+            Var u{"u"};
+            RDom r(0, 8192);
+
+            f() += fast_exp(im(r));
+            f.update(0).rfactor(r, u);
+
+            output(x) = im(x) / f();
+
+            output.set_estimate(x, 0, 8192);
+
+            Pipeline(output).apply_autoscheduler(target, params);
+        }
+
         if (true) {
             // In a point-wise pipeline, everything should be fully fused.
             Func f("f"), g("g"), h("h");
