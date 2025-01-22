@@ -22,6 +22,30 @@ int main(int argc, char **argv) {
 
         Var x("x"), y("y");
 
+        // Reproduce issue #8557
+        // https://github.com/halide/Halide/issues/8557
+        if (true) {
+            ImageParam im(Float(32), 2);
+
+            Func max_fn{"max_fn"}, sum_fn{"sum_fn"}, output{"output"};
+            Var u{"u"};
+            RDom r(0, 8192);
+            RVar ri{"ri"};
+
+            max_fn(y) = Float(32).min();
+            max_fn(y) = max(max_fn(y), im(r, y));
+
+            sum_fn(y) += Halide::exp(im(r, y) - max_fn(y));
+            sum_fn.update(0).split(r, r, ri, 8);
+            sum_fn.update(0).rfactor(r, u);
+
+            output(x, y) = sum_fn(x);
+
+            output.set_estimates({{0, 8192}, {0, 32768}});
+
+            Pipeline(output).apply_autoscheduler(target, params);
+        }
+
         // Reproduce issue #8256
         // https://github.com/halide/Halide/issues/8256
         if (true) {
