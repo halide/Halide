@@ -15,7 +15,8 @@ if (NOT TARGET Halide::Test)
     add_library(Halide_test INTERFACE)
     add_library(Halide::Test ALIAS Halide_test)
 
-    # Obviously link to libHalide, but also grant all tests access to the threads library.
+    # Obviously link to libHalide, but also grant all tests access to the
+    # platform threads library.
     target_link_libraries(Halide_test INTERFACE Halide::Halide Threads::Threads)
 
     # Make internal_assert, debug, etc. available to tests
@@ -30,14 +31,17 @@ endif ()
 
 if (NOT TARGET Halide::ExpectAbort)
     # Add an OBJECT (not static) library to convert abort calls into exit(1).
-    add_library(Halide_expect_abort OBJECT ${Halide_SOURCE_DIR}/test/common/expect_abort.cpp)
+    add_library(Halide_expect_abort OBJECT
+                ${Halide_SOURCE_DIR}/test/common/expect_abort.cpp)
     add_library(Halide::ExpectAbort ALIAS Halide_expect_abort)
     target_link_libraries(Halide_expect_abort PRIVATE Halide::Halide)
 endif ()
 
 if (NOT TARGET Halide::TerminateHandler)
-    # Add an OBJECT (not static) library to add a terminate_handler to catch unhandled exceptions.
-    add_library(Halide_terminate_handler OBJECT ${Halide_SOURCE_DIR}/test/common/terminate_handler.cpp)
+    # Add an OBJECT (not static) library to add a terminate_handler to catch
+    # unhandled exceptions.
+    add_library(Halide_terminate_handler OBJECT
+                ${Halide_SOURCE_DIR}/test/common/terminate_handler.cpp)
     add_library(Halide::TerminateHandler ALIAS Halide_terminate_handler)
 endif ()
 
@@ -45,14 +49,35 @@ endif ()
 # Convenience methods for defining tests.
 ##
 
+function(add_test_labels)
+    cmake_parse_arguments(PARSE_ARGV 0 ARG "" "" "TESTS;LABELS")
+
+    foreach (test IN LISTS ARG_TESTS)
+        get_test_property("${test}" LABELS labels)
+        list(APPEND labels ${ARG_LABELS})
+        set_tests_properties("${test}" PROPERTIES LABELS "${labels}")
+    endforeach ()
+
+    # Add a meta-target for each group, to allow us to build by group easily
+    foreach (label IN LISTS ARG_LABELS)
+        set(meta_target "build_${label}")
+        if (NOT TARGET "${meta_target}")
+            add_custom_target("${meta_target}")
+        endif ()
+        add_dependencies("${meta_target}" ${ARG_TESTS})
+    endforeach ()
+endfunction()
+
 function(add_halide_test TARGET)
     set(options EXPECT_FAILURE USE_EXIT_CODE_ONLY)
     set(oneValueArgs WORKING_DIRECTORY)
     set(multiValueArgs GROUPS COMMAND ARGS)
-    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    cmake_parse_arguments(
+        PARSE_ARGV 1 args "${options}" "${oneValueArgs}" "${multiValueArgs}"
+    )
 
     if (NOT args_COMMAND)
-        set(args_COMMAND ${TARGET})
+        set(args_COMMAND "${TARGET}")
     endif ()
 
     add_test(NAME ${TARGET}
@@ -62,18 +87,20 @@ function(add_halide_test TARGET)
         set_halide_compiler_warnings(${TARGET})
     endif ()
 
-    # We can't add Halide::TerminateHandler here, because it requires Halide::Error
-    # and friends to be present in the final linkage, but some callers of add_halide_test()
-    # are AOT tests, which don't link in libHalide. (It's relatively rare for these
-    # tests to throw exceptions, though, so this isn't the dealbreaker you might think.)
+    # We can't add Halide::TerminateHandler here, because it requires
+    # Halide::Error and friends to be present in the final linkage, but some
+    # callers of add_halide_test() are AOT tests, which don't link in
+    # libHalide. (It's relatively rare for these tests to throw exceptions,
+    # though, so this isn't the deal-breaker you might think.)
     #
     # target_link_libraries("${TARGET}" PRIVATE Halide::TerminateHandler)
 
-    set_tests_properties(${TARGET} PROPERTIES
-                         LABELS "${args_GROUPS}"
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
-                         WILL_FAIL ${args_EXPECT_FAILURE})
+    set_tests_properties(
+        ${TARGET} PROPERTIES
+        ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+        WILL_FAIL ${args_EXPECT_FAILURE}
+    )
 
     if (NOT args_USE_EXIT_CODE_ONLY)
         set_tests_properties(${TARGET} PROPERTIES
@@ -84,29 +111,19 @@ function(add_halide_test TARGET)
                           CXX_VISIBILITY_PRESET hidden
                           VISIBILITY_INLINES_HIDDEN TRUE)
 
-
-    if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
-        if (WITH_SERIALIZATION)
-            target_compile_definitions(${TARGET} PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
-        endif ()
+    if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING AND WITH_SERIALIZATION)
+        target_compile_definitions(
+            ${TARGET} PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
+        )
     endif ()
 
-    # Add a meta-target for each group, to allow us to build by group easily
-    foreach (GROUP IN LISTS args_GROUPS)
-        set(META_TARGET build_${GROUP})
-        if (NOT TARGET ${META_TARGET})
-            add_custom_target(${META_TARGET})
-        endif ()
-        add_dependencies(${META_TARGET} ${TARGET})
-    endforeach ()
-
+    add_test_labels(TESTS ${TARGET} LABELS ${args_GROUPS})
 endfunction()
 
 function(tests)
     set(options EXPECT_FAILURE USE_EXIT_CODE_ONLY)
-    set(oneValueArgs)
     set(multiValueArgs SOURCES GROUPS ARGS)
-    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 0 args "${options}" "" "${multiValueArgs}")
 
     list(GET args_GROUPS 0 PRIMARY_GROUP)
 
@@ -118,7 +135,9 @@ function(tests)
         list(APPEND TEST_NAMES "${TARGET}")
 
         add_executable("${TARGET}" "${file}")
-        target_link_libraries("${TARGET}" PRIVATE Halide::Test Halide::TerminateHandler)
+        target_link_libraries(
+            "${TARGET}" PRIVATE Halide::Test Halide::TerminateHandler
+        )
         if ("${file}" MATCHES ".cpp$")
             target_precompile_headers("${TARGET}" REUSE_FROM _test_internal)
         endif ()
@@ -136,7 +155,13 @@ function(tests)
             set(args_USE_EXIT_CODE_ONLY "")
         endif ()
 
-        add_halide_test("${TARGET}" ARGS ${args_ARGS} GROUPS ${args_GROUPS} ${args_EXPECT_FAILURE} ${args_USE_EXIT_CODE_ONLY})
+        add_halide_test(
+            "${TARGET}"
+            ARGS ${args_ARGS}
+            GROUPS ${args_GROUPS}
+            ${args_EXPECT_FAILURE}
+            ${args_USE_EXIT_CODE_ONLY}
+        )
     endforeach ()
 
     set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
