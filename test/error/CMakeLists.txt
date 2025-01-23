@@ -134,3 +134,12 @@ tests(GROUPS error
       wrong_dimensionality_extern_stage.cpp
       wrong_type.cpp
       )
+
+# Mark tests that use certain scheduling directives
+add_test_labels(
+    TESTS
+    error_rfactor_after_var_and_rvar_fusion
+    error_rfactor_fused_var_and_rvar
+    error_rfactor_inner_dim_non_commutative
+    LABELS rfactor
+)

@@ -451,3 +451,14 @@ set_target_properties(correctness_async
                       correctness_sliding_window
                       correctness_storage_folding
                       PROPERTIES ENABLE_EXPORTS TRUE)
+
+# Mark tests that use certain scheduling directives
+add_test_labels(
+    TESTS
+    correctness_atomics
+    correctness_compute_with
+    correctness_fuzz_schedule
+    correctness_rfactor
+    correctness_simd_op_check_x86
+    LABELS rfactor
+)

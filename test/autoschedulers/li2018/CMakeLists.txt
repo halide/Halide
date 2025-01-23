@@ -16,16 +16,18 @@ add_halide_test(li2018_demo_gradient_autoscheduler
                 COMMAND li2018_demo_gradient_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all --success
                 GROUPS li2018 autoschedulers_cpu autoschedulers_gpu multithreaded)
 
-tests(GROUPS li2018 autoschedulers_cpu autoschedulers_gpu
-      SOURCES
-      test.cpp
-      ARGS $<TARGET_FILE:Halide::Li2018>)
+tests(
+    GROUPS li2018 autoschedulers_cpu autoschedulers_gpu rfactor
+    SOURCES
+    test.cpp
+    ARGS $<TARGET_FILE:Halide::Li2018>
+)
 add_dependencies(li2018_test Halide::Li2018)
 
 if (WITH_PYTHON_BINDINGS)
     if (Halide_TARGET MATCHES "webgpu")
         message(WARNING "li2018_gradient_autoscheduler_test_py is not supported with WebGPU.")
-    else()
+    else ()
         find_package(Python 3.8 REQUIRED COMPONENTS Interpreter Development.Module)
 
         add_test(
@@ -40,5 +42,5 @@ if (WITH_PYTHON_BINDINGS)
                              DEPENDS li2018_test
                              LABELS "li2018;autoschedulers_cpu;autoschedulers_gpu"
                              ENVIRONMENT_MODIFICATION "${PYTHONPATH}")
-    endif()
+    endif ()
 endif ()
