@@ -15,11 +15,13 @@ function(add_tutorial source_file)
     target_link_libraries("${name}" PRIVATE Halide::Halide Halide::Tools)
     target_compile_options(${name} PRIVATE "$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-but-set-variable>")
 
+    list(PREPEND args_GROUPS tutorial)
+
     add_test(NAME tutorial_${name} COMMAND ${name})
     set_tests_properties(tutorial_${name}
                          PROPERTIES
                          ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
-                         LABELS "tutorial;${args_GROUPS}")
+                         LABELS "${args_GROUPS}")
 
     if (args_WITH_IMAGE_IO)
         target_link_libraries(${name} PRIVATE Halide::ImageIO)
@@ -182,7 +184,7 @@ endif ()
 
 # Lessons 17 - 20
 add_tutorial(lesson_17_predicated_rdom.cpp)
-add_tutorial(lesson_18_parallel_associative_reductions.cpp GROUPS multithreaded)
+add_tutorial(lesson_18_parallel_associative_reductions.cpp GROUPS multithreaded rfactor)
 add_tutorial(lesson_19_wrapper_funcs.cpp)
 add_tutorial(lesson_20_cloning_funcs.cpp)
 
@@ -191,16 +193,21 @@ if (TARGET Halide::Mullapudi2016)
     add_executable(lesson_21_auto_scheduler_generate lesson_21_auto_scheduler_generate.cpp)
     target_link_libraries(lesson_21_auto_scheduler_generate PRIVATE Halide::Generator)
 
-    add_halide_library(auto_schedule_false FROM lesson_21_auto_scheduler_generate
-                       TARGETS cmake
-                       GENERATOR auto_schedule_gen)
-    add_halide_library(auto_schedule_true FROM lesson_21_auto_scheduler_generate
-                       TARGETS cmake
-                       AUTOSCHEDULER Halide::Mullapudi2016
-                       GENERATOR auto_schedule_gen
-                       PARAMS autoscheduler.parallelism=32
-                              autoscheduler.last_level_cache_size=16777216
-                              autoscheduler.balance=40)
+    add_halide_library(
+        auto_schedule_false FROM lesson_21_auto_scheduler_generate
+        TARGETS cmake
+        GENERATOR auto_schedule_gen
+    )
+    add_halide_library(
+        auto_schedule_true FROM lesson_21_auto_scheduler_generate
+        TARGETS cmake
+        AUTOSCHEDULER Halide::Mullapudi2016
+        GENERATOR auto_schedule_gen
+        PARAMS
+        autoscheduler.parallelism=32
+        autoscheduler.last_level_cache_size=16777216
+        autoscheduler.balance=40
+    )
 
     add_executable(lesson_21_auto_scheduler_run lesson_21_auto_scheduler_run.cpp)
     target_link_libraries(lesson_21_auto_scheduler_run PRIVATE
