@@ -53,3 +53,7 @@ tests(
 
 # This test needs rdynamic or equivalent
 set_target_properties(performance_fast_pow PROPERTIES ENABLE_EXPORTS TRUE)
+
+
+# Mark tests that use certain scheduling directives
+add_test_labels(TESTS performance_matrix_multiplication performance_rfactor LABELS rfactor)

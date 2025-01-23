@@ -6,6 +6,7 @@
 
 add_subdirectory(common)
 add_subdirectory(adams2019)
+
 if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
     add_subdirectory(anderson2021)
 else ()

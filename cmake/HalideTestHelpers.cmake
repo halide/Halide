@@ -15,7 +15,8 @@ if (NOT TARGET Halide::Test)
     add_library(Halide_test INTERFACE)
     add_library(Halide::Test ALIAS Halide_test)
 
-    # Obviously link to libHalide, but also grant all tests access to the threads library.
+    # Obviously link to libHalide, but also grant all tests access to the
+    # platform threads library.
     target_link_libraries(Halide_test INTERFACE Halide::Halide Threads::Threads)
 
     # Make internal_assert, debug, etc. available to tests
@@ -57,14 +58,33 @@ endif ()
 # Convenience methods for defining tests.
 ##
 
+function(add_test_labels)
+    cmake_parse_arguments(PARSE_ARGV 0 ARG "" "" "TESTS;LABELS")
+
+    foreach (test IN LISTS ARG_TESTS)
+        get_test_property("${test}" LABELS labels)
+        list(APPEND labels ${ARG_LABELS})
+        set_tests_properties("${test}" PROPERTIES LABELS "${labels}")
+    endforeach ()
+
+    # Add a meta-target for each group, to allow us to build by group easily
+    foreach (label IN LISTS ARG_LABELS)
+        set(meta_target "build_${label}")
+        if (NOT TARGET "${meta_target}")
+            add_custom_target("${meta_target}")
+        endif ()
+        add_dependencies("${meta_target}" ${ARG_TESTS})
+    endforeach ()
+endfunction()
+
 function(add_halide_test TARGET)
     set(options EXPECT_FAILURE USE_EXIT_CODE_ONLY)
     set(oneValueArgs WORKING_DIRECTORY)
     set(multiValueArgs GROUPS COMMAND ARGS)
-    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 1 args "${options}" "${oneValueArgs}" "${multiValueArgs}")
 
     if (NOT args_COMMAND)
-        set(args_COMMAND ${TARGET})
+        set(args_COMMAND "${TARGET}")
     endif ()
 
     add_test(
@@ -76,10 +96,11 @@ function(add_halide_test TARGET)
         set_halide_compiler_warnings(${TARGET})
     endif ()
 
-    # We can't add Halide::TerminateHandler here, because it requires Halide::Error
-    # and friends to be present in the final linkage, but some callers of add_halide_test()
-    # are AOT tests, which don't link in libHalide. (It's relatively rare for these
-    # tests to throw exceptions, though, so this isn't the dealbreaker you might think.)
+    # We can't add Halide::TerminateHandler here, because it requires
+    # Halide::Error and friends to be present in the final linkage, but some
+    # callers of add_halide_test() are AOT tests, which don't link in
+    # libHalide. (It's relatively rare for these tests to throw exceptions,
+    # though, so this isn't the deal-breaker you might think.)
     #
     # target_link_libraries("${TARGET}" PRIVATE Halide::TerminateHandler)
 
@@ -115,22 +136,13 @@ function(add_halide_test TARGET)
         endif ()
     endif ()
 
-    # Add a meta-target for each group, to allow us to build by group easily
-    foreach (GROUP IN LISTS args_GROUPS)
-        set(META_TARGET build_${GROUP})
-        if (NOT TARGET ${META_TARGET})
-            add_custom_target(${META_TARGET})
-        endif ()
-        add_dependencies(${META_TARGET} ${TARGET})
-    endforeach ()
-
+    add_test_labels(TESTS ${TARGET} LABELS ${args_GROUPS})
 endfunction()
 
 function(tests)
     set(options EXPECT_FAILURE USE_EXIT_CODE_ONLY)
-    set(oneValueArgs)
     set(multiValueArgs SOURCES GROUPS ARGS)
-    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 0 args "${options}" "" "${multiValueArgs}")
 
     list(GET args_GROUPS 0 PRIMARY_GROUP)
 

@@ -81,7 +81,7 @@ add_dependencies(anderson2021_test_apps_autoscheduler Halide::Anderson2021)
 add_halide_test(
     anderson2021_test_apps_autoscheduler
     COMMAND anderson2021_test_apps_autoscheduler $<TARGET_FILE:Halide_Anderson2021>
-    GROUPS anderson2021 autoschedulers_cuda multithreaded
+    GROUPS anderson2021 autoschedulers_cuda multithreaded rfactor
 )
 set_tests_properties(
     anderson2021_test_apps_autoscheduler

@@ -26,7 +26,7 @@ add_halide_test(
 )
 
 tests(
-    GROUPS li2018 autoschedulers_cpu autoschedulers_gpu
+    GROUPS li2018 autoschedulers_cpu autoschedulers_gpu rfactor
     SOURCES test.cpp
     ARGS $<TARGET_FILE:Halide::Li2018>
 )

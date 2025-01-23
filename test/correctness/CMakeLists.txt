@@ -513,3 +513,14 @@ set_target_properties(
 if (WITH_SERIALIZATION)
     target_compile_definitions(correctness_streaming PRIVATE TEST_WITH_SERIALIZATION)
 endif ()
+
+# Mark tests that use certain scheduling directives
+add_test_labels(
+    TESTS
+        correctness_atomics
+        correctness_compute_with
+        correctness_fuzz_schedule
+        correctness_rfactor
+        correctness_simd_op_check_x86
+    LABELS rfactor
+)

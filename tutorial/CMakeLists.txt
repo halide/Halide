@@ -277,7 +277,7 @@ endif ()
 
 # Lessons 17 - 20
 add_tutorial(lesson_17_predicated_rdom.cpp)
-add_tutorial(lesson_18_parallel_associative_reductions.cpp GROUPS multithreaded)
+add_tutorial(lesson_18_parallel_associative_reductions.cpp GROUPS multithreaded rfactor)
 add_tutorial(lesson_19_wrapper_funcs.cpp)
 add_tutorial(lesson_20_cloning_funcs.cpp)
 
