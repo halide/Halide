@@ -161,7 +161,9 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
 
         std::vector<std::string> vecs;
         for (const Expr &v : op->vectors) {
-            vecs.push_back(print_expr(v));
+            std::string expr = print_expr(v);
+            internal_assert(!expr.empty()) << "Expression did not serialize.";
+            vecs.push_back(std::move(expr));
         }
 
         std::string src = vecs[0];
@@ -189,6 +191,7 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
                 }
             }
             internal_assert(lane_idx != -1) << "Shuffle lane index not found.";
+            internal_assert(vector_idx < op->vectors.size()) << "Shuffle vector index not found.";
             rhs << vecs[vector_idx];
             if (op->vectors[vector_idx].type().lanes() > 1) {
                 switch (vector_declaration_style) {
