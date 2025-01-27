@@ -807,9 +807,15 @@ public:
         std::istringstream ss(str);
 
         for (std::string line; std::getline(ss, line);) {
-            if (line.empty()) {
+            if (line.empty() || line == "\t") {
                 stream << "<span class='line'></span>\n";
                 continue;
+            }
+            bool indent = false;
+            if (line[0] == '\t') {
+                // Replace first tab with four spaces.
+                line = line.substr(1);
+                indent = true;
             }
             line = escape_html(line);
 
@@ -844,14 +850,6 @@ public:
                 scope.pop(current_kernel);
             }
 
-            bool indent = false;
-
-            if (line[0] == '\t') {
-                // Replace first tab with four spaces.
-                line = line.substr(1);
-                indent = true;
-            }
-
             line = replace_all(line, ".f32", ".<span class='OpF32'>f32</span>");
             line = replace_all(line, ".f64", ".<span class='OpF64'>f64</span>");
 
@@ -883,7 +881,7 @@ public:
             }
 
             // Predicated instructions
-            if (line.front() == '@' && indent) {
+            if (!line.empty() && line.front() == '@' && indent) {
                 idx = line.find(' ');
                 std::string pred = line.substr(1, idx - 1);
                 line = "<span class='Pred'>@" + variable(pred, Bool()) + "</span>" + line.substr(idx);
