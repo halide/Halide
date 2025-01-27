@@ -713,6 +713,7 @@ HEADER_FILES = \
   LLVM_Output.h \
   LLVM_Runtime_Linker.h \
   LoopCarry.h \
+  LoopPartitioningDirective.h \
   Lower.h \
   LowerParallelTasks.h \
   LowerWarpShuffles.h \
@@ -731,6 +732,7 @@ HEADER_FILES = \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
+  PrefetchDirective.h \
   Profiling.h \
   PurifyIndexMath.h \
   PythonExtensionGen.h \
@@ -1007,7 +1009,7 @@ endif
 
 $(INCLUDE_DIR)/Halide.h: $(SRC_DIR)/../LICENSE.txt $(HEADERS) $(BIN_DIR)/build_halide_h
 	@mkdir -p $(@D)
-	$(BIN_DIR)/build_halide_h $(SRC_DIR)/../LICENSE.txt $(HEADERS) > $(INCLUDE_DIR)/Halide.h
+	$(BIN_DIR)/build_halide_h $(SRC_DIR)/../LICENSE.txt $(HEADERS) > $(INCLUDE_DIR)/Halide.h || rm $@ && exit 1
 	# Also generate a precompiled version in the same folder so that anything compiled with a compatible set of flags can use it
 	@mkdir -p $(INCLUDE_DIR)/Halide.h.gch
 	$(CXX) -std=c++17 $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE) -x c++-header $(INCLUDE_DIR)/Halide.h -o $(INCLUDE_DIR)/Halide.h.gch/Halide.default.gch

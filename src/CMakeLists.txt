@@ -149,6 +149,7 @@ target_sources(
     LLVM_Output.h
     LLVM_Runtime_Linker.h
     LoopCarry.h
+    LoopPartitioningDirective.h
     Lower.h
     LowerParallelTasks.h
     LowerWarpShuffles.h
@@ -167,6 +168,7 @@ target_sources(
     PartitionLoops.h
     Pipeline.h
     Prefetch.h
+    PrefetchDirective.h
     Profiling.h
     PurifyIndexMath.h
     PythonExtensionGen.h
