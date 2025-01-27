@@ -807,7 +807,7 @@ public:
         std::istringstream ss(str);
 
         for (std::string line; std::getline(ss, line);) {
-            if (line.empty() || (line[0] == '\t' && line.size() == 1)) {
+            if (line.empty() || line == "\t") {
                 stream << "<span class='line'></span>\n";
                 continue;
             }
