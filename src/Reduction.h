@@ -14,7 +14,12 @@ class IRMutator;
 
 /** A single named dimension of a reduction domain */
 struct ReductionVariable {
+    /**
+     * A variable name for the reduction variable. This name must be a
+     * valid Var name, i.e. it must not contain a <tt>.</tt> character.
+     */
     std::string var;
+
     Expr min, extent;
 
     /** This lets you use a ReductionVariable as a key in a map of the form

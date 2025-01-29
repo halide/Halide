@@ -126,10 +126,12 @@ function(set_halide_compiler_warnings NAME)
 
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Woverloaded-virtual>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wimplicit-fallthrough>
 
-        $<$<CXX_COMPILER_ID:GNU>:-Wsuggest-override>
+        # GCC warns when these warnings are given to plain-C sources
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wno-old-style-cast>
 
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
@@ -139,7 +141,6 @@ function(set_halide_compiler_warnings NAME)
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-field-initializers>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-old-style-cast>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-sign-conversion>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-switch-enum>
