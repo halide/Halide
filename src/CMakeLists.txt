@@ -40,14 +40,22 @@ set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # Lists of source files. Keep ALL lists sorted in alphabetical order.
 ##
 
-# The externally-visible header files that go into making Halide.h.
-# Don't include anything here that includes llvm headers.
-# Also *don't* include anything that's only used internally (eg SpirvIR.h).
+# The Halide.h monoheader. This exists in a separate file set so it may be
+# installed to include/Halide.h, while the others go to include/halide/*.h
 target_sources(
     Halide
-    PRIVATE
-    FILE_SET private_headers
+    PUBLIC
+    FILE_SET monoheader
     TYPE HEADERS
+    FILES Halide.h
+)
+
+# The externally-visible header files that are transitively included via
+# Halide.h. Don't include anything here that includes LLVM headers.
+target_sources(
+    Halide
+    PUBLIC
+    FILE_SET HEADERS
     FILES
     AbstractGenerator.h
     AddAtomicMutex.h
@@ -149,6 +157,7 @@ target_sources(
     LLVM_Output.h
     LLVM_Runtime_Linker.h
     LoopCarry.h
+    LoopPartitioningDirective.h
     Lower.h
     LowerParallelTasks.h
     LowerWarpShuffles.h
@@ -167,6 +176,7 @@ target_sources(
     PartitionLoops.h
     Pipeline.h
     Prefetch.h
+    PrefetchDirective.h
     Profiling.h
     PurifyIndexMath.h
     PythonExtensionGen.h
@@ -181,8 +191,6 @@ target_sources(
     RemoveDeadAllocations.h
     RemoveExternLoops.h
     RemoveUndef.h
-    runtime/HalideBuffer.h
-    runtime/HalideRuntime.h
     Schedule.h
     ScheduleFunctions.h
     Scope.h
@@ -218,10 +226,26 @@ target_sources(
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
+    runtime/HalideBuffer.h
+    runtime/HalideRuntime.h
 )
 
-# The sources that go into libHalide. For the sake of IDE support, headers that
-# exist in src/ but are not public should be included here.
+# Private headers that do not get installed for users.
+target_sources(
+    Halide
+    PRIVATE
+    FILE_SET internal_headers
+    TYPE HEADERS
+    BASE_DIRS internal
+    FILES
+    internal/HexagonAlignment.h
+    internal/LLVM_Headers.h
+    internal/PrintLoopNest.h
+    internal/Simplify_Internal.h
+    internal/SpirvIR.h
+)
+
+# The sources that go into libHalide.
 target_sources(
     Halide
     PRIVATE
@@ -385,7 +409,6 @@ target_sources(
     SlidingWindow.cpp
     Solve.cpp
     SpirvIR.cpp
-    SpirvIR.h
     SplitTuples.cpp
     StageStridedLoads.cpp
     StmtToHTML.cpp
@@ -457,31 +480,6 @@ foreach (f IN LISTS HTML_TEMPLATE_FILES)
                        VERBATIM)
     target_sources(Halide PRIVATE ${DST})
 endforeach ()
-
-##
-# Build the Halide mono-header.
-##
-
-set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
-set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
-set(headers "$<TARGET_PROPERTY:Halide,HEADER_SET_private_headers>")
-add_custom_command(OUTPUT "${HALIDE_H}"
-                   COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
-                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>"
-                   DEPENDS build_halide_h "${LICENSE_PATH}" "${headers}"
-                   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
-                   COMMAND_EXPAND_LISTS
-                   VERBATIM)
-add_custom_target(HalideIncludes DEPENDS "${HALIDE_H}")
-add_dependencies(Halide HalideIncludes)
-
-target_sources(
-    Halide
-    INTERFACE
-    FILE_SET HEADERS
-    BASE_DIRS "${Halide_BINARY_DIR}/include"
-    FILES "${Halide_BINARY_DIR}/include/Halide.h"
-)
 
 if (Halide_BUNDLE_STATIC)
     bundle_static(Halide)

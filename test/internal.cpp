@@ -16,8 +16,9 @@
 #include "Monotonic.h"
 #include "Reduction.h"
 #include "Solve.h"
-#include "SpirvIR.h"
 #include "UniquifyVariableNames.h"
+
+#include "internal/SpirvIR.h"
 
 using namespace Halide;
 using namespace Halide::Internal;

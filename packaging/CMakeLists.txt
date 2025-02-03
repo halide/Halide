@@ -40,13 +40,16 @@ endfunction()
 # Main library exports
 ##
 
-install(TARGETS Halide Halide_Generator Halide_GenGen
-        EXPORT Halide_Targets
-        RUNTIME COMPONENT Halide_Runtime
-        LIBRARY COMPONENT Halide_Runtime
-        NAMELINK_COMPONENT Halide_Development
-        ARCHIVE COMPONENT Halide_Development
-        FILE_SET HEADERS COMPONENT Halide_Development)
+install(
+    TARGETS Halide Halide_Generator Halide_GenGen
+    EXPORT Halide_Targets
+    RUNTIME COMPONENT Halide_Runtime
+    LIBRARY COMPONENT Halide_Runtime
+    NAMELINK_COMPONENT Halide_Development
+    ARCHIVE COMPONENT Halide_Development
+    FILE_SET HEADERS COMPONENT Halide_Development DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/halide"
+    FILE_SET monoheader COMPONENT Halide_Development
+)
 
 if (WITH_AUTOSCHEDULERS)
     set(autoschedulers Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021)
