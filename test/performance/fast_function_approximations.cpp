@@ -70,24 +70,24 @@ int main(int argc, char **argv) {
 
     // clang-format off
     FunctionToTest funcs[] = {
-        //{
-        //    "atan",
-        //    -range, range,
-        //    0, 0,
-        //    -1.0, 1.0,
-        //    [](Expr x, Expr y, Expr z) { return Halide::atan(x + z); },
-        //    [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_atan(x + z, prec); },
-        //    {Target::Feature::WebGPU, Target::Feature::Metal},
-        //},
-        //{
-        //    "atan2",
-        //    -range, range,
-        //    -range, range,
-        //    -pi, pi,
-        //    [](Expr x, Expr y, Expr z) { return Halide::atan2(x, y + z); },
-        //    [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_atan2(x, y + z, prec); },
-        //    {Target::Feature::WebGPU, Target::Feature::Metal},
-        //},
+        {
+            "atan",
+            -range, range,
+            0, 0,
+            -1.0, 1.0,
+            [](Expr x, Expr y, Expr z) { return Halide::atan(x + z); },
+            [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_atan(x + z, prec); },
+            {Target::Feature::WebGPU, Target::Feature::Metal},
+        },
+        {
+            "atan2",
+            -range, range,
+            -range, range,
+            -pi, pi,
+            [](Expr x, Expr y, Expr z) { return Halide::atan2(x, y + z); },
+            [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_atan2(x, y + z, prec); },
+            {Target::Feature::WebGPU, Target::Feature::Metal},
+        },
         {
             "sin",
             -range, range,
