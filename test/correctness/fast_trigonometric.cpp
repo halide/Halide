@@ -30,11 +30,11 @@ int main(int argc, char **argv) {
         const float cos_x_ref = cos(x);
         if (std::abs(sin_x_ref - sin_x) > 1e-5) {
             fprintf(stderr, "fast_sin(%.6f) = %.20f not equal to %.20f\n", x, sin_x, sin_x_ref);
-            //exit(1);
+            // exit(1);
         }
         if (std::abs(cos_x_ref - cos_x) > 1e-5) {
             fprintf(stderr, "fast_cos(%.6f) = %.20f not equal to %.20f\n", x, cos_x, cos_x_ref);
-            //exit(1);
+            // exit(1);
         }
     }
     printf("Success!\n");

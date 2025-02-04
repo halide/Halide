@@ -152,9 +152,9 @@ int main(int argc, char **argv) {
 
         // Print results for this function
         printf("      %s           : %9.5f ns per evaluation  [per invokation: %6.3f ms]\n",
-                ftt.name.c_str(),
-                pipeline_time_ref * pipeline_time_to_ns_per_evaluation,
-                pipeline_time_ref * 1e3);
+               ftt.name.c_str(),
+               pipeline_time_ref * pipeline_time_to_ns_per_evaluation,
+               pipeline_time_ref * 1e3);
 
         for (PrecisionToTest &precision : precisions_to_test) {
             double approx_pipeline_time;
@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
             {
                 Func approx_func{ftt.name + "_approx"};
                 Halide::ApproximationPrecision prec = precision.precision;
-                prec.allow_native_when_faster = false; // Always test the actual tabular functions.
+                prec.allow_native_when_faster = false;  // Always test the actual tabular functions.
                 approx_func(x, y) = sum(ftt.make_approximation(arg_x, arg_y, arg_z, prec));
                 schedule(approx_func);
                 approx_func.compile_jit();
@@ -180,13 +180,12 @@ int main(int argc, char **argv) {
             {
                 Func approx_func{ftt.name + "_approx_maybe_native"};
                 Halide::ApproximationPrecision prec = precision.precision;
-                prec.allow_native_when_faster = true; // Now make sure it's always at least as fast!
+                prec.allow_native_when_faster = true;  // Now make sure it's always at least as fast!
                 approx_func(x, y) = sum(ftt.make_approximation(arg_x, arg_y, arg_z, prec));
                 schedule(approx_func);
                 approx_func.compile_jit();
                 approx_maybe_native_pipeline_time = benchmark([&]() { approx_func.realize(buffer_out); buffer_out.device_sync(); }, bcfg);
             }
-
 
             // Check for speedup
             bool should_be_faster = true;
@@ -196,7 +195,6 @@ int main(int argc, char **argv) {
                 }
             }
             if (should_be_faster) num_tests++;
-
 
             printf(" [force_approx");
             if (pipeline_time_ref < approx_pipeline_time * 0.90) {
@@ -208,11 +206,11 @@ int main(int argc, char **argv) {
                 }
             } else if (pipeline_time_ref < approx_pipeline_time * 1.10) {
                 printf("   equally fast (%+5.1f%% faster)",
-                        100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
+                       100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (should_be_faster) num_passed++;
             } else {
                 printf("   %4.1f%% faster",
-                        100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
+                       100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (should_be_faster) num_passed++;
             }
             printf("]");
