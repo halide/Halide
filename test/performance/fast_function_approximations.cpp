@@ -139,6 +139,11 @@ int main(int argc, char **argv) {
     Halide::Tools::BenchmarkConfig bcfg;
     bcfg.max_time = 0.5;
     for (FunctionToTest ftt : funcs) {
+        if (argc == 2 && argv[1] != ftt.name) {
+            printf("Skipping %s\n", ftt.name.c_str());
+            continue;
+        }
+
         Expr arg_x = ftt.lower_x * (1.0f - t0) + ftt.upper_x * t0;
         Expr arg_y = ftt.lower_y * (1.0f - t1) + ftt.upper_y * t1;
         Expr arg_z = ftt.lower_z * (1.0f - t2) + ftt.upper_z * t2;
