@@ -106,6 +106,7 @@ tests(GROUPS correctness
       extract_concat_bits.cpp
       failed_unroll.cpp
       fast_arctan.cpp
+      fast_function_approximations.cpp
       fast_trigonometric.cpp
       fibonacci.cpp
       fit_function.cpp

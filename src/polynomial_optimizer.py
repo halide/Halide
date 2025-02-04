@@ -56,7 +56,12 @@ args = parser.parse_args()
 
 loss_power = 500
 
+import collections
+
+Metrics = collections.namedtuple("Metrics", ["mean_squared_error", "max_abs_error", "max_ulp_error"])
+
 def optimize_approximation(loss, order):
+    func_fixed_part = lambda x: x * 0.0
     if args.func == "atan":
         if hasattr(np, "atan"):
             func = np.atan
@@ -77,18 +82,26 @@ def optimize_approximation(loss, order):
         lower, upper = 0.0, np.pi / 2
     elif args.func == "exp":
         func = lambda x: np.exp(x)
-        exponents = np.arange(order)
+        func_fixed_part = lambda x: 1 + x
+        exponents = np.arange(2, order)
+        lower, upper = 0, np.log(2)
+    elif args.func == "expm1":
+        func = lambda x: np.expm1(x)
+        exponents = np.arange(1, order + 1)
         lower, upper = 0, np.log(2)
     elif args.func == "log":
         func = lambda x: np.log(x + 1.0)
-        exponents = np.arange(order)
-        lower, upper = 0, np.log(2)
+        exponents = np.arange(1, order + 1)
+        lower, upper = -0.25, 0.5
     else:
         print("Unknown function:", args.func)
         exit(1)
 
-    X = np.linspace(lower, upper, 2048 * 8)
+
+    X = np.linspace(lower, upper, 512 * 31)
     target = func(X)
+    fixed_part = func_fixed_part(X)
+    target_fitting_part = target - fixed_part
 
     target_spacing = np.spacing(np.abs(target).astype(np.float32)).astype(np.float64) # Precision (i.e., ULP)
     # We will optimize everything using double precision, which means we will obtain more bits of
@@ -98,6 +111,7 @@ def optimize_approximation(loss, order):
     if args.print: print("exponent:", exponents)
     coeffs = np.zeros(len(exponents))
     powers = np.power(X[:,None], exponents)
+    assert exponents.dtype == np.int64
 
 
 
@@ -106,7 +120,7 @@ def optimize_approximation(loss, order):
     # We will iteratively adjust the weights to put more focus on the parts where it goes wrong.
     weight = np.ones_like(target)
 
-    lstsq_iterations = loss_power * 10
+    lstsq_iterations = loss_power * 20
     if loss == "mse":
         lstsq_iterations = 1
 
@@ -120,9 +134,9 @@ def optimize_approximation(loss, order):
     try:
         for i in iterator:
             norm_weight = weight / np.mean(weight)
-            coeffs, residuals, rank, s = np.linalg.lstsq(powers * norm_weight[:,None], target * norm_weight, rcond=None)
+            coeffs, residuals, rank, s = np.linalg.lstsq(powers * norm_weight[:,None], target_fitting_part * norm_weight, rcond=-1)
 
-            y_hat = np.sum((powers * coeffs)[:,::-1], axis=-1)
+            y_hat = fixed_part + np.sum((powers * coeffs)[:,::-1], axis=-1)
             diff = y_hat - target
             abs_diff = np.abs(diff)
 
@@ -153,6 +167,7 @@ def optimize_approximation(loss, order):
             p = i / lstsq_iterations
             p = min(p * 1.25, 1.0)
             raised_error = np.power(norm_error_metric, 2 + loss_power * p)
+            weight *= 0.99999
             weight += raised_error
 
             mean_loss = np.mean(np.power(abs_diff, loss_power))
@@ -167,6 +182,24 @@ def optimize_approximation(loss, order):
 
     except KeyboardInterrupt:
         print("Interrupted")
+
+    float64_metrics = Metrics(mean_squared_error, max_abs_error, max_ulp_error)
+
+    # Reevaluate with float32 precision.
+    f32_powers = np.power(X[:,None].astype(np.float32), exponents).astype(np.float32)
+    f32_y_hat = fixed_part.astype(np.float32) + np.sum((f32_powers * coeffs.astype(np.float32))[:,::-1], axis=-1)
+    f32_diff = f32_y_hat - target.astype(np.float32)
+    f32_abs_diff = np.abs(f32_diff)
+    # MSE metric
+    f32_mean_squared_error = np.mean(np.square(f32_diff))
+    # MAE metric
+    f32_max_abs_error = np.amax(f32_abs_diff)
+    # MaxULP metric
+    f32_ulp_error = f32_diff / np.spacing(np.abs(target).astype(np.float32))
+    f32_abs_ulp_error = np.abs(f32_ulp_error)
+    f32_max_ulp_error = np.amax(f32_abs_ulp_error)
+
+    float32_metrics = Metrics(f32_mean_squared_error, f32_max_abs_error, f32_max_ulp_error)
 
     if not args.no_gui:
         import matplotlib.pyplot as plt
@@ -236,13 +269,14 @@ def optimize_approximation(loss, order):
         plt.tight_layout()
         plt.show()
 
-    return init_coeffs, coeffs, mean_squared_error, max_abs_error, max_ulp_error, loss_history
+    return init_coeffs, coeffs, float32_metrics, float64_metrics, loss_history
 
 
 for loss in args.loss:
+    print_nl = args.format == "all"
     for order in args.order:
         if args.print: print("Optimizing {loss} with {order} terms...")
-        init_coeffs, coeffs, mean_squared_error, max_abs_error, max_ulp_error, loss_history = optimize_approximation(loss, order)
+        init_coeffs, coeffs, float32_metrics, float64_metrics, loss_history = optimize_approximation(loss, order)
 
 
         if args.print:
@@ -264,26 +298,28 @@ for loss in args.loss:
             print_comment()
             for i, (e, c) in enumerate(zip(exponents, coeffs)):
                 print(f"const float c_{e}({c:+.12e}f);")
-            print()
-
+            if print_nl: print()
 
         if args.format in ["all", "array"]:
             print_comment()
             print("const float coef[] = {");
             for i, (e, c) in enumerate(reversed(list(zip(exponents, coeffs)))):
                 print(f"    {c:+.12e}, // * x^{e}")
-            print("};\n")
+            print("};")
+            if print_nl: print()
 
         if args.format in ["all", "switch"]:
             print("case ApproximationPrecision::" + loss.upper() + "_Poly" + str(order) + ":" +
                   f" // (MSE={mean_squared_error:.4e}, MAE={max_abs_error:.4e}, MaxUlpE={max_ulp_error:.4e})")
             print("    c = {" + (", ".join([f"{c:+.12e}f" for c in coeffs])) + "}; break;")
-            print()
+            if print_nl: print()
 
         if args.format in ["all", "table"]:
-            print("{ApproximationPrecision::" + loss.upper() + f", {mean_squared_error:.6e}, {max_abs_error:.6e}, {max_ulp_error:.3e}, "
-                   + "{" + ", ".join([f"{c:+.8e}" for c in coeffs]) + "}},")
-            print()
+            print("{OO::" + loss.upper() + ", "
+                  + f"{{{float32_metrics.mean_squared_error:.6e}, {float32_metrics.max_abs_error:.6e}, {float32_metrics.max_ulp_error:.3e}}}, "
+                  + f"{{{float64_metrics.mean_squared_error:.6e}, {float64_metrics.max_abs_error:.6e}, {float64_metrics.max_ulp_error:.3e}}}, "
+                  + "{" + ", ".join([f"{c:+.12e}" for c in coeffs]) + "}},")
+            if print_nl: print()
 
 
         if args.print: print("exponent:", exponents)
