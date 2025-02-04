@@ -43,8 +43,8 @@ struct FunctionToTest {
     TestRange2D extended;
     std::function<Expr(Expr x, Expr y)> make_reference;
     std::function<Expr(Expr x, Expr y, Halide::ApproximationPrecision)> make_approximation;
-    int max_mulpe_precise{0}; // max MULPE allowed when MAE query was <= 1e-6
-    int max_mulpe_extended{0}; // max MULPE allowed when MAE query was <= 1e-6
+    int max_mulpe_precise{0};   // max MULPE allowed when MAE query was <= 1e-6
+    int max_mulpe_extended{0};  // max MULPE allowed when MAE query was <= 1e-6
     int test_bits{0xff};
 } functions_to_test[] = {
     // clang-format off
@@ -141,7 +141,6 @@ struct PrecisionToTest {
     {{ApproximationPrecision::MULPE_MAE, 0, 5e-7}, "MULPE+MAE"},
 };
 
-
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     setlocale(LC_NUMERIC, "");
@@ -166,17 +165,17 @@ int main(int argc, char **argv) {
         for (const std::pair<TestRange2D, std::string> &test_range_and_name : ranges) {
             TestRange2D range = test_range_and_name.first;
             printf("Testing fast_%s on its %s range ([%f, %f], [%f, %f])...\n", ftt.name.c_str(), test_range_and_name.second.c_str(),
-                    range.x.l, range.x.u, range.y.l, range.y.u);
+                   range.x.l, range.x.u, range.y.l, range.y.u);
             // Reference:
             Expr arg_x = range.x.l * (1.0f - t0) + range.x.u * t0;
             Expr arg_y = range.y.l * (1.0f - t1) + range.y.u * t1;
             Func ref_func{ftt.name + "_ref"};
             ref_func(x, y) = ftt.make_reference(arg_x, arg_y);
-            ref_func.realize(out_ref); // No schedule: scalar evaluation using libm calls on CPU.
+            ref_func.realize(out_ref);  // No schedule: scalar evaluation using libm calls on CPU.
             out_ref.copy_to_host();
             for (const PrecisionToTest &test : precisions_to_test) {
                 Halide::ApproximationPrecision prec = test.precision;
-                prec.allow_native_when_faster = false; // We want to actually validate our approximation.
+                prec.allow_native_when_faster = false;  // We want to actually validate our approximation.
 
                 Func approx_func{ftt.name + "_approx"};
                 approx_func(x, y) = ftt.make_approximation(arg_x, arg_y, prec);
@@ -211,8 +210,8 @@ int main(int argc, char **argv) {
                 }
 
                 printf("    fast_%s  Approx[%s-optimized, TargetMAE=%.0e] | MaxAbsError: %.4e | MaxULPError: %'14d | MaxMantissaError: %2d",
-                        ftt.name.c_str(), test.objective.c_str(), prec.constraint_max_absolute_error,
-                        max_absolute_error, max_ulp_error, max_mantissa_error);
+                       ftt.name.c_str(), test.objective.c_str(), prec.constraint_max_absolute_error,
+                       max_absolute_error, max_ulp_error, max_mantissa_error);
 
                 if (test_range_and_name.second == "precise") {
                     if ((ftt.test_bits & VALIDATE_MAE_ON_PRECISE)) {
@@ -261,4 +260,3 @@ int main(int argc, char **argv) {
     printf("Passed %d / %d accuracy tests.\n", num_tests_passed, num_tests);
     printf("Success!\n");
 }
-
