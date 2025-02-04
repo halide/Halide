@@ -1399,16 +1399,15 @@ Expr fast_sin_cos_v2(const Expr &x_full, bool is_sin, ApproximationPrecision pre
     Expr k = cast<int>(k_real);
     Expr k_mod4 = k % 4;
     Expr sin_usecos = is_sin ? ((k_mod4 == 1) || (k_mod4 == 3)) : ((k_mod4 == 0) || (k_mod4 == 2));
-    //sin_usecos = !sin_usecos;
+    // sin_usecos = !sin_usecos;
     Expr flip_sign = is_sin ? (k_mod4 > 1) : ((k_mod4 == 1) || (k_mod4 == 2));
 
     // Reduce the angle modulo pi/2: i.e., to the angle within the quadrant.
     Expr x = x_full - k_real * constant(type, PI_OVER_TWO);
     x = select(sin_usecos, constant(type, PI_OVER_TWO) - x, x);
 
-
     const Internal::Approximation *approx = Internal::best_sin_approximation(precision, type);
-    //const Internal::Approximation *approx = Internal::best_cos_approximation(precision);
+    // const Internal::Approximation *approx = Internal::best_cos_approximation(precision);
     const std::vector<double> &c = approx->coefficients;
     Expr x2 = x * x;
     Expr result = constant(type, c.back());
@@ -1423,17 +1422,17 @@ Expr fast_sin_cos_v2(const Expr &x_full, bool is_sin, ApproximationPrecision pre
 }  // namespace
 
 Expr fast_sin(const Expr &x, ApproximationPrecision precision) {
-    //return fast_sin_cos(x, true);
+    // return fast_sin_cos(x, true);
     Expr native_is_fast = target_has_feature(Target::Vulkan);
     return select(native_is_fast && precision.allow_native_when_faster,
-            sin(x), fast_sin_cos_v2(x, true, precision));
+                  sin(x), fast_sin_cos_v2(x, true, precision));
 }
 
 Expr fast_cos(const Expr &x, ApproximationPrecision precision) {
-    //return fast_sin_cos(x, false);
+    // return fast_sin_cos(x, false);
     Expr native_is_fast = target_has_feature(Target::Vulkan);
     return select(native_is_fast && precision.allow_native_when_faster,
-            cos(x), fast_sin_cos_v2(x, false, precision));
+                  cos(x), fast_sin_cos_v2(x, false, precision));
 }
 
 // A vectorizable atan and atan2 implementation.
