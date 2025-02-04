@@ -1336,38 +1336,28 @@ Expr rounding_mul_shift_right(Expr a, Expr b, int q) {
     return rounding_mul_shift_right(std::move(a), std::move(b), make_const(qt, q));
 }
 
-Expr fast_log(const Expr &x) {
-    user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
-
-    Expr reduced, exponent;
-    range_reduce_log(x, &reduced, &exponent);
-
-    Expr x1 = reduced - 1.0f;
-
-    float coeff[] = {
-        0.07640318789187280912f,
-        -0.16252961013874300811f,
-        0.20625219040645212387f,
-        -0.25110261010892864775f,
-        0.33320464908377461777f,
-        -0.49997513376789826101f,
-        1.0f,
-        0.0f};
-
-    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff) / sizeof(coeff[0]));
-    result = result + cast<float>(exponent) * logf(2);
-    result = common_subexpression_elimination(result);
-    return result;
-}
-
 namespace {
+
+constexpr double PI = 3.14159265358979323846;
+constexpr double TWO_OVER_PI = 0.63661977236758134308;
+constexpr double PI_OVER_TWO = 1.57079632679489661923;
+
+Expr constant(Type t, double value) {
+    if (t == Float(64)) {
+        return Expr(value);
+    }
+    if (t == Float(32)) {
+        return Expr(float(value));
+    }
+    internal_error << "Constants only for double or float.";
+    return 0;
+}
 
 // A vectorizable sine and cosine implementation. Based on syrah fast vector math
 // https://github.com/boulos/syrah/blob/master/src/include/syrah/FixedVectorMath.h#L55
+[[deprecated("No precision parameter, use fast_sin_cos_v2 instead.")]]
 Expr fast_sin_cos(const Expr &x_full, bool is_sin) {
-    const float two_over_pi = 0.636619746685028076171875f;
-    const float pi_over_two = 1.57079637050628662109375f;
-    Expr scaled = x_full * two_over_pi;
+    Expr scaled = x_full * float(TWO_OVER_PI);
     Expr k_real = floor(scaled);
     Expr k = cast<int>(k_real);
     Expr k_mod4 = k % 4;
@@ -1375,7 +1365,7 @@ Expr fast_sin_cos(const Expr &x_full, bool is_sin) {
     Expr flip_sign = is_sin ? (k_mod4 > 1) : ((k_mod4 == 1) || (k_mod4 == 2));
 
     // Reduce the angle modulo pi/2: i.e., to the angle within the quadrant.
-    Expr x = x_full - k_real * pi_over_two;
+    Expr x = x_full - k_real * float(PI_OVER_TWO);
 
     const float sin_c2 = -0.16666667163372039794921875f;
     const float sin_c4 = 8.333347737789154052734375e-3;
@@ -1401,41 +1391,76 @@ Expr fast_sin_cos(const Expr &x_full, bool is_sin) {
     return select(flip_sign, -tri_func, tri_func);
 }
 
-}  // namespace
+Expr fast_sin_cos_v2(const Expr &x_full, bool is_sin, ApproximationPrecision precision) {
+    Type type = x_full.type();
+    // Range reduction to interval [0, pi/2] which corresponds to a quadrant of the circle.
+    Expr scaled = x_full * constant(type, TWO_OVER_PI);
+    Expr k_real = floor(scaled);
+    Expr k = cast<int>(k_real);
+    Expr k_mod4 = k % 4;
+    Expr sin_usecos = is_sin ? ((k_mod4 == 1) || (k_mod4 == 3)) : ((k_mod4 == 0) || (k_mod4 == 2));
+    //sin_usecos = !sin_usecos;
+    Expr flip_sign = is_sin ? (k_mod4 > 1) : ((k_mod4 == 1) || (k_mod4 == 2));
 
-Expr fast_sin(const Expr &x_full) {
-    return fast_sin_cos(x_full, true);
+    // Reduce the angle modulo pi/2: i.e., to the angle within the quadrant.
+    Expr x = x_full - k_real * constant(type, PI_OVER_TWO);
+    x = select(sin_usecos, constant(type, PI_OVER_TWO) - x, x);
+
+
+    const Internal::Approximation *approx = Internal::best_sin_approximation(precision, type);
+    //const Internal::Approximation *approx = Internal::best_cos_approximation(precision);
+    const std::vector<double> &c = approx->coefficients;
+    Expr x2 = x * x;
+    Expr result = constant(type, c.back());
+    for (size_t i = 1; i < c.size(); ++i) {
+        result = x2 * result + constant(type, c[c.size() - i - 1]);
+    }
+    result *= x;
+    result = select(flip_sign, -result, result);
+    return common_subexpression_elimination(result, true);
 }
 
-Expr fast_cos(const Expr &x_full) {
-    return fast_sin_cos(x_full, false);
+}  // namespace
+
+Expr fast_sin(const Expr &x, ApproximationPrecision precision) {
+    //return fast_sin_cos(x, true);
+    Expr native_is_fast = target_has_feature(Target::Vulkan);
+    return select(native_is_fast && precision.allow_native_when_faster,
+            sin(x), fast_sin_cos_v2(x, true, precision));
+}
+
+Expr fast_cos(const Expr &x, ApproximationPrecision precision) {
+    //return fast_sin_cos(x, false);
+    Expr native_is_fast = target_has_feature(Target::Vulkan);
+    return select(native_is_fast && precision.allow_native_when_faster,
+            cos(x), fast_sin_cos_v2(x, false, precision));
 }
 
 // A vectorizable atan and atan2 implementation.
 // Based on the ideas presented in https://mazzo.li/posts/vectorized-atan2.html.
 Expr fast_atan_approximation(const Expr &x_full, ApproximationPrecision precision, bool between_m1_and_p1) {
-    const float pi_over_two = 1.57079632679489661923f;
+    Type type = x_full.type();
     Expr x;
     // if x > 1 -> atan(x) = Pi/2 - atan(1/x)
     Expr x_gt_1 = abs(x_full) > 1.0f;
     if (between_m1_and_p1) {
         x = x_full;
     } else {
-        x = select(x_gt_1, 1.0f / x_full, x_full);
+        x = select(x_gt_1, constant(type, 1.0) / x_full, x_full);
     }
-    const Internal::Approximation *approx = Internal::best_atan_approximation(precision);
+    const Internal::Approximation *approx = Internal::best_atan_approximation(precision, type);
     const std::vector<double> &c = approx->coefficients;
     Expr x2 = x * x;
-    Expr result = float(c.back());
+    Expr result = constant(type, c.back());
     for (size_t i = 1; i < c.size(); ++i) {
-        result = x2 * result + float(c[c.size() - i - 1]);
+        result = x2 * result + constant(type, c[c.size() - i - 1]);
     }
     result *= x;
 
     if (!between_m1_and_p1) {
-        result = select(x_gt_1, select(x_full < 0, -pi_over_two, pi_over_two) - result, result);
+        result = select(x_gt_1, select(x_full < 0, constant(type, -PI_OVER_TWO), constant(type, PI_OVER_TWO)) - result, result);
     }
-    return common_subexpression_elimination(result);
+    return common_subexpression_elimination(result, true);
 }
 
 Expr fast_atan(const Expr &x_full, ApproximationPrecision precision) {
@@ -1443,8 +1468,8 @@ Expr fast_atan(const Expr &x_full, ApproximationPrecision precision) {
 }
 
 Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) {
-    const float pi = 3.14159265358979323846f;
-    const float pi_over_two = 1.57079632679489661923f;
+    user_assert(y.type() == x.type()) << "fast_atan2 should take two arguments of the same type.";
+    Type type = y.type();
     // Making sure we take the ratio of the biggest number by the smallest number (in absolute value)
     // will always give us a number between -1 and +1, which is the range over which the approximation
     // works well. We can therefore also skip the inversion logic in the fast_atan_approximation function
@@ -1453,6 +1478,8 @@ Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) 
     Expr swap = abs(y) > abs(x);
     Expr atan_input = select(swap, x, y) / select(swap, y, x);
     Expr ati = fast_atan_approximation(atan_input, precision, true);
+    Expr pi_over_two = constant(type, PI_OVER_TWO);
+    Expr pi = constant(type, PI);
     Expr at = select(swap, select(atan_input >= 0.0f, pi_over_two, -pi_over_two) - ati, ati);
     // This select statement is literally taken over from the definition on Wikipedia.
     // There might be optimizations to be done here, but I haven't tried that yet. -- Martijn
@@ -1463,17 +1490,21 @@ Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) 
         x == 0.0f && y > 0.0f, pi_over_two,
         x == 0.0f && y < 0.0f, -pi_over_two,
         0.0f);
-    return common_subexpression_elimination(result);
+    return common_subexpression_elimination(result, true);
 }
 
-Expr fast_exp(const Expr &x_full) {
+Expr fast_exp(const Expr &x_full, ApproximationPrecision prec) {
+    Type type = x_full.type();
     user_assert(x_full.type() == Float(32)) << "fast_exp only works for Float(32)";
 
-    Expr scaled = x_full / logf(2.0);
+    Expr log2 = constant(type, std::log(2.0));
+
+    Expr scaled = x_full / log2;
     Expr k_real = floor(scaled);
     Expr k = cast<int>(k_real);
-    Expr x = x_full - k_real * logf(2.0);
+    Expr x = x_full - k_real * log2;
 
+#if 0
     float coeff[] = {
         0.01314350012789660196f,
         0.03668965196652099192f,
@@ -1482,6 +1513,17 @@ Expr fast_exp(const Expr &x_full) {
         1.0f,
         1.0f};
     Expr result = evaluate_polynomial(x, coeff, sizeof(coeff) / sizeof(coeff[0]));
+#else
+    const Internal::Approximation *approx = Internal::best_exp_approximation(prec, type);
+    const std::vector<double> &c = approx->coefficients;
+
+    Expr result = constant(type, c.back());
+    for (size_t i = 1; i < c.size(); ++i) {
+        result = x * result + constant(type, c[c.size() - i - 1]);
+    }
+    result = result * x + constant(type, 1.0);
+    result = result * x + constant(type, 1.0);
+#endif
 
     // Compute 2^k.
     int fpbias = 127;
@@ -1491,6 +1533,42 @@ Expr fast_exp(const Expr &x_full) {
     // thing as float.
     Expr two_to_the_n = reinterpret<float>(biased << 23);
     result *= two_to_the_n;
+    result = common_subexpression_elimination(result, true);
+    return result;
+}
+
+Expr fast_log(const Expr &x, ApproximationPrecision prec) {
+    Type type = x.type();
+    user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
+
+    Expr log2 = constant(type, std::log(2.0));
+    Expr reduced, exponent;
+    range_reduce_log(x, &reduced, &exponent);
+
+    Expr x1 = reduced - 1.0f;
+#if 0
+    float coeff[] = {
+        0.07640318789187280912f,
+        -0.16252961013874300811f,
+        0.20625219040645212387f,
+        -0.25110261010892864775f,
+        0.33320464908377461777f,
+        -0.49997513376789826101f,
+        1.0f,
+        0.0f};
+
+    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff) / sizeof(coeff[0]));
+#else
+    const Internal::Approximation *approx = Internal::best_log_approximation(prec, type);
+    const std::vector<double> &c = approx->coefficients;
+
+    Expr result = constant(type, c.back());
+    for (size_t i = 1; i < c.size(); ++i) {
+        result = x1 * result + constant(type, c[c.size() - i - 1]);
+    }
+    result = result * x1;
+#endif
+    result = result + cast<float>(exponent) * log2;
     result = common_subexpression_elimination(result);
     return result;
 }
@@ -2327,14 +2405,14 @@ Expr erf(const Expr &x) {
     return halide_erf(x);
 }
 
-Expr fast_pow(Expr x, Expr y) {
+Expr fast_pow(Expr x, Expr y, ApproximationPrecision prec) {
     if (auto i = as_const_int(y)) {
         return raise_to_integer_power(std::move(x), *i);
     }
 
     x = cast<float>(std::move(x));
     y = cast<float>(std::move(y));
-    return select(x == 0.0f, 0.0f, fast_exp(fast_log(x) * std::move(y)));
+    return select(x == 0.0f, 0.0f, fast_exp(fast_log(x, prec) * std::move(y), prec));
 }
 
 Expr fast_inverse(Expr x) {
