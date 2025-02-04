@@ -16,6 +16,7 @@ tests(GROUPS performance
       fast_inverse.cpp
       fast_pow.cpp
       fast_sine_cosine.cpp
+      fast_function_approximations.cpp
       gpu_half_throughput.cpp
       jit_stress.cpp
       lots_of_inputs.cpp

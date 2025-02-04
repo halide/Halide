@@ -10,13 +10,20 @@ namespace Internal {
 
 struct Approximation {
     ApproximationPrecision::OptimizationObjective objective;
-    double mse;
-    double mae;
-    double mulpe;
+    struct Metrics {
+        double mse;
+        double mae;
+        double mulpe;
+    } metrics_f32, metrics_f64;
     std::vector<double> coefficients;
 };
 
-const Approximation *best_atan_approximation(Halide::ApproximationPrecision precision);
+const Approximation *best_atan_approximation(Halide::ApproximationPrecision precision, Type type);
+const Approximation *best_sin_approximation(Halide::ApproximationPrecision precision, Type type);
+const Approximation *best_cos_approximation(Halide::ApproximationPrecision precision, Type type);
+const Approximation *best_log_approximation(Halide::ApproximationPrecision precision, Type type);
+const Approximation *best_exp_approximation(Halide::ApproximationPrecision precision, Type type);
+const Approximation *best_expm1_approximation(Halide::ApproximationPrecision precision, Type type);
 
 }  // namespace Internal
 }  // namespace Halide
