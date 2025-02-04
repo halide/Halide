@@ -1013,7 +1013,6 @@ Expr fast_sin(const Expr &x, ApproximationPrecision precision = {ApproximationPr
 Expr fast_cos(const Expr &x, ApproximationPrecision precision = {ApproximationPrecision::MULPE, 0, 1e-5});
 // @}
 
-
 /** Fast vectorizable approximations for arctan and arctan2 for Float(32).
  *
  * Desired precision can be specified as either a maximum absolute error (MAE) or
