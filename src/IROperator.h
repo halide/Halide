@@ -975,8 +975,8 @@ Expr pow(Expr x, Expr y);
  * mantissa. Vectorizes cleanly. */
 Expr erf(const Expr &x);
 
-/** Struct that allows the user to specify several requirements for functions
- * that are approximated by polynomial expansions. These polynomials can be
+/** Struct that allows the user to specify precision requirements for functions
+ * that are approximated. These polynomials can be
  * optimized for four different metrics: Mean Squared Error, Maximum Absolute Error,
  * Maximum Units in Last Place (ULP) Error, or a 50%/50% blend of MAE and MULPE.
  *
@@ -994,80 +994,110 @@ Expr erf(const Expr &x);
  */
 struct ApproximationPrecision {
     enum OptimizationObjective {
-        MSE,        //< Mean Squared Error Optimized.
+        AUTO,       //< No preference, but favor speed.
         MAE,        //< Optimized for Max Absolute Error.
-        MULPE,      //< Optimized for Max ULP Error. ULP is "Units in Last Place", measured in IEEE 32-bit floats.
-        MULPE_MAE,  //< Optimized for simultaneously Max ULP Error, and Max Absolute Error, each with a weight of 50%.
-    } optimized_for;
-    int constraint_min_poly_terms{0};           //< Number of terms in polynomial (zero for no constraint).
-    int constraint_max_ulp_error{0};                       //< Max error measured in units in last place (zero for no contraint).
-    float constraint_max_absolute_error{0.0f};  //< Max absolute error (zero for no constraint).
-    bool allow_native_when_faster{true};        //< For some targets, the native functions are really fast.
-                                                //  Put this on false to force expansion of the polynomial approximation.
+        MULPE,      //< Optimized for Max ULP Error. ULP is "Units in Last Place", when represented in IEEE 32-bit floats.
+        MULPE_MAE,  //< Optimized for simultaneously Max ULP Error, and Max Absolute Error, each with a normalized weight of 50%.
+    } optimized_for{AUTO};
+
+    /**
+     * Most function approximations have a range where the approximation works
+     * natively (typically close to zero), without any range reduction tricks
+     * (e.g., exploiting symmetries, repetitions). You may specify a maximal
+     * absolute error or maximal units in last place error, which will be
+     * interpreted as the maximal absolute error within this native range of the
+     * approximation. This will be used as a hint as to which implementation to
+     * use.
+     */
+    // @{
+    int constraint_max_ulp_error{0};
+    float constraint_max_absolute_error{0.0f};
+    // @}
+
+    /**
+     * For most functions, Halide has a built-in table of polynomial
+     * approximations. However, some targets have specialized instructions or
+     * intrinsics available that allow to produce an even faster approximation.
+     * Setting this integer to a non-zero value will force Halide to use the
+     * polynomial with at least this many terms, instead of specialized
+     * device-specific code. This means this is still combinable with the
+     * other constraints.
+     * This is mostly useful for testing and benchmarking.
+     */
+    int force_halide_polynomial{0};
 
     /** MULPE-optimized, with max ULP error. */
     static ApproximationPrecision max_ulp_error(int mulpe) {
-        return ApproximationPrecision{MULPE, 0, mulpe, 0.0f, true};
+        return ApproximationPrecision{MULPE, mulpe, 0.0f, false};
     }
-    /** MULPE-optimized, with max absolute error. */
+    /** MAE-optimized, with max absolute error. */
     static ApproximationPrecision max_abs_error(float mae) {
-        return ApproximationPrecision{MULPE, 0, 0, mae, true};
+        return ApproximationPrecision{MAE, 0, mae, false};
+    }
+    /** MULPE-optimized, forced Halide polynomial with given number of terms. */
+    static ApproximationPrecision poly_mulpe(int num_terms) {
+        user_assert(num_terms > 0);
+        return ApproximationPrecision{MULPE, 0, 0.0f, num_terms};
+    }
+    /** MAE-optimized, forced Halide polynomial with given number of terms. */
+    static ApproximationPrecision poly_mae(int num_terms) {
+        user_assert(num_terms > 0);
+        return ApproximationPrecision{MAE, 0, 0.0f, num_terms};
     }
 };
 
-/** Fast vectorizable approximation to some trigonometric functions for
- * Float(32).  Absolute approximation error is less than 1e-5. Slow on x86 if
- * you don't have at least sse 4.1. */
-// @{
-Expr fast_sin(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_abs_error(1e-5));
-Expr fast_cos(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_abs_error(1e-5));
-// @}
-
-/** Fast vectorizable approximations for arctan and arctan2 for Float(32).
- *
- * Desired precision can be specified as either a maximum absolute error (MAE) or
- * the number of terms in the polynomial approximation (see the ApproximationPrecision enum) which
- * are optimized for either:
- *  - MSE (Mean Squared Error)
- *  - MAE (Maximum Absolute Error)
- *  - MULPE (Maximum Units in Last Place Error).
- *
- * The default (Max ULP Error Polynomial of 6 terms) has a MAE of 3.53e-6.
- * For more info on the available approximations and their precisions, see the table in ApproximationTables.cpp.
- *
- * Note: the polynomial uses odd powers, so the number of terms is not the degree of the polynomial.
- * Note: the polynomial with 8 terms is only useful to increase precision for fast_atan, and not for fast_atan2.
- * Note: the performance of this functions seem to be not reliably faster on WebGPU (for now, August 2024).
+/** Fast approximation to some trigonometric functions for Float(32).
+ * Slow on x86 if you don't have at least sse 4.1.
+ * Vectorize cleanly when using polynomials.
+ * See \ref ApproximationPrecision for details on specifying precision.
  */
 // @{
-Expr fast_atan(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_abs_error(1e-5));
-Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = ApproximationPrecision::max_abs_error(1e-5));
+//* On NVIDIA CUDA: dedicated sin.approx.f32 instruction. */
+Expr fast_sin(const Expr &x, ApproximationPrecision precision = {});
+//* On NVIDIA CUDA: dedicated cos.approx.f32 instruction. */
+Expr fast_cos(const Expr &x, ApproximationPrecision precision = {});
+//* On NVIDIA CUDA: (only when MAE-optimized!) combination of sin.approx.f32, cos.approx.f32, div.approx.f32 instructions. */
+Expr fast_tan(const Expr &x, ApproximationPrecision precision = {});
+Expr fast_atan(const Expr &x, ApproximationPrecision precision = {});
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = {});
 // @}
 
-/**
- * TODO write doc
+
+/** Fast approximate log for Float(32).
+ * Returns nonsense for x <= 0.0f.
+ * Accurate up to the last 5 bits of the mantissa.
+ * Vectorizes cleanly when using polynomials.
+ * Slow on x86 if you don't have at least sse 4.1.
+ * On NVIDIA CUDA: combination of lg2.approx.f32 and a multiplication.
  */
-Expr fast_tan(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_ulp_error(32));
+Expr fast_log(const Expr &x, ApproximationPrecision precision = {});
 
-/** Fast approximate cleanly vectorizable log for Float(32). Returns
- * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
- * mantissa. Vectorizes cleanly. Slow on x86 if you don't
- * have at least sse 4.1. */
-Expr fast_log(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_ulp_error(8));
+/** Fast approximate exp for Float(32).
+ * Returns nonsense for inputs that would overflow.
+ * Typically accurate up to the last 5 bits of the mantissa.
+ * Approximation
+ * Vectorizes cleanly when using polynomials.
+ * Slow on x86 if you don't have at least sse 4.1.
+ * On NVIDIA CUDA: combination of ex2.approx.f32 and a multiplication.
+ */
+Expr fast_exp(const Expr &x, ApproximationPrecision precision = {});
 
-/** Fast approximate cleanly vectorizable exp for Float(32). Returns
- * nonsense for inputs that would overflow or underflow. Typically
- * accurate up to the last 5 bits of the mantissa. Gets worse when
- * approaching overflow. Vectorizes cleanly. Slow on x86 if you don't
- * have at least sse 4.1. */
-Expr fast_exp(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_ulp_error(32));
+/** Fast approximate pow for Float(32).
+ * Returns nonsense for x < 0.0f.
+ * Accurate up to the last 5 bits of the mantissa for typical exponents.
+ * Gets worse when approaching overflow.
+ * Vectorizes cleanly when using polynomials.
+ * Slow on x86 if you don't have at least sse 4.1.
+ * On NVIDIA CUDA: combination of ex2.approx.f32 and lg2.approx.f32.
+ */
+Expr fast_pow(Expr x, Expr y, ApproximationPrecision precision = {});
 
-/** Fast approximate cleanly vectorizable pow for Float(32). Returns
- * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
- * mantissa for typical exponents. Gets worse when approaching
- * overflow. Vectorizes cleanly. Slow on x86 if you don't
- * have at least sse 4.1. */
-Expr fast_pow(Expr x, Expr y, ApproximationPrecision precision = ApproximationPrecision::max_ulp_error(32));
+/** Fast approximate pow for Float(32).
+ * Vectorizes cleanly when using polynomials.
+ * Slow on x86 if you don't have at least sse 4.1.
+ * On NVIDIA CUDA: combination of ex2.approx.f32 and lg2.approx.f32.
+ */
+Expr fast_tanh(const Expr &x, ApproximationPrecision precision = {});
 
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
  * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
