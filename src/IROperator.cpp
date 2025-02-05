@@ -1340,10 +1340,9 @@ namespace {
 Expr make_approximation_precision_info(ApproximationPrecision precision) {
     return Call::make(type_of<ApproximationPrecision *>(), Call::make_struct, {
         Expr(precision.optimized_for),
-        Expr(precision.constraint_min_poly_terms),
         Expr(precision.constraint_max_ulp_error),
         Expr(precision.constraint_max_absolute_error),
-        Expr(precision.allow_native_when_faster),
+        Expr(precision.force_halide_polynomial),
     }, Call::CallType::Intrinsic);
 }
 
@@ -1385,9 +1384,14 @@ Expr fast_pow(Expr x, Expr y, ApproximationPrecision prec) {
         return raise_to_integer_power(std::move(x), *i);
     }
 
+    // TODO: figure out what to do with these casts...
     x = cast<float>(std::move(x));
     y = cast<float>(std::move(y));
     return Call::make(x.type(), Call::fast_pow, {x, y, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
+}
+
+Expr fast_tanh(const Expr &x, ApproximationPrecision precision) {
+    return Call::make(x.type(), Call::fast_tanh, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
 }
 
 

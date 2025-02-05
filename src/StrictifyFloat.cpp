@@ -27,6 +27,10 @@ class StrictifyFloat : public IRMutator {
 
         ScopedValue<Strictness> save_strictness(strictness, new_strictness);
 
+        if (call->type == type_of<ApproximationPrecision*>()) {
+            return call;
+        }
+
         return IRMutator::visit(call);
     }
 

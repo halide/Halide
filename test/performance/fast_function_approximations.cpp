@@ -11,28 +11,30 @@ struct FunctionToTest {
     float lower_z, upper_z;
     std::function<Expr(Expr x, Expr y, Expr z)> make_reference;
     std::function<Expr(Expr x, Expr y, Expr z, Halide::ApproximationPrecision)> make_approximation;
-    std::vector<Target::Feature> not_faster_on{};
+    std::vector<Target::Feature> force_poly_not_faster_on{};
 };
 
 struct PrecisionToTest {
     ApproximationPrecision precision;
     const char *name;
 } precisions_to_test[] = {
-    {{ApproximationPrecision::MULPE, 2}, "Poly2"},
-    {{ApproximationPrecision::MULPE, 3}, "Poly3"},
-    {{ApproximationPrecision::MULPE, 4}, "Poly4"},
-    {{ApproximationPrecision::MULPE, 5}, "Poly5"},
-    {{ApproximationPrecision::MULPE, 6}, "Poly6"},
-    {{ApproximationPrecision::MULPE, 7}, "Poly7"},
-    {{ApproximationPrecision::MULPE, 8}, "Poly8"},
+    {{}, "AUTO"},
 
-    {{ApproximationPrecision::MULPE, 0, 0, 1e-2}, "MAE 1e-2"},
-    {{ApproximationPrecision::MULPE, 0, 0, 1e-3}, "MAE 1e-3"},
-    {{ApproximationPrecision::MULPE, 0, 0, 1e-4}, "MAE 1e-4"},
-    {{ApproximationPrecision::MULPE, 0, 0, 1e-5}, "MAE 1e-5"},
-    {{ApproximationPrecision::MULPE, 0, 0, 1e-6}, "MAE 1e-6"},
-    {{ApproximationPrecision::MULPE, 0, 0, 1e-7}, "MAE 1e-7"},
-    {{ApproximationPrecision::MULPE, 0, 0, 1e-8}, "MAE 1e-8"},
+    {ApproximationPrecision::poly_mae(2), "Poly2"},
+    {ApproximationPrecision::poly_mae(3), "Poly3"},
+    {ApproximationPrecision::poly_mae(4), "Poly4"},
+    {ApproximationPrecision::poly_mae(5), "Poly5"},
+    {ApproximationPrecision::poly_mae(6), "Poly6"},
+    {ApproximationPrecision::poly_mae(7), "Poly7"},
+    {ApproximationPrecision::poly_mae(8), "Poly8"},
+
+    {ApproximationPrecision::max_abs_error(1e-2), "MAE 1e-2"},
+    {ApproximationPrecision::max_abs_error(1e-3), "MAE 1e-3"},
+    {ApproximationPrecision::max_abs_error(1e-4), "MAE 1e-4"},
+    {ApproximationPrecision::max_abs_error(1e-5), "MAE 1e-5"},
+    {ApproximationPrecision::max_abs_error(1e-6), "MAE 1e-6"},
+    {ApproximationPrecision::max_abs_error(1e-7), "MAE 1e-7"},
+    {ApproximationPrecision::max_abs_error(1e-8), "MAE 1e-8"},
 };
 
 int main(int argc, char **argv) {
@@ -128,6 +130,23 @@ int main(int argc, char **argv) {
             [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_log(x + z, prec); },
             {Target::Feature::WebGPU, Target::Feature::Metal, Target::Feature::Vulkan},
         },
+        {
+            "pow",
+            1e-8, range,
+            -10, 10,
+            0, 1e-5,
+            [](Expr x, Expr y, Expr z) { return Halide::pow(x + z, y); },
+            [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_pow(x + z, y, prec); },
+            {Target::Feature::WebGPU, Target::Feature::Metal, Target::Feature::Vulkan},
+        },
+        {
+            "tanh",
+            -10, 10,
+            0, 0,
+            -10, 10,
+            [](Expr x, Expr y, Expr z) { return Halide::tanh(x + z); },
+            [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_tanh(x + z, prec); },
+        },
     };
     // clang-format on
 
@@ -148,9 +167,9 @@ int main(int argc, char **argv) {
             continue;
         }
 
-        Expr arg_x = ftt.lower_x * (1.0f - t0) + ftt.upper_x * t0;
-        Expr arg_y = ftt.lower_y * (1.0f - t1) + ftt.upper_y * t1;
-        Expr arg_z = ftt.lower_z * (1.0f - t2) + ftt.upper_z * t2;
+        Expr arg_x = strict_float(ftt.lower_x * (1.0f - t0) + ftt.upper_x * t0);
+        Expr arg_y = strict_float(ftt.lower_y * (1.0f - t1) + ftt.upper_y * t1);
+        Expr arg_z = strict_float(ftt.lower_z * (1.0f - t2) + ftt.upper_z * t2);
 
         // Reference function
         Func ref_func{ftt.name + "_ref"};
@@ -166,79 +185,60 @@ int main(int argc, char **argv) {
                pipeline_time_ref * 1e3);
 
         for (PrecisionToTest &precision : precisions_to_test) {
-            double approx_pipeline_time;
-            double approx_maybe_native_pipeline_time;
             printf(" fast_%s (%8s):", ftt.name.c_str(), precision.name);
-            // === Approximation function (force approximation) ===
-            printf(" [force_approx");
-            {
-                Func approx_func{ftt.name + "_approx"};
-                Halide::ApproximationPrecision prec = precision.precision;
-                prec.allow_native_when_faster = false;  // Always test the actual tabular functions.
-                approx_func(x, y) = sum(ftt.make_approximation(arg_x, arg_y, arg_z, prec));
-                schedule(approx_func);
-                approx_func.compile_jit();
-                approx_pipeline_time = benchmark([&]() { approx_func.realize(buffer_out); buffer_out.device_sync(); }, bcfg);
-            }
+
+            Func approx_func{ftt.name + "_approx"};
+            approx_func(x, y) = sum(ftt.make_approximation(arg_x, arg_y, arg_z, precision.precision));
+            schedule(approx_func);
+            approx_func.compile_jit();
+            double approx_pipeline_time = benchmark([&]() {
+                approx_func.realize(buffer_out); buffer_out.device_sync();
+            }, bcfg);
 
             // Print results for this approximation.
             printf(" %9.5f ns per evaluation  (per invokation: %6.3f ms)",
-                   approx_pipeline_time * pipeline_time_to_ns_per_evaluation,
-                   approx_pipeline_time * 1e3);
+                    approx_pipeline_time * pipeline_time_to_ns_per_evaluation,
+                    approx_pipeline_time * 1e3);
 
             // Check for speedup
             bool should_be_faster = true;
-            for (Target::Feature f : ftt.not_faster_on) {
-                if (target.has_feature(f)) {
-                    should_be_faster = false;
+            if (precision.precision.force_halide_polynomial != 0) {
+                for (Target::Feature f : ftt.force_poly_not_faster_on) {
+                    if (target.has_feature(f)) {
+                        should_be_faster = false;
+                    }
                 }
             }
             if (should_be_faster) num_tests++;
+
+            int goodness = 0;
 
             if (pipeline_time_ref < approx_pipeline_time * 0.90) {
                 printf("   %6.1f%% slower", -100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (!should_be_faster) {
                     printf("  (expected)");
+                    goodness = 1;
                 } else {
                     printf("!!");
+                    goodness = 0;
                 }
             } else if (pipeline_time_ref < approx_pipeline_time * 1.10) {
                 printf("   equally fast (%+5.1f%% faster)",
-                       100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
+                        100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (should_be_faster) num_passed++;
+                goodness = 1;
             } else {
                 printf("   %4.1f%% faster",
-                       100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
+                        100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (should_be_faster) num_passed++;
-            }
-            printf("]");
-
-            // === Approximation function (maybe native) ===
-            printf(" [maybe_native");
-            {
-                Func approx_func{ftt.name + "_approx_maybe_native"};
-                Halide::ApproximationPrecision prec = precision.precision;
-                prec.allow_native_when_faster = true;  // Now make sure it's always at least as fast!
-                approx_func(x, y) = sum(ftt.make_approximation(arg_x, arg_y, arg_z, prec));
-                schedule(approx_func);
-                approx_func.compile_jit();
-                approx_maybe_native_pipeline_time = benchmark([&]() { approx_func.realize(buffer_out); buffer_out.device_sync(); }, bcfg);
+                goodness = 2;
             }
 
-
-            // Print results for the maybe_naive approximation.
-            printf(" %9.5f ns per evaluation  (per invokation: %6.3f ms)",
-                   approx_maybe_native_pipeline_time * pipeline_time_to_ns_per_evaluation,
-                   approx_maybe_native_pipeline_time * 1e3);
-
-            num_tests++;
-            if (pipeline_time_ref < approx_maybe_native_pipeline_time * 0.9) {
-                printf(" %6.1f%% slower!!", -100.0f * (1.0f - approx_maybe_native_pipeline_time / pipeline_time_ref));
-            } else {
-                num_passed++;
+            switch (goodness) {
+                case 0: printf(" ❌"); break;
+                case 1: printf(" 😐"); break;
+                case 2: printf(" ✅"); break;
             }
-            printf("]");
-
             printf("\n");
         }
         printf("\n");
