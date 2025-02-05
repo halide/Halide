@@ -26,13 +26,13 @@ struct PrecisionToTest {
     {{ApproximationPrecision::MULPE, 7}, "Poly7"},
     {{ApproximationPrecision::MULPE, 8}, "Poly8"},
 
-    {{ApproximationPrecision::MULPE, 0, 1e-2}, "MAE 1e-2"},
-    {{ApproximationPrecision::MULPE, 0, 1e-3}, "MAE 1e-3"},
-    {{ApproximationPrecision::MULPE, 0, 1e-4}, "MAE 1e-4"},
-    {{ApproximationPrecision::MULPE, 0, 1e-5}, "MAE 1e-5"},
-    {{ApproximationPrecision::MULPE, 0, 1e-6}, "MAE 1e-6"},
-    {{ApproximationPrecision::MULPE, 0, 1e-7}, "MAE 1e-7"},
-    {{ApproximationPrecision::MULPE, 0, 1e-8}, "MAE 1e-8"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-2}, "MAE 1e-2"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-3}, "MAE 1e-3"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-4}, "MAE 1e-4"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-5}, "MAE 1e-5"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-6}, "MAE 1e-6"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-7}, "MAE 1e-7"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-8}, "MAE 1e-8"},
 };
 
 int main(int argc, char **argv) {
@@ -40,11 +40,6 @@ int main(int argc, char **argv) {
     if (target.arch == Target::WebAssembly) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
-    }
-    bool performance_is_expected_to_be_poor = false;
-    if (target.has_feature(Target::Vulkan)) {
-        printf("Vulkan has a weird glitch for now where sometimes one of the benchmarks is 10x slower than expected.\n");
-        performance_is_expected_to_be_poor = true;
     }
 
     Var x{"x"}, y{"y"};
@@ -70,6 +65,15 @@ int main(int argc, char **argv) {
 
     // clang-format off
     FunctionToTest funcs[] = {
+        {
+            "tan",
+            -range, range,
+            0, 0,
+            -1.0, 1.0,
+            [](Expr x, Expr y, Expr z) { return Halide::tan(x + z); },
+            [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_tan(x + z, prec); },
+            {Target::Feature::WebGPU, Target::Feature::Metal},
+        },
         {
             "atan",
             -range, range,
@@ -164,7 +168,9 @@ int main(int argc, char **argv) {
         for (PrecisionToTest &precision : precisions_to_test) {
             double approx_pipeline_time;
             double approx_maybe_native_pipeline_time;
-            // Approximation function (force approximation)
+            printf(" fast_%s (%8s):", ftt.name.c_str(), precision.name);
+            // === Approximation function (force approximation) ===
+            printf(" [force_approx");
             {
                 Func approx_func{ftt.name + "_approx"};
                 Halide::ApproximationPrecision prec = precision.precision;
@@ -176,21 +182,9 @@ int main(int argc, char **argv) {
             }
 
             // Print results for this approximation.
-            printf(" fast_%s (%8s): %9.5f ns per evaluation  [per invokation: %6.3f ms]",
-                   ftt.name.c_str(), precision.name,
+            printf(" %9.5f ns per evaluation  (per invokation: %6.3f ms)",
                    approx_pipeline_time * pipeline_time_to_ns_per_evaluation,
                    approx_pipeline_time * 1e3);
-
-            // Approximation function (maybe native)
-            {
-                Func approx_func{ftt.name + "_approx_maybe_native"};
-                Halide::ApproximationPrecision prec = precision.precision;
-                prec.allow_native_when_faster = true;  // Now make sure it's always at least as fast!
-                approx_func(x, y) = sum(ftt.make_approximation(arg_x, arg_y, arg_z, prec));
-                schedule(approx_func);
-                approx_func.compile_jit();
-                approx_maybe_native_pipeline_time = benchmark([&]() { approx_func.realize(buffer_out); buffer_out.device_sync(); }, bcfg);
-            }
 
             // Check for speedup
             bool should_be_faster = true;
@@ -201,7 +195,6 @@ int main(int argc, char **argv) {
             }
             if (should_be_faster) num_tests++;
 
-            printf(" [force_approx");
             if (pipeline_time_ref < approx_pipeline_time * 0.90) {
                 printf("   %6.1f%% slower", -100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (!should_be_faster) {
@@ -220,12 +213,31 @@ int main(int argc, char **argv) {
             }
             printf("]");
 
+            // === Approximation function (maybe native) ===
+            printf(" [maybe_native");
+            {
+                Func approx_func{ftt.name + "_approx_maybe_native"};
+                Halide::ApproximationPrecision prec = precision.precision;
+                prec.allow_native_when_faster = true;  // Now make sure it's always at least as fast!
+                approx_func(x, y) = sum(ftt.make_approximation(arg_x, arg_y, arg_z, prec));
+                schedule(approx_func);
+                approx_func.compile_jit();
+                approx_maybe_native_pipeline_time = benchmark([&]() { approx_func.realize(buffer_out); buffer_out.device_sync(); }, bcfg);
+            }
+
+
+            // Print results for the maybe_naive approximation.
+            printf(" %9.5f ns per evaluation  (per invokation: %6.3f ms)",
+                   approx_maybe_native_pipeline_time * pipeline_time_to_ns_per_evaluation,
+                   approx_maybe_native_pipeline_time * 1e3);
+
             num_tests++;
             if (pipeline_time_ref < approx_maybe_native_pipeline_time * 0.9) {
-                printf(" [maybe_native:  %6.1f%% slower!!]", -100.0f * (1.0f - approx_maybe_native_pipeline_time / pipeline_time_ref));
+                printf(" %6.1f%% slower!!", -100.0f * (1.0f - approx_maybe_native_pipeline_time / pipeline_time_ref));
             } else {
                 num_passed++;
             }
+            printf("]");
 
             printf("\n");
         }
@@ -233,11 +245,9 @@ int main(int argc, char **argv) {
     }
 
     printf("Passed %d / %d performance test.\n", num_passed, num_tests);
-    if (!performance_is_expected_to_be_poor) {
-        if (num_passed < num_tests) {
-            printf("Not all measurements were faster for the fast variants of the functions.\n");
-            return 1;
-        }
+    if (num_passed < num_tests) {
+        printf("Not all measurements were faster (or equally fast) for the fast variants of the functions.\n");
+        return 1;
     }
 
     printf("Success!\n");
