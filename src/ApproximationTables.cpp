@@ -242,7 +242,6 @@ const Approximation *find_best_approximation(const std::vector<Approximation> &t
             penalty += (precision.force_halide_polynomial - num_terms) * extra_term_cost;
         }
 
-
         const Approximation::Metrics *metrics = nullptr;
         if (type == Float(32)) {
             metrics = &e.metrics_f32;
