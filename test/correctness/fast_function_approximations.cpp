@@ -1,7 +1,7 @@
 #include "Halide.h"
 
-#include <locale.h>
 #include <cinttypes>
+#include <locale.h>
 
 using namespace Halide;
 
@@ -47,8 +47,8 @@ struct FunctionToTest {
         std::string name;
         TestRange2D range;
         bool validate_mae{true};
-        uint64_t max_max_ulp_error{0};  // When MaxAE-query was 1e-5 or better.
-        uint64_t max_mean_ulp_error{0}; // When MaxAE-query was 1e-5 or better.
+        uint64_t max_max_ulp_error{0};   // When MaxAE-query was 1e-5 or better.
+        uint64_t max_mean_ulp_error{0};  // When MaxAE-query was 1e-5 or better.
     };
     std::vector<RangedAccuracyTest> ranged_tests;
 } functions_to_test[] = {
@@ -192,14 +192,14 @@ int main(int argc, char **argv) {
     Buffer<float> out_approx{steps * steps};
 
     bool use_icons = true;
-    const auto &print_ok = [use_icons] () {
+    const auto &print_ok = [use_icons]() {
         if (use_icons) {
             printf(" ✅");
         } else {
             printf("  ok");
         }
     };
-    const auto &print_bad = [use_icons] (const char *reason) {
+    const auto &print_bad = [use_icons](const char *reason) {
         if (use_icons) {
             printf(" ❌[%s]", reason);
         } else {
@@ -221,12 +221,11 @@ int main(int argc, char **argv) {
             continue;
         }
 
-
         for (const FunctionToTest::RangedAccuracyTest &rat : ftt.ranged_tests) {
             const TestRange2D &range = rat.range;
             printf("Testing fast_%s on its %s range ([%f, %f], [%f, %f])...\n",
-                    ftt.name.c_str(), rat.name.c_str(),
-                    range.x.l, range.x.u, range.y.l, range.y.u);
+                   ftt.name.c_str(), rat.name.c_str(),
+                   range.x.l, range.x.u, range.y.l, range.y.u);
 
             bool is_2d = range.y.l != range.y.u;
 
@@ -284,14 +283,13 @@ int main(int argc, char **argv) {
                     int mantissa_error = bits_diff(val_ref, val_approx);
                     uint64_t ulp_error = ulp_diff(val_ref, val_approx);
 
-
                     if (!std::isfinite(abs_error)) {
                         if (val_ref != val_approx) {
                             std::printf("      Warn: %.10e vs %.10e\n", val_ref, val_approx);
                         }
                     } else {
                         if (ulp_error > 100'000) {
-                            //std::printf("\nExtreme ULP error %d: %.10e vs %.10e", ulp_error, val_ref, val_approx);
+                            // std::printf("\nExtreme ULP error %d: %.10e vs %.10e", ulp_error, val_ref, val_approx);
                         }
                         max_abs_error = std::max(max_abs_error, abs_error);
                         max_rel_error = std::max(max_rel_error, rel_error);
@@ -346,8 +344,7 @@ int main(int argc, char **argv) {
                     } else {
                         // If we don't validate the MAE strictly, let's check if at least it gives
                         // reasonable results when the MAE <= 1e-5 is desired.
-                        if (prec.constraint_max_absolute_error != 0
-                                && prec.constraint_max_absolute_error <= 1e-5) {
+                        if (prec.constraint_max_absolute_error != 0 && prec.constraint_max_absolute_error <= 1e-5) {
                             num_tests++;
                             if (mean_abs_error < 1e-5 || mean_ulp_error < 20'000 || mean_rel_error < 1e-2) {
                                 num_tests_passed++;
@@ -359,9 +356,7 @@ int main(int argc, char **argv) {
                     }
                 }
 
-                if (prec.constraint_max_absolute_error != 0
-                && prec.constraint_max_absolute_error <= 1e-5
-                && prec.optimized_for == ApproximationPrecision::MULPE) {
+                if (prec.constraint_max_absolute_error != 0 && prec.constraint_max_absolute_error <= 1e-5 && prec.optimized_for == ApproximationPrecision::MULPE) {
                     if (rat.max_max_ulp_error != 0) {
                         num_tests++;
                         if (max_ulp_error > rat.max_max_ulp_error) {

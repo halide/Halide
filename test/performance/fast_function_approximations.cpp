@@ -192,13 +192,15 @@ int main(int argc, char **argv) {
             schedule(approx_func);
             approx_func.compile_jit();
             double approx_pipeline_time = benchmark([&]() {
-                approx_func.realize(buffer_out); buffer_out.device_sync();
-            }, bcfg);
+                approx_func.realize(buffer_out);
+                buffer_out.device_sync();
+            },
+                                                    bcfg);
 
             // Print results for this approximation.
             printf(" %9.5f ns per evaluation  (per invokation: %6.3f ms)",
-                    approx_pipeline_time * pipeline_time_to_ns_per_evaluation,
-                    approx_pipeline_time * 1e3);
+                   approx_pipeline_time * pipeline_time_to_ns_per_evaluation,
+                   approx_pipeline_time * 1e3);
 
             // Check for speedup
             bool should_be_faster = true;
@@ -224,20 +226,26 @@ int main(int argc, char **argv) {
                 }
             } else if (pipeline_time_ref < approx_pipeline_time * 1.10) {
                 printf("   equally fast (%+5.1f%% faster)",
-                        100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
+                       100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (should_be_faster) num_passed++;
                 goodness = 1;
             } else {
                 printf("   %4.1f%% faster",
-                        100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
+                       100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (should_be_faster) num_passed++;
                 goodness = 2;
             }
 
             switch (goodness) {
-                case 0: printf(" ❌"); break;
-                case 1: printf(" 😐"); break;
-                case 2: printf(" ✅"); break;
+            case 0:
+                printf(" ❌");
+                break;
+            case 1:
+                printf(" 😐");
+                break;
+            case 2:
+                printf(" ✅");
+                break;
             }
             printf("\n");
         }
