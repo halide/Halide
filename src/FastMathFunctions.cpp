@@ -12,14 +12,7 @@ namespace Internal {
 // Implemented in IROperator.cpp
 void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent);
 
-namespace ApproxImpl {
-
-constexpr double PI = 3.14159265358979323846;
-constexpr double ONE_OVER_PI = 1.0 / PI;
-constexpr double TWO_OVER_PI = 2.0 / PI;
-constexpr double PI_OVER_TWO = PI / 2;
-
-Expr constant(Type t, double value) {
+static Expr constant(Type t, double value) {
     if (t == Float(64)) {
         return Expr(value);
     }
@@ -28,6 +21,27 @@ Expr constant(Type t, double value) {
     }
     internal_error << "Constants only for double or float.";
     return 0;
+}
+
+
+namespace ApproxImpl {
+
+constexpr double PI = 3.14159265358979323846;
+constexpr double ONE_OVER_PI = 1.0 / PI;
+constexpr double TWO_OVER_PI = 2.0 / PI;
+constexpr double PI_OVER_TWO = PI / 2;
+
+Expr eval_poly(const std::vector<double> &coefs, const Expr &x) {
+    Type type = x.type();
+    if (coefs.empty()) {
+        return constant(x.type(), 0.0);
+    }
+
+    Expr result = constant(type, coefs.back());
+    for (size_t i = 1; i < coefs.size(); ++i) {
+        result = x * result + constant(type, coefs[coefs.size() - i - 1]);
+    }
+    return result;
 }
 
 Expr fast_sincos_helper(const Expr &x_full, bool is_sin, ApproximationPrecision precision) {
@@ -48,12 +62,7 @@ Expr fast_sincos_helper(const Expr &x_full, bool is_sin, ApproximationPrecision 
     const Internal::Approximation *approx = Internal::best_sin_approximation(precision, type);
     // const Internal::Approximation *approx = Internal::best_cos_approximation(precision);
     const std::vector<double> &c = approx->coefficients;
-    Expr x2 = x * x;
-    Expr result = constant(type, c.back());
-    for (size_t i = 1; i < c.size(); ++i) {
-        result = x2 * result + constant(type, c[c.size() - i - 1]);
-    }
-    result *= x;
+    Expr result = x * eval_poly(c, x * x);
     result = select(flip_sign, -result, result);
     return common_subexpression_elimination(result, true);
 }
@@ -74,10 +83,7 @@ Expr fast_tan_helper(const Expr &x, ApproximationPrecision precision) {
     const Internal::Approximation *approx = Internal::best_tan_approximation(precision, type);
     const std::vector<double> &c = approx->coefficients;
     Expr x2 = x * x;
-    Expr result = constant(type, c.back());
-    for (size_t i = 1; i < c.size(); ++i) {
-        result = result * x2 + constant(type, c[c.size() - i - 1]);
-    }
+    Expr result = eval_poly(c, x2);
     result = result * x2 + constant(type, 1); // omitted term from table.
     result *= x;
     return result;
@@ -179,11 +185,7 @@ Expr fast_atan_helper(const Expr &x_full, ApproximationPrecision precision, bool
     const Internal::Approximation *approx = Internal::best_atan_approximation(precision, type);
     const std::vector<double> &c = approx->coefficients;
     Expr x2 = x * x;
-    Expr result = constant(type, c.back());
-    for (size_t i = 1; i < c.size(); ++i) {
-        result = x2 * result + constant(type, c[c.size() - i - 1]);
-    }
-    result *= x;
+    Expr result = x * eval_poly(c, x2);
 
     if (!between_m1_and_p1) {
         result = select(x_gt_1, select(x_full < 0, constant(type, -PI_OVER_TWO), constant(type, PI_OVER_TWO)) - result, result);
@@ -245,10 +247,7 @@ Expr fast_exp(const Expr &x_full, ApproximationPrecision prec) {
     const Internal::Approximation *approx = Internal::best_exp_approximation(prec, type);
     const std::vector<double> &c = approx->coefficients;
 
-    Expr result = constant(type, c.back());
-    for (size_t i = 1; i < c.size(); ++i) {
-        result = x * result + constant(type, c[c.size() - i - 1]);
-    }
+    Expr result = eval_poly(c, x);
     result = result * x + constant(type, 1.0); // Term omitted from table.
     result = result * x + constant(type, 1.0); // Term omitted from table.
 #endif
@@ -291,11 +290,7 @@ Expr fast_log(const Expr &x, ApproximationPrecision prec) {
     const Internal::Approximation *approx = Internal::best_log_approximation(prec, type);
     const std::vector<double> &c = approx->coefficients;
 
-    Expr result = constant(type, c.back());
-    for (size_t i = 1; i < c.size(); ++i) {
-        result = x1 * result + constant(type, c[c.size() - i - 1]);
-    }
-    result = result * x1;
+    Expr result = x1 * eval_poly(c, x1);
 #endif
     result = result + cast<float>(exponent) * log2;
     result = common_subexpression_elimination(result);
@@ -305,6 +300,201 @@ Expr fast_log(const Expr &x, ApproximationPrecision prec) {
 }  // namespace
 
 
+using OO = ApproximationPrecision::OptimizationObjective;
+struct IntrinsicsInfo {
+    DeviceAPI device_api{DeviceAPI::None};
+
+    struct NativeFunc {
+        bool is_fast{false};
+        OO behavior{OO::AUTO};
+        float max_abs_error{0.0f};
+        int max_ulp_error{0};
+        bool defined() const {
+            return behavior != OO::AUTO;
+        }
+    } native_func; //< Default-initialized means it works and is exact.
+
+    struct IntrinsicImpl {
+        OO behavior{OO::AUTO};
+        float max_abs_error{0.0f};
+        int max_ulp_error{0};
+        bool defined() const {
+            return behavior != OO::AUTO;
+        }
+    } intrinsic;
+
+};
+
+struct IntrinsicsInfoPerDeviceAPI {
+    float default_mae; // A reasonable desirable MAE (if specified)
+    int default_mulpe; // A reasonable desirable MULPE (if specified)
+    std::vector<IntrinsicsInfo> device_apis;
+};
+
+IntrinsicsInfoPerDeviceAPI ii_sin_cos {
+    1e-5f, 0, {
+        {DeviceAPI::Vulkan, {true}, {}},
+        {DeviceAPI::CUDA, {false}, {OO::MAE, 5e-7f, 1'000'000}},
+        {DeviceAPI::Metal, {true}, {}},
+        {DeviceAPI::WebGPU, {true}, {}},
+    }
+};
+
+IntrinsicsInfoPerDeviceAPI ii_atan_atan2 {
+    1e-5f, 0, { // no intrinsics available
+        {DeviceAPI::Vulkan, {false}, {}},
+        {DeviceAPI::Metal, {true}, {}},
+        {DeviceAPI::WebGPU, {true}, {}},
+    }
+};
+
+IntrinsicsInfoPerDeviceAPI ii_tan {
+    1e-5f, 0, {
+        {DeviceAPI::Vulkan, {true, OO::MAE, 2e-6f, 1'000'000}, {}}, // Vulkan tan seems to mimic our CUDA implementation
+        {DeviceAPI::CUDA, {false}, {OO::MAE, 2e-6f, 1'000'000}},
+        {DeviceAPI::Metal, {true}, {}},
+        {DeviceAPI::WebGPU, {true}, {}},
+    }
+};
+
+IntrinsicsInfoPerDeviceAPI ii_exp {
+    0.0f, 50, {
+        {DeviceAPI::Vulkan, {true}, {}},
+        {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 5}},
+        {DeviceAPI::Metal, {true}, {}}, // fast exp() on metal
+        {DeviceAPI::WebGPU, {true}, {}},
+    }
+};
+
+IntrinsicsInfoPerDeviceAPI ii_log {
+    1e-5f, 1000, {
+        {DeviceAPI::Vulkan, {true}, {}},
+        {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 3'800'000}},
+        {DeviceAPI::Metal, {false}, {}}, // slow log() on metal
+        {DeviceAPI::WebGPU, {true}, {}},
+    }
+};
+
+IntrinsicsInfoPerDeviceAPI ii_pow {
+    1e-5f, 1000, {
+        {DeviceAPI::Vulkan, {false}, {}},
+        {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 3'800'000}},
+        {DeviceAPI::Metal, {true}, {}},
+        {DeviceAPI::WebGPU, {true}, {}},
+    }
+};
+
+IntrinsicsInfoPerDeviceAPI ii_tanh {
+    1e-5f, 1000, {
+        {DeviceAPI::Vulkan, {true}, {}},
+        {DeviceAPI::CUDA, {true}, {OO::MULPE, 1e-5f, 135}}, // Requires CC75
+        {DeviceAPI::Metal, {true}, {}},
+        {DeviceAPI::WebGPU, {true}, {}},
+    }
+};
+
+
+IntrinsicsInfo resolve_precision(ApproximationPrecision &prec, const IntrinsicsInfoPerDeviceAPI &iida, DeviceAPI api) {
+    IntrinsicsInfo ii{};
+    for (const auto &cand : iida.device_apis) {
+        if (cand.device_api == api) {
+            ii = cand;
+            break;
+        }
+    }
+
+    if (prec.optimized_for == ApproximationPrecision::AUTO) {
+        if (!ii.intrinsic.defined()) {
+            // We don't know about the performance of the intrinsic on this backend.
+            // Alternatively, this backend doesn't even have an intrinsic.
+            // Just assume MAE is of interest.
+            prec.optimized_for = ApproximationPrecision::MAE;
+        } else {
+            // User doesn't care about the optimization objective: let's prefer the
+            // intrinsic, as that's fastest.
+            prec.optimized_for = ii.intrinsic.behavior;
+        }
+    }
+
+    if (!prec.force_halide_polynomial) {
+        if (prec.constraint_max_absolute_error == 0.0f && prec.constraint_max_ulp_error == 0.0f) {
+            // User didn't specify a desired precision. We will prefer intrinsics (which are fast)
+            // or else simply use a reasonable value.
+            if (ii.intrinsic.defined() && prec.optimized_for == ii.intrinsic.behavior) {
+                // The backend intrinsic behaves the way the user wants, let's pick that!
+                prec.constraint_max_absolute_error = ii.intrinsic.max_abs_error;
+                prec.constraint_max_ulp_error = ii.intrinsic.max_ulp_error;
+            } else {
+                prec.constraint_max_ulp_error = iida.default_mulpe;
+                prec.constraint_max_absolute_error = iida.default_mae;
+            }
+        }
+    }
+    return ii;
+}
+
+bool intrinsic_satisfies_precision(const IntrinsicsInfo &ii, const ApproximationPrecision &prec) {
+    if (!ii.intrinsic.defined()) {
+        return false;
+    }
+    if (prec.force_halide_polynomial) {
+        return false; // Don't use intrinsics if the user really wants a polynomial.
+    }
+    if (prec.optimized_for != ii.intrinsic.behavior) {
+        return false;
+    }
+    if (prec.constraint_max_ulp_error != 0) {
+        if (ii.intrinsic.max_ulp_error != 0) {
+            if (ii.intrinsic.max_ulp_error > prec.constraint_max_ulp_error) {
+                return false;
+            }
+        } else {
+            // We don't know?
+        }
+    }
+    if (prec.constraint_max_absolute_error != 0) {
+        if (ii.intrinsic.max_abs_error != 0) {
+            if (ii.intrinsic.max_abs_error > prec.constraint_max_absolute_error) {
+                return false;
+            }
+        } else {
+            // We don't know?
+        }
+    }
+    return true;
+}
+
+bool native_func_satisfies_precision(const IntrinsicsInfo &ii, const ApproximationPrecision &prec) {
+    if (!ii.native_func.defined()) {
+        return true; // Unspecified means it's exact.
+    }
+    if (prec.force_halide_polynomial) {
+        return false; // Don't use native functions if the user really wants a polynomial.
+    }
+    if (prec.optimized_for != ii.native_func.behavior) {
+        return false;
+    }
+    if (prec.constraint_max_ulp_error != 0) {
+        if (ii.native_func.max_ulp_error != 0) {
+            if (ii.native_func.max_ulp_error > prec.constraint_max_ulp_error) {
+                return false;
+            }
+        } else {
+            // We don't know?
+        }
+    }
+    if (prec.constraint_max_absolute_error != 0) {
+        if (ii.native_func.max_abs_error != 0) {
+            if (ii.native_func.max_abs_error > prec.constraint_max_absolute_error) {
+                return false;
+            }
+        } else {
+            // We don't know?
+        }
+    }
+    return true;
+}
+
 class LowerFastMathFunctions : public IRMutator {
   using IRMutator::visit;
 
@@ -312,53 +502,16 @@ class LowerFastMathFunctions : public IRMutator {
   DeviceAPI for_device_api = DeviceAPI::None;
 
   bool is_cuda_cc20() {
-    return for_device_api == DeviceAPI::CUDA;
+      return for_device_api == DeviceAPI::CUDA && target.get_cuda_capability_lower_bound() >= 20;
   }
-  bool is_cuda_cc70() {
-    return for_device_api == DeviceAPI::CUDA && target.has_feature(Target::CUDACapability50);
+  bool is_cuda_cc75() {
+      return for_device_api == DeviceAPI::CUDA && target.get_cuda_capability_lower_bound() >= 75;
   }
 
   bool is_vulkan() { return for_device_api == DeviceAPI::Vulkan; }
   bool is_metal() { return for_device_api == DeviceAPI::Metal; }
   bool is_opencl() { return for_device_api == DeviceAPI::Metal; }
   bool is_webgpu() { return for_device_api == DeviceAPI::WebGPU; }
-  bool native_sincos_is_fast(Type type) {
-    if (type == Float(32)) {
-      return is_vulkan() || is_metal() || is_webgpu();
-    } else {
-      return false;
-    }
-  }
-  bool native_atan_is_fast(Type type) {
-    if (type == Float(32)) {
-      return is_vulkan() || is_metal() || is_webgpu();
-    } else {
-      return false;
-    }
-  }
-  bool native_exp_is_fast(Type type) {
-    if (type == Float(32)) {
-      // exp() on metal is fast (unlike log)!
-      return is_opencl() || is_vulkan() || is_metal() || is_webgpu();
-    } else {
-      return false;
-    }
-  }
-  bool native_log_is_fast(Type type) {
-    if (type == Float(32)) {
-      // log() on metal is slow (unlike exp)!
-      return is_opencl() || is_vulkan() || is_webgpu();
-    } else {
-      return false;
-    }
-  }
-  bool native_pow_is_fast(Type type) {
-    if (type == Float(32)) {
-      return false; // TODO figure out which ones!
-    } else {
-      return false;
-    }
-  }
 
   /** Strips the fast_ prefix, appends the type suffix, and
    * drops the precision argument from the end. */
@@ -416,22 +569,20 @@ class LowerFastMathFunctions : public IRMutator {
     const Call *make_ap = op->args.back().as<Call>(); // Precision is always last argument.
     internal_assert(make_ap);
     internal_assert(make_ap->is_intrinsic(Call::make_struct));
-    internal_assert(make_ap->args.size() == 5);
+    internal_assert(make_ap->args.size() == 4);
     const IntImm *imm_optimized_for = make_ap->args[0].as<IntImm>();
-    const IntImm *imm_min_poly_terms = make_ap->args[1].as<IntImm>();
-    const IntImm *imm_max_ulp_error = make_ap->args[2].as<IntImm>();
-    const FloatImm *imm_max_abs_error = get_float_imm(make_ap->args[3]);
-    const IntImm *imm_allow_native = make_ap->args[4].as<IntImm>();
+    const IntImm *imm_max_ulp_error = make_ap->args[1].as<IntImm>();
+    const FloatImm *imm_max_abs_error = get_float_imm(make_ap->args[2]);
+    const IntImm *imm_force_poly = make_ap->args[3].as<IntImm>();
     internal_assert(imm_optimized_for);
-    internal_assert(imm_min_poly_terms);
+    internal_assert(imm_max_ulp_error);
     internal_assert(imm_max_abs_error);
-    internal_assert(imm_allow_native);
+    internal_assert(imm_force_poly);
     return ApproximationPrecision{
         (ApproximationPrecision::OptimizationObjective) imm_optimized_for->value,
-        (int) imm_min_poly_terms->value,
         (int) imm_max_ulp_error->value,
         (float) imm_max_abs_error->value,
-        (bool) imm_allow_native->value,
+        (bool) imm_force_poly->value,
     };
   }
 
@@ -451,75 +602,121 @@ class LowerFastMathFunctions : public IRMutator {
       if (op->is_intrinsic(Call::fast_sin) || op->is_intrinsic(Call::fast_cos)) {
         // Handle fast_sin and fast_cos together!
         ApproximationPrecision prec = extract_approximation_precision(op);
-        if (op->type == Float(32) && is_cuda_cc20() && prec.allow_native_when_faster) {
-          // We have an intrinsic in the ptx.ll module with the same name.
-          return append_type_suffix(op);
-        } else if (native_sincos_is_fast(op->type) && prec.allow_native_when_faster) {
-          // The native sine and cosine are fast: fall back to native and continue lowering.
-          return to_native_func(op);
-        } else {
-          // No known fast version available, we will expand our own approximation.
-          if (op->is_intrinsic(Call::fast_sin)) {
+        IntrinsicsInfo ii = resolve_precision(prec, ii_sin_cos, for_device_api);
+        if (op->type == Float(32) && intrinsic_satisfies_precision(ii, prec)) {
+            // We have an intrinsic in the ptx_dev.ll module with the same name.
+            return append_type_suffix(op);
+        }
+        if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
+            // The native sine and cosine are fast: fall back to native and continue lowering.
+            return to_native_func(op);
+        }
+
+        // No known fast version available, we will expand our own approximation.
+        if (op->is_intrinsic(Call::fast_sin)) {
             return ApproxImpl::fast_sin(mutate(op->args[0]), prec);
-          } else {
+        } else {
             return ApproxImpl::fast_cos(mutate(op->args[0]), prec);
-          }
         }
       } else if (op->is_intrinsic(Call::fast_atan) || op->is_intrinsic(Call::fast_atan2)) {
         // Handle fast_atan and fast_atan2 together!
         ApproximationPrecision prec = extract_approximation_precision(op);
-        if (native_atan_is_fast(op->type) && prec.allow_native_when_faster) {
+        IntrinsicsInfo ii = resolve_precision(prec, ii_atan_atan2, for_device_api);
+        if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
           // The native atan is fast: fall back to native and continue lowering.
           return to_native_func(op);
-        } else {
-          if (op->is_intrinsic(Call::fast_atan)) {
+        }
+        if (op->is_intrinsic(Call::fast_atan)) {
             return ApproxImpl::fast_atan(mutate(op->args[0]), prec);
-          } else {
+        } else {
             return ApproxImpl::fast_atan2(mutate(op->args[0]), mutate(op->args[1]), prec);
-          }
         }
       } else if (op->is_intrinsic(Call::fast_tan)) {
         ApproximationPrecision prec = extract_approximation_precision(op);
+        IntrinsicsInfo ii = resolve_precision(prec, ii_tan, for_device_api);
+        if (op->type == Float(32) && is_cuda_cc20() && intrinsic_satisfies_precision(ii, prec)) {
+            Expr arg = mutate(op->args[0]);
+            Expr sin = Call::make(arg.type(), "fast_sin_f32", {arg}, Call::PureExtern);
+            Expr cos = Call::make(arg.type(), "fast_cos_f32", {arg}, Call::PureExtern);
+            Expr tan = Call::make(arg.type(), "fast_div_f32", {sin, cos}, Call::PureExtern);
+            return tan;
+        }
+        if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
+          // The native atan is fast: fall back to native and continue lowering.
+          return to_native_func(op);
+        }
         return ApproxImpl::fast_tan(mutate(op->args[0]), prec);
       } else if (op->is_intrinsic(Call::fast_exp)) {
         // Handle fast_exp and fast_log together!
         ApproximationPrecision prec = extract_approximation_precision(op);
-        if (native_exp_is_fast(op->type) && prec.allow_native_when_faster) {
+        IntrinsicsInfo ii = resolve_precision(prec, ii_exp, for_device_api);
+        if (is_cuda_cc20() && intrinsic_satisfies_precision(ii, prec)) {
+            Type type = op->args[0].type();
+            // exp(x) = 2^(a*x) = (2^a)^x
+            // 2^a = e
+            // => log(2^a) = log(e)
+            // => a * log(2) = 1
+            // => a = 1/log(2)
+            Expr ool2 = constant(type, 1.0 / std::log(2.0));
+            return Call::make(type, "fast_ex2_f32", {mutate(op->args[0]) * ool2}, Call::PureExtern);
+        }
+        if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
           // The native atan is fast: fall back to native and continue lowering.
           return to_native_func(op);
-        } else {
-          return ApproxImpl::fast_exp(mutate(op->args[0]), prec);
         }
+        return ApproxImpl::fast_exp(mutate(op->args[0]), prec);
       } else if (op->is_intrinsic(Call::fast_log)) {
         // Handle fast_exp and fast_log together!
         ApproximationPrecision prec = extract_approximation_precision(op);
-        if (native_log_is_fast(op->type) && prec.allow_native_when_faster) {
+        IntrinsicsInfo ii = resolve_precision(prec, ii_log, for_device_api);
+        if (is_cuda_cc20() && intrinsic_satisfies_precision(ii, prec)) {
+            Type type = op->args[0].type();
+            Expr lg = Call::make(type, "fast_lg2_f32", {mutate(op->args[0])}, Call::PureExtern);
+            // log(x) = lg2(x) / lg2(e)
+            // lg2(e) = log(e)/log(2)
+            // => log(x) = lg2(x) / (log(e)/log(2)) = lg2(x) * (log(2) / log(e)) = log(2) * log(2)
+            return lg * constant(type, std::log(2.0));
+        }
+        if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
           // The native atan is fast: fall back to native and continue lowering.
           return to_native_func(op);
-        } else {
-          return ApproxImpl::fast_log(mutate(op->args[0]), prec);
         }
+        return ApproxImpl::fast_log(mutate(op->args[0]), prec);
       } else if (op->is_intrinsic(Call::fast_tanh)) {
-        // We have a fast version on PTX
-        if (is_cuda_cc70()) {
+        ApproximationPrecision prec = extract_approximation_precision(op);
+        IntrinsicsInfo ii = resolve_precision(prec, ii_tanh, for_device_api);
+        // We have a fast version on PTX with CC7.5
+        if (is_cuda_cc75() && intrinsic_satisfies_precision(ii, prec)) {
           return append_type_suffix(op);
-        } else {
-          // Unfortunately, no fast_tanh approximation implemented yet!
-          return to_native_func(op);
         }
+
+        // Unfortunately, no fast_tanh approximation implemented yet!
+        return to_native_func(op);
       } else if (op->is_intrinsic(Call::fast_pow)) {
         ApproximationPrecision prec = extract_approximation_precision(op);
-        if (native_pow_is_fast(op->type) && prec.allow_native_when_faster) {
-          return to_native_func(op);
-        } else {
-          // Rewrite as exp(log(x) * y), and recurse.
-          const Expr &x = op->args[0];
-          const Expr &y = op->args[1];
-          return select(x == 0.0f, 0.0f, mutate(Halide::fast_exp(Halide::fast_log(x, prec) * y, prec)));
+        IntrinsicsInfo ii = resolve_precision(prec, ii_pow, for_device_api);
+        if (is_cuda_cc20() && !prec.force_halide_polynomial) {
+            Type type = op->args[0].type();
+            // Lower to 2^(lg2(x) * y), thanks to specialized instructions.
+            Expr arg_x = mutate(op->args[0]);
+            Expr arg_y = mutate(op->args[1]);
+            Expr lg = Call::make(type, "fast_lg2_f32", {arg_x}, Call::PureExtern);
+            return select(arg_x == 0.0f, 0.0f, Call::make(type, "fast_ex2_f32", {lg * arg_y}, Call::PureExtern));
         }
+        if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
+          return to_native_func(op);
+        }
+
+        // Improve precision somewhat, as we will compound errors.
+        prec.constraint_max_absolute_error *= 0.5;
+        prec.constraint_max_ulp_error *= 0.5;
+        // Rewrite as exp(log(x) * y), and recurse.
+        const Expr &x = op->args[0];
+        const Expr &y = op->args[1];
+        return select(x == 0.0f, 0.0f, mutate(Halide::fast_exp(Halide::fast_log(x, prec) * y, prec)));
       }
       else {
-        return IRMutator::visit(op);
+          return IRMutator::visit(op);
       }
   }
 
