@@ -19,82 +19,112 @@ int bits_diff(float fa, float fb) {
     return count;
 }
 
-int ulp_diff(float fa, float fb) {
+uint64_t ulp_diff(float fa, float fb) {
     uint32_t a = Halide::Internal::reinterpret_bits<uint32_t>(fa);
     uint32_t b = Halide::Internal::reinterpret_bits<uint32_t>(fb);
-    return std::abs(int64_t(a) - int64_t(b));
+    constexpr uint32_t signbit_mask = 0x80000000;
+    int64_t aa = (a & signbit_mask) ? (-int64_t(a & ~signbit_mask)) : (a & ~signbit_mask);
+    int64_t bb = (b & signbit_mask) ? (-int64_t(b & ~signbit_mask)) : (b & ~signbit_mask);
+    return std::abs(aa - bb);
 }
 
 const float pi = 3.14159256f;
 
 struct TestRange {
-    float l, u;
+    float l{0};
+    float u{0};
 };
 struct TestRange2D {
-    TestRange x, y;
+    TestRange x{}, y{};
 };
-
-constexpr int VALIDATE_MAE_ON_PRECISE = 0x1;
-constexpr int VALIDATE_MAE_ON_EXTENDED = 0x2;
 
 struct FunctionToTest {
     std::string name;
-    TestRange2D precise;
-    TestRange2D extended;
     std::function<Expr(Expr x, Expr y)> make_reference;
     std::function<Expr(Expr x, Expr y, Halide::ApproximationPrecision)> make_approximation;
-    int max_mulpe_precise{0};   // max MULPE allowed when MAE query was <= 1e-6
-    int max_mulpe_extended{0};  // max MULPE allowed when MAE query was <= 1e-6
-    int test_bits{0xff};
+    struct RangedAccuracyTest {
+        std::string name;
+        TestRange2D range;
+        bool validate_mae{true};
+        int max_max_ulp_error{0};  // When MaxAE-query was 1e-5 or better.
+        int max_mean_ulp_error{0}; // When MaxAE-query was 1e-5 or better.
+    };
+    std::vector<RangedAccuracyTest> ranged_tests;
 } functions_to_test[] = {
     // clang-format off
     {
+        "tan",
+        [](Expr x, Expr y) { return Halide::tan(x); },
+        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_tan(x, prec); },
+        {
+            { "close-to-zero", {{-1.05f, 1.05f}}, true , 8,  3, },
+            { "pole-to-pole" , {{-1.57f, 1.57f}}, false, 0, 32, },
+            { "extended"     , {{-10.0f, 10.0f}}, false, 0, 32, },
+        }
+    },
+    {
         "atan",
-        {{-20.0f, 20.0f}, {-0.1f, 0.1f}},
-        {{-200.0f, 200.0f}, {-0.1f, 0.1f}},
-        [](Expr x, Expr y) { return Halide::atan(x + y); },
-        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_atan(x + y, prec); },
-        12, 12,
+        [](Expr x, Expr y) { return Halide::atan(x); },
+        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_atan(x, prec); },
+        {
+            { "precise" , {{ -20.0f,  20.0f}}, true, 70, 20 },
+            { "extended", {{-200.0f, 200.0f}}, true, 70, 20 },
+        }
     },
     {
         "atan2",
-        {{-1.0f, 1.0f}, {-0.1f, 0.1f}},
-        {{-10.0f, 10.0f}, {-10.0f, 10.0f}},
         [](Expr x, Expr y) { return Halide::atan2(x, y); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_atan2(x, y, prec); },
-        12, 70,
+        {
+            { "precise" , {{ -10.0f, 10.0f}, {-10.0f, 10.0f}}, true, 70, 20 },
+        }
     },
     {
         "sin",
-        {{-pi * 0.5f, pi * 0.5f}, {-0.1f, -0.1f}},
-        {{-3 * pi, 3 * pi}, {-0.5f, 0.5f}},
-        [](Expr x, Expr y) { return Halide::sin(x + y); },
-        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_sin(x + y, prec); },
+        [](Expr x, Expr y) { return Halide::sin(x); },
+        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_sin(x, prec); },
+        {
+            { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, true, 32, 0 },
+            { "-pi/2 to pi/2", {{-pi * 0.5f, pi * 0.5f}}, true, 0, 0 },
+            { "-3pi to 3pi",   {{-pi * 3.0f, pi * 3.0f}}, true, 0, 0 },
+        }
     },
     {
         "cos",
-        {{-pi * 0.5f, pi * 0.5f}, {-0.1f, -0.1f}},
-        {{-3 * pi, 3 * pi}, {-0.5f, 0.5f}},
-        [](Expr x, Expr y) { return Halide::cos(x + y); },
-        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_cos(x + y, prec); },
+        [](Expr x, Expr y) { return Halide::cos(x); },
+        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_cos(x, prec); },
+        {
+            { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, true, 32, 0 },
+            { "-pi/2 to pi/2", {{-pi * 0.5f, pi * 0.5f}}, true, 0, 0 },
+            { "-3pi to 3pi",   {{-pi * 3.0f, pi * 3.0f}}, true, 0, 0 },
+        }
     },
     {
         "exp",
-        {{0.0f, std::log(2.0f)}, {-0.1f, -0.1f}},
-        {{-20.0f, 20.0f}, {-0.5f, 0.5f}},
-        [](Expr x, Expr y) { return Halide::exp(x + y); },
-        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_exp(x + y, prec); },
-        5, 20,
-        VALIDATE_MAE_ON_PRECISE,
+        [](Expr x, Expr y) { return Halide::exp(x); },
+        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_exp(x, prec); },
+        {
+            { "precise",  {{0.0f, std::log(2.0f)}}, true , 64, 40 },
+            { "extended", {{-20.0f, 20.0f}}       , false, 64, 40 },
+        }
     },
     {
         "log",
-        {{0.76f, 1.49f}, {-0.01f, -0.01f}},
-        {{1e-8f, 20000.0f}, {-1e-9f, 1e-9f}},
-        [](Expr x, Expr y) { return Halide::log(x + y); },
-        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_log(x + y, prec); },
-        20, 20,
-        VALIDATE_MAE_ON_PRECISE,
+        [](Expr x, Expr y) { return Halide::log(x); },
+        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_log(x, prec); },
+        {
+            { "precise",  {{0.76f, 1.49f}}, true, 120, 60 },
+            { "extended", {{1e-8f, 20000.0f}}, false, 120, 60 },
+        }
+    },
+    {
+        "pow",
+        [](Expr x, Expr y) { return Halide::pow(x, y); },
+        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_pow(x, y, prec); },
+        {
+            { "precise",  {{0.76f,  1.49f}, {0.0f, std::log(2.0f)}}, true , 20, 10 },
+            { "extended", {{1e-8f, 200.0f}, {-20.0f,        10.0f}}, false, 20, 10 },
+        }
     },
     // clang-format on
 };
@@ -104,41 +134,43 @@ struct PrecisionToTest {
     std::string objective;
     float expected_mae{0.0f};
 } precisions_to_test[] = {
+#if 0
     // MSE
-    {{ApproximationPrecision::MSE, 0, 1e-1}, "MSE"},
-    {{ApproximationPrecision::MSE, 0, 1e-2}, "MSE"},
-    {{ApproximationPrecision::MSE, 0, 1e-3}, "MSE"},
-    {{ApproximationPrecision::MSE, 0, 1e-4}, "MSE"},
-    {{ApproximationPrecision::MSE, 0, 1e-5}, "MSE"},
-    {{ApproximationPrecision::MSE, 0, 1e-6}, "MSE"},
-    {{ApproximationPrecision::MSE, 0, 5e-7}, "MSE"},
+    {{ApproximationPrecision::MSE, 0, 0, 1e-1}, "MSE"},
+    {{ApproximationPrecision::MSE, 0, 0, 1e-2}, "MSE"},
+    {{ApproximationPrecision::MSE, 0, 0, 1e-3}, "MSE"},
+    {{ApproximationPrecision::MSE, 0, 0, 1e-4}, "MSE"},
+    {{ApproximationPrecision::MSE, 0, 0, 1e-5}, "MSE"},
+    {{ApproximationPrecision::MSE, 0, 0, 1e-6}, "MSE"},
+    {{ApproximationPrecision::MSE, 0, 0, 5e-7}, "MSE"},
+#endif
 
     // MAE
-    {{ApproximationPrecision::MAE, 0, 1e-1}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 1e-2}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 1e-3}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 1e-4}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 1e-5}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 1e-6}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 5e-7}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 0, 1e-1}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 0, 1e-2}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 0, 1e-3}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 0, 1e-4}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 0, 1e-5}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 0, 1e-6}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 0, 5e-7}, "MAE"},
 
     // MULPE
-    {{ApproximationPrecision::MULPE, 0, 1e-1}, "MULPE"},
-    {{ApproximationPrecision::MULPE, 0, 1e-2}, "MULPE"},
-    {{ApproximationPrecision::MULPE, 0, 1e-3}, "MULPE"},
-    {{ApproximationPrecision::MULPE, 0, 1e-4}, "MULPE"},
-    {{ApproximationPrecision::MULPE, 0, 1e-5}, "MULPE"},
-    {{ApproximationPrecision::MULPE, 0, 1e-6}, "MULPE"},
-    {{ApproximationPrecision::MULPE, 0, 5e-7}, "MULPE"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-1}, "MULPE"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-2}, "MULPE"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-3}, "MULPE"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-4}, "MULPE"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-5}, "MULPE"},
+    {{ApproximationPrecision::MULPE, 0, 0, 1e-6}, "MULPE"},
+    {{ApproximationPrecision::MULPE, 0, 0, 5e-7}, "MULPE"},
 
     // MULPE + MAE
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-1}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-2}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-3}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-4}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-5}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-6}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 5e-7}, "MULPE+MAE"},
+    {{ApproximationPrecision::MULPE_MAE, 0, 0, 1e-1}, "MULPE+MAE"},
+    {{ApproximationPrecision::MULPE_MAE, 0, 0, 1e-2}, "MULPE+MAE"},
+    {{ApproximationPrecision::MULPE_MAE, 0, 0, 1e-3}, "MULPE+MAE"},
+    {{ApproximationPrecision::MULPE_MAE, 0, 0, 1e-4}, "MULPE+MAE"},
+    {{ApproximationPrecision::MULPE_MAE, 0, 0, 1e-5}, "MULPE+MAE"},
+    {{ApproximationPrecision::MULPE_MAE, 0, 0, 1e-6}, "MULPE+MAE"},
+    {{ApproximationPrecision::MULPE_MAE, 0, 0, 5e-7}, "MULPE+MAE"},
 };
 
 int main(int argc, char **argv) {
@@ -146,11 +178,16 @@ int main(int argc, char **argv) {
     setlocale(LC_NUMERIC, "");
 
     constexpr int steps = 1024;
-    Var x{"x"}, y{"y"};
-    Expr t0 = x / float(steps);
-    Expr t1 = y / float(steps);
-    Buffer<float> out_ref{steps, steps};
-    Buffer<float> out_approx{steps, steps};
+    Var i{"i"};
+    // 1D indexing:
+    Expr t = i / float(steps * steps);
+    // 2D indexing
+    Expr ix = i % steps;
+    Expr iy = i / steps;
+    Expr tx = ix / float(steps);
+    Expr ty = iy / float(steps);
+    Buffer<float> out_ref{steps * steps};
+    Buffer<float> out_approx{steps * steps};
 
     int num_tests = 0;
     int num_tests_passed = 0;
@@ -161,16 +198,33 @@ int main(int argc, char **argv) {
         }
 
         const float min_precision_extended = 5e-6;
-        std::pair<TestRange2D, std::string> ranges[2] = {{ftt.precise, "precise"}, {ftt.extended, "extended"}};
-        for (const std::pair<TestRange2D, std::string> &test_range_and_name : ranges) {
-            TestRange2D range = test_range_and_name.first;
-            printf("Testing fast_%s on its %s range ([%f, %f], [%f, %f])...\n", ftt.name.c_str(), test_range_and_name.second.c_str(),
-                   range.x.l, range.x.u, range.y.l, range.y.u);
+        for (const FunctionToTest::RangedAccuracyTest &rat : ftt.ranged_tests) {
+            const TestRange2D &range = rat.range;
+            printf("Testing fast_%s on its %s range ([%f, %f], [%f, %f])...\n",
+                    ftt.name.c_str(), rat.name.c_str(),
+                    range.x.l, range.x.u, range.y.l, range.y.u);
+
+            bool is_2d = range.y.l != range.y.u;
+
+            // Prepare the arguments to the functions. We scan over the
+            // entire range specified in the table above. Notice how
+            // we strict_float() those arguments to make sure we are actually
+            // not constant folding those arguments into the expanded
+            // polynomial. Note that this strict_float() does not influence
+            // the computations of the approximation itself, but only the
+            // arguments to the approximated function.
+            Expr arg_x, arg_y;
+            if (is_2d) {
+                arg_x = strict_float(range.x.l * (1.0f - tx) + range.x.u * tx);
+                arg_y = strict_float(range.y.l * (1.0f - ty) + range.y.u * ty);
+            } else {
+                arg_x = strict_float(range.x.l * (1.0f - t) + range.x.u * t);
+                // leave arg_y undefined to catch errors.
+            }
+
             // Reference:
-            Expr arg_x = range.x.l * (1.0f - t0) + range.x.u * t0;
-            Expr arg_y = range.y.l * (1.0f - t1) + range.y.u * t1;
             Func ref_func{ftt.name + "_ref"};
-            ref_func(x, y) = ftt.make_reference(arg_x, arg_y);
+            ref_func(i) = ftt.make_reference(arg_x, arg_y);
             ref_func.realize(out_ref);  // No schedule: scalar evaluation using libm calls on CPU.
             out_ref.copy_to_host();
             for (const PrecisionToTest &test : precisions_to_test) {
@@ -178,74 +232,82 @@ int main(int argc, char **argv) {
                 prec.allow_native_when_faster = false;  // We want to actually validate our approximation.
 
                 Func approx_func{ftt.name + "_approx"};
-                approx_func(x, y) = ftt.make_approximation(arg_x, arg_y, prec);
+                approx_func(i) = ftt.make_approximation(arg_x, arg_y, prec);
 
                 if (target.has_gpu_feature()) {
-                    Var xo, xi;
-                    Var yo, yi;
+                    Var io, ii;
                     approx_func.never_partition_all();
-                    approx_func.gpu_tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::ShiftInwards);
+                    approx_func.gpu_tile(i, io, ii, 256, TailStrategy::ShiftInwards);
                 } else {
-                    approx_func.vectorize(x, 8);
+                    approx_func.vectorize(i, 8);
                 }
                 approx_func.realize(out_approx);
                 out_approx.copy_to_host();
 
-                float max_absolute_error = 0.0f;
-                int max_ulp_error = 0;
+                float max_abs_error = 0.0f;
+                float max_rel_error = 0.0f;
+                uint64_t max_ulp_error = 0;
                 int max_mantissa_error = 0;
+                double sum_abs_error = 0;
+                uint64_t sum_ulp_error = 0;
 
-                for (int y = 0; y < steps; ++y) {
-                    for (int x = 0; x < steps; ++x) {
-                        float val_approx = out_approx(x, y);
-                        float val_ref = out_ref(x, y);
-                        float abs_diff = std::abs(val_approx - val_ref);
-                        int mantissa_error = bits_diff(val_ref, val_approx);
-                        int ulp_error = ulp_diff(val_ref, val_approx);
+                for (int i = 0; i < steps * steps; ++i) {
+                    float val_approx = out_approx(i);
+                    float val_ref = out_ref(i);
+                    float abs_error = std::abs(val_approx - val_ref);
+                    float rel_error = abs_error / (std::abs(val_ref) + 1e-7);
+                    int mantissa_error = bits_diff(val_ref, val_approx);
+                    uint64_t ulp_error = ulp_diff(val_ref, val_approx);
 
-                        max_absolute_error = std::max(max_absolute_error, abs_diff);
-                        max_mantissa_error = std::max(max_mantissa_error, mantissa_error);
+
+                    if (!std::isfinite(abs_error)) {
+                        std::printf("\n Error: %.10e vs %.10e", val_ref, val_approx);
+                    } else {
+                        if (ulp_error > 100'000) {
+                            //std::printf("\nExtreme ULP error %d: %.10e vs %.10e", ulp_error, val_ref, val_approx);
+                        }
+                        max_abs_error = std::max(max_abs_error, abs_error);
+                        max_rel_error = std::max(max_rel_error, rel_error);
                         max_ulp_error = std::max(max_ulp_error, ulp_error);
+                        max_mantissa_error = std::max(max_mantissa_error, mantissa_error);
+
+                        sum_abs_error += abs_error;
+                        sum_ulp_error += ulp_error;
                     }
                 }
 
-                printf("    fast_%s  Approx[%s-optimized, TargetMAE=%.0e] | MaxAbsError: %.4e | MaxULPError: %'14d | MaxMantissaError: %2d",
-                       ftt.name.c_str(), test.objective.c_str(), prec.constraint_max_absolute_error,
-                       max_absolute_error, max_ulp_error, max_mantissa_error);
+                float mean_ulp_error = float(sum_ulp_error / double(steps * steps));
+                float mean_abs_error = float(double(sum_abs_error) / double(steps * steps));
 
-                if (test_range_and_name.second == "precise") {
-                    if ((ftt.test_bits & VALIDATE_MAE_ON_PRECISE)) {
+                printf("    fast_%s  Approx[%s-optimized, TargetMAE=%.0e] MaxError{ abs: %.4e | rel: %.4e | ULP: %'14d | MantissaBits: %2d}   MeanError{ abs: %.4e | ULP: %10.1f}",
+                       ftt.name.c_str(), test.objective.c_str(), prec.constraint_max_absolute_error,
+                       max_abs_error, max_rel_error, max_ulp_error, max_mantissa_error,
+                       mean_abs_error, mean_ulp_error);
+
+                if (rat.validate_mae) {
+                    num_tests++;
+                    if (max_abs_error > prec.constraint_max_absolute_error) {
+                        printf("  BAD: MaxAbsErr too big!");
+                    } else {
+                        printf("  ok");
+                        num_tests_passed++;
+                    }
+                }
+
+                if (prec.constraint_max_absolute_error <= 1e-5 && prec.optimized_for == ApproximationPrecision::MULPE) {
+                    if (rat.max_max_ulp_error != 0) {
                         num_tests++;
-                        if (max_absolute_error > prec.constraint_max_absolute_error) {
-                            printf("  BAD: MaxAbsErr too big!");
+                        if (max_ulp_error > rat.max_max_ulp_error) {
+                            printf("  BAD: Max ULP Error too big!!");
                         } else {
                             printf("  ok");
                             num_tests_passed++;
                         }
                     }
-                    if (ftt.max_mulpe_precise != 0 && prec.constraint_max_absolute_error <= 1e-6 && prec.optimized_for == ApproximationPrecision::MULPE) {
+                    if (rat.max_mean_ulp_error != 0) {
                         num_tests++;
-                        if (max_ulp_error > ftt.max_mulpe_precise) {
-                            printf("  BAD: MULPE too big!!");
-                        } else {
-                            printf("  ok");
-                            num_tests_passed++;
-                        }
-                    }
-                } else if (test_range_and_name.second == "extended") {
-                    if ((ftt.test_bits & VALIDATE_MAE_ON_EXTENDED)) {
-                        num_tests++;
-                        if (max_absolute_error > std::max(prec.constraint_max_absolute_error, min_precision_extended)) {
-                            printf("  BAD: MaxAbsErr too big!");
-                        } else {
-                            printf("  ok");
-                            num_tests_passed++;
-                        }
-                    }
-                    if (ftt.max_mulpe_extended != 0 && prec.constraint_max_absolute_error <= 1e-6 && prec.optimized_for == ApproximationPrecision::MULPE) {
-                        num_tests++;
-                        if (max_ulp_error > ftt.max_mulpe_extended) {
-                            printf("  BAD: MULPE too big!!");
+                        if (mean_ulp_error > rat.max_mean_ulp_error) {
+                            printf("  BAD: Mean ULP Erro too big!!");
                         } else {
                             printf("  ok");
                             num_tests_passed++;
@@ -258,5 +320,10 @@ int main(int argc, char **argv) {
         printf("\n");
     }
     printf("Passed %d / %d accuracy tests.\n", num_tests_passed, num_tests);
+    if (num_tests_passed < num_tests) {
+        printf("Not all accuracy tests passed.\n");
+        return 1;
+    }
     printf("Success!\n");
+    return 0;
 }

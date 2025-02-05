@@ -21,6 +21,7 @@ struct Approximation {
 const Approximation *best_atan_approximation(Halide::ApproximationPrecision precision, Type type);
 const Approximation *best_sin_approximation(Halide::ApproximationPrecision precision, Type type);
 const Approximation *best_cos_approximation(Halide::ApproximationPrecision precision, Type type);
+const Approximation *best_tan_approximation(Halide::ApproximationPrecision precision, Type type);
 const Approximation *best_log_approximation(Halide::ApproximationPrecision precision, Type type);
 const Approximation *best_exp_approximation(Halide::ApproximationPrecision precision, Type type);
 const Approximation *best_expm1_approximation(Halide::ApproximationPrecision precision, Type type);

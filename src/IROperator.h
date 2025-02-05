@@ -1000,17 +1000,27 @@ struct ApproximationPrecision {
         MULPE_MAE,  //< Optimized for simultaneously Max ULP Error, and Max Absolute Error, each with a weight of 50%.
     } optimized_for;
     int constraint_min_poly_terms{0};           //< Number of terms in polynomial (zero for no constraint).
+    int constraint_max_ulp_error{0};                       //< Max error measured in units in last place (zero for no contraint).
     float constraint_max_absolute_error{0.0f};  //< Max absolute error (zero for no constraint).
     bool allow_native_when_faster{true};        //< For some targets, the native functions are really fast.
                                                 //  Put this on false to force expansion of the polynomial approximation.
+
+    /** MULPE-optimized, with max ULP error. */
+    static ApproximationPrecision max_ulp_error(int mulpe) {
+        return ApproximationPrecision{MULPE, 0, mulpe, 0.0f, true};
+    }
+    /** MULPE-optimized, with max absolute error. */
+    static ApproximationPrecision max_abs_error(float mae) {
+        return ApproximationPrecision{MULPE, 0, 0, mae, true};
+    }
 };
 
 /** Fast vectorizable approximation to some trigonometric functions for
  * Float(32).  Absolute approximation error is less than 1e-5. Slow on x86 if
  * you don't have at least sse 4.1. */
 // @{
-Expr fast_sin(const Expr &x, ApproximationPrecision precision = {ApproximationPrecision::MULPE, 0, 1e-5});
-Expr fast_cos(const Expr &x, ApproximationPrecision precision = {ApproximationPrecision::MULPE, 0, 1e-5});
+Expr fast_sin(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_abs_error(1e-5));
+Expr fast_cos(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_abs_error(1e-5));
 // @}
 
 /** Fast vectorizable approximations for arctan and arctan2 for Float(32).
@@ -1030,29 +1040,34 @@ Expr fast_cos(const Expr &x, ApproximationPrecision precision = {ApproximationPr
  * Note: the performance of this functions seem to be not reliably faster on WebGPU (for now, August 2024).
  */
 // @{
-Expr fast_atan(const Expr &x, ApproximationPrecision precision = {ApproximationPrecision::MULPE, 0, 1e-5});
-Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = {ApproximationPrecision::MULPE, 0, 1e-5});
+Expr fast_atan(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_abs_error(1e-5));
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = ApproximationPrecision::max_abs_error(1e-5));
 // @}
+
+/**
+ * TODO write doc
+ */
+Expr fast_tan(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_ulp_error(32));
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
  * mantissa. Vectorizes cleanly. Slow on x86 if you don't
  * have at least sse 4.1. */
-Expr fast_log(const Expr &x, ApproximationPrecision precision = {ApproximationPrecision::MULPE, 0, 1e-5});
+Expr fast_log(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_ulp_error(8));
 
 /** Fast approximate cleanly vectorizable exp for Float(32). Returns
  * nonsense for inputs that would overflow or underflow. Typically
  * accurate up to the last 5 bits of the mantissa. Gets worse when
  * approaching overflow. Vectorizes cleanly. Slow on x86 if you don't
  * have at least sse 4.1. */
-Expr fast_exp(const Expr &x, ApproximationPrecision precision = {ApproximationPrecision::MULPE, 0, 1e-5});
+Expr fast_exp(const Expr &x, ApproximationPrecision precision = ApproximationPrecision::max_ulp_error(32));
 
 /** Fast approximate cleanly vectorizable pow for Float(32). Returns
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
  * mantissa for typical exponents. Gets worse when approaching
  * overflow. Vectorizes cleanly. Slow on x86 if you don't
  * have at least sse 4.1. */
-Expr fast_pow(Expr x, Expr y, ApproximationPrecision precision = {ApproximationPrecision::MULPE, 0, 1e-5});
+Expr fast_pow(Expr x, Expr y, ApproximationPrecision precision = ApproximationPrecision::max_ulp_error(32));
 
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
  * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
