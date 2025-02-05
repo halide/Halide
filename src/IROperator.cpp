@@ -1339,11 +1339,12 @@ namespace {
 
 Expr make_approximation_precision_info(ApproximationPrecision precision) {
     return Call::make(type_of<ApproximationPrecision *>(), Call::make_struct, {
-        Expr(precision.optimized_for),
-        Expr(precision.constraint_max_ulp_error),
-        Expr(precision.constraint_max_absolute_error),
-        Expr(precision.force_halide_polynomial),
-    }, Call::CallType::Intrinsic);
+                                                                                  Expr(precision.optimized_for),
+                                                                                  Expr(precision.constraint_max_ulp_error),
+                                                                                  Expr(precision.constraint_max_absolute_error),
+                                                                                  Expr(precision.force_halide_polynomial),
+                                                                              },
+                      Call::CallType::Intrinsic);
 }
 
 }  // namespace
@@ -1394,7 +1395,6 @@ Expr fast_tanh(const Expr &x, ApproximationPrecision precision) {
     return Call::make(x.type(), Call::fast_tanh, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
 }
 
-
 Expr print(const std::vector<Expr> &args) {
     Expr combined_string = combine_strings(args);
 
@@ -1408,7 +1408,7 @@ Expr print(const std::vector<Expr> &args) {
         Call::make(args[0].type(), Call::return_second,
                    {print_call, args[0]}, Call::PureIntrinsic);
     return result;
- }
+}
 
 Expr print_when(Expr condition, const std::vector<Expr> &args) {
     Expr p = print(args);
