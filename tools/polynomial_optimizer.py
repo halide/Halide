@@ -62,6 +62,8 @@ Metrics = collections.namedtuple("Metrics", ["mean_squared_error", "max_abs_erro
 
 def optimize_approximation(loss, order):
     func_fixed_part = lambda x: x * 0.0
+    X = None
+    will_invert = False
     if args.func == "atan":
         if hasattr(np, "atan"):
             func = np.atan
@@ -80,6 +82,14 @@ def optimize_approximation(loss, order):
         func = np.cos
         exponents = np.arange(order) * 2
         lower, upper = 0.0, np.pi / 2
+    elif args.func == "tan":
+        func = np.tan
+        func_fixed_part = lambda x: x
+        exponents = 3 + np.arange(order - 1) * 2
+        lower, upper = 0.0, np.pi / 4
+        X = np.concatenate([np.logspace(-5, 0, num=2048 * 17), np.linspace(0, 1, 9000)]) * (np.pi / 4)
+        X = np.sort(X)
+        will_invert = True
     elif args.func == "exp":
         func = lambda x: np.exp(x)
         func_fixed_part = lambda x: 1 + x
@@ -98,7 +108,7 @@ def optimize_approximation(loss, order):
         exit(1)
 
 
-    X = np.linspace(lower, upper, 512 * 31)
+    if X is None: X = np.linspace(lower, upper, 512 * 31)
     target = func(X)
     fixed_part = func_fixed_part(X)
     target_fitting_part = target - fixed_part
@@ -123,6 +133,11 @@ def optimize_approximation(loss, order):
     lstsq_iterations = loss_power * 20
     if loss == "mse":
         lstsq_iterations = 1
+    elif loss == "mulpe":
+        lstsq_iterations = 40
+        weight = np.mean(target_spacing) / target_spacing
+
+    #if will_invert: weight += 1.0 / (np.abs(target) + target_spacing)
 
     loss_history = np.zeros((lstsq_iterations, 3))
 
@@ -167,7 +182,6 @@ def optimize_approximation(loss, order):
             p = i / lstsq_iterations
             p = min(p * 1.25, 1.0)
             raised_error = np.power(norm_error_metric, 2 + loss_power * p)
-            weight *= 0.99999
             weight += raised_error
 
             mean_loss = np.mean(np.power(abs_diff, loss_power))

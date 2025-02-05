@@ -746,7 +746,7 @@ int main(int argc, char **argv) {
 
     std::vector<std::future<bool>> futures;
 
-    Halide::Tools::ThreadPool<bool> pool;
+    Halide::Tools::ThreadPool<bool> pool(1);
     for (size_t t = 0; t < tasks.size(); t++) {
         if (!sharder.should_run(t)) continue;
         const auto &task = tasks.at(t);
