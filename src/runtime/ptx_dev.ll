@@ -114,6 +114,11 @@ define weak_odr double @exp_f64(double %x) nounwind uwtable readnone alwaysinlin
        ret double %y
 }
 
+define weak_odr float @fast_ex2_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = call float asm "ex2.approx.f32     $0, $1;", "=f,f" (float %x)
+       ret float %y
+}
+
 declare float @__nv_logf(float) nounwind readnone
 declare double @__nv_log(double) nounwind readnone
 
@@ -125,6 +130,11 @@ define weak_odr float @log_f32(float %x) nounwind uwtable readnone alwaysinline 
 define weak_odr double @log_f64(double %x) nounwind uwtable readnone alwaysinline {
        %y = tail call double @__nv_log(double %x) nounwind readnone
        ret double %y
+}
+
+define weak_odr float @fast_lg2_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = call float asm "lg2.approx.f32     $0, $1;", "=f,f" (float %x)
+       ret float %y
 }
 
 declare float @__nv_fabsf(float) nounwind readnone

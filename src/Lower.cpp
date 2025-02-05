@@ -26,6 +26,7 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "ExtractTileOperations.h"
+#include "FastMathFunctions.h"
 #include "FindCalls.h"
 #include "FindIntrinsics.h"
 #include "FlattenNestedRamps.h"
@@ -327,6 +328,11 @@ void lower_impl(const vector<Function> &output_funcs,
         s = select_gpu_api(s, t);
         log("Lowering after selecting a GPU API for extern stages:", s);
     }
+
+    // Lowering of fast versions of math functions is target dependent: CPU arch or GPU/DeviceAPI.
+    debug(1) << "Selecting fast math function implementations...\n";
+    s = lower_fast_math_functions(s, t);
+    log("Lowering after selecting fast math functions:", s);
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);

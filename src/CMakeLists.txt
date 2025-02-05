@@ -115,6 +115,7 @@ target_sources(
     ExternFuncArgument.h
     ExtractTileOperations.h
     FastIntegerDivide.h
+    FastMathFunctions.h
     FindCalls.h
     FindIntrinsics.h
     FlattenNestedRamps.h
@@ -291,6 +292,7 @@ target_sources(
     Expr.cpp
     ExtractTileOperations.cpp
     FastIntegerDivide.cpp
+    FastMathFunctions.cpp
     FindCalls.cpp
     FindIntrinsics.cpp
     FlattenNestedRamps.cpp
