@@ -1062,7 +1062,6 @@ Expr fast_atan(const Expr &x, ApproximationPrecision precision = {});
 Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = {});
 // @}
 
-
 /** Fast approximate log for Float(32).
  * Returns nonsense for x <= 0.0f.
  * Accurate up to the last 5 bits of the mantissa.

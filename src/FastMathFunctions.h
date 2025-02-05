@@ -9,6 +9,6 @@ namespace Internal {
 Stmt lower_fast_math_functions(const Stmt &s, const Target &t);
 
 }
-}
+}  // namespace Halide
 
 #endif
