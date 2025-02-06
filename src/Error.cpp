@@ -166,15 +166,15 @@ template<typename T>
 
 }  // namespace
 
-void throw_error(RuntimeError e) {
+void throw_error(const RuntimeError &e) {
     throw_error_common(e);
 }
 
-void throw_error(CompileError e) {
+void throw_error(const CompileError &e) {
     throw_error_common(e);
 }
 
-void throw_error(InternalError e) {
+void throw_error(const InternalError &e) {
     throw_error_common(e);
 }
 

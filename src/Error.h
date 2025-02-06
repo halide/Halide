@@ -108,9 +108,9 @@ namespace Internal {
  * @param e The error to throw or report
  */
 /// @{
-[[noreturn]] void throw_error(RuntimeError e);
-[[noreturn]] void throw_error(CompileError e);
-[[noreturn]] void throw_error(InternalError e);
+[[noreturn]] void throw_error(const RuntimeError &e);
+[[noreturn]] void throw_error(const CompileError &e);
+[[noreturn]] void throw_error(const InternalError &e);
 /// @}
 
 /**
