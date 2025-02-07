@@ -545,17 +545,17 @@ bool test(int lanes, int seed) {
         }
         {
             Func f18;
-            f18(x, y) = fast_log(a);
+            f18(x, y) = fast_log(a, ApproximationPrecision::max_ulp_error(64));
             im18 = f18.realize({W, H});
         }
         {
             Func f19;
-            f19(x, y) = fast_exp(b);
+            f19(x, y) = fast_exp(b, ApproximationPrecision::max_ulp_error(64));
             im19 = f19.realize({W, H});
         }
         {
             Func f20;
-            f20(x, y) = fast_pow(a, b / 16.0f);
+            f20(x, y) = fast_pow(a, b / 16.0f, Halide::ApproximationPrecision::max_ulp_error(128));
             im20 = f20.realize({W, H});
         }
 
@@ -746,7 +746,7 @@ int main(int argc, char **argv) {
 
     std::vector<std::future<bool>> futures;
 
-    Halide::Tools::ThreadPool<bool> pool(1);
+    Halide::Tools::ThreadPool<bool> pool;
     for (size_t t = 0; t < tasks.size(); t++) {
         if (!sharder.should_run(t)) continue;
         const auto &task = tasks.at(t);

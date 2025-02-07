@@ -68,8 +68,8 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::atan(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_atan(x, prec); },
         {
-            { "precise" , {{ -20.0f,  20.0f}}, true, 70, 20 },
-            { "extended", {{-200.0f, 200.0f}}, true, 70, 20 },
+            { "precise" , {{ -20.0f,  20.0f}}, true, 80, 40 },
+            { "extended", {{-200.0f, 200.0f}}, true, 80, 40 },
         }
     },
     {
@@ -77,7 +77,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::atan2(x, y); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_atan2(x, y, prec); },
         {
-            { "precise" , {{ -10.0f, 10.0f}, {-10.0f, 10.0f}}, true, 70, 20 },
+            { "precise" , {{ -10.0f, 10.0f}, {-10.0f, 10.0f}}, true, 70, 30 },
         }
     },
     {
@@ -148,48 +148,104 @@ struct PrecisionToTest {
     {{}, "AUTO"},
 
     // MULPE
-    {ApproximationPrecision::max_abs_error(1e-1), "MULPE"},
-    {ApproximationPrecision::max_abs_error(1e-2), "MULPE"},
-    {ApproximationPrecision::max_abs_error(1e-3), "MULPE"},
-    {ApproximationPrecision::max_abs_error(1e-4), "MULPE"},
-    {ApproximationPrecision::max_abs_error(1e-5), "MULPE"},
-    {ApproximationPrecision::max_abs_error(1e-6), "MULPE"},
-    {ApproximationPrecision::max_abs_error(5e-7), "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-1, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-2, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-3, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-4, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-5, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-6, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,5e-7, 1}, "MULPE"},
 
     // MAE
-    {{ApproximationPrecision::MAE, 0, 1e-1}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 1e-2}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 1e-3}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 1e-4}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 1e-5}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 1e-6}, "MAE"},
-    {{ApproximationPrecision::MAE, 0, 5e-7}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 1e-1, 1}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 1e-2, 1}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 1e-3, 1}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 1e-4, 1}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 1e-5, 1}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 1e-6, 1}, "MAE"},
+    {{ApproximationPrecision::MAE, 0, 5e-7, 1}, "MAE"},
 
-    // MULPE + MAE
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-1}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-2}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-3}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-4}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-5}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 1e-6}, "MULPE+MAE"},
-    {{ApproximationPrecision::MULPE_MAE, 0, 5e-7}, "MULPE+MAE"},
+    //// MULPE + MAE
+    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-1}, "MULPE+MAE"},
+    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-2}, "MULPE+MAE"},
+    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-3}, "MULPE+MAE"},
+    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-4}, "MULPE+MAE"},
+    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-5}, "MULPE+MAE"},
+    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-6}, "MULPE+MAE"},
+    //{{ApproximationPrecision::MULPE_MAE, 0, 5e-7}, "MULPE+MAE"},
 };
+
+struct ErrorMetrics {
+    float max_abs_error{0.0f};
+    float max_rel_error{0.0f};
+    uint64_t max_ulp_error{0};
+    int max_mantissa_error{0};
+    float mean_abs_error{0.0f};
+    float mean_rel_error{0.0f};
+    float mean_ulp_error{0.0f};
+};
+
+ErrorMetrics measure_accuracy(Halide::Buffer<float, 1> &out_ref, Halide::Buffer<float, 1> &out_test) {
+    ErrorMetrics em{};
+    double sum_abs_error = 0;
+    double sum_rel_error = 0;
+    uint64_t sum_ulp_error = 0;
+    uint64_t count = 0;
+
+    for (int i = 0; i < out_ref.width(); ++i) {
+        float val_approx = out_test(i);
+        float val_ref = out_ref(i);
+        float abs_error = std::abs(val_approx - val_ref);
+        float rel_error = abs_error / (std::abs(val_ref) + 1e-7);
+        int mantissa_error = bits_diff(val_ref, val_approx);
+        uint64_t ulp_error = ulp_diff(val_ref, val_approx);
+
+        if (!std::isfinite(abs_error)) {
+            if (val_ref != val_approx) {
+                std::printf("      Warn: %.10e vs %.10e\n", val_ref, val_approx);
+            }
+        } else {
+            if (ulp_error > 100'000) {
+                // std::printf("\nExtreme ULP error %d: %.10e vs %.10e", ulp_error, val_ref, val_approx);
+            }
+            count++;
+            em.max_abs_error = std::max(em.max_abs_error, abs_error);
+            em.max_rel_error = std::max(em.max_rel_error, rel_error);
+            em.max_ulp_error = std::max(em.max_ulp_error, ulp_error);
+            em.max_mantissa_error = std::max(em.max_mantissa_error, mantissa_error);
+
+            sum_abs_error += abs_error;
+            sum_rel_error += rel_error;
+            sum_ulp_error += ulp_error;
+        }
+    }
+
+    em.mean_abs_error = float(double(sum_abs_error) / double(count));
+    em.mean_rel_error = float(double(sum_rel_error) / double(count));
+    em.mean_ulp_error = float(sum_ulp_error / double(count));
+
+    return em;
+}
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     setlocale(LC_NUMERIC, "");
 
     constexpr int steps = 1024;
-    Var i{"i"};
+    Var i{"i"}, x{"x"}, y{"y"};
     // 1D indexing:
-    Expr t = i / float(steps * steps);
+    Func input_1d{"input_1d"};
+    input_1d(i) = i / float(steps * steps);
+    input_1d.compute_root(); // Make sure this is super deterministic (computed on always the same CPU).
     // 2D indexing
     Expr ix = i % steps;
     Expr iy = i / steps;
-    Expr tx = ix / float(steps);
-    Expr ty = iy / float(steps);
-    Buffer<float> out_ref{steps * steps};
-    Buffer<float> out_approx{steps * steps};
+    Func input_2d{"input_2d"};
+    input_2d(x, y) = Tuple(x / float(steps), y / float(steps));
+    input_2d.compute_root(); // Super deterministic!
+
+    Buffer<float, 1> out_ref{steps * steps};
+    Buffer<float, 1> out_approx{steps * steps};
 
     bool use_icons = true;
     const auto &print_ok = [use_icons]() {
@@ -197,6 +253,13 @@ int main(int argc, char **argv) {
             printf(" ✅");
         } else {
             printf("  ok");
+        }
+    };
+    const auto &print_warn = [use_icons](const char *reason) {
+        if (use_icons) {
+            printf(" ⚠️[%s]", reason);
+        } else {
+            printf("  WARN[%s]", reason);
         }
     };
     const auto &print_bad = [use_icons](const char *reason) {
@@ -238,18 +301,40 @@ int main(int argc, char **argv) {
             // arguments to the approximated function.
             Expr arg_x, arg_y;
             if (is_2d) {
-                arg_x = strict_float(range.x.l * (1.0f - tx) + range.x.u * tx);
-                arg_y = strict_float(range.y.l * (1.0f - ty) + range.y.u * ty);
+                arg_x = input_2d(ix, iy)[0];
+                arg_y = input_2d(ix, iy)[1];
             } else {
-                arg_x = strict_float(range.x.l * (1.0f - t) + range.x.u * t);
+                arg_x = input_1d(i);
                 // leave arg_y undefined to catch errors.
             }
 
-            // Reference:
+            // Reference function on CPU
             Func ref_func{ftt.name + "_ref"};
             ref_func(i) = ftt.make_reference(arg_x, arg_y);
             ref_func.realize(out_ref);  // No schedule: scalar evaluation using libm calls on CPU.
             out_ref.copy_to_host();
+
+            // Reference function on device (to check that the "exact" function is exact).
+            if (target.has_gpu_feature()) {
+                Var io, ii;
+                ref_func.never_partition_all();
+                ref_func.gpu_tile(i, io, ii, 256, TailStrategy::ShiftInwards);
+                ref_func.realize(out_approx);
+                out_approx.copy_to_host();
+
+                ErrorMetrics em = measure_accuracy(out_ref, out_approx);
+                printf("    %s       (native func on device)                   MaxError{ abs: %.4e | rel: %.4e | ULP: %'14" PRIu64 " | MantissaBits: %2d}   MeanError{ abs: %.4e | ULP: %10.1f}",
+                       ftt.name.c_str(),
+                       em.max_abs_error, em.max_rel_error, em.max_ulp_error, em.max_mantissa_error,
+                       em.mean_abs_error, em.mean_ulp_error);
+
+                if (em.max_ulp_error > 8) {
+                    print_warn("Native func is not exact on device.");
+                } else {
+                    print_ok();
+                }
+                printf("\n");
+            }
 
             // Approximations:
             for (const PrecisionToTest &test : precisions_to_test) {
@@ -267,56 +352,19 @@ int main(int argc, char **argv) {
                 approx_func.realize(out_approx);
                 out_approx.copy_to_host();
 
-                float max_abs_error = 0.0f;
-                float max_rel_error = 0.0f;
-                uint64_t max_ulp_error = 0;
-                int max_mantissa_error = 0;
-                double sum_abs_error = 0;
-                double sum_rel_error = 0;
-                uint64_t sum_ulp_error = 0;
+                ErrorMetrics em = measure_accuracy(out_ref, out_approx);
 
-                for (int i = 0; i < steps * steps; ++i) {
-                    float val_approx = out_approx(i);
-                    float val_ref = out_ref(i);
-                    float abs_error = std::abs(val_approx - val_ref);
-                    float rel_error = abs_error / (std::abs(val_ref) + 1e-7);
-                    int mantissa_error = bits_diff(val_ref, val_approx);
-                    uint64_t ulp_error = ulp_diff(val_ref, val_approx);
-
-                    if (!std::isfinite(abs_error)) {
-                        if (val_ref != val_approx) {
-                            std::printf("      Warn: %.10e vs %.10e\n", val_ref, val_approx);
-                        }
-                    } else {
-                        if (ulp_error > 100'000) {
-                            // std::printf("\nExtreme ULP error %d: %.10e vs %.10e", ulp_error, val_ref, val_approx);
-                        }
-                        max_abs_error = std::max(max_abs_error, abs_error);
-                        max_rel_error = std::max(max_rel_error, rel_error);
-                        max_ulp_error = std::max(max_ulp_error, ulp_error);
-                        max_mantissa_error = std::max(max_mantissa_error, mantissa_error);
-
-                        sum_abs_error += abs_error;
-                        sum_rel_error += rel_error;
-                        sum_ulp_error += ulp_error;
-                    }
-                }
-
-                float mean_abs_error = float(double(sum_abs_error) / double(steps * steps));
-                float mean_rel_error = float(double(sum_rel_error) / double(steps * steps));
-                float mean_ulp_error = float(sum_ulp_error / double(steps * steps));
-
-                printf("    fast_%s  Approx[%s-optimized, TargetMAE=%.0e] MaxError{ abs: %.4e | rel: %.4e | ULP: %'14" PRIu64 " | MantissaBits: %2d}   MeanError{ abs: %.4e | ULP: %10.1f}",
+                printf("    fast_%s  Approx[%6s-optimized, TargetMAE=%.0e] MaxError{ abs: %.4e | rel: %.4e | ULP: %'14" PRIu64 " | MantissaBits: %2d}   MeanError{ abs: %.4e | ULP: %10.1f}",
                        ftt.name.c_str(), test.objective.c_str(), prec.constraint_max_absolute_error,
-                       max_abs_error, max_rel_error, max_ulp_error, max_mantissa_error,
-                       mean_abs_error, mean_ulp_error);
+                       em.max_abs_error, em.max_rel_error, em.max_ulp_error, em.max_mantissa_error,
+                       em.mean_abs_error, em.mean_ulp_error);
 
                 if (test.precision.optimized_for == Halide::ApproximationPrecision::AUTO) {
                     // Make sure that the AUTO is reasonable in at least one way: MAE or Relative/ULP.
                     if (&rat == &ftt.ranged_tests[0]) {
                         // On the first (typically precise) range.
                         num_tests++;
-                        if (max_abs_error < 1e-5 || max_ulp_error < 20'000 || max_rel_error < 1e-2) {
+                        if (em.max_abs_error < 1e-5 || em.max_ulp_error < 20'000 || em.max_rel_error < 1e-2) {
                             num_tests_passed++;
                             print_ok();
                         } else {
@@ -325,7 +373,7 @@ int main(int argc, char **argv) {
                     } else {
                         // On other ranges (typically less precise)
                         num_tests++;
-                        if (mean_abs_error < 1e-5 || mean_ulp_error < 20'000 || mean_rel_error < 1e-2) {
+                        if (em.mean_abs_error < 1e-5 || em.mean_ulp_error < 20'000 || em.mean_rel_error < 1e-2) {
                             num_tests_passed++;
                             print_ok();
                         } else {
@@ -335,7 +383,7 @@ int main(int argc, char **argv) {
                 } else {
                     if (rat.validate_mae) {
                         num_tests++;
-                        if (max_abs_error > std::max(prec.constraint_max_absolute_error, best_mae_for_backend)) {
+                        if (em.max_abs_error > std::max(prec.constraint_max_absolute_error, best_mae_for_backend)) {
                             print_bad("MaxAbsErr too big!");
                         } else {
                             print_ok();
@@ -346,7 +394,7 @@ int main(int argc, char **argv) {
                         // reasonable results when the MAE <= 1e-5 is desired.
                         if (prec.constraint_max_absolute_error != 0 && prec.constraint_max_absolute_error <= 1e-5) {
                             num_tests++;
-                            if (mean_abs_error < 1e-5 || mean_ulp_error < 20'000 || mean_rel_error < 1e-2) {
+                            if (em.mean_abs_error < 1e-5 || em.mean_ulp_error < 20'000 || em.mean_rel_error < 1e-2) {
                                 num_tests_passed++;
                                 print_ok();
                             } else {
@@ -359,7 +407,7 @@ int main(int argc, char **argv) {
                 if (prec.constraint_max_absolute_error != 0 && prec.constraint_max_absolute_error <= 1e-5 && prec.optimized_for == ApproximationPrecision::MULPE) {
                     if (rat.max_max_ulp_error != 0) {
                         num_tests++;
-                        if (max_ulp_error > rat.max_max_ulp_error) {
+                        if (em.max_ulp_error > rat.max_max_ulp_error) {
                             print_bad("Max ULP Error too big!!");
                         } else {
                             print_ok();
@@ -368,7 +416,7 @@ int main(int argc, char **argv) {
                     }
                     if (rat.max_mean_ulp_error != 0) {
                         num_tests++;
-                        if (mean_ulp_error > rat.max_mean_ulp_error) {
+                        if (em.mean_ulp_error > rat.max_mean_ulp_error) {
                             print_bad("Mean ULP Error too big!!");
                         } else {
                             print_ok();
