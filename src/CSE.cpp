@@ -80,6 +80,7 @@ class GVN : public IRMutator {
 public:
     struct Entry {
         Expr expr;
+        bool strict_float = false;
         int use_count = 0;
         // All consumer Exprs for which this is the last child Expr.
         map<Expr, int, IRGraphDeepCompare> uses;
@@ -144,6 +145,7 @@ public:
 class ComputeUseCounts : public IRGraphVisitor {
     GVN &gvn;
     bool lift_all;
+    bool in_strict_float{false};
 
 public:
     ComputeUseCounts(GVN &g, bool l)
@@ -152,6 +154,15 @@ public:
 
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
+
+    void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::strict_float)) {
+            ScopedValue<bool> bind(in_strict_float, true);
+            IRGraphVisitor::visit(op);
+        } else {
+            IRGraphVisitor::visit(op);
+        }
+    }
 
     void include(const Expr &e) override {
         // If it's not the sort of thing we want to extract as a let,
@@ -167,7 +178,9 @@ public:
         // Find this thing's number.
         auto iter = gvn.output_numbering.find(e);
         if (iter != gvn.output_numbering.end()) {
-            gvn.entries[iter->second]->use_count++;
+            auto &entry = gvn.entries[iter->second];
+            entry->use_count++;
+            entry->strict_float |= in_strict_float;
         } else {
             internal_error << "Expr not in shallow numbering: " << e << "\n";
         }
@@ -321,14 +334,14 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     debug(4) << "Canonical form without lets " << e << "\n";
 
     // Figure out which ones we'll pull out as lets and variables.
-    vector<pair<string, Expr>> lets;
+    vector<std::tuple<string, Expr, bool>> lets;
     vector<Expr> new_version(gvn.entries.size());
     map<Expr, Expr, ExprCompare> replacements;
     for (size_t i = 0; i < gvn.entries.size(); i++) {
         const auto &e = gvn.entries[i];
         if (e->use_count > 1) {
             string name = namer.make_unique_name();
-            lets.emplace_back(name, e->expr);
+            lets.emplace_back(name, e->expr, e->strict_float);
             // Point references to this expr to the variable instead.
             replacements[e->expr] = Variable::make(e->expr.type(), name);
         }
@@ -342,11 +355,15 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     debug(4) << "With variables " << e << "\n";
 
     // Wrap the final expr in the lets.
-    for (const auto &[var, value] : reverse_view(lets)) {
+    for (const auto &[var, value, expr_strict_float] : reverse_view(lets)) {
         // Drop this variable as an acceptable replacement for this expr.
         replacer.erase(value);
         // Use containing lets in the value.
-        e = Let::make(var, replacer.mutate(value), e);
+        if (expr_strict_float) {
+            e = Let::make(var, strict_float(replacer.mutate(value)), e);
+        } else {
+            e = Let::make(var, replacer.mutate(value), e);
+        }
     }
 
     debug(4) << "With lets: " << e << "\n";

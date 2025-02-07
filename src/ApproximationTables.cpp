@@ -9,7 +9,7 @@ using OO = ApproximationPrecision::OptimizationObjective;
 
 // clang-format off
 // Generate this table with:
-//   python3 tools/polynomial_optimizer.py atan --order 1 2 3 4 5 6 7 8 --loss mse mae mulpe mulpe_mae --no-gui --format table
+//   python3 tools/polynomial_optimizer.py atan --order 1 2 3 4 5 6 7 8 --loss mae mulpe mulpe_mae --format table
 //
 // Note that the maximal errors are computed with numpy with double precision.
 // The real errors are a bit larger with single-precision floats (see correctness/fast_arctan.cpp).

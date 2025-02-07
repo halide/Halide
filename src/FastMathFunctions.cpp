@@ -63,7 +63,9 @@ Expr fast_sincos_helper(const Expr &x_full, bool is_sin, ApproximationPrecision 
     const std::vector<double> &c = approx->coefficients;
     Expr result = x * eval_poly(c, x * x);
     result = select(flip_sign, -result, result);
-    return common_subexpression_elimination(result, true);
+    //result = strict_float(result);
+    //result = common_subexpression_elimination(result, true);
+    return result;
 }
 
 Expr fast_sin(const Expr &x, ApproximationPrecision precision) {
@@ -146,7 +148,8 @@ Expr fast_atan_helper(const Expr &x_full, ApproximationPrecision precision, bool
     if (!between_m1_and_p1) {
         result = select(x_gt_1, select(x_full < 0, constant(type, -PI_OVER_TWO), constant(type, PI_OVER_TWO)) - result, result);
     }
-    return common_subexpression_elimination(result, true);
+    //result = common_subexpression_elimination(result, true);
+    return result;
 }
 
 Expr fast_atan(const Expr &x_full, ApproximationPrecision precision) {
@@ -163,6 +166,9 @@ Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) 
     // numerical precision.
     Expr swap = abs(y) > abs(x);
     Expr atan_input = select(swap, x, y) / select(swap, y, x);
+    // Increase precision somewhat, as we will compound some additional errors.
+    precision.constraint_max_ulp_error /= 2;
+    precision.constraint_max_absolute_error *= 0.5f;
     Expr ati = fast_atan_helper(atan_input, precision, true);
     Expr pi_over_two = constant(type, PI_OVER_TWO);
     Expr pi = constant(type, PI);
@@ -176,7 +182,8 @@ Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) 
         x == 0.0f && y > 0.0f, pi_over_two,
         x == 0.0f && y < 0.0f, -pi_over_two,
         0.0f);
-    return common_subexpression_elimination(result, true);
+    //result = common_subexpression_elimination(result, true);
+    return result;
 }
 
 Expr fast_exp(const Expr &x_full, ApproximationPrecision prec) {
@@ -216,7 +223,7 @@ Expr fast_exp(const Expr &x_full, ApproximationPrecision prec) {
     // thing as float.
     Expr two_to_the_n = reinterpret<float>(biased << 23);
     result *= two_to_the_n;
-    result = common_subexpression_elimination(result, true);
+    //result = common_subexpression_elimination(result, true);
     return result;
 }
 
@@ -248,7 +255,7 @@ Expr fast_log(const Expr &x, ApproximationPrecision prec) {
     Expr result = x1 * eval_poly(c, x1);
 #endif
     result = result + cast<float>(exponent) * log2;
-    result = common_subexpression_elimination(result);
+    //result = common_subexpression_elimination(result);
     return result;
 }
 
@@ -279,66 +286,69 @@ struct IntrinsicsInfo {
 };
 
 struct IntrinsicsInfoPerDeviceAPI {
+    OO reasonable_behavior; // A reasonable optimization objective for a given function.
     float default_mae;  // A reasonable desirable MAE (if specified)
     int default_mulpe;  // A reasonable desirable MULPE (if specified)
     std::vector<IntrinsicsInfo> device_apis;
 };
 
+// clang-format off
 IntrinsicsInfoPerDeviceAPI ii_sin_cos{
-    1e-5f, 0, {
-                  {DeviceAPI::Vulkan, {true}, {}},
-                  {DeviceAPI::CUDA, {false}, {OO::MAE, 5e-7f, 1'000'000}},
-                  {DeviceAPI::Metal, {true}, {}},
-                  {DeviceAPI::WebGPU, {true}, {}},
-              }};
+    OO::MAE, 1e-5f, 0, {
+      {DeviceAPI::Vulkan, {true}, {}},
+      {DeviceAPI::CUDA, {false}, {OO::MAE, 5e-7f, 1'000'000}},
+      {DeviceAPI::Metal, {true}, {}},
+      {DeviceAPI::WebGPU, {true}, {}},
+}};
 
 IntrinsicsInfoPerDeviceAPI ii_atan_atan2{
-    1e-5f, 0, {
-                  // no intrinsics available
-                  {DeviceAPI::Vulkan, {false}, {}},
-                  {DeviceAPI::Metal, {true}, {}},
-                  {DeviceAPI::WebGPU, {true}, {}},
-              }};
+    OO::MAE, 1e-5f, 0, {
+      // no intrinsics available
+      {DeviceAPI::Vulkan, {false}, {}},
+      {DeviceAPI::Metal, {true}, {}},
+      {DeviceAPI::WebGPU, {true}, {}},
+}};
 
 IntrinsicsInfoPerDeviceAPI ii_tan{
-    1e-5f, 0, {
-                  {DeviceAPI::Vulkan, {true, OO::MAE, 2e-6f, 1'000'000}, {}},  // Vulkan tan seems to mimic our CUDA implementation
-                  {DeviceAPI::CUDA, {false}, {OO::MAE, 2e-6f, 1'000'000}},
-                  {DeviceAPI::Metal, {true}, {}},
-                  {DeviceAPI::WebGPU, {true}, {}},
-              }};
+    OO::MULPE, 1e-5f, 0, {
+      {DeviceAPI::Vulkan, {true, OO::MAE, 2e-6f, 1'000'000}, {}},  // Vulkan tan seems to mimic our CUDA implementation
+      {DeviceAPI::CUDA, {false}, {OO::MAE, 2e-6f, 1'000'000}},
+      {DeviceAPI::Metal, {true}, {}},
+      {DeviceAPI::WebGPU, {true}, {}},
+}};
 
 IntrinsicsInfoPerDeviceAPI ii_exp{
-    0.0f, 50, {
-                  {DeviceAPI::Vulkan, {true}, {}},
-                  {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 5}},
-                  {DeviceAPI::Metal, {true}, {}},  // fast exp() on metal
-                  {DeviceAPI::WebGPU, {true}, {}},
-              }};
+    OO::MULPE, 0.0f, 50, {
+      {DeviceAPI::Vulkan, {true}, {}},
+      {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 5}},
+      {DeviceAPI::Metal, {true}, {}},  // fast exp() on metal
+      {DeviceAPI::WebGPU, {true}, {}},
+}};
 
 IntrinsicsInfoPerDeviceAPI ii_log{
-    1e-5f, 1000, {
-                     {DeviceAPI::Vulkan, {true}, {}},
-                     {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 3'800'000}},
-                     {DeviceAPI::Metal, {false}, {}},  // slow log() on metal
-                     {DeviceAPI::WebGPU, {true}, {}},
-                 }};
+    OO::MAE, 1e-5f, 1000, {
+     {DeviceAPI::Vulkan, {true}, {}},
+     {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 3'800'000}},
+     {DeviceAPI::Metal, {false}, {}},  // slow log() on metal
+     {DeviceAPI::WebGPU, {true}, {}},
+}};
 
 IntrinsicsInfoPerDeviceAPI ii_pow{
-    1e-5f, 1000, {
-                     {DeviceAPI::Vulkan, {false}, {}},
-                     {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 3'800'000}},
-                     {DeviceAPI::Metal, {true}, {}},
-                     {DeviceAPI::WebGPU, {true}, {}},
-                 }};
+    OO::MULPE, 1e-5f, 1000, {
+     {DeviceAPI::Vulkan, {false}, {}},
+     {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 3'800'000}},
+     {DeviceAPI::Metal, {true}, {}},
+     {DeviceAPI::WebGPU, {true}, {}},
+}};
 
 IntrinsicsInfoPerDeviceAPI ii_tanh{
-    1e-5f, 1000, {
-                     {DeviceAPI::Vulkan, {true}, {}},
-                     {DeviceAPI::CUDA, {true}, {OO::MULPE, 1e-5f, 135}},  // Requires CC75
-                     {DeviceAPI::Metal, {true}, {}},
-                     {DeviceAPI::WebGPU, {true}, {}},
-                 }};
+    OO::MAE, 1e-5f, 1000, {
+     {DeviceAPI::Vulkan, {true}, {}},
+     {DeviceAPI::CUDA, {true}, {OO::MULPE, 1e-5f, 135}},  // Requires CC75
+     {DeviceAPI::Metal, {true}, {}},
+     {DeviceAPI::WebGPU, {true}, {}},
+}};
+// clang-format on
 
 IntrinsicsInfo resolve_precision(ApproximationPrecision &prec, const IntrinsicsInfoPerDeviceAPI &iida, DeviceAPI api) {
     IntrinsicsInfo ii{};
@@ -353,8 +363,17 @@ IntrinsicsInfo resolve_precision(ApproximationPrecision &prec, const IntrinsicsI
         if (!ii.intrinsic.defined()) {
             // We don't know about the performance of the intrinsic on this backend.
             // Alternatively, this backend doesn't even have an intrinsic.
-            // Just assume MAE is of interest.
-            prec.optimized_for = ApproximationPrecision::MAE;
+            if (ii.native_func.is_fast) {
+                if (ii.native_func.behavior == ApproximationPrecision::AUTO) {
+                    prec.optimized_for = iida.reasonable_behavior;
+                } else {
+                    prec.optimized_for = ii.native_func.behavior;
+                }
+            } else {
+                // Function is slow, intrinsic doesn't exist, so let's use our own polynomials,
+                // where we define what we think is a reasonable default for OO.
+                prec.optimized_for = iida.reasonable_behavior;
+            }
         } else {
             // User doesn't care about the optimization objective: let's prefer the
             // intrinsic, as that's fastest.
@@ -370,6 +389,10 @@ IntrinsicsInfo resolve_precision(ApproximationPrecision &prec, const IntrinsicsI
                 // The backend intrinsic behaves the way the user wants, let's pick that!
                 prec.constraint_max_absolute_error = ii.intrinsic.max_abs_error;
                 prec.constraint_max_ulp_error = ii.intrinsic.max_ulp_error;
+            } else if (ii.native_func.is_fast && prec.optimized_for == ii.native_func.behavior) {
+                // The backend native func is fast behaves the way the user wants, let's pick that!
+                prec.constraint_max_absolute_error = ii.native_func.max_abs_error;
+                prec.constraint_max_ulp_error = ii.native_func.max_ulp_error;
             } else {
                 prec.constraint_max_ulp_error = iida.default_mulpe;
                 prec.constraint_max_absolute_error = iida.default_mae;
@@ -411,11 +434,11 @@ bool intrinsic_satisfies_precision(const IntrinsicsInfo &ii, const Approximation
 }
 
 bool native_func_satisfies_precision(const IntrinsicsInfo &ii, const ApproximationPrecision &prec) {
-    if (!ii.native_func.defined()) {
-        return true;  // Unspecified means it's exact.
-    }
     if (prec.force_halide_polynomial) {
         return false;  // Don't use native functions if the user really wants a polynomial.
+    }
+    if (!ii.native_func.defined()) {
+        return true;  // Unspecified means it's exact.
     }
     if (prec.optimized_for != ii.native_func.behavior) {
         return false;
@@ -508,15 +531,6 @@ class LowerFastMathFunctions : public IRMutator {
         return Call::make(op->type, new_name, args, Call::PureExtern);
     }
 
-    const FloatImm *get_float_imm(const Expr &e) {
-        if (const Call *c = e.as<Call>()) {
-            internal_assert(c->is_intrinsic(Call::strict_float));
-            return get_float_imm(c->args[0]);
-        } else {
-            return e.as<FloatImm>();
-        }
-    }
-
     ApproximationPrecision extract_approximation_precision(const Call *op) {
         internal_assert(op);
         internal_assert(op->args.size() >= 2);
@@ -526,7 +540,7 @@ class LowerFastMathFunctions : public IRMutator {
         internal_assert(make_ap->args.size() == 4);
         const IntImm *imm_optimized_for = make_ap->args[0].as<IntImm>();
         const IntImm *imm_max_ulp_error = make_ap->args[1].as<IntImm>();
-        const FloatImm *imm_max_abs_error = get_float_imm(make_ap->args[2]);
+        const FloatImm *imm_max_abs_error = make_ap->args[2].as<FloatImm>();
         const IntImm *imm_force_poly = make_ap->args[3].as<IntImm>();
         internal_assert(imm_optimized_for);
         internal_assert(imm_max_ulp_error);
@@ -536,7 +550,7 @@ class LowerFastMathFunctions : public IRMutator {
             (ApproximationPrecision::OptimizationObjective)imm_optimized_for->value,
             (int)imm_max_ulp_error->value,
             (float)imm_max_abs_error->value,
-            (bool)imm_force_poly->value,
+            (int)imm_force_poly->value,
         };
     }
 

@@ -27,6 +27,7 @@
 
 import numpy as np
 import argparse
+import tqdm
 
 np.set_printoptions(linewidth=3000)
 
@@ -47,14 +48,14 @@ parser.add_argument("--loss", nargs='+', required=True,
                     + " * mae: Maximal Absolute Error\n"
                     + " * mulpe: Maximal ULP Error  [default]\n"
                     + " * mulpe_mae: 50%% mulpe + 50%% mae")
-parser.add_argument("--no-gui", action='store_true', help="Do not produce plots.k")
+parser.add_argument("--gui", action='store_true', help="Do produce plots.")
 parser.add_argument("--print", action='store_true', help="Print while optimizing.")
 parser.add_argument("--pbar", action='store_true', help="Create a progress bar while optimizing.")
 parser.add_argument("--format", default="all", choices=["all", "switch", "array", "table", "consts"],
                     help="Output format for copy-pastable coefficients. (default: all)")
 args = parser.parse_args()
 
-loss_power = 500
+loss_power = 1500
 
 import collections
 
@@ -134,20 +135,15 @@ def optimize_approximation(loss, order):
     if loss == "mse":
         lstsq_iterations = 1
     elif loss == "mulpe":
-        lstsq_iterations = 40
-        weight = np.mean(target_spacing) / target_spacing
+        lstsq_iterations = loss_power * 1
+        weight = 0.2 * np.ones_like(target) + 0.2 * np.mean(target_spacing) / target_spacing
 
     #if will_invert: weight += 1.0 / (np.abs(target) + target_spacing)
 
     loss_history = np.zeros((lstsq_iterations, 3))
 
-    iterator = range(lstsq_iterations)
-    if args.pbar:
-        import tqdm
-        iterator = tqdm.trange(lstsq_iterations)
-
     try:
-        for i in iterator:
+        for i in tqdm.trange(lstsq_iterations, disable=not args.pbar, leave=False):
             norm_weight = weight / np.mean(weight)
             coeffs, residuals, rank, s = np.linalg.lstsq(powers * norm_weight[:,None], target_fitting_part * norm_weight, rcond=-1)
 
@@ -215,7 +211,7 @@ def optimize_approximation(loss, order):
 
     float32_metrics = Metrics(f32_mean_squared_error, f32_max_abs_error, f32_max_ulp_error)
 
-    if not args.no_gui:
+    if args.gui:
         import matplotlib.pyplot as plt
 
         fig, ax = plt.subplots(2, 4, figsize=(12, 6))
