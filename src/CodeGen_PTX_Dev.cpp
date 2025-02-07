@@ -728,7 +728,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     if (debug::debug_level() >= 2) {
         dump();
     }
-    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
+    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src\n";
 
     debug(1) << "PTX kernel:\n"
              << outstr.c_str() << "\n";
