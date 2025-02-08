@@ -12,7 +12,9 @@ namespace Internal {
 // Implemented in IROperator.cpp
 void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent);
 
-static Expr constant(Type t, double value) {
+namespace {
+
+Expr constant(Type t, double value) {
     if (t == Float(64)) {
         return Expr(value);
     }
@@ -21,6 +23,8 @@ static Expr constant(Type t, double value) {
     }
     internal_error << "Constants only for double or float.";
     return 0;
+}
+
 }
 
 namespace ApproxImpl {
@@ -367,6 +371,7 @@ IntrinsicsInfoPerDeviceAPI ii_exp{
       {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 5}},
       {DeviceAPI::Metal, {true}, {}},  // fast exp() on metal
       {DeviceAPI::WebGPU, {true}, {}},
+      {DeviceAPI::OpenCL, {true}, {}},  // TODO: check out native_exp()
 }};
 
 IntrinsicsInfoPerDeviceAPI ii_log{
