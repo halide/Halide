@@ -164,15 +164,6 @@ struct PrecisionToTest {
     {{ApproximationPrecision::MAE, 0, 1e-5, 1}, "MAE"},
     {{ApproximationPrecision::MAE, 0, 1e-6, 1}, "MAE"},
     {{ApproximationPrecision::MAE, 0, 5e-7, 1}, "MAE"},
-
-    //// MULPE + MAE
-    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-1}, "MULPE+MAE"},
-    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-2}, "MULPE+MAE"},
-    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-3}, "MULPE+MAE"},
-    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-4}, "MULPE+MAE"},
-    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-5}, "MULPE+MAE"},
-    //{{ApproximationPrecision::MULPE_MAE, 0, 1e-6}, "MULPE+MAE"},
-    //{{ApproximationPrecision::MULPE_MAE, 0, 5e-7}, "MULPE+MAE"},
 };
 
 struct ErrorMetrics {
