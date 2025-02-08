@@ -77,11 +77,13 @@ def optimize_approximation(loss, order):
         lower, upper = 0.0, 1.0
     elif args.func == "sin":
         func = np.sin
-        exponents = 1 + np.arange(order) * 2
+        exponents = 2 + np.arange(order)
+        func_fixed_part = lambda x: x
         lower, upper = 0.0, np.pi / 2
     elif args.func == "cos":
         func = np.cos
-        exponents = np.arange(order) * 2
+        func_fixed_part = lambda x: np.ones_like(x)
+        exponents = 1 + np.arange(order)
         lower, upper = 0.0, np.pi / 2
     elif args.func == "tan":
         func = np.tan
@@ -197,7 +199,7 @@ def optimize_approximation(loss, order):
 
     # Reevaluate with float32 precision.
     f32_powers = np.power(X[:,None].astype(np.float32), exponents).astype(np.float32)
-    f32_y_hat = fixed_part.astype(np.float32) + np.sum((f32_powers * coeffs.astype(np.float32))[:,::-1], axis=-1)
+    f32_y_hat = fixed_part.astype(np.float32) + np.sum((f32_powers * coeffs.astype(np.float32))[:,::-1], axis=-1).astype(np.float32)
     f32_diff = f32_y_hat - target.astype(np.float32)
     f32_abs_diff = np.abs(f32_diff)
     # MSE metric

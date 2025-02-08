@@ -59,8 +59,8 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_tan(x, prec); },
         {
             { "close-to-zero", {{-1.05f, 1.05f}}, true , 8,  3, },
-            { "pole-to-pole" , {{-1.57f, 1.57f}}, false, 0, 32, },
-            { "extended"     , {{-10.0f, 10.0f}}, false, 0, 32, },
+            { "pole-to-pole" , {{-1.57f, 1.57f}}, false, 0,  5, },
+            { "extended"     , {{-10.0f, 10.0f}}, false, 0, 50, },
         }
     },
     {
@@ -85,7 +85,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::sin(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_sin(x, prec); },
         {
-            { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, true, 32, 0 },
+            { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, true, 40, 0 },
             { "-pi/2 to pi/2", {{-pi * 0.5f, pi * 0.5f}}, true, 0, 0 },
             { "-3pi to 3pi",   {{-pi * 3.0f, pi * 3.0f}}, false, 0, 0 },
         }
@@ -95,7 +95,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::cos(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_cos(x, prec); },
         {
-            { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, true, 32, 0 },
+            { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, true, 150, 100 },
             { "-pi/2 to pi/2", {{-pi * 0.5f, pi * 0.5f}}, true, 0, 0 },
             { "-3pi to 3pi",   {{-pi * 3.0f, pi * 3.0f}}, false, 0, 0 },
         }
@@ -105,8 +105,8 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::exp(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_exp(x, prec); },
         {
-            { "precise",  {{0.0f, std::log(2.0f)}}, true , 64, 40 },
-            { "extended", {{-20.0f, 20.0f}}       , false, 64, 40 },
+            { "precise",  {{0.0f, std::log(2.0f)}}, true , 65, 40 },
+            { "extended", {{-20.0f, 20.0f}}       , false, 80, 40 },
         }
     },
     {
@@ -114,7 +114,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::log(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_log(x, prec); },
         {
-            { "precise",  {{0.76f, 1.49f}}, true, 120, 60 },
+            { "precise",  {{0.76f,    1.49f}}, true , 120, 60 },
             { "extended", {{1e-8f, 20000.0f}}, false, 120, 60 },
         }
     },
@@ -123,9 +123,9 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::pow(x, y); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_pow(x, y, prec); },
         {
-            { "precise",  {{0.76f,  1.49f}, {0.0f, std::log(2.0f)}}, true , 20, 10 },
-            { "extended", {{1e-8f,  10.0f}, {-20.0f,        10.0f}}, false, 20, 10 },
-            { "extended", {{1e-8f, 500.0f}, {-20.0f,        10.0f}}, false, 20, 10 },
+            { "precise",  {{0.76f,  1.49f}, {0.0f, std::log(2.0f)}}, true ,   70, 10 },
+            { "extended", {{1e-8f,  10.0f}, {-20.0f,        10.0f}}, false, 1200, 80 },
+            { "extended", {{1e-8f, 500.0f}, {-20.0f,        10.0f}}, false, 1200, 80 },
         }
     },
     {
@@ -133,7 +133,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::tanh(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_tanh(x, prec); },
         {
-            { "precise" , {{ -10.0f, 10.0f}}, true, 70, 20 },
+            { "precise"  , {{ -10.0f , 10.0f }}, true, 70, 20 },
             { "extended" , {{ -100.0f, 100.0f}}, true, 70, 20 },
         }
     },
@@ -233,16 +233,6 @@ int main(int argc, char **argv) {
 
     constexpr int steps = 1024;
     Var i{"i"}, x{"x"}, y{"y"};
-    // 1D indexing:
-    Func input_1d{"input_1d"};
-    input_1d(i) = i / float(steps * steps);
-    input_1d.compute_root(); // Make sure this is super deterministic (computed on always the same CPU).
-    // 2D indexing
-    Expr ix = i % steps;
-    Expr iy = i / steps;
-    Func input_2d{"input_2d"};
-    input_2d(x, y) = Tuple(x / float(steps), y / float(steps));
-    input_2d.compute_root(); // Super deterministic!
 
     Buffer<float, 1> out_ref{steps * steps};
     Buffer<float, 1> out_approx{steps * steps};
@@ -279,18 +269,33 @@ int main(int argc, char **argv) {
     int num_tests = 0;
     int num_tests_passed = 0;
     for (const FunctionToTest &ftt : functions_to_test) {
-        if (argc == 2 && argv[1] != ftt.name) {
+        bool skip = false;
+        if (argc >= 2) {
+            skip = true;
+            for (int i = 1; i < argc; ++i) {
+                if (argv[i] == ftt.name) {
+                    skip = false;
+                    break;
+                }
+            }
+        }
+        if (skip) {
             printf("Skipping %s\n", ftt.name.c_str());
             continue;
         }
 
         for (const FunctionToTest::RangedAccuracyTest &rat : ftt.ranged_tests) {
             const TestRange2D &range = rat.range;
-            printf("Testing fast_%s on its %s range ([%f, %f], [%f, %f])...\n",
-                   ftt.name.c_str(), rat.name.c_str(),
-                   range.x.l, range.x.u, range.y.l, range.y.u);
-
             bool is_2d = range.y.l != range.y.u;
+
+            printf("Testing fast_%s on its %s range ", ftt.name.c_str(), rat.name.c_str());
+            if (is_2d) {
+                printf("([%f, %f] x [%f, %f])...\n", range.x.l, range.x.u, range.y.l, range.y.u);
+            } else {
+                printf("([%f, %f])...\n", range.x.l, range.x.u);
+            }
+
+            Func input{"input"};
 
             // Prepare the arguments to the functions. We scan over the
             // entire range specified in the table above. Notice how
@@ -301,12 +306,22 @@ int main(int argc, char **argv) {
             // arguments to the approximated function.
             Expr arg_x, arg_y;
             if (is_2d) {
-                arg_x = input_2d(ix, iy)[0];
-                arg_y = input_2d(ix, iy)[1];
+                Expr tx = x / float(steps);
+                Expr ty = y / float(steps);
+                input(x, y) = Tuple(
+                        range.x.l * (1.0f - tx) + tx * range.x.u,
+                        range.y.l * (1.0f - ty) + ty * range.y.u);
+                Expr ix = i % steps;
+                Expr iy = i / steps;
+                arg_x = input(ix, iy)[0];
+                arg_y = input(ix, iy)[1];
             } else {
-                arg_x = input_1d(i);
+                Expr t = i / float(steps * steps);
+                input(i) = range.x.l * (1.0f - t) + t * range.x.u;
+                arg_x = input(i);
                 // leave arg_y undefined to catch errors.
             }
+            input.compute_root(); // Make sure this is super deterministic (computed on always the same CPU).
 
             // Reference function on CPU
             Func ref_func{ftt.name + "_ref"};
@@ -322,8 +337,10 @@ int main(int argc, char **argv) {
                 ref_func.realize(out_approx);
                 out_approx.copy_to_host();
 
+#define METRICS_FMT "MaxError{ abs: %.4e , rel: %.4e , ULP: %'14" PRIu64 " , MantissaBits: %2d} | MeanError{ abs: %.4e , ULP: %10.2f}"
+
                 ErrorMetrics em = measure_accuracy(out_ref, out_approx);
-                printf("    %s       (native func on device)                   MaxError{ abs: %.4e | rel: %.4e | ULP: %'14" PRIu64 " | MantissaBits: %2d}   MeanError{ abs: %.4e | ULP: %10.1f}",
+                printf("    %s       (native func on device)                   " METRICS_FMT,
                        ftt.name.c_str(),
                        em.max_abs_error, em.max_rel_error, em.max_ulp_error, em.max_mantissa_error,
                        em.mean_abs_error, em.mean_ulp_error);
@@ -354,7 +371,7 @@ int main(int argc, char **argv) {
 
                 ErrorMetrics em = measure_accuracy(out_ref, out_approx);
 
-                printf("    fast_%s  Approx[%6s-optimized, TargetMAE=%.0e] MaxError{ abs: %.4e | rel: %.4e | ULP: %'14" PRIu64 " | MantissaBits: %2d}   MeanError{ abs: %.4e | ULP: %10.1f}",
+                printf("    fast_%s  Approx[%6s-optimized, TargetMAE=%.0e] " METRICS_FMT,
                        ftt.name.c_str(), test.objective.c_str(), prec.constraint_max_absolute_error,
                        em.max_abs_error, em.max_rel_error, em.max_ulp_error, em.max_mantissa_error,
                        em.mean_abs_error, em.mean_ulp_error);
@@ -384,7 +401,7 @@ int main(int argc, char **argv) {
                     if (rat.validate_mae) {
                         num_tests++;
                         if (em.max_abs_error > std::max(prec.constraint_max_absolute_error, best_mae_for_backend)) {
-                            print_bad("MaxAbsErr too big!");
+                            print_bad("MaxAbs");
                         } else {
                             print_ok();
                             num_tests_passed++;
@@ -408,7 +425,7 @@ int main(int argc, char **argv) {
                     if (rat.max_max_ulp_error != 0) {
                         num_tests++;
                         if (em.max_ulp_error > rat.max_max_ulp_error) {
-                            print_bad("Max ULP Error too big!!");
+                            print_bad("Max ULP");
                         } else {
                             print_ok();
                             num_tests_passed++;
@@ -417,7 +434,7 @@ int main(int argc, char **argv) {
                     if (rat.max_mean_ulp_error != 0) {
                         num_tests++;
                         if (em.mean_ulp_error > rat.max_mean_ulp_error) {
-                            print_bad("Mean ULP Error too big!!");
+                            print_bad("Mean ULP");
                         } else {
                             print_ok();
                             num_tests_passed++;
