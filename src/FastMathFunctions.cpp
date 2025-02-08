@@ -25,7 +25,7 @@ Expr constant(Type t, double value) {
     return 0;
 }
 
-}
+}  // namespace
 
 namespace ApproxImpl {
 
