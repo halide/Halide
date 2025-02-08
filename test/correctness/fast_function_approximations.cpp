@@ -148,13 +148,13 @@ struct PrecisionToTest {
     {{}, "AUTO"},
 
     // MULPE
-    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-1, 1}, "MULPE"},
-    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-2, 1}, "MULPE"},
-    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-3, 1}, "MULPE"},
-    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-4, 1}, "MULPE"},
-    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-5, 1}, "MULPE"},
-    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,1e-6, 1}, "MULPE"},
-    {ApproximationPrecision{ApproximationPrecision::MULPE, 0,5e-7, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0, 1e-1, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0, 1e-2, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0, 1e-3, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0, 1e-4, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0, 1e-5, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0, 1e-6, 1}, "MULPE"},
+    {ApproximationPrecision{ApproximationPrecision::MULPE, 0, 5e-7, 1}, "MULPE"},
 
     // MAE
     {{ApproximationPrecision::MAE, 0, 1e-1, 1}, "MAE"},
@@ -309,8 +309,8 @@ int main(int argc, char **argv) {
                 Expr tx = x / float(steps);
                 Expr ty = y / float(steps);
                 input(x, y) = Tuple(
-                        range.x.l * (1.0f - tx) + tx * range.x.u,
-                        range.y.l * (1.0f - ty) + ty * range.y.u);
+                    range.x.l * (1.0f - tx) + tx * range.x.u,
+                    range.y.l * (1.0f - ty) + ty * range.y.u);
                 Expr ix = i % steps;
                 Expr iy = i / steps;
                 arg_x = input(ix, iy)[0];
@@ -321,7 +321,7 @@ int main(int argc, char **argv) {
                 arg_x = input(i);
                 // leave arg_y undefined to catch errors.
             }
-            input.compute_root(); // Make sure this is super deterministic (computed on always the same CPU).
+            input.compute_root();  // Make sure this is super deterministic (computed on always the same CPU).
 
             // Reference function on CPU
             Func ref_func{ftt.name + "_ref"};
