@@ -997,7 +997,6 @@ struct ApproximationPrecision {
         AUTO,       //< No preference, but favor speed.
         MAE,        //< Optimized for Max Absolute Error.
         MULPE,      //< Optimized for Max ULP Error. ULP is "Units in Last Place", when represented in IEEE 32-bit floats.
-        MULPE_MAE,  //< Optimized for simultaneously Max ULP Error, and Max Absolute Error, each with a normalized weight of 50%.
     } optimized_for{AUTO};
 
     /**
@@ -1052,11 +1051,12 @@ struct ApproximationPrecision {
  * See \ref ApproximationPrecision for details on specifying precision.
  */
 // @{
-//* On NVIDIA CUDA: dedicated sin.approx.f32 instruction. */
+//* On NVIDIA CUDA: default-precision maps to a dedicated sin.approx.f32 instruction. */
 Expr fast_sin(const Expr &x, ApproximationPrecision precision = {});
-//* On NVIDIA CUDA: dedicated cos.approx.f32 instruction. */
+/** On NVIDIA CUDA: default-precision maps to a dedicated cos.approx.f32 instruction. */
 Expr fast_cos(const Expr &x, ApproximationPrecision precision = {});
-//* On NVIDIA CUDA: (only when MAE-optimized!) combination of sin.approx.f32, cos.approx.f32, div.approx.f32 instructions. */
+/** On NVIDIA CUDA: default-precision maps to a combination of sin.approx.f32,
+ * cos.approx.f32, div.approx.f32 instructions. */
 Expr fast_tan(const Expr &x, ApproximationPrecision precision = {});
 Expr fast_atan(const Expr &x, ApproximationPrecision precision = {});
 Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = {});
@@ -1067,7 +1067,7 @@ Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = {});
  * Accurate up to the last 5 bits of the mantissa.
  * Vectorizes cleanly when using polynomials.
  * Slow on x86 if you don't have at least sse 4.1.
- * On NVIDIA CUDA: combination of lg2.approx.f32 and a multiplication.
+ * On NVIDIA CUDA: default-precision maps to a combination of lg2.approx.f32 and a multiplication.
  */
 Expr fast_log(const Expr &x, ApproximationPrecision precision = {});
 
@@ -1077,7 +1077,7 @@ Expr fast_log(const Expr &x, ApproximationPrecision precision = {});
  * Approximation
  * Vectorizes cleanly when using polynomials.
  * Slow on x86 if you don't have at least sse 4.1.
- * On NVIDIA CUDA: combination of ex2.approx.f32 and a multiplication.
+ * On NVIDIA CUDA: default-precision maps to a combination of ex2.approx.f32 and a multiplication.
  */
 Expr fast_exp(const Expr &x, ApproximationPrecision precision = {});
 
@@ -1087,14 +1087,14 @@ Expr fast_exp(const Expr &x, ApproximationPrecision precision = {});
  * Gets worse when approaching overflow.
  * Vectorizes cleanly when using polynomials.
  * Slow on x86 if you don't have at least sse 4.1.
- * On NVIDIA CUDA: combination of ex2.approx.f32 and lg2.approx.f32.
+ * On NVIDIA CUDA: default-precision maps to a combination of ex2.approx.f32 and lg2.approx.f32.
  */
 Expr fast_pow(Expr x, Expr y, ApproximationPrecision precision = {});
 
 /** Fast approximate pow for Float(32).
- * Vectorizes cleanly when using polynomials.
+ * Vectorizes cleanly when using polynomials (caveat: no polynomial approximation implemented yet).
  * Slow on x86 if you don't have at least sse 4.1.
- * On NVIDIA CUDA: combination of ex2.approx.f32 and lg2.approx.f32.
+ * On NVIDIA CUDA: default-precision maps to a combination of ex2.approx.f32 and lg2.approx.f32.
  */
 Expr fast_tanh(const Expr &x, ApproximationPrecision precision = {});
 
