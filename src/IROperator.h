@@ -994,9 +994,9 @@ Expr erf(const Expr &x);
  */
 struct ApproximationPrecision {
     enum OptimizationObjective {
-        AUTO,       //< No preference, but favor speed.
-        MAE,        //< Optimized for Max Absolute Error.
-        MULPE,      //< Optimized for Max ULP Error. ULP is "Units in Last Place", when represented in IEEE 32-bit floats.
+        AUTO,   //< No preference, but favor speed.
+        MAE,    //< Optimized for Max Absolute Error.
+        MULPE,  //< Optimized for Max ULP Error. ULP is "Units in Last Place", when represented in IEEE 32-bit floats.
     } optimized_for{AUTO};
 
     /**
