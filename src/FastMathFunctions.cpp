@@ -102,10 +102,6 @@ Expr fast_sin(const Expr &x_full, ApproximationPrecision precision) {
     const Internal::Approximation *approx = Internal::best_sin_approximation(precision, type);
     const std::vector<double> &c = approx->coefficients;
     Expr result = x + x * x * eval_poly(c, x);
-    if (precision.optimized_for == ApproximationPrecision::MULPE) {
-        // MULPE optimized terms have fixed x + 0*x^2
-        result = x + x * x * result;
-    }
     result = select(flip_sign, -result, result);
     result = common_subexpression_elimination(result, true);
     return result;
