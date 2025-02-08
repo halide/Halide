@@ -91,7 +91,7 @@ Expr fast_sin(const Expr &x_full, ApproximationPrecision precision) {
     Expr scaled = x_abs * constant(type, TWO_OVER_PI);
     Expr k_real = floor(scaled);
     Expr k = cast<int>(k_real);
-    Expr k_mod4 = k % 4; // Halide mod is always positive!
+    Expr k_mod4 = k % 4;  // Halide mod is always positive!
     Expr mirror = (k_mod4 == 1) || (k_mod4 == 3);
     Expr flip_sign = (k_mod4 > 1) ^ (x_full < 0);
 
@@ -118,7 +118,7 @@ Expr fast_cos(const Expr &x_full, ApproximationPrecision precision) {
     Expr scaled = x_abs * constant(type, TWO_OVER_PI);
     Expr k_real = floor(scaled);
     Expr k = cast<int>(k_real);
-    Expr k_mod4 = k % 4; // Halide mod is always positive!
+    Expr k_mod4 = k % 4;  // Halide mod is always positive!
     Expr mirror = ((k_mod4 == 1) || (k_mod4 == 3));
     Expr flip_sign = ((k_mod4 == 1) || (k_mod4 == 2));
 
@@ -334,9 +334,9 @@ struct IntrinsicsInfo {
 };
 
 struct IntrinsicsInfoPerDeviceAPI {
-    OO reasonable_behavior; // A reasonable optimization objective for a given function.
-    float default_mae;  // A reasonable desirable MAE (if specified)
-    int default_mulpe;  // A reasonable desirable MULPE (if specified)
+    OO reasonable_behavior;  // A reasonable optimization objective for a given function.
+    float default_mae;       // A reasonable desirable MAE (if specified)
+    int default_mulpe;       // A reasonable desirable MULPE (if specified)
     std::vector<IntrinsicsInfo> device_apis;
 };
 
