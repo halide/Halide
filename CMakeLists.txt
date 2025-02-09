@@ -196,7 +196,7 @@ option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread fla
 find_package(Threads REQUIRED)
 
 ## LLVM
-find_package(Halide_LLVM 18...99 REQUIRED
+find_package(Halide_LLVM 18...99 REQUIRED  # Use 99 to fake a minimum-only constraint
              COMPONENTS WebAssembly X86
              OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV)
 
