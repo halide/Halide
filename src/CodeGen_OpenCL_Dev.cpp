@@ -1136,7 +1136,18 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "inline float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << "inline float nan_f32() { return NAN; }\n"
                << "inline float neg_inf_f32() { return -INFINITY; }\n"
-               << "inline float inf_f32() { return INFINITY; }\n";
+               << "inline float inf_f32() { return INFINITY; }\n"
+               << "inline bool is_nan_f32(float x) {return isnan(x); }\n"
+               << "inline bool is_inf_f32(float x) {return isinf(x); }\n"
+               << "inline bool is_finite_f32(float x) {return isfinite(x); }\n"
+               << "#define fast_sin_f32 native_sin \n"
+               << "#define fast_cos_f32 native_cos \n"
+               << "#define fast_tan_f32 native_tan \n"
+               << "#define fast_exp_f32 native_exp \n"
+               << "#define fast_log_f32 native_log \n"
+               << "#define fast_pow_f32 native_powr \n"
+               << "#define fast_inverse_f32 native_recip \n"
+               << "#define fast_inverse_sqrt_f32 native_rsqrt \n";
 
     // There does not appear to be a reliable way to safely ignore unused
     // variables in OpenCL C. See https://github.com/halide/Halide/issues/4918.

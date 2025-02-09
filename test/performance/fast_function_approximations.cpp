@@ -162,7 +162,17 @@ int main(int argc, char **argv) {
     Halide::Tools::BenchmarkConfig bcfg;
     bcfg.max_time = 0.5;
     for (FunctionToTest ftt : funcs) {
-        if (argc == 2 && argv[1] != ftt.name) {
+        bool skip = false;
+        if (argc >= 2) {
+            skip = true;
+            for (int i = 1; i < argc; ++i) {
+                if (argv[i] == ftt.name) {
+                    skip = false;
+                    break;
+                }
+            }
+        }
+        if (skip) {
             printf("Skipping %s\n", ftt.name.c_str());
             continue;
         }
