@@ -347,6 +347,7 @@ IntrinsicsInfoPerDeviceAPI ii_sin_cos{
       {DeviceAPI::CUDA, {false}, {OO::MAE, 5e-7f, 1'000'000}},
       {DeviceAPI::Metal, {true}, {}},
       {DeviceAPI::WebGPU, {true}, {}},
+      {DeviceAPI::OpenCL, {false}, {OO::MAE, 5e-7f, 1'000'000}},
 }};
 
 IntrinsicsInfoPerDeviceAPI ii_atan_atan2{
@@ -363,6 +364,7 @@ IntrinsicsInfoPerDeviceAPI ii_tan{
       {DeviceAPI::CUDA, {false}, {OO::MAE, 2e-6f, 1'000'000}},
       {DeviceAPI::Metal, {true}, {}},
       {DeviceAPI::WebGPU, {true}, {}},
+      {DeviceAPI::OpenCL, {false}, {OO::MAE, 2e-6f, 1'000'000}},
 }};
 
 IntrinsicsInfoPerDeviceAPI ii_exp{
@@ -371,7 +373,7 @@ IntrinsicsInfoPerDeviceAPI ii_exp{
       {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 5}},
       {DeviceAPI::Metal, {true}, {}},  // fast exp() on metal
       {DeviceAPI::WebGPU, {true}, {}},
-      {DeviceAPI::OpenCL, {true}, {}},  // TODO: check out native_exp()
+      {DeviceAPI::OpenCL, {true}, {OO::MULPE, 0.0f, 5}}, // Both exp() and native_exp() are faster than polys.
 }};
 
 IntrinsicsInfoPerDeviceAPI ii_log{
@@ -380,6 +382,7 @@ IntrinsicsInfoPerDeviceAPI ii_log{
      {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 3'800'000}},
      {DeviceAPI::Metal, {false}, {}},  // slow log() on metal
      {DeviceAPI::WebGPU, {true}, {}},
+     {DeviceAPI::OpenCL, {true}, {OO::MULPE, 0.0f, 3'800'000}},
 }};
 
 IntrinsicsInfoPerDeviceAPI ii_pow{
@@ -388,6 +391,7 @@ IntrinsicsInfoPerDeviceAPI ii_pow{
      {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 3'800'000}},
      {DeviceAPI::Metal, {true}, {}},
      {DeviceAPI::WebGPU, {true}, {}},
+     {DeviceAPI::OpenCL, {true}, {OO::MULPE, 0.0f, 3'800'000}},
 }};
 
 IntrinsicsInfoPerDeviceAPI ii_tanh{
@@ -623,7 +627,6 @@ public:
             ApproximationPrecision prec = extract_approximation_precision(op);
             IntrinsicsInfo ii = resolve_precision(prec, ii_sin_cos, for_device_api);
             if (op->type == Float(32) && intrinsic_satisfies_precision(ii, prec)) {
-                // We have an intrinsic in the ptx_dev.ll module with the same name.
                 return append_type_suffix(op);
             }
             if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
@@ -653,12 +656,16 @@ public:
         } else if (op->is_intrinsic(Call::fast_tan)) {
             ApproximationPrecision prec = extract_approximation_precision(op);
             IntrinsicsInfo ii = resolve_precision(prec, ii_tan, for_device_api);
-            if (op->type == Float(32) && is_cuda_cc20() && intrinsic_satisfies_precision(ii, prec)) {
-                Expr arg = mutate(op->args[0]);
-                Expr sin = Call::make(arg.type(), "fast_sin_f32", {arg}, Call::PureExtern);
-                Expr cos = Call::make(arg.type(), "fast_cos_f32", {arg}, Call::PureExtern);
-                Expr tan = Call::make(arg.type(), "fast_div_f32", {sin, cos}, Call::PureExtern);
-                return tan;
+            if (op->type == Float(32) && intrinsic_satisfies_precision(ii, prec)) {
+                if (is_cuda_cc20()) {
+                    Expr arg = mutate(op->args[0]);
+                    Expr sin = Call::make(arg.type(), "fast_sin_f32", {arg}, Call::PureExtern);
+                    Expr cos = Call::make(arg.type(), "fast_cos_f32", {arg}, Call::PureExtern);
+                    Expr tan = Call::make(arg.type(), "fast_div_f32", {sin, cos}, Call::PureExtern);
+                    return tan;
+                } else {
+                    return append_type_suffix(op);
+                }
             }
             if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
                 // The native atan is fast: fall back to native and continue lowering.
@@ -679,6 +686,9 @@ public:
                 Expr ool2 = constant(type, 1.0 / std::log(2.0));
                 return Call::make(type, "fast_ex2_f32", {mutate(op->args[0]) * ool2}, Call::PureExtern);
             }
+            if (op->type == Float(32) && intrinsic_satisfies_precision(ii, prec)) {
+                return append_type_suffix(op);
+            }
             if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
                 // The native atan is fast: fall back to native and continue lowering.
                 return to_native_func(op);
@@ -695,6 +705,9 @@ public:
                 // lg2(e) = log(e)/log(2)
                 // => log(x) = lg2(x) / (log(e)/log(2)) = lg2(x) * (log(2) / log(e)) = log(2) * log(2)
                 return lg * constant(type, std::log(2.0));
+            }
+            if (op->type == Float(32) && intrinsic_satisfies_precision(ii, prec)) {
+                return append_type_suffix(op);
             }
             if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
                 // The native atan is fast: fall back to native and continue lowering.
@@ -724,6 +737,9 @@ public:
                 pow = select(arg_x == 0.0f, 0.0f, pow);
                 pow = select(arg_y == 0.0f, 1.0f, pow);
                 return pow;
+            }
+            if (op->type == Float(32) && intrinsic_satisfies_precision(ii, prec)) {
+                return append_type_suffix(op);
             }
             if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
                 return to_native_func(op);
