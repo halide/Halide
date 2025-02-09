@@ -345,7 +345,7 @@ IntrinsicsInfoPerDeviceAPI ii_sin_cos{
     OO::MAE, 1e-5f, 0, {
       {DeviceAPI::Vulkan, {true}, {}},
       {DeviceAPI::CUDA, {false}, {OO::MAE, 5e-7f, 1'000'000}},
-      {DeviceAPI::Metal, {true}, {}},
+      {DeviceAPI::Metal, {true}, {OO::MAE, 5e-7f, 1'000'000}},
       {DeviceAPI::WebGPU, {true}, {}},
       {DeviceAPI::OpenCL, {false}, {OO::MAE, 5e-7f, 1'000'000}},
 }};
@@ -354,7 +354,7 @@ IntrinsicsInfoPerDeviceAPI ii_atan_atan2{
     OO::MAE, 1e-5f, 0, {
       // no intrinsics available
       {DeviceAPI::Vulkan, {false}, {}},
-      {DeviceAPI::Metal, {true}, {}},
+      {DeviceAPI::Metal, {true}, {OO::MAE, 5e-6f}},
       {DeviceAPI::WebGPU, {true}, {}},
 }};
 
@@ -362,7 +362,7 @@ IntrinsicsInfoPerDeviceAPI ii_tan{
     OO::MULPE, 1e-5f, 0, {
       {DeviceAPI::Vulkan, {true, OO::MAE, 2e-6f, 1'000'000}, {}},  // Vulkan tan seems to mimic our CUDA implementation
       {DeviceAPI::CUDA, {false}, {OO::MAE, 2e-6f, 1'000'000}},
-      {DeviceAPI::Metal, {true}, {}},
+      {DeviceAPI::Metal, {true}, {OO::MULPE, 2e-6f, 1'000'000}},
       {DeviceAPI::WebGPU, {true}, {}},
       {DeviceAPI::OpenCL, {false}, {OO::MAE, 2e-6f, 1'000'000}},
 }};
@@ -371,7 +371,7 @@ IntrinsicsInfoPerDeviceAPI ii_exp{
     OO::MULPE, 0.0f, 50, {
       {DeviceAPI::Vulkan, {true}, {}},
       {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 5}},
-      {DeviceAPI::Metal, {true}, {}},  // fast exp() on metal
+      {DeviceAPI::Metal, {true}, {OO::MULPE, 0.0f, 5}},  // precise::exp() is fast on metal
       {DeviceAPI::WebGPU, {true}, {}},
       {DeviceAPI::OpenCL, {true}, {OO::MULPE, 0.0f, 5}}, // Both exp() and native_exp() are faster than polys.
 }};
@@ -380,7 +380,7 @@ IntrinsicsInfoPerDeviceAPI ii_log{
     OO::MAE, 1e-5f, 1000, {
      {DeviceAPI::Vulkan, {true}, {}},
      {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 3'800'000}},
-     {DeviceAPI::Metal, {false}, {}},  // slow log() on metal
+     {DeviceAPI::Metal, {false}, {OO::MAE, 0.0f, 3'800'000}},  // slow log() on metal
      {DeviceAPI::WebGPU, {true}, {}},
      {DeviceAPI::OpenCL, {true}, {OO::MULPE, 0.0f, 3'800'000}},
 }};
@@ -389,7 +389,7 @@ IntrinsicsInfoPerDeviceAPI ii_pow{
     OO::MULPE, 1e-5f, 1000, {
      {DeviceAPI::Vulkan, {false}, {}},
      {DeviceAPI::CUDA, {false}, {OO::MULPE, 0.0f, 3'800'000}},
-     {DeviceAPI::Metal, {true}, {}},
+     {DeviceAPI::Metal, {true}, {OO::MULPE, 0.0f, 3'800'000}},
      {DeviceAPI::WebGPU, {true}, {}},
      {DeviceAPI::OpenCL, {true}, {OO::MULPE, 0.0f, 3'800'000}},
 }};
@@ -398,7 +398,7 @@ IntrinsicsInfoPerDeviceAPI ii_tanh{
     OO::MAE, 1e-5f, 1000, {
      {DeviceAPI::Vulkan, {true}, {}},
      {DeviceAPI::CUDA, {true}, {OO::MULPE, 1e-5f, 135}},  // Requires CC75
-     {DeviceAPI::Metal, {true}, {}},
+     {DeviceAPI::Metal, {true}, {OO::MULPE, 1e-5f, 135}},
      {DeviceAPI::WebGPU, {true}, {}},
 }};
 // clang-format on
