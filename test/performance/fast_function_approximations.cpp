@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
             -pi, pi,
             [](Expr x, Expr y, Expr z) { return Halide::exp(x + z); },
             [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_exp(x + z, prec); },
-            {Target::Feature::WebGPU, Target::Feature::Metal, Target::Feature::Vulkan},
+            {Target::Feature::WebGPU, Target::Feature::Metal, Target::Feature::Vulkan, Target::Feature::OpenCL},
         },
         {
             "log",
