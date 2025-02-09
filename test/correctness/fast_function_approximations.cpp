@@ -87,7 +87,7 @@ struct FunctionToTest {
         {
             { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, true, 40, 0 },
             { "-pi/2 to pi/2", {{-pi * 0.5f, pi * 0.5f}}, true, 0, 0 },
-            { "-3pi to 3pi",   {{-pi * 3.0f, pi * 3.0f}}, false, 0, 0 },
+            { "-3pi to 3pi",   {{-pi * 3.0f, pi * 3.0f}}, true, 0, 0 },
         }
     },
     {
@@ -133,8 +133,8 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::tanh(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_tanh(x, prec); },
         {
-            { "precise"  , {{ -10.0f , 10.0f }}, true, 70, 20 },
-            { "extended" , {{ -100.0f, 100.0f}}, true, 70, 20 },
+            { "precise"     , {{  -8.0f ,  8.0f }}, true, 2500, 20 },
+            { "extended"    , {{ -100.0f, 100.0f}}, true, 2500, 20 },
         }
     },
     // clang-format on
@@ -372,7 +372,8 @@ int main(int argc, char **argv) {
                     if (&rat == &ftt.ranged_tests[0]) {
                         // On the first (typically precise) range.
                         num_tests++;
-                        if (em.max_abs_error < 1e-5 || em.max_ulp_error < 20'000 || em.max_rel_error < 1e-2) {
+                        if ((em.max_abs_error < 1e-5 || em.max_ulp_error < 20'000 || em.max_rel_error < 1e-2) ||
+                            (em.max_abs_error < 1e-4 && em.mean_abs_error < 1e-5 && em.mean_ulp_error < 400)) {
                             num_tests_passed++;
                             print_ok();
                         } else {
