@@ -307,6 +307,32 @@ Expr fast_log(const Expr &x, ApproximationPrecision prec) {
     return result;
 }
 
+Expr fast_tanh(const Expr &x, ApproximationPrecision prec) {
+    // Rewrite with definition:
+    // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
+    //         = (1 - exp(-2x)) / (1 + exp(-2x))
+    // But abs(x) the argument, and flip when negative.
+    Type type = x.type();
+    Expr abs_x = abs(x);
+    Expr flip_sign = x < 0;
+    if (prec.optimized_for == ApproximationPrecision::MULPE) {
+        // Positive arguments to exp() have preciser ULP.
+        // So, we will rewrite the expression to always use exp(2*x)
+        // instead of exp(-2*x) when we are close to zero.
+        Expr flip_exp = abs_x > constant(type, 4);
+        Expr arg_exp = select(flip_exp, -abs_x, abs_x);
+        Expr exp2x = Halide::fast_exp(2 * arg_exp, prec);
+        Expr tanh = (exp2x - constant(type, 1.0)) / (exp2x + constant(type, 1));
+        tanh = select(flip_exp ^ flip_sign, -tanh, tanh);
+        return common_subexpression_elimination(tanh, true);
+    } else {
+        Expr exp2x = Halide::fast_exp(-2 * abs_x, prec);
+        Expr tanh = (constant(type, 1) - exp2x) / (constant(type, 1) + exp2x);
+        tanh = select(flip_sign, -tanh, tanh);
+        return common_subexpression_elimination(tanh, true);
+    }
+}
+
 }  // namespace ApproxImpl
 
 using OO = ApproximationPrecision::OptimizationObjective;
@@ -341,11 +367,20 @@ struct IntrinsicsInfoPerDeviceAPI {
 };
 
 // clang-format off
-IntrinsicsInfoPerDeviceAPI ii_sin_cos{
+IntrinsicsInfoPerDeviceAPI ii_sin{
     OO::MAE, 1e-5f, 0, {
       {DeviceAPI::Vulkan, {true}, {}},
       {DeviceAPI::CUDA, {false}, {OO::MAE, 5e-7f, 1'000'000}},
-      {DeviceAPI::Metal, {true}, {OO::MAE, 5e-7f, 1'000'000}},
+      {DeviceAPI::Metal, {true}, {OO::MAE, 6e-5f,   400'000}},
+      {DeviceAPI::WebGPU, {true}, {}},
+      {DeviceAPI::OpenCL, {false}, {OO::MAE, 5e-7f, 1'000'000}},
+}};
+
+IntrinsicsInfoPerDeviceAPI ii_cos{
+    OO::MAE, 1e-5f, 0, {
+      {DeviceAPI::Vulkan, {true}, {}},
+      {DeviceAPI::CUDA, {false}, {OO::MAE, 5e-7f, 1'000'000}},
+      {DeviceAPI::Metal, {true}, {OO::MAE, 7e-7f,     5'000}},
       {DeviceAPI::WebGPU, {true}, {}},
       {DeviceAPI::OpenCL, {false}, {OO::MAE, 5e-7f, 1'000'000}},
 }};
@@ -622,24 +657,30 @@ public:
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::fast_sin) || op->is_intrinsic(Call::fast_cos)) {
-            // Handle fast_sin and fast_cos together!
+        if (op->is_intrinsic(Call::fast_sin)) {
             ApproximationPrecision prec = extract_approximation_precision(op);
-            IntrinsicsInfo ii = resolve_precision(prec, ii_sin_cos, for_device_api);
+            IntrinsicsInfo ii = resolve_precision(prec, ii_sin, for_device_api);
             if (op->type == Float(32) && intrinsic_satisfies_precision(ii, prec)) {
                 return append_type_suffix(op);
             }
             if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
-                // The native sine and cosine are fast: fall back to native and continue lowering.
                 return to_native_func(op);
             }
 
             // No known fast version available, we will expand our own approximation.
-            if (op->is_intrinsic(Call::fast_sin)) {
-                return ApproxImpl::fast_sin(mutate(op->args[0]), prec);
-            } else {
-                return ApproxImpl::fast_cos(mutate(op->args[0]), prec);
+            return ApproxImpl::fast_sin(mutate(op->args[0]), prec);
+        } else if (op->is_intrinsic(Call::fast_cos)) {
+            ApproximationPrecision prec = extract_approximation_precision(op);
+            IntrinsicsInfo ii = resolve_precision(prec, ii_cos, for_device_api);
+            if (op->type == Float(32) && intrinsic_satisfies_precision(ii, prec)) {
+                return append_type_suffix(op);
             }
+            if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
+                return to_native_func(op);
+            }
+
+            // No known fast version available, we will expand our own approximation.
+            return ApproxImpl::fast_cos(mutate(op->args[0]), prec);
         } else if (op->is_intrinsic(Call::fast_atan) || op->is_intrinsic(Call::fast_atan2)) {
             // Handle fast_atan and fast_atan2 together!
             ApproximationPrecision prec = extract_approximation_precision(op);
@@ -722,8 +763,8 @@ public:
                 return append_type_suffix(op);
             }
 
-            // Unfortunately, no fast_tanh approximation implemented yet!
-            return to_native_func(op);
+            // Expand using defintion in terms of exp(2x), and recurse.
+            return mutate(ApproxImpl::fast_tanh(op->args[0], prec));
         } else if (op->is_intrinsic(Call::fast_pow)) {
             ApproximationPrecision prec = extract_approximation_precision(op);
             IntrinsicsInfo ii = resolve_precision(prec, ii_pow, for_device_api);
