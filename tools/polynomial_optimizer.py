@@ -106,6 +106,11 @@ def optimize_approximation(loss, order):
         func = lambda x: np.log(x + 1.0)
         exponents = np.arange(1, order + 1)
         lower, upper = -0.25, 0.5
+    elif args.func == "tanh":
+        func_fixed_part = lambda x: x
+        func = lambda x: np.tanh(x)
+        exponents = np.arange(1, order + 1)
+        lower, upper = 0.0, 4.0
     else:
         print("Unknown function:", args.func)
         exit(1)
