@@ -207,6 +207,9 @@ Expr halide_exp(const Expr &a);
 Expr halide_erf(const Expr &a);
 // @}
 
+/** Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5 */
+void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent);
+
 /** Raise an expression to an integer power by repeatedly multiplying
  * it by itself. */
 Expr raise_to_integer_power(Expr a, int64_t b);

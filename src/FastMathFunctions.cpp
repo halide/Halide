@@ -9,9 +9,6 @@
 namespace Halide {
 namespace Internal {
 
-// Implemented in IROperator.cpp
-void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent);
-
 namespace {
 
 Expr constant(Type t, double value) {
@@ -295,7 +292,7 @@ Expr fast_log(const Expr &x, ApproximationPrecision prec) {
 
     Expr log2 = constant(type, std::log(2.0));
     Expr reduced, exponent;
-    range_reduce_log(x, &reduced, &exponent);
+    Internal::range_reduce_log(x, &reduced, &exponent);
 
     Expr x1 = reduced - 1.0f;
     const Internal::Approximation *approx = Internal::best_log_approximation(prec, type);
