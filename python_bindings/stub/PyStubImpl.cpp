@@ -37,9 +37,8 @@ public:
         py::print(msg, py::arg("end") = "");
     }
 
-    void error(const char *msg) override {
+    [[noreturn]] void error(const char *msg) override {
         throw Halide::Error(msg);
-        // This method must not return!
     }
 };
 

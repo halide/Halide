@@ -83,7 +83,7 @@ class CompileTimeErrorReporter {
 public:
     virtual ~CompileTimeErrorReporter() = default;
     virtual void warning(const char *msg) = 0;
-    virtual void error(const char *msg) = 0;
+    [[noreturn]] virtual void error(const char *msg) = 0;
 };
 
 /** The default error reporter logs to stderr, then throws an exception
