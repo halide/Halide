@@ -1379,14 +1379,10 @@ Expr fast_log(const Expr &x, ApproximationPrecision prec) {
     return Call::make(x.type(), Call::fast_log, {x, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
 }
 
-Expr fast_pow(Expr x, Expr y, ApproximationPrecision prec) {
+Expr fast_pow(const Expr &x, const Expr &y, ApproximationPrecision prec) {
     if (auto i = as_const_int(y)) {
-        return raise_to_integer_power(std::move(x), *i);
+        return raise_to_integer_power(x, *i);
     }
-
-    // TODO: figure out what to do with these casts...
-    x = cast<float>(std::move(x));
-    y = cast<float>(std::move(y));
     return Call::make(x.type(), Call::fast_pow, {x, y, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
 }
 
