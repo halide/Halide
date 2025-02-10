@@ -38,6 +38,7 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
         "opencl.dll",
 #else
         "libOpenCL.so",
+        "libOpenCL.so.1",
         "/System/Library/Frameworks/OpenCL.framework/OpenCL",
 #endif
     };
