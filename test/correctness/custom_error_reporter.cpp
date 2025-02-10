@@ -33,7 +33,7 @@ public:
         warnings_occurred++;
     }
 
-    void error(const char *msg) override {
+    [[noreturn]] void error(const char *msg) override {
         // Emitting "error.*:" to stdout or stderr will cause CMake to report the
         // test as a failure on Windows, regardless of error code returned.
         // The error text we get from ErrorReport probably contains some variant
