@@ -742,7 +742,6 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
 // Fast math ops based on those from Syrah (http://github.com/boulos/syrah). Thanks, Solomon!
 
 // Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5
-// (This function is not in an anonymous namespace, because it's reused in FastMathFunctions.cpp)
 void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent) {
     Type type = input.type();
     Type int_type = Int(32, type.lanes());
