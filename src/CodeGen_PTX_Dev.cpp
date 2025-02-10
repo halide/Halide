@@ -156,9 +156,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         }
     }
 
-#if LLVM_VERSION >= 200
     function->setCallingConv(llvm::CallingConv::PTX_Kernel);
-#endif
 
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
