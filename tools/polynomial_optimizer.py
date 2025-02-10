@@ -115,6 +115,12 @@ def optimize_approximation(loss, order):
         print("Unknown function:", args.func)
         exit(1)
 
+    X_dense = np.linspace(lower, upper, 512 * 31 * 11)
+    if lower >= 0.0:
+        loglow = -5.0 if lower == 0.0 else np.log(lower)
+        X_dense = np.concatenate([X_dense, np.logspace(loglow, np.log(upper), num=2048 * 17)])
+        X_dense = np.sort(X_dense)
+
 
     if X is None: X = np.linspace(lower, upper, 512 * 31)
     target = func(X)
@@ -203,16 +209,19 @@ def optimize_approximation(loss, order):
     float64_metrics = Metrics(mean_squared_error, max_abs_error, max_ulp_error)
 
     # Reevaluate with float32 precision.
-    f32_powers = np.power(X[:,None].astype(np.float32), exponents).astype(np.float32)
-    f32_y_hat = fixed_part.astype(np.float32) + np.sum((f32_powers * coeffs.astype(np.float32))[:,::-1], axis=-1).astype(np.float32)
-    f32_diff = f32_y_hat - target.astype(np.float32)
+    f32_x_dense = X_dense.astype(np.float32)
+    f32_target_dense = func(f32_x_dense).astype(np.float32)
+    f32_fixed_part_dense = func_fixed_part(f32_x_dense)
+    f32_powers = np.power(f32_x_dense[:,None], exponents).astype(np.float32)
+    f32_y_hat = f32_fixed_part_dense.astype(np.float32) + np.sum((f32_powers * coeffs.astype(np.float32))[:,::-1], axis=-1).astype(np.float32)
+    f32_diff = f32_y_hat - f32_target_dense.astype(np.float32)
     f32_abs_diff = np.abs(f32_diff)
     # MSE metric
     f32_mean_squared_error = np.mean(np.square(f32_diff))
     # MAE metric
     f32_max_abs_error = np.amax(f32_abs_diff)
     # MaxULP metric
-    f32_ulp_error = f32_diff / np.spacing(np.abs(target).astype(np.float32))
+    f32_ulp_error = f32_diff / np.spacing(np.abs(f32_target_dense).astype(np.float32))
     f32_abs_ulp_error = np.abs(f32_ulp_error)
     f32_max_ulp_error = np.amax(f32_abs_ulp_error)
 
