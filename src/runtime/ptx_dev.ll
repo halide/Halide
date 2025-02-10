@@ -54,7 +54,6 @@ define weak_odr double @sqrt_f64(double %x) nounwind uwtable readnone alwaysinli
 declare float @__nv_frcp_rn(float) nounwind readnone
 
 define weak_odr float @fast_inverse_f32(float %x) nounwind uwtable readnone alwaysinline {
-       ; %y = tail call float @__nv_frcp_rn(float %x) nounwind readnone
        %y = call float asm "rcp.approx.f32     $0, $1;", "=f,f" (float %x)
        ret float %y
 }
