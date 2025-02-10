@@ -526,8 +526,8 @@ bool test(int lanes, int seed) {
     if (type_of<A>() == Float(32)) {
         if (verbose) printf("Fast transcendentals\n");
         Buffer<float> im15, im16, im17, im18, im19, im20;
-        Expr a = input(x, y) * 0.5f;
-        Expr b = input((x + 1) % W, y) * 0.5f;
+        Expr a = input(x, y);
+        Expr b = input((x + 1) % W, y);
         {
             Func f15;
             f15(x, y) = log(a);
@@ -568,8 +568,8 @@ bool test(int lanes, int seed) {
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
-                float a = float(input(x, y)) * 0.5f;
-                float b = float(input((x + 1) % W, y)) * 0.5f;
+                float a = float(input(x, y));
+                float b = float(input((x + 1) % W, y));
                 float correct_log = logf(a);
                 float correct_exp = expf(b);
                 float correct_pow = powf(a, b / 16.0f);
@@ -626,16 +626,16 @@ bool test(int lanes, int seed) {
                            a, b / 16.0f, im17(x, y), correct_pow, correct_pow_mantissa, pow_mantissa);
                 }
                 if (std::isfinite(correct_log) && fast_log_mantissa_error > 64) {
-                    printf("fast_log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
-                           a, im18(x, y), correct_log, correct_log_mantissa, fast_log_mantissa);
+                    printf("fast_log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d ; error %d)\n",
+                           a, im18(x, y), correct_log, correct_log_mantissa, fast_log_mantissa, fast_log_mantissa_error);
                 }
                 if (std::isfinite(correct_exp) && fast_exp_mantissa_error > 64) {
-                    printf("fast_exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
-                           b, im19(x, y), correct_exp, correct_exp_mantissa, fast_exp_mantissa);
+                    printf("fast_exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d ; error %d)\n",
+                           b, im19(x, y), correct_exp, correct_exp_mantissa, fast_exp_mantissa, fast_exp_mantissa_error);
                 }
                 if (a >= 0 && std::isfinite(correct_pow) && fast_pow_mantissa_error > 128) {
-                    printf("fast_pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
-                           a, b / 16.0f, im20(x, y), correct_pow, correct_pow_mantissa, fast_pow_mantissa);
+                    printf("fast_pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d ; error %d)\n",
+                           a, b / 16.0f, im20(x, y), correct_pow, correct_pow_mantissa, fast_pow_mantissa, fast_pow_mantissa_error);
                 }
             }
         }
