@@ -35,7 +35,22 @@ bool is_float_extern(const string &op_name,
     return op_name == (func_name + "_f16") ||
            op_name == (func_name + "_f32") ||
            op_name == (func_name + "_f64");
-};
+}
+
+bool is_math_func(const Call *call,
+                  const string &func_name,
+                  Call::IntrinsicOp intrinsic_op = Call::IntrinsicOp::IntrinsicOpCount) {
+    if (call->is_extern()) {
+        const string &op_name = call->name;
+        return op_name == (func_name + "_f16") ||
+               op_name == (func_name + "_f32") ||
+               op_name == (func_name + "_f64");
+    } else if (call->is_intrinsic() && intrinsic_op != Call::IntrinsicOpCount) {
+        return call->is_intrinsic(intrinsic_op);
+    } else {
+        return false;
+    }
+}
 
 /** Compute derivatives through reverse accumulation
  */
@@ -1058,101 +1073,99 @@ void ReverseAccumulationVisitor::visit(const Select *op) {
 void ReverseAccumulationVisitor::visit(const Call *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
-    if (op->is_extern()) {
-        // Math functions
-        if (is_float_extern(op->name, "exp")) {
-            // d/dx exp(x) = exp(x)
-            accumulate(op->args[0], adjoint * exp(op->args[0]));
-        } else if (is_float_extern(op->name, "log")) {
-            // d/dx log(x) = 1 / x
-            accumulate(op->args[0], adjoint / op->args[0]);
-        } else if (is_float_extern(op->name, "sin")) {
-            // d/dx sin(x) = cos(x)
-            accumulate(op->args[0], adjoint * cos(op->args[0]));
-        } else if (is_float_extern(op->name, "asin")) {
-            // d/dx asin(x) = 1 / sqrt(1 - x^2)
-            Expr one = make_one(op->type);
-            accumulate(op->args[0], adjoint / sqrt(one - op->args[0] * op->args[0]));
-        } else if (is_float_extern(op->name, "cos")) {
-            // d/dx cos(x) = -sin(x)
-            accumulate(op->args[0], -adjoint * sin(op->args[0]));
-        } else if (is_float_extern(op->name, "acos")) {
-            // d/dx acos(x) = - 1 / sqrt(1 - x^2)
-            Expr one = make_one(op->type);
-            accumulate(op->args[0], -adjoint / sqrt(one - op->args[0] * op->args[0]));
-        } else if (is_float_extern(op->name, "tan")) {
-            // d/dx tan(x) = 1 / cos(x)^2
-            Expr c = cos(op->args[0]);
-            accumulate(op->args[0], adjoint / (c * c));
-        } else if (is_float_extern(op->name, "atan")) {
-            // d/dx atan(x) = 1 / (1 + x^2)
-            Expr one = make_one(op->type);
-            accumulate(op->args[0], adjoint / (one + op->args[0] * op->args[0]));
-        } else if (is_float_extern(op->name, "atan2")) {
-            Expr x2y2 = op->args[0] * op->args[0] + op->args[1] * op->args[1];
-            // d/dy atan2(y, x) = x / (x^2 + y^2)
-            accumulate(op->args[0], adjoint * (op->args[1] / x2y2));
-            // d/dx atan2(y, x) = -y / (x^2 + y^2)
-            accumulate(op->args[1], adjoint * (-op->args[0] / x2y2));
-        } else if (is_float_extern(op->name, "sinh")) {
-            // d/dx sinh(x) = cosh(x)
-            accumulate(op->args[0], adjoint * cosh(op->args[0]));
-        } else if (is_float_extern(op->name, "asinh")) {
-            // d/dx asin(x) = 1 / sqrt(1 + x^2)
-            Expr one = make_one(op->type);
-            accumulate(op->args[0], adjoint / sqrt(one + op->args[0] * op->args[0]));
-        } else if (is_float_extern(op->name, "cosh")) {
-            // d/dx cosh(x) = sinh(x)
-            accumulate(op->args[0], adjoint * sinh(op->args[0]));
-        } else if (is_float_extern(op->name, "acosh")) {
-            // d/dx acosh(x) = 1 / (sqrt(x - 1) sqrt(x + 1)))
-            Expr one = make_one(op->type);
-            accumulate(op->args[0],
-                       adjoint / (sqrt(op->args[0] - one) * sqrt(op->args[0] + one)));
-        } else if (is_float_extern(op->name, "tanh")) {
-            // d/dx tanh(x) = 1 / cosh(x)^2
-            Expr c = cosh(op->args[0]);
-            accumulate(op->args[0], adjoint / (c * c));
-        } else if (is_float_extern(op->name, "atanh")) {
-            // d/dx atanh(x) = 1 / (1 - x^2)
-            Expr one = make_one(op->type);
-            accumulate(op->args[0], adjoint / (one - op->args[0] * op->args[0]));
-        } else if (is_float_extern(op->name, "ceil")) {
-            // TODO: d/dx = dirac(n) for n in Z ...
-            accumulate(op->args[0], make_zero(op->type));
-        } else if (is_float_extern(op->name, "floor")) {
-            // TODO: d/dx = dirac(n) for n in Z ...
-            accumulate(op->args[0], make_zero(op->type));
-        } else if (is_float_extern(op->name, "round")) {
-            accumulate(op->args[0], make_zero(op->type));
-        } else if (is_float_extern(op->name, "trunc")) {
-            accumulate(op->args[0], make_zero(op->type));
-        } else if (is_float_extern(op->name, "sqrt")) {
-            Expr half = make_const(op->type, 0.5);
-            accumulate(op->args[0], adjoint * (half / sqrt(op->args[0])));
-        } else if (is_float_extern(op->name, "pow")) {
-            Expr one = make_one(op->type);
-            accumulate(op->args[0],
-                       adjoint * op->args[1] * pow(op->args[0], op->args[1] - one));
-            accumulate(op->args[1],
-                       adjoint * pow(op->args[0], op->args[1]) * log(op->args[0]));
-        } else if (is_float_extern(op->name, "fast_inverse")) {
-            // d/dx 1/x = -1/x^2
-            Expr inv_x = fast_inverse(op->args[0]);
-            accumulate(op->args[0], -adjoint * inv_x * inv_x);
-        } else if (is_float_extern(op->name, "fast_inverse_sqrt")) {
-            // d/dx x^(-0.5) = -0.5*x^(-1.5)
-            Expr inv_sqrt_x = fast_inverse_sqrt(op->args[0]);
-            Expr neg_half = make_const(op->type, -0.5);
-            accumulate(op->args[0],
-                       neg_half * adjoint * inv_sqrt_x * inv_sqrt_x * inv_sqrt_x);
-        } else if (op->name == "halide_print") {
-            for (const auto &arg : op->args) {
-                accumulate(arg, make_zero(op->type));
-            }
-        } else {
-            internal_error << "The derivative of " << op->name << " is not implemented.";
+    // Math functions (Can be both intrinsic and extern).
+    if (is_math_func(op, "exp", Call::fast_exp)) {
+        // d/dx exp(x) = exp(x)
+        accumulate(op->args[0], adjoint * exp(op->args[0]));
+    } else if (is_math_func(op, "log", Call::fast_log)) {
+        // d/dx log(x) = 1 / x
+        accumulate(op->args[0], adjoint / op->args[0]);
+    } else if (is_math_func(op, "sin", Call::fast_sin)) {
+        // d/dx sin(x) = cos(x)
+        accumulate(op->args[0], adjoint * cos(op->args[0]));
+    } else if (is_math_func(op, "asin")) {
+        // d/dx asin(x) = 1 / sqrt(1 - x^2)
+        Expr one = make_one(op->type);
+        accumulate(op->args[0], adjoint / sqrt(one - op->args[0] * op->args[0]));
+    } else if (is_math_func(op, "cos", Call::fast_cos)) {
+        // d/dx cos(x) = -sin(x)
+        accumulate(op->args[0], -adjoint * sin(op->args[0]));
+    } else if (is_math_func(op, "acos")) {
+        // d/dx acos(x) = - 1 / sqrt(1 - x^2)
+        Expr one = make_one(op->type);
+        accumulate(op->args[0], -adjoint / sqrt(one - op->args[0] * op->args[0]));
+    } else if (is_math_func(op, "tan", Call::fast_tan)) {
+        // d/dx tan(x) = 1 / cos(x)^2
+        Expr c = cos(op->args[0]);
+        accumulate(op->args[0], adjoint / (c * c));
+    } else if (is_math_func(op, "atan", Call::fast_atan)) {
+        // d/dx atan(x) = 1 / (1 + x^2)
+        Expr one = make_one(op->type);
+        accumulate(op->args[0], adjoint / (one + op->args[0] * op->args[0]));
+    } else if (is_math_func(op, "atan2", Call::fast_atan2)) {
+        Expr x2y2 = op->args[0] * op->args[0] + op->args[1] * op->args[1];
+        // d/dy atan2(y, x) = x / (x^2 + y^2)
+        accumulate(op->args[0], adjoint * (op->args[1] / x2y2));
+        // d/dx atan2(y, x) = -y / (x^2 + y^2)
+        accumulate(op->args[1], adjoint * (-op->args[0] / x2y2));
+    } else if (is_math_func(op, "sinh")) {
+        // d/dx sinh(x) = cosh(x)
+        accumulate(op->args[0], adjoint * cosh(op->args[0]));
+    } else if (is_math_func(op, "asinh")) {
+        // d/dx asin(x) = 1 / sqrt(1 + x^2)
+        Expr one = make_one(op->type);
+        accumulate(op->args[0], adjoint / sqrt(one + op->args[0] * op->args[0]));
+    } else if (is_math_func(op, "cosh")) {
+        // d/dx cosh(x) = sinh(x)
+        accumulate(op->args[0], adjoint * sinh(op->args[0]));
+    } else if (is_math_func(op, "acosh")) {
+        // d/dx acosh(x) = 1 / (sqrt(x - 1) sqrt(x + 1)))
+        Expr one = make_one(op->type);
+        accumulate(op->args[0],
+                   adjoint / (sqrt(op->args[0] - one) * sqrt(op->args[0] + one)));
+    } else if (is_math_func(op, "tanh", Call::fast_tanh)) {
+        // d/dx tanh(x) = 1 / cosh(x)^2
+        Expr c = cosh(op->args[0]);
+        accumulate(op->args[0], adjoint / (c * c));
+    } else if (is_math_func(op, "atanh")) {
+        // d/dx atanh(x) = 1 / (1 - x^2)
+        Expr one = make_one(op->type);
+        accumulate(op->args[0], adjoint / (one - op->args[0] * op->args[0]));
+    } else if (is_math_func(op, "ceil")) {
+        // TODO: d/dx = dirac(n) for n in Z ...
+        accumulate(op->args[0], make_zero(op->type));
+    } else if (is_math_func(op, "floor")) {
+        // TODO: d/dx = dirac(n) for n in Z ...
+        accumulate(op->args[0], make_zero(op->type));
+    } else if (is_math_func(op, "round")) {
+        accumulate(op->args[0], make_zero(op->type));
+    } else if (is_math_func(op, "trunc")) {
+        accumulate(op->args[0], make_zero(op->type));
+    } else if (is_math_func(op, "sqrt")) {
+        Expr half = make_const(op->type, 0.5);
+        accumulate(op->args[0], adjoint * (half / sqrt(op->args[0])));
+    } else if (is_math_func(op, "pow", Call::fast_pow)) {
+        Expr one = make_one(op->type);
+        accumulate(op->args[0],
+                   adjoint * op->args[1] * pow(op->args[0], op->args[1] - one));
+        accumulate(op->args[1],
+                   adjoint * pow(op->args[0], op->args[1]) * log(op->args[0]));
+    } else if (is_math_func(op, "fast_inverse")) {
+        // d/dx 1/x = -1/x^2
+        Expr inv_x = fast_inverse(op->args[0]);
+        accumulate(op->args[0], -adjoint * inv_x * inv_x);
+    } else if (is_math_func(op, "fast_inverse_sqrt")) {
+        // d/dx x^(-0.5) = -0.5*x^(-1.5)
+        Expr inv_sqrt_x = fast_inverse_sqrt(op->args[0]);
+        Expr neg_half = make_const(op->type, -0.5);
+        accumulate(op->args[0],
+                   neg_half * adjoint * inv_sqrt_x * inv_sqrt_x * inv_sqrt_x);
+    } else if (op->is_extern() && op->name == "halide_print") {
+        for (const auto &arg : op->args) {
+            accumulate(arg, make_zero(op->type));
         }
+    } else if (op->is_extern()) {
+        internal_error << "The derivative of " << op->name << " is not implemented.";
     } else if (op->is_intrinsic()) {
         if (op->is_intrinsic(Call::abs)) {
             accumulate(op->args[0],
