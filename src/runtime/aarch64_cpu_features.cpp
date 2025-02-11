@@ -21,24 +21,24 @@ extern "C" unsigned long getauxval(unsigned long type);
 
 namespace {
 
-void set_platform_features(CpuFeatures &features) {
+void set_platform_features(CpuFeatures *features) {
     unsigned long hwcaps = getauxval(AT_HWCAP);
     unsigned long hwcaps2 = getauxval(AT_HWCAP2);
 
     if (hwcaps & HWCAP_ASIMDDP) {
-        features.set_available(halide_target_feature_arm_dot_prod);
+        halide_set_available_cpu_feature(features, halide_target_feature_arm_dot_prod);
     }
 
     if (hwcaps & HWCAP_ASIMDHP) {
-        features.set_available(halide_target_feature_arm_fp16);
+        halide_set_available_cpu_feature(features, halide_target_feature_arm_fp16);
     }
 
     if (hwcaps & HWCAP_SVE) {
-        features.set_available(halide_target_feature_sve);
+        halide_set_available_cpu_feature(features, halide_target_feature_sve);
     }
 
     if (hwcaps2 & HWCAP2_SVE2) {
-        features.set_available(halide_target_feature_sve2);
+        halide_set_available_cpu_feature(features, halide_target_feature_sve2);
     }
 }
 
@@ -56,13 +56,13 @@ bool sysctl_is_set(const char *name) {
     return sysctlbyname(name, &enabled, &enabled_len, nullptr, 0) == 0 && enabled;
 }
 
-void set_platform_features(CpuFeatures &features) {
+void set_platform_features(CpuFeatures *features) {
     if (sysctl_is_set("hw.optional.arm.FEAT_DotProd")) {
-        features.set_available(halide_target_feature_arm_dot_prod);
+        halide_set_available_cpu_feature(features, halide_target_feature_arm_dot_prod);
     }
 
     if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
-        features.set_available(halide_target_feature_arm_fp16);
+        halide_set_available_cpu_feature(features, halide_target_feature_arm_fp16);
     }
 }
 
@@ -84,20 +84,20 @@ extern "C" BOOL IsProcessorFeaturePresent(DWORD feature);
 
 namespace {
 
-void set_platform_features(CpuFeatures &features) {
+void set_platform_features(CpuFeatures *features) {
     // This is the strategy used by Google's cpuinfo library for
     // detecting fp16 arithmetic support on Windows.
     if (!IsProcessorFeaturePresent(PF_FLOATING_POINT_EMULATED) &&
         IsProcessorFeaturePresent(PF_ARM_FMAC_INSTRUCTIONS_AVAILABLE)) {
-        features.set_available(halide_target_feature_arm_fp16);
+        halide_set_available_cpu_feature(features, halide_target_feature_arm_fp16);
     }
 
     if (IsProcessorFeaturePresent(PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE)) {
-        features.set_available(halide_target_feature_arm_dot_prod);
+        halide_set_available_cpu_feature(features, halide_target_feature_arm_dot_prod);
     }
 
     if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
-        features.set_available(halide_target_feature_sve);
+        halide_set_available_cpu_feature(features, halide_target_feature_sve);
     }
 }
 
@@ -107,30 +107,34 @@ void set_platform_features(CpuFeatures &features) {
 
 namespace {
 
-void set_platform_features(CpuFeatures &) {
+void set_platform_features(CpuFeatures *) {
 }
 
 }  // namespace
 
 #endif
 
-WEAK CpuFeatures halide_get_cpu_features() {
-    CpuFeatures features;
-    features.set_known(halide_target_feature_arm_dot_prod);
-    features.set_known(halide_target_feature_arm_fp16);
-    features.set_known(halide_target_feature_armv7s);
-    features.set_known(halide_target_feature_no_neon);
-    features.set_known(halide_target_feature_sve);
-    features.set_known(halide_target_feature_sve2);
-
-    // All ARM architectures support "No Neon".
-    features.set_available(halide_target_feature_no_neon);
-
-    set_platform_features(features);
-
-    return features;
-}
-
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
+
+
+extern "C" {
+
+WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *features) {
+    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_arm_dot_prod);
+    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_arm_fp16);
+    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_armv7s);
+    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_no_neon);
+    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_sve);
+    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_sve2);
+
+    // All ARM architectures support "No Neon".
+    Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_no_neon);
+
+    Halide::Runtime::Internal::set_platform_features(features);
+
+    return halide_error_code_success;
+}
+    
+}  // extern "C" linkage

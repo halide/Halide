@@ -8,29 +8,24 @@
 
 #define PPC_FEATURE2_ARCH_2_07 0x80000000
 
-extern "C" unsigned long int getauxval(unsigned long int);
+extern "C" {
 
-namespace Halide {
-namespace Runtime {
-namespace Internal {
+unsigned long int getauxval(unsigned long int);
 
-WEAK CpuFeatures halide_get_cpu_features() {
-    CpuFeatures features;
-    features.set_known(halide_target_feature_vsx);
-    features.set_known(halide_target_feature_power_arch_2_07);
+WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *features) {
+    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_vsx);
+    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_power_arch_2_07);
 
     const unsigned long hwcap = getauxval(AT_HWCAP);
     const unsigned long hwcap2 = getauxval(AT_HWCAP2);
 
     if (hwcap & PPC_FEATURE_HAS_VSX) {
-        features.set_available(halide_target_feature_vsx);
+        Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_vsx);
     }
     if (hwcap2 & PPC_FEATURE2_ARCH_2_07) {
-        features.set_available(halide_target_feature_power_arch_2_07);
+        Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_power_arch_2_07);
     }
-    return features;
+    return halide_error_code_success;
 }
 
-}  // namespace Internal
-}  // namespace Runtime
-}  // namespace Halide
+} // extern "C" linkage
