@@ -467,7 +467,7 @@ IntrinsicsInfo resolve_precision(ApproximationPrecision &prec, const IntrinsicsI
     }
 
     if (!prec.force_halide_polynomial) {
-        if (prec.constraint_max_absolute_error == 0.0f && prec.constraint_max_ulp_error == 0.0f) {
+        if (prec.constraint_max_absolute_error == 0.0f && prec.constraint_max_ulp_error == 0) {
             // User didn't specify a desired precision. We will prefer intrinsics (which are fast)
             // or else simply use a reasonable value.
             if (ii.intrinsic.defined() && prec.optimized_for == ii.intrinsic.behavior) {
@@ -560,19 +560,6 @@ class LowerFastMathFunctions : public IRMutator {
     }
     bool is_cuda_cc75() {
         return for_device_api == DeviceAPI::CUDA && target.get_cuda_capability_lower_bound() >= 75;
-    }
-
-    bool is_vulkan() {
-        return for_device_api == DeviceAPI::Vulkan;
-    }
-    bool is_metal() {
-        return for_device_api == DeviceAPI::Metal;
-    }
-    bool is_opencl() {
-        return for_device_api == DeviceAPI::Metal;
-    }
-    bool is_webgpu() {
-        return for_device_api == DeviceAPI::WebGPU;
     }
 
     /** Strips the fast_ prefix, appends the type suffix, and
@@ -714,7 +701,7 @@ public:
             // Handle fast_exp and fast_log together!
             ApproximationPrecision prec = extract_approximation_precision(op);
             IntrinsicsInfo ii = resolve_precision(prec, ii_exp, for_device_api);
-            if (is_cuda_cc20() && intrinsic_satisfies_precision(ii, prec)) {
+            if (op->type == Float(32) && is_cuda_cc20() && intrinsic_satisfies_precision(ii, prec)) {
                 Type type = op->args[0].type();
                 // exp(x) = 2^(a*x) = (2^a)^x
                 // 2^a = e
@@ -736,7 +723,7 @@ public:
             // Handle fast_exp and fast_log together!
             ApproximationPrecision prec = extract_approximation_precision(op);
             IntrinsicsInfo ii = resolve_precision(prec, ii_log, for_device_api);
-            if (is_cuda_cc20() && intrinsic_satisfies_precision(ii, prec)) {
+            if (op->type == Float(32) && is_cuda_cc20() && intrinsic_satisfies_precision(ii, prec)) {
                 Type type = op->args[0].type();
                 Expr lg = Call::make(type, "fast_lg2_f32", {mutate(op->args[0])}, Call::PureExtern);
                 // log(x) = lg2(x) / lg2(e)
@@ -756,7 +743,7 @@ public:
             ApproximationPrecision prec = extract_approximation_precision(op);
             IntrinsicsInfo ii = resolve_precision(prec, ii_tanh, for_device_api);
             // We have a fast version on PTX with CC7.5
-            if (is_cuda_cc75() && intrinsic_satisfies_precision(ii, prec)) {
+            if (op->type == Float(32) && is_cuda_cc75() && intrinsic_satisfies_precision(ii, prec)) {
                 return append_type_suffix(op);
             }
 
@@ -765,7 +752,7 @@ public:
         } else if (op->is_intrinsic(Call::fast_pow)) {
             ApproximationPrecision prec = extract_approximation_precision(op);
             IntrinsicsInfo ii = resolve_precision(prec, ii_pow, for_device_api);
-            if (is_cuda_cc20() && !prec.force_halide_polynomial) {
+            if (op->type == Float(32) && is_cuda_cc20() && !prec.force_halide_polynomial) {
                 Type type = op->args[0].type();
                 // Lower to 2^(lg2(x) * y), thanks to specialized instructions.
                 Expr arg_x = mutate(op->args[0]);
