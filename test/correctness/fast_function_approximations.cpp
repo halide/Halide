@@ -256,6 +256,11 @@ int main(int argc, char **argv) {
         best_mae_for_backend = 1e-6f;
         printf("Vulkan backend detected: Reducing required maximal absolute error to %e.\n", best_mae_for_backend);
     }
+    float grace_factor = 1.0f;
+    if (target.arch == Target::X86 && !target.has_feature(Halide::Target::FMA) && !target.has_gpu_feature()) {
+        grace_factor = 1.05f;
+        printf("Using a grace margin of 5%% due to lack of FMA support.\n");
+    }
 
     int num_tests = 0;
     int num_tests_passed = 0;
@@ -393,7 +398,7 @@ int main(int argc, char **argv) {
                 } else {
                     if (rat.validate_mae) {
                         num_tests++;
-                        if (em.max_abs_error > std::max(prec.constraint_max_absolute_error, best_mae_for_backend)) {
+                        if (em.max_abs_error > std::max(prec.constraint_max_absolute_error, best_mae_for_backend) * grace_factor) {
                             print_bad("MaxAbs");
                         } else {
                             print_ok();
@@ -414,10 +419,12 @@ int main(int argc, char **argv) {
                     }
                 }
 
-                if (prec.constraint_max_absolute_error != 0 && prec.constraint_max_absolute_error <= 1e-5 && prec.optimized_for == ApproximationPrecision::MULPE) {
+                if (prec.constraint_max_absolute_error != 0
+                        && prec.constraint_max_absolute_error <= 1e-5
+                        && prec.optimized_for == ApproximationPrecision::MULPE) {
                     if (rat.max_max_ulp_error != 0) {
                         num_tests++;
-                        if (em.max_ulp_error > rat.max_max_ulp_error) {
+                        if (em.max_ulp_error > rat.max_max_ulp_error * grace_factor) {
                             print_bad("Max ULP");
                         } else {
                             print_ok();
@@ -426,7 +433,7 @@ int main(int argc, char **argv) {
                     }
                     if (rat.max_mean_ulp_error != 0) {
                         num_tests++;
-                        if (em.mean_ulp_error > rat.max_mean_ulp_error) {
+                        if (em.mean_ulp_error > rat.max_mean_ulp_error * grace_factor) {
                             print_bad("Mean ULP");
                         } else {
                             print_ok();
