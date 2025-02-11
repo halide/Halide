@@ -20,19 +20,19 @@ struct CpuFeatures {
                                                       // (always a subset of 'known')
 };
 
-ALWAYS_INLINE void halide_set_known_cpu_feature(CpuFeatures* features, int i) {
+ALWAYS_INLINE void halide_set_known_cpu_feature(CpuFeatures *features, int i) {
     features->known[i >> 6] |= ((uint64_t)1) << (i & 63);
 }
 
-ALWAYS_INLINE void halide_set_available_cpu_feature(CpuFeatures* features, int i) {
+ALWAYS_INLINE void halide_set_available_cpu_feature(CpuFeatures *features, int i) {
     features->available[i >> 6] |= ((uint64_t)1) << (i & 63);
 }
 
-ALWAYS_INLINE bool halide_test_known_cpu_feature(CpuFeatures* features, int i) {
+ALWAYS_INLINE bool halide_test_known_cpu_feature(CpuFeatures *features, int i) {
     return (features->known[i >> 6] & ((uint64_t)1) << (i & 63)) != 0;
 }
 
-ALWAYS_INLINE bool halide_test_available_cpu_feature(CpuFeatures* features, int i) {
+ALWAYS_INLINE bool halide_test_available_cpu_feature(CpuFeatures *features, int i) {
     return (features->available[i >> 6] & ((uint64_t)1) << (i & 63)) != 0;
 }
 
@@ -40,7 +40,7 @@ ALWAYS_INLINE bool halide_test_available_cpu_feature(CpuFeatures* features, int 
 }  // namespace Runtime
 }  // namespace Halide
 
-// NOTE: This method is not part of the public API, but we push it into extern "C" to 
+// NOTE: This method is not part of the public API, but we push it into extern "C" to
 //       avoid name mangling mismatches between platforms. See: https://github.com/halide/Halide/issues/8565
 extern "C" WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *features);
 

@@ -116,5 +116,5 @@ WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *feature
 
     return halide_error_code_success;
 }
-        
-} // extern "C" linkage
+
+}  // extern "C" linkage

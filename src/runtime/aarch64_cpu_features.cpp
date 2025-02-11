@@ -118,7 +118,6 @@ void set_platform_features(CpuFeatures *) {
 }  // namespace Runtime
 }  // namespace Halide
 
-
 extern "C" {
 
 WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *features) {
@@ -136,5 +135,5 @@ WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *feature
 
     return halide_error_code_success;
 }
-    
+
 }  // extern "C" linkage

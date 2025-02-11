@@ -134,7 +134,7 @@ WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *feature
                 Halide::Runtime::Internal::cpuid(info3, 7, 1);
                 if ((info3[0] & avxvnni) == avxvnni &&
                     (info3[0] & avx512bf16) == avx512bf16) {
-                        Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
+                    Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
                 }
             }
         }
@@ -142,4 +142,4 @@ WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *feature
     return halide_error_code_success;
 }
 
-} // extern "C" linkage
+}  // extern "C" linkage

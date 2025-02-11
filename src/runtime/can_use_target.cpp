@@ -42,7 +42,7 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
         if (!halide_cpu_features_initialized) {
             CpuFeatures tmp;
             int error = halide_get_cpu_features(&tmp);
-            if(error != halide_error_code_success) {
+            if (error != halide_error_code_success) {
                 halide_error(nullptr, "Internal error: halide_get_cpu_features failed!\n");
                 return 0;
             }
