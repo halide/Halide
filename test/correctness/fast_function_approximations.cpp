@@ -334,7 +334,7 @@ int main(int argc, char **argv) {
                 ref_func.realize(out_approx);
                 out_approx.copy_to_host();
 
-#define METRICS_FMT "MaxError{ abs: %.4e , rel: %.4e , ULP: %'14" PRIu64 " , MantissaBits: %2d} | MeanError{ abs: %.4e , ULP: %10.2f}"
+#define METRICS_FMT "MaxError{ abs: %.4e , rel: %.4e , ULP: %14" PRIu64 " , MantissaBits: %2d} | MeanError{ abs: %.4e , ULP: %10.2f}"
 
                 ErrorMetrics em = measure_accuracy(out_ref, out_approx);
                 printf("    %s       (native func on device)                   " METRICS_FMT,
