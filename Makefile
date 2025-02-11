@@ -483,6 +483,7 @@ SOURCE_FILES = \
   Expr.cpp \
   ExtractTileOperations.cpp \
   FastIntegerDivide.cpp \
+  FastMathFunctions.cpp \
   FindCalls.cpp \
   FindIntrinsics.cpp \
   FlattenNestedRamps.cpp \
