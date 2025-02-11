@@ -407,9 +407,12 @@ int main(int argc, char **argv) {
                     } else {
                         // If we don't validate the MAE strictly, let's check if at least it gives
                         // reasonable results when the MAE <= 1e-5 is desired.
-                        if (prec.constraint_max_absolute_error != 0 && prec.constraint_max_absolute_error <= 1e-5) {
+                        if (prec.constraint_max_absolute_error != 0 &&
+                            prec.constraint_max_absolute_error <= 1e-5) {
                             num_tests++;
-                            if (em.mean_abs_error < 1e-5 || em.mean_ulp_error < 20'000 || em.mean_rel_error < 1e-2) {
+                            if (em.mean_abs_error < 1e-5 ||
+                                em.mean_ulp_error < 20'000 ||
+                                em.mean_rel_error < 1e-2) {
                                 num_tests_passed++;
                                 print_ok();
                             } else {
@@ -419,9 +422,9 @@ int main(int argc, char **argv) {
                     }
                 }
 
-                if (prec.constraint_max_absolute_error != 0
-                        && prec.constraint_max_absolute_error <= 1e-5
-                        && prec.optimized_for == ApproximationPrecision::MULPE) {
+                if (prec.constraint_max_absolute_error != 0 &&
+                    prec.constraint_max_absolute_error <= 1e-5 &&
+                    prec.optimized_for == ApproximationPrecision::MULPE) {
                     if (rat.max_max_ulp_error != 0) {
                         num_tests++;
                         if (em.max_ulp_error > rat.max_max_ulp_error * grace_factor) {
