@@ -324,7 +324,8 @@ int main(int argc, char **argv) {
             if (target.has_gpu_feature()) {
                 Var io, ii;
                 ref_func.never_partition_all();
-                ref_func.gpu_tile(i, io, ii, 256, TailStrategy::ShiftInwards);
+                // also vectorize to make sure that works on GPU as well...
+                ref_func.gpu_tile(i, io, ii, 256, TailStrategy::ShiftInwards).vectorize(ii, 2);
                 ref_func.realize(out_approx);
                 out_approx.copy_to_host();
 
