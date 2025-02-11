@@ -30,13 +30,6 @@ using FuncKey = Derivative::FuncKey;
 namespace Internal {
 namespace {
 
-bool is_float_extern(const string &op_name,
-                     const string &func_name) {
-    return op_name == (func_name + "_f16") ||
-           op_name == (func_name + "_f32") ||
-           op_name == (func_name + "_f64");
-}
-
 bool is_math_func(const Call *call,
                   const string &func_name,
                   Call::IntrinsicOp intrinsic_op = Call::IntrinsicOp::IntrinsicOpCount) {
