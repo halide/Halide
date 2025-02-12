@@ -24,29 +24,23 @@ ALWAYS_INLINE void cpuid(int32_t *info, int32_t fn_id, int32_t extra = 0) {
 
 }  // namespace
 
-}  // namespace Internal
-}  // namespace Runtime
-}  // namespace Halide
-
-extern "C" {
-
-WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *features) {
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_sse41);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_avx);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_f16c);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_fma);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_avx2);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_avx512);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_avx512_knl);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_avx512_skylake);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_avx512_cannonlake);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
+extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
+    halide_set_known_cpu_feature(features, halide_target_feature_sse41);
+    halide_set_known_cpu_feature(features, halide_target_feature_avx);
+    halide_set_known_cpu_feature(features, halide_target_feature_f16c);
+    halide_set_known_cpu_feature(features, halide_target_feature_fma);
+    halide_set_known_cpu_feature(features, halide_target_feature_avx2);
+    halide_set_known_cpu_feature(features, halide_target_feature_avx512);
+    halide_set_known_cpu_feature(features, halide_target_feature_avx512_knl);
+    halide_set_known_cpu_feature(features, halide_target_feature_avx512_skylake);
+    halide_set_known_cpu_feature(features, halide_target_feature_avx512_cannonlake);
+    halide_set_known_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
 
     // Detect CPU features by specific microarchitecture.
     int32_t vendor[4];
-    Halide::Runtime::Internal::cpuid(vendor, 0);
+    cpuid(vendor, 0);
     int32_t info[4];
-    Halide::Runtime::Internal::cpuid(info, 1);
+    cpuid(info, 1);
 
     uint32_t family = (info[0] >> 8) & 0xF;  // Bits 8..11
     uint32_t model = (info[0] >> 4) & 0xF;   // Bits 4..7
@@ -63,15 +57,15 @@ WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *feature
         // AMD
         if (family == 0x19 && model == 0x61) {
             // Zen4
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_sse41);
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx);
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_f16c);
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_fma);
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx2);
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512);
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512_skylake);
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512_cannonlake);
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512_zen4);
+            halide_set_available_cpu_feature(features, halide_target_feature_sse41);
+            halide_set_available_cpu_feature(features, halide_target_feature_avx);
+            halide_set_available_cpu_feature(features, halide_target_feature_f16c);
+            halide_set_available_cpu_feature(features, halide_target_feature_fma);
+            halide_set_available_cpu_feature(features, halide_target_feature_avx2);
+            halide_set_available_cpu_feature(features, halide_target_feature_avx512);
+            halide_set_available_cpu_feature(features, halide_target_feature_avx512_skylake);
+            halide_set_available_cpu_feature(features, halide_target_feature_avx512_cannonlake);
+            halide_set_available_cpu_feature(features, halide_target_feature_avx512_zen4);
             return halide_error_code_success;
         }
     }
@@ -86,21 +80,21 @@ WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *feature
     const bool have_rdrand = (info[2] & (1 << 30)) != 0;
     const bool have_fma = (info[2] & (1 << 12)) != 0;
     if (have_sse41) {
-        Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_sse41);
+        halide_set_available_cpu_feature(features, halide_target_feature_sse41);
     }
     if (have_avx) {
-        Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx);
+        halide_set_available_cpu_feature(features, halide_target_feature_avx);
     }
     if (have_f16c) {
-        Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_f16c);
+        halide_set_available_cpu_feature(features, halide_target_feature_f16c);
     }
     if (have_fma) {
-        Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_fma);
+        halide_set_available_cpu_feature(features, halide_target_feature_fma);
     }
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         int info2[4];
-        Halide::Runtime::Internal::cpuid(info2, 7);
+        cpuid(info2, 7);
         constexpr uint32_t avx2 = 1U << 5;
         constexpr uint32_t avx512f = 1U << 16;
         constexpr uint32_t avx512dq = 1U << 17;
@@ -117,24 +111,24 @@ WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *feature
         constexpr uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
         constexpr uint32_t avx512_cannonlake = avx512_skylake | avx512ifma;  // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx2);
+            halide_set_available_cpu_feature(features, halide_target_feature_avx2);
         }
         if ((info2[1] & avx512) == avx512) {
-            Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512);
+            halide_set_available_cpu_feature(features, halide_target_feature_avx512);
             if ((info2[1] & avx512_knl) == avx512_knl) {
-                Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512_knl);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512_knl);
             }
             if ((info2[1] & avx512_skylake) == avx512_skylake) {
-                Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512_skylake);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512_skylake);
             }
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
-                Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512_cannonlake);
+                halide_set_available_cpu_feature(features, halide_target_feature_avx512_cannonlake);
 
                 int32_t info3[4];
-                Halide::Runtime::Internal::cpuid(info3, 7, 1);
+                cpuid(info3, 7, 1);
                 if ((info3[0] & avxvnni) == avxvnni &&
                     (info3[0] & avx512bf16) == avx512bf16) {
-                    Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
+                    halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
                 }
             }
         }
@@ -142,4 +136,6 @@ WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *feature
     return halide_error_code_success;
 }
 
-}  // extern "C" linkage
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide

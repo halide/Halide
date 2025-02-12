@@ -51,15 +51,15 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
         }
     }
 
-    if (count != Halide::Runtime::Internal::cpu_feature_mask_size) {
+    if (count != cpu_feature_mask_size) {
         // This should not happen unless our runtime is out of sync with the rest of libHalide.
 #ifdef DEBUG_RUNTIME
-        debug(nullptr) << "count " << count << " Halide::Runtime::Internal::cpu_feature_mask_size " << Halide::Runtime::Internal::cpu_feature_mask_size << "\n";
+        debug(nullptr) << "count " << count << " cpu_feature_mask_size " << cpu_feature_mask_size << "\n";
 #endif
         halide_error(nullptr, "Internal error: wrong structure size passed to halide_can_use_target_features()\n");
     }
     const CpuFeatures *cpu_features = reinterpret_cast<const CpuFeatures *>(&halide_cpu_features_storage[0]);
-    for (int i = 0; i < Halide::Runtime::Internal::cpu_feature_mask_size; ++i) {
+    for (int i = 0; i < cpu_feature_mask_size; ++i) {
         uint64_t m;
         if ((m = (features[i] & cpu_features->known[i])) != 0) {
             if ((m & cpu_features->available[i]) != m) {

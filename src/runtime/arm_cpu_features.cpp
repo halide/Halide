@@ -95,26 +95,23 @@ void set_platform_features(CpuFeatures *) {
 
 #endif
 
-}  // namespace Internal
-}  // namespace Runtime
-}  // namespace Halide
-
-extern "C" {
-
-WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *features) {
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_arm_dot_prod);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_arm_fp16);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_armv7s);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_no_neon);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_sve);
-    Halide::Runtime::Internal::halide_set_known_cpu_feature(features, halide_target_feature_sve2);
+extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
+    halide_set_known_cpu_feature(features, halide_target_feature_arm_dot_prod);
+    halide_set_known_cpu_feature(features, halide_target_feature_arm_fp16);
+    halide_set_known_cpu_feature(features, halide_target_feature_armv7s);
+    halide_set_known_cpu_feature(features, halide_target_feature_no_neon);
+    halide_set_known_cpu_feature(features, halide_target_feature_sve);
+    halide_set_known_cpu_feature(features, halide_target_feature_sve2);
 
     // All ARM architectures support "No Neon".
-    Halide::Runtime::Internal::halide_set_available_cpu_feature(features, halide_target_feature_no_neon);
+    halide_set_available_cpu_feature(features, halide_target_feature_no_neon);
 
-    Halide::Runtime::Internal::set_platform_features(features);
+    set_platform_features(features);
 
     return halide_error_code_success;
 }
 
-}  // extern "C" linkage
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+

@@ -36,12 +36,12 @@ ALWAYS_INLINE bool halide_test_available_cpu_feature(CpuFeatures *features, int 
     return (features->available[i >> 6] & ((uint64_t)1) << (i & 63)) != 0;
 }
 
+// NOTE: This method is not part of the public API, but we push it into extern "C" to
+//       avoid name mangling mismatches between platforms. See: https://github.com/halide/Halide/issues/8565
+extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features);
+
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
-
-// NOTE: This method is not part of the public API, but we push it into extern "C" to
-//       avoid name mangling mismatches between platforms. See: https://github.com/halide/Halide/issues/8565
-extern "C" WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatures *features);
 
 #endif  // HALIDE_CPU_FEATURES_H
