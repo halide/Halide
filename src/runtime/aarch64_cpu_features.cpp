@@ -133,4 +133,3 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
-

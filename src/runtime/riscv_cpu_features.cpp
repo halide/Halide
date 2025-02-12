@@ -13,5 +13,3 @@ extern "C" WEAK int halide_get_cpu_features(Halide::Runtime::Internal::CpuFeatur
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
-
-    

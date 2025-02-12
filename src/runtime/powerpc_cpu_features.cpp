@@ -11,13 +11,12 @@
 extern "C" {
 
 unsigned long int getauxval(unsigned long int);
-
 }
 
 namespace Halide {
 namespace Runtime {
 namespace Internal {
-    
+
 extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     halide_set_known_cpu_feature(features, halide_target_feature_vsx);
     halide_set_known_cpu_feature(features, halide_target_feature_power_arch_2_07);
