@@ -603,9 +603,6 @@ void Simplify::ExprInfo::from_bits_known(Simplify::ExprInfo::BitsKnown known, co
             bounds = ConstantInterval{(int64_t)min_val, (int64_t)max_val};
         }
     }
-
-    // debug(0) << "From bits known: " << std::hex << known.mask << " " << known.value << std::dec << "\n"
-    //  << " -> " << bounds << "\n";
 }
 
 }  // namespace Internal
