@@ -196,7 +196,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         }
 
         if (info && (op->type.is_int() || op->type.is_uint())) {
-            auto bits_known = a_info.to_bits_known() & b_info.to_bits_known();
+            auto bits_known = a_info.to_bits_known(op->type) & b_info.to_bits_known(op->type);
             info->from_bits_known(bits_known, op->type);
             if (bits_known.mask == (uint64_t)-1) {
                 return make_const(op->type, bits_known.value);
@@ -237,7 +237,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         }
 
         if (info && (op->type.is_int() || op->type.is_uint())) {
-            auto bits_known = a_info.to_bits_known() | b_info.to_bits_known();
+            auto bits_known = a_info.to_bits_known(op->type) | b_info.to_bits_known(op->type);
             info->from_bits_known(bits_known, op->type);
             if (bits_known.mask == (uint64_t)-1) {
                 return make_const(op->type, bits_known.value);
@@ -256,11 +256,22 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return a | b;
         }
     } else if (op->is_intrinsic(Call::bitwise_not)) {
-        Expr a = mutate(op->args[0], nullptr);
+        ExprInfo a_info;
+        Expr a = mutate(op->args[0], &a_info);
 
         Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
         if (unbroadcast.defined()) {
             return mutate(unbroadcast, info);
+        }
+
+        if (info && (op->type.is_int() || op->type.is_uint())) {
+            // For the purpose of bounds and alignment, ~x can be treated as an
+            // all-ones bit pattern minus x.
+            Expr e = mutate(make_const(op->type, -1) - op->args[0], info);
+            // If the result of this happens to be a constant, we can also just return it
+            if (info->bounds.is_single_point()) {
+                return e;
+            }
         }
 
         if (auto ia = as_const_int(a)) {
@@ -273,12 +284,18 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return ~a;
         }
     } else if (op->is_intrinsic(Call::bitwise_xor)) {
-        Expr a = mutate(op->args[0], nullptr);
-        Expr b = mutate(op->args[1], nullptr);
+        ExprInfo a_info, b_info;
+        Expr a = mutate(op->args[0], &a_info);
+        Expr b = mutate(op->args[1], &b_info);
 
         Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
         if (unbroadcast.defined()) {
             return mutate(unbroadcast, info);
+        }
+
+        if (info && (op->type.is_int() || op->type.is_uint())) {
+            auto bits_known = a_info.to_bits_known(op->type) ^ b_info.to_bits_known(op->type);
+            info->from_bits_known(bits_known, op->type);
         }
 
         auto ia = as_const_int(a), ib = as_const_int(b);

@@ -145,7 +145,11 @@ public:
         // An alternative representation for information about integers is that
         // certain bits have known values in the 2s complement
         // representation. This is a useful form for analyzing bitwise ops, so
-        // we provide conversions to and from that representation.
+        // we provide conversions to and from that representation. For narrow
+        // types, this represent what the bits would be if they were sign or
+        // zero-extended to 64 bits, so for uints the high bits are known to be
+        // zero, and for ints it depends on whether or not we knew the high bit
+        // to begin with.
         struct BitsKnown {
             // A mask which is 1 where we know the value of that bit
             uint64_t mask;
@@ -173,9 +177,15 @@ public:
                 uint64_t ones = known_ones() | other.known_ones();
                 return {zeros | ones, ones};
             }
+
+            BitsKnown operator^(const BitsKnown &other) const {
+                // Unlike & and |, we need to know both bits to know anything.
+                uint64_t new_mask = mask & other.mask;
+                return {new_mask, (value ^ other.value) & new_mask};
+            }
         };
 
-        BitsKnown to_bits_known() const;
+        BitsKnown to_bits_known(const Type &type) const;
         void from_bits_known(BitsKnown known, const Type &type);
     };
 

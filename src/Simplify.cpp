@@ -496,8 +496,15 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     return is_const_one(e);
 }
 
-Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known() const {
+Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known(const Type &type) const {
     BitsKnown result = {0, 0};
+
+    if (!(type.is_int() || type.is_uint())) {
+        // Let's not claim we know anything about the bit patterns of
+        // non-integer types for now.
+        return result;
+    }
+
     // Identify the largest power of two in the modulus to get some low bits
     if (alignment.modulus) {
         result.mask = largest_power_of_two_factor(alignment.modulus) - 1;
@@ -509,15 +516,28 @@ Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known() const {
         return result;
     }
 
-    // The bounds tell us a bunch of high bits are zero or one
-    if (bounds >= 0 && bounds.max_defined) {
-        // At least one high bit is zero, but bounds.max isn't zero or
-        // we would have returned above.
-        result.mask |= (uint64_t)(-1) << (64 - clz64(bounds.max));
-    } else if (bounds < 0 && bounds.min_defined) {
-        // At least one high bit is one, but bounds.min isn't -1 or we
-        // would have returned above.
-        uint64_t high_bits = (uint64_t)(-1) << (64 - clz64(~bounds.min));
+    // The bounds and the type tell us a bunch of high bits are zero or one
+    if (bounds >= 0) {
+        if (type.bits() < 64) {
+            // This would be zero-extended
+            result.mask |= (uint64_t)(-1) << type.bits();
+        } else if (type.is_int()) {
+            // The sign bit and above are zero
+            result.mask |= (uint64_t)(-1) << (type.bits() - 1);
+        }
+        if (bounds.max_defined) {
+            // It's positive and the max is representable as an int64, so at least
+            // one high bit is zero, but bounds.max isn't zero or we would have
+            // returned above.
+            result.mask |= (uint64_t)(-1) << (64 - clz64(bounds.max));
+        }
+    } else if (bounds < 0) {
+        // At least one high bit is one, but bounds.min isn't -1 or we would
+        // have returned above.
+        uint64_t high_bits = (uint64_t)(-1) << (type.bits() - 1);
+        if (bounds.min_defined) {
+            high_bits |= (uint64_t)(-1) << (64 - clz64(~bounds.min));
+        }
         result.mask |= high_bits;
         result.value |= high_bits;
     }
@@ -526,19 +546,6 @@ Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known() const {
 }
 
 void Simplify::ExprInfo::from_bits_known(Simplify::ExprInfo::BitsKnown known, const Type &type) {
-    // We known some high bits from the type alone
-    if (type.bits() < 64) {
-        uint64_t high_zeros = ~((1ULL << type.bits()) - 1);
-        known.mask |= high_zeros;
-        known.value &= ~high_zeros;
-    }
-
-    // We can get the trailing one bits from the largest power of two
-    // factor of ~known.mask
-    uint64_t trailing_mask = (~known.mask & (known.mask + 1)) - 1;
-    alignment.modulus = trailing_mask + 1;
-    alignment.remainder = known.value & trailing_mask;
-
     // Normalize everything to 64-bits by sign- or zero-extending known bits for
     // the type.
     uint64_t missing_bits = 0;
@@ -567,6 +574,11 @@ void Simplify::ExprInfo::from_bits_known(Simplify::ExprInfo::BitsKnown known, co
         }
     }
 
+    // We can get the trailing one bits by adding one and taking the largest power of two factor.
+    uint64_t trailing_mask = largest_power_of_two_factor(known.mask + 1) - 1;
+    alignment.modulus = trailing_mask + 1;
+    alignment.remainder = known.value & trailing_mask;
+
     if ((int64_t)known.mask < 0) {
         // We know some leading bits
 
@@ -589,6 +601,9 @@ void Simplify::ExprInfo::from_bits_known(Simplify::ExprInfo::BitsKnown known, co
             bounds = ConstantInterval{(int64_t)min_val, (int64_t)max_val};
         }
     }
+
+    // debug(0) << "From bits known: " << std::hex << known.mask << " " << known.value << std::dec << "\n"
+    //  << " -> " << bounds << "\n";
 }
 
 }  // namespace Internal
