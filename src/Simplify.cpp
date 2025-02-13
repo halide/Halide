@@ -574,10 +574,12 @@ void Simplify::ExprInfo::from_bits_known(Simplify::ExprInfo::BitsKnown known, co
         }
     }
 
-    // We can get the trailing one bits by adding one and taking the largest power of two factor.
-    uint64_t trailing_mask = largest_power_of_two_factor(known.mask + 1) - 1;
-    alignment.modulus = trailing_mask + 1;
-    alignment.remainder = known.value & trailing_mask;
+    // We can get the trailing one bits by adding one and taking the largest
+    // power of two factor. Note that this works out correctly when we know all
+    // the bits - the modulus comes out as zero, and the remainder is the entire
+    // number, which is how we represent constants in ModulusRemainder.
+    alignment.modulus = largest_power_of_two_factor(known.mask + 1);
+    alignment.remainder = known.value & (alignment.modulus - 1);
 
     if ((int64_t)known.mask < 0) {
         // We know some leading bits
