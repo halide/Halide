@@ -80,6 +80,24 @@ public:
             }
         }
 
+        uint64_t largest_power_of_two_factor(uint64_t x) const {
+            // Consider the bits of x from MSB to LSB. Say there are three
+            // trailing zeros, and the four high bits are unknown:
+            // a b c d 1 0 0 0
+            // The largest power of two factor of a number is the trailing bits
+            // up to and including the first 1. In this example that's 1000
+            // (i.e. 8).
+            // Negating is flipping the bits and adding one. First we flip:
+            // ~a ~b ~c ~d 0 1 1 1
+            // Then we add one:
+            // ~a ~b ~c ~d 1 0 0 0
+            // If we bitwise and this with the original, the unknown bits cancel
+            // out, and we get left with just the largest power of two
+            // factor. If we want a mask of the trailing zeros instead, we can
+            // just subtract one.
+            return x & -x;
+        }
+
         void cast_to(Type t) {
             if ((!t.is_int() && !t.is_uint()) || (t.is_int() && t.bits() >= 32)) {
                 return;
@@ -96,10 +114,8 @@ public:
                     // representable as any 64-bit integer type, so there's no
                     // wraparound.
                     if (alignment.modulus > 0) {
-                        // This masks off all bits except for the lowest set one,
-                        // giving the largest power-of-two factor of a number.
-                        alignment.modulus &= -alignment.modulus;
-                        alignment.remainder = mod_imp(alignment.remainder, alignment.modulus);
+                        alignment.modulus = largest_power_of_two_factor(alignment.modulus);
+                        alignment.remainder &= alignment.modulus - 1;
                     }
                 } else {
                     // A narrowing integer cast that could possibly overflow adds
@@ -125,6 +141,42 @@ public:
             alignment = ModulusRemainder::intersect(alignment, other.alignment);
             trim_bounds_using_alignment();
         }
+
+        // An alternative representation for information about integers is that
+        // certain bits have known values in the 2s complement
+        // representation. This is a useful form for analyzing bitwise ops, so
+        // we provide conversions to and from that representation.
+        struct BitsKnown {
+            // A mask which is 1 where we know the value of that bit
+            uint64_t mask;
+            // The actual value of the known bits
+            uint64_t value;
+
+            uint64_t known_zeros() const {
+                return mask & ~value;
+            }
+
+            uint64_t known_ones() const {
+                return mask & value;
+            }
+
+            BitsKnown operator&(const BitsKnown &other) const {
+                // Where either has known zeros, we have known zeros in the result
+                // Where both have a known one, we have a known one in the result
+                uint64_t zeros = known_zeros() | other.known_zeros();
+                uint64_t ones = known_ones() & other.known_ones();
+                return {zeros | ones, ones};
+            }
+
+            BitsKnown operator|(const BitsKnown &other) const {
+                uint64_t zeros = known_zeros() & other.known_zeros();
+                uint64_t ones = known_ones() | other.known_ones();
+                return {zeros | ones, ones};
+            }
+        };
+
+        BitsKnown to_bits_known() const;
+        void from_bits_known(BitsKnown known, const Type &type);
     };
 
     HALIDE_ALWAYS_INLINE

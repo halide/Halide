@@ -496,5 +496,100 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
     return is_const_one(e);
 }
 
+Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known() const {
+    BitsKnown result = {0, 0};
+    // Identify the largest power of two in the modulus to get some low bits
+    if (alignment.modulus) {
+        result.mask = largest_power_of_two_factor(alignment.modulus) - 1;
+        result.value = result.mask & alignment.remainder;
+    } else {
+        // This value is just a constant
+        result.mask = (uint64_t)(-1);
+        result.value = alignment.remainder;
+        return result;
+    }
+
+    // The bounds tell us a bunch of high bits are zero or one
+    if (bounds >= 0 && bounds.max_defined) {
+        // At least one high bit is zero, but bounds.max isn't zero or
+        // we would have returned above.
+        result.mask |= (uint64_t)(-1) << (64 - clz64(bounds.max));
+    } else if (bounds < 0 && bounds.min_defined) {
+        // At least one high bit is one, but bounds.min isn't -1 or we
+        // would have returned above.
+        uint64_t high_bits = (uint64_t)(-1) << (64 - clz64(~bounds.min));
+        result.mask |= high_bits;
+        result.value |= high_bits;
+    }
+
+    return result;
+}
+
+void Simplify::ExprInfo::from_bits_known(Simplify::ExprInfo::BitsKnown known, const Type &type) {
+    // We known some high bits from the type alone
+    if (type.bits() < 64) {
+        uint64_t high_zeros = ~((1ULL << type.bits()) - 1);
+        known.mask |= high_zeros;
+        known.value &= ~high_zeros;
+    }
+
+    // We can get the trailing one bits from the largest power of two
+    // factor of ~known.mask
+    uint64_t trailing_mask = (~known.mask & (known.mask + 1)) - 1;
+    alignment.modulus = trailing_mask + 1;
+    alignment.remainder = known.value & trailing_mask;
+
+    // Normalize everything to 64-bits by sign- or zero-extending known bits for
+    // the type.
+    uint64_t missing_bits = 0;
+    if (type.bits() < 64) {
+        missing_bits = (uint64_t)(-1) << type.bits();
+    }
+    if (missing_bits) {
+        if (type.is_uint()) {
+            // For a uint the high bits are zero
+            known.mask |= missing_bits;
+            known.value &= ~missing_bits;
+        } else if (type.is_int()) {
+            // For an int we need to know the sign to know the high bits
+            bool sign_bit_known = (known.mask >> (type.bits() - 1)) & 1;
+            bool negative = (known.value >> (type.bits() - 1)) & 1;
+            if (!sign_bit_known) {
+                known.mask &= ~missing_bits;
+                known.value &= ~missing_bits;
+            } else if (negative) {
+                known.mask |= missing_bits;
+                known.value |= missing_bits;
+            } else if (!negative) {
+                known.mask |= missing_bits;
+                known.value &= ~missing_bits;
+            }
+        }
+    }
+
+    if ((int64_t)known.mask < 0) {
+        // We know some leading bits
+
+        // Set all unknown bits to zero
+        uint64_t min_val = known.value & known.mask;
+        // Set all unknown bits to one
+        uint64_t max_val = known.value | ~known.mask;
+
+        if (type.is_uint() && (int64_t)known.value < 0) {
+            // We know it's out of range at the top end for our ConstantInterval
+            // class. At the time of writing, to_bits_known can't produce this
+            // directly, and bits_known is never propagated through other
+            // operations, so this code is unreachable. Nonetheless we'll do the
+            // best job we can at representing this case in case this code
+            // becomes reachable in future.
+            bounds = ConstantInterval::bounded_below((1ULL << 63) - 1);
+        } else {
+            // In all other cases, the bounds are representable as an int64
+            // and don't span zero (because we know the high bit).
+            bounds = ConstantInterval{(int64_t)min_val, (int64_t)max_val};
+        }
+    }
+}
+
 }  // namespace Internal
 }  // namespace Halide
