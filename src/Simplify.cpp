@@ -518,12 +518,12 @@ Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known(const Type &type
 
     // The bounds and the type tell us a bunch of high bits are zero or one
     if (bounds >= 0) {
-        if (type.bits() < 64) {
-            // This would be zero-extended
-            result.mask |= (uint64_t)(-1) << type.bits();
-        } else if (type.is_int()) {
-            // The sign bit and above are zero
+        if (type.is_int()) {
+            // The sign bit and above are zero.
             result.mask |= (uint64_t)(-1) << (type.bits() - 1);
+        } else if (type.bits() < 64) {
+            // Narrow uints are zero-extended.
+            result.mask |= (uint64_t)(-1) << type.bits();
         }
         if (bounds.max_defined) {
             // It's positive and the max is representable as an int64, so at least
