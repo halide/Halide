@@ -164,17 +164,23 @@ public:
                 return mask & value;
             }
 
+            bool all_bits_known() const {
+                return mask == (uint64_t)(-1);
+            }
+
             BitsKnown operator&(const BitsKnown &other) const {
                 // Where either has known zeros, we have known zeros in the result
-                // Where both have a known one, we have a known one in the result
                 uint64_t zeros = known_zeros() | other.known_zeros();
+                // Where both have a known one, we have a known one in the result
                 uint64_t ones = known_ones() & other.known_ones();
                 return {zeros | ones, ones};
             }
 
             BitsKnown operator|(const BitsKnown &other) const {
-                uint64_t zeros = known_zeros() & other.known_zeros();
+                // Where either has known ones, we have known ones in the result
                 uint64_t ones = known_ones() | other.known_ones();
+                // Where both have a known zero, we have a known zero in the result.
+                uint64_t zeros = known_zeros() & other.known_zeros();
                 return {zeros | ones, ones};
             }
 
@@ -190,10 +196,87 @@ public:
     };
 
     HALIDE_ALWAYS_INLINE
-    void clear_expr_info(ExprInfo *b) {
-        if (b) {
-            *b = ExprInfo{};
+    void clear_expr_info(ExprInfo *info) {
+        if (info) {
+            *info = ExprInfo{};
         }
+    }
+
+    void set_expr_info_to_constant(ExprInfo *info, int64_t c) const {
+        if (info) {
+            info->bounds = ConstantInterval::single_point(c);
+            info->alignment = ModulusRemainder{0, c};
+        }
+    }
+
+    int64_t normalize_constant(const Type &t, int64_t c) {
+        // If this is supposed to be an int32, but the constant is not
+        // representable as an int32, we have a problem, because the Halide
+        // simplifier is unsound with respect to int32 overflow (see
+        // https://github.com/halide/Halide/issues/3245).
+
+        // It's tempting to just say we return a signed_integer_overflow, for
+        // which we know nothing, but if we're in this function we're making a
+        // constant, so we clearly decided not to do that in the caller. Is this
+        // a bug in the caller? No, this intentionally happens when
+        // constant-folding narrowing casts, and changing that behavior to
+        // return signed_integer_overflow breaks a bunch of real code, because
+        // unfortunately that's how people express wrapping casts to int32. We
+        // could return an ExprInfo that says "I know nothing", but we're also
+        // returning a constant Expr, so the next mutation is just going to
+        // infer everything there is to infer about a constant. The best we can
+        // do at this point is just wrap to the right number of bits.
+        if (t.is_int()) {
+            c <<= (64 - t.bits());
+            c >>= (64 - t.bits());
+        } else if (t.is_uint()) {
+            // For uints, normalization is considerably less problematic
+            c <<= (64 - t.bits());
+            c = (int64_t)(((uint64_t)c >> (64 - t.bits())));
+        }
+        return c;
+    }
+
+    // We never want to return make_const anything in the simplifier without
+    // also setting the ExprInfo, so shadow the global make_const.
+    Expr make_const(const Type &t, int64_t c, ExprInfo *info) {
+        c = normalize_constant(t, c);
+        set_expr_info_to_constant(info, c);
+        return Halide::Internal::make_const(t, c);
+    }
+
+    Expr make_const(const Type &t, uint64_t c, ExprInfo *info) {
+        c = normalize_constant(t, c);
+
+        if ((int64_t)c >= 0) {
+            set_expr_info_to_constant(info, (int64_t)c);
+        } else if (info) {
+            // If it's not representable as an int64, we can't express
+            // everything we know about it in ExprInfo.
+            // We can say that it's big:
+            info->bounds = ConstantInterval::bounded_below(INT64_MAX);
+            // And we can say what we know about the bottom 62 bits (2^62 is the
+            // largest power of two we can represent as an int64_t):
+            int64_t modulus = (int64_t)1 << 62;
+            info->alignment = {modulus, (int64_t)c & (modulus - 1)};
+        }
+        return Halide::Internal::make_const(t, c);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make_const(const Type &t, double c, ExprInfo *info) {
+        // We don't currently track information about floats
+        return Halide::Internal::make_const(t, c);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr const_false(int lanes, ExprInfo *info) {
+        return make_const(UInt(1, lanes), (int64_t)0, info);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr const_true(int lanes, ExprInfo *info) {
+        return make_const(UInt(1, lanes), (int64_t)1, info);
     }
 
 #if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
@@ -216,13 +299,23 @@ public:
                 debug(1)
                     << spaces << "Bounds: " << b->bounds << " " << b->alignment << "\n";
                 if (auto i = as_const_int(new_e)) {
-                    internal_assert(b->bounds.contains(*i)) << e << "\n"
-                                                            << new_e << "\n"
-                                                            << b->bounds;
+                    internal_assert(b->bounds.contains(*i))
+                        << e << "\n"
+                        << new_e << "\n"
+                        << b->bounds;
                 } else if (auto i = as_const_uint(new_e)) {
-                    internal_assert(b->bounds.contains(*i)) << e << "\n"
-                                                            << new_e << "\n"
-                                                            << b->bounds;
+                    internal_assert(b->bounds.contains(*i))
+                        << e << "\n"
+                        << new_e << "\n"
+                        << b->bounds;
+                }
+                if (new_e.type().is_uint() &&
+                    new_e.type().bits() < 64 &&
+                    !is_signed_integer_overflow(new_e)) {
+                    internal_assert(b->bounds.min_defined && b->bounds.min >= 0)
+                        << e << "\n"
+                        << new_e << "\n"
+                        << b->bounds;
                 }
             }
         }

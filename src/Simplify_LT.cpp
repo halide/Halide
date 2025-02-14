@@ -8,22 +8,26 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
+    if (info) {
+        info->cast_to(op->type);
+    }
+
     const int lanes = op->type.lanes();
     Type ty = a.type();
 
     if (truths.count(op)) {
-        return const_true(lanes);
+        return const_true(lanes, info);
     } else if (falsehoods.count(op)) {
-        return const_false(lanes);
+        return const_false(lanes, info);
     }
 
     if (may_simplify(ty)) {
 
         // Prove or disprove using bounds analysis
         if (a_info.bounds < b_info.bounds) {
-            return const_true(lanes);
+            return const_true(lanes, info);
         } else if (a_info.bounds >= b_info.bounds) {
-            return const_false(lanes);
+            return const_false(lanes, info);
         }
 
         int lanes = op->type.lanes();

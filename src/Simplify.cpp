@@ -91,7 +91,7 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
     Simplify::VarInfo info;
     info.old_uses = info.new_uses = 0;
     if (const Variable *v = fact.as<Variable>()) {
-        info.replacement = const_false(fact.type().lanes());
+        info.replacement = Halide::Internal::const_false(fact.type().lanes());
         simplify->var_info.push(v->name, info);
         pop_list.push_back(v);
     } else if (const NE *ne = fact.as<NE>()) {
@@ -178,7 +178,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     Simplify::VarInfo info;
     info.old_uses = info.new_uses = 0;
     if (const Variable *v = fact.as<Variable>()) {
-        info.replacement = const_true(fact.type().lanes());
+        info.replacement = Halide::Internal::const_true(fact.type().lanes());
         simplify->var_info.push(v->name, info);
         pop_list.push_back(v);
     } else if (const EQ *eq = fact.as<EQ>()) {
@@ -516,30 +516,63 @@ Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known(const Type &type
         return result;
     }
 
+    // Compute a mask which is 1 for all the leading zeros of a uint64
+    auto leading_zeros_mask = [](uint64_t x) {
+        if (x == 0) {
+            // They're all leading zeros, but clz64 is UB on zero. Really we
+            // should have returned early above, but it's hard to guarantee that
+            // the alignment analysis catches constants at the same time as
+            // bounds analysis does.
+            return (uint64_t)-1;
+        }
+        return (uint64_t)(-1) << (64 - clz64(x));
+    };
+
+    auto leading_ones_mask = [=](uint64_t x) {
+        return leading_zeros_mask(~x);
+    };
+
     // The bounds and the type tell us a bunch of high bits are zero or one
-    if (bounds >= 0) {
-        if (type.is_int()) {
-            // The sign bit and above are zero.
-            result.mask |= (uint64_t)(-1) << (type.bits() - 1);
-        } else if (type.bits() < 64) {
-            // Narrow uints are zero-extended.
+    if (type.is_uint()) {
+        // Narrow uints are always zero-extended.
+        if (type.bits() < 64) {
             result.mask |= (uint64_t)(-1) << type.bits();
         }
+        // A lower bound might tell us that there are some leading ones, and an
+        // upper bound might tell us that there are some leading
+        // zeros. Unfortunately we'll never learn about leading ones, because
+        // uint64_ts that start with leading ones can't have a min represented
+        // as an int64_t, which is what ConstantInverval uses, so
+        // bounds.min_defined will never be true.
         if (bounds.max_defined) {
-            // It's positive and the max is representable as an int64, so at least
-            // one high bit is zero, but bounds.max isn't zero or we would have
-            // returned above.
-            result.mask |= (uint64_t)(-1) << (64 - clz64(bounds.max));
+            result.mask |= leading_zeros_mask(bounds.max);
         }
-    } else if (bounds < 0) {
-        // At least one high bit is one, but bounds.min isn't -1 or we would
-        // have returned above.
-        uint64_t high_bits = (uint64_t)(-1) << (type.bits() - 1);
-        if (bounds.min_defined) {
-            high_bits |= (uint64_t)(-1) << (64 - clz64(~bounds.min));
+    } else {
+        internal_assert(type.is_int());
+        // A mask which is 1 for the sign bit and above.
+        uint64_t sign_bit_and_above = (uint64_t)(-1) << (type.bits() - 1);
+        if (bounds >= 0) {
+            // We know this int is positive, so the sign bit and above are zero.
+            result.mask |= sign_bit_and_above;
+            if (bounds.max_defined) {
+                // We also have an upper bound, so there may be more zero bits,
+                // depending on how many leading zeros there are in the upper
+                // bound.
+                result.mask |= leading_zeros_mask(bounds.max);
+            }
+        } else if (bounds < 0) {
+            // This int is negative, so the sign bit and above are one.
+            result.mask |= sign_bit_and_above;
+            result.value |= sign_bit_and_above;
+            if (bounds.min_defined) {
+                // We have a lower bound, so there may be more leading one bits,
+                // depending on how many leading ones there are in the lower
+                // bound.
+                uint64_t leading_ones = leading_ones_mask(bounds.min);
+                result.mask |= leading_ones;
+                result.value |= leading_ones;
+            }
         }
-        result.mask |= high_bits;
-        result.value |= high_bits;
     }
 
     return result;
@@ -548,13 +581,17 @@ Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known(const Type &type
 void Simplify::ExprInfo::from_bits_known(Simplify::ExprInfo::BitsKnown known, const Type &type) {
     // Normalize everything to 64-bits by sign- or zero-extending known bits for
     // the type.
+
+    // A mask which is one for all the new bits resulting from sign or zero
+    // extension.
     uint64_t missing_bits = 0;
     if (type.bits() < 64) {
         missing_bits = (uint64_t)(-1) << type.bits();
     }
+
     if (missing_bits) {
         if (type.is_uint()) {
-            // For a uint the high bits are zero
+            // For a uint the high bits are known to be zero
             known.mask |= missing_bits;
             known.value &= ~missing_bits;
         } else if (type.is_int()) {
@@ -562,12 +599,19 @@ void Simplify::ExprInfo::from_bits_known(Simplify::ExprInfo::BitsKnown known, co
             bool sign_bit_known = (known.mask >> (type.bits() - 1)) & 1;
             bool negative = (known.value >> (type.bits() - 1)) & 1;
             if (!sign_bit_known) {
+                // We don't know the sign bit, so we don't know any of the
+                // extended bits. Mark them as unknown in the mask and zero them
+                // out in the value too just for ease of debugging.
                 known.mask &= ~missing_bits;
                 known.value &= ~missing_bits;
             } else if (negative) {
+                // We know the sign bit is 1, so all of the extended bits are 1
+                // too.
                 known.mask |= missing_bits;
                 known.value |= missing_bits;
             } else if (!negative) {
+                // We know the sign bit is zero, so all of the extended bits are
+                // zero too.
                 known.mask |= missing_bits;
                 known.value &= ~missing_bits;
             }
