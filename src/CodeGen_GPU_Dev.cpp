@@ -149,6 +149,12 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
             internal_assert(op->vectors[0].type() == op->vectors[i].type());
         }
         internal_assert(op->type.lanes() == (int)op->indices.size());
+        // We need to construct the mapping between shuffled-index,
+        // and source-vector-index and source-element-index-within-the-vector.
+        // To start, we'll figure out what the first shuffle-index is per
+        // source-vector. Also let's compute the total number of
+        // source-elements the to be able to assert that all of the
+        // shuffle-indices are within range.
         std::vector<int> vector_first_index;
         int max_index = 0;
         for (const Expr &v : op->vectors) {
@@ -182,15 +188,21 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
         for (int i : op->indices) {
             size_t vector_idx;
             int lane_idx = -1;
+            // Find in which source vector this shuffle-index "i" falls:
             for (vector_idx = 0; vector_idx < op->vectors.size(); ++vector_idx) {
-                if (i >= vector_first_index[vector_idx] && i < vector_first_index[vector_idx] + op->vectors[vector_idx].type().lanes()) {
-                    lane_idx = i - vector_first_index[vector_idx];
+                const int first_index = vector_first_index[vector_idx];
+                if (i >= first_index &&
+                    i < first_index + op->vectors[vector_idx].type().lanes()) {
+                    lane_idx = i - first_index;
                     break;
                 }
             }
             internal_assert(lane_idx != -1) << "Shuffle lane index not found: i=" << i;
             internal_assert(vector_idx < op->vectors.size()) << "Shuffle vector index not found: i=" << i << ", lane=" << lane_idx;
+            // Print the vector in which we will index.
             rhs << vecs[vector_idx];
+            // In case we are dealing with an actual vector instead of scalar,
+            // print out the required indexing syntax.
             if (op->vectors[vector_idx].type().lanes() > 1) {
                 switch (vector_declaration_style) {
                 case VectorDeclarationStyle::OpenCLSyntax:
@@ -202,6 +214,8 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
                     break;
                 }
             }
+
+            // Elements of a vector are comma separated.
             if (elem_num < (int)(op->indices.size() - 1)) {
                 rhs << ", ";
             }
