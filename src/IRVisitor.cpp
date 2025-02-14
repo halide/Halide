@@ -270,18 +270,27 @@ void IRVisitor::visit(const HoistedStorage *op) {
 }
 
 void IRGraphVisitor::include(const Expr &e) {
-    auto r = visited.insert(e.get());
-    if (r.second) {
-        // Was newly inserted
+    if (e.is_sole_reference()) {
+        // We can't have visited it before, and won't visit it again.
         e.accept(this);
+    } else {
+        auto r = visited.insert(e.get());
+        if (r.second) {
+            // Was newly inserted
+            e.accept(this);
+        }
     }
 }
 
 void IRGraphVisitor::include(const Stmt &s) {
-    auto r = visited.insert(s.get());
-    if (r.second) {
-        // Was newly inserted
+    if (s.is_sole_reference()) {
         s.accept(this);
+    } else {
+        auto r = visited.insert(s.get());
+        if (r.second) {
+            // Was newly inserted
+            s.accept(this);
+        }
     }
 }
 
