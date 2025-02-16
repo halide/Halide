@@ -168,6 +168,7 @@ const Approximation *find_best_approximation(const std::vector<Approximation> &t
     std::printf("Looking for min_terms=%d, max_absolute_error=%f\n",
                 precision.constraint_min_poly_terms, precision.constraint_max_absolute_error);
 #endif
+    constexpr double safety_factor = 1.05;
     for (size_t i = 0; i < table.size(); ++i) {
         const Approximation &e = table[i];
 
@@ -204,14 +205,14 @@ const Approximation *find_best_approximation(const std::vector<Approximation> &t
         }
 
         if (precision.constraint_max_ulp_error != 0 &&
-            precision.constraint_max_ulp_error < metrics->mulpe) {
-            float error_ratio = float(metrics->mulpe) / precision.constraint_max_ulp_error;
+            precision.constraint_max_ulp_error < metrics->mulpe * safety_factor) {
+            float error_ratio = float(metrics->mulpe * safety_factor) / precision.constraint_max_ulp_error;
             penalty += 20 * error_ratio * extra_term_cost;  // penalty for not getting the required precision.
         }
 
         if (precision.constraint_max_absolute_error > 0.0 &&
-            precision.constraint_max_absolute_error < metrics->mae) {
-            float error_ratio = metrics->mae / precision.constraint_max_absolute_error;
+            precision.constraint_max_absolute_error < metrics->mae * safety_factor) {
+            float error_ratio = (metrics->mae * safety_factor) / precision.constraint_max_absolute_error;
             penalty += 20 * error_ratio * extra_term_cost;  // penalty for not getting the required precision.
         }
 
