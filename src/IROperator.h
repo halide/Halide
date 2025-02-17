@@ -1073,9 +1073,11 @@ struct ApproximationPrecision {
  * See \ref ApproximationPrecision for details on specifying precision.
  */
 // @{
-//* On NVIDIA CUDA: default-precision maps to a dedicated sin.approx.f32 instruction. */
+/** Caution: Might exceed the range (-1, 1) by a tiny bit.
+ * On NVIDIA CUDA: default-precision maps to a dedicated sin.approx.f32 instruction. */
 Expr fast_sin(const Expr &x, ApproximationPrecision precision = {});
-/** On NVIDIA CUDA: default-precision maps to a dedicated cos.approx.f32 instruction. */
+/** Caution: Might exceed the range (-1, 1) by a tiny bit.
+ * On NVIDIA CUDA: default-precision maps to a dedicated cos.approx.f32 instruction. */
 Expr fast_cos(const Expr &x, ApproximationPrecision precision = {});
 /** On NVIDIA CUDA: default-precision maps to a combination of sin.approx.f32,
  * cos.approx.f32, div.approx.f32 instructions. */
@@ -1118,6 +1120,7 @@ Expr fast_pow(const Expr &x, const Expr &y, ApproximationPrecision precision = {
 
 /** Fast approximate pow for Float(32).
  * Approximations accurate to 2e-7 MAE, and Max 2500 ULPs (on average < 1 ULP) available.
+ * Caution: might exceed the range (-1, 1) by a tiny bit.
  * Vectorizes cleanly when using polynomials.
  * Slow on x86 if you don't have at least sse 4.1.
  * On NVIDIA CUDA: default-precision maps to a combination of ex2.approx.f32 and lg2.approx.f32.

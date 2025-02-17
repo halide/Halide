@@ -46,17 +46,22 @@ int main(int argc, char **argv) {
 
     Var x{"x"}, y{"y"};
     Var xo{"xo"}, yo{"yo"}, xi{"xi"}, yi{"yi"};
-    const int test_w = 256;
-    const int test_h = 128;
+    const int test_w = 512;
+    const int test_h = 256;
 
-    Expr t0 = x / float(test_w);
-    Expr t1 = y / float(test_h);
-    // To make sure we time mostly the computation of the arctan, and not memory bandwidth,
-    // we will compute many arctans per output and sum them. In my testing, GPUs suffer more
-    // from bandwith with this test, so we give it more arctangents to compute per output.
-    const int test_d = target.has_gpu_feature() ? 4096 : 256;
+    const int PRIME_0 = 73;
+    const int PRIME_1 = 233;
+    const int PRIME_2 = 661;
+
+    Expr t0 = ((x * PRIME_0) % test_w) / float(test_w);
+    Expr t1 = ((y * PRIME_1) % test_h) / float(test_h);
+    // To make sure we time mostly the computation of the math function, and not
+    // memory bandwidth, we will compute many evaluations of the function per output
+    // and sum them. In my testing, GPUs suffer more from bandwith with this test,
+    // so we give it even more function evaluations to compute per output.
+    const int test_d = target.has_gpu_feature() ? 2048 : 128;
     RDom rdom{0, test_d};
-    Expr t2 = rdom / float(test_d);
+    Expr t2 = ((rdom % PRIME_2) % test_d) / float(test_d);
 
     const double pipeline_time_to_ns_per_evaluation = 1e9 / double(test_w * test_h * test_d);
     const float range = 10.0f;
@@ -146,6 +151,7 @@ int main(int argc, char **argv) {
             -10, 10,
             [](Expr x, Expr y, Expr z) { return Halide::tanh(x + z); },
             [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_tanh(x + z, prec); },
+            {Target::Feature::CUDA, Target::Feature::Vulkan},
         },
     };
     // clang-format on
@@ -161,6 +167,8 @@ int main(int argc, char **argv) {
     Buffer<float> buffer_out(test_w, test_h);
     Halide::Tools::BenchmarkConfig bcfg;
     bcfg.max_time = 0.5;
+    bcfg.min_time = 0.2;
+    bcfg.accuracy = 0.015;
     for (FunctionToTest ftt : funcs) {
         bool skip = false;
         if (argc >= 2) {
@@ -201,11 +209,12 @@ int main(int argc, char **argv) {
             approx_func(x, y) = sum(ftt.make_approximation(arg_x, arg_y, arg_z, precision.precision));
             schedule(approx_func);
             approx_func.compile_jit();
+            // clang-format off
             double approx_pipeline_time = benchmark([&]() {
                 approx_func.realize(buffer_out);
                 buffer_out.device_sync();
-            },
-                                                    bcfg);
+            }, bcfg);
+            // clang-format on
 
             // Print results for this approximation.
             printf(" %9.5f ns per evaluation  (per invokation: %6.3f ms)",
