@@ -1383,6 +1383,7 @@ Expr fast_pow(const Expr &x, const Expr &y, ApproximationPrecision prec) {
     if (auto i = as_const_int(y)) {
         return raise_to_integer_power(x, *i);
     }
+    user_assert(x.type() == Float(32) && y.type() == Float(32)) << "fast_exp only works for Float(32)";
     return Call::make(x.type(), Call::fast_pow, {x, y, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
 }
 

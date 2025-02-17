@@ -168,7 +168,7 @@ const Approximation *find_best_approximation(const std::vector<Approximation> &t
     std::printf("Looking for min_terms=%d, max_absolute_error=%f\n",
                 precision.constraint_min_poly_terms, precision.constraint_max_absolute_error);
 #endif
-    constexpr double safety_factor = 1.05;
+    constexpr double safety_factor = 1.02;
     for (size_t i = 0; i < table.size(); ++i) {
         const Approximation &e = table[i];
 
