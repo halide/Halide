@@ -11,7 +11,7 @@ bool fast_math_func_has_intrinsic_based_implementation(Call::IntrinsicOp op, Dev
 
 Stmt lower_fast_math_functions(const Stmt &s, const Target &t);
 
-}
+}  // namespace Internal
 }  // namespace Halide
 
 #endif
