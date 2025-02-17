@@ -475,7 +475,6 @@ bool fast_math_func_has_intrinsic_based_implementation(Call::IntrinsicOp op, Dev
         break;
     }
 
-
     internal_assert(iipda != nullptr) << "Function is only supported for fast_xxx math functions. Got: " << Call::get_intrinsic_name(op);
 
     for (const auto &cand : iipda->device_apis) {
