@@ -316,6 +316,8 @@ Expr fast_tanh(const Expr &x, ApproximationPrecision prec) {
         // Positive arguments to exp() have preciser ULP.
         // So, we will rewrite the expression to always use exp(2*x)
         // instead of exp(-2*x) when we are close to zero.
+        // Rewriting it like this is slighlty more expensive, hence the branch
+        // to only pay this extra cost in case we need MULPE-optimized approximations.
         Expr flip_exp = abs_x > constant(type, 4);
         Expr arg_exp = select(flip_exp, -abs_x, abs_x);
         Expr exp2x = Halide::fast_exp(2 * arg_exp, prec);
@@ -323,6 +325,9 @@ Expr fast_tanh(const Expr &x, ApproximationPrecision prec) {
         tanh = select(flip_exp ^ flip_sign, -tanh, tanh);
         return common_subexpression_elimination(tanh, true);
     } else {
+        // Even if we are optimizing for MAE, the nested call to exp()
+        // should be MULPE optimized for accuracy, as we are taking ratios.
+        prec.optimized_for = ApproximationPrecision::MULPE;
         Expr exp2x = Halide::fast_exp(-2 * abs_x, prec);
         Expr tanh = (constant(type, 1) - exp2x) / (constant(type, 1) + exp2x);
         tanh = select(flip_sign, -tanh, tanh);
@@ -434,6 +439,57 @@ IntrinsicsInfoPerDeviceAPI ii_tanh{
      {DeviceAPI::WebGPU, {true}, {}},
 }};
 // clang-format on
+
+bool fast_math_func_has_intrinsic_based_implementation(Call::IntrinsicOp op, DeviceAPI device, const Target &t) {
+    const IntrinsicsInfoPerDeviceAPI *iipda = nullptr;
+    switch (op) {
+    case Call::fast_atan:
+    case Call::fast_atan2:
+        iipda = &ii_atan_atan2;
+        break;
+    case Call::fast_cos:
+        iipda = &ii_cos;
+        break;
+    case Call::fast_exp:
+        iipda = &ii_exp;
+        break;
+    case Call::fast_log:
+        iipda = &ii_log;
+        break;
+    case Call::fast_pow:
+        iipda = &ii_pow;
+        break;
+    case Call::fast_sin:
+        iipda = &ii_sin;
+        break;
+    case Call::fast_tan:
+        iipda = &ii_tan;
+        break;
+    case Call::fast_tanh:
+        iipda = &ii_tanh;
+        break;
+
+    default:
+        std::string name = Call::get_intrinsic_name(op);
+        internal_assert(name.length() > 5 && name.substr(0, 5) != "fast_") << "Did not handle " << name << " in switch case";
+        break;
+    }
+
+
+    internal_assert(iipda != nullptr) << "Function is only supported for fast_xxx math functions. Got: " << Call::get_intrinsic_name(op);
+
+    for (const auto &cand : iipda->device_apis) {
+        if (cand.device_api == device) {
+            if (cand.intrinsic.defined()) {
+                if (op == Call::fast_tanh && device == DeviceAPI::CUDA) {
+                    return t.get_cuda_capability_lower_bound() >= 75;
+                }
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 IntrinsicsInfo resolve_precision(ApproximationPrecision &prec, const IntrinsicsInfoPerDeviceAPI &iida, DeviceAPI api) {
     IntrinsicsInfo ii{};
@@ -562,6 +618,18 @@ class LowerFastMathFunctions : public IRMutator {
         return for_device_api == DeviceAPI::CUDA && target.get_cuda_capability_lower_bound() >= 75;
     }
 
+    void adjust_precision_for_target(ApproximationPrecision &prec) {
+        if (for_device_api == DeviceAPI::None) {
+            if (target.arch == Target::Arch::X86) {
+                // If we do not have fused-multiply-add, we lose some precision.
+                if (target.bits == 32 || !target.has_feature(Target::Feature::FMA)) {
+                    prec.constraint_max_absolute_error *= 0.5f;
+                    prec.constraint_max_ulp_error /= 2;
+                }
+            }
+        }
+    }
+
     /** Strips the fast_ prefix, appends the type suffix, and
      * drops the precision argument from the end. */
     Expr to_native_func(const Call *op) {
@@ -652,6 +720,7 @@ public:
             }
 
             // No known fast version available, we will expand our own approximation.
+            adjust_precision_for_target(prec);
             return ApproxImpl::fast_sin(mutate(op->args[0]), prec);
         } else if (op->is_intrinsic(Call::fast_cos)) {
             ApproximationPrecision prec = extract_approximation_precision(op);
@@ -664,6 +733,7 @@ public:
             }
 
             // No known fast version available, we will expand our own approximation.
+            adjust_precision_for_target(prec);
             return ApproxImpl::fast_cos(mutate(op->args[0]), prec);
         } else if (op->is_intrinsic(Call::fast_atan) || op->is_intrinsic(Call::fast_atan2)) {
             // Handle fast_atan and fast_atan2 together!
@@ -673,6 +743,8 @@ public:
                 // The native atan is fast: fall back to native and continue lowering.
                 return to_native_func(op);
             }
+
+            adjust_precision_for_target(prec);
             if (op->is_intrinsic(Call::fast_atan)) {
                 return ApproxImpl::fast_atan(mutate(op->args[0]), prec);
             } else {
@@ -696,6 +768,8 @@ public:
                 // The native atan is fast: fall back to native and continue lowering.
                 return to_native_func(op);
             }
+
+            adjust_precision_for_target(prec);
             return ApproxImpl::fast_tan(mutate(op->args[0]), prec);
         } else if (op->is_intrinsic(Call::fast_exp)) {
             // Handle fast_exp and fast_log together!
@@ -718,6 +792,8 @@ public:
                 // The native atan is fast: fall back to native and continue lowering.
                 return to_native_func(op);
             }
+
+            adjust_precision_for_target(prec);
             return ApproxImpl::fast_exp(mutate(op->args[0]), prec);
         } else if (op->is_intrinsic(Call::fast_log)) {
             // Handle fast_exp and fast_log together!
@@ -738,6 +814,8 @@ public:
                 // The native atan is fast: fall back to native and continue lowering.
                 return to_native_func(op);
             }
+
+            adjust_precision_for_target(prec);
             return ApproxImpl::fast_log(mutate(op->args[0]), prec);
         } else if (op->is_intrinsic(Call::fast_tanh)) {
             ApproximationPrecision prec = extract_approximation_precision(op);
@@ -748,6 +826,7 @@ public:
             }
 
             // Expand using defintion in terms of exp(2x), and recurse.
+            // Note: no adjustment of precision, as the recursed mutation will take care of that!
             return mutate(ApproxImpl::fast_tanh(op->args[0], prec));
         } else if (op->is_intrinsic(Call::fast_pow)) {
             ApproximationPrecision prec = extract_approximation_precision(op);
