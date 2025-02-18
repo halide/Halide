@@ -23,6 +23,9 @@ using std::vector;
 namespace {
 
 struct ArchParams {
+    /** Enable experimental-GPU schedule feature. */
+    bool experimental_gpu_schedule{false};
+
     /** Maximum level of parallelism avalaible. */
     int parallelism{};
 
@@ -2858,7 +2861,7 @@ std::optional<pair<VarOrRVar, VarOrRVar>> Partitioner::vectorize_stage(const Gro
     // Set the vector length as the maximum of the natural vector size of all
     // values produced by the function.
     const auto vec_len = [&]() -> int {
-        if (t.has_gpu_feature()) {
+        if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
             /** Section 5.4 of the Mullapudi2016 article: We configure the
              * auto-scheduler to target the GPU by set- ting the ...,
              * VECTOR_WIDTH to 32.
@@ -2895,7 +2898,7 @@ std::optional<pair<VarOrRVar, VarOrRVar>> Partitioner::vectorize_stage(const Gro
 
         VarOrRVar vec_var(vec_dim_name, is_rvar);
         auto [inner, outer, accepted] = [&]() -> std::tuple<VarOrRVar, VarOrRVar, bool> {
-            if (t.has_gpu_feature()) {
+            if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
                 VarOrRVar inner{vec_var.name() + "_vi", vec_var.is_rvar}, outer{vec_var.name() + "_vo", vec_var.is_rvar};
                 const bool accepted = gpu_tiling.can_vectorize(vec_var, outer, inner, vec_len);
                 return {inner, outer, accepted};
@@ -3052,7 +3055,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     }
 
     if (dims != ordering) {
-        if (t.has_gpu_feature()) {
+        if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
             gpu_tiling.canReorder(ordering);
         } else {
             f_handle.reorder(ordering);
@@ -3205,7 +3208,7 @@ void Partitioner::generate_group_cpu_schedule(
         }
 
         if (dims != ordering) {
-            if (t.has_gpu_feature()) {
+            if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
                 gpu_tiling.canReorder(ordering);
             } else {
                 f_handle.reorder(ordering);
@@ -3219,7 +3222,7 @@ void Partitioner::generate_group_cpu_schedule(
         auto vectorized_split = vectorize_stage(g, f_handle, g.output.stage_num, def, g_out, true, t,
                                                 rvars, stg_estimates, sched, gpu_tiling);
 
-        if (t.has_gpu_feature() && vectorized_split) {
+        if (t.has_gpu_feature() && vectorized_split && arch_params.experimental_gpu_schedule) {
             auto [v_i, v_o] = *vectorized_split;
             inner_dims.emplace_back(v_i);
             outer_dims.emplace_back(v_o);
@@ -3265,7 +3268,7 @@ void Partitioner::generate_group_cpu_schedule(
             if ((iter != stg_estimates.end()) && iter->second.defined()) {
                 if (!seq_var.empty()) {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
-                    if (t.has_gpu_feature()) {
+                    if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
                         gpu_tiling.canReorder({seq, v});
                     } else {
                         f_handle.reorder(seq, v);
@@ -3274,7 +3277,7 @@ void Partitioner::generate_group_cpu_schedule(
                                             {seq_var, var});
                     }
                 }
-                if (t.has_gpu_feature()) {
+                if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
                     auto parallelized_split = gpu_tiling.can_parallelize(v, iter->second);
                     if (parallelized_split) {
                         auto split_vars = *parallelized_split;
@@ -3297,7 +3300,7 @@ void Partitioner::generate_group_cpu_schedule(
         debug(1) << "Insufficient parallelism for " << f_handle.name() << "\n";
     }
 
-    if (t.has_gpu_feature()) {
+    if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
         gpu_tiling.apply(sched);
     }
 
@@ -3378,7 +3381,7 @@ void Partitioner::generate_group_cpu_schedule(
         vectorize_stage(g, mem_handle, mem.stage_num, mem_def, mem.func, false,
                         t, mem_rvars, mem_estimates, sched, gpu_tiling2);
 
-        if (t.has_gpu_feature()) {
+        if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
             gpu_tiling2.apply(sched);
         }
     }
@@ -3917,6 +3920,7 @@ struct Mullapudi2016 {
         ArchParams arch_params{target.has_gpu_feature()};
         {
             ParamParser parser(params_in.extra);
+            parser.parse("experimental_gpu_schedule", &arch_params.experimental_gpu_schedule);
             parser.parse("parallelism", &arch_params.parallelism);
             parser.parse("last_level_cache_size", &arch_params.last_level_cache_size);
             parser.parse("balance", &arch_params.balance);
