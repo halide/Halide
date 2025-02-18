@@ -343,6 +343,7 @@ tests(GROUPS correctness
       vector_math.cpp
       vector_print_bug.cpp
       vector_reductions.cpp
+      vector_shuffle.cpp
       vector_tile.cpp
       vectorize_guard_with_if.cpp
       vectorize_mixed_widths.cpp
