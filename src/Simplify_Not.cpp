@@ -4,7 +4,14 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Not *op, ExprInfo *info) {
-    Expr a = mutate(op->a, nullptr);
+    ExprInfo a_info;
+    Expr a = mutate(op->a, &a_info);
+
+    if (info) {
+        info->bounds = ConstantInterval::single_point(1) - a_info.bounds;
+        info->alignment = ModulusRemainder{0, 1} - a_info.alignment;
+        info->cast_to(op->type);
+    }
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::not_op(a), op->type);
 
