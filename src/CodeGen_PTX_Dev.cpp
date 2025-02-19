@@ -572,7 +572,7 @@ string CodeGen_PTX_Dev::mattrs() const {
         return "+ptx70";
     } else if (target.has_feature(Target::CUDACapability70) ||
                target.has_feature(Target::CUDACapability75)) {
-        return "+ptx60";
+        return "+ptx70";
     } else if (target.has_feature(Target::CUDACapability61)) {
         return "+ptx50";
     } else if (target.features_any_of({Target::CUDACapability32,
@@ -728,7 +728,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     if (debug::debug_level() >= 2) {
         dump();
     }
-    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
+    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src\n";
 
     debug(1) << "PTX kernel:\n"
              << outstr.c_str() << "\n";

@@ -106,7 +106,7 @@ namespace Internal {
 
 void unhandled_exception_handler() {
     // Note that we use __cpp_exceptions (rather than HALIDE_WITH_EXCEPTIONS)
-    // to maximize the change of dealing with uncaught exceptions in weird
+    // to maximize the chance of dealing with uncaught exceptions in weird
     // build situations (i.e., exceptions enabled via C++ but HALIDE_WITH_EXCEPTIONS
     // is somehow not set).
 #ifdef __cpp_exceptions
