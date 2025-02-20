@@ -1038,16 +1038,16 @@ int isnan_max_rfactor_test() {
 
     ImageParam in(Float(32), 2);
 
-    const auto make_reduce = [&] {
-        Func reduce("reduce");
+    const auto make_reduce = [&](const char *name) {
+        Func reduce(name);
         reduce(y) = Float(32).min();
         reduce(y) = select(reduce(y) > cast(reduce.type(), in(r, y)) || is_nan(reduce(y)), reduce(y), cast(reduce.type(), in(r, y)));
         return reduce;
     };
 
-    Func reference = make_reduce();
+    Func reference = make_reduce("reference");
 
-    Func reduce = make_reduce();
+    Func reduce = make_reduce("reduce");
     reduce.update(0).split(r, r, ri, 8).rfactor(ri, u);
 
     float tests[][16] = {
@@ -1060,8 +1060,8 @@ int isnan_max_rfactor_test() {
     Buffer<float, 2> buf{tests};
     in.set(buf);
 
-    Buffer<float, 1> ref_vals = reference.realize({4});
-    Buffer<float, 1> fac_vals = reduce.realize({4});
+    Buffer<float, 1> ref_vals = reference.realize({4}, get_jit_target_from_environment().with_feature(Target::StrictFloat));
+    Buffer<float, 1> fac_vals = reduce.realize({4}, get_jit_target_from_environment().with_feature(Target::StrictFloat));
 
     for (int i = 0; i < 4; i++) {
         if (std::isnan(fac_vals(i)) && std::isnan(ref_vals(i))) {
@@ -1085,7 +1085,6 @@ int main(int argc, char **argv) {
     };
 
     std::vector<Task> tasks = {
-        {"isnan max rfactor test", isnan_max_rfactor_test},
         {"self assignment rfactor test", self_assignment_rfactor_test},
         {"simple rfactor test: checking call graphs...", simple_rfactor_test<true>},
         {"simple rfactor test: checking output img correctness...", simple_rfactor_test<false>},
@@ -1118,6 +1117,7 @@ int main(int argc, char **argv) {
         {"complex multiply rfactor test", complex_multiply_rfactor_test},
         {"argmin rfactor test", argmin_rfactor_test},
         {"inlined rfactor with disappearing rvar test", inlined_rfactor_with_disappearing_rvar_test},
+        {"isnan max rfactor test", isnan_max_rfactor_test},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;
