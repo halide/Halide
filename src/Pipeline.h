@@ -32,7 +32,7 @@ struct PipelineContents;
  *
  * The 'name' field specifies the type of Autoscheduler
  * to be used (e.g. Adams2019, Mullapudi2016). If this is an empty string,
- * no autoscheduling will be done; if not, it mustbe the name of a known Autoscheduler.
+ * no autoscheduling will be done; if not, it must be the name of a known Autoscheduler.
  *
  * At this time, well-known autoschedulers include:
  *  "Mullapudi2016" -- heuristics-based; the first working autoscheduler; currently built in to libHalide
