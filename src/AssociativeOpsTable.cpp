@@ -263,12 +263,13 @@ Expr is_nan_not_strict(Expr x) {
 
 void populate_ops_table_single_float_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
-    table.emplace_back(select(is_nan(x0) || x0 > y0, x0, y0), tmin_0, true);  // NaN-propagating max
-    table.emplace_back(select(is_nan(x0) || x0 < y0, x0, y0), tmax_0, true);  // NaN-propagating min
+    // Propagating max operators
+    table.emplace_back(select(is_nan_not_strict(x0) || x0 > y0, x0, y0), tmin_0, true);
+    table.emplace_back(select(is_nan_not_strict(x0) || x0 >= y0, x0, y0), tmin_0, true);
 
-    // TODO: this exists to compensate for the Solve module dropping strict_float annotations
-    table.emplace_back(select(is_nan_not_strict(x0) || x0 > y0, x0, y0), tmin_0, true);  // NaN-propagating max
-    table.emplace_back(select(is_nan_not_strict(x0) || x0 < y0, x0, y0), tmax_0, true);  // NaN-propagating min
+    // Propagating min operators
+    table.emplace_back(select(is_nan_not_strict(x0) || x0 < y0, x0, y0), tmax_0, true);
+    table.emplace_back(select(is_nan_not_strict(x0) || x0 <= y0, x0, y0), tmax_0, true);
 }
 
 const map<TableKey, void (*)(const vector<Type> &types, vector<AssociativePattern> &)> val_type_to_populate_luts_fn = {
