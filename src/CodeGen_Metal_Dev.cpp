@@ -884,8 +884,42 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
     string str = src_stream.str();
     debug(1) << "Metal kernel:\n"
              << str << "\n";
+    
     vector<char> buffer(str.begin(), str.end());
-    buffer.push_back(0);
+
+    auto metal_compiler = get_env_variable("HL_METAL_COMPILER");
+    auto metal_linker = get_env_variable("HL_METAL_LINKER");
+    if (!metal_compiler.empty() && !metal_linker.empty()) {
+        // The user has specified the Metal compiler and linker to use, so instead of embedding
+        // the shader as a string, we will embed it as a metallib
+        // Write the source to a temporary file.
+        auto tmpfile = file_make_temp("metal", ".metal");
+        write_entire_file(tmpfile, buffer);
+
+        // Compile the Metal source to a metallib.
+        string metalir = tmpfile + ".ir";
+        string metallib = tmpfile + "lib";
+        string cmd = string(metal_compiler) + " -c -o " + metalir + " " + tmpfile;
+        debug(2) << "Running: " << cmd << "\n";
+
+        // TODO(shoaibkamil): Replace system() with a safer alternative
+        int ret = system(cmd.c_str());
+        user_assert(ret == 0) << "Failed to compile Metal source to metal ir.\n";
+
+        cmd = string(metal_linker) + " -o " + metallib + " " + metalir;
+        debug(2) << "Running: " << cmd << "\n";
+
+        // TODO(shoaibkamil): Replace system() with a safer alternative
+        ret = system(cmd.c_str());
+        user_assert(ret == 0) << "Failed to compile Metal source to metallib.\n";
+
+        // Read the metallib into a buffer.
+        buffer = read_entire_file(metallib);
+        debug(2) << "Metallib size: " << buffer.size() << "\n";
+    } else {
+        buffer.push_back(0);
+    }
+
     return buffer;
 }
 
