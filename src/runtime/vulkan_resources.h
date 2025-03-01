@@ -1716,9 +1716,9 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
             (!from_host && !to_host)) {
 
             VkBufferCopy buffer_copy = {
-                c.src_begin + src_offset,  // srcOffset
-                dst_offset,                // dstOffset
-                c.chunk_size               // size
+                src_offset,   // srcOffset
+                dst_offset,   // dstOffset
+                c.chunk_size  // size
             };
 
             VkBuffer *src_buffer = reinterpret_cast<VkBuffer *>(c.src);

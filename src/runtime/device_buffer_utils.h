@@ -31,10 +31,10 @@ namespace Internal {
 // The struct that describes a host <-> dev copy to perform.
 #define MAX_COPY_DIMS 16
 struct device_copy {
-    // opaque handles for source and device memory.
+    // opaque handles (host or device) for source and destination memory.
     uint64_t src, dst;
-    // The offset in the source memory to start
-    uint64_t src_begin;
+    // The offset in the source and destination memory to start
+    uint64_t src_begin, dst_begin;
     // The multidimensional array of contiguous copy tasks that need to be done.
     uint64_t extent[MAX_COPY_DIMS];
     // The strides (in bytes) that separate adjacent copy tasks in each dimension.
@@ -70,13 +70,18 @@ WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, in
 WEAK void copy_memory(const device_copy &copy, void *user_context) {
     // If this is a zero copy buffer, these pointers will be the same.
     if (copy.src != copy.dst) {
-        copy_memory_helper(copy, MAX_COPY_DIMS - 1, copy.src_begin, 0);
+        copy_memory_helper(copy, MAX_COPY_DIMS - 1, copy.src_begin, copy.dst_begin);
     } else {
         debug(user_context) << "copy_memory: no copy needed as pointers are the same.\n";
     }
 }
 
-// Fills the entire dst buffer, which must be contained within src
+// All crops are supported. It copies the maximum amount of pixels from src to dst.
+// That maximum number of pixels is determined by the overlapping region of the two
+// buffers. This means that you can use it in scenarios:
+//  1) Fill the entire dst buffer, when the dst buffer bounds are contained within src.
+//  2) Copy the entire src buffer, when the src buffer bounds are contained within dst, to dst.
+//  3) Copy only the overlapping region between two buffers, from src to dst.
 WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
                                   const halide_buffer_t *dst, bool dst_host) {
     // Make a copy job representing copying the first pixel only.
@@ -90,12 +95,19 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
         c.dst_stride_bytes[i] = 0;
     }
 
-    // Offset the src base pointer to the right point in its buffer.
+    // Offset the src and dst base pointer to the right point in their buffer.
     c.src_begin = 0;
+    c.dst_begin = 0;
     for (int i = 0; i < src->dimensions; i++) {
-        c.src_begin += (int64_t)src->dim[i].stride * (int64_t)(dst->dim[i].min - src->dim[i].min);
+        int64_t dim_diff = int64_t(dst->dim[i].min - src->dim[i].min);
+        if (dim_diff > 0) {
+            c.src_begin += (int64_t)src->dim[i].stride * dim_diff;
+        } else {
+            c.dst_begin += (int64_t)dst->dim[i].stride * (-dim_diff);
+        }
     }
     c.src_begin *= c.chunk_size;
+    c.dst_begin *= c.chunk_size;
 
     if (src->dimensions != dst->dimensions ||
         src->type.bytes() != dst->type.bytes() ||
@@ -134,7 +146,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
             c.dst_stride_bytes[j] = c.dst_stride_bytes[j - 1];
             c.src_stride_bytes[j] = c.src_stride_bytes[j - 1];
         }
-        c.extent[insert] = dst->dim[i].extent;
+        c.extent[insert] = min(src->dim[i].extent, dst->dim[i].extent);
         // debug(nullptr) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
         c.dst_stride_bytes[insert] = dst_stride_bytes;
         c.src_stride_bytes[insert] = src_stride_bytes;
