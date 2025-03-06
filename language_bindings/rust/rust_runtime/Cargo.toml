@@ -1,0 +1,17 @@
+[package]
+name = "halide_runtime"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+halide_build = "0.1.0"
+
+[patch.crates-io]
+
+#halide_build = {path = "../../rust_build"}
+
+halide_build = {path = "../rust_build"}
+
+
