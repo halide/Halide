@@ -16,13 +16,10 @@ public:
         halide_python_print(nullptr, msg);
     }
 
-    void error(const char *msg) override {
+    [[noreturn]] void error(const char *msg) override {
         // This method is called *only* from the Compiler -- never from jitted
         // code -- so throwing an Error here is the right thing to do.
-
         throw Error(msg);
-
-        // This method must not return!
     }
 };
 
