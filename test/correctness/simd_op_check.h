@@ -130,6 +130,7 @@ public:
                  Target::ARMv87a,
                  Target::ARMv88a,
                  Target::ARMv89a,
+                 Target::ARM64e,
                  Target::AVX,
                  Target::AVX2,
                  Target::AVX512,
