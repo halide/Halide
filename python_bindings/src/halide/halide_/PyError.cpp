@@ -54,7 +54,12 @@ void define_error(py::module &m) {
                 std::rethrow_exception(p);
             }
         } catch (const Error &e) {
-            halide_error(e.what());
+#if PYBIND11_VERSION_HEX >= 0x020C0000  // 2.12
+            set_error(halide_error, e.what());
+#else
+            // TODO: remove this branch when upgrading pybind11 past 2.12.0
+            PyErr_SetString(halide_error.ptr(), e.what());
+#endif
         }
     });
 }

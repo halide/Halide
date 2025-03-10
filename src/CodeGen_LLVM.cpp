@@ -748,7 +748,7 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
     IRBuilderBase::InsertPoint here = builder->saveIP();
     BasicBlock *dtors = get_destructor_block();
 
-    builder->SetInsertPoint(dtors->getFirstNonPHI());
+    builder->SetInsertPoint(dtors->getFirstNonPHIIt());
 
     PHINode *error_code = dyn_cast<PHINode>(dtors->begin());
     internal_assert(error_code) << "The destructor block is supposed to start with a phi node\n";
@@ -1873,7 +1873,11 @@ void CodeGen_LLVM::visit(const Not *op) {
 }
 
 void CodeGen_LLVM::visit(const Select *op) {
-    Value *cmp = codegen(op->condition);
+    Expr cond = op->condition;
+    if (const Broadcast *bc = cond.as<Broadcast>()) {
+        cond = bc->value;
+    }
+    Value *cmp = codegen(cond);
     Value *a = codegen(op->true_value);
     Value *b = codegen(op->false_value);
     if (a->getType()->isVectorTy()) {
