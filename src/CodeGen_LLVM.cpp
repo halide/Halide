@@ -1873,7 +1873,11 @@ void CodeGen_LLVM::visit(const Not *op) {
 }
 
 void CodeGen_LLVM::visit(const Select *op) {
-    Value *cmp = codegen(op->condition);
+    Expr cond = op->condition;
+    if (const Broadcast *bc = cond.as<Broadcast>()) {
+        cond = bc->value;
+    }
+    Value *cmp = codegen(cond);
     Value *a = codegen(op->true_value);
     Value *b = codegen(op->false_value);
     if (a->getType()->isVectorTy()) {
