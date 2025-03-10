@@ -624,7 +624,11 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
             }
         }
         module->setDataLayout(data_layout);
+#if LLVM_VERSION >= 210
+        module->setTargetTriple(triple);
+#else
         module->setTargetTriple(triple.str());
+#endif
     }
 
     // Link them all together
@@ -1380,7 +1384,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     }
 
     llvm::Triple triple("nvptx64--");
+#if LLVM_VERSION >= 210
+    modules[0]->setTargetTriple(triple);
+#else
     modules[0]->setTargetTriple(triple.str());
+#endif
 
     llvm::DataLayout dl("e-i64:64-v16:16-v32:32-n16:32:64");
     modules[0]->setDataLayout(dl);

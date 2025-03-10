@@ -403,7 +403,11 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
 
     internal_assert(module && context);
 
+#if LLVM_VERSION >= 210
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple().str() << "\n";
+#else
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+#endif
 
     module->setModuleIdentifier(name);
 
