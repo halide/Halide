@@ -31,7 +31,7 @@ struct ExternFuncArgument {
     }
 
     template<typename T, int Dims>
-    ExternFuncArgument(Buffer<T, Dims> b)
+    ExternFuncArgument(const Buffer<T, Dims> &b)
         : arg_type(BufferArg), buffer(b) {
     }
     ExternFuncArgument(Expr e)

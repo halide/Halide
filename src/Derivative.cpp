@@ -337,8 +337,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             let_var_mapping.clear();
             let_variables.clear();
             for (const auto &expr : expr_list) {
-                if (expr.get()->node_type == IRNodeType::Let) {
-                    const Let *op = expr.as<Let>();
+                if (const Let *op = expr.as<Let>()) {
                     // Assume Let variables are unique
                     internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
                     let_var_mapping[op->name] = op->value;
@@ -660,8 +659,7 @@ void ReverseAccumulationVisitor::propagate_adjoints(
             let_var_mapping.clear();
             let_variables.clear();
             for (const auto &expr : expr_list) {
-                if (expr.get()->node_type == IRNodeType::Let) {
-                    const Let *op = expr.as<Let>();
+                if (const Let *op = expr.as<Let>()) {
                     // Assume Let variables are unique
                     internal_assert(let_var_mapping.find(op->name) == let_var_mapping.end());
                     let_var_mapping[op->name] = op->value;
@@ -1534,7 +1532,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
             // f(r.x) = ... && r is associative
             // => f(x) = ...
             if (var != nullptr && var->reduction_domain.defined() &&
-                var->reduction_domain.split_predicate().empty()) {
+                is_const_one(var->reduction_domain.predicate())) {
                 ReductionDomain rdom = var->reduction_domain;
                 int rvar_id = -1;
                 for (int rid = 0; rid < (int)rdom.domain().size(); rid++) {

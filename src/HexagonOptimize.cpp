@@ -141,24 +141,6 @@ string type_suffix(const vector<Expr> &ops, bool signed_variants) {
 
 namespace {
 
-// Helper to handle various forms of multiplication.
-Expr as_mul(const Expr &a) {
-    if (a.as<Mul>()) {
-        return a;
-    } else if (const Call *wm = Call::as_intrinsic(a, {Call::widening_mul})) {
-        return simplify(Mul::make(cast(wm->type, wm->args[0]), cast(wm->type, wm->args[1])));
-    } else if (const Call *s = Call::as_intrinsic(a, {Call::shift_left, Call::widening_shift_left})) {
-        auto log2_b = as_const_uint(s->args[1]);
-        if (log2_b) {
-            Expr b = make_one(s->type) << cast(UInt(s->type.bits()), (int)*log2_b);
-            return simplify(Mul::make(cast(s->type, s->args[0]), b));
-        }
-    } else if (const Call *wm = Call::as_intrinsic(a, {Call::widen_right_mul})) {
-        return simplify(Mul::make(wm->args[0], cast(wm->type, wm->args[1])));
-    }
-    return Expr();
-}
-
 // Helpers to generate horizontally reducing multiply operations.
 Expr halide_hexagon_add_2mpy(Type result_type, const string &suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
     Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix,
@@ -1106,20 +1088,20 @@ class OptimizePatterns : public IRMutator {
         }
     }
 
-    template<typename NodeType, typename T>
-    NodeType visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
-        NodeType node = IRMutator::visit(op);
+        auto node = IRMutator::visit(op);
         bounds.pop(op->name);
         return node;
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<Stmt>(op);
+        return visit_let(op);
     }
 
     Expr visit(const Div *op) override {
@@ -1617,12 +1599,12 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    template<typename NodeType, typename LetType>
-    NodeType visit_let(const LetType *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
 
         Expr value = mutate(op->value);
         string deinterleaved_name;
-        NodeType body;
+        decltype(op->body) body;
         // Other code in this mutator needs to be able to tell the
         // difference between a Let that yields a deinterleave, and a
         // let that has a removable deinterleave. Lets that can
@@ -1650,10 +1632,10 @@ class EliminateInterleaves : public IRMutator {
             return op;
         } else if (body.same_as(op->body)) {
             // If the body didn't change, we must not have used the deinterleaved value.
-            return LetType::make(op->name, value, body);
+            return LetOrLetStmt::make(op->name, value, body);
         } else {
             // We need to rewrap the body with new lets.
-            NodeType result = body;
+            auto result = body;
             bool deinterleaved_used = stmt_or_expr_uses_var(result, deinterleaved_name);
             bool interleaved_used = stmt_or_expr_uses_var(result, op->name);
             if (deinterleaved_used && interleaved_used) {
@@ -1671,14 +1653,14 @@ class EliminateInterleaves : public IRMutator {
                     interleaved = native_interleave(interleaved);
                 }
 
-                result = LetType::make(op->name, interleaved, result);
-                return LetType::make(deinterleaved_name, deinterleaved, result);
+                result = LetOrLetStmt::make(op->name, interleaved, result);
+                return LetOrLetStmt::make(deinterleaved_name, deinterleaved, result);
             } else if (deinterleaved_used) {
                 // Only the deinterleaved value is used, we can eliminate the interleave.
-                return LetType::make(deinterleaved_name, remove_interleave(value), result);
+                return LetOrLetStmt::make(deinterleaved_name, remove_interleave(value), result);
             } else if (interleaved_used) {
                 // Only the original value is used, regenerate the let.
-                return LetType::make(op->name, value, result);
+                return LetOrLetStmt::make(op->name, value, result);
             } else {
                 // The let must have been dead.
                 internal_assert(!stmt_or_expr_uses_var(op->body, op->name))
@@ -1689,7 +1671,7 @@ class EliminateInterleaves : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        Expr expr = visit_let<Expr>(op);
+        Expr expr = visit_let(op);
 
         // Lift interleaves out of Let expression bodies.
         const Let *let = expr.as<Let>();
@@ -1700,7 +1682,7 @@ class EliminateInterleaves : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<Stmt>(op);
+        return visit_let(op);
     }
 
     Expr visit(const Cast *op) override {
@@ -2065,13 +2047,13 @@ class ScatterGatherGenerator : public IRMutator {
         return IRMutator::visit(op);
     }
 
-    template<typename NodeType, typename T>
-    NodeType visit_let(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // We only care about vector lets.
         if (op->value.type().is_vector()) {
             bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
         }
-        NodeType node = IRMutator::visit(op);
+        auto node = IRMutator::visit(op);
         if (op->value.type().is_vector()) {
             bounds.pop(op->name);
         }
@@ -2079,11 +2061,11 @@ class ScatterGatherGenerator : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<Stmt>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const Allocate *op) override {

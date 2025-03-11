@@ -223,7 +223,7 @@ private:
             }
         }
         if (op->value.type().lanes() > 1) {
-            // There is probably a more efficient way to this.
+            // There is probably a more efficient way to do this.
             return mutate(flatten_nested_ramps(op));
         }
 
@@ -236,7 +236,14 @@ private:
         } else {
             Type t = op->type.with_lanes(new_lanes);
             ModulusRemainder align = op->alignment;
-            // TODO: Figure out the alignment of every nth lane
+            // The alignment of a Load refers to the alignment of the first
+            // lane, so we can preserve the existing alignment metadata if the
+            // deinterleave is asking for any subset of lanes that includes the
+            // first. Otherwise we just drop it. We could check if the index is
+            // a ramp with constant stride or some other special case, but if
+            // that's the case, the simplifier is very good at figuring out the
+            // alignment, and it has access to context (e.g. the alignment of
+            // enclosing lets) that we do not have here.
             if (starting_lane != 0) {
                 align = ModulusRemainder();
             }
@@ -458,44 +465,44 @@ class Interleaver : public IRMutator {
         return Shuffle::make_interleave(exprs);
     }
 
-    template<typename T, typename Body>
-    Body visit_lets(const T *op) {
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
-            const T *op;
+            const LetOrLetStmt *op;
             Expr new_value;
             ScopedBinding<> binding;
-            Frame(const T *op, Expr v, Scope<void> &scope)
+            Frame(const LetOrLetStmt *op, Expr v, Scope<void> &scope)
                 : op(op),
                   new_value(std::move(v)),
                   binding(new_value.type().is_vector(), scope, op->name) {
             }
         };
         std::vector<Frame> frames;
-        Body result;
+        decltype(op->body) result;
 
         do {
             result = op->body;
             frames.emplace_back(op, mutate(op->value), vector_lets);
-        } while ((op = result.template as<T>()));
+        } while ((op = result.template as<LetOrLetStmt>()));
 
         result = mutate(result);
 
         for (const auto &frame : reverse_view(frames)) {
             Expr value = std::move(frame.new_value);
 
-            result = T::make(frame.op->name, value, result);
+            result = LetOrLetStmt::make(frame.op->name, value, result);
 
             // For vector lets, we may additionally need a let defining the even and odd lanes only
             if (value.type().is_vector()) {
                 if (value.type().lanes() % 2 == 0) {
-                    result = T::make(frame.op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
-                    result = T::make(frame.op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
                 }
                 if (value.type().lanes() % 3 == 0) {
-                    result = T::make(frame.op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
-                    result = T::make(frame.op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
-                    result = T::make(frame.op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
+                    result = LetOrLetStmt::make(frame.op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
                 }
             }
         }
@@ -504,11 +511,11 @@ class Interleaver : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        return visit_lets<Let, Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_lets<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 
     Expr visit(const Ramp *op) override {

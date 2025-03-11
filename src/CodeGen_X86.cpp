@@ -647,7 +647,6 @@ void CodeGen_X86::visit(const Call *op) {
         Expr pattern;
     };
 
-    // clang-format off
     static const Pattern patterns[] = {
         {"pmulh", mul_shift_right(wild_i16x_, wild_i16x_, 16)},
         {"pmulh", mul_shift_right(wild_u16x_, wild_u16x_, 16)},
@@ -656,7 +655,6 @@ void CodeGen_X86::visit(const Call *op) {
         {"saturating_narrow", i8_sat(wild_i16x_)},
         {"saturating_narrow", u8_sat(wild_i16x_)},
     };
-    // clang-format on
 
     vector<Expr> matches;
     for (const auto &pattern : patterns) {
@@ -668,52 +666,49 @@ void CodeGen_X86::visit(const Call *op) {
         }
     }
 
-    // clang-format off
-    static const Pattern reinterpret_patterns[] = {
-        {"saturating_narrow", i16_sat(wild_u32x_)},
-        {"saturating_narrow", u16_sat(wild_u32x_)},
-        {"saturating_narrow", i8_sat(wild_u16x_)},
-        {"saturating_narrow", u8_sat(wild_u16x_)},
-    };
-    // clang-format on
+    if (op->is_intrinsic(Call::saturating_cast)) {
 
-    // Search for saturating casts where the inner value can be
-    // reinterpreted to signed, so that we can use existing
-    // saturating_narrow instructions.
-    // TODO: should use lossless_cast once it is fixed.
-    for (const auto &pattern : reinterpret_patterns) {
-        if (expr_match(pattern.pattern, op, matches)) {
-            const Expr &expr = matches[0];
-            const Type &t = expr.type();
-            // TODO(8212): might want to keep track of scope of bounds information.
-            const ConstantInterval ibounds = constant_integer_bounds(expr);
-            const Type reint_type = t.with_code(halide_type_int);
-            // If the signed type can represent the maximum value unsigned value,
-            //  we can safely reinterpret this unsigned expression as signed.
-            if (reint_type.can_represent(ibounds)) {
-                // Can safely reinterpret to signed integer.
-                matches[0] = cast(reint_type, matches[0]);
-                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
-                if (value) {
-                    return;
+        static const Pattern reinterpret_patterns[] = {
+            {"saturating_narrow", i16_sat(wild_u32x_)},
+            {"saturating_narrow", u16_sat(wild_u32x_)},
+            {"saturating_narrow", i8_sat(wild_u16x_)},
+            {"saturating_narrow", u8_sat(wild_u16x_)},
+        };
+
+        // Search for saturating casts where the inner value can be
+        // reinterpreted to signed, so that we can use existing
+        // saturating_narrow instructions.
+        for (const auto &pattern : reinterpret_patterns) {
+            if (expr_match(pattern.pattern, op, matches)) {
+                const Type signed_type = matches[0].type().with_code(halide_type_int);
+                Expr e = lossless_cast(signed_type, matches[0]);
+                if (e.defined()) {
+                    // Can safely reinterpret to signed integer.
+                    matches[0] = e;
+                    value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+                    if (value) {
+                        return;
+                    }
                 }
+                // No reinterpret patterns match the same input, so stop matching.
+                break;
             }
-            // No reinterpret patterns match the same input, so stop matching.
-            break;
         }
-    }
 
-    static const vector<pair<Expr, Expr>> cast_rewrites = {
-        // Some double-narrowing saturating casts can be better expressed as
-        // combinations of single-narrowing saturating casts.
-        {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
-        {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
-    };
-    for (const auto &i : cast_rewrites) {
-        if (expr_match(i.first, op, matches)) {
-            Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
-            value = codegen(replacement);
-            return;
+        static const vector<pair<Expr, Expr>> cast_rewrites = {
+            // Some double-narrowing saturating casts can be better expressed as
+            // combinations of single-narrowing saturating casts.
+            {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+            {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+            {i8_sat(wild_u32x_), i8_sat(i16_sat(wild_u32x_))},
+        };
+
+        for (const auto &i : cast_rewrites) {
+            if (expr_match(i.first, op, matches)) {
+                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
+                value = codegen(replacement);
+                return;
+            }
         }
     }
 
@@ -1083,11 +1078,9 @@ string CodeGen_X86::mattrs() const {
             attrs.emplace_back("+amx-bf16");
         }
     }
-#if LLVM_VERSION >= 180
     if (gather_might_be_slow(target)) {
         attrs.emplace_back("+prefer-no-gather");
     }
-#endif
 
     if (target.has_feature(Target::AVX10_1)) {
         switch (target.vector_bits) {

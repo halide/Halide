@@ -7,10 +7,16 @@ using namespace Halide::Tools;
 double run_test_1(bool auto_schedule) {
     Var x("x"), y("y"), dx("dx"), dy("dy"), c("c");
 
-    Func f("f");
-    f(x, y, dx, dy) = x + y + dx + dy;
-
+    int W = 1024;
+    int H = 1920;
     int search_area = 7;
+
+    Buffer<uint32_t> im(2048);
+    im.fill(17);
+
+    Func f("f");
+    f(x, y, dx, dy) = im(x) + im(y + 1) + im(dx + search_area / 2) + im(dy + search_area / 2);
+
     RDom dom(-search_area / 2, search_area, -search_area / 2, search_area, "dom");
 
     // If 'f' is inlined into 'r', the only storage layout that the auto scheduler
@@ -23,23 +29,20 @@ double run_test_1(bool auto_schedule) {
 
     if (auto_schedule) {
         // Provide estimates on the pipeline output
-        r.set_estimates({{0, 1024}, {0, 1024}, {0, 3}});
+        r.set_estimates({{0, W}, {0, H}, {0, 3}});
         // Auto-schedule the pipeline
         p.apply_autoscheduler(target, {"Mullapudi2016"});
     } else {
-        /*
+        Var par;
         r.update(0).fuse(c, y, par).parallel(par).reorder(x, dom.x, dom.y).vectorize(x, 4);
-        r.fuse(c, y, par).parallel(par).vectorize(x, 4); */
-
-        // The sequential schedule in this case seems to perform best which is
-        // odd have to investigate this further.
+        r.fuse(c, y, par).parallel(par).vectorize(x, 4);
     }
 
     // Inspect the schedule (only for debugging))
     // r.print_loop_nest();
 
     // Run the schedule
-    Buffer<int> out(1024, 1024, 3);
+    Buffer<int> out(W, H, 3);
     double t = benchmark(3, 10, [&]() {
         p.realize(out);
     });
@@ -154,7 +157,7 @@ int main(int argc, char **argv) {
         double manual_time = run_test_1(false);
         double auto_time = run_test_1(true);
 
-        const double slowdown_factor = 15.0;  // TODO: whoa
+        const double slowdown_factor = 2.0;
         if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
             std::cerr << "Autoscheduler time (1) is slower than expected:\n"
                       << "======================\n"

@@ -60,6 +60,7 @@ struct VarOrRVar {
 class ImageParam;
 
 namespace Internal {
+struct AssociativeOp;
 class Function;
 struct Split;
 struct StorageDim;
@@ -81,13 +82,15 @@ class Stage {
     void split(const std::string &old, const std::string &outer, const std::string &inner,
                const Expr &factor, bool exact, TailStrategy tail);
     void remove(const std::string &var);
-    Stage &purify(const VarOrRVar &old_name, const VarOrRVar &new_name);
 
     const std::vector<Internal::StorageDim> &storage_dims() const {
         return function.schedule().storage_dims();
     }
 
     Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
+
+    std::pair<std::vector<Internal::Split>, std::vector<Internal::Split>>
+    rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const Internal::AssociativeOp &prover_result);
 
 public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
@@ -184,7 +187,7 @@ public:
      *
      */
     // @{
-    Func rfactor(std::vector<std::pair<RVar, Var>> preserved);
+    Func rfactor(const std::vector<std::pair<RVar, Var>> &preserved);
     Func rfactor(const RVar &r, const Var &v);
     // @}
 
@@ -505,7 +508,7 @@ class FuncRef {
      * already have a pure definition, init_val will be used as RHS in
      * the initial function definition. */
     template<typename BinaryOp>
-    Stage func_ref_update(Expr e, int init_val);
+    Stage func_ref_update(const Expr &e, int init_val);
 
 public:
     FuncRef(const Internal::Function &, const std::vector<Expr> &,
@@ -528,7 +531,7 @@ public:
      * pure definition, this sets it to zero.
      */
     // @{
-    Stage operator+=(Expr);
+    Stage operator+=(const Expr &);
     Stage operator+=(const Tuple &);
     Stage operator+=(const FuncRef &);
     // @}
@@ -539,7 +542,7 @@ public:
      * not already have a pure definition, this sets it to zero.
      */
     // @{
-    Stage operator-=(Expr);
+    Stage operator-=(const Expr &);
     Stage operator-=(const Tuple &);
     Stage operator-=(const FuncRef &);
     // @}
@@ -550,7 +553,7 @@ public:
      * definition, this sets it to 1.
      */
     // @{
-    Stage operator*=(Expr);
+    Stage operator*=(const Expr &);
     Stage operator*=(const Tuple &);
     Stage operator*=(const FuncRef &);
     // @}
@@ -561,7 +564,7 @@ public:
      * function does not already have a pure definition, this sets it to 1.
      */
     // @{
-    Stage operator/=(Expr);
+    Stage operator/=(const Expr &);
     Stage operator/=(const Tuple &);
     Stage operator/=(const FuncRef &);
     // @}

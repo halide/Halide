@@ -51,7 +51,7 @@ private:
     // does not apply to union types like Stmt and Expr or enum types like MemoryType
     template<typename src, typename dst>
     std::vector<dst> deserialize_vector(const flatbuffers::Vector<::flatbuffers::Offset<src>> *flatbuffer_vec,
-                                        std::function<dst(Deserializer &, const src *)> deserialize_func) {
+                                        const std::function<dst(Deserializer &, const src *)> &deserialize_func) {
         user_assert(flatbuffer_vec != nullptr) << "deserializing a null vector\n";
         std::vector<dst> result;
         result.reserve(flatbuffer_vec->size());
@@ -368,8 +368,6 @@ Split::SplitType Deserializer::deserialize_split_type(Serialize::SplitType split
         return Split::SplitType::RenameVar;
     case Serialize::SplitType::FuseVars:
         return Split::SplitType::FuseVars;
-    case Serialize::SplitType::PurifyRVar:
-        return Split::SplitType::PurifyRVar;
     default:
         user_error << "unknown split type " << (int)split_type << "\n";
         return Split::SplitType::SplitVar;

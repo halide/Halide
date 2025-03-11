@@ -317,7 +317,6 @@ DECLARE_NO_INITMOD(riscv_cpu_features)
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
-#if LLVM_VERSION >= 180
         if (target.bits == 32) {
             if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:128-n8:16:32-S128");
@@ -347,37 +346,6 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128");
             }
         }
-#else
-        if (target.bits == 32) {
-            if (target.os == Target::OSX) {
-                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
-            } else if (target.os == Target::IOS) {
-                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
-            } else if (target.os == Target::Windows) {
-                // For 32-bit MSVC targets, alignment of f80 values is 16 bytes (see https://reviews.llvm.org/D115942)
-                if (!target.has_feature(Target::JIT)) {
-                    return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32-a:0:32-S32");
-                } else {
-                    return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32-a:0:32-S32");
-                }
-            } else {
-                // Linux/Android
-                return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:32-n8:16:32-S128");
-            }
-        } else {  // 64-bit
-            if (target.os == Target::OSX) {
-                return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-            } else if (target.os == Target::IOS) {
-                return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-            } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
-                return llvm::DataLayout("e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-            } else if (target.os == Target::Windows) {
-                return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-            } else {
-                return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-            }
-        }
-#endif
     } else if (target.arch == Target::ARM) {
         if (target.bits == 32) {
             if (target.os == Target::IOS) {
@@ -455,10 +423,16 @@ std::optional<llvm::VersionTuple> get_os_version_constraint(const llvm::Triple &
         return std::nullopt;
     }
 
-    if (triple.getOS() == llvm::Triple::MacOSX && triple.getArch() == llvm::Triple::x86_64) {
-        // At time of writing (June 2024), this is one version prior
+    if (triple.isMacOSX() && triple.isX86()) {
+        // At time of writing (January 2025), this is one version prior
         // to the oldest version still supported by Apple.
-        return llvm::VersionTuple(11, 0, 0);
+        return llvm::VersionTuple(12, 0, 0);
+    }
+
+    if (triple.isiOS()) {
+        // At time of writing (January 2025), this is one version prior
+        // to the oldest version still supported by Apple.
+        return llvm::VersionTuple(17, 0, 0);
     }
 
     llvm::VersionTuple t = triple.getMinimumSupportedOSVersion();
@@ -650,7 +624,11 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
             }
         }
         module->setDataLayout(data_layout);
+#if LLVM_VERSION >= 210
+        module->setTargetTriple(triple);
+#else
         module->setTargetTriple(triple.str());
+#endif
     }
 
     // Link them all together
@@ -1406,7 +1384,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     }
 
     llvm::Triple triple("nvptx64--");
+#if LLVM_VERSION >= 210
+    modules[0]->setTargetTriple(triple);
+#else
     modules[0]->setTargetTriple(triple.str());
+#endif
 
     llvm::DataLayout dl("e-i64:64-v16:16-v32:32-n16:32:64");
     modules[0]->setDataLayout(dl);

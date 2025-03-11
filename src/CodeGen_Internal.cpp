@@ -664,25 +664,24 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     bool use_large_code_model =
         get_md_bool(module.getModuleFlag("halide_use_large_code_model")).value_or(false);
 
-#if LLVM_VERSION >= 180
-    const auto opt_level = llvm::CodeGenOptLevel::Aggressive;
-#else
-    const auto opt_level = llvm::CodeGenOpt::Aggressive;
-#endif
-
     // Get module mcpu_target and mattrs.
     std::string mcpu_target =
         get_md_string(module.getModuleFlag("halide_mcpu_target")).value_or(std::string{});
     std::string mattrs =
         get_md_string(module.getModuleFlag("halide_mattrs")).value_or(std::string{});
 
-    auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
-                                                mcpu_target,
-                                                mattrs,
-                                                options,
-                                                use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
-                                                use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
-                                                opt_level);
+    auto *tm = llvm_target->createTargetMachine(
+#if LLVM_VERSION >= 210
+        module.getTargetTriple().str(),
+#else
+        module.getTargetTriple(),
+#endif
+        mcpu_target,
+        mattrs,
+        options,
+        use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
+        use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
+        CodeGenOptLevel::Aggressive);
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 

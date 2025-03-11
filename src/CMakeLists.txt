@@ -18,8 +18,10 @@ set(Halide_VERSION_OVERRIDE "${Halide_VERSION}"
     CACHE STRING "VERSION to set for custom Halide packaging")
 mark_as_advanced(Halide_VERSION_OVERRIDE)
 
-if (Halide_VERSION_OVERRIDE)
-    # Empty is considered a value distinct from not-defined
+if (NOT Halide_VERSION_OVERRIDE STREQUAL "")
+    # CMake treats an empty VERSION property differently from leaving it unset.
+    # We also can't check the boolean-ness of Halide_VERSION_OVERRIDE because
+    # VERSION 0 is valid. See: https://github.com/halide/Halide/issues/8522
     set_target_properties(Halide PROPERTIES VERSION "${Halide_VERSION_OVERRIDE}")
 endif ()
 
@@ -27,8 +29,7 @@ set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
     CACHE STRING "SOVERSION to set for custom Halide packaging")
 mark_as_advanced(Halide_SOVERSION_OVERRIDE)
 
-if (Halide_SOVERSION_OVERRIDE)
-    # Empty is considered a value distinct from not-defined
+if (NOT Halide_SOVERSION_OVERRIDE STREQUAL "")
     set_target_properties(Halide PROPERTIES SOVERSION "${Halide_SOVERSION_OVERRIDE}")
 endif ()
 
@@ -593,19 +594,6 @@ target_compile_definitions(Halide PUBLIC
 set(Halide_WASM_BACKEND "wabt"
     CACHE STRING "Which backend to use for Halide's WASM testing.")
 set_property(CACHE Halide_WASM_BACKEND PROPERTY STRINGS "wabt;V8;OFF")
-
-if (WITH_WABT AND NOT WITH_V8)
-    message(DEPRECATION "WITH_WABT has been replaced by Halide_WASM_BACKEND=\"wabt\"")
-    set(Halide_WASM_BACKEND "wabt")
-elseif (NOT WITH_WABT AND WITH_V8)
-    message(DEPRECATION "WITH_V8 has been replaced by Halide_WASM_BACKEND=\"V8\"")
-    set(Halide_WASM_BACKEND "V8")
-elseif (WITH_WABT AND WITH_V8)
-    message(FATAL_ERROR "Cannot use both WABT and V8 at the same time, disable one of them.")
-elseif (DEFINED WITH_WABT AND DEFINED WITH_V8 AND NOT WITH_WABT AND NOT WITH_V8)
-    message(DEPRECATION "Disabling both WITH_WABT and WITH_V8 has been replaced by Halide_WASM_BACKEND=\"OFF\"")
-    set(Halide_WASM_BACKEND "OFF")
-endif ()
 
 if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
     message(WARNING "wabt is not yet supported on Windows")

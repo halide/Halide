@@ -699,10 +699,14 @@ private:
                 Expr load_store_1 = in_im(x) * 3;
 
                 if (has_sve()) {
-                    // in native width, ld1b/st1b is used regardless of data type
-                    const bool allow_byte_ls = (width == target.vector_bits);
-                    add({get_sve_ls_instr("ld1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
-                    add({get_sve_ls_instr("st1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
+                    // This pattern has changed with LLVM 21, see https://github.com/halide/Halide/issues/8584 for more
+                    // details.
+                    if (Halide::Internal::get_llvm_version() <= 200) {
+                        // in native width, ld1b/st1b is used regardless of data type
+                        const bool allow_byte_ls = (width == target.vector_bits);
+                        add({get_sve_ls_instr("ld1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
+                        add({get_sve_ls_instr("st1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
+                    }
                 } else {
                     // vector register is not used for simple load/store
                     string reg_prefix = (width <= 64) ? "d" : "q";
@@ -1164,7 +1168,7 @@ private:
                        int default_vec_factor,
                        bool is_enabled = true /* false to skip testing */)
             : parent(p), default_bits(default_bits), default_instr_lanes(default_instr_lanes),
-              default_vec_factor(default_vec_factor), is_enabled(is_enabled){};
+              default_vec_factor(default_vec_factor), is_enabled(is_enabled) {};
 
         AddTestFunctor(SimdOpCheckArmSve &p,
                        int default_bits,
@@ -1173,7 +1177,7 @@ private:
                        bool is_enabled = true /* false to skip testing */)
             : parent(p), default_bits(default_bits),
               default_instr_lanes(Instruction::get_instr_lanes(default_bits, default_vec_factor, p.target)),
-              default_vec_factor(default_vec_factor), is_enabled(is_enabled){};
+              default_vec_factor(default_vec_factor), is_enabled(is_enabled) {};
 
         // Constructs single Instruction with default parameters
         void operator()(const string &opcode, Expr e) {

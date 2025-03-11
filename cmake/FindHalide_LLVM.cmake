@@ -13,13 +13,6 @@ find_package(LLVM ${PACKAGE_FIND_VERSION} CONFIG)
 
 set(Halide_LLVM_VERSION "${LLVM_PACKAGE_VERSION}")
 
-# TODO: deprecated in Halide 19.0.0, remove in Halide 20.0.0
-if (NOT DEFINED Halide_LLVM_SHARED_LIBS AND DEFINED Halide_SHARED_LLVM)
-    set(Halide_LLVM_SHARED_LIBS "${Halide_SHARED_LLVM}")
-    message(DEPRECATION
-            "Halide_SHARED_LLVM has been renamed to Halide_LLVM_SHARED_LIBS.")
-endif ()
-
 if (NOT DEFINED Halide_LLVM_SHARED_LIBS)
     # Normally, we don't like making decisions for our users. However,
     # this avoids an incompatible scenario that is checked below. So

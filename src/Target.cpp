@@ -1472,16 +1472,22 @@ int Target::natural_vector_size(const Halide::Type &t) const {
         }
     } else if (arch == Target::X86) {
         if (is_integer && (has_feature(Halide::Target::AVX512_Skylake) ||
-                           has_feature(Halide::Target::AVX512_Cannonlake))) {
-            // AVX512BW exists on Skylake and Cannonlake
+                           has_feature(Halide::Target::AVX512_Cannonlake) ||
+                           has_feature(Halide::Target::AVX512_Zen4) ||
+                           has_feature(Halide::Target::AVX512_SapphireRapids))) {
+            // AVX512BW exists on any of these avx512 variants
             return 64 / data_size;
         } else if (t.is_float() && (has_feature(Halide::Target::AVX512) ||
                                     has_feature(Halide::Target::AVX512_KNL) ||
                                     has_feature(Halide::Target::AVX512_Skylake) ||
-                                    has_feature(Halide::Target::AVX512_Cannonlake))) {
+                                    has_feature(Halide::Target::AVX512_Cannonlake) ||
+                                    has_feature(Halide::Target::AVX512_Zen4) ||
+                                    has_feature(Halide::Target::AVX512_SapphireRapids))) {
             // AVX512F is on all AVX512 architectures
             return 64 / data_size;
-        } else if (has_feature(Halide::Target::AVX2)) {
+        } else if (has_feature(Halide::Target::AVX2) ||
+                   has_feature(Halide::Target::AVX512) ||
+                   has_feature(Halide::Target::AVX512_KNL)) {
             // AVX2 uses 256-bit vectors for everything.
             return 32 / data_size;
         } else if (!is_integer && has_feature(Halide::Target::AVX)) {

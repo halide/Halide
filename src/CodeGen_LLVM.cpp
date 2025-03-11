@@ -234,9 +234,6 @@ void CodeGen_LLVM::initialize_llvm() {
             for (const std::string &s : arg_vec) {
                 c_arg_vec.push_back(s.c_str());
             }
-            // TODO: Remove after opaque pointers become the default in LLVM.
-            // This is here to document how to turn on opaque pointers, for testing, in LLVM 15
-            //            c_arg_vec.push_back("-opaque-pointers");
             cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
         }
 
@@ -406,7 +403,11 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
 
     internal_assert(module && context);
 
+#if LLVM_VERSION >= 210
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple().str() << "\n";
+#else
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+#endif
 
     module->setModuleIdentifier(name);
 
@@ -751,7 +752,7 @@ Value *CodeGen_LLVM::register_destructor(llvm::Function *destructor_fn, Value *o
     IRBuilderBase::InsertPoint here = builder->saveIP();
     BasicBlock *dtors = get_destructor_block();
 
-    builder->SetInsertPoint(dtors->getFirstNonPHI());
+    builder->SetInsertPoint(dtors->getFirstNonPHIIt());
 
     PHINode *error_code = dyn_cast<PHINode>(dtors->begin());
     internal_assert(error_code) << "The destructor block is supposed to start with a phi node\n";
@@ -1147,7 +1148,6 @@ void CodeGen_LLVM::optimize_module() {
     using OptimizationLevel = llvm::OptimizationLevel;
     OptimizationLevel level = OptimizationLevel::O3;
 
-#if LLVM_VERSION >= 180
     if (tm->isPositionIndependent()) {
         // Add a pass that converts lookup tables to relative lookup tables to make them PIC-friendly.
         // See https://bugs.llvm.org/show_bug.cgi?id=45244
@@ -1161,7 +1161,6 @@ void CodeGen_LLVM::optimize_module() {
                 mpm.addPass(RelLookupTableConverterPass());
             });
     }
-#endif
 
     if (get_target().has_feature(Target::SanitizerCoverage)) {
         pb.registerOptimizerLastEPCallback(
@@ -1240,7 +1239,7 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (tm) {
-#if LLVM_VERSION >= 180 && LLVM_VERSION < 190
+#if LLVM_VERSION < 190
         tm->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
 #else
         tm->registerPassBuilderCallbacks(pb);
@@ -1878,7 +1877,11 @@ void CodeGen_LLVM::visit(const Not *op) {
 }
 
 void CodeGen_LLVM::visit(const Select *op) {
-    Value *cmp = codegen(op->condition);
+    Expr cond = op->condition;
+    if (const Broadcast *bc = cond.as<Broadcast>()) {
+        cond = bc->value;
+    }
+    Value *cmp = codegen(cond);
     Value *a = codegen(op->true_value);
     Value *b = codegen(op->false_value);
     if (a->getType()->isVectorTy()) {

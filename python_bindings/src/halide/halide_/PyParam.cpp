@@ -28,11 +28,11 @@ void add_param_methods(py::class_<Param<>> &param_class) {
                 param.set<TYPE>(value);
             },
             py::arg("value"))
-        .def(
-            "set_estimate", [](Param<> &param, TYPE value) -> void {
-                param.set_estimate<TYPE>(value);
-            },
-            py::arg("value"));
+        .def("set_estimate",  //
+             [](Param<> &param, TYPE value) -> void {
+                 param.set_estimate<TYPE>(value);  //
+             },
+             py::arg("value"));
 }
 
 }  // namespace

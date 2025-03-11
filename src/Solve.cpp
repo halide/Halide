@@ -1239,6 +1239,10 @@ Expr and_condition_over_domain(const Expr &e, const Scope<Interval> &varying) {
     return simplify(bounds.min);
 }
 
+Expr or_condition_over_domain(const Expr &c, const Scope<Interval> &varying) {
+    return simplify(!and_condition_over_domain(simplify(!c), varying));
+}
+
 // Testing code
 
 namespace {
@@ -1342,8 +1346,8 @@ void solve_test() {
             continue;
         }
         for (int num = 5; num <= 10; num++) {
-            Expr in[] = {x * den<num, x * den <= num, x * den == num, x * den != num, x * den >= num, x * den> num,
-                         x / den<num, x / den <= num, x / den == num, x / den != num, x / den >= num, x / den> num};
+            Expr in[] = {x * den < num, x * den <= num, x * den == num, x * den != num, x * den >= num, x * den > num,
+                         x / den < num, x / den <= num, x / den == num, x / den != num, x / den >= num, x / den > num};
             for (const auto &e : in) {
                 SolverResult solved = solve_expression(e, "x");
                 internal_assert(solved.fully_solved) << "Error: failed to solve for x in " << e << "\n";

@@ -1100,83 +1100,83 @@ RUNTIME_CXX_FLAGS = \
     -Wno-sync-alignment \
     -isystem $(ROOT_DIR)/dependencies/vulkan/include
 
-$(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_X86_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_x86_32.d
 
-$(BUILD_DIR)/initmod.windows_%_x86_64.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_x86_64.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_X86_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_x86_64.d
 
-$(BUILD_DIR)/initmod.windows_%_arm_32.ll: $(SRC_DIR)/runtime/windows_%_arm.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_arm_32.ll: $(SRC_DIR)/runtime/windows_%_arm.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_ARM_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_arm_32.d
 
-$(BUILD_DIR)/initmod.windows_%_arm_64.ll: $(SRC_DIR)/runtime/windows_%_arm.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_arm_64.ll: $(SRC_DIR)/runtime/windows_%_arm.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_ARM_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_arm_64.d
 
-$(BUILD_DIR)/initmod.windows_%_32.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_32.ll: $(SRC_DIR)/runtime/windows_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_X86_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32.d
 
-$(BUILD_DIR)/initmod.windows_%_64.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_64.ll: $(SRC_DIR)/runtime/windows_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_GENERIC_64) -fshort-wchar -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_64.d
 
-$(BUILD_DIR)/initmod.webgpu_%_32.ll: $(SRC_DIR)/runtime/webgpu_%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.webgpu_%_32.ll: $(SRC_DIR)/runtime/webgpu_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WEBGPU_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_$*_32.d
 
-$(BUILD_DIR)/initmod.webgpu_%_64.ll: $(SRC_DIR)/runtime/webgpu_%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.webgpu_%_64.ll: $(SRC_DIR)/runtime/webgpu_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WEBGPU_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_$*_64.d
 
-$(BUILD_DIR)/initmod.webgpu_%_32_debug.ll: $(SRC_DIR)/runtime/webgpu_%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.webgpu_%_32_debug.ll: $(SRC_DIR)/runtime/webgpu_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WEBGPU_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_$*_32_debug.d
 
-$(BUILD_DIR)/initmod.webgpu_%_64_debug.ll: $(SRC_DIR)/runtime/webgpu_%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.webgpu_%_64_debug.ll: $(SRC_DIR)/runtime/webgpu_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WEBGPU_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/webgpu_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.webgpu_$*_64_debug.d
 
-$(BUILD_DIR)/initmod.%_64.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.%_64.ll: $(SRC_DIR)/runtime/%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -fpic -m64 -target $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
 
-$(BUILD_DIR)/initmod.%_32.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.%_32.ll: $(SRC_DIR)/runtime/%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -fpic -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
 
-$(BUILD_DIR)/initmod.windows_%_x86_32_debug.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_x86_32_debug.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_X86_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_x86_32_debug.d
 
-$(BUILD_DIR)/initmod.windows_%_x86_64_debug.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_x86_64_debug.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_X86_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_x86_64_debug.d
 
-$(BUILD_DIR)/initmod.windows_%_arm_32_debug.ll: $(SRC_DIR)/runtime/windows_%_arm.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_arm_32_debug.ll: $(SRC_DIR)/runtime/windows_%_arm.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_ARM_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_arm_32_debug.d
 
-$(BUILD_DIR)/initmod.windows_%_arm_64_debug.ll: $(SRC_DIR)/runtime/windows_%_arm.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_arm_64_debug.ll: $(SRC_DIR)/runtime/windows_%_arm.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_ARM_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_arm_64_debug.d
 
-$(BUILD_DIR)/initmod.windows_%_64_debug.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_64_debug.ll: $(SRC_DIR)/runtime/windows_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_GENERIC_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_64_debug.d
 
-$(BUILD_DIR)/initmod.%_64_debug.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.%_64_debug.ll: $(SRC_DIR)/runtime/%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -fpic -m64 -target  $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64_debug.d
 
-$(BUILD_DIR)/initmod.windows_%_32_debug.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.windows_%_32_debug.ll: $(SRC_DIR)/runtime/windows_%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_X86_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32_debug.d
 
-$(BUILD_DIR)/initmod.%_32_debug.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.%_32_debug.ll: $(SRC_DIR)/runtime/%.cpp
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 $(RUNTIME_CXX_FLAGS) -fpic -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
 
@@ -1184,7 +1184,7 @@ $(BUILD_DIR)/initmod.%_ll.ll: $(SRC_DIR)/runtime/%.ll
 	@mkdir -p $(@D)
 	cp $(SRC_DIR)/runtime/$*.ll $(BUILD_DIR)/initmod.$*_ll.ll
 
-$(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok
+$(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll
 	$(LLVM_AS) $(BUILD_DIR)/initmod.$*.ll -o $(BUILD_DIR)/initmod.$*.bc
 
 $(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/binary2cpp $(BUILD_DIR)/initmod.%.bc
@@ -1226,11 +1226,11 @@ $(BUILD_DIR)/c_template.%.o: $(BUILD_DIR)/c_template.%.cpp
 $(BUILD_DIR)/html_template.%.o: $(BUILD_DIR)/html_template.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(BUILD_DIR)/llvm_ok
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
-$(BUILD_DIR)/Simplify_%.o: $(SRC_DIR)/Simplify_%.cpp $(SRC_DIR)/Simplify_Internal.h $(BUILD_DIR)/llvm_ok
+$(BUILD_DIR)/Simplify_%.o: $(SRC_DIR)/Simplify_%.cpp $(SRC_DIR)/Simplify_Internal.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/Simplify_$*.d -MT $@
 
@@ -2299,129 +2299,6 @@ benchmark_apps: $(BENCHMARK_APPS)
 			HL_TARGET=$(HL_TARGET) \
 			|| exit 1 ; \
 	done
-
-# It's just for compiling the runtime, so earlier clangs *might* work,
-# but best to peg it to the minimum llvm version.
-ifneq (,$(findstring clang version 3.7,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 3.8,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 4.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 5.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 6.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 7.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 7.1,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 8.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 9.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 10.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 11.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 11.1,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 12.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 13.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 14.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 15.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 16.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 17.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 18.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 19.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 20.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq ($(CLANG_OK), )
-$(BUILD_DIR)/clang_ok:
-	@echo "Found a new enough version of clang"
-	mkdir -p $(BUILD_DIR)
-	touch $(BUILD_DIR)/clang_ok
-else
-$(BUILD_DIR)/clang_ok:
-	@echo "Can't find clang or version of clang too old (we need 3.7 or greater):"
-	@echo "You can override this check by setting CLANG_OK=y"
-	echo '$(CLANG_VERSION)'
-	echo $(findstring version 3,$(CLANG_VERSION))
-	echo $(findstring version 3.0,$(CLANG_VERSION))
-	$(CLANG) --version
-	@exit 1
-endif
-
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 160 170 180 190 200))
-LLVM_OK=yes
-endif
-
-ifneq ($(LLVM_OK), )
-$(BUILD_DIR)/llvm_ok: $(BUILD_DIR)/rtti_ok
-	@echo "Found a new enough version of llvm"
-	mkdir -p $(BUILD_DIR)
-	touch $(BUILD_DIR)/llvm_ok
-else
-$(BUILD_DIR)/llvm_ok:
-	@echo "Can't find llvm or version of llvm too old (we need 9.0 or greater):"
-	@echo "You can override this check by setting LLVM_OK=y"
-	$(LLVM_CONFIG) --version
-	@exit 1
-endif
 
 ifneq ($(WITH_RTTI), )
 ifneq ($(LLVM_HAS_NO_RTTI), )

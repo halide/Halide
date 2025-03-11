@@ -807,9 +807,15 @@ public:
         std::istringstream ss(str);
 
         for (std::string line; std::getline(ss, line);) {
-            if (line.empty()) {
+            if (line.empty() || line == "\t") {
                 stream << "<span class='line'></span>\n";
                 continue;
+            }
+            bool indent = false;
+            if (line[0] == '\t') {
+                // Replace first tab with four spaces.
+                line = line.substr(1);
+                indent = true;
             }
             line = escape_html(line);
 
@@ -844,14 +850,6 @@ public:
                 scope.pop(current_kernel);
             }
 
-            bool indent = false;
-
-            if (line[0] == '\t') {
-                // Replace first tab with four spaces.
-                line = line.substr(1);
-                indent = true;
-            }
-
             line = replace_all(line, ".f32", ".<span class='OpF32'>f32</span>");
             line = replace_all(line, ".f64", ".<span class='OpF64'>f64</span>");
 
@@ -883,7 +881,7 @@ public:
             }
 
             // Predicated instructions
-            if (line.front() == '@' && indent) {
+            if (!line.empty() && line.front() == '@' && indent) {
                 idx = line.find(' ');
                 std::string pred = line.substr(1, idx - 1);
                 line = "<span class='Pred'>@" + variable(pred, Bool()) + "</span>" + line.substr(idx);
@@ -1197,7 +1195,7 @@ private:
     }
 
     /* Helper functions for printing IR nodes */
-    void print_constant(std::string cls, Expr c) {
+    void print_constant(const std::string &cls, const Expr &c) {
         print_opening_tag("span", cls, type_to_string(c.type()));
         stream << c;
         print_closing_tag("span");
@@ -1209,7 +1207,7 @@ private:
         print_closing_tag("span");
     }
 
-    void print_binary_op(const Expr &a, const Expr &b, std::string op, Type result_type) {
+    void print_binary_op(const Expr &a, const Expr &b, const std::string &op, Type result_type) {
         std::string result_type_str = type_to_string(result_type);
         print_opening_tag("span", "BinaryOp");
         print_html_element("span", "matched", "(", result_type_str);
@@ -1222,7 +1220,7 @@ private:
         print_closing_tag("span");
     }
 
-    void print_function_call(std::string fn_name, const std::vector<Expr> &args, const std::string &tooltip) {
+    void print_function_call(const std::string &fn_name, const std::vector<Expr> &args, const std::string &tooltip) {
         print_opening_tag("span", "matched");
         print_html_element("span", "Symbol matched", fn_name, tooltip);
         print_text("(");
@@ -1329,7 +1327,7 @@ private:
     }
 
     // Prints a cost button/indicator
-    void print_cost_btn(int line_cost, int block_cost, int max_line_cost, int max_block_cost, std::string id, std::string prefix) {
+    void print_cost_btn(int line_cost, int block_cost, int max_line_cost, int max_block_cost, const std::string &id, const std::string &prefix) {
         const int num_cost_buckets = 20;
         const auto compand = [](int v) -> int { return (int)std::sqrt(v * 10); };
 

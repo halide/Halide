@@ -78,8 +78,8 @@ class SimplifyCorrelatedDifferences : public IRMutator {
     };
     vector<OuterLet> lets;
 
-    template<typename LetStmtOrLet, typename StmtOrExpr>
-    StmtOrExpr visit_let(const LetStmtOrLet *op) {
+    template<typename LetStmtOrLet>
+    auto visit_let(const LetStmtOrLet *op) -> decltype(op->body) {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
             const LetStmtOrLet *op;
@@ -94,7 +94,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             }
         };
         std::vector<Frame> frames;
-        StmtOrExpr result;
+        decltype(op->body) result;
 
         // Note that we must add *everything* that depends on the loop
         // var to the monotonic scope and the list of lets, even
@@ -146,11 +146,11 @@ class SimplifyCorrelatedDifferences : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        return visit_let<Let, Expr>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let<LetStmt, Stmt>(op);
+        return visit_let(op);
     }
 
     Stmt visit(const For *op) override {

@@ -42,7 +42,7 @@ namespace {
 // If data too large, assert.
 // Return the offset at which 'data' was written.
 template<typename T>
-size_t emit_padded(std::ostream &out, T data, size_t size) {
+size_t emit_padded(std::ostream &out, const T &data, size_t size) {
     size_t pos = out.tellp();
     out << data;
     size_t written = (size_t)out.tellp() - pos;
@@ -185,7 +185,14 @@ void write_symbol_table(std::ostream &out,
             internal_assert(!err);
             std::string name = symbols.str().str();
             if (name_to_member_index.find(name) != name_to_member_index.end()) {
-                user_warning << "Warning: symbol '" << name << "' seen multiple times in library.\n";
+                bool is_constant = false;
+                is_constant |= name.find("__real@") == 0;
+                is_constant |= name.find("__xmm@") == 0;
+                is_constant |= name.find("__ymm@") == 0;
+                is_constant |= name.find("__zmm@") == 0;
+                if (!is_constant) {
+                    user_warning << "Warning: symbol '" << name << "' seen multiple times in library.\n";
+                }
                 continue;
             }
             name_to_member_index[name] = i;
@@ -345,7 +352,11 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
 void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
                llvm::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
+#if LLVM_VERSION >= 210
+    Internal::debug(2) << "Target triple: " << module_in.getTargetTriple().str() << "\n";
+#else
     Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
+#endif
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
@@ -412,11 +423,7 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
 }
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
-#if LLVM_VERSION >= 180
     emit_file(module, out, llvm::CodeGenFileType::ObjectFile);
-#else
-    emit_file(module, out, llvm::CGFT_ObjectFile);
-#endif
 }
 
 void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
@@ -592,15 +599,10 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
         return;
     }
 
-#if LLVM_VERSION >= 180
-    const llvm::SymtabWritingMode write_symtab = llvm::SymtabWritingMode::NormalSymtab;
-#else
-    const bool write_symtab = true;
-#endif
     const auto kind = Internal::get_triple_for_target(target).isOSDarwin() ? llvm::object::Archive::K_BSD : llvm::object::Archive::K_GNU;
     const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
-                                     write_symtab, kind,
+                                     llvm::SymtabWritingMode::NormalSymtab, kind,
                                      deterministic, thin, nullptr);
     internal_assert(!result)
         << "Failed to write archive: " << dst_file

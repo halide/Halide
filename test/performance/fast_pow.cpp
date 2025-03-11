@@ -20,6 +20,12 @@ int main(int argc, char **argv) {
     printf("HL_TARGET is:     %s\n", hl_target.to_string().c_str());
     printf("HL_JIT_TARGET is: %s\n", hl_jit_target.to_string().c_str());
 
+    if (hl_jit_target.arch == Target::X86 &&
+        !hl_jit_target.has_feature(Target::SSE41)) {
+        printf("[SKIP] These intrinsics are known to be slow on x86 without sse 4.1.\n");
+        return 0;
+    }
+
     if (hl_jit_target.arch == Target::WebAssembly) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;

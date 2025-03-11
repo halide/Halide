@@ -648,14 +648,14 @@ struct BinOp {
         }
         const Op &op = (const Op &)e;
         return (a.template match<bound>(*op.a.get(), state) &&
-                b.template match<bound | bindings<A>::mask>(*op.b.get(), state));
+                b.template match<(bound | bindings<A>::mask)>(*op.b.get(), state));
     }
 
     template<uint32_t bound, typename Op2, typename A2, typename B2>
     HALIDE_ALWAYS_INLINE bool match(const BinOp<Op2, A2, B2> &op, MatcherState &state) const noexcept {
         return (std::is_same<Op, Op2>::value &&
                 a.template match<bound>(unwrap(op.a), state) &&
-                b.template match<bound | bindings<A>::mask>(unwrap(op.b), state));
+                b.template match<(bound | bindings<A>::mask)>(unwrap(op.b), state));
     }
 
     constexpr static bool foldable = A::foldable && B::foldable;
@@ -750,14 +750,14 @@ struct CmpOp {
         }
         const Op &op = (const Op &)e;
         return (a.template match<bound>(*op.a.get(), state) &&
-                b.template match<bound | bindings<A>::mask>(*op.b.get(), state));
+                b.template match<(bound | bindings<A>::mask)>(*op.b.get(), state));
     }
 
     template<uint32_t bound, typename Op2, typename A2, typename B2>
     HALIDE_ALWAYS_INLINE bool match(const CmpOp<Op2, A2, B2> &op, MatcherState &state) const noexcept {
         return (std::is_same<Op, Op2>::value &&
                 a.template match<bound>(unwrap(op.a), state) &&
-                b.template match<bound | bindings<A>::mask>(unwrap(op.b), state));
+                b.template match<(bound | bindings<A>::mask)>(unwrap(op.b), state));
     }
 
     constexpr static bool foldable = A::foldable && B::foldable;
@@ -1320,11 +1320,6 @@ constexpr bool and_reduce(bool first, Args... rest) {
     return first && and_reduce(rest...);
 }
 
-// TODO: this can be replaced with std::min() once we require C++14 or later
-constexpr int const_min(int a, int b) {
-    return a < b ? a : b;
-}
-
 template<Call::IntrinsicOp intrin>
 struct OptionalIntrinType {
     bool check(const Type &) const {
@@ -1362,7 +1357,7 @@ struct Intrin {
     HALIDE_ALWAYS_INLINE bool match_args(int, const Call &c, MatcherState &state) const noexcept {
         using T = decltype(std::get<i>(args));
         return (std::get<i>(args).template match<bound>(*c.args[i].get(), state) &&
-                match_args<i + 1, bound | bindings<T>::mask>(0, c, state));
+                match_args<i + 1, (bound | bindings<T>::mask)>(0, c, state));
     }
 
     template<int i, uint32_t binds>
@@ -1413,7 +1408,7 @@ struct Intrin {
             return saturating_cast(optional_type_hint.type, std::move(arg0));
         }
 
-        Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
+        Expr arg1 = std::get<std::min<size_t>(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::absd) {
             return absd(std::move(arg0), std::move(arg1));
         } else if (intrin == Call::widen_right_add) {
@@ -1448,7 +1443,7 @@ struct Intrin {
             return rounding_shift_right(std::move(arg0), std::move(arg1));
         }
 
-        Expr arg2 = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
+        Expr arg2 = std::get<std::min<size_t>(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::mul_shift_right) {
             return mul_shift_right(std::move(arg0), std::move(arg1), std::move(arg2));
         } else if (intrin == Call::rounding_mul_shift_right) {
@@ -1692,14 +1687,14 @@ struct SelectOp {
         }
         const Select &op = (const Select &)e;
         return (c.template match<bound>(*op.condition.get(), state) &&
-                t.template match<bound | bindings<C>::mask>(*op.true_value.get(), state) &&
-                f.template match<bound | bindings<C>::mask | bindings<T>::mask>(*op.false_value.get(), state));
+                t.template match<(bound | bindings<C>::mask)>(*op.true_value.get(), state) &&
+                f.template match<(bound | bindings<C>::mask | bindings<T>::mask)>(*op.false_value.get(), state));
     }
     template<uint32_t bound, typename C2, typename T2, typename F2>
     HALIDE_ALWAYS_INLINE bool match(const SelectOp<C2, T2, F2> &instance, MatcherState &state) const noexcept {
         return (c.template match<bound>(unwrap(instance.c), state) &&
-                t.template match<bound | bindings<C>::mask>(unwrap(instance.t), state) &&
-                f.template match<bound | bindings<C>::mask | bindings<T>::mask>(unwrap(instance.f), state));
+                t.template match<(bound | bindings<C>::mask)>(unwrap(instance.t), state) &&
+                f.template match<(bound | bindings<C>::mask | bindings<T>::mask)>(unwrap(instance.f), state));
     }
 
     HALIDE_ALWAYS_INLINE
@@ -1765,7 +1760,7 @@ struct BroadcastOp {
     template<uint32_t bound, typename A2, typename B2>
     HALIDE_ALWAYS_INLINE bool match(const BroadcastOp<A2, B2> &op, MatcherState &state) const noexcept {
         return (a.template match<bound>(unwrap(op.a), state) &&
-                lanes.template match<bound | bindings<A>::mask>(unwrap(op.lanes), state));
+                lanes.template match<(bound | bindings<A>::mask)>(unwrap(op.lanes), state));
     }
 
     HALIDE_ALWAYS_INLINE
@@ -1829,8 +1824,8 @@ struct RampOp {
         }
         const Ramp &op = (const Ramp &)e;
         if (a.template match<bound>(*op.base.get(), state) &&
-            b.template match<bound | bindings<A>::mask>(*op.stride.get(), state) &&
-            lanes.template match<bound | bindings<A>::mask | bindings<B>::mask>(op.lanes, state)) {
+            b.template match<(bound | bindings<A>::mask)>(*op.stride.get(), state) &&
+            lanes.template match<(bound | bindings<A>::mask | bindings<B>::mask)>(op.lanes, state)) {
             return true;
         } else {
             return false;
@@ -1840,8 +1835,8 @@ struct RampOp {
     template<uint32_t bound, typename A2, typename B2, typename C2>
     HALIDE_ALWAYS_INLINE bool match(const RampOp<A2, B2, C2> &op, MatcherState &state) const noexcept {
         return (a.template match<bound>(unwrap(op.a), state) &&
-                b.template match<bound | bindings<A>::mask>(unwrap(op.b), state) &&
-                lanes.template match<bound | bindings<A>::mask | bindings<B>::mask>(unwrap(op.lanes), state));
+                b.template match<(bound | bindings<A>::mask)>(unwrap(op.b), state) &&
+                lanes.template match<(bound | bindings<A>::mask | bindings<B>::mask)>(unwrap(op.lanes), state));
     }
 
     HALIDE_ALWAYS_INLINE
@@ -1892,7 +1887,7 @@ struct VectorReduceOp {
             const VectorReduce &op = (const VectorReduce &)e;
             if (op.op == reduce_op &&
                 a.template match<bound>(*op.value.get(), state) &&
-                lanes.template match<bound | bindings<A>::mask>(op.type.lanes(), state)) {
+                lanes.template match<(bound | bindings<A>::mask)>(op.type.lanes(), state)) {
                 return true;
             }
         }
@@ -1903,7 +1898,7 @@ struct VectorReduceOp {
     HALIDE_ALWAYS_INLINE bool match(const VectorReduceOp<A2, B2, reduce_op_2> &op, MatcherState &state) const noexcept {
         return (reduce_op == reduce_op_2 &&
                 a.template match<bound>(unwrap(op.a), state) &&
-                lanes.template match<bound | bindings<A>::mask>(unwrap(op.lanes), state));
+                lanes.template match<(bound | bindings<A>::mask)>(unwrap(op.lanes), state));
     }
 
     HALIDE_ALWAYS_INLINE
@@ -2152,9 +2147,9 @@ struct SliceOp {
         return v.vectors.size() == 1 &&
                v.is_slice() &&
                vec.template match<bound>(*v.vectors[0].get(), state) &&
-               base.template match<bound | bindings<Vec>::mask>(v.slice_begin(), state) &&
-               stride.template match<bound | bindings<Vec>::mask | bindings<Base>::mask>(v.slice_stride(), state) &&
-               lanes.template match<bound | bindings<Vec>::mask | bindings<Base>::mask | bindings<Stride>::mask>(v.type.lanes(), state);
+               base.template match<(bound | bindings<Vec>::mask)>(v.slice_begin(), state) &&
+               stride.template match<(bound | bindings<Vec>::mask | bindings<Base>::mask)>(v.slice_stride(), state) &&
+               lanes.template match<(bound | bindings<Vec>::mask | bindings<Base>::mask | bindings<Stride>::mask)>(v.type.lanes(), state);
     }
 
     HALIDE_ALWAYS_INLINE

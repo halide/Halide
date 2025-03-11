@@ -338,8 +338,6 @@ Serialize::SplitType Serializer::serialize_split_type(const Split::SplitType &sp
         return Serialize::SplitType::RenameVar;
     case Split::SplitType::FuseVars:
         return Serialize::SplitType::FuseVars;
-    case Split::SplitType::PurifyRVar:
-        return Serialize::SplitType::PurifyRVar;
     default:
         user_error << "Unsupported split type\n";
         return Serialize::SplitType::SplitVar;
@@ -410,7 +408,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
     if (!stmt.defined()) {
         return std::make_pair(Serialize::Stmt::UndefinedStmt, Serialize::CreateUndefinedStmt(builder).Union());
     }
-    switch (stmt->node_type) {
+    switch (stmt.node_type()) {
     case IRNodeType::LetStmt: {
         const auto *const let_stmt = stmt.as<LetStmt>();
         const auto name_serialized = serialize_string(builder, let_stmt->name);
@@ -681,7 +679,7 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
     if (!expr.defined()) {
         return std::make_pair(Serialize::Expr::UndefinedExpr, Serialize::CreateUndefinedExpr(builder).Union());
     }
-    switch (expr->node_type) {
+    switch (expr.node_type()) {
     case IRNodeType::IntImm: {
         const auto *const int_imm = expr.as<IntImm>();
         const auto type_serialized = serialize_type(builder, int_imm->type);

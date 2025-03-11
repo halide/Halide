@@ -153,7 +153,7 @@ protected:
 
         // Returns Phi node inputs.
         template<typename StmtOrExpr>
-        SpvFactory::BlockVariables emit_if_then_else(const Expr &condition, StmtOrExpr then_case, StmtOrExpr else_case);
+        SpvFactory::BlockVariables emit_if_then_else(const Expr &condition, const StmtOrExpr &then_case, const StmtOrExpr &else_case);
 
         template<typename T>
         SpvId declare_constant_int(Type value_type, int64_t value);
@@ -1936,7 +1936,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Realize *) {
 template<typename StmtOrExpr>
 SpvFactory::BlockVariables
 CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
-                                                     StmtOrExpr then_case, StmtOrExpr else_case) {
+                                                     const StmtOrExpr &then_case, const StmtOrExpr &else_case) {
 
     SpvId merge_block_id = builder.reserve_id(SpvBlockId);
     SpvId if_block_id = builder.reserve_id(SpvBlockId);

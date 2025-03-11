@@ -69,10 +69,12 @@ static_assert(((HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT & (HALIDE_RUNTIME_BUF
 #ifndef HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
 
 // clang-format off
-#ifdef _MSC_VER
+#ifdef _WIN32
 
-    // MSVC doesn't implement aligned_alloc(), even in C++17 mode, and
-    // has stated they probably never will, so, always default it off here.
+    // Windows (regardless of which compiler) doesn't implement aligned_alloc(),
+    // even in C++17 mode, and has stated they probably never will, as the issue
+    // is in the incompatibility that free() needs to be able to free both pointers
+    // returned by malloc() and aligned_alloc(). So, always default it off here.
     #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
 
 #elif defined(__ANDROID_API__) && __ANDROID_API__ < 28
@@ -1995,9 +1997,12 @@ public:
     /** Make a buffer with the same shape and memory nesting order as
      * another buffer. It may have a different type. */
     template<typename T2, int D2, int S2>
+    // NOLINTNEXTLINE(performance-unnecessary-value-param)
     static Buffer<T, Dims, InClassDimStorage> make_with_shape_of(Buffer<T2, D2, S2> src,
                                                                  void *(*allocate_fn)(size_t) = nullptr,
                                                                  void (*deallocate_fn)(void *) = nullptr) {
+        // Note that src is taken by value because its dims are mutated
+        // in-place by the helper. Do not change to taking it by reference.
         static_assert(Dims == D2 || Dims == AnyDims);
         const halide_type_t dst_type = T_is_void ? src.type() : halide_type_of<typename std::remove_cv<not_void_T>::type>();
         return Buffer<>::make_with_shape_of_helper(dst_type, src.dimensions(), src.buf.dim,
@@ -2063,9 +2068,7 @@ private:
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE
-        storage_T *
-        address_of(Args... args) const {
+    HALIDE_ALWAYS_INLINE storage_T *address_of(Args... args) const {
         if (T_is_void) {
             return (storage_T *)(this->buf.host) + offset_of(0, args...) * type().bytes();
         } else {
@@ -2120,8 +2123,7 @@ public:
     }
 
     HALIDE_ALWAYS_INLINE
-    const not_void_T &
-    operator()() const {
+    const not_void_T &operator()() const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 0;
@@ -2141,9 +2143,7 @@ public:
 
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    HALIDE_ALWAYS_INLINE
-        not_void_T &
-        operator()(int first, Args... rest) {
+    HALIDE_ALWAYS_INLINE not_void_T &operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 1 + (int)(sizeof...(rest));
