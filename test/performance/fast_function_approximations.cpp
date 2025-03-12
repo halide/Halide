@@ -20,6 +20,7 @@ struct PrecisionToTest {
 } precisions_to_test[] = {
     {{}, "AUTO"},
 
+    // Test performance of polynomials.
     {ApproximationPrecision::poly_mae(2), "Poly2"},
     {ApproximationPrecision::poly_mae(3), "Poly3"},
     {ApproximationPrecision::poly_mae(4), "Poly4"},
@@ -28,6 +29,7 @@ struct PrecisionToTest {
     {ApproximationPrecision::poly_mae(7), "Poly7"},
     {ApproximationPrecision::poly_mae(8), "Poly8"},
 
+    // Test performance of intrinsics and perhaps later of polynomials if intrinsic precision is insufficient.
     {ApproximationPrecision::max_abs_error(1e-2), "MAE 1e-2"},
     {ApproximationPrecision::max_abs_error(1e-3), "MAE 1e-3"},
     {ApproximationPrecision::max_abs_error(1e-4), "MAE 1e-4"},
@@ -153,6 +155,24 @@ int main(int argc, char **argv) {
             [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_tanh(x + z, prec); },
             {Target::Feature::CUDA, Target::Feature::Vulkan},
         },
+        {
+            "asin",
+            -0.9, 0.9,
+            0, 0,
+            -0.1, 0.1,
+            [](Expr x, Expr y, Expr z) { return Halide::asin(x + z); },
+            [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_asin(x + z, prec); },
+            {Target::Feature::WebGPU, Target::Feature::Metal, Target::CUDA, Target::Feature::Vulkan, Target::Feature::OpenCL},
+        },
+        {
+            "acos",
+            -0.9, 0.9,
+            0, 0,
+            -0.1, 0.1,
+            [](Expr x, Expr y, Expr z) { return Halide::acos(x + z); },
+            [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_acos(x + z, prec); },
+            {Target::Feature::WebGPU, Target::Feature::Metal, Target::CUDA, Target::Feature::Vulkan, Target::Feature::OpenCL},
+        },
     };
     // clang-format on
 
@@ -167,7 +187,7 @@ int main(int argc, char **argv) {
     Buffer<float> buffer_out(test_w, test_h);
     Halide::Tools::BenchmarkConfig bcfg;
     bcfg.max_time = 0.5;
-    bcfg.min_time = 0.2;
+    bcfg.min_time = 0.3;
     bcfg.accuracy = 0.015;
     for (FunctionToTest ftt : funcs) {
         bool skip = false;

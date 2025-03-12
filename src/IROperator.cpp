@@ -1356,6 +1356,14 @@ Expr fast_cos(const Expr &x, ApproximationPrecision precision) {
     return Call::make(x.type(), Call::fast_cos, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
 }
 
+Expr fast_asin(const Expr &x, ApproximationPrecision precision) {
+    return Call::make(x.type(), Call::fast_asin, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
+}
+
+Expr fast_acos(const Expr &x, ApproximationPrecision precision) {
+    return Call::make(x.type(), Call::fast_acos, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
+}
+
 Expr fast_atan(const Expr &x, ApproximationPrecision precision) {
     return Call::make(x.type(), Call::fast_atan, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
 }
@@ -1383,8 +1391,14 @@ Expr fast_pow(const Expr &x, const Expr &y, ApproximationPrecision prec) {
     if (auto i = as_const_int(y)) {
         return raise_to_integer_power(x, *i);
     }
-    user_assert(x.type() == Float(32) && y.type() == Float(32)) << "fast_exp only works for Float(32)";
-    return Call::make(x.type(), Call::fast_pow, {x, y, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
+
+    Expr x_float = x;
+    if (x_float.type().is_int_or_uint()) {
+        user_warning << "fast_pow(int, float) is deprecated. Please make sure to use a floating point type for argument x.";
+        x_float = cast<float>(x_float);
+    }
+    user_assert(x.type() == Float(32) && y.type() == Float(32)) << "fast_pow only works for Float(32)";
+    return Call::make(x_float.type(), Call::fast_pow, {x_float, y, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
 }
 
 Expr fast_tanh(const Expr &x, ApproximationPrecision precision) {

@@ -11,7 +11,6 @@ np.set_printoptions(linewidth=3000, precision=20)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("func")
-parser.add_argument("--formula", action='store_true', help="Output in formula form (pastable in Desmos)")
 parser.add_argument("--order", type=int, nargs='+', required=True)
 args = parser.parse_args()
 
@@ -58,7 +57,8 @@ if taylor is None:
 
 def num_to_str(c):
     if c == 0.0: return "0"
-    return f"{c:+.12e}"
+    if c == 1.0: return "1"
+    return c.hex()
 
 def formula(coeffs, exponents=None):
     if exponents is None:
@@ -100,20 +100,14 @@ for order in args.order:
 
         return Metrics(ft_mean_squared_error, ft_max_abs_error, ft_max_ulp_error)
 
-
     float16_metrics = eval(np.float16)
     float32_metrics = eval(np.float32)
     float64_metrics = eval(np.float64)
 
-
-    print("{", end="")
-    if args.formula:
-        print(f" /* Padé order {len(pa) - 1}/{len(qa) - 1}: ({formula(pa)})/({formula(qa)}) */", end="")
-    print("\n"
-          + f"  {{{float16_metrics.mean_squared_error:.6e}, {float16_metrics.max_abs_error:.6e}, {float16_metrics.max_ulp_error:.3e}}},\n"
-          + f"  {{{float32_metrics.mean_squared_error:.6e}, {float32_metrics.max_abs_error:.6e}, {float32_metrics.max_ulp_error:.3e}}},\n"
-          + f"  {{{float64_metrics.mean_squared_error:.6e}, {float64_metrics.max_abs_error:.6e}, {float64_metrics.max_ulp_error:.3e}}},\n"
-          + "    {" + ", ".join([f"{num_to_str(c)}" for c in pa]) + "},\n"
-          + "    {" + ", ".join([f"{num_to_str(c)}" for c in qa]) + "}\n"
-          , end="")
+    print("{", f" /* Padé order {len(pa) - 1}/{len(qa) - 1}: ({formula(pa)})/({formula(qa)}) */")
+    print(f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}, {float16_metrics.max_abs_error:.6e}, {float16_metrics.max_ulp_error:.3e}}},")
+    print(f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}, {float32_metrics.max_abs_error:.6e}, {float32_metrics.max_ulp_error:.3e}}},")
+    print(f"    /* f64 */ {{{float64_metrics.mean_squared_error:.6e}, {float64_metrics.max_abs_error:.6e}, {float64_metrics.max_ulp_error:.3e}}},")
+    print("    /* p */ {" + ", ".join([f"{num_to_str(c)}" for c in pa]) + "}")
+    print("    /* q */ {" + ", ".join([f"{num_to_str(c)}" for c in qa]) + "}")
     print("},")

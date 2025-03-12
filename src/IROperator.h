@@ -1082,6 +1082,8 @@ Expr fast_cos(const Expr &x, ApproximationPrecision precision = {});
 /** On NVIDIA CUDA: default-precision maps to a combination of sin.approx.f32,
  * cos.approx.f32, div.approx.f32 instructions. */
 Expr fast_tan(const Expr &x, ApproximationPrecision precision = {});
+Expr fast_asin(const Expr &x, ApproximationPrecision precision = {});
+Expr fast_acos(const Expr &x, ApproximationPrecision precision = {});
 Expr fast_atan(const Expr &x, ApproximationPrecision precision = {});
 Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = {});
 // @}

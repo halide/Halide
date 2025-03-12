@@ -79,7 +79,7 @@ inline std::pair<Expr, Expr> two_sum(const Expr &a, const Expr &b) {
 
 inline std::pair<Expr, Expr> two_prod(const Expr &a, const Expr &b) {
     Expr x = strict_float(a * b);
-    Expr y = strict_float(a * b - x); // No strict float, so let's hope it gets compiled as FMA.
+    Expr y = strict_float(1 * (a * b - x)); // No strict float, so let's hope it gets compiled as FMA.
     return {x, y};
 }
 
@@ -96,18 +96,26 @@ Expr eval_poly_compensated_horner(const std::vector<double> &coefs, const Expr &
     Expr result = make_const(type, coefs.back());
     Expr error = make_const(type, 0.0);
     for (size_t i = 1; i < coefs.size(); ++i) {
-        auto [p, pi] = two_prod(result, x);
-        auto [sn, sigma] = two_sum(p, make_const(type, coefs[coefs.size() - i - 1]));
-        result = sn;
-        error = error * x + strict_float(pi + sigma);
+        double c = coefs[coefs.size() - i - 1];
+        if (c == 0.0) {
+            auto [p, pi] = two_prod(result, x);
+            result = p;
+            error = error * x + pi;
+        } else {
+            auto [p, pi] = two_prod(result, x);
+            auto [sn, sigma] = two_sum(p, make_const(type, c));
+            result = sn;
+            error = error * x + strict_float(pi + sigma);
+        }
     }
+    //error = print(error);
     result = strict_float(result + error);
     debug(3) << "Polynomial (preciser): " << common_subexpression_elimination(result) << "\n";
     return result;
 }
 
 Expr eval_poly(const std::vector<double> &coefs, const Expr &x) {
-    //return eval_poly_compensated_horner(coefs, x);
+    return eval_poly_compensated_horner(coefs, x);
     if (coefs.size() >= 2) {
         return eval_poly_fast(x, coefs);
     }
@@ -148,6 +156,7 @@ Expr fast_sin(const Expr &x_full, ApproximationPrecision precision) {
 }
 
 Expr fast_cos(const Expr &x_full, ApproximationPrecision precision) {
+    constexpr bool use_sin = false; // MULPE-optimized versions work a lot better on sin(x).
     Type type = x_full.type();
     Expr x_abs = abs(x_full);
     // Range reduction to interval [0, pi/2] which corresponds to a quadrant of the circle.
@@ -156,14 +165,24 @@ Expr fast_cos(const Expr &x_full, ApproximationPrecision precision) {
     Expr k = cast<int>(k_real);
     Expr k_mod4 = k % 4;  // Halide mod is always positive!
     Expr mirror = ((k_mod4 == 1) || (k_mod4 == 3));
+    if (use_sin) {
+        mirror = !mirror;
+    }
     Expr flip_sign = ((k_mod4 == 1) || (k_mod4 == 2));
 
     // Reduce the angle modulo pi/2: i.e., to the angle within the quadrant.
     Expr x = x_abs - k_real * make_const(type, PI_OVER_TWO);
     x = select(mirror, make_const(type, PI_OVER_TWO) - x, x);
 
-    const Internal::Approximation *approx = Internal::best_cos_approximation(precision, type);
-    Expr result = eval_approx(approx, x);
+    Expr result;
+    if (use_sin) {
+        // Approximating cos(x) as sin(pi/2 - x).
+        const Internal::Approximation *approx = Internal::best_sin_approximation(precision, type);
+        result = eval_approx(approx, x);
+    } else {
+        const Internal::Approximation *approx = Internal::best_cos_approximation(precision, type);
+        result = eval_approx(approx, x);
+    }
     result = select(flip_sign, -result, result);
     result = common_subexpression_elimination(result, true);
     return result;
@@ -455,6 +474,13 @@ IntrinsicsInfoPerDeviceAPI ii_tanh{
      {DeviceAPI::Metal, {true}, {OO::MULPE, 1e-5f, 135}},
      {DeviceAPI::WebGPU, {true}, {}},
 }};
+
+IntrinsicsInfoPerDeviceAPI ii_asin_acos{
+   OO::MULPE, 1e-5f, 500, {
+    {DeviceAPI::Vulkan, {true}, {}},
+    {DeviceAPI::CUDA, {true}, {}},
+    {DeviceAPI::OpenCL, {true}, {}},
+}};
 // clang-format on
 
 bool fast_math_func_has_intrinsic_based_implementation(Call::IntrinsicOp op, DeviceAPI device, const Target &t) {
@@ -484,6 +510,10 @@ bool fast_math_func_has_intrinsic_based_implementation(Call::IntrinsicOp op, Dev
         break;
     case Call::fast_tanh:
         iipda = &ii_tanh;
+        break;
+    case Call::fast_asin:
+    case Call::fast_acos:
+        iipda = &ii_asin_acos;
         break;
 
     default:
@@ -875,6 +905,28 @@ public:
             pow = select(arg_x == 0.0f, 0.0f, pow);
             pow = select(arg_y == 0.0f, 1.0f, pow);
             return pow;
+        } else if (op->is_intrinsic(Call::fast_asin)) {
+            ApproximationPrecision prec = extract_approximation_precision(op);
+            IntrinsicsInfo ii = resolve_precision(prec, ii_asin_acos, for_device_api);
+            if (op->type == Float(32) && intrinsic_satisfies_precision(ii, prec)) {
+                return append_type_suffix(op);
+            }
+            if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
+                return to_native_func(op);
+            }
+            Expr x = mutate(op->args[0]);
+            return mutate(Halide::fast_atan2(x, sqrt((1 + x) * (1 - x)), prec));
+        } else if (op->is_intrinsic(Call::fast_acos)) {
+            ApproximationPrecision prec = extract_approximation_precision(op);
+            IntrinsicsInfo ii = resolve_precision(prec, ii_asin_acos, for_device_api);
+            if (op->type == Float(32) && intrinsic_satisfies_precision(ii, prec)) {
+                return append_type_suffix(op);
+            }
+            if (ii.native_func.is_fast && native_func_satisfies_precision(ii, prec)) {
+                return to_native_func(op);
+            }
+            Expr x = mutate(op->args[0]);
+            return mutate(Halide::fast_atan2(sqrt((1 + x) * (1 - x)), x, prec));
         } else {
             return IRMutator::visit(op);
         }
