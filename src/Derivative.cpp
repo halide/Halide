@@ -1076,14 +1076,14 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
     } else if (is_math_func(op, "sin", Call::fast_sin)) {
         // d/dx sin(x) = cos(x)
         accumulate(op->args[0], adjoint * cos(op->args[0]));
-    } else if (is_math_func(op, "asin")) {
+    } else if (is_math_func(op, "asin", Call::fast_asin)) {
         // d/dx asin(x) = 1 / sqrt(1 - x^2)
         Expr one = make_one(op->type);
         accumulate(op->args[0], adjoint / sqrt(one - op->args[0] * op->args[0]));
     } else if (is_math_func(op, "cos", Call::fast_cos)) {
         // d/dx cos(x) = -sin(x)
         accumulate(op->args[0], -adjoint * sin(op->args[0]));
-    } else if (is_math_func(op, "acos")) {
+    } else if (is_math_func(op, "acos", Call::fast_acos)) {
         // d/dx acos(x) = - 1 / sqrt(1 - x^2)
         Expr one = make_one(op->type);
         accumulate(op->args[0], -adjoint / sqrt(one - op->args[0] * op->args[0]));

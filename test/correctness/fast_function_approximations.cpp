@@ -150,6 +150,24 @@ struct FunctionToTest {
             { "extended"    , {{ -100.0f, 100.0f}}, true, true, 2500, 20 },
         }
     },
+    {
+        "asin", Call::fast_asin,
+        [](Expr x, Expr y) { return Halide::asin(x); },
+        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_asin(x, prec); },
+        Halide::Internal::best_atan_approximation, // Yes, atan table!
+        {
+            { "precise"     , {{  -1.0f ,  1.0f }}, true, true, 2500, 20 },
+        }
+    },
+    {
+        "acos", Call::fast_acos,
+        [](Expr x, Expr y) { return Halide::acos(x); },
+        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_acos(x, prec); },
+        Halide::Internal::best_atan_approximation, // Yes, atan table!
+        {
+            { "precise"     , {{  -1.0f ,  1.0f }}, true, true, 2500, 20 },
+        }
+    },
     // clang-format on
 };
 
@@ -357,7 +375,7 @@ int main(int argc, char **argv) {
             input.compute_root();  // Make sure this is super deterministic (computed on always the same CPU).
 
             // Reference function on CPU
-            Func ref_func{ftt.name + "_ref"};
+            Func ref_func{ftt.name + "_ref_cpu_via_double"};
             ref_func(i) = cast<float>(ftt.make_reference(
                 cast<double>(arg_x),
                 arg_y.defined() ? cast<double>(arg_y) : arg_y));
@@ -373,10 +391,12 @@ int main(int argc, char **argv) {
             // Reference function on device (to check that the "exact" function is exact).
             if (target.has_gpu_feature()) {
                 Var io, ii;
-                ref_func.never_partition_all();
+                Func ref_func_gpu{ftt.name + "_ref_gpu"};
+                ref_func_gpu(i) = ftt.make_reference(arg_x, arg_y);
+                ref_func_gpu.never_partition_all();
                 // also vectorize to make sure that works on GPU as well...
-                ref_func.gpu_tile(i, io, ii, 256, TailStrategy::ShiftInwards).vectorize(ii, 2);
-                ref_func.realize(out_approx);
+                ref_func_gpu.gpu_tile(i, io, ii, 256, TailStrategy::ShiftInwards).vectorize(ii, 2);
+                ref_func_gpu.realize(out_approx);
                 out_approx.copy_to_host();
 
 #define METRICS_FMT "MaxError{ abs: %.4e , rel: %.4e , ULP: %14" PRIu64 " , MantissaBits: %2d} | MeanError{ abs: %.4e , ULP: %10.2f}"

@@ -629,6 +629,8 @@ const char *const intrinsic_op_names[] = {
     "dynamic_shuffle",
     "extract_bits",
     "extract_mask_element",
+    "fast_acos",
+    "fast_asin",
     "fast_atan",
     "fast_atan2",
     "fast_cos",
