@@ -8,6 +8,7 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_MLIR.h"
 #include "CodeGen_PyTorch.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
@@ -42,6 +43,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::function_info_header, {"function_info_header", ".function_info.h", IsSingle}},
         {OutputFileType::hlpipe, {"hlpipe", ".hlpipe", IsSingle}},
         {OutputFileType::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
+        {OutputFileType::mlir, {"mlir", ".mlir", IsSingle}},
         {OutputFileType::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
         {OutputFileType::python_extension, {"python_extension", ".py.cpp", IsSingle}},
         {OutputFileType::pytorch_wrapper, {"pytorch_wrapper", ".pytorch.h", IsSingle}},
@@ -770,6 +772,15 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
 
         std::ofstream file(output_files.at(OutputFileType::pytorch_wrapper));
         Internal::CodeGen_PyTorch cg(file);
+        cg.compile(*this);
+        file.close();
+        internal_assert(!file.fail());
+    }
+    if (contains(output_files, OutputFileType::mlir)) {
+        debug(1) << "Module.compile(): mlir " << output_files.at(OutputFileType::mlir) << "\n";
+
+        std::ofstream file(output_files.at(OutputFileType::mlir));
+        Internal::CodeGen_MLIR cg(file);
         cg.compile(*this);
         file.close();
         internal_assert(!file.fail());
