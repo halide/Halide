@@ -27,9 +27,13 @@
 
 import numpy as np
 import argparse
-import tqdm
+import rich.console
+import rich.progress
+import concurrent.futures
 
+console = rich.console.Console()
 np.set_printoptions(linewidth=3000)
+
 
 class SmartFormatter(argparse.HelpFormatter):
     def _split_lines(self, text, width):
@@ -37,21 +41,21 @@ class SmartFormatter(argparse.HelpFormatter):
             return text[2:].splitlines()
         return argparse.HelpFormatter._split_lines(self, text, width)
 
+
 parser = argparse.ArgumentParser(formatter_class=SmartFormatter)
 parser.add_argument("func")
 parser.add_argument("--order", type=int, nargs='+', required=True)
 parser.add_argument("--loss", nargs='+', required=True,
                     choices=["mse", "mae", "mulpe", "mulpe_mae"],
                     default="mulpe",
-                    help="R|What to optimize for.\n"
-                    + " * mse: Mean Squared Error\n"
-                    + " * mae: Maximal Absolute Error\n"
-                    + " * mulpe: Maximal ULP Error  [default]\n"
-                    + " * mulpe_mae: 50%% mulpe + 50%% mae")
+                    help=("R|What to optimize for.\n"
+                          + " * mse: Mean Squared Error\n"
+                          + " * mae: Maximal Absolute Error\n"
+                          + " * mulpe: Maximal ULP Error  [default]\n"
+                          + " * mulpe_mae: 50%% mulpe + 50%% mae"))
 parser.add_argument("--gui", action='store_true', help="Do produce plots.")
 parser.add_argument("--print", action='store_true', help="Print while optimizing.")
 parser.add_argument("--pbar", action='store_true', help="Create a progress bar while optimizing.")
-parser.add_argument("--formula", action='store_true', help="Output in formula form (pastable in Desmos)")
 args = parser.parse_args()
 
 loss_power = 1500
@@ -60,7 +64,8 @@ import collections
 
 Metrics = collections.namedtuple("Metrics", ["mean_squared_error", "max_abs_error", "max_ulp_error"])
 
-def optimize_approximation(loss, order):
+
+def optimize_approximation(loss, order, progress):
     fixed_part_taylor = []
     X = None
     will_invert = False
@@ -70,7 +75,7 @@ def optimize_approximation(loss, order):
         elif hasattr(np, "arctan"):
             func = np.arctan
         else:
-            print("Your numpy version doesn't support arctan.")
+            console.print("Your numpy version doesn't support arctan.")
             exit(1)
         exponents = 1 + np.arange(order) * 2
         lower, upper = 0.0, 1.0
@@ -90,49 +95,62 @@ def optimize_approximation(loss, order):
         lower, upper = 0.0, np.pi / 2
     elif args.func == "tan":
         func = np.tan
-        fixed_part_taylor = [0, 1, 0, 1/3] # We want a very accurate approximation around zero, because we will need it to invert and compute the tan near the poles.
-        if order == 2: fixed_part_taylor = [0] # Let's optimize at least the ^1 term
-        if order == 2: fixed_part_taylor = [0, 1] # Let's optimize at least the ^3 term
+        fixed_part_taylor = [0, 1, 0, 1 / 3]  # We want a very accurate approximation around zero, because we will need it to invert and compute the tan near the poles.
+        if order == 2:
+            fixed_part_taylor = [0]  # Let's optimize at least the ^1 term
+        if order == 2:
+            fixed_part_taylor = [0, 1]  # Let's optimize at least the ^3 term
         exponents = 1 + np.arange(order) * 2
         lower, upper = 0.0, np.pi / 4
         X = np.concatenate([np.logspace(-5, 0, num=2048 * 17), np.linspace(0, 1, 9000)]) * (np.pi / 4)
         X = np.sort(X)
         will_invert = True
     elif args.func == "exp":
-        func = lambda x: np.exp(x)
+        func = np.exp
         fixed_part_taylor = [1, 1]
         exponents = np.arange(2, order)
         lower, upper = 0, np.log(2)
     elif args.func == "expm1":
-        func = lambda x: np.expm1(x)
+        func = np.expm1
         exponents = np.arange(1, order + 1)
         lower, upper = 0, np.log(2)
     elif args.func == "log":
-        func = lambda x: np.log(x + 1.0)
+        def func(x): return np.log(x + 1.0)
         exponents = np.arange(1, order + 1)
         lower, upper = -0.25, 0.5
     elif args.func == "tanh":
-        func = lambda x: np.tanh(x)
+        func = np.tanh
         fixed_part_taylor = [0, 1]
         exponents = np.arange(2, order + 1)
         lower, upper = 0.0, 4.0
+    elif args.func == "asin":
+        func = np.arcsin
+        fixed_part_taylor = [0, 1]
+        exponents = 1 + 2 * np.arange(0, order)
+        lower, upper = -1.0, 1.0
+    elif args.func == "asin_invx":
+        def func(x): return np.arcsin(1/x)
+        exponents = 1 + np.arange(order)
+        lower, upper = 1.0, 2.0
     else:
-        print("Unknown function:", args.func)
+        console.print("Unknown function:", args.func)
         exit(1)
 
     # Make sure we never optimize the coefficients of the fixed part.
     exponents = exponents[exponents >= len(fixed_part_taylor)]
 
     X_dense = np.linspace(lower, upper, 512 * 31 * 11)
-    #if lower >= 0.0:
+    # if lower >= 0.0:
     #    loglow = -5.0 if lower == 0.0 else np.log(lower)
     #    X_dense = np.concatenate([X_dense, np.logspace(loglow, np.log(upper), num=2048 * 17)])
     #    X_dense = np.sort(X_dense)
 
+    def func_fixed_part(x):
+        return x * 0.0
 
-    func_fixed_part = lambda x: x * 0.0
     if len(fixed_part_taylor) > 0:
         assert len(fixed_part_taylor) <= 4
+
         def ffp(x):
             x2 = x * x
             x3 = x2 * x
@@ -140,23 +158,22 @@ def optimize_approximation(loss, order):
             return np.sum([xp * c for xp, c in zip([np.ones_like(x), x, x2, x3, x4], fixed_part_taylor)], axis=0)
         func_fixed_part = ffp
 
-    if X is None: X = np.linspace(lower, upper, 512 * 31)
+    if X is None:
+        X = np.linspace(lower, upper, 512 * 31)
     target = func(X)
     fixed_part = func_fixed_part(X)
     target_fitting_part = target - fixed_part
 
-    target_spacing = np.spacing(np.abs(target).astype(np.float32)).astype(np.float64) # Precision (i.e., ULP)
+    target_spacing = np.spacing(np.abs(target).astype(np.float32)).astype(np.float64)  # Precision (i.e., ULP)
     # We will optimize everything using double precision, which means we will obtain more bits of
     # precision than the actual target values in float32, which means that our reconstruction and
     # ideal target value can be a non-integer number of float32-ULPs apart.
 
-    if args.print: print("exponent:", exponents)
+    if args.print:
+        console.print("exponent:", exponents)
     coeffs = np.zeros(len(exponents))
-    powers = np.power(X[:,None], exponents)
+    powers = np.power(X[:, None], exponents)
     assert exponents.dtype == np.int64
-
-
-
 
     # If the loss is MSE, then this is just a linear system we can solve for.
     # We will iteratively adjust the weights to put more focus on the parts where it goes wrong.
@@ -169,16 +186,17 @@ def optimize_approximation(loss, order):
         lstsq_iterations = loss_power * 1
         weight = 0.2 * np.ones_like(target) + 0.2 * np.mean(target_spacing) / target_spacing
 
-    #if will_invert: weight += 1.0 / (np.abs(target) + target_spacing)
+    # if will_invert: weight += 1.0 / (np.abs(target) + target_spacing)
 
     loss_history = np.zeros((lstsq_iterations, 3))
 
     try:
-        for i in tqdm.trange(lstsq_iterations, disable=not args.pbar, leave=False):
+        task = progress.add_task(f"{args.func} {loss} order={order}", total=lstsq_iterations)
+        for i in progress.track(range(lstsq_iterations), task_id=task):
             norm_weight = weight / np.mean(weight)
-            coeffs, residuals, rank, s = np.linalg.lstsq(powers * norm_weight[:,None], target_fitting_part * norm_weight, rcond=-1)
+            coeffs, residuals, rank, s = np.linalg.lstsq(powers * norm_weight[:, None], target_fitting_part * norm_weight, rcond=-1)
 
-            y_hat = fixed_part + np.sum((powers * coeffs)[:,::-1], axis=-1)
+            y_hat = fixed_part + np.sum((powers * coeffs)[:, ::-1], axis=-1)
             diff = y_hat - target
             abs_diff = np.abs(diff)
 
@@ -194,8 +212,8 @@ def optimize_approximation(loss, order):
             loss_history[i, 2] = max_ulp_error
 
             if args.print and i % 10 == 0:
-                print(f"[{((i+1) / lstsq_iterations * 100.0):3.0f}%] coefficients:", coeffs,
-                      f" MaxAE: {max_abs_error:20.17f} MaxULPs: {max_ulp_error:20.0f}  mean weight: {weight.mean():.4e}")
+                console.log(f"[{((i + 1) / lstsq_iterations * 100.0):3.0f}%] coefficients:", coeffs,
+                            f" MaxAE: {max_abs_error:20.17f} MaxULPs: {max_ulp_error:20.0f}  mean weight: {weight.mean():.4e}")
 
             if loss == "mae":
                 norm_error_metric = abs_diff / np.amax(abs_diff)
@@ -222,12 +240,12 @@ def optimize_approximation(loss, order):
                 init_y_hat = y_hat.copy()
 
     except KeyboardInterrupt:
-        print("Interrupted")
+        console.log("Interrupted")
 
     def eval(dtype):
         ft_x_dense = X_dense.astype(dtype)
         ft_target_dense = func(X_dense).astype(dtype)
-        ft_powers = np.power(ft_x_dense[:,None], exponents).astype(dtype)
+        ft_powers = np.power(ft_x_dense[:, None], exponents).astype(dtype)
         ft_fixed_part = func_fixed_part(ft_x_dense).astype(dtype)
         ft_y_hat = ft_fixed_part + np.sum(ft_powers * coeffs, axis=-1).astype(dtype)
         ft_diff = ft_y_hat - ft_target_dense.astype(dtype)
@@ -277,9 +295,9 @@ def optimize_approximation(loss, order):
         ax[2].legend()
 
         ax[3].set_title("Maximal Absolute Error\nprogression during\noptimization")
-        ax[3].semilogx(1 + np.arange(loss_history.shape[0]), loss_history[:,1])
+        ax[3].semilogx(1 + np.arange(loss_history.shape[0]), loss_history[:, 1])
         ax[3].set_xlim(1, loss_history.shape[0] + 1)
-        ax[3].axhline(y=loss_history[0,1], linestyle=':', color='k')
+        ax[3].axhline(y=loss_history[0, 1], linestyle=':', color='k')
         ax[3].grid()
 
         ax[5].set_title("ULP distance")
@@ -289,7 +307,6 @@ def optimize_approximation(loss, order):
         ax[5].grid()
         ax[5].set_xlim(lower, upper)
         ax[5].legend()
-
 
         ax[6].set_title("Absolute ULP distance\n(log-scale)")
         ax[6].semilogy(X, init_abs_ulp_error, label='init')
@@ -301,9 +318,9 @@ def optimize_approximation(loss, order):
         ax[6].legend()
 
         ax[7].set_title("Maximal ULP Error\nprogression during\noptimization")
-        ax[7].loglog(1 + np.arange(loss_history.shape[0]), loss_history[:,2])
+        ax[7].loglog(1 + np.arange(loss_history.shape[0]), loss_history[:, 2])
         ax[7].set_xlim(1, loss_history.shape[0] + 1)
-        ax[7].axhline(y=loss_history[0,2], linestyle=':', color='k')
+        ax[7].axhline(y=loss_history[0, 2], linestyle=':', color='k')
         ax[7].grid()
 
         ax[4].set_title("LstSq Weight\n(log-scale)")
@@ -319,30 +336,35 @@ def optimize_approximation(loss, order):
 
 
 def num_to_str(c):
-    if c == 0.0: return "0"
-    if c == 1.0: return "1"
+    if c == 0.0:
+        return "0"
+    if c == 1.0:
+        return "1"
     return c.hex()
+
 
 def formula(coeffs, exponents=None):
     if exponents is None:
         exponents = np.arange(len(coeffs))
     terms = []
     for c, e in zip(coeffs, exponents):
-        if c == 0: continue
-        if c == 1: terms.append(f"x^{e}")
-        else: terms.append(f"{c:.12f} * x^{e}")
+        if c == 0:
+            continue
+        if c == 1:
+            terms.append(f"x^{e}")
+        else:
+            terms.append(f"{c:.12f} * x^{e}")
     return " + ".join(terms)
 
-for loss in args.loss:
-    for order in args.order:
-        if args.print: print("Optimizing {loss} with {order} terms...")
-        exponents, fixed_part_taylor, init_coeffs, coeffs, float16_metrics, float32_metrics, float64_metrics, loss_history = optimize_approximation(loss, order)
 
+with concurrent.futures.ThreadPoolExecutor(4) as pool, rich.progress.Progress(console=console, disable=not args.pbar) as progress:
+    futures = []
+    for loss in args.loss:
+        for order in args.order:
+            futures.append((loss, order, pool.submit(optimize_approximation, loss, order, progress)))
 
-        if args.print:
-            print("Init  coeffs:", init_coeffs)
-            print("Final coeffs:", coeffs)
-            print(f"mse: {mean_loss:40.27f}  max abs error: {max_abs_error:20.17f}  max ulp error: {max_ulp_error:e}")
+    for loss, order, future in futures:
+        exponents, fixed_part_taylor, init_coeffs, coeffs, float16_metrics, float32_metrics, float64_metrics, loss_history = future.result()
 
         degree = len(fixed_part_taylor) - 1
         if len(exponents) > 0:
@@ -353,16 +375,14 @@ for loss in args.loss:
         for e, c in zip(exponents, coeffs):
             all_coeffs[e] = c
 
-        print("{", end="")
-        if args.formula:
-            print(f" /* Polynomial degree {degree}: {formula(all_coeffs)} */", end="")
-        print("\n"
-              + f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}, {float16_metrics.max_abs_error:.6e}, {float16_metrics.max_ulp_error:.3e}}},\n"
-              + f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}, {float32_metrics.max_abs_error:.6e}, {float32_metrics.max_ulp_error:.3e}}},\n"
-              + f"    /* f64 */ {{{float64_metrics.mean_squared_error:.6e}, {float64_metrics.max_abs_error:.6e}, {float64_metrics.max_ulp_error:.3e}}},\n"
-              +  "    /* p */ {" + ", ".join([f"{num_to_str(c)}" for c in all_coeffs]) + "}\n"
-              , end="")
-        print("},")
+        code = "{"
+        code += f" /* {loss.upper()} Polynomial degree {degree}: {formula(all_coeffs)} */\n"
+        code += f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}, {float16_metrics.max_abs_error:.6e}, {float16_metrics.max_ulp_error:.3e}}},\n"
+        code += f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}, {float32_metrics.max_abs_error:.6e}, {float32_metrics.max_ulp_error:.3e}}},\n"
+        code += f"    /* f64 */ {{{float64_metrics.mean_squared_error:.6e}, {float64_metrics.max_abs_error:.6e}, {float64_metrics.max_ulp_error:.3e}}},\n"
+        code += "    /* p */ {" + ", ".join([f"{num_to_str(c)}" for c in all_coeffs]) + "}\n"
+        code += "},"
+        console.print(code)
 
-        if args.print: print("exponent:", exponents)
-
+        if args.print:
+            console.print("exponent:", exponents)

@@ -549,6 +549,8 @@ struct Call : public ExprNode<Call> {
 
         // Some fast math functions.
         // @{
+        fast_acos,
+        fast_asin,
         fast_atan,
         fast_atan2,
         fast_cos,
