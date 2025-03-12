@@ -57,6 +57,7 @@ target_sources(
     AlignLoads.h
     AllocationBoundsInference.h
     ApplySplit.h
+    ApproximationTables.h
     Argument.h
     AssociativeOpsTable.h
     Associativity.h
