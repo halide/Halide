@@ -78,6 +78,7 @@ tests(GROUPS correctness
       debug_to_file_reorder.cpp
       deferred_loop_level.cpp
       deinterleave4.cpp
+      determine_fast_function_approximation_metrics.cpp
       device_buffer_copies_with_profile.cpp
       device_buffer_copy.cpp
       device_copy_at_inner_loop.cpp
@@ -86,7 +87,6 @@ tests(GROUPS correctness
       dilate3x3.cpp
       div_by_zero.cpp
       div_round_to_zero.cpp
-      ring_buffer.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       early_out.cpp
@@ -126,8 +126,8 @@ tests(GROUPS correctness
       fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
-      gpu_allocation_cache.cpp
       gpu_alloc_group_profiling.cpp
+      gpu_allocation_cache.cpp
       gpu_arg_types.cpp
       gpu_assertion_in_kernel.cpp
       gpu_bounds_inference_failure.cpp
@@ -260,8 +260,8 @@ tests(GROUPS correctness
       realize_over_shifted_domain.cpp
       recursive_box_filters.cpp
       reduction_chain.cpp
-      reduction_predicate_racing.cpp
       reduction_non_rectangular.cpp
+      reduction_predicate_racing.cpp
       reduction_schedule.cpp
       register_shuffle.cpp
       reorder_storage.cpp
@@ -269,6 +269,7 @@ tests(GROUPS correctness
       reschedule.cpp
       respect_input_constraint_in_bounds_inference.cpp
       reuse_stack_alloc.cpp
+      ring_buffer.cpp
       round.cpp
       saturating_casts.cpp
       scatter.cpp
