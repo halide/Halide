@@ -12,6 +12,7 @@ np.set_printoptions(linewidth=3000, precision=20)
 parser = argparse.ArgumentParser()
 parser.add_argument("func")
 parser.add_argument("--order", type=int, nargs='+', required=True)
+parser.add_argument("--with-max-error", action='store_true', help="Fill out the observed max abs/ulp error in the printed table.")
 args = parser.parse_args()
 
 taylor_order = 30
@@ -46,7 +47,7 @@ X_dense = np.linspace(lower, upper, 512 * 31 * 11)
 y = func(X_dense)
 
 if taylor is None:
-    powers = np.power(X_dense[:,None], exponents)
+    powers = np.power(X_dense[:, None], exponents)
     coeffs, res, rank, s = np.linalg.lstsq(powers, y, rcond=-1)
 
     degree = np.amax(exponents)
@@ -60,6 +61,7 @@ def num_to_str(c):
     if c == 1.0: return "1"
     return c.hex()
 
+
 def formula(coeffs, exponents=None):
     if exponents is None:
         exponents = np.arange(len(coeffs))
@@ -69,6 +71,7 @@ def formula(coeffs, exponents=None):
         if c == 1: terms.append(f"x^{e}")
         else: terms.append(f"{c:.12f} * x^{e}")
     return " + ".join(terms)
+
 
 print("Taylor")
 print(formula(taylor))
@@ -85,8 +88,8 @@ for order in args.order:
     def eval(dtype):
         ft_x_dense = X_dense.astype(dtype)
         ft_target_dense = func(X_dense).astype(dtype)
-        ft_powers = np.power(ft_x_dense[:,None], exponents).astype(dtype)
-        ft_y_hat = np.sum(ft_powers[:,:len(pa)] * pa, axis=-1).astype(dtype) / np.sum(ft_powers[:,:len(qa)] * qa, axis=-1).astype(np.float32)
+        ft_powers = np.power(ft_x_dense[:, None], exponents).astype(dtype)
+        ft_y_hat = np.sum(ft_powers[:, :len(pa)] * pa, axis=-1).astype(dtype) / np.sum(ft_powers[:, :len(qa)] * qa, axis=-1).astype(dtype)
         ft_diff = ft_y_hat - ft_target_dense.astype(dtype)
         ft_abs_diff = np.abs(ft_diff)
         # MSE metric
@@ -96,7 +99,7 @@ for order in args.order:
         # MaxULP metric
         ft_ulp_error = ft_diff.astype(np.float64) / np.spacing(np.abs(ft_target_dense).astype(dtype)).astype(np.float64)
         ft_abs_ulp_error = np.abs(ft_ulp_error)
-        ft_max_ulp_error = np.amax(ft_abs_ulp_error)
+        ft_max_ulp_error = np.amax(ft_abs_ulp_error).astype(np.int64)
 
         return Metrics(ft_mean_squared_error, ft_max_abs_error, ft_max_ulp_error)
 
@@ -105,9 +108,14 @@ for order in args.order:
     float64_metrics = eval(np.float64)
 
     print("{", f" /* Padé order {len(pa) - 1}/{len(qa) - 1}: ({formula(pa)})/({formula(qa)}) */")
-    print(f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}, {float16_metrics.max_abs_error:.6e}, {float16_metrics.max_ulp_error:.3e}}},")
-    print(f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}, {float32_metrics.max_abs_error:.6e}, {float32_metrics.max_ulp_error:.3e}}},")
-    print(f"    /* f64 */ {{{float64_metrics.mean_squared_error:.6e}, {float64_metrics.max_abs_error:.6e}, {float64_metrics.max_ulp_error:.3e}}},")
-    print("    /* p */ {" + ", ".join([f"{num_to_str(c)}" for c in pa]) + "}")
-    print("    /* q */ {" + ", ".join([f"{num_to_str(c)}" for c in qa]) + "}")
+    if args.with_max_error:
+        print(f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}, {float16_metrics.max_abs_error:.6e}, {float16_metrics.max_ulp_error}u}},")
+        print(f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}, {float32_metrics.max_abs_error:.6e}, {float32_metrics.max_ulp_error}u}},")
+        print(f"    /* f64 */ {{{float64_metrics.mean_squared_error:.6e}, {float64_metrics.max_abs_error:.6e}, {float64_metrics.max_ulp_error}u}},")
+    else:
+        print(f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}}},")
+        print(f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}}},")
+        print(f"    /* f64 */ {{{float64_metrics.mean_squared_error:.6e}}},")
+    print("    /* p */ {" + ", ".join([f"{num_to_str(c)}" for c in pa]) + "},")
+    print("    /* q */ {" + ", ".join([f"{num_to_str(c)}" for c in qa]) + "},")
     print("},")
