@@ -672,9 +672,9 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 
     auto *tm = llvm_target->createTargetMachine(
 #if LLVM_VERSION >= 210
-        module.getTargetTriple().str(),
+        triple,
 #else
-        module.getTargetTriple(),
+        triple.str(),
 #endif
         mcpu_target,
         mattrs,
