@@ -54,6 +54,7 @@ parser.add_argument("--loss", nargs='+', required=True,
                           + " * mulpe: Maximal ULP Error  [default]\n"
                           + " * mulpe_mae: 50%% mulpe + 50%% mae"))
 parser.add_argument("--gui", action='store_true', help="Do produce plots.")
+parser.add_argument("--with-max-error", action='store_true', help="Fill out the observed max abs/ulp error in the printed table.")
 parser.add_argument("--print", action='store_true', help="Print while optimizing.")
 parser.add_argument("--pbar", action='store_true', help="Create a progress bar while optimizing.")
 args = parser.parse_args()
@@ -81,11 +82,10 @@ def optimize_approximation(loss, order, progress):
         lower, upper = 0.0, 1.0
     elif args.func == "sin":
         func = np.sin
+        exponents = 1 + np.arange(order)
         if loss == "mulpe":
-            exponents = 2 + np.arange(order)
             fixed_part_taylor = [0, 1]
         else:
-            exponents = 1 + np.arange(order)
             fixed_part_taylor = [0]
         lower, upper = 0.0, np.pi / 2
     elif args.func == "cos":
@@ -257,7 +257,7 @@ def optimize_approximation(loss, order, progress):
         # MaxULP metric
         ft_ulp_error = ft_diff / np.spacing(np.abs(ft_target_dense).astype(dtype))
         ft_abs_ulp_error = np.abs(ft_ulp_error)
-        ft_max_ulp_error = np.amax(ft_abs_ulp_error)
+        ft_max_ulp_error = np.amax(ft_abs_ulp_error).astype(np.int64)
 
         return Metrics(ft_mean_squared_error, ft_max_abs_error, ft_max_ulp_error)
 
@@ -377,9 +377,14 @@ with concurrent.futures.ThreadPoolExecutor(4) as pool, rich.progress.Progress(co
 
         code = "{"
         code += f" /* {loss.upper()} Polynomial degree {degree}: {formula(all_coeffs)} */\n"
-        code += f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}, {float16_metrics.max_abs_error:.6e}, {float16_metrics.max_ulp_error:.3e}}},\n"
-        code += f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}, {float32_metrics.max_abs_error:.6e}, {float32_metrics.max_ulp_error:.3e}}},\n"
-        code += f"    /* f64 */ {{{float64_metrics.mean_squared_error:.6e}, {float64_metrics.max_abs_error:.6e}, {float64_metrics.max_ulp_error:.3e}}},\n"
+        if args.with_max_error:
+            code += f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}, {float16_metrics.max_abs_error:.6e}, {float16_metrics.max_ulp_error}u}},\n"
+            code += f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}, {float32_metrics.max_abs_error:.6e}, {float32_metrics.max_ulp_error}u}},\n"
+            code += f"    /* f64 */ {{{float64_metrics.mean_squared_error:.6e}, {float64_metrics.max_abs_error:.6e}, {float64_metrics.max_ulp_error}u}},\n"
+        else:
+            code += f"    /* f16 */ {{{float16_metrics.mean_squared_error:.6e}}},\n"
+            code += f"    /* f32 */ {{{float32_metrics.mean_squared_error:.6e}}},\n"
+            code += f"    /* f64 */ {{{float64_metrics.mean_squared_error:.6e}}},\n"
         code += "    /* p */ {" + ", ".join([f"{num_to_str(c)}" for c in all_coeffs]) + "}\n"
         code += "},"
         console.print(code)

@@ -15,6 +15,11 @@ constexpr double ONE_OVER_PI = 1.0 / PI;
 constexpr double TWO_OVER_PI = 2.0 / PI;
 constexpr double PI_OVER_TWO = PI / 2;
 
+std::pair<float, float> split_float(double value) {
+    float high = float(value);                // Convert to single precision
+    float low = float(value - double(high));  // Compute the residual part
+    return {high, low};
+}
 
 Expr eval_poly_fast(Expr x, const std::vector<double> &coeff) {
     int n = coeff.size();
@@ -79,7 +84,7 @@ inline std::pair<Expr, Expr> two_sum(const Expr &a, const Expr &b) {
 
 inline std::pair<Expr, Expr> two_prod(const Expr &a, const Expr &b) {
     Expr x = strict_float(a * b);
-    Expr y = strict_float(1 * (a * b - x)); // No strict float, so let's hope it gets compiled as FMA.
+    Expr y = strict_float((a * b - x));  // No strict float, so let's hope it gets compiled as FMA.
     return {x, y};
 }
 
@@ -108,8 +113,7 @@ Expr eval_poly_compensated_horner(const std::vector<double> &coefs, const Expr &
             error = error * x + strict_float(pi + sigma);
         }
     }
-    //error = print(error);
-    result = strict_float(result + error);
+    // result = strict_float(result + error);
     debug(3) << "Polynomial (preciser): " << common_subexpression_elimination(result) << "\n";
     return result;
 }
@@ -146,9 +150,14 @@ Expr fast_sin(const Expr &x_full, ApproximationPrecision precision) {
 
     // Reduce the angle modulo pi/2: i.e., to the angle within the quadrant.
     Expr x = x_abs - k_real * make_const(type, PI_OVER_TWO);
-    x = select(mirror, make_const(type, PI_OVER_TWO) - x, x);
+    Expr pi_over_two_minus_x = make_const(type, PI_OVER_TWO) - x;
+    if (type == Float(32) && precision.optimized_for == ApproximationPrecision::MULPE) {
+        auto [hi, lo] = split_float(PI_OVER_TWO);
+        pi_over_two_minus_x = strict_float(make_const(type, hi) - x) + make_const(type, lo);
+    }
+    x = select(mirror, pi_over_two_minus_x, x);
 
-    const Internal::Approximation *approx = Internal::best_sin_approximation(precision, type);
+    const Internal::Approximation *approx = Internal::ApproximationTables::best_sin_approximation(precision, type);
     Expr result = eval_approx(approx, x);
     result = select(flip_sign, -result, result);
     result = common_subexpression_elimination(result, true);
@@ -156,7 +165,8 @@ Expr fast_sin(const Expr &x_full, ApproximationPrecision precision) {
 }
 
 Expr fast_cos(const Expr &x_full, ApproximationPrecision precision) {
-    constexpr bool use_sin = false; // MULPE-optimized versions work a lot better on sin(x).
+    const bool use_sin = precision.optimized_for == ApproximationPrecision::MULPE;
+
     Type type = x_full.type();
     Expr x_abs = abs(x_full);
     // Range reduction to interval [0, pi/2] which corresponds to a quadrant of the circle.
@@ -172,15 +182,20 @@ Expr fast_cos(const Expr &x_full, ApproximationPrecision precision) {
 
     // Reduce the angle modulo pi/2: i.e., to the angle within the quadrant.
     Expr x = x_abs - k_real * make_const(type, PI_OVER_TWO);
-    x = select(mirror, make_const(type, PI_OVER_TWO) - x, x);
+    Expr pi_over_two_minus_x = make_const(type, PI_OVER_TWO) - x;
+    if (type == Float(32) && precision.optimized_for == ApproximationPrecision::MULPE) {
+        auto [hi, lo] = split_float(PI_OVER_TWO);
+        pi_over_two_minus_x = strict_float(strict_float(make_const(type, hi) - x) + make_const(type, lo));
+    }
+    x = select(mirror, pi_over_two_minus_x, x);
 
     Expr result;
     if (use_sin) {
         // Approximating cos(x) as sin(pi/2 - x).
-        const Internal::Approximation *approx = Internal::best_sin_approximation(precision, type);
+        const Internal::Approximation *approx = Internal::ApproximationTables::best_sin_approximation(precision, type);
         result = eval_approx(approx, x);
     } else {
-        const Internal::Approximation *approx = Internal::best_cos_approximation(precision, type);
+        const Internal::Approximation *approx = Internal::ApproximationTables::best_cos_approximation(precision, type);
         result = eval_approx(approx, x);
     }
     result = select(flip_sign, -result, result);
@@ -195,28 +210,35 @@ Expr fast_tan(const Expr &x_full, ApproximationPrecision precision) {
     Expr scaled = x_full * make_const(type, ONE_OVER_PI);
     Expr k_real = round(scaled);
 
-    Expr x = x_full - k_real * make_const(type, PI);
+    Expr x;
+    if (type == Float(64)) {
+        x = x_full - k_real * make_const(type, PI);
+    } else if (type == Float(32)) {
+        auto [pi_hi, pi_lo] = split_float(PI);
+        x = strict_float(strict_float(x_full - k_real * make_const(type, pi_hi)) - (k_real * make_const(type, pi_lo)));
+    }
 
     // When polynomial: x is assumed to be reduced to [-pi/2, pi/2]!
-    const Internal::Approximation *approx = Internal::best_tan_approximation(precision, type);
+    const Internal::Approximation *approx = Internal::ApproximationTables::best_tan_approximation(precision, type);
 
     Expr abs_x = abs(x);
     Expr flip = x < make_const(type, 0.0);
     Expr use_cotan = abs_x > make_const(type, PI / 4.0);
-    Expr arg = select(use_cotan, make_const(type, PI_OVER_TWO) - abs_x, abs_x);
-
-    // Change the precision, because we need slighly higher accuracy
-    // for the inverted branch (tan(x) = 1/tan(pi/2-x)).
-    ApproximationPrecision adj_prec = precision;
-    adj_prec.constraint_max_absolute_error *= 0.1f;
-    adj_prec.constraint_max_ulp_error /= 4;
+    Expr pi_over_two_minus_abs_x;
+    if (type == Float(64)) {
+        pi_over_two_minus_abs_x = make_const(type, PI_OVER_TWO) - abs_x;
+    } else if (type == Float(32)) {
+        auto [hi, lo] = split_float(PI_OVER_TWO);
+        pi_over_two_minus_abs_x = strict_float(make_const(type, hi) - abs_x) + make_const(type, lo);
+    }
+    Expr arg = select(use_cotan, pi_over_two_minus_abs_x, abs_x);
 
     Expr result;
     if (!approx->q.empty()) {
         // If we are dealing with Padé approximants, we can immediately swap the two
         // things we divide to handle the cotan-branch.
-        Expr p = eval_poly_horner(approx->p, arg);
-        Expr q = eval_poly_horner(approx->q, arg);
+        Expr p = eval_poly(approx->p, arg);
+        Expr q = eval_poly(approx->q, arg);
         result = select(use_cotan, q, p) / select(use_cotan, p, q);
     } else {
         Expr tan_of_arg = eval_approx(approx, arg);
@@ -239,7 +261,7 @@ Expr fast_atan_helper(const Expr &x_full, ApproximationPrecision precision, bool
     } else {
         x = select(x_gt_1, make_const(type, 1.0) / x_full, x_full);
     }
-    const Internal::Approximation *approx = Internal::best_atan_approximation(precision, type);
+    const Internal::Approximation *approx = Internal::ApproximationTables::best_atan_approximation(precision, type);
     Expr result = eval_approx(approx, x);
 
     if (!between_m1_and_p1) {
@@ -308,7 +330,7 @@ Expr fast_exp(const Expr &x_full, ApproximationPrecision prec) {
     //   x = K*log(2) - K*log(2) + x
     //   x = x
 
-    const Internal::Approximation *approx = Internal::best_exp_approximation(prec, type);
+    const Internal::Approximation *approx = Internal::ApproximationTables::best_exp_approximation(prec, type);
     Expr result = eval_approx(approx, x);
 
     // Compute 2^k.
@@ -332,7 +354,7 @@ Expr fast_log(const Expr &x, ApproximationPrecision prec) {
     Internal::range_reduce_log(x, &reduced, &exponent);
 
     Expr x1 = reduced - 1.0f;
-    const Internal::Approximation *approx = Internal::best_log_approximation(prec, type);
+    const Internal::Approximation *approx = Internal::ApproximationTables::best_log_approximation(prec, type);
     Expr result = eval_approx(approx, x1);
 
     result = result + cast<float>(exponent) * log2;
@@ -381,7 +403,7 @@ struct IntrinsicsInfo {
         bool is_fast{false};
         OO behavior{OO::AUTO};
         float max_abs_error{0.0f};
-        int max_ulp_error{0};
+        uint64_t max_ulp_error{0};
         bool defined() const {
             return behavior != OO::AUTO;
         }
@@ -390,7 +412,7 @@ struct IntrinsicsInfo {
     struct IntrinsicImpl {
         OO behavior{OO::AUTO};
         float max_abs_error{0.0f};
-        int max_ulp_error{0};
+        uint64_t max_ulp_error{0};
         bool defined() const {
             return behavior != OO::AUTO;
         }
@@ -432,7 +454,7 @@ IntrinsicsInfoPerDeviceAPI ii_atan_atan2{
 }};
 
 IntrinsicsInfoPerDeviceAPI ii_tan{
-    OO::MULPE, 1e-5f, 0, {
+    OO::MULPE, 0.0f, 2000, {
       {DeviceAPI::Vulkan, {true, OO::MAE, 2e-6f, 1'000'000}, {}},  // Vulkan tan seems to mimic our CUDA implementation
       {DeviceAPI::CUDA, {false}, {OO::MAE, 2e-6f, 1'000'000}},
       {DeviceAPI::Metal, {true}, {OO::MULPE, 2e-6f, 1'000'000}},
@@ -725,7 +747,7 @@ class LowerFastMathFunctions : public IRMutator {
         internal_assert(make_ap->is_intrinsic(Call::make_struct));
         internal_assert(make_ap->args.size() == 4);
         const IntImm *imm_optimized_for = make_ap->args[0].as<IntImm>();
-        const IntImm *imm_max_ulp_error = make_ap->args[1].as<IntImm>();
+        const UIntImm *imm_max_ulp_error = make_ap->args[1].as<UIntImm>();
         const FloatImm *imm_max_abs_error = make_ap->args[2].as<FloatImm>();
         const IntImm *imm_force_poly = make_ap->args[3].as<IntImm>();
         internal_assert(imm_optimized_for);
@@ -734,8 +756,8 @@ class LowerFastMathFunctions : public IRMutator {
         internal_assert(imm_force_poly);
         return ApproximationPrecision{
             (ApproximationPrecision::OptimizationObjective)imm_optimized_for->value,
-            (int)imm_max_ulp_error->value,
-            (float)imm_max_abs_error->value,
+            imm_max_ulp_error->value,
+            imm_max_abs_error->value,
             (int)imm_force_poly->value,
         };
     }

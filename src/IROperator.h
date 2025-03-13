@@ -1031,8 +1031,8 @@ struct ApproximationPrecision {
      * use.
      */
     // @{
-    int constraint_max_ulp_error{0};
-    float constraint_max_absolute_error{0.0f};
+    uint64_t constraint_max_ulp_error{0};
+    double constraint_max_absolute_error{0.0};
     // @}
 
     /**
@@ -1048,7 +1048,7 @@ struct ApproximationPrecision {
     int force_halide_polynomial{0};
 
     /** MULPE-optimized, with max ULP error. */
-    static ApproximationPrecision max_ulp_error(int mulpe) {
+    static ApproximationPrecision max_ulp_error(uint64_t mulpe) {
         return ApproximationPrecision{MULPE, mulpe, 0.0f, false};
     }
     /** MAE-optimized, with max absolute error. */
