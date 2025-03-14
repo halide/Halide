@@ -107,8 +107,11 @@ def optimize_approximation(loss, order, progress):
         will_invert = True
     elif args.func == "exp":
         func = np.exp
-        fixed_part_taylor = [1, 1]
-        exponents = np.arange(2, order)
+        #if loss == "mulpe":
+        #    fixed_part_taylor = [1, 1]
+        #else:
+        #    fixed_part_taylor = [1]
+        exponents = np.arange(0, order)
         lower, upper = 0, np.log(2)
     elif args.func == "expm1":
         func = np.expm1
@@ -191,8 +194,11 @@ def optimize_approximation(loss, order, progress):
     loss_history = np.zeros((lstsq_iterations, 3))
 
     try:
-        task = progress.add_task(f"{args.func} {loss} order={order}", total=lstsq_iterations)
-        for i in progress.track(range(lstsq_iterations), task_id=task):
+        if progress:
+            task = progress.add_task(f"{args.func} {loss} order={order}", total=lstsq_iterations)
+        elif args.print:
+            print(f"Optimizing {args.func} {loss} order={order}...\n", end="")
+        for i in range(lstsq_iterations):
             norm_weight = weight / np.mean(weight)
             coeffs, residuals, rank, s = np.linalg.lstsq(powers * norm_weight[:, None], target_fitting_part * norm_weight, rcond=-1)
 
@@ -238,6 +244,9 @@ def optimize_approximation(loss, order, progress):
                 init_abs_ulp_error = abs_ulp_error.copy()
                 init_abs_error = abs_diff.copy()
                 init_y_hat = y_hat.copy()
+
+            if progress:
+                progress.update(task, advance=1)
 
     except KeyboardInterrupt:
         console.log("Interrupted")
@@ -357,13 +366,18 @@ def formula(coeffs, exponents=None):
     return " + ".join(terms)
 
 
-with concurrent.futures.ThreadPoolExecutor(4) as pool, rich.progress.Progress(console=console, disable=not args.pbar) as progress:
+with concurrent.futures.ProcessPoolExecutor(8) as pool, rich.progress.Progress(console=console, disable=not args.pbar) as progress:
     futures = []
     for loss in args.loss:
         for order in args.order:
-            futures.append((loss, order, pool.submit(optimize_approximation, loss, order, progress)))
+            futures.append((loss, order, pool.submit(optimize_approximation, loss, order, None)))
 
+    last_loss = None
     for loss, order, future in futures:
+        if loss != last_loss:
+            console.print(f"/* {loss.upper()} optimized */")
+            last_loss = loss
+
         exponents, fixed_part_taylor, init_coeffs, coeffs, float16_metrics, float32_metrics, float64_metrics, loss_history = future.result()
 
         degree = len(fixed_part_taylor) - 1
