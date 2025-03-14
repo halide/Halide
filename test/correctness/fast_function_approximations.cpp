@@ -119,7 +119,6 @@ constexpr RangedAccuracyTest::Validation rlx_ulp_val = {1.01, 20};
 constexpr RangedAccuracyTest::Validation vrlx_ulp_val = {1.1, 200};
 constexpr RangedAccuracyTest::Validation rsnbl_ulp_val = {20.0, 1'000};
 
-
 struct FunctionToTest {
     std::string name;
     Call::IntrinsicOp fast_op;

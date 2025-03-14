@@ -230,7 +230,7 @@ Expr fast_tan(const Expr &x_full, ApproximationPrecision precision) {
     Expr pi_over_two_minus_abs_x;
     if (type == Float(64)) {
         pi_over_two_minus_abs_x = make_const(type, PI_OVER_TWO) - abs_x;
-    } else if (type == Float(32)) { // We want to do this trick always, because we invert later.
+    } else if (type == Float(32)) {  // We want to do this trick always, because we invert later.
         auto [hi, lo] = split_float(PI_OVER_TWO);
         // TODO(mcourteaux): replace with proper strict_float intrinsic ops.
         pi_over_two_minus_abs_x = strict_float(make_const(type, hi) - abs_x) + make_const(type, lo);
