@@ -96,7 +96,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_cos(x, prec); },
         Halide::Internal::ApproximationTables::best_cos_approximation,
         Halide::Internal::ApproximationTables::table_cos,
-        {-PI_OVER_TWO, PI_OVER_TWO},
+        {0.0f, PI_OVER_TWO},
     },
     {
         "exp", OO::MULPE,
@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
 
         const int num_floats_x = range_x.num_floats();
         const int num_floats_y = range_y.num_floats();
-        printf("Testing fast_%s on range ([%f, %f] x [%f, %f]) = %d x %d floats...\n", ftt.name.c_str(),
+        printf("\n📏 Testing fast_%s on range ([%f, %f] x [%f, %f]) = %d x %d floats...\n", ftt.name.c_str(),
                range_x.l, range_x.u, range_y.l, range_y.u, num_floats_x, num_floats_y);
         RDom r({{0, num_floats_x}, {0, num_floats_y}}, "rdom");
 
@@ -239,7 +239,7 @@ int main(int argc, char **argv) {
                 } else if (c == 1.0) {
                     printf("1");
                 } else {
-                    printf("%.8a", c);
+                    printf("%a", c);
                 }
             };
             constexpr auto print_poly = [](const std::vector<double> &coef) {
@@ -279,9 +279,9 @@ int main(int argc, char **argv) {
                 printf(")");
             }
             printf(" */\n");
-            printf("    /* f16 */ {%.6e, %.4a, %" PRIu64 "},\n", m16.mse, m16.mae, m16.mulpe);
-            printf("    /* f32 */ {%.6e, %.4a, %" PRIu64 "},\n", metrics.mse, out_mae(), uint64_t(out_mulpe()));
-            printf("    /* f64 */ {%.6e, %.4a, %" PRIu64 "},\n", m64.mse, m64.mae, m64.mulpe);
+            printf("    /* f16 */ {%.6e, %a, %" PRIu64 "},\n", m16.mse, m16.mae, m16.mulpe);
+            printf("    /* f32 */ {%.6e, %a, %" PRIu64 "},\n", metrics.mse, out_mae(), uint64_t(out_mulpe()));
+            printf("    /* f64 */ {%.6e, %a, %" PRIu64 "},\n", m64.mse, m64.mae, m64.mulpe);
             printf("    /* p */ {");
             const char *sep = "";
             for (double c : approx.p) {
