@@ -131,7 +131,6 @@ int main(int argc, char **argv) {
     target_no_fma.bits = target.bits;
     target_no_fma.vector_bits = target.vector_bits;
 
-
     auto out_mae = Buffer<float>::make_scalar();
     auto out_mulpe = Buffer<int>::make_scalar();
     auto out_mae_fma = Buffer<float>::make_scalar();
