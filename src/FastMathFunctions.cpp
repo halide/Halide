@@ -76,6 +76,7 @@ Expr eval_poly_horner(const std::vector<double> &coefs, const Expr &x) {
 }
 
 inline std::pair<Expr, Expr> two_sum(const Expr &a, const Expr &b) {
+    // TODO(mcourteaux): replace with proper strict_float intrinsic ops.
     Expr x = strict_float(a + b);
     Expr z = strict_float(x - a);
     Expr y = strict_float(strict_float(a - strict_float(x - z)) + strict_float(b - z));
@@ -83,8 +84,9 @@ inline std::pair<Expr, Expr> two_sum(const Expr &a, const Expr &b) {
 }
 
 inline std::pair<Expr, Expr> two_prod(const Expr &a, const Expr &b) {
+    // TODO(mcourteaux): replace with proper strict_float intrinsic ops.
     Expr x = strict_float(a * b);
-    Expr y = strict_float((a * b - x));  // No strict float, so let's hope it gets compiled as FMA.
+    Expr y = (a * b - x);  // No strict float, so let's hope it gets compiled as FMA.
     return {x, y};
 }
 
@@ -93,6 +95,7 @@ Expr eval_poly_compensated_horner(const std::vector<double> &coefs, const Expr &
     // https://www-pequan.lip6.fr/~jmc/polycopies/Compensation-horner.pdf
     // Currently I'm not seeing any notable precision improvement. I'm not sure if this
     // due to simplifications and optimizations happening, or the already good precision of fma ops.
+    // TODO(mcourteaux): Revisit this once we have proper strict_float intrinsics.
     Type type = x.type();
     if (coefs.empty()) {
         return make_const(x.type(), 0.0);
@@ -110,16 +113,15 @@ Expr eval_poly_compensated_horner(const std::vector<double> &coefs, const Expr &
             auto [p, pi] = two_prod(result, x);
             auto [sn, sigma] = two_sum(p, make_const(type, c));
             result = sn;
-            error = error * x + strict_float(pi + sigma);
+            error = error * x + (pi + sigma);
         }
     }
-    // result = strict_float(result + error);
     debug(3) << "Polynomial (preciser): " << common_subexpression_elimination(result) << "\n";
     return result;
 }
 
 Expr eval_poly(const std::vector<double> &coefs, const Expr &x) {
-    return eval_poly_compensated_horner(coefs, x);
+    // return eval_poly_compensated_horner(coefs, x);
     if (coefs.size() >= 2) {
         return eval_poly_fast(x, coefs);
     }
@@ -153,6 +155,7 @@ Expr fast_sin(const Expr &x_full, ApproximationPrecision precision) {
     Expr pi_over_two_minus_x = make_const(type, PI_OVER_TWO) - x;
     if (type == Float(32) && precision.optimized_for == ApproximationPrecision::MULPE) {
         auto [hi, lo] = split_float(PI_OVER_TWO);
+        // TODO(mcourteaux): replace with proper strict_float intrinsic ops.
         pi_over_two_minus_x = strict_float(make_const(type, hi) - x) + make_const(type, lo);
     }
     x = select(mirror, pi_over_two_minus_x, x);
@@ -185,6 +188,7 @@ Expr fast_cos(const Expr &x_full, ApproximationPrecision precision) {
     Expr pi_over_two_minus_x = make_const(type, PI_OVER_TWO) - x;
     if (type == Float(32) && precision.optimized_for == ApproximationPrecision::MULPE) {
         auto [hi, lo] = split_float(PI_OVER_TWO);
+        // TODO(mcourteaux): replace with proper strict_float intrinsic ops.
         pi_over_two_minus_x = strict_float(strict_float(make_const(type, hi) - x) + make_const(type, lo));
     }
     x = select(mirror, pi_over_two_minus_x, x);
@@ -210,11 +214,10 @@ Expr fast_tan(const Expr &x_full, ApproximationPrecision precision) {
     Expr scaled = x_full * make_const(type, ONE_OVER_PI);
     Expr k_real = round(scaled);
 
-    Expr x;
-    if (type == Float(64)) {
-        x = x_full - k_real * make_const(type, PI);
-    } else if (type == Float(32)) {
+    Expr x = x_full - k_real * make_const(type, PI);
+    if (type == Float(32) && precision.optimized_for == ApproximationPrecision::MULPE) {
         auto [pi_hi, pi_lo] = split_float(PI);
+        // TODO(mcourteaux): replace with proper strict_float intrinsic ops.
         x = strict_float(strict_float(x_full - k_real * make_const(type, pi_hi)) - (k_real * make_const(type, pi_lo)));
     }
 
@@ -227,8 +230,9 @@ Expr fast_tan(const Expr &x_full, ApproximationPrecision precision) {
     Expr pi_over_two_minus_abs_x;
     if (type == Float(64)) {
         pi_over_two_minus_abs_x = make_const(type, PI_OVER_TWO) - abs_x;
-    } else if (type == Float(32)) {
+    } else if (type == Float(32)) { // We want to do this trick always, because we invert later.
         auto [hi, lo] = split_float(PI_OVER_TWO);
+        // TODO(mcourteaux): replace with proper strict_float intrinsic ops.
         pi_over_two_minus_abs_x = strict_float(make_const(type, hi) - abs_x) + make_const(type, lo);
     }
     Expr arg = select(use_cotan, pi_over_two_minus_abs_x, abs_x);

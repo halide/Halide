@@ -2,10 +2,35 @@
 
 #include <cinttypes>
 #include <cmath>
+#include <cstdio>
 #include <locale.h>
+#include <string>
 
 using namespace Halide;
 using namespace Halide::Internal;
+
+const bool use_icons = true;
+const auto &print_ok = []() {
+    if (use_icons) {
+        printf(" ✅");
+    } else {
+        printf("  ok");
+    }
+};
+const auto &print_warn = [](const char *reason) {
+    if (use_icons) {
+        printf(" ⚠️[%s]", reason);
+    } else {
+        printf("  WARN[%s]", reason);
+    }
+};
+const auto &print_bad = [](const char *reason) {
+    if (use_icons) {
+        printf(" ❌[%s]", reason);
+    } else {
+        printf("  BAD[%s]", reason);
+    }
+};
 
 int bits_diff(float fa, float fb) {
     uint32_t a = Halide::Internal::reinterpret_bits<uint32_t>(fa);
@@ -43,24 +68,64 @@ struct TestRange2D {
     TestRange x{}, y{};
 };
 
+struct RangedAccuracyTest {
+    std::string name;
+    TestRange2D range;
+    struct Validation {
+        double factor{1.0};
+        double term{0.0};
+        operator bool() const {
+            return factor != 0.0 || term != 0.0;
+        }
+
+        void eval(const char *str, double expected_error, double actual_error, int &num_tests, int &num_tests_passed) const {
+            if (factor != 0 || term != 0.0) {
+                num_tests++;
+                if (expected_error * factor + term < actual_error) {
+                    print_bad(str);
+                    printf(" %g > %g ", actual_error, expected_error);
+                    if (factor != 1.0) {
+                        printf("* %f ", factor);
+                    }
+                    if (term != 0.0) {
+                        printf("+ %g ", term);
+                    }
+                    printf(" ");
+                } else {
+                    print_ok();
+                    num_tests_passed++;
+                }
+            }
+        }
+    } max_abs, mean_abs, max_ulp, mean_ulp;
+
+    uint64_t max_max_ulp_error{0};   // When MaxAE-query was 1e-5 or better and forced poly.
+    uint64_t max_mean_ulp_error{0};  // When MaxAE-query was 1e-5 or better and forced poly.
+};
+
+constexpr RangedAccuracyTest::Validation no_val = {0.0, 0.0};
+
+constexpr RangedAccuracyTest::Validation rlx_abs_val = {1.02, 1e-7};
+constexpr RangedAccuracyTest::Validation vrlx_abs_val = {1.1, 1e-6};
+constexpr RangedAccuracyTest::Validation rsnbl_abs_val = {2.0, 1e-5};
+constexpr RangedAccuracyTest::Validation rlx_abs_val_pct(double pct) {
+    return {1.0 + 100 * pct, 1e-7};
+}
+constexpr RangedAccuracyTest::Validation max_abs_val(double max_val) {
+    return {0.0f, max_val};
+}
+
+constexpr RangedAccuracyTest::Validation rlx_ulp_val = {1.01, 20};
+constexpr RangedAccuracyTest::Validation vrlx_ulp_val = {1.1, 200};
+constexpr RangedAccuracyTest::Validation rsnbl_ulp_val = {20.0, 1'000};
+
+
 struct FunctionToTest {
     std::string name;
     Call::IntrinsicOp fast_op;
     std::function<Expr(Expr x, Expr y)> make_reference;
     std::function<Expr(Expr x, Expr y, Halide::ApproximationPrecision)> make_approximation;
     const Halide::Internal::Approximation *(*obtain_approximation)(Halide::ApproximationPrecision, Halide::Type);
-    struct RangedAccuracyTest {
-        std::string name;
-        TestRange2D range;
-        double validate_max_mae_factor{1.0};
-        double validate_max_mulpe_factor{1.0};
-        uint64_t validate_max_mulpe_offset{0};
-        double validate_mean_mae_factor{1.0};
-        double validate_mean_mulpe_factor{1.0};
-
-        uint64_t max_max_ulp_error{0};   // When MaxAE-query was 1e-5 or better and forced poly.
-        uint64_t max_mean_ulp_error{0};  // When MaxAE-query was 1e-5 or better and forced poly.
-    };
     std::vector<RangedAccuracyTest> ranged_tests;
 } functions_to_test[] = {
     // clang-format off
@@ -70,20 +135,19 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_tan(x, prec); },
         Halide::Internal::ApproximationTables::best_tan_approximation,
         {
-            { "close-to-zero", {{-0.78f, 0.78f}}                              , 1.0, 1.0 , 0, 1.0, 1.0, 40,  5, },
-            { "pole-to-pole" , {{-0.0F, just_not_pi_over_two}}, 0.0, 1.01, 4, 0.0, 0.0, 40,  5, },
-            { "extended"     , {{-10.0f, 10.0f}}                              , 0.0, 0.0 , 4, 0.0, 0.0,  0, 50, },
+            { "close-to-zero", {{-0.78f, 0.78f}}              , {}, {}, {}, {}, 40,  5, },
+            { "pole-to-pole" , {{-0.0f, just_not_pi_over_two}}, no_val, no_val, {1.01, 4}, rsnbl_ulp_val, 40,  5, },
+            { "extended"     , {{-10.0f, 10.0f}}              , no_val, no_val, no_val, rsnbl_ulp_val,  0, 50, },
         }
     },
-    /*
     {
         "atan", Call::fast_atan,
         [](Expr x, Expr y) { return Halide::atan(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_atan(x, prec); },
         Halide::Internal::ApproximationTables::best_atan_approximation,
         {
-            { "precise" , {{ -20.0f,  20.0f}}, true, true, 80, 40 },
-            { "extended", {{-200.0f, 200.0f}}, true, true, 80, 40 },
+            { "precise" , {{ -20.0f,  20.0f}}, {}, {}, {}, {}, 80, 40 },
+            { "extended", {{-200.0f, 200.0f}}, {}, {}, {}, {}, 80, 40 },
         }
     },
     {
@@ -92,7 +156,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_atan2(x, y, prec); },
         Halide::Internal::ApproximationTables::best_atan_approximation,
         {
-            { "precise" , {{ -10.0f, 10.0f}, {-10.0f, 10.0f}}, true, true, 70, 30 },
+            { "precise" , {{ -10.0f, 10.0f}, {-10.0f, 10.0f}}, rlx_abs_val_pct(4), {}, {}, {}, 70, 30 },
         }
     },
     {
@@ -101,9 +165,9 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_sin(x, prec); },
         Halide::Internal::ApproximationTables::best_sin_approximation,
         {
-            { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, true, true, 40, 0 },
-            { "-pi/2 to pi/2", {{-just_not_pi_over_two, just_not_pi_over_two}}, true, true, 0, 0 },
-            { "-10 to 10",   {{-10.0f, 10.0f}}, false, false, 0, 0 },
+            { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}                  , {}, {}, {}, {}, 40, 0 },
+            { "-pi/2 to pi/2", {{-just_not_pi_over_two, just_not_pi_over_two}}, {}, {}, {}, {}, 0, 0 },
+            { "-10 to 10",   {{-10.0f, 10.0f}}                                , rsnbl_abs_val, rsnbl_abs_val, no_val, rsnbl_ulp_val, 0, 0 },
         }
     },
     {
@@ -112,9 +176,10 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_cos(x, prec); },
         Halide::Internal::ApproximationTables::best_cos_approximation,
         {
-            { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, true, true, 150, 100 },
-            { "-pi/2 to pi/2", {{-just_not_pi_over_two, just_not_pi_over_two}}, true, false, 0, 0 },
-            { "-10 to 10",   {{-10.0f, 10.0f}}, false, false, 0, 0 },
+            // We have to relax all tests here, because it actually compiles to a sin, so the table entries are not accurate.
+            { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, rlx_abs_val, rlx_abs_val, rlx_ulp_val, rlx_ulp_val, 150, 100 },
+            { "-pi/2 to pi/2", {{-just_not_pi_over_two, just_not_pi_over_two}}, rlx_abs_val, rlx_abs_val, no_val, rsnbl_ulp_val, 0, 0 },
+            { "-10 to 10",   {{-10.0f, 10.0f}}, rsnbl_abs_val, rsnbl_abs_val, no_val, rsnbl_ulp_val, 0, 0 },
         }
     },
     {
@@ -123,8 +188,8 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_exp(x, prec); },
         Halide::Internal::ApproximationTables::best_exp_approximation,
         {
-            { "precise",  {{0.0f, std::log(2.0f)}}, true , true, 65, 40 },
-            { "extended", {{-20.0f, 20.0f}}       , false, true, 80, 40 },
+            { "precise",  {{0.0f, std::log(2.0f)}}, {}, {}, {}, {}, 65, 40 },
+            { "extended", {{-20.0f, 20.0f}}       , no_val, no_val, rlx_ulp_val, rlx_ulp_val, 80, 40 },
         }
     },
     {
@@ -133,8 +198,8 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_log(x, prec); },
         Halide::Internal::ApproximationTables::best_log_approximation,
         {
-            { "precise",  {{0.76f,    1.49f}}, true, true, 120, 60 },
-            { "extended", {{1e-8f, 20000.0f}}, false, true, 120, 60 },
+            { "precise",  {{0.76f,    1.49f}}, {}, {}, {}, {}, 120, 60 },
+            { "extended", {{1e-8f, 20000.0f}}, rsnbl_abs_val, rsnbl_abs_val, rsnbl_ulp_val, rsnbl_ulp_val, 120, 60 },
         }
     },
     {
@@ -143,9 +208,9 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_pow(x, y, prec); },
         nullptr,
         {
-            { "precise",  {{0.76f,  1.49f}, {0.0f, std::log(2.0f)}}, true , true,   70,  10 },
-            { "extended", {{1e-8f,  10.0f}, {  0.0f,        10.0f}}, false, true, 1200, 100 },
-            { "extended", {{1e-8f,  50.0f}, {-20.0f,        10.0f}}, false, true, 1200, 100 },
+            { "precise",  {{0.76f,  1.49f}, {0.0f, std::log(2.0f)}}, {}, {}, {}, {},   50,  10 },
+            { "extended", {{1e-8f,  10.0f}, {  0.0f,        10.0f}}, no_val, no_val, no_val, no_val,    0, 140 },
+            { "extended", {{1e-8f,  50.0f}, {-20.0f,        10.0f}}, no_val, no_val, no_val, no_val,    0, 140 },
         }
     },
     {
@@ -154,8 +219,8 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_tanh(x, prec); },
         nullptr,
         {
-            { "precise"     , {{  -8.0f ,  8.0f }}, true, true, 2500, 20 },
-            { "extended"    , {{ -100.0f, 100.0f}}, true, true, 2500, 20 },
+            { "precise"     , {{  -8.0f ,  8.0f }}, {}, {}, {}, {}, 2500, 20 },
+            { "extended"    , {{ -100.0f, 100.0f}}, no_val, no_val, no_val, no_val, 2500, 20 },
         }
     },
     {
@@ -164,7 +229,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_asin(x, prec); },
         Halide::Internal::ApproximationTables::best_atan_approximation, // Yes, atan table!
         {
-            { "precise"     , {{  -1.0f ,  1.0f }}, true, true, 2500, 20 },
+            { "precise"     , {{  -1.0f ,  1.0f }}, vrlx_abs_val, vrlx_abs_val, vrlx_ulp_val, vrlx_ulp_val, 2500, 20 },
         }
     },
     {
@@ -173,10 +238,9 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_acos(x, prec); },
         Halide::Internal::ApproximationTables::best_atan_approximation, // Yes, atan table!
         {
-            { "precise"     , {{  -1.0f ,  1.0f }}, true, true, 2500, 20 },
+            { "precise"     , {{  -1.0f ,  1.0f }}, vrlx_abs_val, vrlx_abs_val, vrlx_ulp_val, vrlx_ulp_val, 2500, 20 },
         }
     },
-    */
     // clang-format on
 };
 
@@ -223,9 +287,11 @@ struct ErrorMetrics {
     float mean_rel_error{0.0f};
     float mean_ulp_error{0.0f};
 
-    float max_error_actual{0.0f};
-    float max_error_expected{0.0f};
-    int max_error_where{0};
+    struct Worst {
+        float actual{0.0f};
+        float expected{0.0f};
+        int where{0};
+    } worst_abs, worst_ulp;
 };
 
 ErrorMetrics measure_accuracy(Halide::Buffer<float, 1> &out_ref, Halide::Buffer<float, 1> &out_test) {
@@ -254,9 +320,14 @@ ErrorMetrics measure_accuracy(Halide::Buffer<float, 1> &out_ref, Halide::Buffer<
             count++;
 
             if (abs_error > em.max_abs_error) {
-                em.max_error_actual = val_approx;
-                em.max_error_expected = val_ref;
-                em.max_error_where = i;
+                em.worst_abs.actual = val_approx;
+                em.worst_abs.expected = val_ref;
+                em.worst_abs.where = i;
+            }
+            if (ulp_error > em.max_ulp_error) {
+                em.worst_ulp.actual = val_approx;
+                em.worst_ulp.expected = val_ref;
+                em.worst_ulp.where = i;
             }
 
             em.max_abs_error = std::max(em.max_abs_error, abs_error);
@@ -288,29 +359,6 @@ int main(int argc, char **argv) {
     Buffer<float, 1> out_input_1{steps * steps};
     Buffer<float, 1> out_ref{steps * steps};
     Buffer<float, 1> out_approx{steps * steps};
-
-    bool use_icons = true;
-    const auto &print_ok = [use_icons]() {
-        if (use_icons) {
-            printf(" ✅");
-        } else {
-            printf("  ok");
-        }
-    };
-    const auto &print_warn = [use_icons](const char *reason) {
-        if (use_icons) {
-            printf(" ⚠️[%s]", reason);
-        } else {
-            printf("  WARN[%s]", reason);
-        }
-    };
-    const auto &print_bad = [use_icons](const char *reason) {
-        if (use_icons) {
-            printf(" ❌[%s]", reason);
-        } else {
-            printf("  BAD[%s]", reason);
-        }
-    };
 
     double best_mae_for_backend = 0.0;
     if (target.has_feature(Halide::Target::Vulkan)) {
@@ -344,16 +392,16 @@ int main(int argc, char **argv) {
             continue;
         }
 
-        for (const FunctionToTest::RangedAccuracyTest &rat : ftt.ranged_tests) {
+        for (const RangedAccuracyTest &rat : ftt.ranged_tests) {
             const TestRange2D &range = rat.range;
             bool is_2d = range.y.l != range.y.u;
 
-            printf("Testing fast_%s on its %s range ", ftt.name.c_str(), rat.name.c_str());
+            printf("Testing fast_%s on its %s range (", ftt.name.c_str(), rat.name.c_str());
+            printf("[%g, %g]", range.x.l, range.x.u);
             if (is_2d) {
-                printf("([%f, %f] x [%f, %f])...\n", range.x.l, range.x.u, range.y.l, range.y.u);
-            } else {
-                printf("([%f, %f])...\n", range.x.l, range.x.u);
+                printf(" x [%g, %g]n", range.y.l, range.y.u);
             }
+            printf(")...\n");
 
             Func input{"input"};
 
@@ -466,14 +514,16 @@ int main(int argc, char **argv) {
                        em.max_abs_error, em.max_rel_error, em.max_ulp_error, em.max_mantissa_error,
                        em.mean_abs_error, em.mean_ulp_error);
 
-                printf(" (worst: (act)%+.8e != (exp)%+.8e @ %s",
-                       em.max_error_actual,
-                       em.max_error_expected,
-                       ftt.name.c_str());
-                if (is_2d) {
-                    printf("(%e, %e))", out_input_0(em.max_error_where), out_input_1(em.max_error_where));
-                } else {
-                    printf("(%e))", out_input_0(em.max_error_where));
+                for (const ErrorMetrics::Worst &w : {em.worst_abs, em.worst_ulp}) {
+                    printf(" (worst: (act)%+.8e != (exp)%+.8e @ %s",
+                           w.actual,
+                           w.expected,
+                           ftt.name.c_str());
+                    if (is_2d) {
+                        printf("(%e, %e))", out_input_0(w.where), out_input_1(w.where));
+                    } else {
+                        printf("(%e))", out_input_0(w.where));
+                    }
                 }
 
                 if (test.precision.optimized_for == Halide::ApproximationPrecision::AUTO) {
@@ -503,54 +553,10 @@ int main(int argc, char **argv) {
                         // We have tabular data indicating expected precision.
                         const Halide::Internal::Approximation *approx = ftt.obtain_approximation(prec, arg_x.type());
                         const Halide::Internal::Approximation::Metrics &metrics = approx->metrics_for(arg_x.type());
-                        if (rat.validate_max_mulpe_factor != 0.0) {
-                            num_tests++;
-                            if (metrics.mulpe * rat.validate_max_mulpe_factor + rat.validate_max_mulpe_offset < em.max_ulp_error) {
-                                print_bad("MaxUlp");
-                                printf(" %lld > %lld * %f + %lld  ",
-                                       (long long)(em.max_ulp_error),
-                                       (long long)(metrics.mulpe),
-                                       rat.validate_max_mulpe_factor,
-                                       (long long)rat.validate_max_mulpe_offset);
-                            } else {
-                                print_ok();
-                                num_tests_passed++;
-                            }
-                        }
-                        if (rat.validate_mean_mulpe_factor != 0.0) {
-                            num_tests++;
-                            if (metrics.mulpe * rat.validate_mean_mulpe_factor + 20 < em.mean_ulp_error) {
-                                print_bad("MeanUlp");
-                                printf(" %lld > %lld * %f  ",
-                                       (long long)(em.mean_ulp_error),
-                                       (long long)(metrics.mulpe),
-                                       rat.validate_max_mulpe_factor);
-                            } else {
-                                print_ok();
-                                num_tests_passed++;
-                            }
-                        }
-
-                        if (rat.validate_max_mae_factor != 0.0) {
-                            num_tests++;
-                            if (metrics.mae * rat.validate_max_mae_factor < em.max_abs_error) {
-                                print_bad("MaxAbs");
-                                printf(" %e > %e * %f ", em.max_abs_error, metrics.mae, rat.validate_max_mae_factor);
-                            } else {
-                                print_ok();
-                                num_tests_passed++;
-                            }
-                        }
-                        if (rat.validate_mean_mae_factor != 0.0) {
-                            num_tests++;
-                            if (metrics.mae * rat.validate_mean_mae_factor < em.mean_abs_error) {
-                                print_bad("MeanAbs");
-                                printf(" %e > %e * %f  ", em.mean_abs_error, metrics.mae, rat.validate_mean_mae_factor);
-                            } else {
-                                print_ok();
-                                num_tests_passed++;
-                            }
-                        }
+                        rat.max_ulp.eval("MaxUlp", metrics.mulpe, em.max_ulp_error, num_tests, num_tests_passed);
+                        rat.mean_ulp.eval("MeanUlp", metrics.mulpe, em.mean_ulp_error, num_tests, num_tests_passed);
+                        rat.max_abs.eval("MaxAbs", metrics.mae, em.max_abs_error, num_tests, num_tests_passed);
+                        rat.mean_abs.eval("MeanAbs", metrics.mae, em.mean_abs_error, num_tests, num_tests_passed);
                     }
 
                     {
@@ -574,7 +580,7 @@ int main(int argc, char **argv) {
                 if (prec.constraint_max_absolute_error != 0 &&
                     prec.constraint_max_absolute_error <= 1e-5 &&
                     prec.optimized_for == ApproximationPrecision::MULPE) {
-                    if (rat.max_max_ulp_error != 0 && prec.force_halide_polynomial) {
+                    if (rat.max_max_ulp_error != 0) {
                         num_tests++;
                         if (em.max_ulp_error > rat.max_max_ulp_error) {
                             print_bad("Max ULP");
@@ -583,7 +589,7 @@ int main(int argc, char **argv) {
                             num_tests_passed++;
                         }
                     }
-                    if (rat.max_mean_ulp_error != 0 && prec.force_halide_polynomial) {
+                    if (rat.max_mean_ulp_error != 0) {
                         num_tests++;
                         if (em.mean_ulp_error > rat.max_mean_ulp_error) {
                             print_bad("Mean ULP");
