@@ -615,11 +615,16 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.GuaranteedTailCallOpt = false;
 
     std::unique_ptr<TargetMachine>
-        target_machine(llvm_target->createTargetMachine(triple.str(),
-                                                        mcpu_target(), mattrs(), options,
-                                                        llvm::Reloc::PIC_,
-                                                        llvm::CodeModel::Small,
-                                                        CodeGenOptLevel::Aggressive));
+        target_machine(llvm_target->createTargetMachine(
+#if LLVM_VERSION >= 210
+            triple,
+#else
+            triple.str(),
+#endif
+            mcpu_target(), mattrs(), options,
+            llvm::Reloc::PIC_,
+            llvm::CodeModel::Small,
+            CodeGenOptLevel::Aggressive));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
