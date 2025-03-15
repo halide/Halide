@@ -252,39 +252,23 @@ int main(int argc, char **argv) {
             }
             if (should_be_faster) num_tests++;
 
-            int goodness = 0;
-
             if (pipeline_time_ref < approx_pipeline_time * 0.90) {
                 printf("   %6.1f%% slower", -100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (!should_be_faster) {
-                    printf("  (expected)");
-                    goodness = 1;
+                    printf("  (expected) 😐");
                 } else {
-                    printf("!!");
-                    goodness = 0;
+                    printf("!! ❌");
                 }
             } else if (pipeline_time_ref < approx_pipeline_time * 1.10) {
                 printf("   equally fast (%+5.1f%% faster)",
                        100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (should_be_faster) num_passed++;
-                goodness = 1;
+                printf(" 😐");
             } else {
                 printf("   %4.1f%% faster",
                        100.0f * (1.0f - approx_pipeline_time / pipeline_time_ref));
                 if (should_be_faster) num_passed++;
-                goodness = 2;
-            }
-
-            switch (goodness) {
-            case 0:
-                printf(" ❌");
-                break;
-            case 1:
-                printf(" 😐");
-                break;
-            case 2:
                 printf(" ✅");
-                break;
             }
             printf("\n");
         }
