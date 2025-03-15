@@ -555,6 +555,7 @@ struct Call : public ExprNode<Call> {
         fast_atan2,
         fast_cos,
         fast_exp,
+        fast_expm1,
         fast_log,
         fast_pow,
         fast_sin,

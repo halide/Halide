@@ -956,6 +956,15 @@ Expr hypot(const Expr &x, const Expr &y);
  * mantissa. Vectorizes cleanly. */
 Expr exp(Expr x);
 
+/** Return the exponential of a floating-point expression. If the
+ * argument is not floating-point, it is cast to Float(32). For
+ * Float(64) arguments, this calls the system exp function, and does
+ * not vectorize well. For Float(32) arguments, this function is
+ * vectorizable, does the right thing for extremely small or extremely
+ * large inputs, and is accurate up to the last bit of the
+ * mantissa. Vectorizes cleanly. */
+Expr expm1(Expr x);
+
 /** Return the logarithm of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). For
  * Float(64) arguments, this calls the system log function, and does
@@ -1107,6 +1116,12 @@ Expr fast_log(const Expr &x, ApproximationPrecision precision = {});
  * See \ref ApproximationPrecision for details on specifying precision.
  */
 Expr fast_exp(const Expr &x, ApproximationPrecision precision = {});
+
+/** Fast approximate expm1 for Float(32).
+ * Returns nonsense for inputs that would overflow.
+ * Slow on x86 if you don't have at least sse 4.1.
+ */
+Expr fast_expm1(const Expr &x, ApproximationPrecision precision = {});
 
 /** Fast approximate pow for Float(32).
  * Returns nonsense for x < 0.0f.

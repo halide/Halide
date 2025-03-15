@@ -36,6 +36,7 @@ extern const std::vector<Approximation> table_atan;
 extern const std::vector<Approximation> table_sin;
 extern const std::vector<Approximation> table_cos;
 extern const std::vector<Approximation> table_tan;
+extern const std::vector<Approximation> table_expm1;
 extern const std::vector<Approximation> table_exp;
 extern const std::vector<Approximation> table_log;
 
@@ -45,6 +46,7 @@ const Approximation *best_cos_approximation(Halide::ApproximationPrecision preci
 const Approximation *best_tan_approximation(Halide::ApproximationPrecision precision, Type type);
 const Approximation *best_log_approximation(Halide::ApproximationPrecision precision, Type type);
 const Approximation *best_exp_approximation(Halide::ApproximationPrecision precision, Type type);
+const Approximation *best_expm1_approximation(Halide::ApproximationPrecision precision, Type type);
 }  // namespace ApproximationTables
 
 }  // namespace Internal

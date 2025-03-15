@@ -1382,6 +1382,11 @@ Expr fast_exp(const Expr &x, ApproximationPrecision prec) {
     return Call::make(x.type(), Call::fast_exp, {x, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
 }
 
+Expr fast_expm1(const Expr &x, ApproximationPrecision prec) {
+    user_assert(x.type() == Float(32)) << "fast_expm1 only works for Float(32)";
+    return Call::make(x.type(), Call::fast_expm1, {x, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
+}
+
 Expr fast_log(const Expr &x, ApproximationPrecision prec) {
     user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
     return Call::make(x.type(), Call::fast_log, {x, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
@@ -2187,6 +2192,17 @@ Expr sqrt(Expr x) {
 
 Expr hypot(const Expr &x, const Expr &y) {
     return sqrt(x * x + y * y);
+}
+
+Expr expm1(Expr x) {
+    user_assert(x.defined()) << "exp of undefined Expr\n";
+    if (x.type() == Float(64)) {
+        return Call::make(Float(64), "expm1_f64", {std::move(x)}, Call::PureExtern);
+    } else if (x.type() == Float(16)) {
+        return Call::make(Float(16), "expm1_f16", {std::move(x)}, Call::PureExtern);
+    } else {
+        return Call::make(Float(32), "expm1_f32", {cast<float>(std::move(x))}, Call::PureExtern);
+    }
 }
 
 Expr exp(Expr x) {
