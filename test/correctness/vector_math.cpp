@@ -640,14 +640,12 @@ bool test(int lanes, int seed) {
             }
         }
 
-        /*
         printf("log mantissa error: %d\n", worst_log_mantissa);
         printf("exp mantissa error: %d\n", worst_exp_mantissa);
         printf("pow mantissa error: %d\n", worst_pow_mantissa);
         printf("fast_log mantissa error: %d\n", worst_fast_log_mantissa);
         printf("fast_exp mantissa error: %d\n", worst_fast_exp_mantissa);
         printf("fast_pow mantissa error: %d\n", worst_fast_pow_mantissa);
-        */
     }
 
     // Lerp (where the weight is the same type as the values)

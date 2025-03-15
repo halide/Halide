@@ -61,7 +61,7 @@ struct TestRange {
 
 using OO = Halide::ApproximationPrecision::OptimizationObjective;
 
-constexpr float just_not_pi_over_two = std::nexttoward(float(PI_OVER_TWO), 0.0f);
+const float just_not_pi_over_two = std::nexttoward(float(PI_OVER_TWO), 0.0f);
 
 Expr makeshift_expm1(Expr x) {
     Type t = x.type();
@@ -110,7 +110,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_sin(x, prec); },
         Halide::Internal::ApproximationTables::best_sin_approximation,
         Halide::Internal::ApproximationTables::table_sin,
-        {0.0f, PI_OVER_TWO},
+        {0.0f, float(PI_OVER_TWO)},
     },
     {
         "cos", OO::MAE, // Only MAE uses the cos table. MULPE gets redirected to fast_sin.
@@ -118,7 +118,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_cos(x, prec); },
         Halide::Internal::ApproximationTables::best_cos_approximation,
         Halide::Internal::ApproximationTables::table_cos,
-        {0.0f, PI_OVER_TWO},
+        {0.0f, float(PI_OVER_TWO)},
     },
     {
         "expm1", OO::MULPE,
@@ -126,7 +126,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_expm1(x, prec); },
         Halide::Internal::ApproximationTables::best_expm1_approximation,
         Halide::Internal::ApproximationTables::table_expm1,
-        {-0.5 * std::log(2.0), 0.5 * std::log(2.0)},
+        {-float(0.5 * std::log(2.0)), float(0.5 * std::log(2.0))},
     },
     {
         "exp", OO::MULPE,
@@ -134,7 +134,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_exp(x, prec); },
         Halide::Internal::ApproximationTables::best_exp_approximation,
         Halide::Internal::ApproximationTables::table_exp,
-        {0.0f, std::log(2.0)},
+        {0.0f, float(std::log(2.0))},
     },
     {
         "log", OO::MULPE,
