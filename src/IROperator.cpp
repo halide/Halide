@@ -2194,17 +2194,6 @@ Expr hypot(const Expr &x, const Expr &y) {
     return sqrt(x * x + y * y);
 }
 
-Expr expm1(Expr x) {
-    user_assert(x.defined()) << "exp of undefined Expr\n";
-    if (x.type() == Float(64)) {
-        return Call::make(Float(64), "expm1_f64", {std::move(x)}, Call::PureExtern);
-    } else if (x.type() == Float(16)) {
-        return Call::make(Float(16), "expm1_f16", {std::move(x)}, Call::PureExtern);
-    } else {
-        return Call::make(Float(32), "expm1_f32", {cast<float>(std::move(x))}, Call::PureExtern);
-    }
-}
-
 Expr exp(Expr x) {
     user_assert(x.defined()) << "exp of undefined Expr\n";
     if (x.type() == Float(64)) {

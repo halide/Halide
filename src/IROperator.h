@@ -956,15 +956,6 @@ Expr hypot(const Expr &x, const Expr &y);
  * mantissa. Vectorizes cleanly. */
 Expr exp(Expr x);
 
-/** Return the exponential of a floating-point expression. If the
- * argument is not floating-point, it is cast to Float(32). For
- * Float(64) arguments, this calls the system exp function, and does
- * not vectorize well. For Float(32) arguments, this function is
- * vectorizable, does the right thing for extremely small or extremely
- * large inputs, and is accurate up to the last bit of the
- * mantissa. Vectorizes cleanly. */
-Expr expm1(Expr x);
-
 /** Return the logarithm of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). For
  * Float(64) arguments, this calls the system log function, and does
@@ -992,7 +983,7 @@ Expr erf(const Expr &x);
  * hardware instructions. If no hardware instructions are available, approximations
  * are implemented in Halide using polynomials or potentially Padé approximants.
  * Both the hardware instructions and the in-house approximations have a certain behavior
- * and precision. This struct allows you to specifiy which behavior and precision you
+ * and precision. This struct allows you to specify which behavior and precision you
  * are interested in. Halide will select an appropriate implemenation that satisfies
  * these requirements.
  *

@@ -61,6 +61,10 @@ Expr eval_poly_horner(const std::vector<double> &coefs, const Expr &x) {
      * R = a0 + x * a1 + x^2 * a2 + x^3 * a3
      *   = a0 + x * (a1 + x * a2 + x^2 * a3)
      *   = a0 + x * (a1 + x * (a2 + x * a3))
+     *
+     * This is known as Horner's method.
+     * Fun fact: even if we don't program it like this, the Halide expression
+     * rewriter will turn it into this Horner format.
      */
     Type type = x.type();
     if (coefs.empty()) {
@@ -680,6 +684,10 @@ bool intrinsic_satisfies_precision(const IntrinsicsInfo &ii, const Approximation
             }
         } else {
             // We don't know?
+            // TODO(mcourteaux): We haven't measured the intrinsics on this particular
+            // device API yet. We could report a warning, but that's perhaps too invasive.
+            // Let's report it in debug(1) instead to have people notice this.
+            debug(1) << "Warning: intrinsic is defined but not yet measured in terms of ULP precision.\n";
         }
     }
     if (prec.constraint_max_absolute_error != 0) {
@@ -689,6 +697,8 @@ bool intrinsic_satisfies_precision(const IntrinsicsInfo &ii, const Approximation
             }
         } else {
             // We don't know?
+            // TODO(mcourteaux): Read above.
+            debug(1) << "Warning: intrinsic is defined but not yet measured in terms of MAE precision.\n";
         }
     }
     return true;
@@ -711,6 +721,11 @@ bool native_func_satisfies_precision(const IntrinsicsInfo &ii, const Approximati
             }
         } else {
             // We don't know?
+            // TODO(mcourteaux): We could report a warning that we assume the
+            // precision is unknown, but I'll postpone this for when we have
+            // strict_float, and only warn in case of string_float requirements.
+            // For now let's report it in debug(1) such that we won't forget about this.
+            debug(1) << "Warning: native func is defined but not yet measured in terms of MAE precision.\n";
         }
     }
     if (prec.constraint_max_absolute_error != 0) {
@@ -720,6 +735,8 @@ bool native_func_satisfies_precision(const IntrinsicsInfo &ii, const Approximati
             }
         } else {
             // We don't know?
+            // TODO(mcourteaux): Read above.
+            debug(1) << "Warning: native func is defined but not yet measured in terms of ULP precision.\n";
         }
     }
     return true;
