@@ -430,16 +430,18 @@ SOURCE_FILES = \
   Associativity.cpp \
   AsyncProducers.cpp \
   AutoScheduleUtils.cpp \
+  BoundConstantExtentLoops.cpp \
+  BoundSmallAllocations.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
   BoundsInference.cpp \
-  BoundConstantExtentLoops.cpp \
-  BoundSmallAllocations.cpp \
   Buffer.cpp \
+  CPlusPlusMangle.cpp \
+  CSE.cpp \
   Callable.cpp \
   CanonicalizeGPUVars.cpp \
-  Closure.cpp \
   ClampUnsafeAccesses.cpp \
+  Closure.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
@@ -449,20 +451,18 @@ SOURCE_FILES = \
   CodeGen_LLVM.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenCL_Dev.cpp \
-  CodeGen_Vulkan_Dev.cpp \
+  CodeGen_PTX_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
-  CodeGen_PTX_Dev.cpp \
   CodeGen_PyTorch.cpp \
   CodeGen_RISCV.cpp \
+  CodeGen_Vulkan_Dev.cpp \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
   CompilerLogger.cpp \
   ConstantBounds.cpp \
   ConstantInterval.cpp \
-  CPlusPlusMangle.cpp \
-  CSE.cpp \
   Debug.cpp \
   DebugArguments.cpp \
   DebugToFile.cpp \
@@ -495,13 +495,6 @@ SOURCE_FILES = \
   Generator.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
-  ImageParam.cpp \
-  InferArguments.cpp \
-  InjectHostDevBufferCopies.cpp \
-  Inline.cpp \
-  InlineReductions.cpp \
-  IntegerDivisionTable.cpp \
-  Interval.cpp \
   IR.cpp \
   IREquality.cpp \
   IRMatch.cpp \
@@ -509,12 +502,19 @@ SOURCE_FILES = \
   IROperator.cpp \
   IRPrinter.cpp \
   IRVisitor.cpp \
+  ImageParam.cpp \
+  InferArguments.cpp \
+  InjectHostDevBufferCopies.cpp \
+  Inline.cpp \
+  InlineReductions.cpp \
+  IntegerDivisionTable.cpp \
+  Interval.cpp \
   JITModule.cpp \
-  Lambda.cpp \
-  Lerp.cpp \
   LICM.cpp \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
+  Lambda.cpp \
+  Lerp.cpp \
   LoopCarry.cpp \
   Lower.cpp \
   LowerParallelTasks.cpp \
@@ -537,8 +537,8 @@ SOURCE_FILES = \
   PurifyIndexMath.cpp \
   PythonExtensionGen.cpp \
   Qualify.cpp \
-  Random.cpp \
   RDom.cpp \
+  Random.cpp \
   Realization.cpp \
   RealizationOrder.cpp \
   RebaseLoopsToZero.cpp \
@@ -552,28 +552,28 @@ SOURCE_FILES = \
   SelectGPUAPI.cpp \
   Serialization.cpp \
   Simplify.cpp \
+  SimplifyCorrelatedDifferences.cpp \
+  SimplifySpecializations.cpp \
   Simplify_Add.cpp \
   Simplify_And.cpp \
   Simplify_Call.cpp \
   Simplify_Cast.cpp \
-  Simplify_Reinterpret.cpp \
   Simplify_Div.cpp \
   Simplify_EQ.cpp \
   Simplify_Exprs.cpp \
-  Simplify_Let.cpp \
   Simplify_LT.cpp \
+  Simplify_Let.cpp \
   Simplify_Max.cpp \
   Simplify_Min.cpp \
   Simplify_Mod.cpp \
   Simplify_Mul.cpp \
   Simplify_Not.cpp \
   Simplify_Or.cpp \
+  Simplify_Reinterpret.cpp \
   Simplify_Select.cpp \
   Simplify_Shuffle.cpp \
   Simplify_Stmts.cpp \
   Simplify_Sub.cpp \
-  SimplifyCorrelatedDifferences.cpp \
-  SimplifySpecializations.cpp \
   SkipStages.cpp \
   SlidingWindow.cpp \
   Solve.cpp \
@@ -625,17 +625,20 @@ HEADER_FILES = \
   AlignLoads.h \
   AllocationBoundsInference.h \
   ApplySplit.h \
+  ApproximationTables.h \
   Argument.h \
   AssociativeOpsTable.h \
   Associativity.h \
   AsyncProducers.h \
   AutoScheduleUtils.h \
+  BoundConstantExtentLoops.h \
+  BoundSmallAllocations.h \
   BoundaryConditions.h \
   Bounds.h \
   BoundsInference.h \
-  BoundConstantExtentLoops.h \
-  BoundSmallAllocations.h \
   Buffer.h \
+  CPlusPlusMangle.h \
+  CSE.h \
   Callable.h \
   CanonicalizeGPUVars.h \
   ClampUnsafeAccesses.h \
@@ -647,18 +650,16 @@ HEADER_FILES = \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenCL_Dev.h \
-  CodeGen_Vulkan_Dev.h \
-  CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
+  CodeGen_Posix.h \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
+  CodeGen_Vulkan_Dev.h \
   CodeGen_WebGPU_Dev.h \
   CompilerLogger.h \
   ConciseCasts.h \
-  CPlusPlusMangle.h \
   ConstantBounds.h \
   ConstantInterval.h \
-  CSE.h \
   Debug.h \
   DebugArguments.h \
   DebugToFile.h \
@@ -695,6 +696,13 @@ HEADER_FILES = \
   Generator.h \
   HexagonOffload.h \
   HexagonOptimize.h \
+  IR.h \
+  IREquality.h \
+  IRMatch.h \
+  IRMutator.h \
+  IROperator.h \
+  IRPrinter.h \
+  IRVisitor.h \
   ImageParam.h \
   InferArguments.h \
   InjectHostDevBufferCopies.h \
@@ -703,20 +711,12 @@ HEADER_FILES = \
   IntegerDivisionTable.h \
   Interval.h \
   IntrusivePtr.h \
-  IR.h \
-  IREquality.h \
-  IRMatch.h \
-  IRMutator.h \
-  IROperator.h \
-  IRPrinter.h \
-  IRVisitor.h \
-  WasmExecutor.h \
   JITModule.h \
-  Lambda.h \
-  Lerp.h \
   LICM.h \
   LLVM_Output.h \
   LLVM_Runtime_Linker.h \
+  Lambda.h \
+  Lerp.h \
   LoopCarry.h \
   LoopPartitioningDirective.h \
   Lower.h \
@@ -742,9 +742,9 @@ HEADER_FILES = \
   PurifyIndexMath.h \
   PythonExtensionGen.h \
   Qualify.h \
+  RDom.h \
   Random.h \
   Realization.h \
-  RDom.h \
   RealizationOrder.h \
   RebaseLoopsToZero.h \
   Reduction.h \
@@ -752,8 +752,6 @@ HEADER_FILES = \
   RemoveDeadAllocations.h \
   RemoveExternLoops.h \
   RemoveUndef.h \
-  runtime/HalideBuffer.h \
-  runtime/HalideRuntime.h \
   Schedule.h \
   ScheduleFunctions.h \
   Scope.h \
@@ -787,7 +785,10 @@ HEADER_FILES = \
   Util.h \
   Var.h \
   VectorizeLoops.h \
+  WasmExecutor.h \
   WrapCalls.h
+  runtime/HalideBuffer.h \
+  runtime/HalideRuntime.h \
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
