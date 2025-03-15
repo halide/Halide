@@ -1070,6 +1070,9 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
     if (is_math_func(op, "exp", Call::fast_exp)) {
         // d/dx exp(x) = exp(x)
         accumulate(op->args[0], adjoint * exp(op->args[0]));
+    } else if (is_math_func(op, "expm1", Call::fast_expm1)) {
+        // d/dx (exp(x) - 1) = exp(x)
+        accumulate(op->args[0], adjoint * exp(op->args[0]));
     } else if (is_math_func(op, "log", Call::fast_log)) {
         // d/dx log(x) = 1 / x
         accumulate(op->args[0], adjoint / op->args[0]);

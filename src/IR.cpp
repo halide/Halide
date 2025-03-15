@@ -635,6 +635,7 @@ const char *const intrinsic_op_names[] = {
     "fast_atan2",
     "fast_cos",
     "fast_exp",
+    "fast_expm1",
     "fast_log",
     "fast_pow",
     "fast_sin",

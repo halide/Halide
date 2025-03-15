@@ -115,8 +115,9 @@ def optimize_approximation(loss, order, progress):
         lower, upper = 0, np.log(2)
     elif args.func == "expm1":
         func = np.expm1
+        fixed_part_taylor = [0, 1]
         exponents = np.arange(1, order + 1)
-        lower, upper = 0, np.log(2)
+        lower, upper = -0.5 * np.log(2), 0.5 * np.log(2)
     elif args.func == "log":
         def func(x): return np.log(x + 1.0)
         exponents = np.arange(1, order + 1)
