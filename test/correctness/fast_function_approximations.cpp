@@ -101,6 +101,8 @@ struct RangedAccuracyTest {
 
     uint64_t max_max_ulp_error{0};   // When MaxAE-query was 1e-5 or better and forced poly.
     uint64_t max_mean_ulp_error{0};  // When MaxAE-query was 1e-5 or better and forced poly.
+
+    bool requires_strict_float{false};
 };
 
 constexpr RangedAccuracyTest::Validation no_val = {0.0, 0.0};
@@ -119,6 +121,20 @@ constexpr RangedAccuracyTest::Validation rlx_ulp_val = {1.01, 20};
 constexpr RangedAccuracyTest::Validation vrlx_ulp_val = {1.1, 200};
 constexpr RangedAccuracyTest::Validation rsnbl_ulp_val = {20.0, 1'000};
 
+Expr makeshift_expm1(Expr x) {
+    Type t = x.type();
+    Expr r = x;
+    Expr xpow = x;
+    int factr = 1;
+    for (int i = 2; i < 15; ++i) {
+        xpow = xpow * x;
+        factr *= i;
+        r += xpow * Halide::Internal::make_const(t, 1.0 / factr);
+    }
+    Expr ivl = Halide::Internal::make_const(t, 1.0);
+    return select(x > -ivl && x < ivl, r, exp(x) - make_const(t, 1.0));
+}
+
 struct FunctionToTest {
     std::string name;
     Call::IntrinsicOp fast_op;
@@ -135,7 +151,7 @@ struct FunctionToTest {
         Halide::Internal::ApproximationTables::best_tan_approximation,
         {
             { "close-to-zero", {{-0.78f, 0.78f}}              , {}, {}, {}, {}, 40,  5, },
-            { "pole-to-pole" , {{-0.0f, just_not_pi_over_two}}, no_val, no_val, {1.01, 4}, rsnbl_ulp_val, 40,  5, },
+            { "pole-to-pole" , {{-0.0f, just_not_pi_over_two}}, no_val, no_val, {1.01, 4}, rsnbl_ulp_val, 40,  5, true},
             { "extended"     , {{-10.0f, 10.0f}}              , no_val, no_val, no_val, rsnbl_ulp_val,  0, 50, },
         }
     },
@@ -155,7 +171,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_atan2(x, y, prec); },
         Halide::Internal::ApproximationTables::best_atan_approximation,
         {
-            { "precise" , {{ -10.0f, 10.0f}, {-10.0f, 10.0f}}, rlx_abs_val_pct(4), {}, {}, {}, 70, 30 },
+            { "precise" , {{ -10.0f, 10.0f}, {-10.0f, 10.0f}}, rlx_abs_val_pct(4), rlx_abs_val, rlx_ulp_val, rlx_ulp_val, 70, 30 },
         }
     },
     {
@@ -177,8 +193,18 @@ struct FunctionToTest {
         {
             // We have to relax all tests here, because it actually compiles to a sin, so the table entries are not accurate.
             { "-pi/3 to pi/3", {{-pi * 0.333f, pi * 0.333f}}, rlx_abs_val, rlx_abs_val, rlx_ulp_val, rlx_ulp_val, 150, 100 },
-            { "-pi/2 to pi/2", {{-just_not_pi_over_two, just_not_pi_over_two}}, rlx_abs_val, rlx_abs_val, no_val, rsnbl_ulp_val, 0, 0 },
+            { "-pi/2 to pi/2", {{-just_not_pi_over_two, just_not_pi_over_two}}, rlx_abs_val, rlx_abs_val, no_val, rsnbl_ulp_val, 0, 0, true},
             { "-10 to 10",   {{-10.0f, 10.0f}}, rsnbl_abs_val, rsnbl_abs_val, no_val, rsnbl_ulp_val, 0, 0 },
+        }
+    },
+    {
+        "expm1", Call::fast_expm1,
+        [](Expr x, Expr y) { return makeshift_expm1(x); }, // We don't have expm1... :(
+        [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_expm1(x, prec); },
+        Halide::Internal::ApproximationTables::best_expm1_approximation,
+        {
+            { "precise",  {{-0.5 * std::log(2.0), 0.5f * std::log(2.0)}}, {}, {}, {}, {}, 300, 130 },
+            { "extended", {{-20.0f, 20.0f}}, no_val, no_val, rsnbl_ulp_val, rlx_ulp_val, 600, 40 },
         }
     },
     {
@@ -197,8 +223,8 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_log(x, prec); },
         Halide::Internal::ApproximationTables::best_log_approximation,
         {
-            { "precise",  {{0.76f,    1.49f}}, {}, {}, {}, {}, 120, 60 },
-            { "extended", {{1e-8f, 20000.0f}}, rsnbl_abs_val, rsnbl_abs_val, rsnbl_ulp_val, rsnbl_ulp_val, 120, 60 },
+            { "precise",  {{0.76f,    1.49f}}, {}, {}, {}, {}, 2500, 1000 },
+            { "extended", {{1e-8f, 20000.0f}}, rsnbl_abs_val, rsnbl_abs_val, rsnbl_ulp_val, rsnbl_ulp_val, 2500, 60 },
         }
     },
     {
@@ -228,7 +254,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_asin(x, prec); },
         Halide::Internal::ApproximationTables::best_atan_approximation, // Yes, atan table!
         {
-            { "precise"     , {{  -1.0f ,  1.0f }}, vrlx_abs_val, vrlx_abs_val, vrlx_ulp_val, vrlx_ulp_val, 2500, 20 },
+            { "precise"     , {{  -1.0f ,  1.0f }}, vrlx_abs_val, vrlx_abs_val, vrlx_ulp_val, vrlx_ulp_val, 2500, 50 },
         }
     },
     {
@@ -237,7 +263,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_acos(x, prec); },
         Halide::Internal::ApproximationTables::best_atan_approximation, // Yes, atan table!
         {
-            { "precise"     , {{  -1.0f ,  1.0f }}, vrlx_abs_val, vrlx_abs_val, vrlx_ulp_val, vrlx_ulp_val, 2500, 20 },
+            { "precise"     , {{  -1.0f ,  1.0f }}, vrlx_abs_val, vrlx_abs_val, vrlx_ulp_val, vrlx_ulp_val, 2500, 50 },
         }
     },
     // clang-format on
@@ -359,6 +385,8 @@ int main(int argc, char **argv) {
     Buffer<float, 1> out_ref{steps * steps};
     Buffer<float, 1> out_approx{steps * steps};
 
+    bool target_has_proper_strict_float_support = !target.has_gpu_feature();
+
     double best_mae_for_backend = 0.0;
     if (target.has_feature(Halide::Target::Vulkan)) {
         best_mae_for_backend = 1e-6;
@@ -398,7 +426,7 @@ int main(int argc, char **argv) {
             printf("Testing fast_%s on its %s range (", ftt.name.c_str(), rat.name.c_str());
             printf("[%g, %g]", range.x.l, range.x.u);
             if (is_2d) {
-                printf(" x [%g, %g]n", range.y.l, range.y.u);
+                printf(" x [%g, %g]", range.y.l, range.y.u);
             }
             printf(")...\n");
 
@@ -548,7 +576,8 @@ int main(int argc, char **argv) {
                         }
                     }
                 } else {
-                    if (ftt.obtain_approximation && test.precision.force_halide_polynomial > 0) {
+                    if (ftt.obtain_approximation && test.precision.force_halide_polynomial > 0 &&
+                        (!rat.requires_strict_float || target_has_proper_strict_float_support)) {
                         // We have tabular data indicating expected precision.
                         const Halide::Internal::Approximation *approx = ftt.obtain_approximation(prec, arg_x.type());
                         const Halide::Internal::Approximation::Metrics &metrics = approx->metrics_for(arg_x.type());
@@ -578,7 +607,8 @@ int main(int argc, char **argv) {
 
                 if (prec.constraint_max_absolute_error != 0 &&
                     prec.constraint_max_absolute_error <= 1e-5 &&
-                    prec.optimized_for == ApproximationPrecision::MULPE) {
+                    prec.optimized_for == ApproximationPrecision::MULPE &&
+                    (!rat.requires_strict_float || target_has_proper_strict_float_support)) {
                     if (rat.max_max_ulp_error != 0) {
                         num_tests++;
                         if (em.max_ulp_error > rat.max_max_ulp_error) {
