@@ -29,7 +29,7 @@ Expr Simplify::visit(const Mod *op, ExprInfo *info) {
         }
 
         if (mod_info.bounds.is_single_point()) {
-            return make_const(op->type, mod_info.bounds.min);
+            return make_const(op->type, mod_info.bounds.min, nullptr);
         }
 
         int lanes = op->type.lanes();
