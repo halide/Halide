@@ -427,7 +427,7 @@ Expr fast_tanh(const Expr &x, ApproximationPrecision prec) {
         // should be MULPE optimized for accuracy, as we are taking ratios.
         if (prec.optimized_for == ApproximationPrecision::MAE) {
             prec.optimized_for = ApproximationPrecision::MULPE;
-        } // else it's on AUTO, and we want to keep that (AUTO tanh uses AUTO exp).
+        }  // else it's on AUTO, and we want to keep that (AUTO tanh uses AUTO exp).
         Expr exp2x = Halide::fast_exp(-2 * abs_x, prec);
         Expr tanh = (make_const(type, 1) - exp2x) / (make_const(type, 1) + exp2x);
         tanh = select(flip_sign, -tanh, tanh);

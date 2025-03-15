@@ -351,11 +351,11 @@ int main(int argc, char **argv) {
             printf(" */\n");
             if (find_worst_loc) {
                 printf("    /* Worst abs error location: low(%d) + loc(%d) = val(%d) (%g). */\n",
-                        range_x.lower_int(), out_mae_loc0(), out_mae_loc0() + range_x.lower_int(),
-                        int_to_float(out_mae_loc0() + range_x.lower_int()));
+                       range_x.lower_int(), out_mae_loc0(), out_mae_loc0() + range_x.lower_int(),
+                       int_to_float(out_mae_loc0() + range_x.lower_int()));
                 printf("    /* Worst ulp error location: low(%d) + loc(%d) = val(%d) (%g). */\n",
-                        range_x.lower_int(), out_mulpe_loc0(), range_x.lower_int() + out_mulpe_loc0(),
-                        int_to_float(out_mulpe_loc0() + range_x.lower_int()));
+                       range_x.lower_int(), out_mulpe_loc0(), range_x.lower_int() + out_mulpe_loc0(),
+                       int_to_float(out_mulpe_loc0() + range_x.lower_int()));
             }
             printf("    /* f16 */ {%.6e, %a, %" PRIu64 "},\n", m16.mse, m16.mae, m16.mulpe);
             printf("    /* f32 */ {%.6e, %a, %" PRIu64 "},\n", metrics.mse, out_mae(), uint64_t(out_mulpe()));
