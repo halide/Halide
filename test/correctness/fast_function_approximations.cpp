@@ -203,7 +203,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_expm1(x, prec); },
         Halide::Internal::ApproximationTables::best_expm1_approximation,
         {
-            { "precise",  {{-0.5 * std::log(2.0), 0.5f * std::log(2.0)}}, {}, {}, {}, {}, 300, 130 },
+            { "precise",  {{-0.5f * std::log(2.0f)), 0.5f * std::log(2.0f))}}, {}, {}, {}, {}, 300, 130 },
             { "extended", {{-20.0f, 20.0f}}, no_val, no_val, rsnbl_ulp_val, rlx_ulp_val, 600, 40 },
         }
     },
