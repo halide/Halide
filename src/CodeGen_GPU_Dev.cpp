@@ -1,4 +1,5 @@
 #include "CodeGen_GPU_Dev.h"
+#include "CodeGen_Internal.h"
 #include "CanonicalizeGPUVars.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
@@ -250,6 +251,32 @@ void CodeGen_GPU_C::visit(const Call *op) {
     } else {
         CodeGen_C::visit(op);
     }
+}
+
+
+std::string CodeGen_GPU_C::print_extern_call(const Call *op) {
+    internal_assert(!function_takes_user_context(op->name)) << op->name;
+
+    // Here we do not scalarize function calls with vector arguments.
+    // Backends should provide those functions, and if not available,
+    // we could compose them by writing out a call element by element,
+    // but that's never happened until 2025, so I guess we can leave
+    // this to be an error for now, just like it was.
+
+    std::ostringstream rhs;
+    std::vector<std::string> args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        args[i] = print_expr(op->args[i]);
+    }
+    std::string name = op->name;
+    auto it = extern_function_name_map.find(name);
+    if (it != extern_function_name_map.end()) {
+        name = it->second;
+        debug(3) << "Rewriting " << op->name << " as " << name << "\n";
+    }
+    debug(3) << "Writing out call to " << name << "\n";
+    rhs << name << "(" << with_commas(args) << ")";
+    return rhs.str();
 }
 
 }  // namespace Internal

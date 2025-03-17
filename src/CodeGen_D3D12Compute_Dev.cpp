@@ -67,6 +67,40 @@ protected:
         CodeGen_D3D12Compute_C(std::ostream &s, const Target &t)
             : CodeGen_GPU_C(s, t) {
             integer_suffix_style = IntegerSuffixStyle::HLSL;
+
+#define alias(x, y) \
+            extern_function_name_map[x "_f16"] = y; \
+            extern_function_name_map[x "_f32"] = y; \
+            extern_function_name_map[x "_f64"] = y
+            alias("sqrt", "sqrt");
+            alias("sin", "sin");
+            alias("cos", "cos");
+            alias("exp", "exp");
+            alias("log", "log");
+            alias("abs", "abs");
+            alias("floor", "floor");
+            alias("ceil", "ceil");
+            alias("trunc", "trunc");
+            alias("pow", "pow");
+            alias("asin", "asin");
+            alias("acos", "acos");
+            alias("tan", "tan");
+            alias("atan", "atan");
+            alias("atan2", "atan2");
+            alias("sinh", "sinh");
+            alias("asinh", "asinh");
+            alias("cosh", "cosh");
+            alias("acosh", "acosh");
+            alias("tanh", "tanh");
+            alias("atanh", "atanh");
+
+            alias("is_nan", "isnan");
+            alias("is_inf", "isinf");
+            alias("is_finite", "isfinite");
+
+            alias("fast_inverse", "rcp");
+            alias("fast_inverse_sqrt", "rsqrt");
+#undef alias
         }
         void add_kernel(Stmt stmt,
                         const std::string &name,
@@ -79,7 +113,6 @@ protected:
         std::string print_storage_type(Type type);
         std::string print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space);
         std::string print_reinterpret(Type type, const Expr &e) override;
-        std::string print_extern_call(const Call *op) override;
 
         std::string print_vanilla_cast(Type type, const std::string &value_expr);
         std::string print_reinforced_cast(Type type, const std::string &value_expr);
@@ -245,18 +278,6 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op)
         return;
     }
     print_expr(op->value);
-}
-
-string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name)) << op->name;
-
-    vector<string> args(op->args.size());
-    for (size_t i = 0; i < op->args.size(); i++) {
-        args[i] = print_expr(op->args[i]);
-    }
-    ostringstream rhs;
-    rhs << op->name << "(" << with_commas(args) << ")";
-    return rhs.str();
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Max *op) {
@@ -1290,19 +1311,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "float nan_f32()     { return  1.#IND; } \n"  // Quiet NaN with minimum fractional value.
         << "float neg_inf_f32() { return -1.#INF; } \n"
         << "float inf_f32()     { return +1.#INF; } \n"
-        << "#define is_inf_f32     isinf    \n"
-        << "#define is_finite_f32  isfinite \n"
-        << "#define is_nan_f32     isnan    \n"
         << "#define float_from_bits asfloat \n"
-        << "#define sqrt_f32    sqrt   \n"
-        << "#define sin_f32     sin    \n"
-        << "#define cos_f32     cos    \n"
-        << "#define exp_f32     exp    \n"
-        << "#define log_f32     log    \n"
-        << "#define abs_f32     abs    \n"
-        << "#define floor_f32   floor  \n"
-        << "#define ceil_f32    ceil   \n"
-        << "#define trunc_f32   trunc  \n"
         // pow() in HLSL has the same semantics as C if
         // x > 0.  Otherwise, we need to emulate C
         // behavior.
@@ -1322,19 +1331,9 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "    return nan_f32();             \n"
         << "  }                               \n"
         << "}                                 \n"
-        << "#define asin_f32    asin   \n"
-        << "#define acos_f32    acos   \n"
-        << "#define tan_f32     tan    \n"
-        << "#define atan_f32    atan   \n"
-        << "#define atan2_f32   atan2  \n"
-        << "#define sinh_f32    sinh   \n"
-        << "#define cosh_f32    cosh   \n"
-        << "#define tanh_f32    tanh   \n"
-        << "#define asinh_f32(x) (log_f32(x + sqrt_f32(x*x + 1))) \n"
-        << "#define acosh_f32(x) (log_f32(x + sqrt_f32(x*x - 1))) \n"
-        << "#define atanh_f32(x) (log_f32((1+x)/(1-x))/2) \n"
-        << "#define fast_inverse_f32      rcp   \n"
-        << "#define fast_inverse_sqrt_f32 rsqrt \n"
+        << "#define asinh(x) (log(x + sqrt(x*x + 1))) \n"
+        << "#define acosh(x) (log(x + sqrt(x*x - 1))) \n"
+        << "#define atanh(x) (log((1+x)/(1-x))/2) \n"
         << "\n";
     //<< "}\n"; // close namespace
 
