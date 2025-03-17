@@ -10,6 +10,8 @@
 #include "Scope.h"
 #include "Target.h"
 
+#include <unordered_map>
+
 namespace Halide {
 
 struct Argument;
