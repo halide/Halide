@@ -111,7 +111,6 @@ protected:
         std::string print_storage_type(Type type);
         std::string print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space);
         std::string print_reinterpret(Type type, const Expr &e) override;
-        std::string print_extern_call(const Call *op) override;
 
         std::string get_memory_space(const std::string &);
 
@@ -241,11 +240,6 @@ string simt_intrinsic(const string &name) {
     return "";
 }
 }  // namespace
-
-string CodeGen_Metal_Dev::CodeGen_Metal_C::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name)) << op->name;
-    return CodeGen_GPU_C::print_extern_call(op);
-}
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Max *op) {
     print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));

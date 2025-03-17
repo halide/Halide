@@ -105,7 +105,6 @@ protected:
         using CodeGen_GPU_C::visit;
         std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace) override;
         std::string print_reinterpret(Type type, const Expr &e) override;
-        std::string print_extern_call(const Call *op) override;
         std::string print_array_access(const std::string &name,
                                        const Type &type,
                                        const std::string &id_index);
@@ -486,11 +485,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
     } else {
         CodeGen_GPU_C::visit(op);
     }
-}
-
-string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name)) << op->name;
-    return CodeGen_GPU_C::print_extern_call(op);
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string &name,

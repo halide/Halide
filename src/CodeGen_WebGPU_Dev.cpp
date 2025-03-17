@@ -102,7 +102,6 @@ protected:
                                AppendSpaceIfNeeded append_space =
                                    DoNotAppendSpace) override;
         std::string print_reinterpret(Type type, const Expr &e) override;
-        std::string print_extern_call(const Call *op) override;
         std::string print_assignment(Type t, const std::string &rhs) override;
         std::string print_const(Type t, const std::string &rhs);
         std::string print_assignment_or_const(Type t, const std::string &rhs,
@@ -297,11 +296,6 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_reinterpret(Type type,
     ostringstream oss;
     oss << "bitcast<" << print_type(type) << ">(" << print_expr(e) << ")";
     return oss.str();
-}
-
-string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name)) << op->name;
-    return CodeGen_GPU_C::print_extern_call(op);
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
