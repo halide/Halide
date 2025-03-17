@@ -134,6 +134,8 @@ protected:
      * use different syntax for other C-like languages. */
     virtual void add_vector_typedefs(const std::set<Type> &vector_types);
 
+    std::unordered_map<std::string, std::string> extern_function_name_map;
+
     /** Bottleneck to allow customization of calls to generic Extern/PureExtern calls.  */
     virtual std::string print_extern_call(const Call *op);
 
