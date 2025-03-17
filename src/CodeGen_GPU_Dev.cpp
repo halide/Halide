@@ -1,6 +1,6 @@
 #include "CodeGen_GPU_Dev.h"
-#include "CodeGen_Internal.h"
 #include "CanonicalizeGPUVars.h"
+#include "CodeGen_Internal.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
@@ -252,7 +252,6 @@ void CodeGen_GPU_C::visit(const Call *op) {
         CodeGen_C::visit(op);
     }
 }
-
 
 std::string CodeGen_GPU_C::print_extern_call(const Call *op) {
     internal_assert(!function_takes_user_context(op->name)) << op->name;

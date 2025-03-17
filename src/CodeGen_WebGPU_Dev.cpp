@@ -58,17 +58,16 @@ protected:
             : CodeGen_GPU_C(s, t) {
             vector_declaration_style = VectorDeclarationStyle::WGSLSyntax;
 
-
-#define alias(x, y) \
-            extern_function_name_map[x "_f16"] = y; \
-            extern_function_name_map[x "_f32"] = y
+#define alias(x, y)                         \
+    extern_function_name_map[x "_f16"] = y; \
+    extern_function_name_map[x "_f32"] = y
 
             alias("sqrt", "sqrt");
             alias("sin", "sin");
             alias("cos", "cos");
             alias("exp", "exp");
             alias("log", "log");
-            alias("abs", "fabs"); // f-prefix! (although it's handled as an intrinsic).
+            alias("abs", "fabs");  // f-prefix! (although it's handled as an intrinsic).
             alias("floor", "floor");
             alias("ceil", "ceil");
             alias("trunc", "trunc");
@@ -88,7 +87,6 @@ protected:
 
             alias("fast_inverse_sqrt", "inverseSqrt");
 #undef alias
-
         }
         void add_kernel(const Stmt &stmt,
                         const string &name,

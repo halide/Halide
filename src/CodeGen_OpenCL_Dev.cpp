@@ -63,16 +63,16 @@ protected:
             integer_suffix_style = IntegerSuffixStyle::OpenCL;
             vector_declaration_style = VectorDeclarationStyle::OpenCLSyntax;
 
-#define alias(x, y) \
-            extern_function_name_map[x "_f16"] = y; \
-            extern_function_name_map[x "_f32"] = y; \
-            extern_function_name_map[x "_f64"] = y
+#define alias(x, y)                         \
+    extern_function_name_map[x "_f16"] = y; \
+    extern_function_name_map[x "_f32"] = y; \
+    extern_function_name_map[x "_f64"] = y
             alias("sqrt", "sqrt");
             alias("sin", "sin");
             alias("cos", "cos");
             alias("exp", "exp");
             alias("log", "log");
-            alias("abs", "fabs"); // f-prefix! (although it's handled as an intrinsic).
+            alias("abs", "fabs");  // f-prefix! (although it's handled as an intrinsic).
             alias("floor", "floor");
             alias("ceil", "ceil");
             alias("trunc", "trunc");
