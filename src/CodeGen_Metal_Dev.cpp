@@ -88,7 +88,6 @@ protected:
             alias("is_inf", "isinf");
             alias("is_finite", "isfinite");
 
-            alias("fast_inverse", "native_recip");
             alias("fast_inverse_sqrt", "native_rsqrt");
 #undef alias
         }
@@ -841,6 +840,7 @@ void CodeGen_Metal_Dev::init_module() {
                << "constexpr half nan_f16() { return half_from_bits(32767); }\n"
                << "constexpr half neg_inf_f16() { return half_from_bits(64512); }\n"
                << "constexpr half inf_f16() { return half_from_bits(31744); }\n"
+               << "half fast_inverse_f16(half x) { return 1.0h / x; }\n"
                // This is quite annoying: even though the MSL docs claim
                // all versions of Metal support the same memory fence
                // names, the truth is that 1.0 does not.
