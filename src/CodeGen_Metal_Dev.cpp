@@ -58,6 +58,41 @@ protected:
     public:
         CodeGen_Metal_C(std::ostream &s, const Target &t)
             : CodeGen_GPU_C(s, t) {
+
+#define alias(x, y) \
+            extern_function_name_map[x "_f16"] = y; \
+            extern_function_name_map[x "_f32"] = y
+            alias("sqrt", "sqrt");
+            alias("sin", "sin");
+            alias("cos", "cos");
+            alias("exp", "exp");
+            alias("log", "log");
+            alias("abs", "fabs"); // f-prefix!
+            alias("floor", "floor");
+            alias("ceil", "ceil");
+            alias("trunc", "trunc");
+            alias("pow", "pow");
+            alias("asin", "asin");
+            alias("acos", "acos");
+            alias("tan", "tan");
+            alias("atan", "atan");
+            alias("atan2", "atan2");
+            alias("sinh", "sinh");
+            alias("asinh", "asinh");
+            alias("cosh", "cosh");
+            alias("acosh", "acosh");
+            alias("tanh", "tanh");
+            alias("atanh", "atanh");
+
+            alias("is_nan", "isnan");
+            alias("is_inf", "isinf");
+            alias("is_finite", "isfinite");
+
+            alias("fast_inverse", "native_recip");
+            alias("fast_inverse_sqrt", "native_rsqrt");
+#undef alias
+
+
         }
         void add_kernel(const Stmt &stmt,
                         const std::string &name,
@@ -209,13 +244,7 @@ string simt_intrinsic(const string &name) {
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_extern_call(const Call *op) {
     internal_assert(!function_takes_user_context(op->name)) << op->name;
-    vector<string> args(op->args.size());
-    for (size_t i = 0; i < op->args.size(); i++) {
-        args[i] = print_expr(op->args[i]);
-    }
-    ostringstream rhs;
-    rhs << op->name << "(" << with_commas(args) << ")";
-    return rhs.str();
+    return CodeGen_GPU_C::print_extern_call(op);
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Max *op) {
@@ -331,6 +360,13 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         }
         stream << ");\n";
         print_assignment(op->type, "0");
+    } else if (op->is_intrinsic(Call::absd)) {
+        Expr equiv = Call::make(op->type, "absdiff", op->args, Call::PureExtern);
+        equiv.accept(this);
+    } else if (op->is_intrinsic(Call::round)) {
+        // In Metal, rint matches our rounding semantics
+        Expr equiv = Call::make(op->type, "rint", op->args, Call::PureExtern);
+        equiv.accept(this);
     } else {
         CodeGen_GPU_C::visit(op);
     }
@@ -809,56 +845,6 @@ void CodeGen_Metal_Dev::init_module() {
                << "constexpr float neg_inf_f32() { return float_from_bits(0xff800000); }\n"
                << "constexpr float inf_f32() { return float_from_bits(0x7f800000); }\n"
                << "float fast_inverse_f32(float x) { return 1.0f / x; }\n"
-               << "#define is_nan_f32 isnan\n"
-               << "#define is_inf_f32 isinf\n"
-               << "#define is_finite_f32 isfinite\n"
-               << "#define sqrt_f32 sqrt\n"
-               << "#define sin_f32 sin\n"
-               << "#define cos_f32 cos\n"
-               << "#define exp_f32 exp\n"
-               << "#define log_f32 log\n"
-               << "#define abs_f32 fabs\n"
-               << "#define floor_f32 floor\n"
-               << "#define ceil_f32 ceil\n"
-               << "#define trunc_f32 trunc\n"
-               << "#define pow_f32 pow\n"
-               << "#define asin_f32 asin\n"
-               << "#define acos_f32 acos\n"
-               << "#define tan_f32 tan\n"
-               << "#define atan_f32 atan\n"
-               << "#define atan2_f32 atan2\n"
-               << "#define sinh_f32 sinh\n"
-               << "#define asinh_f32 asinh\n"
-               << "#define cosh_f32 cosh\n"
-               << "#define acosh_f32 acosh\n"
-               << "#define tanh_f32 tanh\n"
-               << "#define atanh_f32 atanh\n"
-               << "#define fast_inverse_sqrt_f32 rsqrt\n"
-               << "#define is_nan_f16 isnan\n"
-               << "#define is_inf_f16 isinf\n"
-               << "#define is_finite_f16 isfinite\n"
-               << "#define sqrt_f16 sqrt\n"
-               << "#define sin_f16 sin\n"
-               << "#define cos_f16 cos\n"
-               << "#define exp_f16 exp\n"
-               << "#define log_f16 log\n"
-               << "#define abs_f16 fabs\n"
-               << "#define floor_f16 floor\n"
-               << "#define ceil_f16 ceil\n"
-               << "#define trunc_f16 trunc\n"
-               << "#define pow_f16 pow\n"
-               << "#define asin_f16 asin\n"
-               << "#define acos_f16 acos\n"
-               << "#define tan_f16 tan\n"
-               << "#define atan_f16 atan\n"
-               << "#define atan2_f16 atan2\n"
-               << "#define sinh_f16 sinh\n"
-               << "#define asinh_f16 asinh\n"
-               << "#define cosh_f16 cosh\n"
-               << "#define acosh_f16 acosh\n"
-               << "#define tanh_f16 tanh\n"
-               << "#define atanh_f16 atanh\n"
-               << "#define fast_inverse_sqrt_f16 rsqrt\n"
                << "constexpr half half_from_bits(unsigned short x) {return as_type<half>(x);}\n"
                << "constexpr half nan_f16() { return half_from_bits(32767); }\n"
                << "constexpr half neg_inf_f16() { return half_from_bits(64512); }\n"

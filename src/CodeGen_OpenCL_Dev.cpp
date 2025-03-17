@@ -62,6 +62,40 @@ protected:
             : CodeGen_GPU_C(s, t) {
             integer_suffix_style = IntegerSuffixStyle::OpenCL;
             vector_declaration_style = VectorDeclarationStyle::OpenCLSyntax;
+
+#define alias(x, y) \
+            extern_function_name_map[x "_f16"] = y; \
+            extern_function_name_map[x "_f32"] = y; \
+            extern_function_name_map[x "_f64"] = y
+            alias("sqrt", "sqrt");
+            alias("sin", "sin");
+            alias("cos", "cos");
+            alias("exp", "exp");
+            alias("log", "log");
+            alias("abs", "fabs"); // f-prefix! (although it's handled as an intrinsic).
+            alias("floor", "floor");
+            alias("ceil", "ceil");
+            alias("trunc", "trunc");
+            alias("pow", "pow");
+            alias("asin", "asin");
+            alias("acos", "acos");
+            alias("tan", "tan");
+            alias("atan", "atan");
+            alias("atan2", "atan2");
+            alias("sinh", "sinh");
+            alias("asinh", "asinh");
+            alias("cosh", "cosh");
+            alias("acosh", "acosh");
+            alias("tanh", "tanh");
+            alias("atanh", "atanh");
+
+            alias("is_nan", "isnan");
+            alias("is_inf", "isinf");
+            alias("is_finite", "isfinite");
+
+            alias("fast_inverse", "native_recip");
+            alias("fast_inverse_sqrt", "native_rsqrt");
+#undef alias
         }
         void add_kernel(Stmt stmt,
                         const std::string &name,
@@ -300,16 +334,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         ostringstream rhs;
         rhs << "select(" << false_val << ", " << true_val << ", " << cond << ")";
         print_assignment(op->type, rhs.str());
-    } else if (op->is_intrinsic(Call::abs)) {
-        if (op->type.is_float()) {
-            ostringstream rhs;
-            rhs << "abs_f" << op->type.bits() << "(" << print_expr(op->args[0]) << ")";
-            print_assignment(op->type, rhs.str());
-        } else {
-            ostringstream rhs;
-            rhs << "abs(" << print_expr(op->args[0]) << ")";
-            print_assignment(op->type, rhs.str());
-        }
     } else if (op->is_intrinsic(Call::absd)) {
         ostringstream rhs;
         rhs << "abs_diff(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
@@ -466,13 +490,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_extern_call(const Call *op) {
     internal_assert(!function_takes_user_context(op->name)) << op->name;
-    vector<string> args(op->args.size());
-    for (size_t i = 0; i < op->args.size(); i++) {
-        args[i] = print_expr(op->args[i]);
-    }
-    ostringstream rhs;
-    rhs << op->name << "(" << with_commas(args) << ")";
-    return rhs.str();
+    return CodeGen_GPU_C::print_extern_call(op);
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_array_access(const string &name,
@@ -1123,64 +1141,14 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "inline float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << "inline float nan_f32() { return NAN; }\n"
                << "inline float neg_inf_f32() { return -INFINITY; }\n"
-               << "inline float inf_f32() { return INFINITY; }\n"
-               << "inline bool is_nan_f32(float x) {return isnan(x); }\n"
-               << "inline bool is_inf_f32(float x) {return isinf(x); }\n"
-               << "inline bool is_finite_f32(float x) {return isfinite(x); }\n"
-               << "#define sqrt_f32 sqrt \n"
-               << "#define sin_f32 sin \n"
-               << "#define cos_f32 cos \n"
-               << "#define exp_f32 exp \n"
-               << "#define log_f32 log \n"
-               << "#define abs_f32 fabs \n"
-               << "#define floor_f32 floor \n"
-               << "#define ceil_f32 ceil \n"
-               << "#define trunc_f32 trunc \n"
-               << "#define pow_f32 pow\n"
-               << "#define asin_f32 asin \n"
-               << "#define acos_f32 acos \n"
-               << "#define tan_f32 tan \n"
-               << "#define atan_f32 atan \n"
-               << "#define atan2_f32 atan2\n"
-               << "#define sinh_f32 sinh \n"
-               << "#define asinh_f32 asinh \n"
-               << "#define cosh_f32 cosh \n"
-               << "#define acosh_f32 acosh \n"
-               << "#define tanh_f32 tanh \n"
-               << "#define atanh_f32 atanh \n"
-               << "#define fast_inverse_f32 native_recip \n"
-               << "#define fast_inverse_sqrt_f32 native_rsqrt \n";
+               << "inline float inf_f32() { return INFINITY; }\n";
 
     // There does not appear to be a reliable way to safely ignore unused
     // variables in OpenCL C. See https://github.com/halide/Halide/issues/4918.
     src_stream << "#define halide_maybe_unused(x)\n";
 
     if (target.has_feature(Target::CLDoubles)) {
-        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
-                   << "inline bool is_nan_f64(double x) {return isnan(x); }\n"
-                   << "inline bool is_inf_f64(double x) {return isinf(x); }\n"
-                   << "inline bool is_finite_f64(double x) {return isfinite(x); }\n"
-                   << "#define sqrt_f64 sqrt\n"
-                   << "#define sin_f64 sin\n"
-                   << "#define cos_f64 cos\n"
-                   << "#define exp_f64 exp\n"
-                   << "#define log_f64 log\n"
-                   << "#define abs_f64 fabs\n"
-                   << "#define floor_f64 floor\n"
-                   << "#define ceil_f64 ceil\n"
-                   << "#define trunc_f64 trunc\n"
-                   << "#define pow_f64 pow\n"
-                   << "#define asin_f64 asin\n"
-                   << "#define acos_f64 acos\n"
-                   << "#define tan_f64 tan\n"
-                   << "#define atan_f64 atan\n"
-                   << "#define atan2_f64 atan2\n"
-                   << "#define sinh_f64 sinh\n"
-                   << "#define asinh_f64 asinh\n"
-                   << "#define cosh_f64 cosh\n"
-                   << "#define acosh_f64 acosh\n"
-                   << "#define tanh_f64 tanh\n"
-                   << "#define atanh_f64 atanh\n";
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
     }
 
     if (target.has_feature(Target::CLHalf)) {
@@ -1192,31 +1160,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                    << "inline half half_from_bits(unsigned short x) {return __builtin_astype(x, half);}\n"
                    << "inline half nan_f16() { return half_from_bits(" << nan_f16 << "); }\n"
                    << "inline half neg_inf_f16() { return half_from_bits(" << neg_inf_f16 << "); }\n"
-                   << "inline half inf_f16() { return half_from_bits(" << inf_f16 << "); }\n"
-                   << "inline bool is_nan_f16(half x) {return isnan(x); }\n"
-                   << "inline bool is_inf_f16(half x) {return isinf(x); }\n"
-                   << "inline bool is_finite_f16(half x) {return isfinite(x); }\n"
-                   << "#define sqrt_f16 sqrt\n"
-                   << "#define sin_f16 sin\n"
-                   << "#define cos_f16 cos\n"
-                   << "#define exp_f16 exp\n"
-                   << "#define log_f16 log\n"
-                   << "#define abs_f16 fabs\n"
-                   << "#define floor_f16 floor\n"
-                   << "#define ceil_f16 ceil\n"
-                   << "#define trunc_f16 trunc\n"
-                   << "#define pow_f16 pow\n"
-                   << "#define asin_f16 asin\n"
-                   << "#define acos_f16 acos\n"
-                   << "#define tan_f16 tan\n"
-                   << "#define atan_f16 atan\n"
-                   << "#define atan2_f16 atan2\n"
-                   << "#define sinh_f16 sinh\n"
-                   << "#define asinh_f16 asinh\n"
-                   << "#define cosh_f16 cosh\n"
-                   << "#define acosh_f16 acosh\n"
-                   << "#define tanh_f16 tanh\n"
-                   << "#define atanh_f16 atanh\n";
+                   << "inline half inf_f16() { return half_from_bits(" << inf_f16 << "); }\n";
     }
 
     if (target.has_feature(Target::CLAtomics64)) {

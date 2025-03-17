@@ -237,10 +237,16 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_GPU_C::visit(const Call *op) {
-    // In metal and opencl, "rint" is a polymorphic function that matches our
-    // rounding semantics. GLSL handles it separately using "roundEven".
-    if (op->is_intrinsic(Call::round)) {
-        print_assignment(op->type, "rint(" + print_expr(op->args[0]) + ")");
+    if (op->is_intrinsic(Call::abs)) {
+        internal_assert(op->args.size() == 1);
+        std::stringstream fn;
+        if (op->type.is_float()) {
+            fn << "abs_f" << op->type.bits();
+        } else {
+            fn << "abs";
+        }
+        Expr equiv = Call::make(op->type, fn.str(), op->args, Call::PureExtern);
+        equiv.accept(this);
     } else {
         CodeGen_C::visit(op);
     }
