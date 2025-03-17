@@ -59,15 +59,15 @@ protected:
         CodeGen_Metal_C(std::ostream &s, const Target &t)
             : CodeGen_GPU_C(s, t) {
 
-#define alias(x, y) \
-            extern_function_name_map[x "_f16"] = y; \
-            extern_function_name_map[x "_f32"] = y
+#define alias(x, y)                         \
+    extern_function_name_map[x "_f16"] = y; \
+    extern_function_name_map[x "_f32"] = y
             alias("sqrt", "sqrt");
             alias("sin", "sin");
             alias("cos", "cos");
             alias("exp", "exp");
             alias("log", "log");
-            alias("abs", "fabs"); // f-prefix!
+            alias("abs", "fabs");  // f-prefix!
             alias("floor", "floor");
             alias("ceil", "ceil");
             alias("trunc", "trunc");
@@ -91,8 +91,6 @@ protected:
             alias("fast_inverse", "native_recip");
             alias("fast_inverse_sqrt", "native_rsqrt");
 #undef alias
-
-
         }
         void add_kernel(const Stmt &stmt,
                         const std::string &name,
