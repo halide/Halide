@@ -274,7 +274,11 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
+#if LLVM_VERSION >= 210
+    debug(2) << "Target triple: " << m->getTargetTriple().str() << "\n";
+#else
     debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
+#endif
     string error_string;
 
     llvm::for_each(*m, set_function_attributes_from_halide_target_options);
@@ -313,18 +317,32 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     llvm::orc::LLJITBuilderState::ObjectLinkingLayerCreator linkerBuilder;
     if ((target.arch == Target::Arch::X86 && target.bits == 32) ||
         (target.arch == Target::Arch::ARM && target.bits == 32)) {
-        // Fallback to RTDyld-based linking to workaround errors:
-        // i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
-        // ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
+// Fallback to RTDyld-based linking to workaround errors:
+// i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
+// ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
+#if LLVM_VERSION >= 210
+        linkerBuilder = [&](llvm::orc::ExecutionSession &session) {
+            return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&]() {
+                return std::make_unique<HalideJITMemoryManager>(dependencies);
+            });
+        };
+#else
         linkerBuilder = [&](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
             return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&]() {
                 return std::make_unique<HalideJITMemoryManager>(dependencies);
             });
         };
+#endif
     } else {
+#if LLVM_VERSION >= 210
+        linkerBuilder = [](llvm::orc::ExecutionSession &session) {
+            return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
+        };
+#else
         linkerBuilder = [](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
             return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
         };
+#endif
     }
 
     auto JIT = llvm::cantFail(llvm::orc::LLJITBuilder()

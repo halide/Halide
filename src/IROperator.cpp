@@ -496,7 +496,6 @@ Expr lossless_cast(Type t,
                 Expr a = lossless_cast(t, op->a, scope, cache);
                 Expr b = lossless_cast(t, op->b, scope, cache);
                 if (a.defined() && b.defined()) {
-                    debug(0) << a << " " << b << "\n";
                     return Min::make(a, b);
                 }
             } else if (const Max *op = e.as<Max>()) {

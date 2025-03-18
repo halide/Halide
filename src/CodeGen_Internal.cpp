@@ -670,13 +670,18 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     std::string mattrs =
         get_md_string(module.getModuleFlag("halide_mattrs")).value_or(std::string{});
 
-    auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
-                                                mcpu_target,
-                                                mattrs,
-                                                options,
-                                                use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
-                                                use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
-                                                CodeGenOptLevel::Aggressive);
+    auto *tm = llvm_target->createTargetMachine(
+#if LLVM_VERSION >= 210
+        triple,
+#else
+        triple.str(),
+#endif
+        mcpu_target,
+        mattrs,
+        options,
+        use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
+        use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
+        CodeGenOptLevel::Aggressive);
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 

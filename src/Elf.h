@@ -2,6 +2,7 @@
 #define HALIDE_ELF_H
 
 #include <algorithm>
+#include <cstdint>
 #include <iterator>
 #include <list>
 #include <memory>
@@ -225,17 +226,17 @@ public:
         SHT_REL = 9,
         SHT_SHLIB = 10,
         SHT_DYNSYM = 11,
-        SHT_LOPROC = 0x70000000,
-        SHT_HIPROC = 0x7fffffff,
-        SHT_LOUSER = 0x80000000,
-        SHT_HIUSER = 0xffffffff,
+        SHT_LOPROC = 0x70000000u,
+        SHT_HIPROC = 0x7fffffffu,
+        SHT_LOUSER = 0x80000000u,
+        SHT_HIUSER = 0xffffffffu,
     };
 
     enum Flag : uint32_t {
         SHF_WRITE = 0x1,
         SHF_ALLOC = 0x2,
         SHF_EXECINSTR = 0x4,
-        SHF_MASKPROC = 0xf0000000,
+        SHF_MASKPROC = 0xf0000000u,
     };
 
     typedef std::vector<Relocation> RelocationList;
@@ -463,8 +464,8 @@ public:
         ET_EXEC = 2,
         ET_DYN = 3,
         ET_CORE = 4,
-        ET_LOPROC = 0xff00,
-        ET_HIPROC = 0xffff,
+        ET_LOPROC = 0xff00u,
+        ET_HIPROC = 0xffffu,
     };
 
     // We use lists for sections and symbols to avoid iterator

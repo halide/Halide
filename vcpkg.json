@@ -115,6 +115,7 @@
             "target-aarch64",
             "target-arm",
             "target-hexagon",
+            "target-nvptx",
             "target-powerpc",
             "target-riscv"
           ]

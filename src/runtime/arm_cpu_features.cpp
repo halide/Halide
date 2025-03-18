@@ -18,15 +18,15 @@ extern "C" unsigned long getauxval(unsigned long type);
 
 namespace {
 
-void set_platform_features(CpuFeatures &features) {
+void set_platform_features(CpuFeatures *features) {
     unsigned long hwcaps = getauxval(AT_HWCAP);
 
     if (hwcaps & HWCAP_ASIMDDP) {
-        features.set_available(halide_target_feature_arm_dot_prod);
+        halide_set_available_cpu_feature(features, halide_target_feature_arm_dot_prod);
     }
 
     if (hwcaps & HWCAP_ASIMDHP) {
-        features.set_available(halide_target_feature_arm_fp16);
+        halide_set_available_cpu_feature(features, halide_target_feature_arm_fp16);
     }
 }
 
@@ -68,17 +68,17 @@ bool is_armv7s() {
     return type == CPU_TYPE_ARM && subtype == CPU_SUBTYPE_ARM_V7S;
 }
 
-void set_platform_features(CpuFeatures &features) {
+void set_platform_features(CpuFeatures *features) {
     if (is_armv7s()) {
-        features.set_available(halide_target_feature_armv7s);
+        halide_set_available_cpu_feature(features, halide_target_feature_armv7s);
     }
 
     if (sysctl_is_set("hw.optional.arm.FEAT_DotProd")) {
-        features.set_available(halide_target_feature_arm_dot_prod);
+        halide_set_available_cpu_feature(features, halide_target_feature_arm_dot_prod);
     }
 
     if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
-        features.set_available(halide_target_feature_arm_fp16);
+        halide_set_available_cpu_feature(features, halide_target_feature_arm_fp16);
     }
 }
 
@@ -88,28 +88,27 @@ void set_platform_features(CpuFeatures &features) {
 
 namespace {
 
-void set_platform_features(CpuFeatures &) {
+void set_platform_features(CpuFeatures *) {
 }
 
 }  // namespace
 
 #endif
 
-WEAK CpuFeatures halide_get_cpu_features() {
-    CpuFeatures features;
-    features.set_known(halide_target_feature_arm_dot_prod);
-    features.set_known(halide_target_feature_arm_fp16);
-    features.set_known(halide_target_feature_armv7s);
-    features.set_known(halide_target_feature_no_neon);
-    features.set_known(halide_target_feature_sve);
-    features.set_known(halide_target_feature_sve2);
+extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
+    halide_set_known_cpu_feature(features, halide_target_feature_arm_dot_prod);
+    halide_set_known_cpu_feature(features, halide_target_feature_arm_fp16);
+    halide_set_known_cpu_feature(features, halide_target_feature_armv7s);
+    halide_set_known_cpu_feature(features, halide_target_feature_no_neon);
+    halide_set_known_cpu_feature(features, halide_target_feature_sve);
+    halide_set_known_cpu_feature(features, halide_target_feature_sve2);
 
     // All ARM architectures support "No Neon".
-    features.set_available(halide_target_feature_no_neon);
+    halide_set_available_cpu_feature(features, halide_target_feature_no_neon);
 
     set_platform_features(features);
 
-    return features;
+    return halide_error_code_success;
 }
 
 }  // namespace Internal

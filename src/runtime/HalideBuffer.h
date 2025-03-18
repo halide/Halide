@@ -65,10 +65,12 @@ static_assert(((HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT & (HALIDE_RUNTIME_BUF
 #ifndef HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
 
 // clang-format off
-#ifdef _MSC_VER
+#ifdef _WIN32
 
-    // MSVC doesn't implement aligned_alloc(), even in C++17 mode, and
-    // has stated they probably never will, so, always default it off here.
+    // Windows (regardless of which compiler) doesn't implement aligned_alloc(),
+    // even in C++17 mode, and has stated they probably never will, as the issue
+    // is in the incompatibility that free() needs to be able to free both pointers
+    // returned by malloc() and aligned_alloc(). So, always default it off here.
     #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
 
 #elif defined(__ANDROID_API__) && __ANDROID_API__ < 28
@@ -2117,8 +2119,7 @@ public:
     }
 
     HALIDE_ALWAYS_INLINE
-    const not_void_T &
-    operator()() const {
+    const not_void_T &operator()() const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 0;

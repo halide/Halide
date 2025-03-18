@@ -126,10 +126,12 @@ function(set_halide_compiler_warnings NAME)
 
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Woverloaded-virtual>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wimplicit-fallthrough>
 
-        $<$<CXX_COMPILER_ID:GNU>:-Wsuggest-override>
+        # GCC warns when these warnings are given to plain-C sources
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wno-old-style-cast>
 
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
@@ -139,7 +141,6 @@ function(set_halide_compiler_warnings NAME)
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-field-initializers>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-old-style-cast>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-sign-conversion>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-switch-enum>
@@ -195,7 +196,7 @@ option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread fla
 find_package(Threads REQUIRED)
 
 ## LLVM
-find_package(Halide_LLVM 18...20 REQUIRED
+find_package(Halide_LLVM 18...99 REQUIRED  # Use 99 to fake a minimum-only constraint
              COMPONENTS WebAssembly X86
              OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV)
 
