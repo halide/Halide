@@ -2119,8 +2119,7 @@ public:
     }
 
     HALIDE_ALWAYS_INLINE
-    const not_void_T &
-    operator()() const {
+    const not_void_T &operator()() const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 0;

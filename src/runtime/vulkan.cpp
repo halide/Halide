@@ -478,7 +478,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     copy_helper.src = (uint64_t)(staging_buffer);
     copy_helper.dst = (uint64_t)(device_buffer);
     uint64_t src_offset = copy_helper.src_begin;
-    uint64_t dst_offset = device_region->range.head_offset;
+    uint64_t dst_offset = copy_helper.dst_begin + device_region->range.head_offset;
 
     // enqueue the copy operation, using the allocated buffers
     error_code = vk_do_multidimensional_copy(user_context, cmds.command_buffer, copy_helper,
@@ -647,7 +647,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     copy_helper.src = (uint64_t)(device_buffer);
     copy_helper.dst = (uint64_t)(staging_buffer);
     uint64_t src_offset = copy_helper.src_begin + device_region->range.head_offset;
-    uint64_t dst_offset = 0;
+    uint64_t dst_offset = copy_helper.dst_begin;
 
     // enqueue the copy operation, using the allocated buffers
     int error_code = vk_do_multidimensional_copy(user_context, cmds.command_buffer, copy_helper,
@@ -927,11 +927,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         copy_helper.src = (uint64_t)(src_device_buffer);
         copy_helper.dst = (uint64_t)(dst_device_buffer);
         uint64_t src_offset = copy_helper.src_begin + src_buffer_region->range.head_offset;
-        uint64_t dst_offset = dst_buffer_region->range.head_offset;
-        if (!from_host && !to_host) {
-            src_offset = src_buffer_region->range.head_offset;
-            dst_offset = dst_buffer_region->range.head_offset;
-        }
+        uint64_t dst_offset = copy_helper.dst_begin + dst_buffer_region->range.head_offset;
 
         debug(user_context) << " src region=" << (void *)src_memory_region << " buffer=" << (void *)src_device_buffer << " crop_offset=" << (uint64_t)src_buffer_region->range.head_offset << " copy_offset=" << src_offset << "\n";
         debug(user_context) << " dst region=" << (void *)dst_memory_region << " buffer=" << (void *)dst_device_buffer << " crop_offset=" << (uint64_t)dst_buffer_region->range.head_offset << " copy_offset=" << dst_offset << "\n";
