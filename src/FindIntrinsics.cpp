@@ -747,7 +747,7 @@ protected:
                     auto b_bounds = constant_integer_bounds(b);
                     const int max_shift = op->type.bits() - 1;
 
-                    if (a.defined() & b_bounds >= -max_shift && b_bounds <= max_shift) {
+                    if (a.defined() && b_bounds >= -max_shift && b_bounds <= max_shift) {
                         if (!is_saturated ||
                             (shift->is_intrinsic(Call::rounding_shift_right) && can_prove(b >= 0)) ||
                             (shift->is_intrinsic(Call::rounding_shift_left) && can_prove(b <= 0))) {
