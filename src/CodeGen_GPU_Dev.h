@@ -100,6 +100,8 @@ protected:
     void visit(const Shuffle *op) override;
     void visit(const Call *op) override;
 
+    std::string print_extern_call(const Call *op) override;
+
     VectorDeclarationStyle vector_declaration_style = VectorDeclarationStyle::CLikeSyntax;
 };
 
