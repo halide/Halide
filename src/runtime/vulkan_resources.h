@@ -1182,7 +1182,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
         halide_debug_assert(user_context, (idx + 8) < module_entries);  // should be at least 8 entries
 
         // [0] Length of entry point name (padded to nearest word size)
-        uint32_t entry_point_name_length = module_ptr[idx++]; // length is number of uint32_t entries
+        uint32_t entry_point_name_length = module_ptr[idx++];  // length is number of uint32_t entries
 
         // [*] Entry point string data (padded with null chars)
         const char *entry_point_name = (const char *)(module_ptr + idx);  // NOTE: module owns string data
@@ -1310,7 +1310,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
             return nullptr;
         }
 
-	memcpy(shader_bindings[n].entry_point_name, entry_point_name, entry_point_name_length * sizeof(uint32_t));
+        memcpy(shader_bindings[n].entry_point_name, entry_point_name, entry_point_name_length * sizeof(uint32_t));
         shader_bindings[n].uniform_buffer_count = uniform_buffer_count;
         shader_bindings[n].storage_buffer_count = storage_buffer_count;
         shader_bindings[n].specialization_constants_count = specialization_constants_count;
@@ -1641,7 +1641,7 @@ void vk_destroy_compiled_shader_module(VulkanCompiledShaderModule *shader_module
         for (uint32_t n = 0; n < shader_module->shader_count; n++) {
 #ifdef DEBUG_RUNTIME
             debug(user_context) << "  destroying shader binding [" << n << "] ";
-            if(shader_module->shader_bindings[n].entry_point_name) {		
+            if (shader_module->shader_bindings[n].entry_point_name) {
                 debug(user_context) << shader_module->shader_bindings[n].entry_point_name << "\n";
                 vk_host_free(user_context, shader_module->shader_bindings[n].entry_point_name, allocator->callbacks());
                 shader_module->shader_bindings[n].entry_point_name = nullptr;
@@ -1703,12 +1703,12 @@ void vk_destroy_compilation_cache_entry(VulkanCompilationCacheEntry *cache_entry
         return;
     }
 
-    debug(user_context) 
+    debug(user_context)
         << " Destroying " << cache_entry->module_count << " shader modules for cache entry (cache_entry: " << cache_entry << ")\n";
 
     for (uint32_t m = 0; m < cache_entry->module_count; m++) {
-        debug(user_context) 
-           << " destroying compiled_module[" << m << "]: " << cache_entry->compiled_modules[m] << "\n";
+        debug(user_context)
+            << " destroying compiled_module[" << m << "]: " << cache_entry->compiled_modules[m] << "\n";
 
         VulkanCompiledShaderModule *compiled_module = cache_entry->compiled_modules[m];
         vk_destroy_compiled_shader_module(compiled_module, allocator);
