@@ -88,7 +88,7 @@ protected:
             alias("is_inf", "isinf");
             alias("is_finite", "isfinite");
 
-            alias("fast_inverse_sqrt", "native_rsqrt");
+            alias("fast_inverse_sqrt", "fast::rsqrt");
 #undef alias
         }
         void add_kernel(const Stmt &stmt,

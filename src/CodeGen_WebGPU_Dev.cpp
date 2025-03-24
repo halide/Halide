@@ -67,7 +67,7 @@ protected:
             alias("cos", "cos");
             alias("exp", "exp");
             alias("log", "log");
-            alias("abs", "fabs");  // f-prefix! (although it's handled as an intrinsic).
+            alias("abs", "abs");
             alias("floor", "floor");
             alias("ceil", "ceil");
             alias("trunc", "trunc");

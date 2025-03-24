@@ -240,14 +240,21 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
 void CodeGen_GPU_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
-        std::stringstream fn;
         if (op->type.is_float()) {
+            std::stringstream fn;
             fn << "abs_f" << op->type.bits();
+            Expr equiv = Call::make(op->type, fn.str(), op->args, Call::PureExtern);
+            equiv.accept(this);
         } else {
-            fn << "abs";
+            // The integer-abs doesn't have suffixes in Halide.
+            // Also, compared to most backends, it has a different signature:
+            // Halide does `unsigned T abs(signed T)`, whereas C and most other
+            // APIs do `T abs(T)`. So we have to wrap it in an additional cast.
+            Type arg_type = op->args[0].type();
+            Expr abs = Call::make(arg_type, "abs", op->args, Call::PureExtern);
+            Expr equiv = cast(op->type, abs);
+            equiv.accept(this);
         }
-        Expr equiv = Call::make(op->type, fn.str(), op->args, Call::PureExtern);
-        equiv.accept(this);
     } else {
         CodeGen_C::visit(op);
     }
