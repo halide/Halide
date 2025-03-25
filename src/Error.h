@@ -46,14 +46,18 @@ private:
 };
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
-struct HALIDE_EXPORT_SYMBOL RuntimeError : public Error {
+struct HALIDE_EXPORT_SYMBOL RuntimeError final : Error {
+    static constexpr auto error_name = "Runtime error";
+
     explicit RuntimeError(const char *msg);
     explicit RuntimeError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to a user error. */
-struct HALIDE_EXPORT_SYMBOL CompileError : public Error {
+struct HALIDE_EXPORT_SYMBOL CompileError final : Error {
+    static constexpr auto error_name = "User error";
+
     explicit CompileError(const char *msg);
     explicit CompileError(const std::string &msg);
 };
@@ -61,7 +65,9 @@ struct HALIDE_EXPORT_SYMBOL CompileError : public Error {
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to an internal compiler bug, or to an invalid use of
  * Halide's internals. */
-struct HALIDE_EXPORT_SYMBOL InternalError : public Error {
+struct HALIDE_EXPORT_SYMBOL InternalError final : Error {
+    static constexpr auto error_name = "Internal error";
+
     explicit InternalError(const char *msg);
     explicit InternalError(const std::string &msg);
 };
@@ -77,7 +83,7 @@ class CompileTimeErrorReporter {
 public:
     virtual ~CompileTimeErrorReporter() = default;
     virtual void warning(const char *msg) = 0;
-    virtual void error(const char *msg) = 0;
+    [[noreturn]] virtual void error(const char *msg) = 0;
 };
 
 /** The default error reporter logs to stderr, then throws an exception
@@ -91,27 +97,71 @@ void set_custom_compile_time_error_reporter(CompileTimeErrorReporter *error_repo
 
 namespace Internal {
 
-struct ErrorReport {
-    enum {
-        User = 0x0001,
-        Warning = 0x0002,
-        Runtime = 0x0004
-    };
+/**
+ * If a custom error reporter is configured, notifies the reporter by calling
+ * its error() function with the value of \p e.what()
+ *
+ * Otherwise, if Halide was built with exceptions, throw \p e unless an
+ * existing exception is in flight. On the other hand, if Halide was built
+ * without exceptions, print the error message to stderr and abort().
+ *
+ * @param e The error to throw or report
+ */
+/// @{
+[[noreturn]] void throw_error(const RuntimeError &e);
+[[noreturn]] void throw_error(const CompileError &e);
+[[noreturn]] void throw_error(const InternalError &e);
+/// @}
 
+/**
+ * If a custom error reporter is configured, notifies the reporter by calling
+ * its warning() function. Otherwise, prints the warning to stderr.
+ *
+ * @param warning The warning to issue
+ */
+void issue_warning(const char *warning);
+
+template<typename T>
+struct ReportBase {
     std::ostringstream msg;
-    const int flags;
 
-    ErrorReport(const char *f, int l, const char *cs, int flags);
-
-    // Just a trick used to convert RValue into LValue
-    HALIDE_ALWAYS_INLINE ErrorReport &ref() {
-        return *this;
+    ReportBase(const char *file, int line, const char *condition_string, const char *prefix) {
+        // Only mention where inside libHalide the error tripped if we have debug level > 0
+        if (debug::debug_level() > 0) {
+            msg << prefix << " at " << file << ":" << line << ' ';
+            if (condition_string) {
+                msg << "Condition failed: " << condition_string << ' ';
+            }
+        }
     }
 
-    template<typename T>
-    ErrorReport &operator<<(const T &x) {
+    // Just a trick used to convert RValue into LValue
+    HALIDE_ALWAYS_INLINE T &ref() {
+        return *static_cast<T *>(this);
+    }
+
+    template<typename S>
+    HALIDE_ALWAYS_INLINE T &operator<<(const S &x) {
         msg << x;
-        return *this;
+        return *static_cast<T *>(this);
+    }
+
+protected:
+    std::string finalize_message() {
+        if (!msg.str().empty() && msg.str().back() != '\n') {
+            msg << "\n";
+        }
+        return msg.str();
+    }
+};
+
+template<typename Exception>
+struct ErrorReport : ReportBase<ErrorReport<Exception>> {
+    using Base = ReportBase<ErrorReport>;
+
+    ErrorReport(const char *file, int line, const char *condition_string)
+        : Base(file, line, condition_string, Exception::error_name) {
+        this->msg << "Error: ";
     }
 
     /** When you're done using << on the object, and let it fall out of
@@ -122,19 +172,34 @@ struct ErrorReport {
      * this by only actually throwing if there isn't an exception in
      * flight already.
      */
-    ~ErrorReport() noexcept(false);
+    [[noreturn]] ~ErrorReport() noexcept(false) {
+        throw_error(Exception(this->finalize_message()));
+    }
+};
+
+struct WarningReport : ReportBase<WarningReport> {
+    WarningReport(const char *file, int line, const char *condition_string)
+        : ReportBase(file, line, condition_string, "Warning") {
+        this->msg << "Warning: ";
+    }
+
+    /** When you're done using << on the object, and let it fall out of
+     * scope, this prints the computed warning message.
+     */
+    ~WarningReport() {
+        issue_warning(this->finalize_message().c_str());
+    }
 };
 
 // This uses operator precedence as a trick to avoid argument evaluation if
 // an assertion is true: it is intended to be used as part of the
 // _halide_internal_assertion macro, to coerce the result of the stream
 // expression to void (to match the condition-is-false case).
-class Voidifier {
-public:
-    HALIDE_ALWAYS_INLINE Voidifier() = default;
+struct Voidifier {
     // This has to be an operator with a precedence lower than << but
     // higher than ?:
-    HALIDE_ALWAYS_INLINE void operator&(ErrorReport &) {
+    template<typename T>
+    HALIDE_ALWAYS_INLINE void operator&(T &) {
     }
 };
 
@@ -152,23 +217,24 @@ public:
  * effect that all assertion parameters are totally skipped (not ever evaluated)
  * when the assertion is true.
  */
-#define _halide_internal_assertion(condition, flags) \
+#define _halide_internal_assertion(condition, type)  \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    (condition) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::ErrorReport(__FILE__, __LINE__, #condition, flags).ref()
+    (condition) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::ErrorReport<type>(__FILE__, __LINE__, #condition).ref()
 
-#define internal_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, 0)
-#define user_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User)
-#define user_warning Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User | Halide::Internal::ErrorReport::Warning)
-#define halide_runtime_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, Halide::Internal::ErrorReport::User | Halide::Internal::ErrorReport::Runtime)
+#define internal_error Halide::Internal::ErrorReport<Halide::InternalError>(__FILE__, __LINE__, nullptr)
+#define user_error Halide::Internal::ErrorReport<Halide::CompileError>(__FILE__, __LINE__, nullptr)
+#define user_warning Halide::Internal::WarningReport(__FILE__, __LINE__, nullptr)
+#define halide_runtime_error Halide::Internal::ErrorReport<Halide::RuntimeError>(__FILE__, __LINE__, nullptr)
 
-#define internal_assert(c) _halide_internal_assertion(c, 0)
-#define user_assert(c) _halide_internal_assertion(c, Halide::Internal::ErrorReport::User)
+#define internal_assert(c) _halide_internal_assertion(c, Halide::InternalError)
+#define user_assert(c) _halide_internal_assertion(c, Halide::CompileError)
 
 // The nicely named versions get cleaned up at the end of Halide.h,
 // but user code might want to do halide-style user_asserts (e.g. the
 // Extern macros introduce calls to user_assert), so for that purpose
 // we define an equivalent macro that can be used outside of Halide.h
-#define _halide_user_assert(c) _halide_internal_assertion(c, Halide::Internal::ErrorReport::User)
+#define _halide_internal_assert(c) _halide_internal_assertion(c, Halide::InternalError)
+#define _halide_user_assert(c) _halide_internal_assertion(c, Halide::CompileError)
 
 // N.B. Any function that might throw a user_assert or user_error may
 // not be inlined into the user's code, or the line number will be
