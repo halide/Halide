@@ -140,7 +140,7 @@ Expr random_expr(std::mt19937 &rng) {
             e = common_subexpression_elimination(e1);
             break;
         case 7:
-            switch (rng() % 19) {
+            switch (rng() % 20) {
             case 0:
                 if (may_widen) {
                     e = widening_add(e1, e2);
@@ -213,6 +213,9 @@ Expr random_expr(std::mt19937 &rng) {
                 break;
             case 18:
                 e = rounding_shift_left(e1, e2);
+                break;
+            case 19:
+                e = ~e1;
                 break;
             }
         }
