@@ -52,8 +52,8 @@ class GpuObjectLifetimeTracker {
         {"vk_create_pipeline_layout", "vk_destroy_pipeline_layout"},
         {"vk_create_compute_pipeline", "vk_destroy_compute_pipeline"},
         {"vk_create_descriptor_pool", "vk_destroy_descriptor_pool"},
-        {"Vulkan: Allocated memory for device region", "Vulkan: Deallocated memory for device region"},
-        {"Vulkan: Created buffer", "Vulkan: Destroyed buffer"},
+        {"Vulkan: Reserved memory for device region", "Vulkan: Released memory for device region"},
+        {"vkCreateBuffer: Created buffer for device region", "vkDestroyBuffer: Destroyed buffer for device region"},
 
         // WebGPU objects
         {"wgpuCreateInstance", "wgpuInstanceRelease", true},
