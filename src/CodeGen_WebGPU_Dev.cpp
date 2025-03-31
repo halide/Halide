@@ -170,23 +170,6 @@ void CodeGen_WebGPU_Dev::init_module() {
         << "fn neg_inf_f32() -> f32 {return float_from_bits(0xff800000);}\n"
         << "fn inf_f32() -> f32 {return float_from_bits(0x7f800000);}\n"
         << "fn fast_inverse_f32(x : f32) -> f32 {return 1.0 / x;}\n"
-        // pow() in WGSL has the same semantics as C if x > 0.
-        // Otherwise, we need to emulate the behavior.
-        << "fn pow_f32(x : f32, y : f32) -> f32 { \n"
-        << "  if (x > 0.0) {                  \n"
-        << "    return pow(x, y);             \n"
-        << "  } else if (y == 0.0) {          \n"
-        << "    return 1.0;                   \n"
-        << "  } else if (trunc(y) == y) {     \n"
-        << "    if ((y % 2) == 0) {           \n"
-        << "      return pow(abs(x), y);      \n"
-        << "    } else {                      \n"
-        << "      return -pow(abs(x), y);     \n"
-        << "    }                             \n"
-        << "  } else {                        \n"
-        << "    return nan_f32();             \n"
-        << "  }                               \n"
-        << "}                                 \n"
         // WGSL doesn't provide these by default, but we can exploit the nature
         // of comparison ops to construct them... although they are of dubious value
         // (since the WGSL spec says that "Implementations may assume that NaNs
@@ -536,6 +519,23 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::round)) {
         Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
         equiv.accept(this);
+    } else if (op->is_extern() && op->name == "pow_f32") {
+        // pow() in WGSL has the same semantics as C if x > 0.
+        // Otherwise, we need to emulate the behavior.
+        Expr ox = op->args[0];
+        Expr oy = op->args[1];
+        Expr equiv = Call::make(op->type, "pow", {abs(ox), oy}, Call::PureExtern);
+        equiv = select(ox > 0.0f,
+                       equiv,
+                       select(oy == 0.0f,
+                              1.0f,
+                              select(oy == trunc(oy),
+                                     select(cast<int>(oy) % 2 == 0,
+                                            equiv,
+                                            -equiv),
+                                     float(std::nanf("")))));
+        equiv.accept(this);
+
     } else {
         CodeGen_GPU_C::visit(op);
     }
