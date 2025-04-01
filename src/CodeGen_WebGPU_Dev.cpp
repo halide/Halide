@@ -526,12 +526,13 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
         Expr ox = op->args[0];
         Expr oy = op->args[1];
         Expr equiv = Call::make(op->type, "pow", {abs(ox), oy}, Call::PureExtern);
+        Type int_type = Type(Type::Int, 32, oy.type().lanes());
         equiv = select(ox > 0.0f,
                        equiv,
                        select(oy == 0.0f,
                               1.0f,
                               select(oy == trunc(oy),
-                                     select(cast<int>(oy) % 2 == 0,
+                                     select(cast(int_type, oy) % 2 == 0,
                                             equiv,
                                             -equiv),
                                      float(std::nanf("")))));
