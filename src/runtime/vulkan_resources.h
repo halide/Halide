@@ -1639,7 +1639,6 @@ void vk_destroy_compiled_shader_module(VulkanCompiledShaderModule *shader_module
             << "shader_bindings: " << shader_module->shader_bindings << ")\n";
 #endif
         for (uint32_t n = 0; n < shader_module->shader_count; n++) {
-#ifdef DEBUG_RUNTIME
             debug(user_context) << "  destroying shader binding [" << n << "] ";
             if (shader_module->shader_bindings[n].entry_point_name) {
                 debug(user_context) << shader_module->shader_bindings[n].entry_point_name << "\n";
@@ -1648,7 +1647,6 @@ void vk_destroy_compiled_shader_module(VulkanCompiledShaderModule *shader_module
             } else {
                 debug(user_context) << "<unknown entry point>\n";
             }
-#endif
             if (shader_module->shader_bindings[n].args_region) {
                 debug(user_context) << "  destroying shader binding args regions [" << n << "]\n";
                 vk_destroy_scalar_uniform_buffer(user_context, allocator, shader_module->shader_bindings[n].args_region);
