@@ -530,12 +530,12 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
         equiv = select(ox > 0.0f,
                        equiv,
                        select(oy == 0.0f,
-                              1.0f,
+                              make_const(oy.type(), 1.0f),
                               select(oy == trunc(oy),
                                      select(cast(int_type, oy) % 2 == 0,
                                             equiv,
                                             -equiv),
-                                     float(std::nanf("")))));
+                                     make_const(oy.type(), std::nanf("")))));
         equiv.accept(this);
 
     } else {
