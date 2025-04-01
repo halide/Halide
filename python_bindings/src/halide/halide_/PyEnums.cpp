@@ -222,6 +222,7 @@ void define_enums(py::module &m) {
         .value("function_info_header", OutputFileType::function_info_header)
         .value("hlpipe", OutputFileType::hlpipe)
         .value("llvm_assembly", OutputFileType::llvm_assembly)
+        .value("mlir", OutputFileType::mlir)
         .value("object", OutputFileType::object)
         .value("python_extension", OutputFileType::python_extension)
         .value("pytorch_wrapper", OutputFileType::pytorch_wrapper)
