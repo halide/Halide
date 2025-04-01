@@ -527,6 +527,13 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
         Expr oy = op->args[1];
         Expr equiv = Call::make(op->type, "pow", {abs(ox), oy}, Call::PureExtern);
         Type int_type = Type(Type::Int, 32, oy.type().lanes());
+
+        // This is ill-defined. WGSL spec says that nan cannot occur.
+        // Yet the WGSL built-in pow() function yields NaN for pow(-0.1, -0.1).
+        // We'll try to get the NaN value in, by doing a value of 1.0 with
+        // the correct number of lanes, multiplied by the result of our helper function
+        // that tries to hack a NaN value in.
+        Expr nan = make_const(oy.type(), 1.0f) * Call::make(Float(32), "nan_f32", {}, Call::PureExtern);
         equiv = select(ox > 0.0f,
                        equiv,
                        select(oy == 0.0f,
@@ -535,7 +542,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
                                      select(cast(int_type, oy) % 2 == 0,
                                             equiv,
                                             -equiv),
-                                     make_const(oy.type(), std::nanf("")))));
+                                     nan)));
         equiv.accept(this);
 
     } else {
