@@ -24,7 +24,7 @@ void schedule_test(Func f, int vector_width, Partition partition_policy, const T
     }
     f.partition(x, partition_policy);
     f.partition(y, partition_policy);
-    if (t.has_gpu_feature() && vector_width <= 16) {
+    if (t.has_gpu_feature()) {
         f.gpu_tile(x, y, xo, yo, xi, yi, 2, 2);
     } else if (t.has_feature(Target::HVX)) {
         // TODO: Non-native vector widths hang the compiler here.
@@ -387,6 +387,9 @@ int main(int argc, char **argv) {
         target.has_feature(Target::WebGPU)) {
         // https://github.com/halide/Halide/issues/2148
         vector_width_max = 4;
+    }
+    if (target.has_feature(Target::OpenCL)) {
+        vector_width_max = 16;
     }
     if (target.arch == Target::WebAssembly) {
         // The wasm jit is very slow, so shorten this test here.

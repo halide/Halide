@@ -62,6 +62,7 @@ protected:
             : CodeGen_GPU_C(s, t) {
             integer_suffix_style = IntegerSuffixStyle::OpenCL;
             vector_declaration_style = VectorDeclarationStyle::OpenCLSyntax;
+            abs_returns_unsigned_type = true;
 
 #define alias(x, y)                         \
     extern_function_name_map[x "_f16"] = y; \

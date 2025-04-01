@@ -57,6 +57,7 @@ protected:
         CodeGen_WGSL(std::ostream &s, Target t)
             : CodeGen_GPU_C(s, t) {
             vector_declaration_style = VectorDeclarationStyle::WGSLSyntax;
+            abs_returns_unsigned_type = false;
 
 #define alias(x, y)                         \
     extern_function_name_map[x "_f16"] = y; \
