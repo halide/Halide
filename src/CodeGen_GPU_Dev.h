@@ -103,6 +103,7 @@ protected:
     std::string print_extern_call(const Call *op) override;
 
     VectorDeclarationStyle vector_declaration_style = VectorDeclarationStyle::CLikeSyntax;
+    bool abs_returns_unsigned_type{false};
 };
 
 }  // namespace Internal

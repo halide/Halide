@@ -246,14 +246,21 @@ void CodeGen_GPU_C::visit(const Call *op) {
             Expr equiv = Call::make(op->type, fn.str(), op->args, Call::PureExtern);
             equiv.accept(this);
         } else {
-            // The integer-abs doesn't have suffixes in Halide.
-            // Also, compared to most backends, it has a different signature:
-            // Halide does `unsigned T abs(signed T)`, whereas C and most other
-            // APIs do `T abs(T)`. So we have to wrap it in an additional cast.
-            Type arg_type = op->args[0].type();
-            Expr abs = Call::make(arg_type, "abs", op->args, Call::PureExtern);
-            Expr equiv = cast(op->type, abs);
-            equiv.accept(this);
+            // Note: The integer-abs doesn't have suffixes in Halide.
+            if (abs_returns_unsigned_type) {
+                // Halide also returns unsigned, so we're good. Just replace it
+                // with a PureExtern function call.
+                Expr abs = Call::make(op->type, "abs", op->args, Call::PureExtern);
+                Expr equiv = cast(op->type, abs);
+                equiv.accept(this);
+            } else {
+                // Halide does `unsigned T abs(signed T)`, whereas C and most other
+                // APIs do `T abs(T)`. So we have to wrap it in an additional cast.
+                Type arg_type = op->args[0].type();
+                Expr abs = Call::make(arg_type, "abs", op->args, Call::PureExtern);
+                Expr equiv = cast(op->type, abs);
+                equiv.accept(this);
+            }
         }
     } else {
         CodeGen_C::visit(op);
