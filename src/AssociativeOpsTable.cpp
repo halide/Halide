@@ -249,6 +249,9 @@ void populate_ops_table_single_uint32_select(const vector<Type> &types, vector<A
     table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
 }
 
+// This function exists because the Solve module strips strict_float on one side of the pattern matching.
+// This leads to failed pattern matches in the nan-propagating min/max patterns.
+// TODO: Once strict_float has been reworked, this should be removed.
 Expr is_nan_not_strict(Expr x) {
     Type t = Bool(x.type().lanes());
     if (x.type().element_of() == Float(64)) {
