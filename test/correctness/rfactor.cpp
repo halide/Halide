@@ -1031,6 +1031,12 @@ int inlined_rfactor_with_disappearing_rvar_test() {
     return 0;
 }
 
+enum MaxRFactorTestVariant {
+    BitwiseOr,
+    LogicalOr,
+};
+
+template<MaxRFactorTestVariant variant>
 int isnan_max_rfactor_test() {
     RDom r(0, 16);
     RVar ri("ri");
@@ -1041,7 +1047,14 @@ int isnan_max_rfactor_test() {
     const auto make_reduce = [&](const char *name) {
         Func reduce(name);
         reduce(y) = Float(32).min();
-        reduce(y) = select(reduce(y) > cast(reduce.type(), in(r, y)) || is_nan(reduce(y)), reduce(y), cast(reduce.type(), in(r, y)));
+        switch (variant) {
+        case BitwiseOr:
+            reduce(y) = select(reduce(y) > cast(reduce.type(), in(r, y)) | is_nan(reduce(y)), reduce(y), cast(reduce.type(), in(r, y)));
+            break;
+        case LogicalOr:
+            reduce(y) = select(reduce(y) > cast(reduce.type(), in(r, y)) || is_nan(reduce(y)), reduce(y), cast(reduce.type(), in(r, y)));
+            break;
+        }
         return reduce;
     };
 
@@ -1115,7 +1128,8 @@ int main(int argc, char **argv) {
         {"complex multiply rfactor test", complex_multiply_rfactor_test},
         {"argmin rfactor test", argmin_rfactor_test},
         {"inlined rfactor with disappearing rvar test", inlined_rfactor_with_disappearing_rvar_test},
-        {"isnan max rfactor test", isnan_max_rfactor_test},
+        {"isnan max rfactor test (bitwise or)", isnan_max_rfactor_test<BitwiseOr>},
+        {"isnan max rfactor test (logical or)", isnan_max_rfactor_test<LogicalOr>},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;
