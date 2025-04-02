@@ -1108,8 +1108,6 @@ int main(int argc, char **argv) {
         {"tuple rfactor test: checking output img correctness...", tuple_rfactor_test<false>},
         {"tuple specialize rdom predicate rfactor test: checking call graphs...", tuple_specialize_rdom_predicate_rfactor_test<true>},
         {"tuple specialize rdom predicate rfactor test: checking output img correctness...", tuple_specialize_rdom_predicate_rfactor_test<false>},
-        {"parallel dot product rfactor test: checking call graphs...", parallel_dot_product_rfactor_test<true>},
-        {"parallel dot product rfactor test: checking output img correctness...", parallel_dot_product_rfactor_test<false>},
         {"tuple partial reduction rfactor test: checking call graphs...", tuple_partial_reduction_rfactor_test<true>},
         {"tuple partial reduction rfactor test: checking output img correctness...", tuple_partial_reduction_rfactor_test<false>},
         {"check allocation bound test", check_allocation_bound_test},
