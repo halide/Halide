@@ -13,6 +13,13 @@ Expr mid3(Expr a, Expr b, Expr c) {
 }
 
 int main(int arch, char **argv) {
+
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::Vulkan) && (!target.has_feature(Target::VulkanInt8))) {
+        printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
+        return 0;
+    }
+
     const int W = 256, H = 256;
     Buffer<uint8_t> in(W, H);
     // Set up the input.
@@ -43,7 +50,6 @@ int main(int arch, char **argv) {
     median3x3(x, y) = mid3(min_max(x, y), max_min(x, y), mid_mid(x, y));
 
     // Schedule.
-    Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
         median3x3.gpu_tile(x, y, xi, yi, 16, 16);

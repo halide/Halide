@@ -27,6 +27,10 @@ int main(int argc, char **argv) {
 
     // Schedule.
     Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::Vulkan) && (!target.has_feature(Target::VulkanInt8))) {
+        printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
+        return 0;
+    }
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
         dilate3x3.gpu_tile(x, y, xi, yi, 16, 16);
