@@ -70,7 +70,6 @@ bool host_supports_target_device(const Target &t) {
 const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d,
                                                                      const Target &t,
                                                                      const char *error_site) {
-
     if (d == DeviceAPI::Default_GPU) {
         d = get_default_device_api_for_target(t);
         if (d == DeviceAPI::Host) {
