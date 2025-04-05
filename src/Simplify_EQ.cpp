@@ -4,10 +4,14 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const EQ *op, ExprInfo *info) {
+    if (info) {
+        info->cast_to(op->type);
+    }
+
     if (truths.count(op)) {
-        return const_true(op->type.lanes());
+        return const_true(op->type.lanes(), info);
     } else if (falsehoods.count(op)) {
-        return const_false(op->type.lanes());
+        return const_false(op->type.lanes(), info);
     }
 
     if (!may_simplify(op->a.type())) {
@@ -26,14 +30,13 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
         if (should_commute(a, b)) {
             std::swap(a, b);
         }
-        const int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type);
         if (rewrite(x == 1, x)) {
             return rewrite.result;
         } else if (rewrite(x == 0, !x)) {
             return mutate(rewrite.result, info);
-        } else if (rewrite(x == x, const_true(lanes))) {
-            return rewrite.result;
+        } else if (rewrite(x == x, true)) {
+            return const_true(op->type.lanes(), info);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
@@ -47,17 +50,17 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
 
     // If the delta is 0, then it's just x == x
     if (is_const_zero(delta)) {
-        return const_true(lanes);
+        return const_true(lanes, info);
     }
 
     // Attempt to disprove using bounds analysis
     if (!delta_info.bounds.contains(0)) {
-        return const_false(lanes);
+        return const_false(lanes, info);
     }
 
     // Attempt to disprove using modulus remainder analysis
     if (delta_info.alignment.remainder != 0) {
-        return const_false(lanes);
+        return const_false(lanes, info);
     }
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), op->type, delta.type());

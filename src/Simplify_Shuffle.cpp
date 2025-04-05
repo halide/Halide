@@ -78,7 +78,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
 
                 Expr shuffled_predicate;
                 if (unpredicated) {
-                    shuffled_predicate = const_true(t.lanes());
+                    shuffled_predicate = const_true(t.lanes(), nullptr);
                 } else {
                     shuffled_predicate = Shuffle::make(load_predicates, op->indices);
                     shuffled_predicate = mutate(shuffled_predicate, nullptr);
