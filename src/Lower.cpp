@@ -26,6 +26,7 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "ExtractTileOperations.h"
+#include "FastMathFunctions.h"
 #include "FindCalls.h"
 #include "FindIntrinsics.h"
 #include "FlattenNestedRamps.h"
@@ -328,6 +329,11 @@ void lower_impl(const vector<Function> &output_funcs,
         log("Lowering after selecting a GPU API for extern stages:", s);
     }
 
+    // Lowering of fast versions of math functions is target dependent: CPU arch or GPU/DeviceAPI.
+    debug(1) << "Selecting fast math function implementations...\n";
+    s = lower_fast_math_functions(s, t);
+    log("Lowering after selecting fast math functions:", s);
+
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
@@ -418,8 +424,9 @@ void lower_impl(const vector<Function> &output_funcs,
         log("Lowering after injecting warp shuffles:", s);
     }
 
-    debug(1) << "Simplifying...\n";
+    debug(1) << "Common Subexpression Elimination...\n";
     s = common_subexpression_elimination(s);
+    log("Lowering after CSE:", s);
 
     debug(1) << "Lowering unsafe promises...\n";
     s = lower_unsafe_promises(s, t);
