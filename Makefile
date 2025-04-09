@@ -786,9 +786,9 @@ HEADER_FILES = \
   Var.h \
   VectorizeLoops.h \
   WasmExecutor.h \
-  WrapCalls.h
+  WrapCalls.h \
   runtime/HalideBuffer.h \
-  runtime/HalideRuntime.h \
+  runtime/HalideRuntime.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
@@ -890,7 +890,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_yield \
   write_debug_image \
   vulkan \
-  x86_cpu_features \
+  x86_cpu_features
 
 RUNTIME_LL_COMPONENTS = \
   aarch64 \
