@@ -9,6 +9,8 @@ on:
       - '**.c'
       - '**.cpp'
       - 'run-clang-tidy.sh'
+      - 'run-clang-format.sh'
+      - '.github/workflows/presubmit.yml'
 
 permissions:
   contents: read
