@@ -123,6 +123,11 @@ WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *halide_b
     halide_buffer->device_interface = nullptr;
 
 #ifdef DEBUG_RUNTIME
+    debug(user_context) << "Vulkan: Released memory for device region ("
+                        << "user_context: " << user_context << ", "
+                        << "buffer: " << halide_buffer << ", "
+                        << "size_in_bytes: " << (uint64_t)device_region->size << ")\n";
+
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
@@ -348,6 +353,11 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
     }
 
 #ifdef DEBUG_RUNTIME
+    debug(user_context) << "Vulkan: Reserved memory for device region ("
+                        << "user_context: " << user_context << ", "
+                        << "buffer: " << buf << ", "
+                        << "size_in_bytes: " << (uint64_t)size << ")\n";
+
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif

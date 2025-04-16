@@ -9,6 +9,8 @@ on:
       - '**.c'
       - '**.cpp'
       - 'run-clang-tidy.sh'
+      - 'run-clang-format.sh'
+      - '.github/workflows/presubmit.yml'
 
 permissions:
   contents: read
@@ -38,7 +40,7 @@ jobs:
           CLANG_TIDY_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@19
   check_cmake_file_lists:
     name: Check CMake file lists
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
       - name: Run test sources check

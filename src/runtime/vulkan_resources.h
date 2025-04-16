@@ -41,7 +41,7 @@ struct VulkanSharedMemoryAllocation {
 
 // Entry point metadata for shader modules
 struct VulkanShaderBinding {
-    const char *entry_point_name = nullptr;
+    char *entry_point_name = nullptr;
     VulkanDispatchData dispatch_data = {};
     VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
     VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
@@ -1182,7 +1182,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
         halide_debug_assert(user_context, (idx + 8) < module_entries);  // should be at least 8 entries
 
         // [0] Length of entry point name (padded to nearest word size)
-        uint32_t entry_point_name_length = module_ptr[idx++];
+        uint32_t entry_point_name_length = module_ptr[idx++];  // length is number of uint32_t entries
 
         // [*] Entry point string data (padded with null chars)
         const char *entry_point_name = (const char *)(module_ptr + idx);  // NOTE: module owns string data
@@ -1304,7 +1304,13 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
         }
         debug(user_context) << "]\n";
 #endif
-        shader_bindings[n].entry_point_name = entry_point_name;  // NOTE: module owns string data
+        shader_bindings[n].entry_point_name = (char *)vk_host_malloc(user_context, entry_point_name_length * sizeof(uint32_t), 0, alloc_scope, allocator->callbacks());
+        if (shader_bindings[n].entry_point_name == nullptr) {
+            error(user_context) << "Vulkan: Failed to allocate entry_point_name! Out of memory!\n";
+            return nullptr;
+        }
+
+        memcpy(shader_bindings[n].entry_point_name, entry_point_name, entry_point_name_length * sizeof(uint32_t));
         shader_bindings[n].uniform_buffer_count = uniform_buffer_count;
         shader_bindings[n].storage_buffer_count = storage_buffer_count;
         shader_bindings[n].specialization_constants_count = specialization_constants_count;
@@ -1611,10 +1617,11 @@ void vk_destroy_compiled_shader_module(VulkanCompiledShaderModule *shader_module
 
     if (shader_module->descriptor_set_layouts) {
         for (uint32_t n = 0; n < shader_module->shader_count; n++) {
-            debug(user_context) << "  destroying descriptor set layout [" << n << "] " << shader_module->shader_bindings[n].entry_point_name << "\n";
+            debug(user_context) << "  destroying descriptor set layout [" << n << "] " << shader_module->descriptor_set_layouts[n] << "\n";
             vk_destroy_descriptor_set_layout(user_context, allocator, shader_module->descriptor_set_layouts[n]);
             shader_module->descriptor_set_layouts[n] = VK_NULL_HANDLE;
         }
+        debug(user_context) << "  destroying descriptor set layout " << (void *)shader_module->descriptor_set_layouts << "\n";
         vk_host_free(user_context, shader_module->descriptor_set_layouts, allocator->callbacks());
         shader_module->descriptor_set_layouts = nullptr;
     }
@@ -1625,24 +1632,43 @@ void vk_destroy_compiled_shader_module(VulkanCompiledShaderModule *shader_module
     }
 
     if (shader_module->shader_bindings) {
+#ifdef DEBUG_RUNTIME
+        debug(user_context)
+            << "  destroying shader bindings ("
+            << "shader_module: " << shader_module << ", "
+            << "shader_bindings: " << shader_module->shader_bindings << ")\n";
+#endif
         for (uint32_t n = 0; n < shader_module->shader_count; n++) {
+            debug(user_context) << "  destroying shader binding [" << n << "] ";
+            if (shader_module->shader_bindings[n].entry_point_name) {
+                debug(user_context) << shader_module->shader_bindings[n].entry_point_name << "\n";
+                vk_host_free(user_context, shader_module->shader_bindings[n].entry_point_name, allocator->callbacks());
+                shader_module->shader_bindings[n].entry_point_name = nullptr;
+            } else {
+                debug(user_context) << "<unknown entry point>\n";
+            }
             if (shader_module->shader_bindings[n].args_region) {
+                debug(user_context) << "  destroying shader binding args regions [" << n << "]\n";
                 vk_destroy_scalar_uniform_buffer(user_context, allocator, shader_module->shader_bindings[n].args_region);
                 shader_module->shader_bindings[n].args_region = nullptr;
             }
             if (shader_module->shader_bindings[n].descriptor_pool) {
+                debug(user_context) << "  destroying shader binding descriptor pool [" << n << "]\n";
                 vk_destroy_descriptor_pool(user_context, allocator, shader_module->shader_bindings[n].descriptor_pool);
                 shader_module->shader_bindings[n].descriptor_pool = VK_NULL_HANDLE;
             }
             if (shader_module->shader_bindings[n].specialization_constants) {
+                debug(user_context) << "  destroying shader binding specialization constants [" << n << "]\n";
                 vk_host_free(user_context, shader_module->shader_bindings[n].specialization_constants, allocator->callbacks());
                 shader_module->shader_bindings[n].specialization_constants = nullptr;
             }
             if (shader_module->shader_bindings[n].shared_memory_allocations) {
+                debug(user_context) << "  destroying shader binding shared memory allocations [" << n << "]\n";
                 vk_host_free(user_context, shader_module->shader_bindings[n].shared_memory_allocations, allocator->callbacks());
                 shader_module->shader_bindings[n].shared_memory_allocations = nullptr;
             }
             if (shader_module->shader_bindings[n].compute_pipeline) {
+                debug(user_context) << "  destroying shader binding compute pipeline [" << n << "]\n";
                 vk_destroy_compute_pipeline(user_context, allocator, shader_module->shader_bindings[n].compute_pipeline);
                 shader_module->shader_bindings[n].compute_pipeline = VK_NULL_HANDLE;
             }
@@ -1651,13 +1677,14 @@ void vk_destroy_compiled_shader_module(VulkanCompiledShaderModule *shader_module
         shader_module->shader_bindings = nullptr;
     }
     if (shader_module->shader_module) {
-        debug(user_context) << " . destroying shader module " << (void *)shader_module->shader_module << "\n";
+        debug(user_context) << "   destroying shader module " << (void *)shader_module->shader_module << "\n";
         vkDestroyShaderModule(allocator->current_device(), shader_module->shader_module, allocator->callbacks());
         shader_module->shader_module = VK_NULL_HANDLE;
     }
     shader_module->shader_count = 0;
     vk_host_free(user_context, shader_module, allocator->callbacks());
     shader_module = nullptr;
+    debug(user_context) << " Destroyed compiled shader module: " << (void *)shader_module << "\n";
 }
 
 void vk_destroy_compilation_cache_entry(VulkanCompilationCacheEntry *cache_entry) {
@@ -1674,15 +1701,22 @@ void vk_destroy_compilation_cache_entry(VulkanCompilationCacheEntry *cache_entry
         return;
     }
 
+    debug(user_context)
+        << " Destroying " << cache_entry->module_count << " shader modules for cache entry (cache_entry: " << cache_entry << ")\n";
+
     for (uint32_t m = 0; m < cache_entry->module_count; m++) {
-        VulkanCompiledShaderModule *shader_module = cache_entry->compiled_modules[m];
-        vk_destroy_compiled_shader_module(shader_module, allocator);
+        debug(user_context)
+            << " destroying compiled_module[" << m << "]: " << cache_entry->compiled_modules[m] << "\n";
+
+        VulkanCompiledShaderModule *compiled_module = cache_entry->compiled_modules[m];
+        vk_destroy_compiled_shader_module(compiled_module, allocator);
     }
 
     cache_entry->module_count = 0;
     cache_entry->allocator = nullptr;
     vk_host_free(user_context, cache_entry, allocator->callbacks());
     cache_entry = nullptr;
+    debug(user_context) << "Vulkan: Destroyed compilation cache entry (cache_entry: " << cache_entry << ")\n";
 }
 
 int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocator) {
