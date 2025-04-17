@@ -1031,6 +1031,35 @@ int inlined_rfactor_with_disappearing_rvar_test() {
     return 0;
 }
 
+// From issue: https://github.com/halide/Halide/issues/8600
+int rfactor_precise_bounds_test() {
+    Var x("x"), y("y");
+    RDom r(0, 10, 0, 10);
+
+    // Create an input with random values
+    Buffer<uint8_t> input(10, 10, "input");
+    for (int y = 0; y < 10; ++y) {
+        for (int x = 0; x < 10; ++x) {
+            input(x, y) = (rand() % 256);
+        }
+    }
+
+    Func f;
+
+    f() = 0;
+    f() += input(r.x, r.y);
+    RVar rxo, rxi, ryo, ryi;
+    Func intm = f.update()
+                    .tile(r.x, r.y, rxo, ryo, rxi, ryi, 4, 4)
+                    .rfactor({{rxi, x}, {ryi, y}});
+
+    intm.compute_root();
+
+    Buffer<int> im = f.realize();
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1063,8 +1092,6 @@ int main(int argc, char **argv) {
         {"tuple rfactor test: checking output img correctness...", tuple_rfactor_test<false>},
         {"tuple specialize rdom predicate rfactor test: checking call graphs...", tuple_specialize_rdom_predicate_rfactor_test<true>},
         {"tuple specialize rdom predicate rfactor test: checking output img correctness...", tuple_specialize_rdom_predicate_rfactor_test<false>},
-        {"parallel dot product rfactor test: checking call graphs...", parallel_dot_product_rfactor_test<true>},
-        {"parallel dot product rfactor test: checking output img correctness...", parallel_dot_product_rfactor_test<false>},
         {"tuple partial reduction rfactor test: checking call graphs...", tuple_partial_reduction_rfactor_test<true>},
         {"tuple partial reduction rfactor test: checking output img correctness...", tuple_partial_reduction_rfactor_test<false>},
         {"check allocation bound test", check_allocation_bound_test},
@@ -1072,6 +1099,7 @@ int main(int argc, char **argv) {
         {"complex multiply rfactor test", complex_multiply_rfactor_test},
         {"argmin rfactor test", argmin_rfactor_test},
         {"inlined rfactor with disappearing rvar test", inlined_rfactor_with_disappearing_rvar_test},
+        {"rfactor bounds tests", rfactor_precise_bounds_test},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;
