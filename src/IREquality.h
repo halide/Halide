@@ -66,7 +66,7 @@ bool graph_equal(const IRNode &a, const IRNode &b) {
     } else if (a.node_type != b.node_type) {
         return false;
     } else {
-        return equal_impl(a, b);
+        return graph_equal_impl(a, b);
     }
 }
 
@@ -79,7 +79,7 @@ bool graph_equal(const IRHandle &a, const IRHandle &b) {
     } else if (!b.defined()) {
         return false;
     } else {
-        return equal(*(a.get()), *(b.get()));
+        return graph_equal(*(a.get()), *(b.get()));
     }
 }
 
