@@ -47,6 +47,7 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *info) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::broadcast(value, lanes), op->type);
     if (rewrite(broadcast(broadcast(x, c0), lanes), broadcast(x, c0 * lanes)) ||
+        rewrite(broadcast(IRMatcher::Overflow(), lanes), IRMatcher::Overflow()) ||
         false) {
         return mutate(rewrite.result, info);
     }
@@ -215,7 +216,7 @@ Expr Simplify::visit(const Variable *op, ExprInfo *info) {
             *info = *b;
         }
         if (b->bounds.is_single_point()) {
-            return make_const(op->type, b->bounds.min);
+            return make_const(op->type, b->bounds.min, nullptr);
         }
     } else if (info && !no_overflow_int(op->type)) {
         info->bounds = ConstantInterval::bounds_of_type(op->type);
@@ -340,7 +341,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
         Expr new_index = b_index->value;
         int new_lanes = new_index.type().lanes();
         Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, b_index->value,
-                               op->image, op->param, const_true(new_lanes), align);
+                               op->image, op->param, const_true(new_lanes, nullptr), align);
         return Broadcast::make(load, b_index->lanes);
     } else if (s_index &&
                is_const_one(predicate) &&
@@ -351,7 +352,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *info) {
         for (const Expr &new_index : s_index->vectors) {
             int new_lanes = new_index.type().lanes();
             Expr load = Load::make(op->type.with_lanes(new_lanes), op->name, new_index,
-                                   op->image, op->param, const_true(new_lanes), ModulusRemainder{});
+                                   op->image, op->param, const_true(new_lanes, nullptr), ModulusRemainder{});
             loaded_vecs.emplace_back(std::move(load));
         }
         return Shuffle::make(loaded_vecs, s_index->indices);

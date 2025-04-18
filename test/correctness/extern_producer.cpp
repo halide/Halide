@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> output = sink.realize({100, 100});
 
-        // Should be all zeroes.
+        // Should be all zeros.
         RDom r(output);
         unsigned int error = evaluate_may_gpu<unsigned int>(sum(abs(output(r.x, r.y))));
         if (error != 0) {
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> output_multi = sink_multi.realize({100, 100});
 
-        // Should be all zeroes.
+        // Should be all zeros.
         RDom r(output_multi);
         unsigned int error_multi = evaluate<unsigned int>(sum(abs(output_multi(r.x, r.y))));
         if (error_multi != 0) {

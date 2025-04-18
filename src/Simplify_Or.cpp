@@ -5,7 +5,7 @@ namespace Internal {
 
 Expr Simplify::visit(const Or *op, ExprInfo *info) {
     if (truths.count(op)) {
-        return const_true(op->type.lanes());
+        return const_true(op->type.lanes(), info);
     }
 
     Expr a = mutate(op->a, nullptr);
@@ -15,12 +15,43 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
         std::swap(a, b);
     }
 
+    if (info) {
+        info->cast_to(op->type);
+    }
+
     auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b), op->type);
 
     // clang-format off
+
+    // Cases that fold to a constant
     if (EVAL_IN_LAMBDA
-        (rewrite(x || true, b) ||
-         rewrite(x || false, a) ||
+        (rewrite(x || true, true) ||
+         rewrite(x != y || x == y, true) ||
+         rewrite(x != y || y == x, true) ||
+         rewrite((z || x != y) || x == y, true) ||
+         rewrite((z || x != y) || y == x, true) ||
+         rewrite((x != y || z) || x == y, true) ||
+         rewrite((x != y || z) || y == x, true) ||
+         rewrite((z || x == y) || x != y, true) ||
+         rewrite((z || x == y) || y != x, true) ||
+         rewrite((x == y || z) || x != y, true) ||
+         rewrite((x == y || z) || y != x, true) ||
+         rewrite(x || !x, true) ||
+         rewrite(!x || x, true) ||
+         rewrite(y <= x || x < y, true) ||
+         rewrite(x <= c0 || c1 <= x, true, !is_float(x) && c1 <= c0 + 1) ||
+         rewrite(c1 <= x || x <= c0, true, !is_float(x) && c1 <= c0 + 1) ||
+         rewrite(x <= c0 || c1 < x, true, c1 <= c0) ||
+         rewrite(c1 <= x || x < c0, true, c1 <= c0) ||
+         rewrite(x < c0 || c1 < x, true, c1 < c0) ||
+         rewrite(c1 < x || x < c0, true, c1 < c0))) {
+        set_expr_info_to_constant(info, true);
+        return rewrite.result;
+    }
+
+    // Cases that fold to one of the args
+    if (EVAL_IN_LAMBDA
+        (rewrite(x || false, a) ||
          rewrite(x || x, a) ||
 
          rewrite((x || y) || x, a) ||
@@ -42,26 +73,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
          rewrite((x && y) || y, b) ||
          rewrite(y || (x && y), a) ||
 
-         rewrite(x != y || x == y, true) ||
-         rewrite(x != y || y == x, true) ||
-         rewrite((z || x != y) || x == y, true) ||
-         rewrite((z || x != y) || y == x, true) ||
-         rewrite((x != y || z) || x == y, true) ||
-         rewrite((x != y || z) || y == x, true) ||
-         rewrite((z || x == y) || x != y, true) ||
-         rewrite((z || x == y) || y != x, true) ||
-         rewrite((x == y || z) || x != y, true) ||
-         rewrite((x == y || z) || y != x, true) ||
-         rewrite(x || !x, true) ||
-         rewrite(!x || x, true) ||
-         rewrite(y <= x || x < y, true) ||
          rewrite(x != c0 || x == c1, a, c0 != c1) ||
-         rewrite(x <= c0 || c1 <= x, true, !is_float(x) && c1 <= c0 + 1) ||
-         rewrite(c1 <= x || x <= c0, true, !is_float(x) && c1 <= c0 + 1) ||
-         rewrite(x <= c0 || c1 < x, true, c1 <= c0) ||
-         rewrite(c1 <= x || x < c0, true, c1 <= c0) ||
-         rewrite(x < c0 || c1 < x, true, c1 < c0) ||
-         rewrite(c1 < x || x < c0, true, c1 < c0) ||
          rewrite(c0 < x || c1 < x, fold(min(c0, c1)) < x) ||
          rewrite(c0 <= x || c1 <= x, fold(min(c0, c1)) <= x) ||
          rewrite(x < c0 || x < c1, x < fold(max(c0, c1))) ||
@@ -70,6 +82,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
     }
     // clang-format on
 
+    // Cases that need remutation
     if (rewrite(broadcast(x, c0) || broadcast(y, c0), broadcast(x || y, c0)) ||
         rewrite((x && (y || z)) || y, (x && z) || y) ||
         rewrite((x && (z || y)) || y, (x && z) || y) ||
