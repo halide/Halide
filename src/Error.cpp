@@ -106,7 +106,7 @@ namespace Internal {
 
 void unhandled_exception_handler() {
     // Note that we use __cpp_exceptions (rather than HALIDE_WITH_EXCEPTIONS)
-    // to maximize the change of dealing with uncaught exceptions in weird
+    // to maximize the chance of dealing with uncaught exceptions in weird
     // build situations (i.e., exceptions enabled via C++ but HALIDE_WITH_EXCEPTIONS
     // is somehow not set).
 #ifdef __cpp_exceptions
@@ -116,7 +116,7 @@ void unhandled_exception_handler() {
         try {
             std::rethrow_exception(ce);
         } catch (Error &e) {
-            // Halide Errors are presume to be nicely formatted as-is
+            // Halide Errors are presumed to be nicely formatted as-is
             std::cerr << e.what() << std::flush;
         } catch (std::exception &e) {
             // Arbitrary C++ exceptions... who knows?
@@ -139,81 +139,53 @@ namespace {
 CompileError _compile_error("");
 RuntimeError _runtime_error("");
 InternalError _internal_error("");
-}  // namespace
 
-ErrorReport::ErrorReport(const char *file, int line, const char *condition_string, int flags)
-    : flags(flags) {
-// Note that we deliberately try to put the entire message into a single line
-// (aside from newlines inserted by user code) to make it easy to filter
-// specific warnings or messages via (e.g.) grep.... unless we are likely to be
-// outputting to a proper terminal, in which case newlines are used to improve readability.
-#if defined(HALIDE_WITH_EXCEPTIONS)
-    const bool use_newlines = false;
-#else
-    const bool use_newlines = (custom_error_reporter == nullptr) && isatty(2);
-#endif
-    const char sep = use_newlines ? '\n' : ' ';
-
-    const char *what = (flags & Warning) ? "Warning" : "Error";
-    if (flags & User) {
-        // Only mention where inside of libHalide the error tripped if we have debug level > 0
-        debug(1) << "User error triggered at " << file << ":" << line << "\n";
-        if (condition_string) {
-            debug(1) << "Condition failed: " << condition_string << "\n";
-        }
-        msg << what << ":";
-        msg << sep;
-    } else {
-        msg << "Internal " << what << " at " << file << ":" << line;
-        msg << sep;
-        if (condition_string) {
-            msg << "Condition failed: " << condition_string << ":" << sep;
-        }
-    }
-}
-
-ErrorReport::~ErrorReport() noexcept(false) {
-    if (!msg.str().empty() && msg.str().back() != '\n') {
-        msg << "\n";
-    }
-
-    if (custom_error_reporter != nullptr) {
-        if (flags & Warning) {
-            custom_error_reporter->warning(msg.str().c_str());
-            return;
-        } else {
-            custom_error_reporter->error(msg.str().c_str());
-            // error() should not have returned to us, but just in case
-            // it does, make sure we don't continue.
-            abort();
-        }
-    }
-
-    // TODO: Add an option to error out on warnings too
-    if (flags & Warning) {
-        std::cerr << msg.str();
-        return;
+template<typename T>
+[[noreturn]] void throw_error_common(const T &e) {
+    if (custom_error_reporter) {
+        custom_error_reporter->error(e.what());
+        // error() should not have returned to us, but just in case
+        // it does, make sure we don't continue.
+        abort();
     }
 
 #ifdef HALIDE_WITH_EXCEPTIONS
     if (std::uncaught_exceptions() > 0) {
-        // This should never happen - evaluating one of the arguments
-        // to the error message would have to throw an
-        // exception. Nonetheless, in case it does, preserve the
-        // exception already in flight and suppress this one.
-        return;
-    } else if (flags & Runtime) {
-        throw RuntimeError(msg.str());
-    } else if (flags & User) {
-        throw CompileError(msg.str());
-    } else {
-        throw InternalError(msg.str());
+        // This should never happen - evaluating one of the arguments to the
+        // error message would have to throw an exception. Nonetheless, in
+        // case it does, preserve the exception already in flight and suppress
+        // this one.
+        std::rethrow_exception(std::current_exception());
     }
+    throw e;
 #else
-    std::cerr << msg.str() << std::flush;
+    std::cerr << e.what() << std::flush;
     abort();
 #endif
 }
+
+}  // namespace
+
+void throw_error(const RuntimeError &e) {
+    throw_error_common(e);
+}
+
+void throw_error(const CompileError &e) {
+    throw_error_common(e);
+}
+
+void throw_error(const InternalError &e) {
+    throw_error_common(e);
+}
+
+void issue_warning(const char *warning) {
+    if (custom_error_reporter) {
+        custom_error_reporter->warning(warning);
+    } else {
+        std::cerr << warning;
+    }
+}
+
 }  // namespace Internal
 
 }  // namespace Halide
