@@ -1060,6 +1060,64 @@ int rfactor_precise_bounds_test() {
     return 0;
 }
 
+enum MaxRFactorTestVariant {
+    BitwiseOr,
+    LogicalOr,
+};
+
+template<MaxRFactorTestVariant variant>
+int isnan_max_rfactor_test() {
+    RDom r(0, 16);
+    RVar ri("ri");
+    Var x("x"), y("y"), u("u");
+
+    ImageParam in(Float(32), 2);
+
+    const auto make_reduce = [&](const char *name) {
+        Func reduce(name);
+        reduce(y) = Float(32).min();
+        switch (variant) {
+        case BitwiseOr:
+            reduce(y) = select(reduce(y) > cast(reduce.type(), in(r, y)) | is_nan(reduce(y)), reduce(y), cast(reduce.type(), in(r, y)));
+            break;
+        case LogicalOr:
+            reduce(y) = select(reduce(y) > cast(reduce.type(), in(r, y)) || is_nan(reduce(y)), reduce(y), cast(reduce.type(), in(r, y)));
+            break;
+        }
+        return reduce;
+    };
+
+    Func reference = make_reduce("reference");
+
+    Func reduce = make_reduce("reduce");
+    reduce.update(0).split(r, r, ri, 8).rfactor(ri, u);
+
+    float tests[][16] = {
+        {NAN, 0.29f, 0.19f, 0.68f, 0.44f, 0.40f, 0.39f, 0.53f, 0.23f, 0.21f, 0.85f, 0.19f, 0.37f, 0.03f, 0.14f, 0.64f},
+        {0.98f, 0.65f, 0.86f, 0.16f, 0.14f, 0.91f, 0.74f, 0.99f, 0.91f, 0.01f, 0.11f, 0.59f, 0.05f, 0.90f, 0.93f, NAN},
+        {0.84f, 0.14f, 0.99f, 0.19f, 0.63f, 0.12f, 0.51f, 0.67f, NAN, 0.34f, 0.89f, 0.93f, 0.72f, 0.69f, 0.58f, 0.63f},
+        {0.44f, 0.12f, 0.00f, 0.30f, 0.80f, 0.88f, 0.95f, 0.12f, 0.90f, 0.99f, 0.67f, 0.71f, 0.35f, 0.67f, 0.18f, 0.93f},
+    };
+
+    Buffer<float, 2> buf{tests};
+    in.set(buf);
+
+    Buffer<float, 1> ref_vals = reference.realize({4}, get_jit_target_from_environment().with_feature(Target::StrictFloat));
+    Buffer<float, 1> fac_vals = reduce.realize({4}, get_jit_target_from_environment().with_feature(Target::StrictFloat));
+
+    for (int i = 0; i < 4; i++) {
+        if (std::isnan(fac_vals(i)) && std::isnan(ref_vals(i))) {
+            continue;
+        }
+        if (fac_vals(i) != ref_vals(i)) {
+            std::cerr << "At index " << i << ", expected: " << ref_vals(i) << ", got: " << fac_vals(i) << "\n";
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -1100,6 +1158,8 @@ int main(int argc, char **argv) {
         {"argmin rfactor test", argmin_rfactor_test},
         {"inlined rfactor with disappearing rvar test", inlined_rfactor_with_disappearing_rvar_test},
         {"rfactor bounds tests", rfactor_precise_bounds_test},
+        {"isnan max rfactor test (bitwise or)", isnan_max_rfactor_test<BitwiseOr>},
+        {"isnan max rfactor test (logical or)", isnan_max_rfactor_test<LogicalOr>},
     };
 
     using Sharder = Halide::Internal::Test::Sharder;
