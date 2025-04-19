@@ -8,6 +8,11 @@ int main(int argc, char **argv) {
     // Test explicit casting of a predicate to an integer as part of a reduction
     // NOTE: triggers a convert_to_bool in Vulkan for a SelectOp
     Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::Vulkan) && (!target.has_feature(Target::VulkanInt8))) {
+        printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
+        return 0;
+    }
+
     Var x("x"), y("y");
 
     Func input("input");
