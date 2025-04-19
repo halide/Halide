@@ -155,10 +155,24 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
         }
         break;
     case 0x19:  // AMD Family 19h
-        if ((model & 0xf0) == 0 || model == 0x21) {
-            return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
-        } else if (model == 0x61) {
-            return Target::Processor::ZnVer4;  // 61h: Zen4
+	if (
+            // Zen 3
+            (0x50 <= model && model <= 0x5F) ||  // Cezanne
+            (0x40 <= model && model <= 0x4F) ||  // Rembrandt
+            (0x30 <= model && model <= 0x3F) ||  // Badami
+            (0x20 <= model && model <= 0x2F) ||  // Vermeer
+            (0x00 <= model && model <= 0x0F)     // Chagall, Milan, Genesis
+        ) {
+            return Target::Processor::ZnVer3;
+        } else if (
+	    // Zen 4
+	    (0xA0 <= model && model <= 0xAF) ||  // Genoa, Dragon Range
+            (0x78 <= model && model <= 0x7F) ||  // Phoenix 2, Hawk Point 2 (Zen 4c)
+            (0x70 <= model && model <= 0x77) ||  // Phoenix, Hawk Point 1
+            (0x60 <= model && model <= 0x6F) ||  // Raphael
+            (0x10 <= model && model <= 0x1F)     // Storm Peak
+	) {
+            return Target::Processor::ZnVer4;
         }
         break;
     case 0x1a:  // AMD Family 1Ah
