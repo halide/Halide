@@ -35,7 +35,7 @@ public:
         use_sse42 = use_avx;
 
         use_avx512_vnni = target.has_feature(Target::AVX512_Zen4);
-        use_avx_vnni = target.has_feature(Target::AVX512_SapphireRapids);
+        use_avx_vnni = target.has_feature(Target::AVXVNNI);
     }
 
     void add_tests() override {
@@ -600,8 +600,43 @@ public:
             check("vpmaxsq", 8, max(i64_1, i64_2));
             check("vpminsq", 8, min(i64_1, i64_2));
         }
+        if (use_avx_vnni) {
+            // avx_vnni is not part of the AVX-512 suite, it does not require
+            // AVX-512F and can be implemented independently. avx_vnni adds
+            // instructions which can only operate on 128- or 256-bit vectors.
+            {
+                // 16 bit, 2 element dot product
+                RDom r(0, 2);
+                check("vpdpwssd*ymm", 8, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssd*xmm", 4, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+            }
+            {
+                // 8 bit, 4 element dot product
+                RDom r(0, 4);
+                check("vpdpbusd*ymm", 8, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusd*xmm", 4, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+            }
+            {
+                // 16 bit, 2 element saturaing dot product
+                RDom r(0, 2);
+                check("vpdpwssds*ymm", 8, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssds*xmm", 4, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+            }
+            {
+                // 8 bit, 4 element saturating dot product
+                RDom r(0, 4);
+                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+            }
+        }
         if (use_avx512_vnni) {
-            // For our targets, avx512_vnni implies avx512_bf16
+            // For our targets, avx512_vnni implies avx512_bf16 and avx512vl.
+            // if avx512vl flag is set, avx512_bf16 and avx512_vnni can support
+            // 128-bit and 256-bit vectors as well.
             // Disabled due to https://github.com/halide/Halide/issues/7219
             /*
             check("vcvtne2ps2bf16*zmm", 32, cast(BFloat(16), f32_1));
@@ -615,45 +650,37 @@ public:
                 RDom r(0, 2);
                 check("vdpbf16ps*zmm", 16, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
                 check("vpdpwssd*zmm", 16, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                if (use_avx_vnni) {
-                    check("vdpbf16ps*ymm", 8, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
-                    check("vdpbf16ps*xmm", 4, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
-                    check("vpdpwssd*ymm", 8, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                    check("vpdpwssd*xmm", 4, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                }
+                check("vdpbf16ps*ymm", 8, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
+                check("vdpbf16ps*xmm", 4, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
+                check("vpdpwssd*ymm", 8, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssd*xmm", 4, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
             }
             {
                 // 8 bit, 4 element dot product
                 RDom r(0, 4);
                 check("vpdpbusd*zmm", 16, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
                 check("vpdpbusd*zmm", 16, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                if (use_avx_vnni) {
-                    check("vpdpbusd*ymm", 8, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                    check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                    check("vpdpbusd*xmm", 4, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                    check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                }
+                check("vpdpbusd*ymm", 8, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusd*xmm", 4, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
             }
             {
                 // 16 bit, 2 element saturaing dot product
                 RDom r(0, 2);
                 check("vpdpwssds*zmm", 16, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                if (use_avx_vnni) {
-                    check("vpdpwssds*ymm", 8, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                    check("vpdpwssds*xmm", 4, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                }
+                check("vpdpwssds*ymm", 8, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssds*xmm", 4, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
             }
             {
                 // 8 bit, 4 element saturating dot product
                 RDom r(0, 4);
                 check("vpdpbusds*zmm", 16, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
                 check("vpdpbusds*zmm", 16, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                if (use_avx_vnni) {
-                    check("vpdpbusds*ymm", 8, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                    check("vpdpbusds*ymm", 8, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                    check("vpdpbusds*xmm", 4, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                    check("vpdpbusds*xmm", 4, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                }
+                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
             }
         }
     }
@@ -689,7 +716,8 @@ int main(int argc, char **argv) {
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
-            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_zen5"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
             // Can be enabled when AVX10 and APX support are stable in LLVM.
             // Target("x86-64-linux-avx10_1-vector_bits_256-x86apx"),
         });
