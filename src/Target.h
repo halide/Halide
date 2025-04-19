@@ -88,6 +88,7 @@ struct Target {
         SSE41 = halide_target_feature_sse41,
         AVX = halide_target_feature_avx,
         AVX2 = halide_target_feature_avx2,
+        AVXVNNI = halide_target_feature_avxvnni,
         FMA = halide_target_feature_fma,
         FMA4 = halide_target_feature_fma4,
         F16C = halide_target_feature_f16c,

@@ -126,9 +126,11 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
 
                 int32_t info3[4];
                 cpuid(info3, 7, 1);
-                if ((info3[0] & avxvnni) == avxvnni &&
-                    (info3[0] & avx512bf16) == avx512bf16) {
-                    halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
+                if ((info3[0] & avxvnni) == avxvnni) {
+                    halide_set_available_cpu_feature(features, halide_target_feature_avxvnni);
+                    if ((info3[0] & avx512bf16) == avx512bf16) {
+                        halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
+                    }
                 }
             }
         }

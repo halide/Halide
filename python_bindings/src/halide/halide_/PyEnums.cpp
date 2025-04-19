@@ -119,6 +119,7 @@ void define_enums(py::module &m) {
         .value("SSE41", Target::Feature::SSE41)
         .value("AVX", Target::Feature::AVX)
         .value("AVX2", Target::Feature::AVX2)
+        .value("AVXVNNI", Target::Feature::AVXVNNI)
         .value("FMA", Target::Feature::FMA)
         .value("FMA4", Target::Feature::FMA4)
         .value("F16C", Target::Feature::F16C)

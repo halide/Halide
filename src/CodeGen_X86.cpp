@@ -1072,8 +1072,10 @@ string CodeGen_X86::mattrs() const {
             attrs.emplace_back("+avx512bitalg");
             attrs.emplace_back("+avx512vbmi2");
         }
-        if (target.has_feature(Target::AVX512_SapphireRapids)) {
+        if (target.has_feature(Target::AVXVNNI)) {
             attrs.emplace_back("+avxvnni");
+        }
+        if (target.has_feature(Target::AVX512_SapphireRapids)) {
             attrs.emplace_back("+amx-int8");
             attrs.emplace_back("+amx-bf16");
         }

@@ -394,9 +394,11 @@ Target calculate_host_target() {
                 const uint32_t avxvnni = 1U << 4;     // avxvnni (note, not avx512vnni) result in eax
                 const uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, with cpuid(eax=7, ecx=1)
                 // TODO: port to family/model -based detection.
-                if ((info3[0] & avxvnni) == avxvnni &&
-                    (info3[0] & avx512bf16) == avx512bf16) {
-                    initial_features.push_back(Target::AVX512_SapphireRapids);
+                if ((info3[0] & avxvnni) == avxvnni) {
+                    initial_features.push_back(Target::AVXVNNI);
+                    if ((info3[0] & avx512bf16) == avx512bf16) {
+                        initial_features.push_back(Target::AVX512_SapphireRapids);
+                    }
                 }
             }
         }
@@ -624,6 +626,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sse41", Target::SSE41},
     {"avx", Target::AVX},
     {"avx2", Target::AVX2},
+    {"avxvnni", Target::AVXVNNI},
     {"fma", Target::FMA},
     {"fma4", Target::FMA4},
     {"f16c", Target::F16C},
@@ -976,6 +979,7 @@ void Target::validate_features() const {
         do_check_bad(*this, {
                                 AVX,
                                 AVX2,
+                                AVXVNNI,
                                 AVX512,
                                 AVX512_Cannonlake,
                                 AVX512_KNL,
@@ -1002,6 +1006,7 @@ void Target::validate_features() const {
                                 ARMv81a,
                                 AVX,
                                 AVX2,
+                                AVXVNNI,
                                 AVX512,
                                 AVX512_Cannonlake,
                                 AVX512_KNL,
@@ -1557,10 +1562,11 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 14> intersection_features = {{
+    const std::array<Feature, 15> intersection_features = {{
         ARMv7s,
         AVX,
         AVX2,
+        AVXVNNI,
         AVX512,
         AVX512_Cannonlake,
         AVX512_KNL,
