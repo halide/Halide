@@ -161,6 +161,8 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
             return Target::Processor::ZnVer4;  // 61h: Zen4
         }
         break;
+    case 0x1a:  // AMD Family 1Ah
+        return Target::Processor::ZnVer5;  // Zen5
     default:
         break;  // Unknown AMD CPU.
     }
@@ -333,6 +335,14 @@ Target calculate_host_target() {
                             Target::AVX2, Target::AVX512,
                             Target::AVX512_Skylake, Target::AVX512_Cannonlake,
                             Target::AVX512_Zen4});
+            return t;
+        } else if (processor == Target::Processor::ZnVer5) {
+            Target t{os, arch, bits, processor, initial_features, vector_bits};
+            t.set_features({Target::SSE41, Target::AVX,
+                            Target::F16C, Target::FMA,
+                            Target::AVX2, Target::AVXVNNI, Target::AVX512,
+                            Target::AVX512_Skylake, Target::AVX512_Cannonlake,
+                            Target::AVX512_Zen4, Target::AVX512_Zen5});
             return t;
         }
     }
@@ -607,6 +617,7 @@ const std::map<std::string, Target::Processor> processor_name_map = {
     {"tune_znver2", Target::Processor::ZnVer2},
     {"tune_znver3", Target::Processor::ZnVer3},
     {"tune_znver4", Target::Processor::ZnVer4},
+    {"tune_znver5", Target::Processor::ZnVer5},
 };
 
 bool lookup_processor(const std::string &tok, Target::Processor &result) {
@@ -670,6 +681,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
     {"avx512_sapphirerapids", Target::AVX512_SapphireRapids},
     {"avx512_zen4", Target::AVX512_Zen4},
+    {"avx512_zen5", Target::AVX512_Zen5},
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
@@ -986,6 +998,7 @@ void Target::validate_features() const {
                                 AVX512_SapphireRapids,
                                 AVX512_Skylake,
                                 AVX512_Zen4,
+                                AVX512_Zen5,
                                 F16C,
                                 FMA,
                                 FMA4,
@@ -1013,6 +1026,7 @@ void Target::validate_features() const {
                                 AVX512_SapphireRapids,
                                 AVX512_Skylake,
                                 AVX512_Zen4,
+                                AVX512_Zen5,
                                 F16C,
                                 FMA,
                                 FMA4,
@@ -1465,6 +1479,7 @@ int Target::natural_vector_size(const Halide::Type &t) const {
         if (is_integer && (has_feature(Halide::Target::AVX512_Skylake) ||
                            has_feature(Halide::Target::AVX512_Cannonlake) ||
                            has_feature(Halide::Target::AVX512_Zen4) ||
+                           has_feature(Halide::Target::AVX512_Zen5) ||
                            has_feature(Halide::Target::AVX512_SapphireRapids))) {
             // AVX512BW exists on any of these avx512 variants
             return 64 / data_size;
@@ -1473,6 +1488,7 @@ int Target::natural_vector_size(const Halide::Type &t) const {
                                     has_feature(Halide::Target::AVX512_Skylake) ||
                                     has_feature(Halide::Target::AVX512_Cannonlake) ||
                                     has_feature(Halide::Target::AVX512_Zen4) ||
+                                    has_feature(Halide::Target::AVX512_Zen5) ||
                                     has_feature(Halide::Target::AVX512_SapphireRapids))) {
             // AVX512F is on all AVX512 architectures
             return 64 / data_size;
@@ -1562,7 +1578,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 15> intersection_features = {{
+    const std::array<Feature, 16> intersection_features = {{
         ARMv7s,
         AVX,
         AVX2,
@@ -1573,6 +1589,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         AVX512_SapphireRapids,
         AVX512_Skylake,
         AVX512_Zen4,
+        AVX512_Zen5,
         F16C,
         FMA,
         FMA4,

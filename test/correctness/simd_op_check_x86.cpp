@@ -689,6 +689,7 @@ int main(int argc, char **argv) {
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_zen5"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
             // Can be enabled when AVX10 and APX support are stable in LLVM.
             // Target("x86-64-linux-avx10_1-vector_bits_256-x86apx"),

@@ -40,6 +40,9 @@ Target complete_x86_target(Target t) {
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
         t.set_feature(Target::AVX512_Zen4);
     }
+    if (t.has_feature(Target::AVX512_Zen5)) {
+        t.set_feature(Target::AVX512_Zen4);
+    }
     if (t.has_feature(Target::AVX512_Zen4)) {
         t.set_feature(Target::AVX512_Cannonlake);
     }
@@ -947,6 +950,8 @@ string CodeGen_X86::mcpu_target() const {
     //          The CPU choice here *WILL* affect -mattrs!
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         return "sapphirerapids";
+    } else if (target.has_feature(Target::AVX512_Zen5)) {
+        return "znver5";
     } else if (target.has_feature(Target::AVX512_Zen4)) {
         return "znver4";
     } else if (target.has_feature(Target::AVX512_Cannonlake)) {
@@ -989,6 +994,7 @@ bool gather_might_be_slow(Target target) {
     case Target::Processor::ZnVer2:
     case Target::Processor::ZnVer3:
     case Target::Processor::ZnVer4:
+    case Target::Processor::ZnVer5:
         return false;
     default:
         return !target.has_feature(Target::AVX512_Zen4);
@@ -1025,6 +1031,8 @@ string CodeGen_X86::mcpu_tune() const {
         return "znver3";
     case Target::Processor::ZnVer4:
         return "znver4";
+    case Target::Processor::ZnVer5:
+        return "znver5";
 
     case Target::Processor::ProcessorGeneric:
         break;

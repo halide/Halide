@@ -158,6 +158,7 @@ void define_enums(py::module &m) {
         .value("AVX512_Skylake", Target::Feature::AVX512_Skylake)
         .value("AVX512_Cannonlake", Target::Feature::AVX512_Cannonlake)
         .value("AVX512_Zen4", Target::Feature::AVX512_Zen4)
+        .value("AVX512_Zen5", Target::Feature::AVX512_Zen5)
         .value("AVX512_SapphireRapids", Target::Feature::AVX512_SapphireRapids)
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)
