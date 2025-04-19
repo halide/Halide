@@ -57,6 +57,37 @@ protected:
         CodeGen_WGSL(std::ostream &s, Target t)
             : CodeGen_GPU_C(s, t) {
             vector_declaration_style = VectorDeclarationStyle::WGSLSyntax;
+            abs_returns_unsigned_type = false;
+
+#define alias(x, y)                         \
+    extern_function_name_map[x "_f16"] = y; \
+    extern_function_name_map[x "_f32"] = y
+
+            alias("sqrt", "sqrt");
+            alias("sin", "sin");
+            alias("cos", "cos");
+            alias("exp", "exp");
+            alias("log", "log");
+            alias("abs", "abs");
+            alias("floor", "floor");
+            alias("ceil", "ceil");
+            alias("trunc", "trunc");
+            alias("asin", "asin");
+            alias("acos", "acos");
+            alias("tan", "tan");
+            alias("atan", "atan");
+            alias("atan2", "atan2");
+            alias("sinh", "sinh");
+            alias("asinh", "asinh");
+            alias("cosh", "cosh");
+            alias("acosh", "acosh");
+            alias("tanh", "tanh");
+            alias("atanh", "atanh");
+
+            alias("round", "round");
+
+            alias("fast_inverse_sqrt", "inverseSqrt");
+#undef alias
         }
         void add_kernel(const Stmt &stmt,
                         const string &name,
@@ -70,7 +101,6 @@ protected:
                                AppendSpaceIfNeeded append_space =
                                    DoNotAppendSpace) override;
         std::string print_reinterpret(Type type, const Expr &e) override;
-        std::string print_extern_call(const Call *op) override;
         std::string print_assignment(Type t, const std::string &rhs) override;
         std::string print_const(Type t, const std::string &rhs);
         std::string print_assignment_or_const(Type t, const std::string &rhs,
@@ -140,46 +170,7 @@ void CodeGen_WebGPU_Dev::init_module() {
         << "fn nan_f32() -> f32 {return float_from_bits(0x7fc00000);}\n"
         << "fn neg_inf_f32() -> f32 {return float_from_bits(0xff800000);}\n"
         << "fn inf_f32() -> f32 {return float_from_bits(0x7f800000);}\n"
-        << "fn acos_f32(x : f32) -> f32 {return acos(x);}\n"
-        << "fn acosh_f32(x : f32) -> f32 {return acosh(x);}\n"
-        << "fn asin_f32(x : f32) -> f32 {return asin(x);}\n"
-        << "fn asinh_f32(x : f32) -> f32 {return asinh(x);}\n"
-        << "fn atan_f32(x : f32) -> f32 {return atan(x);}\n"
-        << "fn atan2_f32(y : f32, x : f32) -> f32 {return atan2(y, x);}\n"
-        << "fn atanh_f32(x : f32) -> f32 {return atanh(x);}\n"
-        << "fn ceil_f32(x : f32) -> f32 {return ceil(x);}\n"
-        << "fn cos_f32(x : f32) -> f32 {return cos(x);}\n"
-        << "fn cosh_f32(x : f32) -> f32 {return cosh(x);}\n"
-        << "fn exp_f32(x : f32) -> f32 {return exp(x);}\n"
-        << "fn floor_f32(x : f32) -> f32 {return floor(x);}\n"
         << "fn fast_inverse_f32(x : f32) -> f32 {return 1.0 / x;}\n"
-        << "fn fast_inverse_sqrt_f32(x : f32) -> f32 {return inverseSqrt(x);}\n"
-        << "fn log_f32(x : f32) -> f32 {return log(x);}\n"
-        // pow() in WGSL has the same semantics as C if x > 0.
-        // Otherwise, we need to emulate the behavior.
-        << "fn pow_f32(x : f32, y : f32) -> f32 { \n"
-        << "  if (x > 0.0) {                  \n"
-        << "    return pow(x, y);             \n"
-        << "  } else if (y == 0.0) {          \n"
-        << "    return 1.0;                   \n"
-        << "  } else if (trunc(y) == y) {     \n"
-        << "    if ((y % 2) == 0) {           \n"
-        << "      return pow(abs(x), y);      \n"
-        << "    } else {                      \n"
-        << "      return -pow(abs(x), y);     \n"
-        << "    }                             \n"
-        << "  } else {                        \n"
-        << "    return nan_f32();             \n"
-        << "  }                               \n"
-        << "}                                 \n"
-        << "fn rint(x : f32) -> f32 {return round(x);}\n"
-        << "fn round_f32(x : f32) -> f32 {return round(x);}\n"
-        << "fn sin_f32(x : f32) -> f32 {return sin(x);}\n"
-        << "fn sinh_f32(x : f32) -> f32 {return sinh(x);}\n"
-        << "fn sqrt_f32(x : f32) -> f32 {return sqrt(x);}\n"
-        << "fn tan_f32(x : f32) -> f32 {return tan(x);}\n"
-        << "fn tanh_f32(x : f32) -> f32 {return tanh(x);}\n"
-        << "fn trunc_f32(x : f32) -> f32 {return trunc(x);}\n"
         // WGSL doesn't provide these by default, but we can exploit the nature
         // of comparison ops to construct them... although they are of dubious value
         // (since the WGSL spec says that "Implementations may assume that NaNs
@@ -287,18 +278,6 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_reinterpret(Type type,
     ostringstream oss;
     oss << "bitcast<" << print_type(type) << ">(" << print_expr(e) << ")";
     return oss.str();
-}
-
-string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name)) << op->name;
-
-    vector<string> args(op->args.size());
-    for (size_t i = 0; i < op->args.size(); i++) {
-        args[i] = print_expr(op->args[i]);
-    }
-    ostringstream rhs;
-    rhs << op->name << "(" << with_commas(args) << ")";
-    return rhs.str();
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
@@ -538,6 +517,34 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
             close_scope("if " + cond_id + " else");
         }
         print_assignment(op->type, result_id);
+    } else if (op->is_intrinsic(Call::round)) {
+        Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
+        equiv.accept(this);
+    } else if (op->is_extern() && op->name == "pow_f32") {
+        // pow() in WGSL has the same semantics as C if x > 0.
+        // Otherwise, we need to emulate the behavior.
+        Expr ox = op->args[0];
+        Expr oy = op->args[1];
+        Expr equiv = Call::make(op->type, "pow", {abs(ox), oy}, Call::PureExtern);
+        Type int_type = Type(Type::Int, 32, oy.type().lanes());
+
+        // This is ill-defined. WGSL spec says that nan cannot occur.
+        // Yet the WGSL built-in pow() function yields NaN for pow(-0.1, -0.1).
+        // We'll try to get the NaN value in, by doing a value of 1.0 with
+        // the correct number of lanes, multiplied by the result of our helper function
+        // that tries to hack a NaN value in.
+        Expr nan = make_const(oy.type(), 1.0f) * Call::make(Float(32), "nan_f32", {}, Call::PureExtern);
+        equiv = select(ox > 0.0f,
+                       equiv,
+                       select(oy == 0.0f,
+                              make_const(oy.type(), 1.0f),
+                              select(oy == trunc(oy),
+                                     select(cast(int_type, oy) % 2 == 0,
+                                            equiv,
+                                            -equiv),
+                                     nan)));
+        equiv.accept(this);
+
     } else {
         CodeGen_GPU_C::visit(op);
     }
