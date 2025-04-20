@@ -1360,13 +1360,13 @@ typedef enum halide_target_feature_t {
     halide_target_feature_no_asserts,       ///< Disable all runtime checks, for slightly tighter code.
     halide_target_feature_no_bounds_query,  ///< Disable the bounds querying functionality.
 
-    halide_target_feature_sse41,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
-    halide_target_feature_avx,    ///< Use AVX 1 instructions. Only relevant on x86.
-    halide_target_feature_avx2,   ///< Use AVX 2 instructions. Only relevant on x86.
-    halide_target_feature_avxvnni,///< Enable the AVX-VNNI features supported by AVX2 instructions. Supports 256-bit VNNI instructions without EVEX encoding.
-    halide_target_feature_fma,    ///< Enable x86 FMA instruction
-    halide_target_feature_fma4,   ///< Enable x86 (AMD) FMA4 instruction set
-    halide_target_feature_f16c,   ///< Enable x86 16-bit float support
+    halide_target_feature_sse41,    ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
+    halide_target_feature_avx,      ///< Use AVX 1 instructions. Only relevant on x86.
+    halide_target_feature_avx2,     ///< Use AVX 2 instructions. Only relevant on x86.
+    halide_target_feature_avxvnni,  ///< Enable the AVX-VNNI features supported by AVX2 instructions. Supports 256-bit VNNI instructions without EVEX encoding.
+    halide_target_feature_fma,      ///< Enable x86 FMA instruction
+    halide_target_feature_fma4,     ///< Enable x86 (AMD) FMA4 instruction set
+    halide_target_feature_f16c,     ///< Enable x86 16-bit float support
 
     halide_target_feature_armv7s,   ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
     halide_target_feature_no_neon,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.

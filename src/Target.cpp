@@ -155,7 +155,7 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
         }
         break;
     case 0x19:  // AMD Family 19h
-	if (
+        if (
             // Zen 3
             (0x50 <= model && model <= 0x5F) ||  // Cezanne
             (0x40 <= model && model <= 0x4F) ||  // Rembrandt
@@ -165,17 +165,17 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
         ) {
             return Target::Processor::ZnVer3;
         } else if (
-	    // Zen 4
-	    (0xA0 <= model && model <= 0xAF) ||  // Genoa, Dragon Range
+            // Zen 4
+            (0xA0 <= model && model <= 0xAF) ||  // Genoa, Dragon Range
             (0x78 <= model && model <= 0x7F) ||  // Phoenix 2, Hawk Point 2 (Zen 4c)
             (0x70 <= model && model <= 0x77) ||  // Phoenix, Hawk Point 1
             (0x60 <= model && model <= 0x6F) ||  // Raphael
             (0x10 <= model && model <= 0x1F)     // Storm Peak
-	) {
+        ) {
             return Target::Processor::ZnVer4;
         }
         break;
-    case 0x1a:  // AMD Family 1Ah
+    case 0x1a:                             // AMD Family 1Ah
         return Target::Processor::ZnVer5;  // Zen5
     default:
         break;  // Unknown AMD CPU.
