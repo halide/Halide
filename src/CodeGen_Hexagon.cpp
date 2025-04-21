@@ -2228,10 +2228,6 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         Value *args[2] = {get_user_context(), llvm_size};
 
         Value *call = builder->CreateCall(alloc_fn, args);
-
-        // Fix the type to avoid pointless bitcasts later
-        call = builder->CreatePointerCast(
-            call, PointerType::get(llvm_type_of(alloc->type), 0));
         allocation.ptr = call;
 
         // Assert that the allocation worked.

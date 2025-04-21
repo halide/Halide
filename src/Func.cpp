@@ -907,7 +907,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
 
     ReductionDomain rdom{definition.schedule().rvars(), definition.predicate(), true};
     SubstitutionMap rdom_promises;
-    for (int i = 0; i < rdom.domain().size(); i++) {
+    for (int i = 0; i < (int)rdom.domain().size(); i++) {
         const auto &[var, min, extent] = rdom.domain()[i];
         rdom_promises.emplace(var, promise_clamped(RVar(rdom, i), min, min + extent - 1));
     }
