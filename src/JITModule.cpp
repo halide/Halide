@@ -245,6 +245,11 @@ public:
         code_pages.emplace_back(result, size);
         return result;
     }
+
+    // We don't support throwing C++ exceptions through JIT-compiled code. Avoid
+    // any issues with it by just opting out.
+    void registerEHFrames(uint8_t *, uint64_t, size_t) override {};
+    void deregisterEHFrames() override {};
 };
 
 }  // namespace
