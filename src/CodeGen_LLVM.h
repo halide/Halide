@@ -18,6 +18,7 @@ template<typename, typename>
 class IRBuilder;
 class LLVMContext;
 class Type;
+class PointerType;
 class StructType;
 class Instruction;
 class CallInst;
@@ -208,6 +209,7 @@ protected:
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t = nullptr, *i1_t = nullptr, *i8_t = nullptr, *i16_t = nullptr, *i32_t = nullptr, *i64_t = nullptr, *f16_t = nullptr, *f32_t = nullptr, *f64_t = nullptr;
+    llvm::PointerType *ptr_t = nullptr;
     llvm::StructType *halide_buffer_t_type = nullptr,
                      *type_t_type,
                      *dimension_t_type,
