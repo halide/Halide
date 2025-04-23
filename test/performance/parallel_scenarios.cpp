@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include "halide_thread_pool.h"
 
+#include <chrono>
+
 using namespace Halide;
 
 int main(int argc, char **argv) {
