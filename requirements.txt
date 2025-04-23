@@ -4,7 +4,7 @@ imageio
 ninja
 numpy
 pillow
-pybind11==2.10.4
+pybind11==2.11.1
 scikit-build-core==0.10.5
 scipy
 setuptools>=43
