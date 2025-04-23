@@ -198,7 +198,6 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &
 // Expand LLVM's search for symbols to include code contained in a set of JITModule.
 class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<JITModule> modules;
-    std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
     HalideJITMemoryManager(const std::vector<JITModule> &modules)
@@ -240,12 +239,6 @@ public:
         return result;
     }
 
-    uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
-        uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
-        code_pages.emplace_back(result, size);
-        return result;
-    }
-
     // We don't support throwing C++ exceptions through JIT-compiled code. Avoid
     // any issues with it by just opting out.
     void registerEHFrames(uint8_t *, uint64_t, size_t) override {};
@@ -266,7 +259,8 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
     compile_module(std::move(llvm_module), fn.name, m.target(), deps_with_runtime);
-    // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
+    // If -time-passes is in HL_LLVM_ARGS, this will print llvm pass time
+    // statistics. Otherwise it's a no-op.
     llvm::reportAndResetTimings();
 }
 
@@ -321,10 +315,12 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     llvm::orc::LLJITBuilderState::ObjectLinkingLayerCreator linkerBuilder;
     if ((target.arch == Target::Arch::X86 && target.bits == 32) ||
-        (target.arch == Target::Arch::ARM && target.bits == 32)) {
+        (target.arch == Target::Arch::ARM && target.bits == 32) ||
+        target.os == Target::Windows) {
 // Fallback to RTDyld-based linking to workaround errors:
 // i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
 // ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
+// Windows 64-bit: JIT session error: could not register eh-frame: __register_frame function not found
 #if LLVM_VERSION >= 210
         linkerBuilder = [&](llvm::orc::ExecutionSession &session) {
             return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&]() {
