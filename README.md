@@ -229,7 +229,8 @@ $ cmake --build build
 
 Setting `-DHalide_LLVM_ROOT` is not required if you have a suitable system-wide
 version installed. However, if you have multiple LLVMs installed, it can pick
-between them.
+between them. Do not use a relative path for `Halide_LLVM_ROOT`. It can cause
+problems on some systems.
 
 ### Windows
 
