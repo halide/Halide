@@ -107,28 +107,28 @@ struct fail {
 
 template<typename T>
 T value_as(const halide_type_t &type, const halide_scalar_value_t &value) {
-    switch (type.element_of().as_u32()) {
-    case halide_type_t(halide_type_int, 8).as_u32():
+    switch (type.element_of().as_u64()) {
+    case halide_type_t(halide_type_int, 8).as_u64():
         return (T)value.u.i8;
-    case halide_type_t(halide_type_int, 16).as_u32():
+    case halide_type_t(halide_type_int, 16).as_u64():
         return (T)value.u.i16;
-    case halide_type_t(halide_type_int, 32).as_u32():
+    case halide_type_t(halide_type_int, 32).as_u64():
         return (T)value.u.i32;
-    case halide_type_t(halide_type_int, 64).as_u32():
+    case halide_type_t(halide_type_int, 64).as_u64():
         return (T)value.u.i64;
-    case halide_type_t(halide_type_uint, 1).as_u32():
+    case halide_type_t(halide_type_uint, 1).as_u64():
         return (T)value.u.b;
-    case halide_type_t(halide_type_uint, 8).as_u32():
+    case halide_type_t(halide_type_uint, 8).as_u64():
         return (T)value.u.u8;
-    case halide_type_t(halide_type_uint, 16).as_u32():
+    case halide_type_t(halide_type_uint, 16).as_u64():
         return (T)value.u.u16;
-    case halide_type_t(halide_type_uint, 32).as_u32():
+    case halide_type_t(halide_type_uint, 32).as_u64():
         return (T)value.u.u32;
-    case halide_type_t(halide_type_uint, 64).as_u32():
+    case halide_type_t(halide_type_uint, 64).as_u64():
         return (T)value.u.u64;
-    case halide_type_t(halide_type_float, 32).as_u32():
+    case halide_type_t(halide_type_float, 32).as_u64():
         return (T)value.u.f32;
-    case halide_type_t(halide_type_float, 64).as_u32():
+    case halide_type_t(halide_type_float, 64).as_u64():
         return (T)value.u.f64;
     default:
         fail() << "Can't convert packet with type: " << (int)type.code << "bits: " << type.bits;

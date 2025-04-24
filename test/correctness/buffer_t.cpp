@@ -18,11 +18,11 @@ int main(int argc, char **argv) {
     CHECK(device, 0, 0);
     CHECK(device_interface, 8, 8);
     CHECK(host, 12, 16);
-    CHECK(flags, 16, 24);
-    CHECK(type, 24, 32);
-    CHECK(dimensions, 28, 36);
+    CHECK(type, 16, 24);
+    CHECK(dimensions, 24, 32);
+    CHECK(flags, 28, 36);
     CHECK(dim, 32, 40);
-    CHECK(padding, 36, 48);
+    CHECK(padding, 40, 48);
 
     static_assert((sizeof(void *) == 8 && sizeof(halide_buffer_t) == 56) ||
                       (sizeof(void *) == 4 && sizeof(halide_buffer_t) == 40),

@@ -584,22 +584,22 @@ double dequantize_scalar(const Tensor *t) {
     int zero = q.zero.empty() ? 0 : q.zero.front();
 
     const auto &buf = t->buffer();
-    switch (buf.type().element_of().as_u32()) {
-    case halide_type_of<uint8_t>().as_u32():
+    switch (buf.type().element_of().as_u64()) {
+    case halide_type_of<uint8_t>().as_u64():
         return (as_scalar<uint8_t>(buf) - zero) * scale;
-    case halide_type_of<int8_t>().as_u32():
+    case halide_type_of<int8_t>().as_u64():
         return (as_scalar<int8_t>(buf) - zero) * scale;
-    case halide_type_of<uint16_t>().as_u32():
+    case halide_type_of<uint16_t>().as_u64():
         return (as_scalar<uint16_t>(buf) - zero) * scale;
-    case halide_type_of<int16_t>().as_u32():
+    case halide_type_of<int16_t>().as_u64():
         return (as_scalar<int16_t>(buf) - zero) * scale;
-    case halide_type_of<uint32_t>().as_u32():
+    case halide_type_of<uint32_t>().as_u64():
         return (as_scalar<uint32_t>(buf) - zero) * scale;
-    case halide_type_of<int32_t>().as_u32():
+    case halide_type_of<int32_t>().as_u64():
         return (as_scalar<int32_t>(buf) - zero) * scale;
-    case halide_type_of<float>().as_u32():
+    case halide_type_of<float>().as_u64():
         return (as_scalar<float>(buf) - zero) * scale;
-    case halide_type_of<double>().as_u32():
+    case halide_type_of<double>().as_u64():
         return (as_scalar<double>(buf) - zero) * scale;
     default:
         HLOG(FATAL) << "Unsupported type " << buf.type();

@@ -332,9 +332,9 @@ Stmt add_image_checks_inner(Stmt s,
         // Check the type matches the internally-understood type
         {
             string type_name = name + ".type";
-            Expr type_var = Variable::make(UInt(32), type_name, image, param, rdom);
-            uint32_t correct_type_bits = ((halide_type_t)type).as_u32();
-            Expr correct_type_expr = make_const(UInt(32), correct_type_bits);
+            Expr type_var = Variable::make(UInt(64), type_name, image, param, rdom);
+            uint64_t correct_type_bits = ((halide_type_t)type).as_u64();
+            Expr correct_type_expr = make_const(UInt(64), correct_type_bits);
             Expr error = Call::make(Int(32), "halide_error_bad_type",
                                     {error_name, type_var, correct_type_expr},
                                     Call::Extern);

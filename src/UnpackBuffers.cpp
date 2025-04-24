@@ -101,7 +101,7 @@ Stmt unpack_buffers(Stmt s) {
         lets.emplace_back(dev_interface_var, dev_interface_val);
 
         string type_code_var = name + ".type";
-        Expr type_code_val = Call::make(UInt(32), Call::buffer_get_type, args, Call::Extern);
+        Expr type_code_val = Call::make(UInt(64), Call::buffer_get_type, args, Call::Extern);
         lets.emplace_back(type_code_var, type_code_val);
 
         string host_dirty_var = name + ".host_dirty";

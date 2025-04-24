@@ -44,30 +44,30 @@ struct typed_scalar {
             std::cerr << "Mismatched types\n";
             exit(1);
         }
-        switch (type.element_of().as_u32()) {
-        case halide_type_t(halide_type_float, 32).as_u32():
+        switch (type.element_of().as_u64()) {
+        case halide_type_t(halide_type_float, 32).as_u64():
             return value.u.f32 == that.value.u.f32;
-        case halide_type_t(halide_type_float, 64).as_u32():
+        case halide_type_t(halide_type_float, 64).as_u64():
             return value.u.f64 == that.value.u.f64;
-        case halide_type_t(halide_type_int, 8).as_u32():
+        case halide_type_t(halide_type_int, 8).as_u64():
             return value.u.i8 == that.value.u.i8;
-        case halide_type_t(halide_type_int, 16).as_u32():
+        case halide_type_t(halide_type_int, 16).as_u64():
             return value.u.i16 == that.value.u.i16;
-        case halide_type_t(halide_type_int, 32).as_u32():
+        case halide_type_t(halide_type_int, 32).as_u64():
             return value.u.i32 == that.value.u.i32;
-        case halide_type_t(halide_type_int, 64).as_u32():
+        case halide_type_t(halide_type_int, 64).as_u64():
             return value.u.i64 == that.value.u.i64;
-        case halide_type_t(halide_type_uint, 1).as_u32():
+        case halide_type_t(halide_type_uint, 1).as_u64():
             return value.u.b == that.value.u.b;
-        case halide_type_t(halide_type_uint, 8).as_u32():
+        case halide_type_t(halide_type_uint, 8).as_u64():
             return value.u.u8 == that.value.u.u8;
-        case halide_type_t(halide_type_uint, 16).as_u32():
+        case halide_type_t(halide_type_uint, 16).as_u64():
             return value.u.u16 == that.value.u.u16;
-        case halide_type_t(halide_type_uint, 32).as_u32():
+        case halide_type_t(halide_type_uint, 32).as_u64():
             return value.u.u32 == that.value.u.u32;
-        case halide_type_t(halide_type_uint, 64).as_u32():
+        case halide_type_t(halide_type_uint, 64).as_u64():
             return value.u.u64 == that.value.u.u64;
-        case halide_type_t(halide_type_handle, 64).as_u32():
+        case halide_type_t(halide_type_handle, 64).as_u64():
             return value.u.handle == that.value.u.handle;
         default:
             std::cerr << "Unsupported type\n";
@@ -81,41 +81,41 @@ struct typed_scalar {
     }
 
     friend std::ostream &operator<<(std::ostream &o, const typed_scalar &s) {
-        switch (s.type.element_of().as_u32()) {
-        case halide_type_t(halide_type_float, 32).as_u32():
+        switch (s.type.element_of().as_u64()) {
+        case halide_type_t(halide_type_float, 32).as_u64():
             o << s.value.u.f32;
             break;
-        case halide_type_t(halide_type_float, 64).as_u32():
+        case halide_type_t(halide_type_float, 64).as_u64():
             o << s.value.u.f64;
             break;
-        case halide_type_t(halide_type_int, 8).as_u32():
+        case halide_type_t(halide_type_int, 8).as_u64():
             o << (int)s.value.u.i8;
             break;
-        case halide_type_t(halide_type_int, 16).as_u32():
+        case halide_type_t(halide_type_int, 16).as_u64():
             o << s.value.u.i16;
             break;
-        case halide_type_t(halide_type_int, 32).as_u32():
+        case halide_type_t(halide_type_int, 32).as_u64():
             o << s.value.u.i32;
             break;
-        case halide_type_t(halide_type_int, 64).as_u32():
+        case halide_type_t(halide_type_int, 64).as_u64():
             o << s.value.u.i64;
             break;
-        case halide_type_t(halide_type_uint, 1).as_u32():
+        case halide_type_t(halide_type_uint, 1).as_u64():
             o << (s.value.u.b ? "true" : "false");
             break;
-        case halide_type_t(halide_type_uint, 8).as_u32():
+        case halide_type_t(halide_type_uint, 8).as_u64():
             o << (int)s.value.u.u8;
             break;
-        case halide_type_t(halide_type_uint, 16).as_u32():
+        case halide_type_t(halide_type_uint, 16).as_u64():
             o << s.value.u.u16;
             break;
-        case halide_type_t(halide_type_uint, 32).as_u32():
+        case halide_type_t(halide_type_uint, 32).as_u64():
             o << s.value.u.u32;
             break;
-        case halide_type_t(halide_type_uint, 64).as_u32():
+        case halide_type_t(halide_type_uint, 64).as_u64():
             o << s.value.u.u64;
             break;
-        case halide_type_t(halide_type_handle, 64).as_u32():
+        case halide_type_t(halide_type_handle, 64).as_u64():
             o << (uint64_t)s.value.u.handle;
             break;
         default:
@@ -1373,10 +1373,10 @@ constexpr char arginfo_to_sigchar(::HalideFunctionInfo::ArgumentInfo arg) {
     } else {
 
         #define HANDLE_CASE(CODE, BITS, CHAR)        \
-            case halide_type_t(CODE, BITS).as_u32(): \
+            case halide_type_t(CODE, BITS).as_u64(): \
                 return (CHAR);
 
-        switch (arg.type.as_u32()) {
+        switch (arg.type.as_u64()) {
             HANDLE_CASE(halide_type_bfloat, 16, '!')
             HANDLE_CASE(halide_type_float, 16, 'e')
             HANDLE_CASE(halide_type_float, 32, 'f')

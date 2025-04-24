@@ -87,8 +87,8 @@ bool _halide_buffer_is_bounds_query(const halide_buffer_t *buf) {
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
-uint32_t _halide_buffer_get_type(const halide_buffer_t *buf) {
-    return buf->type.as_u32();
+uint64_t _halide_buffer_get_type(const halide_buffer_t *buf) {
+    return buf->type.as_u64();
 }
 
 HALIDE_BUFFER_HELPER_ATTRS

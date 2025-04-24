@@ -475,7 +475,7 @@ extern int32_t halide_debug_to_file(void *user_context, const char *filename,
  */
 typedef enum halide_type_code_t
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    : uint8_t
+    : uint16_t
 #endif
 {
     halide_type_int = 0,     ///< signed integers
@@ -506,24 +506,24 @@ struct halide_type_t {
     HALIDE_ATTRIBUTE_ALIGN(1)
     halide_type_code_t code;  // halide_type_code_t
 #else
-    HALIDE_ATTRIBUTE_ALIGN(1)
-    uint8_t code;  // halide_type_code_t
+    HALIDE_ATTRIBUTE_ALIGN(2)
+    uint16_t code;  // halide_type_code_t
 #endif
 
     /** The number of bits of precision of a single scalar value of this type. */
-    HALIDE_ATTRIBUTE_ALIGN(1)
-    uint8_t bits;
-
-    /** How many elements in a vector. This is 1 for scalar types. */
     HALIDE_ATTRIBUTE_ALIGN(2)
-    uint16_t lanes;
+    uint16_t bits;
+
+    /** How many elements in a vector. This is 1 for scalar types. Negative values are reserved. */
+    HALIDE_ATTRIBUTE_ALIGN(4)
+    int32_t lanes;
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     /** Construct a runtime representation of a Halide type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint16_t bits, int32_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
 
@@ -533,7 +533,7 @@ struct halide_type_t {
         : code((halide_type_code_t)0), bits(0), lanes(0) {
     }
 
-    HALIDE_ALWAYS_INLINE constexpr halide_type_t with_lanes(uint16_t new_lanes) const {
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t with_lanes(int32_t new_lanes) const {
         return halide_type_t((halide_type_code_t)code, bits, new_lanes);
     }
 
@@ -542,7 +542,7 @@ struct halide_type_t {
     }
     /** Compare two types for equality. */
     HALIDE_ALWAYS_INLINE constexpr bool operator==(const halide_type_t &other) const {
-        return as_u32() == other.as_u32();
+        return as_u64() == other.as_u64();
     }
 
     HALIDE_ALWAYS_INLINE constexpr bool operator!=(const halide_type_t &other) const {
@@ -550,7 +550,7 @@ struct halide_type_t {
     }
 
     HALIDE_ALWAYS_INLINE constexpr bool operator<(const halide_type_t &other) const {
-        return as_u32() < other.as_u32();
+        return as_u64() < other.as_u64();
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
@@ -558,20 +558,20 @@ struct halide_type_t {
         return (bits + 7) / 8;
     }
 
-    HALIDE_ALWAYS_INLINE constexpr uint32_t as_u32() const {
+    HALIDE_ALWAYS_INLINE constexpr uint64_t as_u64() const {
         // Note that this produces a result that is identical to memcpy'ing 'this'
-        // into a u32 (on a little-endian machine, anyway), and at -O1 or greater
+        // into a u64 (on a little-endian machine, anyway), and at -O1 or greater
         // on Clang, the compiler knows this and optimizes this into a single 32-bit move.
         // (At -O0 it will look awful.)
-        return static_cast<uint8_t>(code) |
-               (static_cast<uint16_t>(bits) << 8) |
-               (static_cast<uint32_t>(lanes) << 16);
+        return (uint64_t)code |
+               ((uint64_t)bits << 16) |
+               ((uint64_t)((uint32_t)lanes) << 32);
     }
 #endif
 };
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-static_assert(sizeof(halide_type_t) == sizeof(uint32_t), "size mismatch in halide_type_t");
+static_assert(sizeof(halide_type_t) == sizeof(uint64_t), "size mismatch in halide_type_t");
 #endif
 
 enum halide_trace_event_code_t { halide_trace_load = 0,
@@ -1294,7 +1294,7 @@ extern int halide_error_extern_stage_failed(void *user_context, const char *exte
 extern int halide_error_explicit_bounds_too_small(void *user_context, const char *func_name, const char *var_name,
                                                   int min_bound, int max_bound, int min_required, int max_required);
 extern int halide_error_bad_type(void *user_context, const char *func_name,
-                                 uint32_t type_given, uint32_t correct_type);  // N.B. The last two args are the bit representation of a halide_type_t
+                                 uint64_t type_given, uint64_t correct_type);  // N.B. The last two args are the bit representation of a halide_type_t
 extern int halide_error_bad_dimensions(void *user_context, const char *func_name,
                                        int32_t dimensions_given, int32_t correct_dimensions);
 extern int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
@@ -1559,14 +1559,14 @@ typedef struct halide_buffer_t {
      * coordinates (defined below). */
     uint8_t *host;
 
-    /** flags with various meanings. */
-    uint64_t flags;
-
     /** The type of each buffer element. */
     struct halide_type_t type;
 
     /** The dimensionality of the buffer. */
     int32_t dimensions;
+
+    /** flags with various meanings. */
+    uint32_t flags;
 
     /** The shape of the buffer. Halide does not own this array - you
      * must manage the memory for it yourself. */
@@ -1586,7 +1586,7 @@ typedef struct halide_buffer_t {
         if (value) {
             flags |= flag;
         } else {
-            flags &= ~uint64_t(flag);
+            flags &= ~uint32_t(flag);
         }
     }
 

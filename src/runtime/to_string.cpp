@@ -289,7 +289,7 @@ WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *t) {
     dst = halide_uint64_to_string(dst, end, t->bits, 1);
     if (t->lanes != 1) {
         dst = halide_string_to_string(dst, end, "x");
-        dst = halide_uint64_to_string(dst, end, t->lanes, 1);
+        dst = halide_int64_to_string(dst, end, t->lanes, 1);
     }
     return dst;
 }

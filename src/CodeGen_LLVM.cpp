@@ -799,9 +799,9 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
         << " because it has a dirty device pointer\n";
 
     Constant *type_fields[] = {
-        ConstantInt::get(i8_t, buf.type().code()),
-        ConstantInt::get(i8_t, buf.type().bits()),
-        ConstantInt::get(i16_t, buf.type().lanes())};
+        ConstantInt::get(i16_t, buf.type().code()),
+        ConstantInt::get(i16_t, buf.type().bits()),
+        ConstantInt::get(i32_t, buf.type().lanes())};
 
     Constant *shape = nullptr;
     if (buf.dimensions()) {
@@ -824,9 +824,9 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
         ConstantInt::get(i64_t, 0),                                     // device
         ConstantPointerNull::get(ptr_t),                                // device_interface
         create_binary_blob(data_blob, buf.name() + ".data", constant),  // host
-        ConstantInt::get(i64_t, halide_buffer_flag_host_dirty),         // flags
         ConstantStruct::get(type_t_type, type_fields),                  // type
         ConstantInt::get(i32_t, buf.dimensions()),                      // dimensions
+        ConstantInt::get(i32_t, halide_buffer_flag_host_dirty),         // flags
         shape,                                                          // dim
         ConstantPointerNull::get(ptr_t),                                // padding
     };
@@ -994,9 +994,9 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         internal_assert(type_t_type) << "Did not find halide_type_t in module.\n";
 
         Constant *type_fields[] = {
-            ConstantInt::get(i8_t, args[arg].type.code()),
-            ConstantInt::get(i8_t, args[arg].type.bits()),
-            ConstantInt::get(i16_t, 1)};
+            ConstantInt::get(i16_t, args[arg].type.code()),
+            ConstantInt::get(i16_t, args[arg].type.bits()),
+            ConstantInt::get(i32_t, 1)};
         Constant *type = ConstantStruct::get(type_t_type, type_fields);
 
         auto argument_estimates = args[arg].argument_estimates;

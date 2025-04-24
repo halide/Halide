@@ -2321,7 +2321,7 @@ bool save_tiff(ImageType &im, const std::string &filename) {
 
     // Otherwise, write it out via manual traversal.
 #define HANDLE_CASE(CODE, BITS, TYPE)                             \
-    case halide_type_t(CODE, BITS).as_u32(): {                    \
+    case halide_type_t(CODE, BITS).as_u64(): {                    \
         ElemWriter<TYPE> ew(&f);                                  \
         im.template as<const TYPE, AnyDims>().for_each_value(ew); \
         if (!check(ew.ok, "TIFF write failed")) {                 \
@@ -2330,7 +2330,7 @@ bool save_tiff(ImageType &im, const std::string &filename) {
         break;                                                    \
     }
 
-    switch (im_type.element_of().as_u32()) {
+    switch (im_type.element_of().as_u64()) {
         HANDLE_CASE(halide_type_float, 32, float)
         HANDLE_CASE(halide_type_float, 64, double)
         HANDLE_CASE(halide_type_int, 8, int8_t)
@@ -2495,32 +2495,32 @@ struct ImageTypeConversion {
         constexpr int AnyDims = Internal::AnyDims;
 
         const halide_type_t src_type = src.type();
-        switch (src_type.element_of().as_u32()) {
+        switch (src_type.element_of().as_u64()) {
 #ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
-        case halide_type_t(halide_type_float, 16).as_u32():
+        case halide_type_t(halide_type_float, 16).as_u64():
             return convert_image<DstElemType>(src.template as<_Float16, AnyDims>());
 #endif
-        case halide_type_t(halide_type_float, 32).as_u32():
+        case halide_type_t(halide_type_float, 32).as_u64():
             return convert_image<DstElemType>(src.template as<float, AnyDims>());
-        case halide_type_t(halide_type_float, 64).as_u32():
+        case halide_type_t(halide_type_float, 64).as_u64():
             return convert_image<DstElemType>(src.template as<double, AnyDims>());
-        case halide_type_t(halide_type_int, 8).as_u32():
+        case halide_type_t(halide_type_int, 8).as_u64():
             return convert_image<DstElemType>(src.template as<int8_t, AnyDims>());
-        case halide_type_t(halide_type_int, 16).as_u32():
+        case halide_type_t(halide_type_int, 16).as_u64():
             return convert_image<DstElemType>(src.template as<int16_t, AnyDims>());
-        case halide_type_t(halide_type_int, 32).as_u32():
+        case halide_type_t(halide_type_int, 32).as_u64():
             return convert_image<DstElemType>(src.template as<int32_t, AnyDims>());
-        case halide_type_t(halide_type_int, 64).as_u32():
+        case halide_type_t(halide_type_int, 64).as_u64():
             return convert_image<DstElemType>(src.template as<int64_t, AnyDims>());
-        case halide_type_t(halide_type_uint, 1).as_u32():
+        case halide_type_t(halide_type_uint, 1).as_u64():
             return convert_image<DstElemType>(src.template as<bool, AnyDims>());
-        case halide_type_t(halide_type_uint, 8).as_u32():
+        case halide_type_t(halide_type_uint, 8).as_u64():
             return convert_image<DstElemType>(src.template as<uint8_t, AnyDims>());
-        case halide_type_t(halide_type_uint, 16).as_u32():
+        case halide_type_t(halide_type_uint, 16).as_u64():
             return convert_image<DstElemType>(src.template as<uint16_t, AnyDims>());
-        case halide_type_t(halide_type_uint, 32).as_u32():
+        case halide_type_t(halide_type_uint, 32).as_u64():
             return convert_image<DstElemType>(src.template as<uint32_t, AnyDims>());
-        case halide_type_t(halide_type_uint, 64).as_u32():
+        case halide_type_t(halide_type_uint, 64).as_u64():
             return convert_image<DstElemType>(src.template as<uint64_t, AnyDims>());
         default:
             assert(false && "Unsupported type");
@@ -2544,32 +2544,32 @@ struct ImageTypeConversion {
 
         // Call the appropriate static-to-static conversion routine
         // based on the desired dst type.
-        switch (dst_type.element_of().as_u32()) {
+        switch (dst_type.element_of().as_u64()) {
 #ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
-        case halide_type_t(halide_type_float, 16).as_u32():
+        case halide_type_t(halide_type_float, 16).as_u64():
             return convert_image<_Float16>(src);
 #endif
-        case halide_type_t(halide_type_float, 32).as_u32():
+        case halide_type_t(halide_type_float, 32).as_u64():
             return convert_image<float>(src);
-        case halide_type_t(halide_type_float, 64).as_u32():
+        case halide_type_t(halide_type_float, 64).as_u64():
             return convert_image<double>(src);
-        case halide_type_t(halide_type_int, 8).as_u32():
+        case halide_type_t(halide_type_int, 8).as_u64():
             return convert_image<int8_t>(src);
-        case halide_type_t(halide_type_int, 16).as_u32():
+        case halide_type_t(halide_type_int, 16).as_u64():
             return convert_image<int16_t>(src);
-        case halide_type_t(halide_type_int, 32).as_u32():
+        case halide_type_t(halide_type_int, 32).as_u64():
             return convert_image<int32_t>(src);
-        case halide_type_t(halide_type_int, 64).as_u32():
+        case halide_type_t(halide_type_int, 64).as_u64():
             return convert_image<int64_t>(src);
-        case halide_type_t(halide_type_uint, 1).as_u32():
+        case halide_type_t(halide_type_uint, 1).as_u64():
             return convert_image<bool>(src);
-        case halide_type_t(halide_type_uint, 8).as_u32():
+        case halide_type_t(halide_type_uint, 8).as_u64():
             return convert_image<uint8_t>(src);
-        case halide_type_t(halide_type_uint, 16).as_u32():
+        case halide_type_t(halide_type_uint, 16).as_u64():
             return convert_image<uint16_t>(src);
-        case halide_type_t(halide_type_uint, 32).as_u32():
+        case halide_type_t(halide_type_uint, 32).as_u64():
             return convert_image<uint32_t>(src);
-        case halide_type_t(halide_type_uint, 64).as_u32():
+        case halide_type_t(halide_type_uint, 64).as_u64():
             return convert_image<uint64_t>(src);
         default:
             assert(false && "Unsupported type");
@@ -2597,28 +2597,28 @@ struct ImageTypeConversion {
         // this forces instantiation of the complete any-to-any conversion
         // matrix of code.)
         const halide_type_t src_type = src.type();
-        switch (src_type.element_of().as_u32()) {
-        case halide_type_t(halide_type_float, 32).as_u32():
+        switch (src_type.element_of().as_u64()) {
+        case halide_type_t(halide_type_float, 32).as_u64():
             return convert_image(src.template as<float, AnyDims>(), dst_type);
-        case halide_type_t(halide_type_float, 64).as_u32():
+        case halide_type_t(halide_type_float, 64).as_u64():
             return convert_image(src.template as<double, AnyDims>(), dst_type);
-        case halide_type_t(halide_type_int, 8).as_u32():
+        case halide_type_t(halide_type_int, 8).as_u64():
             return convert_image(src.template as<int8_t, AnyDims>(), dst_type);
-        case halide_type_t(halide_type_int, 16).as_u32():
+        case halide_type_t(halide_type_int, 16).as_u64():
             return convert_image(src.template as<int16_t, AnyDims>(), dst_type);
-        case halide_type_t(halide_type_int, 32).as_u32():
+        case halide_type_t(halide_type_int, 32).as_u64():
             return convert_image(src.template as<int32_t, AnyDims>(), dst_type);
-        case halide_type_t(halide_type_int, 64).as_u32():
+        case halide_type_t(halide_type_int, 64).as_u64():
             return convert_image(src.template as<int64_t, AnyDims>(), dst_type);
-        case halide_type_t(halide_type_uint, 1).as_u32():
+        case halide_type_t(halide_type_uint, 1).as_u64():
             return convert_image(src.template as<bool, AnyDims>(), dst_type);
-        case halide_type_t(halide_type_uint, 8).as_u32():
+        case halide_type_t(halide_type_uint, 8).as_u64():
             return convert_image(src.template as<uint8_t, AnyDims>(), dst_type);
-        case halide_type_t(halide_type_uint, 16).as_u32():
+        case halide_type_t(halide_type_uint, 16).as_u64():
             return convert_image(src.template as<uint16_t, AnyDims>(), dst_type);
-        case halide_type_t(halide_type_uint, 32).as_u32():
+        case halide_type_t(halide_type_uint, 32).as_u64():
             return convert_image(src.template as<uint32_t, AnyDims>(), dst_type);
-        case halide_type_t(halide_type_uint, 64).as_u32():
+        case halide_type_t(halide_type_uint, 64).as_u64():
             return convert_image(src.template as<uint64_t, AnyDims>(), dst_type);
         default:
             assert(false && "Unsupported type");

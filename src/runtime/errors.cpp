@@ -28,10 +28,10 @@ WEAK int halide_error_explicit_bounds_too_small(void *user_context, const char *
 }
 
 WEAK int halide_error_bad_type(void *user_context, const char *func_name,
-                               uint32_t type_given_bits, uint32_t correct_type_bits) {
+                               uint64_t type_given_bits, uint64_t correct_type_bits) {
     halide_type_t correct_type, type_given;
-    memcpy(&correct_type, &correct_type_bits, sizeof(uint32_t));
-    memcpy(&type_given, &type_given_bits, sizeof(uint32_t));
+    memcpy(&correct_type, &correct_type_bits, sizeof(uint64_t));
+    memcpy(&type_given, &type_given_bits, sizeof(uint64_t));
     error(user_context)
         << func_name << " has type " << correct_type
         << " but type of the buffer passed in is " << type_given;
