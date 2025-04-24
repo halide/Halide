@@ -115,11 +115,6 @@ if (Halide_LLVM_FOUND)
         set_property(TARGET Halide_LLVM::Core PROPERTY INTERFACE_CXX_RTTI "${LLVM_ENABLE_RTTI}")
         set_property(TARGET Halide_LLVM::Core APPEND PROPERTY COMPATIBLE_INTERFACE_BOOL CXX_RTTI)
 
-        if (LLVM_LIBCXX GREATER -1)
-            target_compile_options(Halide_LLVM::Core INTERFACE "$<$<LINK_LANGUAGE:CXX>:-stdlib=libc++>")
-            target_link_options(Halide_LLVM::Core INTERFACE "$<$<LINK_LANGUAGE:CXX>:-stdlib=libc++>")
-        endif ()
-
         if (Halide_LLVM_SHARED_LIBS)
             target_link_libraries(Halide_LLVM::Core INTERFACE LLVM ${CMAKE_DL_LIBS})
         else ()
