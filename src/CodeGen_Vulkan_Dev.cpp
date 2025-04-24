@@ -2025,7 +2025,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
         e.accept(this);
         arg_ids.push_back(builder.current_id());
     }
-    
+
     if (op->is_interleave()) {
         int op_lanes = op->type.lanes();
         internal_assert(!arg_ids.empty());
@@ -2177,11 +2177,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
                 builder.append(SpvFactory::composite_extract(scalar_type_id, scalar_id, arg_ids[arg_idx], indices));
 
                 debug(2) << arg_ids[arg_idx] << "(v" << op->vectors[arg_idx].type().lanes() << "[" << lane_idx << "]) ";
-                constituents.push_back(scalar_id); // insert a component from a vector 
+                constituents.push_back(scalar_id);  // insert a component from a vector
             } else {
                 debug(2) << arg_ids[arg_idx] << " ";
                 SpvId scalar_id = cast_type(op->type.element_of(), op->vectors[arg_idx].type(), arg_ids[arg_idx]);
-                constituents.push_back(scalar_id); // inserting a scalar
+                constituents.push_back(scalar_id);  // inserting a scalar
             }
         }
 
