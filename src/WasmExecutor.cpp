@@ -522,14 +522,14 @@ struct wasm_halide_buffer_t {
     uint64_t device;
     wasm32_ptr_t device_interface;  // halide_device_interface_t*
     wasm32_ptr_t host;              // uint8_t*
-    uint64_t flags;
     halide_type_t type;
     int32_t dimensions;
+    uint32_t flags;
     wasm32_ptr_t dim;      // halide_dimension_t*
     wasm32_ptr_t padding;  // always zero
 };
 
-static_assert(sizeof(halide_type_t) == 4, "halide_type_t");
+static_assert(sizeof(halide_type_t) == 8, "halide_type_t");
 static_assert(sizeof(halide_dimension_t) == 16, "halide_dimension_t");
 static_assert(sizeof(wasm_halide_buffer_t) == 40, "wasm_halide_buffer_t");
 

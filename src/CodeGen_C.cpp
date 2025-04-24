@@ -1212,9 +1212,9 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
            << "0, "                                              // device
            << "nullptr, "                                        // device_interface
            << "const_cast<uint8_t*>(&" << name << "_data[0]), "  // host
-           << "0, "                                              // flags
            << "halide_type_t((halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "), "
            << buffer.dimensions() << ", "
+           << "0, "  // flags
            << buffer_shape << "};\n";
 
     // Make a global pointer to it.
