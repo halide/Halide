@@ -915,6 +915,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * arguments. */
     bool is_extract_element() const;
 
+    /** Returns the sequence of vector and lane indices that represent each
+     * entry to be used for the shuffled vector */
+    std::vector<std::pair<int, int>> calculate_vector_and_lane_indices() const;
+
     static const IRNodeType _node_type = IRNodeType::Shuffle;
 };
 

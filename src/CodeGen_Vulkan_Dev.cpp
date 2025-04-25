@@ -2134,41 +2134,17 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
         // We need to construct the mapping between shuffled-index,
         // and source-vector-index and source-element-index-within-the-vector.
         //
-        // To start, we'll figure out what the first shuffle-index is per
-        // source-vector. Also let's compute the total number of
-        // source-elements the to be able to assert that all of the
-        // shuffle-indices are within range.
-        //
-        std::vector<int> vector_first_index;
-        int max_index = 0;
-        for (const Expr &v : op->vectors) {
-            vector_first_index.push_back(max_index);
-            max_index += v.type().lanes();
-        }
-        for (int i : op->indices) {
-            internal_assert(i >= 0 && i < max_index);
-        }
+        std::vector<std::pair<int, int>> vector_lane_indices;
+        vector_lane_indices = op->calculate_vector_and_lane_indices();
 
         SpvId type_id = builder.declare_type(op->type);
         SpvId result_id = builder.reserve_id(SpvResultId);
 
         SpvFactory::Components constituents;
         debug(2) << " CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Shuffle): Composite(" << op->type << ") => ";
-        for (int i : op->indices) {
-            uint32_t arg_idx = 0;
-            int lane_idx = -1;
-
-            // Find in which source vector this shuffle-index "i" falls:
-            for (arg_idx = 0; arg_idx < op->vectors.size(); ++arg_idx) {
-                const int first_index = vector_first_index[arg_idx];
-                if (i >= first_index &&
-                    i < first_index + op->vectors[arg_idx].type().lanes()) {
-                    lane_idx = i - first_index;
-                    break;
-                }
-            }
-            internal_assert(lane_idx != -1) << "Shuffle lane index not found: i=" << i;
-            internal_assert(arg_idx < op->vectors.size()) << "Shuffle vector index not found: i=" << i << ", lane=" << lane_idx;
+        for (auto element_mapping : vector_lane_indices) {
+            int arg_idx = element_mapping.first;
+            int lane_idx = element_mapping.second;
 
             if (op->vectors[arg_idx].type().lanes() > 1) {
                 SpvFactory::Indices indices = {(uint32_t)lane_idx};
