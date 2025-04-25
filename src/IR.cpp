@@ -917,15 +917,15 @@ bool Shuffle::is_interleave() const {
 
 std::vector<std::pair<int, int>> Shuffle::calculate_vector_and_lane_indices() const {
 
-    // Construct the mapping between shuffled-index, and source-vector-index 
+    // Construct the mapping between shuffled-index, and source-vector-index
     // and source-element-index-within-the-vector.
     std::vector<std::pair<int, int>> vector_lane_indices;
-    if(vectors.empty() || indices.empty()) {
+    if (vectors.empty() || indices.empty()) {
         return vector_lane_indices;
     }
 
     // To start, we'll figure out what the first shuffle-index is per
-    // source-vector. Also let's compute the total number of source-elements 
+    // source-vector. Also let's compute the total number of source-elements
     // and assert that all of the shuffle-indices are within range.
     int max_index = 0;
     std::vector<int> vector_first_index;
@@ -955,8 +955,8 @@ std::vector<std::pair<int, int>> Shuffle::calculate_vector_and_lane_indices() co
                 break;
             }
             ++vector_idx;
-        }    
-    
+        }
+
         // Sanity check the vector and lane indices are valid
         internal_assert(vector_idx < (int)vectors.size()) << "Shuffle vector index not found: i=" << i << ", lane=" << lane_idx;
         internal_assert(lane_idx != -1) << "Shuffle lane index not found: i=" << i;
@@ -967,7 +967,6 @@ std::vector<std::pair<int, int>> Shuffle::calculate_vector_and_lane_indices() co
 
     return vector_lane_indices;
 }
-
 
 Stmt Atomic::make(const std::string &producer_name,
                   const std::string &mutex_name,
