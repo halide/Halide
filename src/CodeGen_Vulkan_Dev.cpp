@@ -2103,40 +2103,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
             SpvId result_id = cast_type(op->type, op->vectors[0].type(), arg_ids[0]);
             builder.update_id(result_id);
         }
-    } else if (op->type.is_scalar()) {
-        // Deduce which vector we need. Apparently it's not required
-        // that all vectors have identical lanes, so a loop is required.
-        // Since idx of -1 means "don't care", we'll treat it as 0 to simplify.
-        SpvId result_id = SpvInvalidId;
-        int idx = std::max(0, op->indices[0]);
-        for (size_t vec_idx = 0; vec_idx < op->vectors.size(); vec_idx++) {
-            const int vec_lanes = op->vectors[vec_idx].type().lanes();
-            if (idx < vec_lanes) {
-                if (op->vectors[vec_idx].type().is_vector()) {
-                    SpvFactory::Indices indices = {(uint32_t)idx};
-                    SpvId type_id = builder.declare_type(op->type);
-                    result_id = builder.reserve_id(SpvResultId);
-                    builder.append(SpvFactory::composite_extract(type_id, result_id, arg_ids[vec_idx], indices));
-                    builder.update_id(result_id);
-                } else {
-                    SpvId result_id = cast_type(op->type, op->vectors[arg_idx].type(), arg_ids[arg_idx]);
-                    builder.update_id(result_id);
-                }
-                break;
-            }
-            idx -= vec_lanes;
-        }
-
     } else {
-
-        // Vector shuffle with arbitrary number of lanes per arg
-
-        // Sanity check the types and number of lanes all match
-        internal_assert(!op->vectors.empty());
-        for (size_t i = 1; i < op->vectors.size(); i++) {
-            internal_assert(op->vectors[0].type() == op->vectors[i].type());
-        }
-        internal_assert(op->type.lanes() == (int)op->indices.size());
+        // Shuffle with arbitrary number of lanes per arg
 
         // Construct the mapping for each shuffled element to find
         // the corresponding vector-index to use and which lane-index
