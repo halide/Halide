@@ -962,7 +962,7 @@ std::vector<std::pair<int, int>> Shuffle::calculate_vector_and_lane_indices() co
         internal_assert(lane_idx != -1) << "Shuffle lane index not found: i=" << i;
 
         // Save the vector and lane index to use for this shuffle element
-        vector_lane_indices.push_back({vector_idx, lane_idx});
+        vector_lane_indices.emplace_back(vector_idx, lane_idx);
     }
 
     return vector_lane_indices;
