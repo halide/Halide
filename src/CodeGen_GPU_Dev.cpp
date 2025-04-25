@@ -144,27 +144,22 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
     if (op->type.is_scalar()) {
         CodeGen_C::visit(op);
     } else {
+        // Vector shuffle with arbitrary number of lanes per arg
+
+        // Sanity check the types and number of lanes all match
         internal_assert(!op->vectors.empty());
         for (size_t i = 1; i < op->vectors.size(); i++) {
             internal_assert(op->vectors[0].type() == op->vectors[i].type());
         }
         internal_assert(op->type.lanes() == (int)op->indices.size());
-        // We need to construct the mapping between shuffled-index,
-        // and source-vector-index and source-element-index-within-the-vector.
-        // To start, we'll figure out what the first shuffle-index is per
-        // source-vector. Also let's compute the total number of
-        // source-elements the to be able to assert that all of the
-        // shuffle-indices are within range.
-        std::vector<int> vector_first_index;
-        int max_index = 0;
-        for (const Expr &v : op->vectors) {
-            vector_first_index.push_back(max_index);
-            max_index += v.type().lanes();
-        }
-        for (int i : op->indices) {
-            internal_assert(i >= 0 && i < max_index);
-        }
 
+        // Construct the mapping for each shuffled element to find
+        // the corresponding vector-index to use and which lane-index
+        // of the selected vector.
+        std::vector<std::pair<int, int>> vector_lane_indices;
+        vector_lane_indices = op->calculate_vector_and_lane_indices();
+
+        // Traverse all the vector args
         std::vector<std::string> vecs;
         for (const Expr &v : op->vectors) {
             vecs.push_back(print_expr(v));
@@ -184,23 +179,15 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
             rhs << "{";
             break;
         }
-        int elem_num = 0;
-        for (int i : op->indices) {
-            size_t vector_idx;
-            int lane_idx = -1;
-            // Find in which source vector this shuffle-index "i" falls:
-            for (vector_idx = 0; vector_idx < op->vectors.size(); ++vector_idx) {
-                const int first_index = vector_first_index[vector_idx];
-                if (i >= first_index &&
-                    i < first_index + op->vectors[vector_idx].type().lanes()) {
-                    lane_idx = i - first_index;
-                    break;
-                }
-            }
-            internal_assert(lane_idx != -1) << "Shuffle lane index not found: i=" << i;
-            internal_assert(vector_idx < op->vectors.size()) << "Shuffle vector index not found: i=" << i << ", lane=" << lane_idx;
+
+        int element_idx = 0;
+        for (auto element_mapping : vector_lane_indices) {
+            int vector_idx = element_mapping.first;
+            int lane_idx = element_mapping.second;
+
             // Print the vector in which we will index.
             rhs << vecs[vector_idx];
+
             // In case we are dealing with an actual vector instead of scalar,
             // print out the required indexing syntax.
             if (op->vectors[vector_idx].type().lanes() > 1) {
@@ -216,11 +203,12 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
             }
 
             // Elements of a vector are comma separated.
-            if (elem_num < (int)(op->indices.size() - 1)) {
+            if (element_idx < (int)(op->indices.size() - 1)) {
                 rhs << ", ";
             }
-            elem_num++;
+            element_idx++;
         }
+
         switch (vector_declaration_style) {
         case VectorDeclarationStyle::OpenCLSyntax:
             rhs << ")";

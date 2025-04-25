@@ -2130,10 +2130,17 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
     } else {
 
         // Vector shuffle with arbitrary number of lanes per arg
-        //
-        // We need to construct the mapping between shuffled-index,
-        // and source-vector-index and source-element-index-within-the-vector.
-        //
+
+        // Sanity check the types and number of lanes all match
+        internal_assert(!op->vectors.empty());
+        for (size_t i = 1; i < op->vectors.size(); i++) {
+            internal_assert(op->vectors[0].type() == op->vectors[i].type());
+        }
+        internal_assert(op->type.lanes() == (int)op->indices.size());
+
+        // Construct the mapping for each shuffled element to find
+        // the corresponding vector-index to use and which lane-index
+        // of the selected vector.
         std::vector<std::pair<int, int>> vector_lane_indices;
         vector_lane_indices = op->calculate_vector_and_lane_indices();
 
