@@ -2021,7 +2021,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
     SpvFactory::Operands arg_ids;
     arg_ids.reserve(op->vectors.size());
     for (const Expr &e : op->vectors) {
-        debug(2) << " CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Shuffle): Arg[" << arg_idx++ << "] => " << e << "\n";
+        debug(3) << " CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Shuffle): Arg[" << arg_idx++ << "] => " << e << "\n";
         e.accept(this);
         arg_ids.push_back(builder.current_id());
     }
@@ -2031,11 +2031,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
         internal_assert(!arg_ids.empty());
         int arg_lanes = op->vectors[0].type().lanes();
 
-        debug(2) << "    vector interleave x" << (uint32_t)op->vectors.size() << " : ";
+        debug(3) << "    vector interleave x" << (uint32_t)op->vectors.size() << " : ";
         for (int idx : op->indices) {
-            debug(2) << idx << " ";
+            debug(3) << idx << " ";
         }
-        debug(2) << "\n";
+        debug(3) << "\n";
 
         if (arg_ids.size() == 1) {
 
@@ -2148,7 +2148,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
         SpvId result_id = builder.reserve_id(SpvResultId);
 
         SpvFactory::Components constituents;
-        debug(2) << " CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Shuffle): Composite(" << op->type << ") => ";
+        debug(3) << " Shuffle Composite(" << op->type << ") => ";
         for (auto element_mapping : vector_lane_indices) {
             int arg_idx = element_mapping.first;
             int lane_idx = element_mapping.second;
@@ -2159,16 +2159,16 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
                 SpvId scalar_id = builder.reserve_id(SpvResultId);
                 builder.append(SpvFactory::composite_extract(scalar_type_id, scalar_id, arg_ids[arg_idx], indices));
 
-                debug(2) << arg_ids[arg_idx] << "(v" << op->vectors[arg_idx].type().lanes() << "[" << lane_idx << "]) ";
+                debug(3) << arg_ids[arg_idx] << "(v" << op->vectors[arg_idx].type().lanes() << "[" << lane_idx << "]) ";
                 constituents.push_back(scalar_id);  // insert a component from a vector
             } else {
-                debug(2) << arg_ids[arg_idx] << " ";
+                debug(3) << arg_ids[arg_idx] << " ";
                 SpvId scalar_id = cast_type(op->type.element_of(), op->vectors[arg_idx].type(), arg_ids[arg_idx]);
                 constituents.push_back(scalar_id);  // inserting a scalar
             }
         }
 
-        debug(2) << "\n";
+        debug(3) << "\n";
         builder.append(SpvFactory::composite_construct(type_id, result_id, constituents));
         builder.update_id(result_id);
     }
