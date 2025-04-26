@@ -39,9 +39,11 @@ Target complete_x86_target(Target t) {
     }
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
         t.set_feature(Target::AVX512_Zen4);
+        t.set_feature(Target::AVXVNNI);
     }
     if (t.has_feature(Target::AVX512_Zen5)) {
         t.set_feature(Target::AVX512_Zen4);
+        t.set_feature(Target::AVXVNNI);
     }
     if (t.has_feature(Target::AVX512_Zen4)) {
         t.set_feature(Target::AVX512_Cannonlake);
