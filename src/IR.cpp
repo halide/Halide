@@ -922,14 +922,14 @@ std::vector<std::pair<int, int>> Shuffle::vector_and_lane_indices() const {
     std::vector<std::pair<int, int>> all_indices;
     all_indices.reserve(indices.size());
     for (int i = 0; i < (int)vectors.size(); i++) {
-      for (int j = 0; j < vectors[i].type().lanes(); j++) {
-        all_indices.emplace_back(i, j);
-      }
+        for (int j = 0; j < vectors[i].type().lanes(); j++) {
+            all_indices.emplace_back(i, j);
+        }
     }
     std::vector<std::pair<int, int>> result;
     result.reserve(indices.size());
     for (int i : indices) {
-      result.push_back(all_indices[i]);
+        result.push_back(all_indices[i]);
     }
     return result;
 }
