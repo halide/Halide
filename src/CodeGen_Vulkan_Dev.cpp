@@ -2109,8 +2109,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
         // Construct the mapping for each shuffled element to find
         // the corresponding vector-index to use and which lane-index
         // of the selected vector.
-        std::vector<std::pair<int, int>> vector_lane_indices;
-        vector_lane_indices = op->calculate_vector_and_lane_indices();
+        auto vector_lane_indices = op->vector_and_lane_indices();
 
         SpvId type_id = builder.declare_type(op->type);
         SpvId result_id = builder.reserve_id(SpvResultId);

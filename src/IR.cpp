@@ -915,57 +915,23 @@ bool Shuffle::is_interleave() const {
     return true;
 }
 
-std::vector<std::pair<int, int>> Shuffle::calculate_vector_and_lane_indices() const {
+std::vector<std::pair<int, int>> Shuffle::vector_and_lane_indices() const {
 
-    // Construct the mapping between shuffled-index, and source-vector-index
-    // and source-element-index-within-the-vector.
-    std::vector<std::pair<int, int>> vector_lane_indices;
-    if (vectors.empty() || indices.empty()) {
-        return vector_lane_indices;
-    }
-
-    // To start, we'll figure out what the first shuffle-index is per
-    // source-vector. Also let's compute the total number of source-elements
-    // and assert that all of the shuffle-indices are within range.
-    int max_index = 0;
-    std::vector<int> vector_first_index;
-    vector_first_index.reserve(vectors.size());
-
-    for (const Expr &v : vectors) {
-        vector_first_index.push_back(max_index);
-        max_index += v.type().lanes();
-    }
-    for (int i : indices) {
-        internal_assert(i >= 0 && i < max_index);
-    }
-
-    // Now construct the mapping for each shuffled element and find the index
+    // Construct the mapping for each shuffled element and find the index
     // of which vector to use and the index for which of its lanes to use
-    vector_lane_indices.reserve(indices.size());
-    for (int i : indices) {
-        int vector_idx = 0;
-        int lane_idx = -1;
-
-        // Find in which source vector this shuffle-index "i" falls:
-        while (vector_idx < (int)vectors.size()) {
-            const int first_index = vector_first_index[vector_idx];
-            if (i >= first_index &&
-                i < first_index + vectors[vector_idx].type().lanes()) {
-                lane_idx = i - first_index;
-                break;
-            }
-            ++vector_idx;
-        }
-
-        // Sanity check the vector and lane indices are valid
-        internal_assert(vector_idx < (int)vectors.size()) << "Shuffle vector index not found: i=" << i << ", lane=" << lane_idx;
-        internal_assert(lane_idx != -1) << "Shuffle lane index not found: i=" << i;
-
-        // Save the vector and lane index to use for this shuffle element
-        vector_lane_indices.emplace_back(vector_idx, lane_idx);
+    std::vector<std::pair<int, int>> all_indices;
+    all_indices.reserve(indices.size());
+    for (int i = 0; i < (int)vectors.size(); i++) {
+      for (int j = 0; j < vectors[i].type().lanes(); j++) {
+        all_indices.emplace_back(i, j);
+      }
     }
-
-    return vector_lane_indices;
+    std::vector<std::pair<int, int>> result;
+    result.reserve(indices.size());
+    for (int i : indices) {
+      result.push_back(all_indices[i]);
+    }
+    return result;
 }
 
 Stmt Atomic::make(const std::string &producer_name,

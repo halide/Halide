@@ -156,8 +156,7 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
         // Construct the mapping for each shuffled element to find
         // the corresponding vector-index to use and which lane-index
         // of the selected vector.
-        std::vector<std::pair<int, int>> vector_lane_indices;
-        vector_lane_indices = op->calculate_vector_and_lane_indices();
+        auto vector_lane_indices = op->vector_and_lane_indices();
 
         // Traverse all the vector args
         std::vector<std::string> vecs;
