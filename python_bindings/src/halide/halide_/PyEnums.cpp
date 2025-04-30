@@ -109,7 +109,9 @@ void define_enums(py::module &m) {
         .value("TuneK8_SSE3", Target::Processor::K8_SSE3)
         .value("TuneZnVer1", Target::Processor::ZnVer1)
         .value("TuneZnVer2", Target::Processor::ZnVer2)
-        .value("TuneZnVer3", Target::Processor::ZnVer3);
+        .value("TuneZnVer3", Target::Processor::ZnVer3)
+        .value("TuneZnVer4", Target::Processor::ZnVer4)
+        .value("TuneZnVer5", Target::Processor::ZnVer5);
 
     py::enum_<Target::Feature>(m, "TargetFeature")
         .value("JIT", Target::Feature::JIT)
