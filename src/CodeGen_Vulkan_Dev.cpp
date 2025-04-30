@@ -2012,7 +2012,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
     internal_assert(!op->vectors.empty());
     internal_assert(op->type.lanes() == (int)op->indices.size());
 
-    // Traverse all the arg vectors
+    // The Shuffle operator supports any combination of vector width for its
+    // arguments, as long as the indices match the number of lanes for the result
+    // type.  This means the arguments can be a mixed combination of vectors with 
+    // any number of lanes (or a scalar).  We special case interleave and extract,
+    // and then use the vector and lane index mapping to determine which values to
+    // use from the arguments to do the shufffle.
+
+    // First, traverse all the arg vectors
     uint32_t arg_idx = 0;
     SpvFactory::Operands arg_ids;
     arg_ids.reserve(op->vectors.size());
