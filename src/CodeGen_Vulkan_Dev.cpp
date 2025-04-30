@@ -2014,7 +2014,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
 
     // The Shuffle operator supports any combination of vector width for its
     // arguments, as long as the indices match the number of lanes for the result
-    // type.  This means the arguments can be a mixed combination of vectors with 
+    // type.  This means the arguments can be a mixed combination of vectors with
     // any number of lanes (or a scalar).  We special case interleave and extract,
     // and then use the vector and lane index mapping to determine which values to
     // use from the arguments to do the shufffle.
