@@ -2009,11 +2009,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
              << "is_interleave=" << (op->is_interleave() ? "true" : "false") << " "
              << "is_extract_element=" << (op->is_extract_element() ? "true" : "false") << "\n";
 
-    // Sanity check that the total lane count matches between the op-type and indices
     internal_assert(!op->vectors.empty());
-    for (size_t i = 1; i < op->vectors.size(); i++) {
-        internal_assert(op->vectors[0].type() == op->vectors[i].type());
-    }
     internal_assert(op->type.lanes() == (int)op->indices.size());
 
     // Traverse all the arg vectors

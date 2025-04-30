@@ -145,12 +145,7 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
         CodeGen_C::visit(op);
     } else {
         // Vector shuffle with arbitrary number of lanes per arg
-
-        // Sanity check the types and number of lanes all match
         internal_assert(!op->vectors.empty());
-        for (size_t i = 1; i < op->vectors.size(); i++) {
-            internal_assert(op->vectors[0].type() == op->vectors[i].type());
-        }
         internal_assert(op->type.lanes() == (int)op->indices.size());
 
         // Construct the mapping for each shuffled element to find
