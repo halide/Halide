@@ -148,6 +148,7 @@ protected:
 
         SpvFactory::Components split_vector(Type type, SpvId value_id);
         SpvId join_vector(Type type, const SpvFactory::Components &value_components);
+        SpvId fill_vector(Type type, SpvId value_id);        
         SpvId cast_type(Type target_type, Type value_type, SpvId value_id);
         SpvId convert_to_bool(Type target_type, Type value_type, SpvId value_id);
 
@@ -1298,14 +1299,26 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
     } else if (op->name == "nan_f32") {
         float value = NAN;
         SpvId result_id = builder.declare_constant(Float(32), &value);
+        if(op->type.is_vector()) {
+            SpvId value_id = result_id;
+            result_id = fill_vector(op->type, value_id);
+        }
         builder.update_id(result_id);
     } else if (op->name == "inf_f32") {
         float value = INFINITY;
         SpvId result_id = builder.declare_constant(Float(32), &value);
+        if(op->type.is_vector()) {
+            SpvId value_id = result_id;
+            result_id = fill_vector(op->type, value_id);
+        }
         builder.update_id(result_id);
     } else if (op->name == "neg_inf_f32") {
         float value = -INFINITY;
         SpvId result_id = builder.declare_constant(Float(32), &value);
+        if(op->type.is_vector()) {
+            SpvId value_id = result_id;
+            result_id = fill_vector(op->type, value_id);
+        }
         builder.update_id(result_id);
     } else if (starts_with(op->name, "is_nan_f")) {
         internal_assert(op->args.size() == 1);
@@ -2227,6 +2240,16 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::join_vector(Type type, const SpvFactory
     SpvId type_id = builder.declare_type(type);
     SpvId result_id = builder.reserve_id(SpvResultId);
     builder.append(SpvFactory::composite_construct(type_id, result_id, value_components));
+    return result_id;
+}
+
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::fill_vector(Type type, SpvId value_id) {
+    SpvId type_id = builder.declare_type(type);
+    SpvId result_id = builder.reserve_id(SpvResultId);
+
+    SpvFactory::Components constituents;
+    constituents.insert(constituents.end(), type.lanes(), value_id);
+    builder.append(SpvFactory::composite_construct(type_id, result_id, constituents));
     return result_id;
 }
 
