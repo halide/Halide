@@ -715,6 +715,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"semihosting", Target::Semihosting},
     {"avx10_1", Target::AVX10_1},
     {"x86apx", Target::X86APX},
+    {"simulator", Target::Simulator},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -1512,7 +1513,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
-    const std::array<Feature, 33> union_features = {{
+     constexpr std::array<Feature, 33> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
@@ -1557,7 +1558,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 14> intersection_features = {{
+     constexpr std::array<Feature, 14> intersection_features = {{
         ARMv7s,
         AVX,
         AVX2,
@@ -1576,7 +1577,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 9> matching_features = {{
+     constexpr std::array<Feature, 10> matching_features = {{
         ASAN,
         Debug,
         HexagonDma,
@@ -1586,6 +1587,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         TSAN,
         WasmThreads,
         SanitizerCoverage,
+        Simulator,
     }};
     // clang-format on
 
