@@ -433,7 +433,7 @@ class RewriteLoadsAs32Bit : public IRMutator {
         } else if (index.same_as(op->index)) {
             return op;
         } else {
-            return Load::make(op->type, op->name, op->index, op->image, op->param, op->predicate, op->alignment);
+            return Load::make(op->type, op->name, std::move(index), op->image, op->param, op->predicate, op->alignment);
         }
     }
 };
