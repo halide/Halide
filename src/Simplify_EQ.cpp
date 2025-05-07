@@ -5,6 +5,12 @@ namespace Internal {
 
 Expr Simplify::visit(const EQ *op, ExprInfo *info) {
     if (info) {
+        // There are three possibilities:
+        // 1) We know the result is zero.
+        // 2) We know the result is one.
+        // 3) The result might be either zero or one.
+        // The line below takes care of case 3, and cases 1 and 2 are handled in
+        // the constant folding rules that come later in this method.
         info->cast_to(op->type);
     }
 

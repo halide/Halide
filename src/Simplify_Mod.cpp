@@ -29,6 +29,8 @@ Expr Simplify::visit(const Mod *op, ExprInfo *info) {
         }
 
         if (mod_info.bounds.is_single_point()) {
+            // We don't pass info as the last arg here because we've already set
+            // info to be the constant above. No need to do it again.
             return make_const(op->type, mod_info.bounds.min, nullptr);
         }
 

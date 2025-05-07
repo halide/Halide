@@ -8,6 +8,7 @@ Expr Simplify::visit(const Not *op, ExprInfo *info) {
     Expr a = mutate(op->a, &a_info);
 
     if (info) {
+        // Treat not as 1 - x
         info->bounds = ConstantInterval::single_point(1) - a_info.bounds;
         info->alignment = ModulusRemainder{0, 1} - a_info.alignment;
         info->cast_to(op->type);

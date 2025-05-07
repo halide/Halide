@@ -226,13 +226,14 @@ public:
         // returning a constant Expr, so the next mutation is just going to
         // infer everything there is to infer about a constant. The best we can
         // do at this point is just wrap to the right number of bits.
+        int dropped_bits = 64 - t.bits();
         if (t.is_int()) {
-            c <<= (64 - t.bits());
-            c >>= (64 - t.bits());
+            c <<= dropped_bits;
+            c >>= dropped_bits;  // sign-extend
         } else if (t.is_uint()) {
             // For uints, normalization is considerably less problematic
-            c <<= (64 - t.bits());
-            c = (int64_t)(((uint64_t)c >> (64 - t.bits())));
+            c <<= dropped_bits;
+            c = (int64_t)(((uint64_t)c >> dropped_bits));  // zero-extend
         }
         return c;
     }
@@ -249,6 +250,7 @@ public:
         c = normalize_constant(t, c);
 
         if ((int64_t)c >= 0) {
+            // This is representable as an int64_t
             set_expr_info_to_constant(info, (int64_t)c);
         } else if (info) {
             // If it's not representable as an int64, we can't express
