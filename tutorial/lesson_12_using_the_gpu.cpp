@@ -112,6 +112,12 @@ public:
     // Now a schedule that uses CUDA or OpenCL.
     bool schedule_for_gpu() {
         Target target = find_gpu_target();
+
+        std::cout << "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" << std::endl;
+        std::cout << target << std::endl;
+        std::cout << target.get_d3d12_capability_lower_bound() << std::endl;
+        std::cout << "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" << std::endl;
+
         if (!target.has_gpu_feature()) {
             return false;
         }
@@ -248,6 +254,8 @@ public:
     }
 };
 
+#include <stdlib.h>
+
 int main(int argc, char **argv) {
     // Load an input image.
     Buffer<uint8_t> input = load_image("images/rgb.png");
@@ -261,6 +269,7 @@ int main(int argc, char **argv) {
     p1.curved.realize(reference_output);
 
     printf("Running pipeline on GPU:\n");
+    putenv("HL_DEBUG_CODEGEN=1");
     MyPipeline p2(input);
     bool has_gpu_target = p2.schedule_for_gpu();
     if (has_gpu_target) {
@@ -288,6 +297,7 @@ Target find_gpu_target() {
     Target target = get_host_target();
 
     std::vector<Target::Feature> features_to_try;
+    //features_to_try.push_back(Target::CUDA);
     if (target.os == Target::Windows) {
         // Try D3D12 first; if that fails, try OpenCL.
         if (sizeof(void*) == 8) {
@@ -307,6 +317,14 @@ Target find_gpu_target() {
 
     for (Target::Feature f : features_to_try) {
         Target new_target = target.with_feature(f);
+        if (new_target.has_feature(Target::D3D12Compute))
+        {
+            new_target = new_target.with_feature(Target::D3D12ComputeSM60);
+        }
+        //if (new_target.has_feature(Target::CUDA))
+        //{
+        //    new_target = new_target.with_feature(Target::CUDACapability80);
+        //}
         if (host_supports_target_device(new_target)) {
             return new_target;
         }
