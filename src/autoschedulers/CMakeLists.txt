@@ -22,6 +22,8 @@ function(add_autoscheduler)
         EXPORT_NAME ${arg_NAME}
         OUTPUT_NAME autoschedule_${name_lower}
     )
+
+    set_property(GLOBAL APPEND PROPERTY Halide_AUTOSCHEDULERS Halide_${arg_NAME})
 endfunction()
 
 ## Autoschedulers must always be built for the same target as libHalide.

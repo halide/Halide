@@ -52,7 +52,7 @@ install(
 )
 
 if (WITH_AUTOSCHEDULERS)
-    set(autoschedulers Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021)
+    get_property(autoschedulers GLOBAL PROPERTY Halide_AUTOSCHEDULERS)
 
     install(
         TARGETS ${autoschedulers}
