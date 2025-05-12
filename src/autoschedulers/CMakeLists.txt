@@ -16,10 +16,14 @@ function(add_autoscheduler)
     target_compile_definitions(Halide_${arg_NAME} PRIVATE Halide_EXPORTS)
     target_link_libraries(Halide_${arg_NAME} PRIVATE Halide::Plugin)
 
-    string(TOLOWER "${arg_NAME}" name_lower)
+    string(TOLOWER "autoschedule_${arg_NAME}" output_name)
     set_target_properties(Halide_${arg_NAME} PROPERTIES
-                          EXPORT_NAME ${arg_NAME}
-                          OUTPUT_NAME autoschedule_${name_lower})
+                          EXPORT_NAME "${arg_NAME}"
+                          OUTPUT_NAME "${output_name}")
+
+    set_property(DIRECTORY "${Halide_SOURCE_DIR}"
+                 APPEND PROPERTY Halide_AUTOSCHEDULERS
+                 Halide_${arg_NAME})
 endfunction()
 
 ## Autoschedulers must always be built for the same target as libHalide.
