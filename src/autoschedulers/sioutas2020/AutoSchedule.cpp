@@ -80,8 +80,7 @@ Expr roundUp(const Expr &num, const Expr &multiple) {
 string get_expr_str(const Expr &expr) {
     ostringstream ostr;
     ostr << expr;
-    string nst;
-    nst = ostr.str();
+    string nst = ostr.str();
     nst.erase(std::remove(nst.begin(), nst.end(), '"'), nst.end());
     return nst;
 }
@@ -101,8 +100,7 @@ bool is_box_unbounded(const Box &b) {
     return false;
 }
 
-// Helper function to simplify the upper and lower bounds of each dimension of a
-// box.
+// Helper function to simplify the upper and lower bounds a box's dimensions
 void simplify_box(Box &b) {
     for (size_t i = 0; i < b.size(); i++) {
         b[i].min = simplify(b[i].min);
@@ -411,7 +409,7 @@ void queue_func_regions(map<FStage, DimBounds> &fs_bounds, const Function &prod_
     internal_assert(region.size() == args.size());
 
     // The region only specifies the extent of each dimension
-    // by position. Populating a map which is keyed by name.
+    // by position. Populating a map with names as keys.
     for (size_t v = 0; v < args.size(); v++) {
         prod_pure_bounds[args[v]] = region[v];
     }
@@ -771,9 +769,9 @@ map<string, Box> DependenceAnalysis::redundant_regions(
         overlaps.emplace(reg.first, b_intersect);
     }
 
-    // Simplify the bounds of each of the overlap regions.
-    for (auto &f : overlaps) {
-        simplify_box(f.second);
+    // Simplify the bounds of each overlap region.
+    for (auto &[_, region] : overlaps) {
+        simplify_box(region);
     }
 
     return overlaps;
@@ -870,8 +868,8 @@ struct AutoSchedule {
     map<string, size_t> topological_order;
 
     // Cache for storing all internal vars/rvars that have been declared during
-    // the course of schedule generation, to ensure that we don't introduce any
-    // duplicates in the string representation of the schedules.
+    // schedule generation, to ensure that we don't introduce any duplicates in
+    // the string representation of the schedules.
     map<string, VarOrRVar> internal_vars;
 
     // Store the list of schedules applied to some function stages (most recent
@@ -921,7 +919,7 @@ struct AutoSchedule {
         }
         stream << "\n";
 
-        // Declare all the functions + schedules
+        // Declare all the functions and schedules
         std::ostringstream func_ss;
         std::ostringstream schedule_ss;
 
@@ -1085,7 +1083,7 @@ struct Partitioner {
         vector<FStage> members;
         // Members of the group which are inlined.
         set<string> inlined;
-        // Tile sizes along dimensions of the output function of the group.
+        // Tile sizes along dimensions of the group's output function
         map<string, Expr> tile_sizes;
 
         Group(const FStage &output, const vector<FStage> &members)
@@ -1125,7 +1123,7 @@ struct Partitioner {
             return stream;
         }
     };
-    // Result of the analysis of a group.
+    // Analysis results for a group.
     struct GroupAnalysis {
         // Estimate of the arithmetic and memory cost for computing the group.
         Cost cost;
@@ -1249,7 +1247,7 @@ struct Partitioner {
     // Levels that are targeted by the grouping algorithm. In the 'Inline' mode,
     // the grouping algorithm groups the functions by inlining the expression
     // for the producer function into the consumer stage. In the 'FastMem' mode,
-    // the grouping is done at the level of tiles of the group output stage.
+    // the grouping is done by tiles of the group output stage.
     enum class Level { Inline,
                        FastMem };
 
@@ -1288,30 +1286,30 @@ struct Partitioner {
                       Level level);
 
     // check if it's a single stage group (with multiple update defs)
-    bool is_singleton_group(const Group &g);
+    static bool is_singleton_group(const Group &g);
     // checks a group's members for boundary condition funcs
-    bool check_for_boundary(const Group &g);
-    // Given a grouping 'g', compute the estimated cost (arithmetic + memory)
+    static bool check_for_boundary(const Group &g);
+    // Given a grouping 'g', compute the estimated cost (arithmetic and memory)
     // and parallelism that can be potentially exploited when computing that
     // group.
     GroupAnalysis analyze_group(const Group &g, bool show_analysis, bool to_inline);
 
     static Expr estimate_threads(const map<string, Expr> &);
     pair<map<string, Expr>, vector<pair<FStage, Expr>>>
-    eval_max_threads(const Group &g, bool show_analysis);
-    Expr estimate_threads_out(const Group &g, bool show_analysis);
+    eval_max_threads(const Group &g, bool show_analysis) const;
+    Expr estimate_threads_out(const Group &g, bool show_analysis) const;
 
     // For each group in the partition, return the regions of the producers
     // need to be allocated to compute a tile of the group's output.
 
     map<FStage, vector<map<string, Expr>>> tile_configs_per_stage;
-    map<FStage, map<string, Box>> group_storage_bounds();
+    map<FStage, map<string, Box>> group_storage_bounds() const;
     Group optimize_granularity(const Group &pre_group, const AutoSchedule &sched);
-    map<FStage, DimBounds> group_solo_bounds(const Group &g);
+    map<FStage, DimBounds> group_solo_bounds(const Group &g) const;
     map<FStage, map<string, map<string, Expr>>> reuse_per_stage;
     // For each group in the partition, return the regions of the producers
     // required to compute a tile of the group's output.
-    map<FStage, map<FStage, DimBounds>> group_loop_bounds();
+    map<FStage, map<FStage, DimBounds>> group_loop_bounds() const;
 
     // Partition the pipeline by iteratively merging groups until a fixpoint is
     // reached.
@@ -1336,11 +1334,12 @@ struct Partitioner {
                                          const map<string, Expr> &tile_sizes) const;
 
     // Return the estimated size of the bounds.
-    map<string, Expr> bounds_to_estimates(const DimBounds &bounds);
+    static map<string, Expr> bounds_to_estimates(const DimBounds &bounds);
 
     // Given a function stage, return a vector of possible tile configurations
     // for that function stage.
-    vector<map<string, Expr>> generate_tile_configs(const FStage &stg, bool final_tile);
+    vector<map<string, Expr>> generate_tile_configs(const FStage &stg,
+                                                    bool final_tile) const;
 
     // Find the best tiling configuration for a group 'g' among a set of tile
     // configurations. This returns a pair of configuration with the highest
@@ -1348,25 +1347,25 @@ struct Partitioner {
     pair<map<string, Expr>, GroupAnalysis>
     find_best_tile_config(const Group &g, bool is_init, bool is_final);
     map<string, Expr> find_min_tile_dims(const FStage &stg);
-    set<string> dims_to_tile(const FStage &stg);
+    set<string> dims_to_tile(const FStage &stg) const;
     // estimates the occupancy on a gpu for this group
     vector<Expr> estimate_occupancy(const Expr &threads, const Expr &footprint,
-                                    Expr n_blocks);
+                                    Expr n_blocks) const;
     Expr estimate_tile_benefit(const GroupAnalysis &old_grouping,
                                const GroupAnalysis &new_grouping, bool final_tiles,
-                               bool ensure_parallelism);
+                               bool ensure_parallelism) const;
 
-    // Estimate the benefit (arithmetic + memory) of 'new_grouping' over
-    // 'old_grouping'. Positive values indicates that 'new_grouping' may be
+    // Estimate the benefit (arithmetic and memory) of 'new_grouping' over
+    // 'old_grouping'. Positive values indicate that 'new_grouping' may be
     // preferrable over 'old_grouping'. When 'ensure_parallelism' is set to
     // true, this will return an undefined cost if the estimated parallelism is
     // smaller than the machine parameters. If 'no_redundant_work' is set, we
     // only consider the arithmetic cost, i.e. if the arithmetic benefit is
     // negative, we will treat it as no benefits and we should not perform the
     // new grouping.
-    Expr estimate_benefit(const GroupAnalysis &old_grouping,
-                          const GroupAnalysis &new_grouping, bool no_redundant_work,
-                          bool ensure_parallelism);
+    static Expr estimate_benefit(const GroupAnalysis &old_grouping,
+                                 const GroupAnalysis &new_grouping,
+                                 bool no_redundant_work, bool ensure_parallelism);
 
     // Same as above; however, 'new_grouping' is a vector of function pairs that
     // are to be grouped together.
@@ -1383,7 +1382,7 @@ struct Partitioner {
     // bounds of the allocation are specified by 'buffer_bounds'.
     Expr find_max_access_stride(const Scope<> &vars, const string &func_acc,
                                 const vector<Expr> &acc_exprs,
-                                const Box &buffer_bounds);
+                                const Box &buffer_bounds) const;
 
     // Return the sum of access strides along each of the loop variables in
     // a function stage. The bounds of all the allocations accessed are
@@ -1392,11 +1391,11 @@ struct Partitioner {
     map<string, Expr>
     analyze_spatial_locality(const FStage &stg,
                              const map<string, Box> &parent_alloc_bounds,
-                             const set<string> &inlines = set<string>());
+                             const set<string> &inlines = set<string>()) const;
 
     map<string, map<string, Expr>> evaluate_reuse(const FStage &stg,
-                                                  const set<string> &prods);
-    map<string, Expr> find_dims(const FStage &stg, unsigned int stage_num);
+                                                  const set<string> &prods) const;
+    map<string, Expr> find_dims(const FStage &stg, unsigned int stage_num) const;
     // Generate and apply schedules for all functions within a pipeline by
     // following their grouping structure.
     //
@@ -1423,7 +1422,7 @@ struct Partitioner {
     // Split the dimension of stage 'f_handle' along 'v' into inner and outer
     // dimensions. Modify 'estimates' according to the split and append the
     // split schedule to 'sched'.
-    pair<VarOrRVar, VarOrRVar>
+    static pair<VarOrRVar, VarOrRVar>
     split_dim(const Group &g, Stage f_handle, int stage_num, const Definition &def,
               bool is_group_output, const VarOrRVar &v, const Expr &factor,
               const string &in_suffix, const string &out_suffix,
@@ -1431,11 +1430,12 @@ struct Partitioner {
 
     // Loop over the dimensions of function stage 'f_handle' starting from
     // innermost and vectorize the first pure dimension encountered.
-    void vectorize_stage(const Group &g, Stage f_handle, int stage_num, Definition def,
-                         const Function &func, bool is_group_output, bool is_singleton,
-                         const Target &t, set<string> &rvars,
-                         map<string, Expr> &estimates, AutoSchedule &sched,
-                         vector<string> thread_dims);
+    static void vectorize_stage(const Group &g, Stage f_handle, int stage_num,
+                                Definition def, const Function &func,
+                                bool is_group_output, bool is_singleton,
+                                const Target &t, set<string> &rvars,
+                                map<string, Expr> &estimates, AutoSchedule &sched,
+                                vector<string> thread_dims);
     // unroll innermostsssss
     void unroll_group_outer_stage(const Group &g, Stage f_handle, int stage_num,
                                   Definition def, Function func, bool is_group_output,
@@ -1445,29 +1445,28 @@ struct Partitioner {
                                   vector<string> non_thread_dims);
 
     // unroll / tile + unroll members
-    void unroll_group_inner_stage(const Group &g, Stage f_handle, int stage_num,
-                                  Definition def, const Function &func,
-                                  bool is_group_output, const Target &t,
-                                  set<string> &rvars, map<string, Expr> &estimates,
-                                  AutoSchedule &sched, vector<string> thread_dims,
-                                  vector<string> non_thread_dims);
+    static void unroll_group_inner_stage(
+        const Group &g, Stage f_handle, int stage_num, Definition def,
+        const Function &func, bool is_group_output, const Target &t, set<string> &rvars,
+        map<string, Expr> &estimates, AutoSchedule &sched, vector<string> thread_dims,
+        vector<string> non_thread_dims);
 
     // Reorder the dimensions to preserve spatial locality. This function
     // checks the stride of each access. The dimensions of the loop are
     // reordered such that the dimension with the smallest access stride is
     // innermost. This takes the strides along each dimension as input.
-    void reorder_dims(Stage f_handle, int stage_num, Definition def,
-                      map<string, Expr> strides, AutoSchedule &sched,
-                      map<string, Expr> sbounds, vector<string> thread_dims);
+    static void reorder_dims(Stage f_handle, int stage_num, Definition def,
+                             map<string, Expr> strides, AutoSchedule &sched,
+                             map<string, Expr> sbounds, vector<string> thread_dims);
 
     // Helper functions to display partition information of the pipeline.
     void disp_pipeline_costs();
-    void disp_pipeline_bounds();
-    void disp_pipeline_graph();
-    void disp_grouping();
+    void disp_pipeline_bounds() const;
+    void disp_pipeline_graph() const;
+    void disp_grouping() const;
 };
 
-void Partitioner::disp_grouping() {
+void Partitioner::disp_grouping() const {
     debug(0) << "\n=========" << '\n';
     debug(0) << "Grouping:" << '\n';
     debug(0) << "=========" << '\n';
@@ -1477,7 +1476,7 @@ void Partitioner::disp_grouping() {
     debug(0) << "=========" << '\n';
 }
 
-void Partitioner::disp_pipeline_graph() {
+void Partitioner::disp_pipeline_graph() const {
     debug(0) << "\n================" << '\n';
     debug(0) << "Pipeline graph:" << '\n';
     debug(0) << "================" << '\n';
@@ -1494,7 +1493,7 @@ void Partitioner::disp_pipeline_graph() {
     debug(0) << "================" << '\n';
 }
 
-void Partitioner::disp_pipeline_bounds() {
+void Partitioner::disp_pipeline_bounds() const {
     debug(0) << "\n================" << '\n';
     debug(0) << "Pipeline bounds:" << '\n';
     debug(0) << "================" << '\n';
@@ -1649,7 +1648,8 @@ bool Partitioner::is_singleton_group(const Group &group) {
     return true;
 }
 
-map<string, Expr> Partitioner::find_dims(const FStage &stg, unsigned int stage_num) {
+map<string, Expr> Partitioner::find_dims(const FStage &stg,
+                                         unsigned int stage_num) const {
 
     Expr order = make_zero(Int(64));
     map<string, Expr> dim_order;
@@ -1739,7 +1739,8 @@ Partitioner::Group Partitioner::optimize_granularity(const Group &pre_g,
         vector<string> consumers;
         if (global_children.find(st) != global_children.end()) {
             for (const FStage &c : get_element(global_children, st)) {
-                debug(2) << "cons " << c.func.name() << " prod " << st.func.name() << '\n';
+                debug(2) << "cons " << c.func.name() << " prod " << st.func.name()
+                         << '\n';
                 if (c.func.name() == st.func.name()) {
                     continue;
                 }
@@ -1923,8 +1924,8 @@ void Partitioner::evaluate_final_tiles() {
     grouping_cache.clear();
 }
 
-map<string, map<string, Expr>> Partitioner::evaluate_reuse(const FStage &stg,
-                                                           const set<string> &prods) {
+map<string, map<string, Expr>>
+Partitioner::evaluate_reuse(const FStage &stg, const set<string> &prods) const {
     map<string, map<string, Expr>> reuse;
     Function f = stg.func;
 
@@ -2159,7 +2160,7 @@ min_tile[mins.first]=cast(Int(32),mins.second);
 */
 
 vector<map<string, Expr>> Partitioner::generate_tile_configs(const FStage &stg,
-                                                             bool final_tile) {
+                                                             bool final_tile) const {
 
     Expr bytes_per_ele = make_zero(Int(32));
     string stg_name = stg.func.name();
@@ -2400,7 +2401,7 @@ set<string> Partitioner::dims_to_tile(const FStage &stg){
 }
 */
 
-set<string> Partitioner::dims_to_tile(const FStage &stg) {
+set<string> Partitioner::dims_to_tile(const FStage &stg) const {
     const vector<Dim> &dims = get_stage_dims(stg.func, stg.stage_num);
 
     // Get the dimensions that are going to be tiled in this stage.
@@ -2483,7 +2484,8 @@ set<string> Partitioner::dims_to_tile(const FStage &stg) {
 }
 
 vector<Expr> Partitioner::estimate_occupancy(const Expr &threads,
-                                             const Expr &shared_mem, Expr n_blocks) {
+                                             const Expr &shared_mem,
+                                             Expr n_blocks) const {
     //  Expr threads=eval_max_threads(g,false);
     debug(5) << "Estimating occupancy..." << '\n';
 
@@ -2659,7 +2661,7 @@ Partitioner::find_best_tile_config(const Group &g, bool is_init, bool is_final) 
     no_tile.tile_sizes = no_tile_config;
     bool flag_db = true;
     bool test_it = false;
-    // if is init just analyze and return ones
+    // if is init, analyze and return ones
     if (is_init) {
         set<string> thread_vars = dims_to_tile(g.output);
         Group init_group = g;
@@ -2958,7 +2960,7 @@ Expr Partitioner::estimate_threads(const map<string, Expr> &thread_blocks) {
     return estimated_threads;
 }
 
-Expr Partitioner::estimate_threads_out(const Group &g, bool show_analysis) {
+Expr Partitioner::estimate_threads_out(const Group &g, bool show_analysis) const {
     debug(5) << "output of group " << g.output.func.name() << '\n';
 
     Expr spawned_threads = make_one(UInt(32));
@@ -2988,7 +2990,7 @@ Expr Partitioner::estimate_threads_out(const Group &g, bool show_analysis) {
 }
 
 pair<map<string, Expr>, vector<pair<FStage, Expr>>>
-Partitioner::eval_max_threads(const Group &g, bool show_analysis) {
+Partitioner::eval_max_threads(const Group &g, bool show_analysis) const {
     set<string> gmembers;
     for (const auto &st : g.members) {
         gmembers.insert(st.func.name());
@@ -3598,7 +3600,8 @@ Partitioner::GroupConfig Partitioner::evaluate_choice(Group &group, Level level)
 
 Expr Partitioner::estimate_tile_benefit(const GroupAnalysis &old_grouping,
                                         const GroupAnalysis &new_grouping,
-                                        bool final_tiles, bool ensure_parallelism) {
+                                        bool final_tiles,
+                                        bool ensure_parallelism) const {
 
     if (ensure_parallelism &&
         (!new_grouping.parallelism.defined() ||
@@ -3767,7 +3770,7 @@ map<string, Expr> Partitioner::bounds_to_estimates(const DimBounds &bounds) {
     return estimates;
 }
 
-map<FStage, map<string, Box>> Partitioner::group_storage_bounds() {
+map<FStage, map<string, Box>> Partitioner::group_storage_bounds() const {
     map<FStage, map<string, Box>> group_storage_bounds;
     for (const pair<const FStage, Group> &gpair : groups) {
         const Group &g = gpair.second;
@@ -3795,8 +3798,7 @@ map<FStage, map<string, Box>> Partitioner::group_storage_bounds() {
     return group_storage_bounds;
 }
 
-map<FStage, DimBounds> Partitioner::group_solo_bounds(const Group &groups) {
-    map<FStage, DimBounds> group_bounds;
+map<FStage, DimBounds> Partitioner::group_solo_bounds(const Group &groups) const {
     //  for (const pair<const FStage, Group> &gpair : groups) {
     Group g = groups;
     map<FStage, DimBounds> mem_bounds;
@@ -3826,12 +3828,10 @@ map<FStage, DimBounds> Partitioner::group_solo_bounds(const Group &groups) {
         }
     }
 
-    group_bounds = mem_bounds;
-
-    return group_bounds;
+    return mem_bounds;
 }
 
-map<FStage, map<FStage, DimBounds>> Partitioner::group_loop_bounds() {
+map<FStage, map<FStage, DimBounds>> Partitioner::group_loop_bounds() const {
     map<FStage, map<FStage, DimBounds>> group_bounds;
     for (const pair<const FStage, Group> &gpair : groups) {
         Group g = gpair.second;
@@ -4010,9 +4010,9 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
                                   vector<string> thread_dims) {
     vector<Dim> &dims = def.schedule().dims();
     int vec_dim_index = -1;
-    // Set the vector length as the maximum of the natural vector size of all
+    // Set the vector length as the maximum of the natural vector size over all
     // values produced by the function.
-    // int vec_len = 0;
+    //     int vec_len = 0;
     vector<int> vec_dim_indices;
     /*for (const auto &type : func.output_types()) {
       vec_len = std::max(vec_len, t.natural_vector_size(type));
@@ -5000,11 +5000,11 @@ void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
 
 Expr Partitioner::find_max_access_stride(const Scope<> &vars, const string &func_acc,
                                          const vector<Expr> &acc_exprs,
-                                         const Box &buffer_bounds) {
+                                         const Box &buffer_bounds) const {
     size_t num_storage_dims = 0;
     Expr bytes_per_element = make_zero(Int(64));
 
-    // Get the number of dimensions of the allocated storage and the
+    // Get the number of dimensions for the allocated storage and the
     // number of bytes required to store a single value of func_acc.
     if (const auto &iter = dep_analysis.env.find(func_acc);
         iter != dep_analysis.env.end()) {
@@ -5044,7 +5044,7 @@ Expr Partitioner::find_max_access_stride(const Scope<> &vars, const string &func
 map<string, Expr>
 Partitioner::analyze_spatial_locality(const FStage &stg,
                                       const map<string, Box> &parent_alloc_bounds,
-                                      const set<string> &inlines) {
+                                      const set<string> &inlines) const {
     internal_assert(!stg.func.has_extern_definition());
     // Handle inlining. When a function is inlined into another, the stride of
     // the accesses should be computed on the expression post inlining.
@@ -5277,7 +5277,7 @@ bool inline_unbounded(const vector<Function> &outputs, const vector<string> &ord
 
 // Generate schedules for all functions in the pipeline required to compute the
 // outputs. This applies the schedules and returns a string representation of
-// the schedules. The target architecture is specified by 'target'.
+// the schedules. Parameter 'target' specifies the target architecture.
 string my_generate_schedules(const vector<Function> &outputs, const Target &target,
                              const Sioutas2020Params &arch_params) {
     // Make an environment map which is used throughout the auto scheduling
