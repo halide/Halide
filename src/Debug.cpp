@@ -3,6 +3,7 @@
 #include "Util.h"
 
 #include <climits>
+#include <optional>
 
 namespace Halide::Internal::detail {
 
