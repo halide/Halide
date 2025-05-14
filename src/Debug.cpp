@@ -47,6 +47,10 @@ public:
             return std::nullopt;
         }
 
+        if (*ptr == '\0') {
+            return rule;
+        }
+
         if (*ptr == ',') {
             rule.file_suffix = read_until(++ptr, ":@");
             if (*ptr == ':') {
@@ -72,12 +76,16 @@ public:
 
     bool accepts(const int verbosity, const char *file, const char *function,
                  const int line) const {
-        if (verbosity > this->verbosity) {
-            return false;
+        switch (complexity) {
+        case VerbosityOnly:
+            return verbosity <= this->verbosity;
+        case NeedsMatching:
+            return verbosity <= this->verbosity &&
+                   ends_with(file, file_suffix) &&
+                   ends_with(function, function_suffix) &&
+                   line_low <= line && line <= line_high;
         }
-        return complexity == NeedsMatching && ends_with(file, file_suffix) &&
-               ends_with(function, function_suffix) && line_low <= line &&
-               line <= line_high;
+        return false;
     }
 };
 
