@@ -9,17 +9,16 @@ namespace Halide::Internal::detail {
 
 namespace {
 
-std::string read_until(const char *&ptr, const char delim) {
-    const char *start = ptr;
-    while (*ptr != delim && *ptr != '\0') {
-        ptr++;
+std::string read_until(const char *&str, const char *delims) {
+    const char *start = str;
+    for (; *str; ++str) {
+        for (const char *ch = delims; *ch; ++ch) {
+            if (*str == *ch) {
+                return {start, str};
+            }
+        }
     }
-    std::string result{start, ptr};
-    // Swallow the delimiter
-    if (*ptr == delim) {
-        ptr++;
-    }
-    return result;
+    return {start, str};
 }
 
 bool parse_int(const std::string &number, int &value) {
@@ -44,30 +43,27 @@ public:
         DebugRule rule;
         const char *ptr = spec.c_str();
 
-        if (!parse_int(read_until(ptr, ','), rule.verbosity)) {
+        if (!parse_int(read_until(ptr, ",@"), rule.verbosity)) {
             return std::nullopt;
         }
 
-        if (!*ptr) {
-            return rule;
-        }
-
-        rule.file_suffix = read_until(ptr, ':');
-
-        if (*ptr == ':') {
-            rule.function_suffix = read_until(++ptr, ':');
-        }
-
-        if (*ptr) {
-            if (!parse_int(read_until(ptr, '-'), rule.line_low)) {
-                return std::nullopt;
-            }
-            rule.line_high = rule.line_low;
-            if (*ptr) {
-                if (!parse_int(read_until(ptr, '\0'), rule.line_high)) {
+        if (*ptr == ',') {
+            rule.file_suffix = read_until(++ptr, ":@");
+            if (*ptr == ':') {
+                if (!parse_int(read_until(++ptr, "-@"), rule.line_low)) {
                     return std::nullopt;
                 }
+                rule.line_high = rule.line_low;
+                if (*ptr == '-') {
+                    if (!parse_int(read_until(++ptr, "@"), rule.line_high)) {
+                        return std::nullopt;
+                    }
+                }
             }
+        }
+
+        if (*ptr == '@') {
+            rule.function_suffix = std::string{ptr + 1};
         }
 
         rule.complexity = NeedsMatching;
@@ -98,7 +94,7 @@ parse_rules(const std::string &env) {
             user_warning
                 << "Ignoring malformed HL_DEBUG_CODEGEN entry: [" << spec << "]\n"
                 << "The expected format is:\n    "
-                << "verbosity[,file_suffix[::function_suffix][:line_low[-line_high]]]";
+                << "verbosity[,filename[:line_low[-line_high]]][@func]";
         }
     }
 
