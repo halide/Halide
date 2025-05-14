@@ -140,6 +140,15 @@ struct Target {
         TraceRealizations = halide_target_feature_trace_realizations,
         TracePipeline = halide_target_feature_trace_pipeline,
         D3D12Compute = halide_target_feature_d3d12compute,
+        D3D12ComputeSM60 = halide_target_feature_d3d12compute_sm_60,
+        D3D12ComputeSM61 = halide_target_feature_d3d12compute_sm_61,
+        D3D12ComputeSM62 = halide_target_feature_d3d12compute_sm_62,
+        D3D12ComputeSM63 = halide_target_feature_d3d12compute_sm_63,
+        D3D12ComputeSM64 = halide_target_feature_d3d12compute_sm_64,
+        D3D12ComputeSM65 = halide_target_feature_d3d12compute_sm_65,
+        D3D12ComputeSM66 = halide_target_feature_d3d12compute_sm_66,
+        D3D12ComputeSM67 = halide_target_feature_d3d12compute_sm_67,
+        D3D12ComputeSM68 = halide_target_feature_d3d12compute_sm_68,
         StrictFloat = halide_target_feature_strict_float,
         TSAN = halide_target_feature_tsan,
         ASAN = halide_target_feature_asan,
@@ -336,6 +345,11 @@ struct Target {
             return (((uint64_t)1) << 31) - 1;
         }
     }
+
+    /** Get the minimum shader model for D3D12 capability found as an integer. Returns
+     * 50 (our minimum supported d3d12 shader model compute capability) if no d3d12
+     * features are set. */
+    int get_d3d12_capability_lower_bound() const;
 
     /** Get the minimum cuda capability found as an integer. Returns
      * 20 (our minimum supported cuda compute capability) if no cuda
