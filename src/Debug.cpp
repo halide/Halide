@@ -90,15 +90,14 @@ parse_rules(const std::string &env) {
     DebugRule::Complexity complexity = DebugRule::VerbosityOnly;
 
     for (const std::string &spec : split_string(env, ";")) {
-        auto rule = DebugRule::parse(spec);
-        if (!rule) {
-            user_warning
-                << "Ignoring malformed HL_DEBUG_CODEGEN entry: [" << env << "]\n"
-                << "The expected format is:\n    "
-                << "verbosity[,file_suffix[::function_suffix][:line_low[-line_high]]]";
-        } else {
+        if (auto rule = DebugRule::parse(spec)) {
             complexity = std::max(complexity, rule->complexity);
             rules.push_back(*rule);
+        } else if (!spec.empty()) {
+            user_warning
+                << "Ignoring malformed HL_DEBUG_CODEGEN entry: [" << spec << "]\n"
+                << "The expected format is:\n    "
+                << "verbosity[,file_suffix[::function_suffix][:line_low[-line_high]]]";
         }
     }
 
