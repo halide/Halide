@@ -1430,9 +1430,10 @@ map<string, Expr> Partitioner::evaluate_reuse(const FStage &stg,
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         Expr total_reuse = make_zero(Int(64));
-        if (debug::debug_level() >= 3) {
+        debug(3) << [&] {
             disp_regions(reuse_regions[d]);
-        }
+            return "";
+        };
         for (const auto &reg : reuse_regions[d]) {
             Expr size = box_size(reg.second);
             if (!size.defined()) {
@@ -1780,9 +1781,10 @@ void Partitioner::group(Partitioner::Level level) {
         }
 
         Cost post_merge = get_pipeline_cost();
-        if (debug::debug_level() >= 3) {
+        debug(3) << [&] {
             disp_pipeline_costs();
-        }
+            return "";
+        };
     }
 }
 
@@ -3300,9 +3302,10 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // Compute the expression costs for each function in the pipeline.
     debug(2) << "Initializing region costs...\n";
     RegionCosts costs(env, order);
-    if (debug::debug_level() >= 3) {
+    debug(3) << [&] {
         costs.disp_func_costs();
-    }
+        return "";
+    };
 
     debug(2) << "Initializing dependence analysis...\n";
     DependenceAnalysis dep_analysis(env, order, func_val_bounds);
@@ -3363,31 +3366,35 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 
     // Display the current pipeline graph.
     // TODO: Output the graph in dot format.
-    if (debug::debug_level() >= 3) {
+    debug(3) << [&] {
         part.disp_pipeline_graph();
         part.disp_pipeline_bounds();
-    }
+        return "";
+    };
 
     debug(2) << "Partitioner initializing groups...\n";
     part.initialize_groups();
-    if (debug::debug_level() >= 3) {
+    debug(3) << [&] {
         part.disp_pipeline_costs();
-    }
+        return "";
+    };
 
     debug(2) << "Partitioner computing inline group...\n";
     part.group(Partitioner::Level::Inline);
-    if (debug::debug_level() >= 3) {
+    debug(3) << [&] {
         part.disp_grouping();
-    }
+        return "";
+    };
 
     debug(2) << "Partitioner computing fast-mem group...\n";
     part.grouping_cache.clear();
     part.group(Partitioner::Level::FastMem);
-    if (debug::debug_level() >= 3) {
+    debug(3) << [&] {
         part.disp_pipeline_costs();
         part.disp_grouping();
         part.disp_pipeline_graph();
-    }
+        return "";
+    };
 
     debug(2) << "Initializing AutoSchedule...\n";
     AutoSchedule sched(env, top_order);
