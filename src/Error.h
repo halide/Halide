@@ -126,12 +126,9 @@ struct ReportBase {
     std::ostringstream msg;
 
     ReportBase(const char *file, int line, const char *condition_string, const char *prefix) {
-        // Only mention where inside libHalide the error tripped if we have debug level > 0
-        if (debug::debug_level() > 0) {
-            msg << prefix << " at " << file << ":" << line << ' ';
-            if (condition_string) {
-                msg << "Condition failed: " << condition_string << ' ';
-            }
+        msg << prefix << " at " << file << ":" << line << ' ';
+        if (condition_string) {
+            msg << "Condition failed: " << condition_string << ' ';
         }
     }
 

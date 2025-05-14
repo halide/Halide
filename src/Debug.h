@@ -46,24 +46,35 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
  * HL_DEBUG_CODEGEN
  */
 
+namespace detail {
 class debug {
     const bool logging;
+    static int should_log(int verbosity, const char *file, const char *function, int line);
 
 public:
-    debug(int verbosity)
-        : logging(verbosity <= debug_level()) {
+    debug(const int verbosity, const char *file, const char *function, const int line)
+        : logging(should_log(verbosity, file, function, line)) {
     }
 
     template<typename T>
     debug &operator<<(T &&x) {
         if (logging) {
-            std::cerr << std::forward<T>(x);
+            if constexpr (std::is_invocable_v<T>) {
+                std::cerr << x();
+            } else {
+                std::cerr << std::forward<T>(x);
+            }
         }
         return *this;
     }
 
-    static int debug_level();
+    bool is_active() const {
+        return logging;
+    }
 };
+}  // namespace detail
+
+#define debug(n) Halide::Internal::detail::debug(n, __FILE__, __FUNCTION__, __LINE__)
 
 /** Allow easily printing the contents of containers, or std::vector-like containers,
  *  in debug output. Used like so:

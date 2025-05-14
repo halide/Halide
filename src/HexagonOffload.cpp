@@ -1026,14 +1026,15 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     compile_llvm_module_to_object(*llvm_module, object_stream);
 
     int min_debug_level = device_code.name() == runtime_module_name ? 3 : 2;
-    if (debug::debug_level() >= min_debug_level) {
-        debug(0) << "Hexagon device code assembly: "
-                 << "\n";
+    debug(min_debug_level) << [&] {
+        std::stringstream ss;
+        ss << "Hexagon device code assembly: \n";
         llvm::SmallString<4096> assembly;
         llvm::raw_svector_ostream assembly_stream(assembly);
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
-        debug(0) << assembly.c_str() << "\n";
-    }
+        ss << assembly.c_str() << "\n";
+        return ss.str();
+    };
 
     auto obj = Elf::Object::parse_object(object.data(), object.size());
     internal_assert(obj);
