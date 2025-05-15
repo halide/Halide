@@ -357,7 +357,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
     Buffer<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
 
     // Filter the input values for the operation to be tested.
-    // Cannot divide by zero, so remove zeroes from b.
+    // Cannot divide by zero, so remove zeros from b.
     // Also, cannot divide the most negative number by -1.
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
@@ -462,7 +462,7 @@ bool f_mod() {
     Buffer<T> out(WIDTH, HEIGHT);
 
     // Filter the input values for the operation to be tested.
-    // Cannot divide by zero, so remove zeroes from b.
+    // Cannot divide by zero, so remove zeros from b.
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
             if (b(i, j) == 0.0) {
