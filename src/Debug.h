@@ -32,8 +32,8 @@ std::ostream &operator<<(std::ostream &stream, const Stmt &);
 struct LoweredFunc;
 std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
-bool debug_is_active(int verbosity, const char *file, const char *function, int line);
-#define debug_is_active(n) (::Halide::Internal::debug_is_active((n), __FILE__, __FUNCTION__, __LINE__))
+bool debug_is_active_impl(int verbosity, const char *file, const char *function, int line);
+#define debug_is_active(n) (::Halide::Internal::debug_is_active_impl((n), __FILE__, __FUNCTION__, __LINE__))
 
 /** For optional debugging during codegen, use the debug macro as
  * follows:

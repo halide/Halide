@@ -125,8 +125,8 @@ template<typename T>
 struct ReportBase {
     std::ostringstream msg;
 
-    ReportBase(const char *file, int line, const char *condition_string, const char *prefix) {
-        if (debug_is_active(1)) {
+    ReportBase(const char *file, const char *function, int line, const char *condition_string, const char *prefix) {
+        if (debug_is_active_impl(1, file, function, line)) {
             msg << prefix << " at " << file << ":" << line << ' ';
             if (condition_string) {
                 msg << "Condition failed: " << condition_string << ' ';
@@ -158,8 +158,8 @@ template<typename Exception>
 struct ErrorReport : ReportBase<ErrorReport<Exception>> {
     using Base = ReportBase<ErrorReport>;
 
-    ErrorReport(const char *file, int line, const char *condition_string)
-        : Base(file, line, condition_string, Exception::error_name) {
+    ErrorReport(const char *file, const char *function, int line, const char *condition_string)
+        : Base(file, function, line, condition_string, Exception::error_name) {
         this->msg << "Error: ";
     }
 
@@ -177,8 +177,8 @@ struct ErrorReport : ReportBase<ErrorReport<Exception>> {
 };
 
 struct WarningReport : ReportBase<WarningReport> {
-    WarningReport(const char *file, int line, const char *condition_string)
-        : ReportBase(file, line, condition_string, "Warning") {
+    WarningReport(const char *file, const char *function, int line, const char *condition_string)
+        : ReportBase(file, function, line, condition_string, "Warning") {
         this->msg << "Warning: ";
     }
 
@@ -218,12 +218,12 @@ struct Voidifier {
  */
 #define _halide_internal_assertion(condition, type)  \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    (condition) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::ErrorReport<type>(__FILE__, __LINE__, #condition).ref()
+    (condition) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::ErrorReport<type>(__FILE__, __FUNCTION__, __LINE__, #condition).ref()
 
-#define internal_error Halide::Internal::ErrorReport<Halide::InternalError>(__FILE__, __LINE__, nullptr)
-#define user_error Halide::Internal::ErrorReport<Halide::CompileError>(__FILE__, __LINE__, nullptr)
-#define user_warning Halide::Internal::WarningReport(__FILE__, __LINE__, nullptr)
-#define halide_runtime_error Halide::Internal::ErrorReport<Halide::RuntimeError>(__FILE__, __LINE__, nullptr)
+#define internal_error Halide::Internal::ErrorReport<Halide::InternalError>(__FILE__, __FUNCTION__, __LINE__, nullptr)
+#define user_error Halide::Internal::ErrorReport<Halide::CompileError>(__FILE__, __FUNCTION__, __LINE__, nullptr)
+#define user_warning Halide::Internal::WarningReport(__FILE__, __FUNCTION__, __LINE__, nullptr)
+#define halide_runtime_error Halide::Internal::ErrorReport<Halide::RuntimeError>(__FILE__, __FUNCTION__, __LINE__, nullptr)
 
 #define internal_assert(c) _halide_internal_assertion(c, Halide::InternalError)
 #define user_assert(c) _halide_internal_assertion(c, Halide::CompileError)
