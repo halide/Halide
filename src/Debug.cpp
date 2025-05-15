@@ -2,6 +2,7 @@
 #include "Error.h"
 #include "Util.h"
 
+#include <algorithm>
 #include <climits>
 #include <optional>
 
