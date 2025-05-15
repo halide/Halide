@@ -707,7 +707,7 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
                 ss << "Found extern: " << p.first << "\n";
             }
             return ss.str();
-        };
+        }();
 
         wasm_module = WasmModule::compile(module, args,
                                           module.name(), jit_externs, externs_jit_module);

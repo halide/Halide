@@ -507,7 +507,7 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
         ss << assembly.c_str() << "\n";
         return ss.str();
-    };
+    }();
 
     Buffer<uint8_t> result(object.size(), name());
     memcpy(result.data(), reinterpret_cast<uint8_t *>(&object[0]), object.size());

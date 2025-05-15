@@ -434,7 +434,7 @@ Stmt lower_parallel_tasks(const Stmt &s, std::vector<LoweredFunc> &closure_imple
                << lf.body << "\n\n";
         }
         return ss.str();
-    };
+    }();
 
     // Append to the end rather than replacing the list entirely.
     closure_implementations.insert(closure_implementations.end(),

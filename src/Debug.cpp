@@ -6,7 +6,7 @@
 #include <climits>
 #include <optional>
 
-namespace Halide::Internal::detail {
+namespace Halide::Internal {
 
 namespace {
 
@@ -115,4 +115,4 @@ bool debug_is_active(const int verbosity, const char *file, const char *function
     });
 }
 
-}  // namespace Halide::Internal::detail
+}  // namespace Halide::Internal

@@ -1097,7 +1097,7 @@ void CodeGen_LLVM::optimize_module() {
     debug(3) << [&] {
         module->print(dbgs(), nullptr, false, true);
         return "";
-    };
+    }();
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
@@ -1243,7 +1243,7 @@ void CodeGen_LLVM::optimize_module() {
     debug(2) << [&] {
         module->print(dbgs(), nullptr, false, true);
         return "";
-    };
+    }();
 
     auto *logger = get_compiler_logger();
     if (logger) {
@@ -1319,7 +1319,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
             std::cerr << " got (value->getType()): ";
             value->print(dbgs(), true);
             return "\n";
-        };
+        }();
     }
     internal_assert(types_match)
         << "Codegen of Expr " << e

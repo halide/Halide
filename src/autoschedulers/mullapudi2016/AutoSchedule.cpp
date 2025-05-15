@@ -1433,7 +1433,7 @@ map<string, Expr> Partitioner::evaluate_reuse(const FStage &stg,
         debug(3) << [&] {
             disp_regions(reuse_regions[d]);
             return "";
-        };
+        }();
         for (const auto &reg : reuse_regions[d]) {
             Expr size = box_size(reg.second);
             if (!size.defined()) {
@@ -1784,7 +1784,7 @@ void Partitioner::group(Partitioner::Level level) {
         debug(3) << [&] {
             disp_pipeline_costs();
             return "";
-        };
+        }();
     }
 }
 
@@ -3305,7 +3305,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     debug(3) << [&] {
         costs.disp_func_costs();
         return "";
-    };
+    }();
 
     debug(2) << "Initializing dependence analysis...\n";
     DependenceAnalysis dep_analysis(env, order, func_val_bounds);
@@ -3370,21 +3370,21 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         part.disp_pipeline_graph();
         part.disp_pipeline_bounds();
         return "";
-    };
+    }();
 
     debug(2) << "Partitioner initializing groups...\n";
     part.initialize_groups();
     debug(3) << [&] {
         part.disp_pipeline_costs();
         return "";
-    };
+    }();
 
     debug(2) << "Partitioner computing inline group...\n";
     part.group(Partitioner::Level::Inline);
     debug(3) << [&] {
         part.disp_grouping();
         return "";
-    };
+    }();
 
     debug(2) << "Partitioner computing fast-mem group...\n";
     part.grouping_cache.clear();
@@ -3394,7 +3394,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         part.disp_grouping();
         part.disp_pipeline_graph();
         return "";
-    };
+    }();
 
     debug(2) << "Initializing AutoSchedule...\n";
     AutoSchedule sched(env, top_order);

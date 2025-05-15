@@ -32,12 +32,15 @@ std::ostream &operator<<(std::ostream &stream, const Stmt &);
 struct LoweredFunc;
 std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
-/** For optional debugging during codegen, use the debug class as
+bool debug_is_active(int verbosity, const char *file, const char *function, int line);
+#define debug_is_active(n) (::Halide::Internal::debug_is_active((n), __FILE__, __FUNCTION__, __LINE__))
+
+/** For optional debugging during codegen, use the debug macro as
  * follows:
  *
- \code
- debug(verbosity) << "The expression is " << expr << "\n";
- \endcode
+ * \code
+ * debug(verbosity) << "The expression is " << expr << "\n";
+ * \endcode
  *
  * verbosity of 0 always prints, 1 should print after every major
  * stage, 2 should be used for more detail, and 3 should be used for
@@ -45,28 +48,9 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
  * is determined by the value of the environment variable
  * HL_DEBUG_CODEGEN
  */
-
-namespace detail {
-struct debug {
-    template<typename T>
-    debug &operator<<(T &&x) {
-        if constexpr (std::is_invocable_v<T>) {
-            std::cerr << x();
-        } else {
-            std::cerr << std::forward<T>(x);
-        }
-        return *this;
-    }
-};
-
-bool debug_is_active(int verbosity, const char *file, const char *function, int line);
-}  // namespace detail
-
 #define debug(n)                                     \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    (!debug_is_active((n))) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::detail::debug()
-
-#define debug_is_active(n) (::Halide::Internal::detail::debug_is_active((n), __FILE__, __FUNCTION__, __LINE__))
+    (!debug_is_active((n))) ? (void)0 : ::Halide::Internal::Voidifier() & std::cerr
 
 /** Allow easily printing the contents of containers, or std::vector-like containers,
  *  in debug output. Used like so:

@@ -369,7 +369,7 @@ Stmt add_image_checks_inner(Stmt s,
                    << "\n";
             }
             return ss.str();
-        };
+        }();
 
         for (int j = 0; j < dimensions; j++) {
             string dim = std::to_string(j);

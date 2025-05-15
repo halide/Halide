@@ -126,9 +126,11 @@ struct ReportBase {
     std::ostringstream msg;
 
     ReportBase(const char *file, int line, const char *condition_string, const char *prefix) {
-        msg << prefix << " at " << file << ":" << line << ' ';
-        if (condition_string) {
-            msg << "Condition failed: " << condition_string << ' ';
+        if (debug_is_active(1)) {
+            msg << prefix << " at " << file << ":" << line << ' ';
+            if (condition_string) {
+                msg << "Condition failed: " << condition_string << ' ';
+            }
         }
     }
 

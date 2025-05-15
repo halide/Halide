@@ -733,7 +733,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     debug(2) << [&] {
         dump();
         return "Done with CodeGen_PTX_Dev::compile_to_src";
-    };
+    }();
 
     debug(1) << "PTX kernel:\n"
              << outstr.c_str() << "\n";
@@ -772,7 +772,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
         */
         return "";
-    };
+    }();
 
     // Null-terminate the ptx source
     buffer.push_back(0);

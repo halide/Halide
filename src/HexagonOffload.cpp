@@ -1034,7 +1034,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
         ss << assembly.c_str() << "\n";
         return ss.str();
-    };
+    }();
 
     auto obj = Elf::Object::parse_object(object.data(), object.size());
     internal_assert(obj);
