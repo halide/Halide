@@ -47,34 +47,26 @@ std::ostream &operator<<(std::ostream &, const LoweredFunc &);
  */
 
 namespace detail {
-class debug {
-    const bool logging;
-    static int should_log(int verbosity, const char *file, const char *function, int line);
-
-public:
-    debug(const int verbosity, const char *file, const char *function, const int line)
-        : logging(should_log(verbosity, file, function, line)) {
-    }
-
+struct debug {
     template<typename T>
     debug &operator<<(T &&x) {
-        if (logging) {
-            if constexpr (std::is_invocable_v<T>) {
-                std::cerr << x();
-            } else {
-                std::cerr << std::forward<T>(x);
-            }
+        if constexpr (std::is_invocable_v<T>) {
+            std::cerr << x();
+        } else {
+            std::cerr << std::forward<T>(x);
         }
         return *this;
     }
-
-    bool is_active() const {
-        return logging;
-    }
 };
+
+bool debug_is_active(int verbosity, const char *file, const char *function, int line);
 }  // namespace detail
 
-#define debug(n) Halide::Internal::detail::debug(n, __FILE__, __FUNCTION__, __LINE__)
+#define debug(n)                                     \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
+    (!debug_is_active((n))) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::detail::debug()
+
+#define debug_is_active(n) (::Halide::Internal::detail::debug_is_active((n), __FILE__, __FUNCTION__, __LINE__))
 
 /** Allow easily printing the contents of containers, or std::vector-like containers,
  *  in debug output. Used like so:

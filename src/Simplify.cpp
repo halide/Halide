@@ -432,7 +432,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
-    const bool check_failed_proofs = debug(1).is_active() || get_compiler_logger() != nullptr;
+    const bool check_failed_proofs = debug_is_active(1) || get_compiler_logger() != nullptr;
     if (check_failed_proofs && !is_const(e)) {
         struct RenameVariables : public IRMutator {
             using IRMutator::visit;

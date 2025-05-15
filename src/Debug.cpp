@@ -106,8 +106,9 @@ std::vector<DebugRule> parse_rules(const std::string &env) {
 
 }  // namespace
 
-int debug::should_log(const int verbosity, const char *file, const char *function,
-                      const int line) {
+#undef debug_is_active
+bool debug_is_active(const int verbosity, const char *file, const char *function,
+                     const int line) {
     static const std::vector<DebugRule> rules = parse_rules(get_env_variable("HL_DEBUG_CODEGEN"));
     return std::any_of(rules.begin(), rules.end(), [&](const auto &rule) {
         return rule.accepts(verbosity, file, function, line);
