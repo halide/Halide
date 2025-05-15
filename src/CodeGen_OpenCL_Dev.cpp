@@ -1148,6 +1148,12 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define acosh_f32 acosh \n"
                << "#define tanh_f32 tanh \n"
                << "#define atanh_f32 atanh \n"
+               << "#define fast_sin_f32 native_sin \n"
+               << "#define fast_cos_f32 native_cos \n"
+               << "#define fast_tan_f32 native_tan \n"
+               << "#define fast_exp_f32 native_exp \n"
+               << "#define fast_log_f32 native_log \n"
+               << "#define fast_pow_f32 native_powr \n"
                << "#define fast_inverse_f32 native_recip \n"
                << "#define fast_inverse_sqrt_f32 native_rsqrt \n";
 
