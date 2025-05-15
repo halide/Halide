@@ -32,14 +32,13 @@ bool parse_int(const std::string &number, int &value) {
 class DebugRule {
     int verbosity = 0;
     std::string file_suffix = "";
-    std::string function_suffix = "";
     int line_low = -1;
     int line_high = INT_MAX;
-
-public:
+    std::string function_suffix = "";
     enum Complexity { VerbosityOnly,
                       NeedsMatching } complexity = VerbosityOnly;
 
+public:
     static std::optional<DebugRule> parse(const std::string &spec) {
         DebugRule rule;
         const char *ptr = spec.c_str();
@@ -90,14 +89,10 @@ public:
     }
 };
 
-std::pair<std::vector<DebugRule>, DebugRule::Complexity>
-parse_rules(const std::string &env) {
+std::vector<DebugRule> parse_rules(const std::string &env) {
     std::vector<DebugRule> rules;
-    DebugRule::Complexity complexity = DebugRule::VerbosityOnly;
-
     for (const std::string &spec : split_string(env, ";")) {
         if (auto rule = DebugRule::parse(spec)) {
-            complexity = std::max(complexity, rule->complexity);
             rules.push_back(*rule);
         } else if (!spec.empty()) {
             user_warning
@@ -106,23 +101,15 @@ parse_rules(const std::string &env) {
                 << "verbosity[,filename[:line_low[-line_high]]][@func]";
         }
     }
-
-    if (rules.empty()) {
-        rules.emplace_back();
-    }
-
-    return {rules, complexity};
+    return rules;
 }
 
 }  // namespace
 
 int debug::should_log(const int verbosity, const char *file, const char *function,
                       const int line) {
-    // C++ is silly and doesn't allow `static` with structured bindings
-    static const auto rc = parse_rules(get_env_variable("HL_DEBUG_CODEGEN"));
-    const auto &[rules, complexity] = rc;
-
-    return std::any_of(rules.begin(), rules.end(), [&](const DebugRule &rule) {
+    static const std::vector<DebugRule> rules = parse_rules(get_env_variable("HL_DEBUG_CODEGEN"));
+    return std::any_of(rules.begin(), rules.end(), [&](const auto &rule) {
         return rule.accepts(verbosity, file, function, line);
     });
 }
