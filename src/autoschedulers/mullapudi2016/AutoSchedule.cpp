@@ -1,13 +1,12 @@
 #include "HalidePlugin.h"
 
+#include "ParamParser.h"
+
 #include <algorithm>
 #include <map>
 #include <regex>
 #include <set>
 #include <utility>
-
-#include "Halide.h"
-#include "ParamParser.h"
 
 namespace Halide {
 namespace Internal {
