@@ -1,6 +1,6 @@
-#include "Errors.h"
-#include "Halide.h"
 #include "HalidePlugin.h"
+
+#include "Errors.h"
 #include "ParamParser.h"
 
 namespace Halide {

@@ -2866,9 +2866,10 @@ void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
     emitter.encode_spirv_module(spirv_module);
 
     // Dump the SPIR-V if debug is enabled
-    if (debug::debug_level() >= 2) {
+    debug(2) << [&] {
         emitter.dump_spirv_module();
-    }
+        return "";
+    }();
 
     // Copy the SPIR-V module into the Kernel Module table
     KernelModule kernel_module;

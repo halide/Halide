@@ -191,9 +191,9 @@ void ReverseAccumulationVisitor::propagate_adjoints(
         realization_order({output.function()}, env).first;
     vector<Func> funcs;
     funcs.reserve(order.size());
-    // Internal::debug(0) << "Sorted Func list:\n";
+    // debug(0) << "Sorted Func list:\n";
     // for (const auto &func_name : order) {
-    //     Internal::debug(0) << "  . " << func_name << "\n";
+    //     debug(0) << "  . " << func_name << "\n";
     // }
     for (const auto &func_name : order) {
         funcs.emplace_back(env[func_name]);
@@ -1919,7 +1919,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 Func Derivative::operator()(const Func &func, int update_id) const {
     auto it = adjoints.find(FuncKey{func.name(), update_id});
     if (it == adjoints.end()) {
-        Internal::debug(1) << "Could not find Func " << func.name() << "\n";
+        debug(1) << "Could not find Func " << func.name() << "\n";
         return Func();
     }
     return it->second;
@@ -1928,7 +1928,7 @@ Func Derivative::operator()(const Func &func, int update_id) const {
 Func Derivative::operator()(const Buffer<> &buffer) const {
     auto it = adjoints.find(FuncKey{buffer.name(), -1});
     if (it == adjoints.end()) {
-        Internal::debug(1) << "Could not find Buffer " << buffer.name() << "\n";
+        debug(1) << "Could not find Buffer " << buffer.name() << "\n";
         return Func();
     }
     return it->second;
@@ -1937,7 +1937,7 @@ Func Derivative::operator()(const Buffer<> &buffer) const {
 Func Derivative::operator()(const Param<> &param) const {
     auto it = adjoints.find(FuncKey{param.name(), -1});
     if (it == adjoints.end()) {
-        Internal::debug(1) << "Could not find Param " << param.name() << "\n";
+        debug(1) << "Could not find Param " << param.name() << "\n";
         return Func();
     }
     return it->second;
@@ -1946,7 +1946,7 @@ Func Derivative::operator()(const Param<> &param) const {
 Func Derivative::operator()(const std::string &name) const {
     auto it = adjoints.find(FuncKey{name, -1});
     if (it == adjoints.end()) {
-        Internal::debug(1) << "Could not find name: " << name << "\n";
+        debug(1) << "Could not find name: " << name << "\n";
         return Func();
     }
     return it->second;

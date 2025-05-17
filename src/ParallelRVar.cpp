@@ -146,7 +146,7 @@ bool can_parallelize_rvar(const string &v,
 
     // Add the definition's predicate if there is any
     if (pred.defined() || !is_const_one(pred)) {
-        Expr this_pred = pred;
+        const Expr &this_pred = pred;
         Expr other_pred = renamer.mutate(pred);
         debug(3) << "......this thread predicate: " << this_pred << "\n";
         debug(3) << "......other thread predicate: " << other_pred << "\n";

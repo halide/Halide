@@ -6,9 +6,7 @@ namespace Halide {
 namespace Internal {
 
 std::vector<DeviceArgument> HostClosure::arguments() {
-    if (debug::debug_level() >= 2) {
-        debug(2) << *this;
-    }
+    debug(2) << *this;
 
     std::vector<DeviceArgument> res;
     for (const auto &v : vars) {

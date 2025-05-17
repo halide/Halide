@@ -97,12 +97,16 @@ int main(int argc, char **argv) {
     fprintf(stdout, "\n");
     fprintf(stdout,
             "// Clean up macros used inside Halide headers\n"
+            "#ifndef HALIDE_KEEP_MACROS\n"
             "#undef user_assert\n"
             "#undef user_error\n"
             "#undef user_warning\n"
             "#undef internal_error\n"
             "#undef internal_assert\n"
             "#undef halide_runtime_error\n"
+            "#undef debug\n"
+            "#undef debug_is_active\n"
+            "#endif\n"
             "#endif  // HALIDE_H\n");
 
     return 0;

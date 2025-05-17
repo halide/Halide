@@ -427,12 +427,14 @@ Stmt lower_parallel_tasks(const Stmt &s, std::vector<LoweredFunc> &closure_imple
     Stmt result = lowering_mutator.mutate(s);
 
     // Main body will be dumped as part of standard lowering debugging, but closures will not be.
-    if (debug::debug_level() >= 2) {
+    debug(2) << [&] {
+        std::stringstream ss;
         for (const auto &lf : lowering_mutator.closure_implementations) {
-            debug(2) << "lower_parallel_tasks generated closure lowered function " << lf.name << ":\n"
-                     << lf.body << "\n\n";
+            ss << "lower_parallel_tasks generated closure lowered function " << lf.name << ":\n"
+               << lf.body << "\n\n";
         }
-    }
+        return ss.str();
+    }();
 
     // Append to the end rather than replacing the list entirely.
     closure_implementations.insert(closure_implementations.end(),

@@ -730,10 +730,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     module_pass_manager.run(*module);
 
     // Codegen pipeline completed.
-    if (debug::debug_level() >= 2) {
+    debug(2) << [&] {
         dump();
-    }
-    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
+        return "Done with CodeGen_PTX_Dev::compile_to_src";
+    }();
 
     debug(1) << "PTX kernel:\n"
              << outstr.c_str() << "\n";
@@ -741,9 +741,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     vector<char> buffer(outstr.begin(), outstr.end());
 
     // Dump the SASS too if the cuda SDK is in the path
-    if (debug::debug_level() >= 2) {
-        debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";
-
+    debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";
+    debug(2) << [&] {
         TemporaryFile ptx(get_current_kernel_name(), ".ptx");
         TemporaryFile sass(get_current_kernel_name(), ".sass");
 
@@ -772,7 +771,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
             f.read(buffer.data(), sz);
         }
         */
-    }
+        return "";
+    }();
 
     // Null-terminate the ptx source
     buffer.push_back(0);

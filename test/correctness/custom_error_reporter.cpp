@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     MyCustomErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
-    Halide::Internal::WarningReport("", 0, nullptr) << "Here is a warning.";
+    Halide::Internal::WarningReport("", "", 0, nullptr) << "Here is a warning.";
 
     // This call should not return.
     _halide_user_assert(argc == 0) << should_be_evaluated();

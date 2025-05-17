@@ -1094,9 +1094,10 @@ void CodeGen_LLVM::optimize_module() {
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
-    if (debug::debug_level() >= 3) {
+    debug(3) << [&] {
         module->print(dbgs(), nullptr, false, true);
-    }
+        return "";
+    }();
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
@@ -1239,9 +1240,10 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     debug(3) << "After LLVM optimizations:\n";
-    if (debug::debug_level() >= 2) {
+    debug(2) << [&] {
         module->print(dbgs(), nullptr, false, true);
-    }
+        return "";
+    }();
 
     auto *logger = get_compiler_logger();
     if (logger) {
@@ -1264,23 +1266,15 @@ void CodeGen_LLVM::sym_pop(const string &name) {
 
 llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const {
     // look in the symbol table
-    llvm::Value *const *v = symbol_table.find(name);
-    if (!v) {
-        if (must_succeed) {
-            std::ostringstream err;
-            err << "Symbol not found: " << name << "\n";
-
-            if (debug::debug_level() > 0) {
-                err << "The following names are in scope:\n"
-                    << symbol_table << "\n";
-            }
-
-            internal_error << err.str();
-        } else {
-            return nullptr;
-        }
+    if (const auto *v = symbol_table.find(name)) {
+        return *v;
     }
-    return *v;
+    if (must_succeed) {
+        debug(1) << "The following names are in scope:\n"
+                 << symbol_table;
+        internal_error << "Symbol not found: " << name;
+    }
+    return nullptr;
 }
 
 bool CodeGen_LLVM::sym_exists(const string &name) const {
@@ -1318,12 +1312,14 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
                        e.type().is_handle() ||
                        value->getType()->isVoidTy() ||
                        value->getType() == llvm_type_of(e.type());
-    if (!types_match && debug::debug_level() > 0) {
-        debug(1) << "Unexpected LLVM type for generated expression. Expected (llvm_type_of(e.type())): ";
-        llvm_type_of(e.type())->print(dbgs(), true);
-        debug(1) << " got (value->getType()): ";
-        value->print(dbgs(), true);
-        debug(1) << "\n";
+    if (!types_match) {
+        debug(1) << [&] {
+            std::cerr << "Unexpected LLVM type for generated expression. Expected (llvm_type_of(e.type())): ";
+            llvm_type_of(e.type())->print(dbgs(), true);
+            std::cerr << " got (value->getType()): ";
+            value->print(dbgs(), true);
+            return "\n";
+        }();
     }
     internal_assert(types_match)
         << "Codegen of Expr " << e

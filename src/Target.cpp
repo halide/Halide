@@ -823,7 +823,7 @@ bool merge_string(Target &t, const std::string &target) {
     vector<string> tokens;
     size_t first_dash;
     while ((first_dash = rest.find('-')) != string::npos) {
-        // Internal::debug(0) << first_dash << ", " << rest << "\n";
+        // debug(0) << first_dash << ", " << rest << "\n";
         tokens.push_back(rest.substr(0, first_dash));
         rest = rest.substr(first_dash + 1);
     }
@@ -1644,16 +1644,16 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if (arch != other.arch || bits != other.bits || os != other.os) {
-        Internal::debug(1) << "runtime targets must agree on platform (arch-bits-os)\n"
-                           << "  this:  " << *this << "\n"
-                           << "  other: " << other << "\n";
+        debug(1) << "runtime targets must agree on platform (arch-bits-os)\n"
+                 << "  this:  " << *this << "\n"
+                 << "  other: " << other << "\n";
         return false;
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, SanitizerCoverage\n"
-                           << "  this:  " << *this << "\n"
-                           << "  other: " << other << "\n";
+        debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, SanitizerCoverage\n"
+                 << "  this:  " << *this << "\n"
+                 << "  other: " << other << "\n";
         return false;
     }
 
