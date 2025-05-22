@@ -263,10 +263,10 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
 
         llvm::Function *barrier;
-        if (barrier = module->getFunction("llvm.nvvm.barrier.cta.sync.aligned.all")) {
+        if ((barrier = module->getFunction("llvm.nvvm.barrier.cta.sync.aligned.all"))) {
             // LLVM 20 and above: https://github.com/llvm/llvm-project/pull/140615
             builder->CreateCall(barrier, builder->getInt32(0));
-        } else if (barrier = module->getFunction("llvm.nvvm.barrier0")) {
+        } else if ((barrier = module->getFunction("llvm.nvvm.barrier0"))) {
             // LLVM 19: Testing for llvm.nvvm.barrier0 can be removed once we drop support for LLVM 19
             builder->CreateCall(barrier);
         } else {
