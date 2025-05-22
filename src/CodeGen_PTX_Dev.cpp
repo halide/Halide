@@ -267,13 +267,13 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
             internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
 
             builder->CreateCall(barrier0);
-            value = ConstantInt::get(i32_t, 0);
         } else {
             // Changed in LLVM 20.
             barrier0 = module->getFunction("llvm.nvvm.barrier.cta.sync.aligned.all");
             internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier.cta.sync.aligned.all)\n";
             builder->CreateCall(barrier0, builder->getInt32(0));
         }
+        value = ConstantInt::get(i32_t, 0);
         return;
     }
 
