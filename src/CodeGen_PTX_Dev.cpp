@@ -262,15 +262,13 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         auto fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
 
-        llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
-        if (barrier0) {
-            internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
-
+        llvm::Function *barrier = module->getFunction("llvm.nvvm.barrier0");
+        if (barrier) {
             builder->CreateCall(barrier0);
         } else {
-            // Changed in LLVM 20.
-            barrier0 = module->getFunction("llvm.nvvm.barrier.cta.sync.aligned.all");
-            internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier.cta.sync.aligned.all)\n";
+            // Changed in LLVM 20: https://github.com/llvm/llvm-project/pull/140615
+            barrier = module->getFunction("llvm.nvvm.barrier.cta.sync.aligned.all");
+            internal_assert(barrier) << "Could not find PTX barrier intrinsic llvm.nvvm.barrier0 nor llvm.nvvm.barrier.cta.sync.aligned.all\n";
             builder->CreateCall(barrier0, builder->getInt32(0));
         }
         value = ConstantInt::get(i32_t, 0);
