@@ -1,4 +1,5 @@
 declare void @llvm.nvvm.barrier0()
+declare void @llvm.nvvm.barrier.cta.sync.aligned.all(i32)
 declare  i32 @llvm.nvvm.read.ptx.sreg.tid.x()
 declare  i32 @llvm.nvvm.read.ptx.sreg.ctaid.x()
 declare  i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
