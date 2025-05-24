@@ -85,7 +85,7 @@ int vk_create_command_pool(void *user_context, VulkanMemoryAllocator *allocator,
     debug(user_context)
         << " vk_create_command_pool (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
-        << "queue_index: " << queue_index << ")\n";
+        << "queue_index: " << queue_index << ")";
 #endif
 
     if (allocator == nullptr) {
@@ -103,7 +103,7 @@ int vk_create_command_pool(void *user_context, VulkanMemoryAllocator *allocator,
 
     VkResult result = vkCreateCommandPool(allocator->current_device(), &command_pool_info, allocator->callbacks(), command_pool);
     if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: Failed to create command pool!\n";
+        vk_report_error(user_context, result, "vkCreateCommandPool");
         return halide_error_code_generic_error;
     }
     return halide_error_code_success;
@@ -117,7 +117,7 @@ int vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator
         << "command_pool: " << (void *)command_pool << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to destroy command pool ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to destroy command pool ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
     vkResetCommandPool(allocator->current_device(), command_pool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
@@ -135,7 +135,7 @@ int vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocato
         << "command_pool: " << (void *)command_pool << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to create command buffer ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to create command buffer ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -150,7 +150,7 @@ int vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocato
 
     VkResult result = vkAllocateCommandBuffers(allocator->current_device(), &command_buffer_info, command_buffer);
     if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: Failed to allocate command buffers!\n";
+        vk_report_error(user_context, result, "vkAllocateCommandBuffers");
         return halide_error_code_generic_error;
     }
     return halide_error_code_success;
@@ -165,7 +165,7 @@ int vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocat
         << "command_buffer: " << (void *)command_buffer << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to destroy command buffer ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to destroy command buffer ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -231,7 +231,7 @@ int vk_fill_command_buffer_with_dispatch_call(void *user_context,
 
     VkResult result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
     if (result != VK_SUCCESS) {
-        error(user_context) << "vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
+        vk_report_error(user_context, result, "vkBeginCommandBuffer");
         return halide_error_code_generic_error;
     }
 
@@ -242,7 +242,7 @@ int vk_fill_command_buffer_with_dispatch_call(void *user_context,
 
     result = vkEndCommandBuffer(command_buffer);
     if (result != VK_SUCCESS) {
-        error(user_context) << "vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
+        vk_report_error(user_context, result, "vkEndCommandBuffer");
         return halide_error_code_generic_error;
     }
 
@@ -272,7 +272,7 @@ int vk_submit_command_buffer(void *user_context, VkQueue queue, VkCommandBuffer 
 
     VkResult result = vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE);
     if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
+        vk_report_error(user_context, result, "vkSubmitQueue");
         return halide_error_code_generic_error;
     }
     return halide_error_code_success;
@@ -327,7 +327,7 @@ int vk_create_descriptor_pool(void *user_context,
         << "storage_buffer_count: " << (uint32_t)storage_buffer_count << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to create descriptor pool ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to create descriptor pool ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -364,7 +364,7 @@ int vk_create_descriptor_pool(void *user_context,
 
     VkResult result = vkCreateDescriptorPool(allocator->current_device(), &descriptor_pool_info, allocator->callbacks(), descriptor_pool);
     if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: Failed to create descriptor pool! vkCreateDescriptorPool returned " << vk_get_error_name(result) << "\n";
+        vk_report_error(user_context, result, "vkCreateDescriptorPool");
         return halide_error_code_generic_error;
     }
     return halide_error_code_success;
@@ -380,7 +380,7 @@ int vk_destroy_descriptor_pool(void *user_context,
         << "descriptor_pool: " << (void *)descriptor_pool << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to destroy descriptor pool ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to destroy descriptor pool ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
     vkDestroyDescriptorPool(allocator->current_device(), descriptor_pool, allocator->callbacks());
@@ -404,7 +404,7 @@ int vk_create_descriptor_set_layout(void *user_context,
         << "layout: " << (void *)layout << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to create descriptor set layout ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to create descriptor set layout ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -462,7 +462,7 @@ int vk_create_descriptor_set_layout(void *user_context,
     // Create the descriptor set layout
     VkResult result = vkCreateDescriptorSetLayout(allocator->current_device(), &layout_info, allocator->callbacks(), layout);
     if (result != VK_SUCCESS) {
-        error(user_context) << "vkCreateDescriptorSetLayout returned " << vk_get_error_name(result) << "\n";
+        vk_report_error(user_context, result, "vkCreateDescriptorSetLayout");
         return halide_error_code_generic_error;
     }
 
@@ -480,7 +480,7 @@ int vk_destroy_descriptor_set_layout(void *user_context,
         << "layout: " << (void *)descriptor_set_layout << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to destroy descriptor set layout ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to destroy descriptor set layout ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
     vkDestroyDescriptorSetLayout(allocator->current_device(), descriptor_set_layout, allocator->callbacks());
@@ -502,7 +502,7 @@ int vk_create_descriptor_set(void *user_context,
         << "descriptor_pool: " << (void *)descriptor_pool << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to create descriptor set ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to create descriptor set ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -517,7 +517,7 @@ int vk_create_descriptor_set(void *user_context,
 
     VkResult result = vkAllocateDescriptorSets(allocator->current_device(), &descriptor_set_info, descriptor_set);
     if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkAllocateDescriptorSets returned " << vk_get_error_name(result) << "\n";
+        vk_report_error(user_context, result, "vkAllocateDescriptorSets");
         return halide_error_code_generic_error;
     }
 
@@ -543,7 +543,7 @@ int vk_update_descriptor_set(void *user_context,
         << "descriptor_set: " << (void *)descriptor_set << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to create descriptor set ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to create descriptor set ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -600,7 +600,7 @@ int vk_update_descriptor_set(void *user_context,
             // retrieve the buffer from the region
             VkBuffer *device_buffer = reinterpret_cast<VkBuffer *>(owner->handle);
             if (device_buffer == nullptr) {
-                error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
+                error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!";
                 return halide_error_code_internal_error;
             }
 
@@ -673,7 +673,7 @@ MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
 #endif
 
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to create scalar uniform buffer ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to create scalar uniform buffer ... invalid allocator pointer!";
         return nullptr;
     }
 
@@ -686,7 +686,7 @@ MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
     // allocate a new region
     MemoryRegion *region = allocator->reserve(user_context, request);
     if ((region == nullptr) || (region->handle == nullptr)) {
-        error(user_context) << "Vulkan: Failed to create scalar uniform buffer ... unable to allocate device memory!\n";
+        error(user_context) << "Vulkan: Failed to create scalar uniform buffer ... unable to allocate device memory!";
         return nullptr;
     }
 
@@ -708,19 +708,19 @@ int vk_update_scalar_uniform_buffer(void *user_context,
 #endif
 
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to update scalar uniform buffer ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to update scalar uniform buffer ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
     if ((region == nullptr) || (region->handle == nullptr)) {
-        error(user_context) << "Vulkan: Failed to update scalar uniform buffer ... invalid memory region!\n";
+        error(user_context) << "Vulkan: Failed to update scalar uniform buffer ... invalid memory region!";
         return halide_error_code_internal_error;
     }
 
     // map the region to a host ptr
     uint8_t *host_ptr = (uint8_t *)allocator->map(user_context, region);
     if (host_ptr == nullptr) {
-        error(user_context) << "Vulkan: Failed to update scalar uniform buffer ... unable to map host pointer to device memory!\n";
+        error(user_context) << "Vulkan: Failed to update scalar uniform buffer ... unable to map host pointer to device memory!";
         return halide_error_code_internal_error;
     }
 
@@ -748,7 +748,7 @@ int vk_destroy_scalar_uniform_buffer(void *user_context, VulkanMemoryAllocator *
         << "scalar_args_region: " << (void *)scalar_args_region << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to destroy scalar uniform buffer ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to destroy scalar uniform buffer ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -782,7 +782,7 @@ int vk_create_pipeline_layout(void *user_context,
         << "pipeline_layout: " << (void *)pipeline_layout << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to create pipeline layout ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to create pipeline layout ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -791,7 +791,7 @@ int vk_create_pipeline_layout(void *user_context,
         if (descriptor_set_count > max_bound_descriptor_sets) {
             error(user_context) << "Vulkan: Number of descriptor sets for pipeline layout exceeds the number that can be bound by device!\n"
                                 << " requested: " << descriptor_set_count << ","
-                                << " available: " << max_bound_descriptor_sets << "\n";
+                                << " available: " << max_bound_descriptor_sets;
             return halide_error_code_incompatible_device_interface;
         }
     }
@@ -808,7 +808,7 @@ int vk_create_pipeline_layout(void *user_context,
 
     VkResult result = vkCreatePipelineLayout(allocator->current_device(), &pipeline_layout_info, allocator->callbacks(), pipeline_layout);
     if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkCreatePipelineLayout returned " << vk_get_error_name(result) << "\n";
+        vk_report_error(user_context, result, "vkCreatePipelineLayout");
         return halide_error_code_generic_error;
     }
     return halide_error_code_success;
@@ -826,7 +826,7 @@ int vk_destroy_pipeline_layout(void *user_context,
 #endif
 
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to destroy pipeline layout ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to destroy pipeline layout ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -848,11 +848,12 @@ int vk_create_compute_pipeline(void *user_context,
     debug(user_context)
         << " vk_create_compute_pipeline (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
+        << "pipeline_name: " << pipeline_name << ", "
         << "shader_module: " << (void *)shader_module << ", "
         << "pipeline_layout: " << (void *)pipeline_layout << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to create compute pipeline ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to create compute pipeline ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -878,7 +879,10 @@ int vk_create_compute_pipeline(void *user_context,
 
     VkResult result = vkCreateComputePipelines(allocator->current_device(), VK_NULL_HANDLE, 1, &compute_pipeline_info, allocator->callbacks(), compute_pipeline);
     if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: Failed to create compute pipeline! vkCreateComputePipelines returned " << vk_get_error_name(result) << "\n";
+        vk_report_error(user_context, result, "vkCreateComputePipeline")
+            << "failed to create compute pipeline " << pipeline_name << ".\n"
+            << " (This might be a bug in Halide. To debug this, see the HL_SPIRV_DUMP_FILE environment variable, and use the Khronos validator to make a bug report)";
+
         return halide_error_code_generic_error;
     }
 
@@ -905,24 +909,24 @@ int vk_setup_compute_pipeline(void *user_context,
 #endif
 
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to setup compute pipeline ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to setup compute pipeline ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
     if (shader_bindings == nullptr) {
-        error(user_context) << "Vulkan: Failed to setup compute pipeline ... invalid shader bindings!\n";
+        error(user_context) << "Vulkan: Failed to setup compute pipeline ... invalid shader bindings!";
         return halide_error_code_generic_error;
     }
 
     if (shader_bindings == nullptr) {
-        error(user_context) << "Vulkan: Failed to setup compute pipeline ... invalid dispatch data!\n";
+        error(user_context) << "Vulkan: Failed to setup compute pipeline ... invalid dispatch data!";
         return halide_error_code_generic_error;
     }
 
     VkResult result = VK_SUCCESS;
     const char *entry_point_name = shader_bindings->entry_point_name;
     if (entry_point_name == nullptr) {
-        error(user_context) << "Vulkan: Failed to setup compute pipeline ... missing entry point name!\n";
+        error(user_context) << "Vulkan: Failed to setup compute pipeline ... missing entry point name!";
         return halide_error_code_generic_error;
     }
 
@@ -945,7 +949,7 @@ int vk_setup_compute_pipeline(void *user_context,
             } else {
                 // dynamic allocation
                 if (shared_mem_constant_id > 0) {
-                    error(user_context) << "Vulkan: Multiple dynamic shared memory allocations found! Only one is suported!!\n";
+                    error(user_context) << "Vulkan: Multiple dynamic shared memory allocations found! Only one is suported!!";
                     result = VK_ERROR_TOO_MANY_OBJECTS;
                     break;
                 }
@@ -978,13 +982,13 @@ int vk_setup_compute_pipeline(void *user_context,
             if (static_shared_mem_bytes > device_shared_mem_size) {
                 error(user_context) << "Vulkan: Amount of static shared memory used exceeds device limit!\n"
                                     << " requested: " << static_shared_mem_bytes << " bytes,"
-                                    << " available: " << device_shared_mem_size << " bytes\n";
+                                    << " available: " << device_shared_mem_size << " bytes";
                 return halide_error_code_incompatible_device_interface;
             }
             if (dispatch_data->shared_mem_bytes > device_shared_mem_size) {
                 error(user_context) << "Vulkan: Amount of dynamic shared memory used exceeds device limit!\n"
                                     << " requested: " << dispatch_data->shared_mem_bytes << " bytes,"
-                                    << " available: " << device_shared_mem_size << " bytes\n";
+                                    << " available: " << device_shared_mem_size << " bytes";
                 return halide_error_code_incompatible_device_interface;
             }
         }
@@ -1015,14 +1019,14 @@ int vk_setup_compute_pipeline(void *user_context,
             }
         }
         if (found_index == invalid_index) {
-            error(user_context) << "Vulkan: Failed to locate dispatch constant index for shader binding!\n";
+            error(user_context) << "Vulkan: Failed to locate dispatch constant index for shader binding!";
             result = VK_ERROR_INITIALIZATION_FAILED;
         }
     }
 
     // don't even attempt to create the pipeline layout if we encountered errors in the shader binding
     if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: Failed to decode shader bindings! " << vk_get_error_name(result) << "\n";
+        error(user_context) << "Vulkan: Failed to decode shader bindings! " << vk_get_error_name(result);
         return halide_error_code_generic_error;
     }
 
@@ -1050,7 +1054,7 @@ int vk_setup_compute_pipeline(void *user_context,
         if (shader_bindings->compute_pipeline) {
             int error_code = vk_destroy_compute_pipeline(user_context, allocator, shader_bindings->compute_pipeline);
             if (error_code != halide_error_code_success) {
-                error(user_context) << "Vulkan: Failed to destroy compute pipeline!\n";
+                error(user_context) << "Vulkan: Failed to destroy compute pipeline!";
                 return halide_error_code_generic_error;
             }
             shader_bindings->compute_pipeline = VK_NULL_HANDLE;
@@ -1058,7 +1062,7 @@ int vk_setup_compute_pipeline(void *user_context,
 
         int error_code = vk_create_compute_pipeline(user_context, allocator, entry_point_name, shader_module, pipeline_layout, &specialization_info, &(shader_bindings->compute_pipeline));
         if (error_code != halide_error_code_success) {
-            error(user_context) << "Vulkan: Failed to create compute pipeline!\n";
+            error(user_context) << "Vulkan: Failed to create compute pipeline!";
             return error_code;
         }
 
@@ -1068,7 +1072,7 @@ int vk_setup_compute_pipeline(void *user_context,
         if (shader_bindings->compute_pipeline == VK_NULL_HANDLE) {
             int error_code = vk_create_compute_pipeline(user_context, allocator, entry_point_name, shader_module, pipeline_layout, nullptr, &(shader_bindings->compute_pipeline));
             if (error_code != halide_error_code_success) {
-                error(user_context) << "Vulkan: Failed to create compute pipeline!\n";
+                error(user_context) << "Vulkan: Failed to create compute pipeline!";
                 return error_code;
             }
         }
@@ -1088,7 +1092,7 @@ int vk_destroy_compute_pipeline(void *user_context,
         << "compute_pipeline: " << (void *)compute_pipeline << ")\n";
 #endif
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to destroy compute pipeline ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to destroy compute pipeline ... invalid allocator pointer!";
         return halide_error_code_generic_error;
     }
 
@@ -1110,12 +1114,12 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
 #endif
 
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to decode shader bindings ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to decode shader bindings ... invalid allocator pointer!";
         return nullptr;
     }
 
     if ((module_ptr == nullptr) || (module_size < (2 * sizeof(uint32_t)))) {
-        error(user_context) << "Vulkan: Failed to decode shader bindings ... invalid module buffer!\n";
+        error(user_context) << "Vulkan: Failed to decode shader bindings ... invalid module buffer!";
         return nullptr;
     }
 
@@ -1163,7 +1167,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
     uint32_t idx = 1;  // skip past the header_word_count
     uint32_t shader_count = module_ptr[idx++];
     if (shader_count < 1) {
-        error(user_context) << "Vulkan: Failed to decode shader bindings ... no descriptors found!\n";
+        error(user_context) << "Vulkan: Failed to decode shader bindings ... no descriptors found!";
         return nullptr;  // no descriptors
     }
 
@@ -1172,7 +1176,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
     size_t shader_bindings_size = shader_count * sizeof(VulkanShaderBinding);
     VulkanShaderBinding *shader_bindings = (VulkanShaderBinding *)vk_host_malloc(user_context, shader_bindings_size, 0, alloc_scope, allocator->callbacks());
     if (shader_bindings == nullptr) {
-        error(user_context) << "Vulkan: Failed to allocate shader_bindings! Out of memory!\n";
+        error(user_context) << "Vulkan: Failed to allocate shader_bindings! Out of memory!";
         return nullptr;
     }
     memset(shader_bindings, 0, shader_bindings_size);
@@ -1205,7 +1209,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
             size_t specialization_constants_size = specialization_constants_count * sizeof(VulkanSpecializationConstant);
             specialization_constants = (VulkanSpecializationConstant *)vk_host_malloc(user_context, specialization_constants_size, 0, alloc_scope, allocator->callbacks());
             if (specialization_constants == nullptr) {
-                error(user_context) << "Vulkan: Failed to allocate specialization_constants! Out of memory!\n";
+                error(user_context) << "Vulkan: Failed to allocate specialization_constants! Out of memory!";
                 return nullptr;
             }
             memset(specialization_constants, 0, specialization_constants_size);
@@ -1241,7 +1245,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
             size_t shared_memory_allocations_size = shared_memory_allocations_count * sizeof(VulkanSharedMemoryAllocation);
             shared_memory_allocations = (VulkanSharedMemoryAllocation *)vk_host_malloc(user_context, shared_memory_allocations_size, 0, alloc_scope, allocator->callbacks());
             if (shared_memory_allocations == nullptr) {
-                error(user_context) << "Vulkan: Failed to allocate shared_memory_allocations! Out of memory!\n";
+                error(user_context) << "Vulkan: Failed to allocate shared_memory_allocations! Out of memory!";
                 return nullptr;
             }
             memset(shared_memory_allocations, 0, shared_memory_allocations_size);
@@ -1306,7 +1310,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
 #endif
         shader_bindings[n].entry_point_name = (char *)vk_host_malloc(user_context, entry_point_name_length * sizeof(uint32_t), 0, alloc_scope, allocator->callbacks());
         if (shader_bindings[n].entry_point_name == nullptr) {
-            error(user_context) << "Vulkan: Failed to allocate entry_point_name! Out of memory!\n";
+            error(user_context) << "Vulkan: Failed to allocate entry_point_name! Out of memory!";
             return nullptr;
         }
 
@@ -1358,7 +1362,7 @@ int vk_validate_shader_for_device(void *user_context, VulkanMemoryAllocator *all
             if (static_shared_mem_bytes > device_shared_mem_size) {
                 error(user_context) << "Vulkan: Amount of static shared memory used exceeds device limit!\n"
                                     << " requested: " << static_shared_mem_bytes << " bytes,"
-                                    << " available: " << device_shared_mem_size << " bytes\n";
+                                    << " available: " << device_shared_mem_size << " bytes";
                 return halide_error_code_incompatible_device_interface;
             }
         }
@@ -1370,7 +1374,7 @@ int vk_validate_shader_for_device(void *user_context, VulkanMemoryAllocator *all
         if (shader_count > max_descriptors) {
             error(user_context) << "Vulkan: Number of required descriptor sets exceeds the amount available for device!\n"
                                 << " requested: " << shader_count << ","
-                                << " available: " << max_descriptors << "\n";
+                                << " available: " << max_descriptors;
             return halide_error_code_incompatible_device_interface;
         }
     }
@@ -1466,7 +1470,7 @@ VulkanCompilationCacheEntry *vk_compile_kernel_module(void *user_context, Vulkan
         // Compile the "SPIR-V Module" for the kernel
         cache_entry->compiled_modules[i] = vk_compile_shader_module(user_context, allocator, (const char *)spirv_ptr, (int)spirv_size);
         if (cache_entry->compiled_modules[i] == nullptr) {
-            debug(user_context) << "Vulkan: Failed to compile shader module!\n";
+            debug(user_context) << "Vulkan: Failed to compile shader module!";
             error_code = halide_error_code_generic_error;
         }
 
@@ -1506,12 +1510,12 @@ VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanM
 #endif
 
     if (allocator == nullptr) {
-        error(user_context) << "Vulkan: Failed to compile shader modules ... invalid allocator pointer!\n";
+        error(user_context) << "Vulkan: Failed to compile shader modules ... invalid allocator pointer!";
         return nullptr;
     }
 
     if ((ptr == nullptr) || (size <= 0)) {
-        error(user_context) << "Vulkan: Failed to compile shader modules ... invalid program source buffer!\n";
+        error(user_context) << "Vulkan: Failed to compile shader modules ... invalid program source buffer!";
         return nullptr;
     }
 
@@ -1549,7 +1553,7 @@ VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanM
     VkSystemAllocationScope alloc_scope = VkSystemAllocationScope::VK_SYSTEM_ALLOCATION_SCOPE_OBJECT;
     VulkanCompiledShaderModule *compiled_module = (VulkanCompiledShaderModule *)vk_host_malloc(user_context, sizeof(VulkanCompiledShaderModule), 0, alloc_scope, allocator->callbacks());
     if (compiled_module == nullptr) {
-        error(user_context) << "Vulkan: Failed to allocate compilation cache entry! Out of memory!\n";
+        error(user_context) << "Vulkan: Failed to allocate compilation cache entry! Out of memory!";
         return nullptr;
     }
     memset(compiled_module, 0, sizeof(VulkanCompiledShaderModule));
@@ -1557,7 +1561,7 @@ VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanM
     // decode the entry point data and extract the shader bindings
     VulkanShaderBinding *decoded_bindings = vk_decode_shader_bindings(user_context, allocator, module_ptr, module_size);
     if (decoded_bindings == nullptr) {
-        error(user_context) << "Vulkan: Failed to decode shader bindings!\n";
+        error(user_context) << "Vulkan: Failed to decode shader bindings!";
         return nullptr;
     }
 
@@ -1574,8 +1578,8 @@ VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanM
     compiled_module->shader_count = shader_count;
 
     VkResult result = vkCreateShaderModule(allocator->current_device(), &shader_info, allocator->callbacks(), &compiled_module->shader_module);
-    if ((result != VK_SUCCESS)) {
-        error(user_context) << "Vulkan: vkCreateShaderModule Failed! Error returned: " << vk_get_error_name(result) << "\n";
+    if (result != VK_SUCCESS) {
+        vk_report_error(user_context, result, "vkCreateShaderModule");
         vk_host_free(user_context, compiled_module->shader_bindings, allocator->callbacks());
         vk_host_free(user_context, compiled_module, allocator->callbacks());
         return nullptr;
@@ -1585,7 +1589,7 @@ VulkanCompiledShaderModule *vk_compile_shader_module(void *user_context, VulkanM
     if (compiled_module->shader_count) {
         compiled_module->descriptor_set_layouts = (VkDescriptorSetLayout *)vk_host_malloc(user_context, compiled_module->shader_count * sizeof(VkDescriptorSetLayout), 0, alloc_scope, allocator->callbacks());
         if (compiled_module->descriptor_set_layouts == nullptr) {
-            error(user_context) << "Vulkan: Failed to allocate descriptor set layouts for cache entry! Out of memory!\n";
+            error(user_context) << "Vulkan: Failed to allocate descriptor set layouts for cache entry! Out of memory!";
             return nullptr;
         }
         memset(compiled_module->descriptor_set_layouts, 0, compiled_module->shader_count * sizeof(VkDescriptorSetLayout));
@@ -1758,7 +1762,7 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
             VkBuffer *src_buffer = reinterpret_cast<VkBuffer *>(c.src);
             VkBuffer *dst_buffer = reinterpret_cast<VkBuffer *>(c.dst);
             if (!src_buffer || !dst_buffer) {
-                error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
+                error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!";
                 return halide_error_code_internal_error;
             }
 
@@ -1796,7 +1800,7 @@ int vk_device_crop_from_offset(void *user_context,
 
     VulkanContext ctx(user_context);
     if (ctx.error != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to acquire context!\n";
+        error(user_context) << "Vulkan: Failed to acquire context!";
         return ctx.error;
     }
 
@@ -1805,21 +1809,21 @@ int vk_device_crop_from_offset(void *user_context,
 #endif
 
     if (offset < 0) {
-        error(user_context) << "Vulkan: Invalid offset for device crop!\n";
+        error(user_context) << "Vulkan: Invalid offset for device crop!";
         return halide_error_code_device_crop_failed;
     }
 
     // get the allocated region for the device
     MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(src->device);
     if (device_region == nullptr) {
-        error(user_context) << "Vulkan: Failed to crop region! Invalide device region!\n";
+        error(user_context) << "Vulkan: Failed to crop region! Invalide device region!";
         return halide_error_code_device_crop_failed;
     }
 
     // create the croppeg region from the allocated region
     MemoryRegion *cropped_region = ctx.allocator->create_crop(user_context, device_region, (uint64_t)offset);
     if ((cropped_region == nullptr) || (cropped_region->handle == nullptr)) {
-        error(user_context) << "Vulkan: Failed to crop region! Unable to create memory region!\n";
+        error(user_context) << "Vulkan: Failed to crop region! Unable to create memory region!";
         return halide_error_code_device_crop_failed;
     }
 
