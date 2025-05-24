@@ -289,13 +289,18 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
             if (inner_shuffle->is_concat()) {
                 int slice_min = op->indices.front();
                 int slice_max = op->indices.back();
+                if (slice_min > slice_max) {
+                    // Slices can go backward.
+                    std::swap(slice_min, slice_max);
+                }
                 int concat_index = 0;
                 int new_slice_start = -1;
                 vector<Expr> new_concat_vectors;
                 for (const auto &v : inner_shuffle->vectors) {
                     // Check if current concat vector overlaps with slice.
-                    if ((concat_index >= slice_min && concat_index <= slice_max) ||
-                        ((concat_index + v.type().lanes() - 1) >= slice_min && (concat_index + v.type().lanes() - 1) <= slice_max)) {
+                    int overlap_max = std::min(slice_max, concat_index + v.type().lanes() - 1);
+                    int overlap_min = std::max(slice_min, concat_index);
+                    if (overlap_min <= overlap_max) {
                         if (new_slice_start < 0) {
                             new_slice_start = concat_index;
                         }
@@ -305,7 +310,10 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                     concat_index += v.type().lanes();
                 }
                 if (new_concat_vectors.size() < inner_shuffle->vectors.size()) {
-                    return Shuffle::make_slice(Shuffle::make_concat(new_concat_vectors), op->slice_begin() - new_slice_start, op->slice_stride(), op->indices.size());
+                    return Shuffle::make_slice(Shuffle::make_concat(new_concat_vectors),
+                                               op->slice_begin() - new_slice_start,
+                                               op->slice_stride(),
+                                               op->indices.size());
                 }
             }
         }
