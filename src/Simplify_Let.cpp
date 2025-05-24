@@ -98,7 +98,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
         Expr new_var = Variable::make(f.new_value.type(), f.new_name);
         Expr replacement = new_var;
 
-        debug(4) << "simplify let " << op->name << " = " << f.value << " in...\n";
+        debug(4) << "simplify let " << op->name << " = (" << f.value.type() << ") " << f.value << " in...\n";
 
         while (true) {
             const Variable *var = f.new_value.template as<Variable>();
@@ -180,6 +180,16 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
                 f.new_value = cast->value;
                 new_var = Variable::make(f.new_value.type(), f.new_name);
                 replacement = substitute(f.new_name, Cast::make(cast->type, new_var), replacement);
+            } else if (shuffle && shuffle->is_concat() && is_pure(shuffle)) {
+                // Substitute in all concatenates as they will likely simplify
+                // with other shuffles.
+                // As the structure of this while loop makes it hard to peel off
+                // pure operations from _all_ arguments to the Shuffle, we will
+                // instead subsitute all of the vars that go in the shuffle, and
+                // instead guard against side effects by checking with `is_pure()`.
+                replacement = substitute(f.new_name, shuffle, replacement);
+                f.new_value = Expr();
+                break;
             } else if (shuffle && shuffle->is_slice()) {
                 // Replacing new_value below might free the shuffle
                 // indices vector, so save them now.
