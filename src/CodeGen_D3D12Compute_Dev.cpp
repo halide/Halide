@@ -87,6 +87,7 @@ protected:
         std::string print_reinterpret_cast(Type type, const std::string &value_expr);
 
         std::string print_assignment(Type t, const std::string &rhs) override;
+        std::string print_parameters(std::vector<DeviceArgument> const& args, bool as_global);
 
         using CodeGen_GPU_C::visit;
         void visit(const Evaluate *op) override;
@@ -130,24 +131,61 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         // dispatch, there is no need to complicate things with packoffset.
     }
 
+    // TODO(soufianekhiat):
+    //  Add support for HLSL 6.6:
+    //      Type:
+    //          uint8_t4_packed   // 4 packed uint8_t values in a uint32_t
+    //          int8_t4_packed  // 4 packed int8_t values in a uint32_t
+    //      Intrinsics:
+    //          int16_t4 unpack_s8s16(int8_t4_packed packedVal);        // Sign Extended
+    //          uint16_t4 unpack_u8u16(uint8_t4_packed packedVal);      // Non-Sign Extended
+    //
+    //          int32_t4 unpack_s8s32(int8_t4_packed packedVal);        // Sign Extended
+    //          uint32_t4 unpack_u8u32(uint8_t4_packed packedVal);      // Non-Sign Extended
+    //  And:
+    //          uint8_t4_packed pack_u8(uint32_t4 unpackedVal);         // Pack lower 8 bits, drop unused bits
+    //          int8_t4_packed pack_s8(int32_t4 unpackedVal);           // Pack lower 8 bits, drop unused bits
+    //
+    //          uint8_t4_packed pack_u8(uint16_t4 unpackedVal);         // Pack lower 8 bits, drop unused bits
+    //          int8_t4_packed pack_s8(int16_t4 unpackedVal);           // Pack lower 8 bits, drop unused bits
+    //
+    //          uint8_t4_packed pack_clamp_u8(int32_t4 unpackedVal);    // Pack and Clamp [0, 255]
+    //          int8_t4_packed pack_clamp_s8(int32_t4 unpackedVal);     // Pack and Clamp [-128, 127]
+    //
+    //          uint8_t4_packed pack_clamp_u8(int16_t4 unpackedVal);    // Pack and Clamp [0, 255]
+    //          int8_t4_packed pack_clamp_s8(int16_t4 unpackedVal);     // Pack and Clamp [-128, 127]
+
     if (type.is_float()) {
         switch (type.bits()) {
         case 16:
-            // 16-bit floating point value. This data type is provided only for language compatibility.
-            // Direct3D 10 shader targets map all half data types to float data types.
-            // A half data type cannot be used on a uniform global variable (use the /Gec flag if this functionality is desired).
-            oss << "half";
+            if (target.get_d3d12_capability_lower_bound() < 62) {
+                // 16-bit floating point value. This data type is provided only for language compatibility.
+                // Direct3D 10 shader targets map all half data types to float data types.
+                // A half data type cannot be used on a uniform global variable (use the /Gec flag if this functionality is desired).
+                oss << "half";
+            } else {
+                // NOTE(soufianekhiat): need options "-enable-16bit-types -T c_s_6_2" for compilation
+                oss << "float16_t";
+            }
             break;
         case 32:
-            oss << "float";
+            if (target.get_d3d12_capability_lower_bound() < 60) {
+                oss << "float";
+            } else {
+                oss << "float32_t";
+            }
             break;
         case 64:
-            // "64-bit floating point value. You cannot use double precision values as inputs and outputs for a stream.
-            //  To pass double precision values between shaders, declare each double as a pair of uint data types.
-            //  Then, use the asdouble function to pack each double into the pair of uints and the asuint function to
-            //  unpack the pair of uints back into the double."
-            user_error << "HLSL (SM 5.1) does not have transparent support for 'double' types.\n";
-            oss << "double";
+            if (target.get_d3d12_capability_lower_bound() == 51) {
+                // "64-bit floating point value. You cannot use double precision values as inputs and outputs for a stream.
+                //  To pass double precision values between shaders, declare each double as a pair of uint data types.
+                //  Then, use the asdouble function to pack each double into the pair of uints and the asuint function to
+                //  unpack the pair of uints back into the double."
+                user_error << "HLSL (SM 5.1) does not have transparent support for 'double' types.\n";
+                oss << "double";
+            } else {
+                oss << "float64_t";
+            }
             break;
         default:
             user_error << "Can't represent a float with this many bits in HLSL (SM 5.1): " << type << "\n";
@@ -158,18 +196,39 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             oss << "bool";
             break;
         case 8:
+            if (type.is_uint()) {
+                oss << "u";
+            }
+            oss << "int";
+            break;
         case 16:
+            if (type.is_uint()) {
+                oss << "u";
+            }
+            oss << "short";
+            break;
         case 32:
             if (type.is_uint()) {
                 oss << "u";
             }
             oss << "int";
+            if (target.get_d3d12_capability_lower_bound() >= 60) {
+                oss << "32_t";
+            } else {
 #if DEBUG_TYPES
             oss << type.bits();
 #endif
+            }
             break;
         case 64:
-            user_error << "HLSL (SM 5.1) does not support 64-bit integers.\n";
+            if (target.get_d3d12_capability_lower_bound() == 51) {
+                user_error << "HLSL (SM 5.1) does not support 64-bit integers.\n";
+            } else {
+                if (type.is_uint()) {
+                    oss << "u";
+                }
+                oss << "int64_t";
+            }
             break;
         default:
             user_error << "Can't represent an integer with this many bits in HLSL (SM 5.1): " << type << "\n";
@@ -194,7 +253,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
         // TODO(marcos): are there 8-wide and 16-wide types in HLSL?
         // (CodeGen_GLSLBase seems to happily generate invalid vector types)
     default:
-        user_error << "Unsupported vector width in HLSL (SM 5.1): " << type << "\n";
+        user_error << "Unsupported vector width in HLSL (SM 5.1 or 6.x): " << type << "\n";
     }
 
     if (space == AppendSpace) {
@@ -405,6 +464,8 @@ string hex_literal(T value) {
 struct StoragePackUnpack {
     using CodeGen = CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
 
+    // TODO(soufianekhiat): https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_Pack_Unpack_Intrinsics.html
+
     // Shader Model 5.1: threadgroup shared memory is limited 32KB
     static const size_t ThreadGroupSharedStorageLimit = 32 * 1024;
 
@@ -427,6 +488,7 @@ struct StoragePackUnpack {
         std::ostringstream lhs;
         // NOTE(marcos): 8bit and 16bit word packing -- the smallest integer
         // type granularity available in HLSL SM 5.1 is 32bit (int/uint):
+        // TODO(soufianekhiat): 
         Type value_type = op->value.type();
         if (value_type.bits() == 32) {
             // storing a 32bit word? great! just reinterpret value to uint32:
@@ -446,21 +508,21 @@ struct StoragePackUnpack {
             index << i << " / " << divisor;
             ostringstream word;
             word << cg.print_name(op->name)
-                 << "[" + index.str() + "]";
+                    << "[" + index.str() + "]";
             // now mask the appropriate bits:
             ostringstream mask;
             mask << "("
-                 << hex_literal((1 << bits) - 1)
-                 << " << "
-                 << "(" << bits << "*(" << i << " % " << divisor << " ))"
-                 << ")";
+                    << hex_literal((1 << bits) - 1)
+                    << " << "
+                    << "(" << bits << "*(" << i << " % " << divisor << " ))"
+                    << ")";
             // apply the mask to the rhs value:
             ostringstream value;
             value << "("
-                  << mask.str()
-                  << " & "
-                  << "(" << cg.print_expr(op->value) << ")"
-                  << ")";
+                    << mask.str()
+                    << " & "
+                    << "(" << cg.print_expr(op->value) << ")"
+                    << ")";
 
             // the performance impact of atomic operations on shared memory is
             // not well documented... here is something:
@@ -811,6 +873,37 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type t
     return CodeGen_GPU_C::print_assignment(type, rhs_modified);
 }
 
+string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_parameters(std::vector<DeviceArgument> const &args, bool as_global) {
+    ostringstream ss;
+    for (const auto &arg : args) {
+        if (!as_global) {
+            ss << ",\n";
+            ss << " ";
+        }
+        if (arg.is_buffer) {
+            // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
+            // all buffers as UAVs since there is no way the runtime can know
+            // if a given halide_buffer_t is read-only (SRV) or read-write...
+            ss << "RW"
+               << "Buffer"
+               << "<" << print_type(arg.type) << ">"
+               << " " << print_name(arg.name);
+            Allocation alloc;
+            alloc.type = arg.type;
+            allocations.push(arg.name, alloc);
+        } else {
+            ss << "uniform"
+               << " " << print_type(arg.type)
+               << " " << print_name(arg.name);
+        }
+        if (as_global) {
+            ss << ";\n";
+        }
+    }
+
+    return ss.str();
+}
+
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, const string &value_expr) {
     ostringstream ss;
     ss << print_type(type) << "(" << value_expr << ")";
@@ -882,8 +975,12 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
     // some emulation in code...
     internal_assert(target_type.bits() >= 8);
     internal_assert(source_type.bits() >= 8);
-    internal_assert(target_type.bits() <= 32);
-    internal_assert(source_type.bits() <= 32);
+    // HLSL 6.0 support 64 bits integers and floats
+    if (target.get_d3d12_capability_lower_bound() == 51)
+    {
+        internal_assert(target_type.bits() <= 32);
+        internal_assert(source_type.bits() <= 32);
+    }
     internal_assert(target_type.bits() % 8 == 0);
     internal_assert(source_type.bits() % 8 == 0);
 
@@ -1103,7 +1200,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
-        // In D3D12/HLSL, only 32bit types (int/uint/float) are suppoerted (even
+        // In D3D12/HLSL, only 32bit types (int/uint/float) are supported (even
         // though things are changing with newer shader models). Since there is
         // no uint8 type, we'll have to emulate it with 32bit types...
         // This will also require pack/unpack logic with bit-masking and aliased
@@ -1178,6 +1275,11 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     };
     FindThreadGroupSize ftg;
     s.accept(&ftg);
+
+    if (target.get_d3d12_capability_lower_bound() >= 60) {
+        stream << print_parameters(args, true);
+    }
+
     // for undetermined 'numthreads' dimensions, insert placeholders to the code
     // such as '__NUM_TREADS_X' that will later be patched when D3DCompile() is
     // invoked in halide_d3d12compute_run()
@@ -1194,25 +1296,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
            << "uint3 tgroup_index  : SV_GroupID,\n"
            << " "
            << "uint3 tid_in_tgroup : SV_GroupThreadID";
-    for (const auto &arg : args) {
-        stream << ",\n";
-        stream << " ";
-        if (arg.is_buffer) {
-            // NOTE(marcos): Passing all buffers as RWBuffers in order to bind
-            // all buffers as UAVs since there is no way the runtime can know
-            // if a given halide_buffer_t is read-only (SRV) or read-write...
-            stream << "RW"
-                   << "Buffer"
-                   << "<" << print_type(arg.type) << ">"
-                   << " " << print_name(arg.name);
-            Allocation alloc;
-            alloc.type = arg.type;
-            allocations.push(arg.name, alloc);
-        } else {
-            stream << "uniform"
-                   << " " << print_type(arg.type)
-                   << " " << print_name(arg.name);
-        }
+    if (target.get_d3d12_capability_lower_bound() < 60) {
+        stream << print_parameters(args, false);
     }
     stream << ")\n";
 
@@ -1234,6 +1319,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 
 void CodeGen_D3D12Compute_Dev::init_module() {
     debug(2) << "D3D12Compute device codegen init_module\n";
+
+    Target const& target = d3d12compute_c.get_target();
 
     // wipe the internal kernel source
     src_stream.str("");
@@ -1260,14 +1347,18 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         // warning X4714 : sum of temp registers and indexable temp registers times 256 threads exceeds the recommended total 16384.  Performance may be reduced
         << "#pragma warning( disable : 4714 )"
            "\n"
+        //// warning: magnitude of floating-point constant too large for type 'float'; maximum is 3.40282347E+38 [-Wliteral-range]
+        //<< "#pragma warning( disable : 462 )" // OR 4056
+        //   "\n"
         << "\n";
 
     src_stream << "#define halide_maybe_unused(x) (void)(x)\n";
 
     // Write out the Halide math functions.
-    src_stream
+    //src_stream
     //<< "namespace {\n"   // HLSL does not support unnamed namespaces...
 #if DEBUG_TYPES
+    src_stream
         << "#define  int8   int\n"
         << "#define  int16  int\n"
         << "#define  int32  int\n"
@@ -1285,11 +1376,25 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "\n"
         << "#define asint32  asint\n"
         << "#define asuint32 asuint\n"
-        << "\n"
+        << "\n";
 #endif
-        << "float nan_f32()     { return  1.#IND; } \n"  // Quiet NaN with minimum fractional value.
-        << "float neg_inf_f32() { return -1.#INF; } \n"
-        << "float inf_f32()     { return +1.#INF; } \n"
+    if (target.get_d3d12_capability_lower_bound() < 60) {
+        src_stream
+            << "float nan_f32()     { return  1.#IND; } \n"  // Quiet NaN with minimum fractional value.
+            << "float neg_inf_f32() { return -1.#INF; } \n"
+            << "float inf_f32()     { return +1.#INF; } \n";
+    }
+    else {
+        // HLSL 6.x: Still a proposal https://microsoft.github.io/hlsl-specs/proposals/0003-numeric-constants.html
+        src_stream
+            // NOTE(soufianekhiat): cf. https://github.com/microsoft/hlsl-specs/issues/210
+            << "float nan_f32()     { return  1.0f/0.0f; } \n"
+            << "float neg_inf_f32() { return -1.#INF; } \n"
+            << "float inf_f32()     { return +1.#INF; } \n";
+            //<< "float neg_inf_f32() { return -1.e1000f; } \n"
+            //<< "float inf_f32()     { return +1.e1000f; } \n";
+    }
+    src_stream
         << "#define is_inf_f32     isinf    \n"
         << "#define is_finite_f32  isfinite \n"
         << "#define is_nan_f32     isnan    \n"
