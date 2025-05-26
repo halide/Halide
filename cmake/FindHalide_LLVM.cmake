@@ -11,7 +11,7 @@ set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 
 find_package(LLVM CONFIG)
 
-set(Halide_LLVM_VERSION "${LLVM_VERSION}")
+set(Halide_LLVM_VERSION "${LLVM_PACKAGE_VERSION}")
 
 if (NOT DEFINED Halide_LLVM_SHARED_LIBS)
     # Normally, we don't like making decisions for our users. However,
