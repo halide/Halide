@@ -96,7 +96,6 @@ find_package_handle_standard_args(
     REASON_FAILURE_MESSAGE "${REASON_FAILURE_MESSAGE}"
     HANDLE_COMPONENTS
     HANDLE_VERSION_RANGE
-    NAME_MISMATCHED
 )
 
 function(_Halide_LLVM_link target visibility)
