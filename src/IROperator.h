@@ -1278,7 +1278,8 @@ Expr random_int(Expr seed = Expr());
 
 /** Create an Expr that prints out its value whenever it is
  * evaluated. It also prints out everything else in the arguments
- * list, separated by spaces. This can include string literals. */
+ * list, separated by spaces. This can include string literals.
+ * Evaluates to the first argument passed. */
 //@{
 Expr print(const std::vector<Expr> &values);
 
