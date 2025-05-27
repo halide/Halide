@@ -157,7 +157,8 @@
         "rhs": "Darwin"
       },
       "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "/opt/homebrew;/opt/homebrew/opt/llvm;/opt/homebrew/opt/jpeg"
+        "Halide_LLVM_ROOT": "/opt/homebrew/opt/llvm",
+        "CMAKE_PREFIX_PATH": "/opt/homebrew;/opt/homebrew/opt/jpeg"
       }
     },
     {
@@ -169,7 +170,7 @@
       "displayName": "macOS (vcpkg)",
       "description": "macOS build with vcpkg dependencies",
       "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "/opt/homebrew/opt/llvm"
+        "CMAKE_PREFIX_PATH": ""
       }
     },
     {
