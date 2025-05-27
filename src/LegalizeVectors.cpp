@@ -26,17 +26,19 @@ int max_lanes_for_device(DeviceAPI api, int parent_max_lanes) {
     case DeviceAPI::OpenCL:
         return 16;
     case DeviceAPI::CUDA:
+    case DeviceAPI::Hexagon:
+    case DeviceAPI::HexagonDma:
     case DeviceAPI::Host:
         return 0;  // No max: LLVM based legalization
     case DeviceAPI::None:
         return parent_max_lanes;
-    default:
+    case DeviceAPI::Default_GPU:
+        internal_error << "No GPU API was selected.";
         return 0;
     }
 }
 
 std::string vec_name(const string &name, int lane_start, int lane_count) {
-    // return name + ".ls" + std::to_string(lane_start) + ".lc" + std::to_string(lane_count);
     return name + ".lanes_" + std::to_string(lane_start) + "_" + std::to_string(lane_start + lane_count - 1);
 }
 
@@ -70,7 +72,7 @@ Expr simplify_shuffle(const Shuffle *op) {
     vector<pair<int, int>> src_vec_and_lane_idx = op->vector_and_lane_indices();
     bool all_from_the_same = true;
     bool is_full_vec = src_vec_and_lane_idx[0].second == 0;
-    for (int i = 1; i < op->indices.size(); ++i) {
+    for (int i = 1; i < int(op->indices.size()); ++i) {
         if (src_vec_and_lane_idx[i].first != src_vec_and_lane_idx[0].first) {
             all_from_the_same = false;
             is_full_vec = false;
@@ -82,7 +84,7 @@ Expr simplify_shuffle(const Shuffle *op) {
     }
     if (all_from_the_same) {
         const Expr &src_vec = op->vectors[src_vec_and_lane_idx[0].first];
-        is_full_vec &= src_vec.type().lanes() == op->indices.size();
+        is_full_vec &= src_vec.type().lanes() == int(op->indices.size());
         int first_lane_in_src = src_vec_and_lane_idx[0].second;
         if (is_full_vec) {
             return src_vec;
@@ -92,7 +94,7 @@ Expr simplify_shuffle(const Shuffle *op) {
                 return simplify(Ramp::make(ramp->base + first_lane_in_src * ramp->stride, ramp->stride, op->indices.size()));
             }
             vector<int> new_indices;
-            for (int i = 0; i < op->indices.size(); ++i) {
+            for (int i = 0; i < int(op->indices.size()); ++i) {
                 new_indices.push_back(src_vec_and_lane_idx[i].second);
             }
             return Shuffle::make({src_vec}, new_indices);
@@ -133,7 +135,7 @@ class ExtractLanes : public IRMutator {
         internal_assert(op);
         internal_assert(op->is_intrinsic(Call::make_struct));
         vector<Expr> args(op->args.size());
-        for (int i = 0; i < op->args.size(); ++i) {
+        for (int i = 0; i < int(op->args.size()); ++i) {
             args[i] = mutate(op->args[i]);
         }
         return Call::make(op->type, Call::make_struct, args, Call::Intrinsic);
@@ -224,7 +226,7 @@ class ExtractLanes : public IRMutator {
         Expr mutated = op;
         std::vector<Expr> args;
         args.reserve(op->args.size());
-        for (int i = 0; i < op->args.size(); ++i) {
+        for (int i = 0; i < int(op->args.size()); ++i) {
             const Expr &arg = op->args[i];
             internal_assert(arg.type().lanes() == op->type.lanes()) << "Call argument " << arg << " lane count of " << arg.type().lanes() << " does not match op lane count of " << op->type.lanes();
             Expr mutated = mutate(arg);
@@ -306,7 +308,6 @@ class LiftExceedingVectors : public IRMutator {
     int max_lanes{max_lanes_for_device(DeviceAPI::Host, 0)};
 
     vector<pair<string, Expr>> lets;
-    map<Expr, Expr, ExprCompare> replacements;
     bool just_in_let_defintion{false};
     int in_strict_float = 0;
 
@@ -330,31 +331,9 @@ class LiftExceedingVectors : public IRMutator {
         return LetStmt::make(op->name, std::move(def), std::move(body));
     }
 
-    Stmt visit(const Store *op) override {
-        bool exceeds_lanecount = max_lanes && op->index.type().lanes() > max_lanes;
-        if (exceeds_lanecount) {
-            Expr value = mutate(op->value);
-
-            // Split up in multiple stores
-            int num_vecs = (op->index.type().lanes() + max_lanes - 1) / max_lanes;
-            std::vector<Stmt> assignments;
-            assignments.reserve(num_vecs);
-            for (int i = 0; i < num_vecs; ++i) {
-                int lane_start = i * max_lanes;
-                int lane_count_for_vec = std::min(op->value.type().lanes() - lane_start, max_lanes);
-                Expr rhs = ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(value);
-                Expr index = ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(op->index);
-                Expr predictate = ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(op->predicate);
-                assignments.push_back(Store::make(
-                    op->name, std::move(rhs), std::move(index),
-                    op->param, std::move(predictate), op->alignment + lane_start));
-            }
-            return Block::make(assignments);
-        }
-        return IRMutator::visit(op);
-    }
-
     Expr visit(const Call *op) override {
+        // Custom handling of Call, to prevent certain things from being extracted out
+        // of the call arguments, as that's not always allowed.
         bool exceeds_lanecount = max_lanes && op->type.lanes() > max_lanes;
         if (op->is_intrinsic(Call::strict_float)) {
             in_strict_float++;
@@ -364,7 +343,7 @@ class LiftExceedingVectors : public IRMutator {
             std::vector<Expr> args;
             args.reserve(op->args.size());
             bool changed = false;
-            for (int i = 0; i < op->args.size(); ++i) {
+            for (int i = 0; i < int(op->args.size()); ++i) {
                 bool may_extract = true;
                 if (op->is_intrinsic(Call::require)) {
                     may_extract &= i < 2;
@@ -410,22 +389,9 @@ public:
         bool exceeds_lanecount = max_lanes && e.type().lanes() > max_lanes;
 
         if (exceeds_lanecount) {
-            bool should_extract = true;
-            should_extract &= e.node_type() != IRNodeType::Variable;
-            should_extract &= e.node_type() != IRNodeType::Let;
-            should_extract &= e.node_type() != IRNodeType::Broadcast;
-            should_extract &= e.node_type() != IRNodeType::Ramp;
-            should_extract &= e.node_type() != IRNodeType::Call;
-            should_extract &= e.node_type() != IRNodeType::Add;
-            should_extract &= e.node_type() != IRNodeType::Sub;
-            should_extract &= e.node_type() != IRNodeType::Mul;
-            should_extract &= e.node_type() != IRNodeType::Div;
-            should_extract &= e.node_type() != IRNodeType::EQ;
-            should_extract &= e.node_type() != IRNodeType::NE;
-            should_extract &= e.node_type() != IRNodeType::LT;
-            should_extract &= e.node_type() != IRNodeType::GT;
-            should_extract &= e.node_type() != IRNodeType::GE;
-            should_extract &= e.node_type() != IRNodeType::LE;
+            bool should_extract = false;
+            should_extract |= e.node_type() == IRNodeType::Shuffle;
+            should_extract |= e.node_type() == IRNodeType::VectorReduce;
 
             // TODO: Handling of strict_float is not well done.
             // But at least it covers a few basic scenarios.
@@ -438,7 +404,6 @@ public:
             if (should_extract) {
                 std::string name = unique_name('t');
                 Expr var = Variable::make(e.type(), name);
-                replacements[e] = var;
                 lets.emplace_back(name, e);
                 debug(3) << "  => Lifted out into " << name << "\n";
                 return var;
@@ -448,9 +413,6 @@ public:
         ScopedValue<bool> scoped_just_in_let(just_in_let_defintion, false);
         return IRMutator::mutate(e);
     }
-
-public:
-    LiftExceedingVectors() = default;
 };
 
 class LegalizeVectors : public IRMutator {
@@ -490,13 +452,37 @@ class LegalizeVectors : public IRMutator {
         return {};
     }
 
+    Stmt visit(const Store *op) override {
+        bool exceeds_lanecount = max_lanes && op->index.type().lanes() > max_lanes;
+        if (exceeds_lanecount) {
+            // Split up in multiple stores
+            int num_vecs = (op->index.type().lanes() + max_lanes - 1) / max_lanes;
+            std::vector<Stmt> assignments;
+            assignments.reserve(num_vecs);
+            for (int i = 0; i < num_vecs; ++i) {
+                int lane_start = i * max_lanes;
+                int lane_count_for_vec = std::min(op->value.type().lanes() - lane_start, max_lanes);
+                Expr rhs = ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(op->value);
+                Expr index = ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(op->index);
+                Expr predictate = ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(op->predicate);
+                assignments.push_back(Store::make(
+                    op->name, std::move(rhs), std::move(index),
+                    op->param, std::move(predictate), op->alignment + lane_start));
+            }
+            Stmt result = Block::make(assignments);
+            debug(3) << "Legalized store " << Stmt(op) << " => " << result << "\n";
+            return result;
+        }
+        return IRMutator::visit(op);
+    }
+
     Expr visit(const Shuffle *op) override {
         if (max_lanes == 0) {
             return IRMutator::visit(op);
         }
         internal_assert(op->type.lanes() <= max_lanes) << Expr(op);
         bool requires_mutation = false;
-        for (int i = 0; i < op->vectors.size(); ++i) {
+        for (size_t i = 0; i < op->vectors.size(); ++i) {
             if (op->vectors[i].type().lanes() > max_lanes) {
                 requires_mutation = true;
                 break;
@@ -511,7 +497,7 @@ class LegalizeVectors : public IRMutator {
 
             vector<Expr> new_vectors;
             vector<pair<int, int>> vector_and_lane_indices = op->vector_and_lane_indices();
-            for (int i = 0; i < op->vectors.size(); ++i) {
+            for (int i = 0; i < int(op->vectors.size()); ++i) {
                 const Expr &vec = op->vectors[i];
                 if (vec.type().lanes() > max_lanes) {
                     debug(4) << "  Arg " << i << ": " << vec << "\n";
@@ -591,8 +577,8 @@ class LegalizeVectors : public IRMutator {
 
 Stmt legalize_vectors(const Stmt &s) {
     // Similar to CSE, lifting out stuff into variables.
-    // Pass 1): lift out vectors that exceed lane count into variables
-    // Pass 2): Rewrite those vector variables as bundles of vector variables.
+    // Pass 1): lift out Shuffles that exceed lane count into variables
+    // Pass 2): Rewrite those vector variables as bundles of vector variables, while legalizing all other stuff.
     Stmt m0 = simplify(s);
     Stmt m1 = common_subexpression_elimination(m0, false);
     if (!m1.same_as(s)) {
@@ -622,7 +608,7 @@ Stmt legalize_vectors(const Stmt &s) {
     Stmt m4 = LegalizeVectors().mutate(m3);
     if (!m4.same_as(m3)) {
         debug(3) << "After legalizing vectors:\n"
-                 << m3 << "\n";
+                 << m4 << "\n";
     }
     if (m4.same_as(m2)) {
         debug(3) << "Vector Legalization did do nothing, returning input.\n";
