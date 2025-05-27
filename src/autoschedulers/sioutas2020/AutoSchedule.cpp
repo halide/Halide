@@ -1,11 +1,11 @@
+#include "HalidePlugin.h"
+
+#include "Errors.h"
+#include "ParamParser.h"
+
 #include <algorithm>
 #include <regex>
 #include <utility>
-
-#include "Errors.h"
-#include "Halide.h"
-#include "HalidePlugin.h"
-#include "ParamParser.h"
 
 using namespace std;
 using namespace Halide;
@@ -2880,9 +2880,10 @@ void Partitioner::group(const Level level) {
         }
 
         Cost post_merge = get_pipeline_cost();
-        if (debug::debug_level() >= 3) {
+        debug(3) << [&] {
             disp_pipeline_costs();
-        }
+            return "";
+        }();
     }
 }
 
@@ -5375,9 +5376,10 @@ string my_generate_schedules(const vector<Function> &outputs, const Target &targ
     // Compute the expression costs for each function in the pipeline.
     debug(2) << "Initializing region costs...\n";
     RegionCosts costs(env, order);
-    if (debug::debug_level() >= 3) {
+    debug(3) << [&] {
         costs.disp_func_costs();
-    }
+        return "";
+    }();
 
     debug(2) << "Initializing dependence analysis...\n";
     DependenceAnalysis dep_analysis(env, order, func_val_bounds);
@@ -5462,15 +5464,17 @@ string my_generate_schedules(const vector<Function> &outputs, const Target &targ
     debug(2) << "Partitioner initializing groups...\n";
     part.total_inlines = 0;
     part.initialize_groups();
-    if (debug::debug_level() >= 3) {
+    debug(3) << [&] {
         part.disp_pipeline_costs();
-    }
+        return "";
+    }();
 
     debug(2) << "Partitioner computing inline group...\n";
     part.group(Partitioner::Level::Inline);
-    if (debug::debug_level() >= 3) {
+    debug(3) << [&] {
         part.disp_grouping();
-    }
+        return "";
+    }();
     std::string disable_fusion = get_env_variable("HL_GPU_NO_FUS");
     bool no_fus = std::atoi(disable_fusion.c_str());
 
@@ -5479,11 +5483,12 @@ string my_generate_schedules(const vector<Function> &outputs, const Target &targ
         debug(2) << "Partitioner computing fast-mem group...\n";
         part.grouping_cache.clear();
         part.group(Partitioner::Level::FastMem);
-        if (debug::debug_level() >= 3) {
+        debug(3) << [&] {
             part.disp_pipeline_costs();
             part.disp_grouping();
             part.disp_pipeline_graph();
-        }
+            return "";
+        }();
     }
     part.evaluate_final_tiles();
     debug(2) << "Initializing AutoSchedule...\n";
