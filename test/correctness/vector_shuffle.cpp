@@ -62,12 +62,7 @@ int test_with_indices(const Target &target, const std::vector<int> &indices0, co
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
-    int max_vec_size = 4;
-    if (!target.has_gpu_feature() || target.has_feature(Target::Feature::OpenCL) || target.has_feature(Target::Feature::CUDA)) {
-        max_vec_size = 8;
-    }
-
-    for (int vec_size = max_vec_size; vec_size > 1; vec_size /= 2) {
+    for (int vec_size = 8; vec_size > 1; vec_size /= 2) {
         printf("Testing vector size %d...\n", vec_size);
         std::vector<int> indices0, indices1;
 

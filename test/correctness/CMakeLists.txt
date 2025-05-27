@@ -223,6 +223,7 @@ tests(GROUPS correctness
       median3x3.cpp
       metal_precompiled_shaders.cpp
       memoize_cloned.cpp
+      metal_long_vectors.cpp
       min_extent.cpp
       mod.cpp
       mul_div_mod.cpp

@@ -42,6 +42,7 @@
 #include "InjectHostDevBufferCopies.h"
 #include "Inline.h"
 #include "LICM.h"
+#include "LegalizeVectors.h"
 #include "LoopCarry.h"
 #include "LowerParallelTasks.h"
 #include "LowerWarpShuffles.h"
@@ -443,6 +444,10 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Flattening nested ramps...\n";
     s = flatten_nested_ramps(s);
     log("Lowering after flattening nested ramps:", s);
+
+    debug(1) << "Legalizing vectors...\n";
+    s = legalize_vectors(s);
+    log("Lowering after legalizing vectors:", s);
 
     debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);

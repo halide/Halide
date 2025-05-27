@@ -45,6 +45,11 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
         new_vectors.push_back(new_vector);
     }
 
+    // A concat of one vector, is just the vector.
+    if (op->vectors.size() == 1 && op->is_concat()) {
+        return new_vectors[0];
+    }
+
     // Try to convert a load with shuffled indices into a
     // shuffle of a dense load.
     if (const Load *first_load = new_vectors[0].as<Load>()) {
