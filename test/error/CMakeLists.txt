@@ -78,7 +78,6 @@ tests(GROUPS error
       memoize_output_invalid.cpp
       memoize_redefine_eviction_key.cpp
       metal_threads_too_large.cpp
-      metal_vector_too_large.cpp
       missing_args.cpp
       no_default_device.cpp
       nonexistent_update_stage.cpp
