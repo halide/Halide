@@ -103,13 +103,13 @@ Expr simplify_shuffle(const Shuffle *op) {
 }
 
 class LiftLetToLetStmt : public IRMutator {
-public:
     vector<const Let *> lets;
     Expr visit(const Let *op) override {
         lets.push_back(op);
         return mutate(op->body);
     }
 
+public:
     Stmt mutate(const Stmt &s) override {
         ScopedValue<decltype(lets)> scoped_lets(lets, {});
         Stmt mutated = IRMutator::mutate(s);
@@ -174,11 +174,6 @@ class ExtractLanes : public IRMutator {
 
         // This is feasible: see VectorizeLoops.
         return Expr(0);
-    }
-
-public:
-    ExtractLanes(int start, int count, int max_legal)
-        : lane_start(start), lane_count(count), max_legal_lanes(max_legal) {
     }
 
     Expr visit(const Shuffle *op) override {
@@ -283,6 +278,7 @@ public:
         return VectorReduce::make(op->op, arg, lane_count);
     }
 
+public:
     // Small helper to assert the transform did what it's supposed to do.
     Expr mutate(const Expr &e) override {
         Type original_type = e.type();
@@ -300,6 +296,10 @@ public:
     Stmt mutate(const Stmt &s) override {
         return IRMutator::mutate(s);
     }
+
+    ExtractLanes(int start, int count, int max_legal)
+        : lane_start(start), lane_count(count), max_legal_lanes(max_legal) {
+    }
 };
 
 class LiftExceedingVectors : public IRMutator {
@@ -310,39 +310,24 @@ class LiftExceedingVectors : public IRMutator {
     bool just_in_let_defintion{false};
     int in_strict_float = 0;
 
-public:
     Stmt visit(const For *op) override {
         ScopedValue<int> scoped_max_lanes(max_lanes, max_lanes_for_device(op->device_api, max_lanes));
         return IRMutator::visit(op);
     }
 
-    template<typename LetOrLetStmt>
-    decltype(LetOrLetStmt::body) visit_let(const LetOrLetStmt *op) {
-        ScopedValue<bool> scoped_just_in_let(just_in_let_defintion, true);
-        Expr def = mutate(op->value);
-        auto body = mutate(op->body);
-        if (def.same_as(op->value) && body.same_as(op->body)) {
-            return op;
-        }
-        return LetOrLetStmt::make(op->name, std::move(def), std::move(body));
-    }
-
     Expr visit(const Let *op) override {
         internal_error << "We don't want to process Lets. They should have all been converted to LetStmts.";
-        Expr def;
-        {
-            ScopedValue<bool> scoped_just_in_let(just_in_let_defintion, true);
-            def = mutate(op->value);
-        }
-        auto body = mutate(op->body);
-        if (def.same_as(op->value) && body.same_as(op->body)) {
-            return op;
-        }
-        return IRMutator::visit(op);
+        return {};
     }
 
     Stmt visit(const LetStmt *op) override {
-        return visit_let(op);
+        ScopedValue<bool> scoped_just_in_let(just_in_let_defintion, true);
+        Expr def = mutate(op->value);
+        Stmt body = mutate(op->body);
+        if (def.same_as(op->value) && body.same_as(op->body)) {
+            return op;
+        }
+        return LetStmt::make(op->name, std::move(def), std::move(body));
     }
 
     Stmt visit(const Store *op) override {
@@ -409,6 +394,7 @@ public:
         return mutated;
     }
 
+public:
     Stmt mutate(const Stmt &s) override {
         ScopedValue<decltype(lets)> scoped_lets(lets, {});
         ScopedValue<bool> scoped_just_in_let(just_in_let_defintion, false);
@@ -419,44 +405,6 @@ public:
         }
         return mutated;
     }
-
-#if 0
-    Stmt visit(const IfThenElse *op) override {
-        debug(3) << "Visit IfThenElse: " << Stmt(op) << " with max lanes: " << max_lanes << "\n";
-        Expr condition;
-        decltype(lets) condition_lets;
-        {
-            ScopedValue<decltype(lets)> scoped_lets(lets, {});
-            condition = mutate(op->condition);
-            condition_lets = lets;
-        }
-        Stmt then_case, else_case;
-        {
-            ScopedValue<decltype(lets)> scoped_lets(lets, {});
-            then_case = mutate(op->then_case);
-            for (auto &let : reverse_view(lets)) {
-                then_case = LetStmt::make(let.first, let.second, then_case);
-            }
-        }
-        {
-            ScopedValue<decltype(lets)> scoped_lets(lets, {});
-            else_case = mutate(op->else_case);
-            for (auto &let : reverse_view(lets)) {
-                else_case = LetStmt::make(let.first, let.second, else_case);
-            }
-        }
-        if (condition.same_as(op->condition) &&
-            then_case.same_as(op->then_case) &&
-            else_case.same_as(op->else_case)) {
-            return op;
-        }
-        Stmt mutated = IfThenElse::make(std::move(condition), std::move(then_case), std::move(else_case));
-        for (auto &let : reverse_view(lets)) {
-            mutated = LetStmt::make(let.first, let.second, mutated);
-        }
-        return mutated;
-    }
-#endif
 
     Expr mutate(const Expr &e) override {
         bool exceeds_lanecount = max_lanes && e.type().lanes() > max_lanes;
@@ -508,21 +456,19 @@ public:
 class LegalizeVectors : public IRMutator {
     int max_lanes{max_lanes_for_device(DeviceAPI::Host, 0)};
 
-public:
     Stmt visit(const For *op) override {
         ScopedValue<int> scoped_max_lanes(max_lanes, max_lanes_for_device(op->device_api, max_lanes));
         return IRMutator::visit(op);
     }
 
-    template<typename LetOrLetStmt>
-    decltype(LetOrLetStmt::body) visit_let(const LetOrLetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         bool exceeds_lanecount = max_lanes && op->value.type().lanes() > max_lanes;
 
         if (exceeds_lanecount) {
             int num_vecs = (op->value.type().lanes() + max_lanes - 1) / max_lanes;
             debug(3) << "Legalize let " << op->value.type() << ": " << op->name
                      << " = " << op->value << " into " << num_vecs << " vecs\n";
-            decltype(LetOrLetStmt::body) body = IRMutator::mutate(op->body);
+            Stmt body = IRMutator::mutate(op->body);
             for (int i = num_vecs - 1; i >= 0; --i) {
                 int lane_start = i * max_lanes;
                 int lane_count_for_vec = std::min(op->value.type().lanes() - lane_start, max_lanes);
@@ -531,7 +477,7 @@ public:
                 Expr value = mutate(ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(op->value));
 
                 debug(3) << "  Add: let " << name << " = " << value << "\n";
-                body = LetOrLetStmt::make(name, value, body);
+                body = LetStmt::make(name, value, body);
             }
             return body;
         } else {
@@ -539,13 +485,9 @@ public:
         }
     }
 
-    Stmt visit(const LetStmt *op) override {
-        return visit_let(op);
-    }
-
     Expr visit(const Let *op) override {
         internal_error << "Lets should have been lifted into letStmts.";
-        return visit_let(op);
+        return {};
     }
 
     Expr visit(const Shuffle *op) override {
