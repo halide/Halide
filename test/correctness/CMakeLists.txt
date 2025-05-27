@@ -216,6 +216,7 @@ tests(GROUPS correctness
       math.cpp
       median3x3.cpp
       memoize_cloned.cpp
+      metal_long_vectors.cpp
       min_extent.cpp
       mod.cpp
       mul_div_mod.cpp
