@@ -489,6 +489,7 @@ int test_long_transpose_chain() {
 
     out1.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
     out2.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
+    im.set_estimates({{0, 1000}, {0, 1000}});
 
     const auto results = Pipeline({out1, out2}).apply_autoscheduler(target, params);
     debug(1) << results.schedule_source;
@@ -696,7 +697,7 @@ int main(int argc, char **argv) {
         {"test_boring_memcpy", test_boring_memcpy},
         {"test_tiny_loads", test_tiny_loads},
         {"test_many_dimensions", test_many_dimensions},
-        // {"test_long_transpose_chain", test_long_transpose_chain},
+        {"test_long_transpose_chain", test_long_transpose_chain},
         // {"test_func_that_should_be_recomputed", test_func_that_should_be_recomputed},
         {"test_roundup_in_update_stage", test_roundup_in_update_stage},
         // {"test_convolution_pyramid", test_convolution_pyramid},
