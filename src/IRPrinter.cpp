@@ -551,6 +551,98 @@ std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
 IRPrinter::IRPrinter(ostream &s)
     : stream(s) {
     s.setf(std::ios::fixed, std::ios::floatfield);
+    if (&stream == &std::cout || &stream == &std::cerr) {
+        bool support_colors = false;
+        const char *term = getenv("TERM");
+        if (term) {
+            // Check if the terminal supports colors
+            if (strstr(term, "color") || strstr(term, "xterm")) {
+                support_colors = true;
+            }
+        }
+        const char *opt = getenv("HL_NO_COLORS");
+        if (opt) {
+            int val = std::atoi(opt);
+            if (val) {
+                support_colors = false;
+            }
+        }
+        if (support_colors) {
+            ansi = true;
+        }
+    }
+}
+
+#define ansi_hl "\e[4m"
+#define ansi_dim "\e[2m"
+#define ansi_kw "\e[35;1m"
+#define ansi_imm_int "\e[36m"
+#define ansi_imm_float "\e[96m"
+#define ansi_imm_str "\e[32m"
+#define ansi_var ""
+#define ansi_buf "\e[33m"
+#define ansi_fn "\e[31m"
+#define ansi_type "\e[34m"
+#define ansi_reset_col "\e[39m"
+#define ansi_reset "\e[0m"
+
+#define ansi_helper(name)                                                          \
+    template<typename T>                                                           \
+    Ansi<T> IRPrinter::name(const T &t) {                                          \
+        return {t, ansi ? ansi_##name : nullptr, ansi ? ansi_reset_col : nullptr}; \
+    }
+#define ansi_helper_r(name)                                                    \
+    template<typename T>                                                       \
+    Ansi<T> IRPrinter::name(const T &t) {                                      \
+        return {t, ansi ? ansi_##name : nullptr, ansi ? ansi_reset : nullptr}; \
+    }
+
+ansi_helper_r(hl);
+ansi_helper_r(kw);
+ansi_helper(imm_int);
+ansi_helper(imm_float);
+ansi_helper(imm_str);
+ansi_helper(var);
+ansi_helper(buf);
+ansi_helper(fn);
+ansi_helper(type);
+
+template<typename T>
+Ansi<T> IRPrinter::typep(const T &t) {
+    return {t, ansi ? ansi_type "(" : "(", ansi ? ")" ansi_reset : ")"};
+}
+
+template<typename T>
+Ansi<T> IRPrinter::paren(const T &t, bool bold, int depth) {
+    if (!ansi) {
+        return {t, nullptr, nullptr};
+    }
+    if (depth == -1) depth = paren_depth;
+    const char *open = "";
+    if (bold) {
+        // clang-format off
+        switch (depth % 6) {
+        case 0: open = "\e[91;1m"; break;
+        case 1: open = "\e[92;1m"; break;
+        case 2: open = "\e[93;1m"; break;
+        case 3: open = "\e[94;1m"; break;
+        case 4: open = "\e[95;1m"; break;
+        case 5: open = "\e[96;1m"; break;
+        }
+        // clang-format on
+    } else {
+        // clang-format off
+        switch (depth % 6) {
+        case 0: open = "\e[91m"; break;
+        case 1: open = "\e[92m"; break;
+        case 2: open = "\e[93m"; break;
+        case 3: open = "\e[94m"; break;
+        case 4: open = "\e[95m"; break;
+        case 5: open = "\e[96m"; break;
+        }
+        // clang-format on
+    }
+    return {t, open, ansi_reset};
 }
 
 void IRPrinter::print(const Expr &ir) {
@@ -576,27 +668,31 @@ void IRPrinter::print_list(const std::vector<Expr> &exprs) {
     for (size_t i = 0; i < exprs.size(); i++) {
         print_no_parens(exprs[i]);
         if (i < exprs.size() - 1) {
-            stream << ", ";
+            stream << paren(", ");
         }
     }
 }
 
 void IRPrinter::visit(const IntImm *op) {
     if (op->type == Int(32)) {
-        stream << op->value;
+        stream << imm_int(op->value);
     } else {
-        stream << "(" << op->type << ")" << op->value;
+        stream << typep(op->type) << imm_int(op->value);
     }
 }
 
 void IRPrinter::visit(const UIntImm *op) {
-    stream << "(" << op->type << ")" << op->value;
+    stream << typep(op->type) << imm_int(op->value);
 }
 
 void IRPrinter::visit(const FloatImm *op) {
     const bool use_scientific_format = (op->value != 0.0) && (std::log10(std::abs(op->value)) < -6);
     if (use_scientific_format) {
         stream << std::scientific;
+    }
+
+    if (ansi) {
+        stream << ansi_imm_float;
     }
 
     switch (op->type.bits()) {
@@ -613,12 +709,19 @@ void IRPrinter::visit(const FloatImm *op) {
         internal_error << "Bad bit-width for float: " << op->type << "\n";
     }
 
+    if (ansi) {
+        stream << ansi_reset;
+    }
+
     if (use_scientific_format) {
         stream << std::fixed;
     }
 }
 
 void IRPrinter::visit(const StringImm *op) {
+    if (ansi) {
+        stream << ansi_imm_str;
+    }
     stream << "\"";
     for (unsigned char c : op->value) {
         if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
@@ -648,18 +751,23 @@ void IRPrinter::visit(const StringImm *op) {
         }
     }
     stream << "\"";
+    if (ansi) {
+        stream << ansi_reset;
+    }
 }
 
 void IRPrinter::visit(const Cast *op) {
-    stream << op->type << "(";
-    print(op->value);
-    stream << ")";
+    stream << type(op->type);
+    openf();
+    print_no_parens(op->value);
+    closef();
 }
 
 void IRPrinter::visit(const Reinterpret *op) {
-    stream << "reinterpret<" << op->type << ">(";
-    print(op->value);
-    stream << ")";
+    stream << kw("reinterpret<") << type(op->type) << kw(">");
+    openf();
+    print_no_parens(op->value);
+    closef();
 }
 
 void IRPrinter::visit(const Variable *op) {
@@ -667,30 +775,47 @@ void IRPrinter::visit(const Variable *op) {
         (op->type != Int(32))) {
         // Handle types already have parens
         if (op->type.is_handle()) {
-            stream << op->type;
+            stream << type(op->type);
         } else {
-            stream << "(" << op->type << ")";
+            stream << typep(op->type);
         }
     }
-    stream << op->name;
+    stream << var(op->name);
 }
 
 void IRPrinter::open() {
     if (!implicit_parens) {
-        stream << "(";
+        paren_depth++;
+        stream << paren("(");
     }
 }
 
 void IRPrinter::close() {
     if (!implicit_parens) {
-        stream << ")";
+        stream << paren(")");
+        paren_depth--;
     }
+}
+
+void IRPrinter::openf() {
+    paren_depth++;
+    stream << paren("(");
+}
+
+void IRPrinter::openf(const char *name) {
+    paren_depth++;
+    stream << paren(name, false) << paren("(");
+}
+
+void IRPrinter::closef() {
+    stream << paren(")");
+    paren_depth--;
 }
 
 void IRPrinter::visit(const Add *op) {
     open();
     print(op->a);
-    stream << " + ";
+    stream << paren(" + ");
     print(op->b);
     close();
 }
@@ -698,7 +823,7 @@ void IRPrinter::visit(const Add *op) {
 void IRPrinter::visit(const Sub *op) {
     open();
     print(op->a);
-    stream << " - ";
+    stream << paren(" - ");
     print(op->b);
     close();
 }
@@ -706,7 +831,7 @@ void IRPrinter::visit(const Sub *op) {
 void IRPrinter::visit(const Mul *op) {
     open();
     print(op->a);
-    stream << "*";
+    stream << paren("*");
     print(op->b);
     close();
 }
@@ -714,7 +839,7 @@ void IRPrinter::visit(const Mul *op) {
 void IRPrinter::visit(const Div *op) {
     open();
     print(op->a);
-    stream << "/";
+    stream << paren("/");
     print(op->b);
     close();
 }
@@ -722,31 +847,31 @@ void IRPrinter::visit(const Div *op) {
 void IRPrinter::visit(const Mod *op) {
     open();
     print(op->a);
-    stream << " % ";
+    stream << paren(" % ");
     print(op->b);
     close();
 }
 
 void IRPrinter::visit(const Min *op) {
-    stream << "min(";
+    openf("min");
     print_no_parens(op->a);
-    stream << ", ";
+    stream << paren(", ");
     print_no_parens(op->b);
-    stream << ")";
+    closef();
 }
 
 void IRPrinter::visit(const Max *op) {
-    stream << "max(";
+    openf("max");
     print_no_parens(op->a);
-    stream << ", ";
+    stream << paren(", ");
     print_no_parens(op->b);
-    stream << ")";
+    closef();
 }
 
 void IRPrinter::visit(const EQ *op) {
     open();
     print(op->a);
-    stream << " == ";
+    stream << paren(" == ");
     print(op->b);
     close();
 }
@@ -754,7 +879,7 @@ void IRPrinter::visit(const EQ *op) {
 void IRPrinter::visit(const NE *op) {
     open();
     print(op->a);
-    stream << " != ";
+    stream << paren(" != ");
     print(op->b);
     close();
 }
@@ -762,7 +887,7 @@ void IRPrinter::visit(const NE *op) {
 void IRPrinter::visit(const LT *op) {
     open();
     print(op->a);
-    stream << " < ";
+    stream << paren(" < ");
     print(op->b);
     close();
 }
@@ -770,7 +895,7 @@ void IRPrinter::visit(const LT *op) {
 void IRPrinter::visit(const LE *op) {
     open();
     print(op->a);
-    stream << " <= ";
+    stream << paren(" <= ");
     print(op->b);
     close();
 }
@@ -778,7 +903,7 @@ void IRPrinter::visit(const LE *op) {
 void IRPrinter::visit(const GT *op) {
     open();
     print(op->a);
-    stream << " > ";
+    stream << paren(" > ");
     print(op->b);
     close();
 }
@@ -786,7 +911,7 @@ void IRPrinter::visit(const GT *op) {
 void IRPrinter::visit(const GE *op) {
     open();
     print(op->a);
-    stream << " >= ";
+    stream << paren(" >= ");
     print(op->b);
     close();
 }
@@ -794,7 +919,7 @@ void IRPrinter::visit(const GE *op) {
 void IRPrinter::visit(const And *op) {
     open();
     print(op->a);
-    stream << " && ";
+    stream << paren(" && ");
     print(op->b);
     close();
 }
@@ -802,7 +927,7 @@ void IRPrinter::visit(const And *op) {
 void IRPrinter::visit(const Or *op) {
     open();
     print(op->a);
-    stream << " || ";
+    stream << paren(" || ");
     print(op->b);
     close();
 }
@@ -813,13 +938,13 @@ void IRPrinter::visit(const Not *op) {
 }
 
 void IRPrinter::visit(const Select *op) {
-    stream << "select(";
+    openf("select");
     print_no_parens(op->condition);
-    stream << ", ";
+    stream << paren(", ");
     print_no_parens(op->true_value);
-    stream << ", ";
+    stream << paren(", ");
     print_no_parens(op->false_value);
-    stream << ")";
+    closef();
 }
 
 void IRPrinter::visit(const Load *op) {
@@ -829,32 +954,51 @@ void IRPrinter::visit(const Load *op) {
         open();
     }
     if (!known_type.contains(op->name)) {
-        stream << "(" << op->type << ")";
+        stream << typep(op->type);
     }
-    stream << op->name << "[";
+    paren_depth++;
+    stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
     if (show_alignment) {
-        stream << " aligned(" << op->alignment.modulus << ", " << op->alignment.remainder << ")";
+        if (ansi) {
+            stream << ansi_dim;
+        }
+        stream << " aligned("
+               << imm_int(op->alignment.modulus)
+               << ", "
+               << imm_int(op->alignment.remainder) << ")";
+        if (ansi) {
+            stream << ansi_reset;
+        }
     }
-    stream << "]";
+    stream << paren("]");
+    paren_depth--;
     if (has_pred) {
-        stream << " if ";
+        stream << kw(" if ");
         print(op->predicate);
         close();
     }
 }
 
 void IRPrinter::visit(const Ramp *op) {
-    stream << "ramp(";
+    stream << kw("ramp(");
     print_no_parens(op->base);
-    stream << ", ";
+    stream << kw(", ");
     print_no_parens(op->stride);
-    stream << ", " << op->lanes << ")";
+    stream << kw(", ") << imm_int(op->lanes);
+    stream << kw(")");
 }
 
 void IRPrinter::visit(const Broadcast *op) {
-    stream << "x" << op->lanes << "(";
+    if (ansi) {
+        stream << ansi_kw << "x" << op->lanes << ansi_reset;
+    } else {
+        stream << "x" << op->lanes;
+    }
+    stream << "(";
+    paren_depth++;
     print_no_parens(op->value);
+    paren_depth--;
     stream << ")";
 }
 
@@ -863,31 +1007,38 @@ void IRPrinter::visit(const Call *op) {
     if (!known_type.contains(op->name) &&
         (op->type != Int(32))) {
         if (op->type.is_handle()) {
-            stream << op->type;  // Already has parens
+            stream << type(op->type);  // Already has parens
         } else {
-            stream << "(" << op->type << ")";
+            stream << typep(op->type);
         }
     }
-    stream << op->name << "(";
+    openf(op->name.c_str());
     print_list(op->args);
-    stream << ")";
+    closef();
 }
 
 void IRPrinter::visit(const Let *op) {
     ScopedBinding<> bind(known_type, op->name);
-    open();
-    stream << "let " << op->name << " = ";
+    paren_depth++;
+    if (!implicit_parens) {
+        stream << paren("(");
+    }
+    stream << paren("let ") << var(op->name) << paren(" = ");
     print(op->value);
-    stream << " in ";
+    stream << paren(" in ");
     if (!is_summary) {
         print(op->body);
     }
-    close();
+    if (!implicit_parens) {
+        stream << paren(")");
+    }
+    paren_depth--;
 }
 
 void IRPrinter::visit(const LetStmt *op) {
     ScopedBinding<> bind(known_type, op->name);
-    stream << get_indent() << "let " << op->name << " = ";
+    stream << get_indent() << kw("let ") << var(op->name) << kw(" = ");
+    ScopedValue<int> reset_paren_depth(paren_depth, 0);
     print_no_parens(op->value);
     stream << "\n";
 
@@ -897,52 +1048,59 @@ void IRPrinter::visit(const LetStmt *op) {
 }
 
 void IRPrinter::visit(const AssertStmt *op) {
-    stream << get_indent() << "assert(";
+    stream << get_indent() << kw("assert(");
     print_no_parens(op->condition);
-    stream << ", ";
+    stream << kw(", ");
     print_no_parens(op->message);
-    stream << ")\n";
+    stream << kw(")\n");
 }
 
 void IRPrinter::visit(const ProducerConsumer *op) {
     stream << get_indent();
     if (op->is_producer) {
-        stream << "produce " << op->name << " {\n";
+        stream << paren("produce ") << buf(op->name) << paren(" {\n");
     } else {
-        stream << "consume " << op->name << " {\n";
+        stream << paren("consume ") << buf(op->name) << paren(" {\n");
     }
+    paren_depth++;
     indent++;
     print(op->body);
     indent--;
-    stream << get_indent() << "}\n";
+    paren_depth--;
+    stream << get_indent() << paren("}\n");
 }
 
 void IRPrinter::visit(const For *op) {
     ScopedBinding<> bind(known_type, op->name);
-    stream << get_indent() << op->for_type << op->device_api << " (" << op->name << ", ";
+    paren_depth++;
+    stream << get_indent() << paren(op->for_type) << type(op->device_api) << paren(" (");
+    stream << var(op->name) << paren(", ");
     print_no_parens(op->min);
-    stream << ", ";
+    stream << paren(", ");
     print_no_parens(op->extent);
-    stream << ") ";
+    closef();
+    stream << " ";
 
     print_braced_stmt(op->body, 1);
 }
 
 void IRPrinter::visit(const Acquire *op) {
-    stream << get_indent() << "acquire (";
+    stream << get_indent() << kw("acquire ");
+    openf();
     print_no_parens(op->semaphore);
-    stream << ", ";
+    stream << paren(", ");
     print_no_parens(op->count);
-    stream << ") ";
+    closef();
+    stream << " ";
     print_braced_stmt(op->body, 1);
 }
 
 void IRPrinter::print_lets(const Let *let) {
     stream << get_indent();
     ScopedBinding<> bind(known_type, let->name);
-    stream << "let " << let->name << " = ";
+    stream << kw("let ") << var(let->name) << kw(" = ");
     print_no_parens(let->value);
-    stream << " in\n";
+    stream << kw(" in\n");
     if (is_summary) {
         stream << get_indent() << "...\n";
     } else if (const Let *next = let->body.as<Let>()) {
@@ -956,37 +1114,46 @@ void IRPrinter::print_lets(const Let *let) {
 
 void IRPrinter::print_braced_stmt(const Stmt &stmt, int extra_indent) {
     if (is_summary) {
-        stream << "{ ... }\n";
+        stream << paren("{ ... }\n");
         return;
     }
 
-    stream << "{\n";
+    paren_depth++;
+    stream << paren("{\n");
     indent += extra_indent;
     print(stmt);
     indent -= extra_indent;
-    stream << get_indent() << "}\n";
+    stream << get_indent() << paren("}\n");
+    paren_depth--;
 }
 
 void IRPrinter::visit(const Store *op) {
+    ScopedValue<int> reset_paren_depth(paren_depth, 0);
     stream << get_indent();
     const bool has_pred = !is_const_one(op->predicate);
     const bool show_alignment = op->value.type().is_vector() && (op->alignment.modulus > 1);
     if (has_pred) {
-        stream << "predicate (";
+        stream << kw("predicate (");
         print_no_parens(op->predicate);
-        stream << ")\n";
+        stream << kw(")\n");
         indent++;
         stream << get_indent();
     }
-    stream << op->name << "[";
+    stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
     if (show_alignment) {
+        if (ansi) {
+            stream << ansi_dim;
+        }
         stream << " aligned("
-               << op->alignment.modulus
+               << imm_int(op->alignment.modulus)
                << ", "
-               << op->alignment.remainder << ")";
+               << imm_int(op->alignment.remainder) << ")";
+        if (ansi) {
+            stream << ansi_reset;
+        }
     }
-    stream << "] = ";
+    stream << paren("] = ");
     if (const Let *let = op->value.as<Let>()) {
         // Use some nicer line breaks for containing Lets
         stream << "\n";
@@ -1004,24 +1171,26 @@ void IRPrinter::visit(const Store *op) {
 }
 
 void IRPrinter::visit(const Provide *op) {
+    ScopedValue<int> reset_paren_depth(paren_depth, 0);
     stream << get_indent();
     const bool has_pred = !is_const_one(op->predicate);
     if (has_pred) {
-        stream << "predicate (";
+        stream << kw("predicate (");
         print_no_parens(op->predicate);
-        stream << ")\n";
+        stream << kw(")\n");
         indent++;
         stream << get_indent();
     }
-    stream << op->name << "(";
+    stream << buf(op->name);
+    stream << paren("(");
     print_list(op->args);
-    stream << ") = ";
+    stream << paren(") = ");
     if (op->values.size() > 1) {
-        stream << "{";
+        stream << paren("{");
     }
     print_list(op->values);
     if (op->values.size() > 1) {
-        stream << "}";
+        stream << paren("}");
     }
 
     stream << "\n";
@@ -1031,8 +1200,9 @@ void IRPrinter::visit(const Provide *op) {
 }
 
 void IRPrinter::visit(const Allocate *op) {
+    ScopedValue<int> reset_paren_depth(paren_depth, 0);
     ScopedBinding<> bind(known_type, op->name);
-    stream << get_indent() << "allocate " << op->name << "[" << op->type;
+    stream << get_indent() << hl(kw("allocate")) << " " << buf(op->name) << "[" << type(op->type);
     bool first = true;
     for (const auto &extent : op->extents) {
         stream << " * ";
@@ -1047,7 +1217,7 @@ void IRPrinter::visit(const Allocate *op) {
     }
     stream << "]";
     if (op->memory_type != MemoryType::Auto) {
-        stream << " in " << op->memory_type;
+        stream << kw(" in ") << type(op->memory_type);
     }
     if (!is_const_one(op->condition)) {
         stream << " if ";
@@ -1055,13 +1225,17 @@ void IRPrinter::visit(const Allocate *op) {
     }
     if (op->new_expr.defined()) {
         stream << "\n";
-        stream << get_indent() << " custom_new { ";
+        stream << get_indent() << kw(" custom_new { ");
         print_no_parens(op->new_expr);
-        stream << " }";
+        stream << kw(" }");
     }
     if (!op->free_function.empty()) {
         stream << "\n";
-        stream << get_indent() << " custom_delete { " << op->free_function << "(" << op->name << "); }";
+        stream << get_indent() << kw(" custom_delete { ");
+        openf(op->free_function.c_str());
+        stream << buf(op->name);
+        closef();
+        stream << "; " << kw("}");
     }
     stream << "\n";
 
@@ -1071,29 +1245,29 @@ void IRPrinter::visit(const Allocate *op) {
 }
 
 void IRPrinter::visit(const Free *op) {
-    stream << get_indent() << "free " << op->name;
+    stream << get_indent() << hl(kw("free")) << " " << buf(op->name);
     stream << "\n";
 }
 
 void IRPrinter::visit(const Realize *op) {
     ScopedBinding<> bind(known_type, op->name);
-    stream << get_indent() << "realize " << op->name << "(";
+    stream << get_indent() << kw("realize ") << buf(op->name) << kw("(");
     for (size_t i = 0; i < op->bounds.size(); i++) {
-        stream << "[";
+        stream << paren("[");
         print_no_parens(op->bounds[i].min);
-        stream << ", ";
+        stream << paren(", ");
         print_no_parens(op->bounds[i].extent);
-        stream << "]";
+        stream << paren("]");
         if (i < op->bounds.size() - 1) {
             stream << ", ";
         }
     }
-    stream << ")";
+    stream << kw(")");
     if (op->memory_type != MemoryType::Auto) {
-        stream << " in " << op->memory_type;
+        stream << kw(" in ") << type(op->memory_type);
     }
     if (!is_const_one(op->condition)) {
-        stream << " if ";
+        stream << kw(" if ");
         print(op->condition);
     }
 
@@ -1102,16 +1276,19 @@ void IRPrinter::visit(const Realize *op) {
 }
 
 void IRPrinter::visit(const Prefetch *op) {
+    ScopedValue<int> reset_paren_depth(paren_depth, 0);
     stream << get_indent();
     const bool has_cond = !is_const_one(op->condition);
     if (has_cond) {
-        stream << "if (";
+        stream << kw("if ");
+        openf();
         print_no_parens(op->condition);
-        stream << ") {\n";
+        closef();
+        stream << " {\n";
         indent++;
         stream << get_indent();
     }
-    stream << "prefetch " << op->name << ", " << op->prefetch.at << ", " << op->prefetch.from << ", (";
+    stream << kw("prefetch ") << buf(op->name) << ", " << op->prefetch.at << ", " << op->prefetch.from << ", (";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
         print_no_parens(op->bounds[i].min);
@@ -1149,7 +1326,7 @@ void IRPrinter::visit(const Fork *op) {
     }
     stmts.push_back(rest);
 
-    stream << get_indent() << "fork ";
+    stream << get_indent() << kw("fork ");
     if (is_summary) {
         stream << "[" << stmts.size();
         if (stmts.size() == 1) {
@@ -1172,30 +1349,34 @@ void IRPrinter::visit(const Fork *op) {
 void IRPrinter::visit(const IfThenElse *op) {
     stream << get_indent();
     while (true) {
-        stream << "if (";
+        stream << paren("if (");
         print_no_parens(op->condition);
-        stream << ") {\n";
+        stream << paren(") {\n");
+        paren_depth++;
         indent++;
         print(op->then_case);
         indent--;
+        paren_depth--;
 
         if (!op->else_case.defined()) {
             break;
         }
 
         if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
-            stream << get_indent() << "} else ";
+            stream << get_indent() << paren("} else ");
             op = nested_if;
         } else {
-            stream << get_indent() << "} else {\n";
+            stream << get_indent() << paren("}") << (" else {\n");
+            paren_depth++;
             indent++;
             print(op->else_case);
             indent--;
+            paren_depth--;
             break;
         }
     }
 
-    stream << get_indent() << "}\n";
+    stream << get_indent() << paren("}\n");
 }
 
 void IRPrinter::visit(const Evaluate *op) {
@@ -1206,53 +1387,51 @@ void IRPrinter::visit(const Evaluate *op) {
 
 void IRPrinter::visit(const Shuffle *op) {
     if (op->is_concat()) {
-        stream << "concat_vectors(";
+        openf("concat_vectors");
         print_list(op->vectors);
-        stream << ")";
     } else if (op->is_interleave()) {
-        stream << "interleave_vectors(";
+        openf("interleave_vectors");
         print_list(op->vectors);
-        stream << ")";
     } else if (op->is_extract_element()) {
-        stream << "extract_element(";
+        openf("extract_element");
         print_list(op->vectors);
-        stream << ", " << op->indices[0] << ")";
+        stream << paren(", ") << imm_int(op->indices[0]);
     } else if (op->is_slice()) {
-        stream << "slice_vectors(";
+        openf("slice_vectors");
         print_list(op->vectors);
-        stream << ", " << op->slice_begin()
-               << ", " << op->slice_stride()
-               << ", " << op->indices.size()
-               << ")";
+        stream << paren(", ") << imm_int(op->slice_begin())
+               << paren(", ") << imm_int(op->slice_stride())
+               << paren(", ") << imm_int(op->indices.size());
     } else {
-        stream << "shuffle(";
+        openf("shuffle");
         print_list(op->vectors);
-        stream << ", ";
+        stream << paren(", ");
         for (size_t i = 0; i < op->indices.size(); i++) {
-            print_no_parens(op->indices[i]);
+            stream << imm_int(op->indices[i]);
             if (i < op->indices.size() - 1) {
-                stream << ", ";
+                stream << paren(", ");
             }
         }
-        stream << ")";
     }
+    closef();
 }
 
 void IRPrinter::visit(const VectorReduce *op) {
-    stream << "("
-           << op->type
-           << ")vector_reduce_" << op->op << "("
-           << op->value
-           << ")";
+    stream << typep(op->type);
+    paren_depth++;
+    stream << paren("vector_reduce_", false) << paren(op->op, false) << paren("(");
+    print_no_parens(op->value);
+    stream << paren(")");
+    paren_depth--;
 }
 
 void IRPrinter::visit(const Atomic *op) {
     stream << get_indent();
 
     if (op->mutex_name.empty()) {
-        stream << "atomic (" << op->producer_name << ") ";
+        stream << kw("atomic (") << op->producer_name << kw(") ");
     } else {
-        stream << "atomic (" << op->producer_name << ", " << op->mutex_name << ") ";
+        stream << kw("atomic (") << op->producer_name << kw(", ") << op->mutex_name << kw(") ");
     }
 
     print_braced_stmt(op->body);
@@ -1260,9 +1439,9 @@ void IRPrinter::visit(const Atomic *op) {
 
 void IRPrinter::visit(const HoistedStorage *op) {
     if (op->name.empty()) {
-        stream << get_indent() << "hoisted_storage ";
+        stream << get_indent() << kw("hoisted_storage ");
     } else {
-        stream << get_indent() << "hoisted_storage (" << op->name << ") ";
+        stream << get_indent() << kw("hoisted_storage (") << buf(op->name) << kw(") ");
     }
 
     print_braced_stmt(op->body);

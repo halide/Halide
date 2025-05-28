@@ -115,6 +115,20 @@ struct Indentation {
 };
 std::ostream &operator<<(std::ostream &stream, const Indentation &);
 
+template<typename T>
+struct Ansi {
+    const T &cnt;
+    const char *open, *close;
+};
+
+template<typename T>
+std::ostream &operator<<(std::ostream &out, const Ansi<T> &a) {
+    if (a.open) out << a.open;
+    out << a.cnt;
+    if (a.close) out << a.close;
+    return out;
+}
+
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
  * which it prints.
@@ -164,11 +178,37 @@ protected:
      * ellipses (...). */
     bool is_summary = false;
 
+    bool ansi = false;
+    int paren_depth = 0;
+
+    // clang-format off
+    template<typename T> Ansi<T> hl(const T &t);
+    template<typename T> Ansi<T> kw(const T &t);
+    template<typename T> Ansi<T> imm_int(const T &t);
+    template<typename T> Ansi<T> imm_float(const T &t);
+    template<typename T> Ansi<T> imm_str(const T &t);
+    template<typename T> Ansi<T> var(const T &t);
+    template<typename T> Ansi<T> buf(const T &t);
+    template<typename T> Ansi<T> fn(const T &t);
+    template<typename T> Ansi<T> type(const T &t);
+    template<typename T> Ansi<T> typep(const T &t);
+    template<typename T> Ansi<T> paren(const T &t, bool bold = true, int d = -1);
+    // clang-format on
+
     /** Either emits "(" or "", depending on the value of implicit_parens */
     void open();
 
     /** Either emits ")" or "", depending on the value of implicit_parens */
     void close();
+
+    /** Emits "(" always */
+    void openf();
+
+    /** Emits "name(" always */
+    void openf(const char *name);
+
+    /** Emits ")" always */
+    void closef();
 
     /** The symbols whose types can be inferred from values printed
      * already. */
