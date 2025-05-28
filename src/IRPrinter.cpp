@@ -573,18 +573,18 @@ IRPrinter::IRPrinter(ostream &s)
     }
 }
 
-#define ansi_hl "\e[4m"
-#define ansi_dim "\e[2m"
-#define ansi_kw "\e[35;1m"
-#define ansi_imm_int "\e[36m"
-#define ansi_imm_float "\e[96m"
-#define ansi_imm_str "\e[32m"
+#define ansi_hl "\033[4m"
+#define ansi_dim "\033[2m"
+#define ansi_kw "\033[35;1m"
+#define ansi_imm_int "\033[36m"
+#define ansi_imm_float "\033[96m"
+#define ansi_imm_str "\033[32m"
 #define ansi_var ""
-#define ansi_buf "\e[33m"
-#define ansi_fn "\e[31m"
-#define ansi_type "\e[34m"
-#define ansi_reset_col "\e[39m"
-#define ansi_reset "\e[0m"
+#define ansi_buf "\033[33m"
+#define ansi_fn "\033[31m"
+#define ansi_type "\033[34m"
+#define ansi_reset_col "\033[39m"
+#define ansi_reset "\033[0m"
 
 #define ansi_helper(name)                                                          \
     template<typename T>                                                           \
@@ -597,15 +597,15 @@ IRPrinter::IRPrinter(ostream &s)
         return {t, ansi ? ansi_##name : nullptr, ansi ? ansi_reset : nullptr}; \
     }
 
-ansi_helper_r(hl);
-ansi_helper_r(kw);
-ansi_helper(imm_int);
-ansi_helper(imm_float);
-ansi_helper(imm_str);
-ansi_helper(var);
-ansi_helper(buf);
-ansi_helper(fn);
-ansi_helper(type);
+ansi_helper_r(hl)
+ansi_helper_r(kw)
+ansi_helper(imm_int)
+ansi_helper(imm_float)
+ansi_helper(imm_str)
+ansi_helper(var)
+ansi_helper(buf)
+ansi_helper(fn)
+ansi_helper(type)
 
 template<typename T>
 Ansi<T> IRPrinter::typep(const T &t) {
@@ -617,28 +617,32 @@ Ansi<T> IRPrinter::paren(const T &t, bool bold, int depth) {
     if (!ansi) {
         return {t, nullptr, nullptr};
     }
-    if (depth == -1) depth = paren_depth;
+    if (depth == -1) {
+        depth = paren_depth;
+    }
     const char *open = "";
     if (bold) {
         // clang-format off
         switch (depth % 6) {
-        case 0: open = "\e[91;1m"; break;
-        case 1: open = "\e[92;1m"; break;
-        case 2: open = "\e[93;1m"; break;
-        case 3: open = "\e[94;1m"; break;
-        case 4: open = "\e[95;1m"; break;
-        case 5: open = "\e[96;1m"; break;
+        case 0: open = "\033[91;1m"; break;
+        case 1: open = "\033[92;1m"; break;
+        case 2: open = "\033[93;1m"; break;
+        case 3: open = "\033[94;1m"; break;
+        case 4: open = "\033[95;1m"; break;
+        case 5: open = "\033[96;1m"; break;
+        default: break;
         }
         // clang-format on
     } else {
         // clang-format off
         switch (depth % 6) {
-        case 0: open = "\e[91m"; break;
-        case 1: open = "\e[92m"; break;
-        case 2: open = "\e[93m"; break;
-        case 3: open = "\e[94m"; break;
-        case 4: open = "\e[95m"; break;
-        case 5: open = "\e[96m"; break;
+        case 0: open = "\033[91m"; break;
+        case 1: open = "\033[92m"; break;
+        case 2: open = "\033[93m"; break;
+        case 3: open = "\033[94m"; break;
+        case 4: open = "\033[95m"; break;
+        case 5: open = "\033[96m"; break;
+        default: break;
         }
         // clang-format on
     }
