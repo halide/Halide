@@ -682,7 +682,7 @@ int main(int argc, char **argv) {
         {"test_gather_with_lut", test_gather_with_lut},
         {"test_alternate_indexing", test_alternate_indexing},
         {"test_high_read_traffic", test_high_read_traffic},
-        // {"test_boring_memcpy", test_boring_memcpy},
+        {"test_boring_memcpy", test_boring_memcpy},
         // {"test_tiny_loads", test_tiny_loads},
         // {"test_many_dimensions", test_many_dimensions},
         // {"test_long_transpose_chain", test_long_transpose_chain},
