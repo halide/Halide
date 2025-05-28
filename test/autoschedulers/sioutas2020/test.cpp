@@ -526,6 +526,7 @@ int test_func_that_should_be_recomputed() {
     g(x, y) = f[N - 1](x, y) + f[0](clamp(cast<int>(sin(x) * 10000), 0, 100000), clamp(cast<int>(sin(x * y) * 10000), 0, 100000));
 
     g.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
+    im.set_estimates({{-N, 2048 + N}, {-N, 2048 + N}});
 
     const auto results = Pipeline(g).apply_autoscheduler(target, params);
     debug(1) << results.schedule_source;
@@ -698,7 +699,7 @@ int main(int argc, char **argv) {
         {"test_tiny_loads", test_tiny_loads},
         {"test_many_dimensions", test_many_dimensions},
         {"test_long_transpose_chain", test_long_transpose_chain},
-        // {"test_func_that_should_be_recomputed", test_func_that_should_be_recomputed},
+        {"test_func_that_should_be_recomputed", test_func_that_should_be_recomputed},
         {"test_roundup_in_update_stage", test_roundup_in_update_stage},
         // {"test_convolution_pyramid", test_convolution_pyramid},
         // {"test_unknown_2", test_unknown_2},
