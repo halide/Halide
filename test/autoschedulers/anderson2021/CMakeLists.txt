@@ -1,3 +1,8 @@
+if (NOT "NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
+    message(STATUS "Not testing anderson2021 because PTX is not enabled for this build of Halide")
+    return()
+endif ()
+
 ##
 # Tests for the Anderson2021 autoscheduler
 ##
