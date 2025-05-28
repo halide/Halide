@@ -33,7 +33,8 @@ int test_rfactor_with_split() {
 
     output.set_estimates({{0, 8192}, {0, 32768}});
 
-    Pipeline(output).apply_autoscheduler(target, params);
+    const auto results = Pipeline(output).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -54,7 +55,8 @@ int test_rfactor_softmax() {
 
     output.set_estimate(x, 0, 8192);
 
-    Pipeline(output).apply_autoscheduler(target, params);
+    const auto results = Pipeline(output).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -69,7 +71,8 @@ int test_pointwise_fusion() {
 
     h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
-    Pipeline(h).apply_autoscheduler(target, params);
+    const auto results = Pipeline(h).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -94,7 +97,8 @@ int test_huge_stencils() {
 
     h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
-    Pipeline(h).apply_autoscheduler(target, params);
+    const auto results = Pipeline(h).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -110,7 +114,8 @@ int test_isotropic_stencils() {
 
     h.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-    Pipeline(h).apply_autoscheduler(target, params);
+    const auto results = Pipeline(h).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -126,7 +131,8 @@ int test_small_stencils() {
 
     h.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-    Pipeline(h).apply_autoscheduler(target, params);
+    const auto results = Pipeline(h).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -153,7 +159,8 @@ int test_stencil_chain() {
 
     f[N - 1].set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-    Pipeline(f[N - 1]).apply_autoscheduler(target, params);
+    const auto results = Pipeline(f[N - 1]).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -168,7 +175,8 @@ int test_outer_product() {
 
     f.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-    Pipeline(f).apply_autoscheduler(target, params);
+    const auto results = Pipeline(f).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -191,7 +199,8 @@ int test_separable_downsample() {
     downx(x, y, k) = downy(2 * x - 1, y, k) + downy(2 * x, y, k) + downy(2 * x + 1, y, k) + downy(2 * x + 2, y, k);
     downx.set_estimate(x, 1, 1022).set_estimate(y, 1, 1022).set_estimate(k, 0, 256);
 
-    Pipeline(downx).apply_autoscheduler(target, params);
+    const auto results = Pipeline(downx).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -216,7 +225,8 @@ int test_multiple_stages() {
 
     g.set_estimate(x, 1, 1022).set_estimate(y, 1, 1022);
 
-    Pipeline(g).apply_autoscheduler(target, params);
+    const auto results = Pipeline(g).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -256,7 +266,8 @@ int test_scan_with_pointwise_stages() {
 
     after[N - 1].set_estimate(x, 0, 1024).set_estimate(y, 0, 1024);
 
-    Pipeline(after[N - 1]).apply_autoscheduler(target, params);
+    const auto results = Pipeline(after[N - 1]).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -278,7 +289,8 @@ int test_unknown_1() {
 
     out.set_estimate(j, 0, 1024).set_estimate(i, 0, 1024);
 
-    Pipeline(out).apply_autoscheduler(target, params);
+    const auto results = Pipeline(out).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -332,7 +344,8 @@ int test_scan_x_pointwise_downsample_y() {
 
     p3[N - 1].set_estimate(x, 0, 1024).set_estimate(y, 0, 1024);
 
-    Pipeline(p3[N - 1]).apply_autoscheduler(target, params);
+    const auto results = Pipeline(p3[N - 1]).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -350,7 +363,8 @@ int test_gather_with_lut() {
 
     out.set_estimate(x, 0, 10);
 
-    Pipeline(out).apply_autoscheduler(target, params);
+    const auto results = Pipeline(out).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -367,7 +381,8 @@ int test_alternate_indexing() {
 
     h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
-    Pipeline(h).apply_autoscheduler(target, params);
+    const auto results = Pipeline(h).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -388,7 +403,8 @@ int test_high_read_traffic() {
     a.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
     b.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
-    Pipeline({a, b}).apply_autoscheduler(target, params);
+    const auto results = Pipeline({a, b}).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -402,8 +418,10 @@ int test_boring_memcpy() {
     g(x, y) = f(x, y);
 
     g.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
+    im.set_estimates({{0, 1000}, {0, 1000}});
 
-    Pipeline(g).apply_autoscheduler(target, params);
+    const auto results = Pipeline(g).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -417,7 +435,8 @@ int test_tiny_loads() {
 
     f.set_estimate(x, 0, 3).set_estimate(y, 0, 5);
 
-    Pipeline(f).apply_autoscheduler(target, params);
+    const auto results = Pipeline(f).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -438,7 +457,8 @@ int test_many_dimensions() {
         .set_estimate(u, 0, 2)
         .set_estimate(v, 0, 6);
 
-    Pipeline(f).apply_autoscheduler(target, params);
+    const auto results = Pipeline(f).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -459,7 +479,8 @@ int test_long_transpose_chain() {
     out1.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
     out2.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
-    Pipeline({out1, out2}).apply_autoscheduler(target, params);
+    const auto results = Pipeline({out1, out2}).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -494,7 +515,8 @@ int test_func_that_should_be_recomputed() {
 
     g.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-    Pipeline(g).apply_autoscheduler(target, params);
+    const auto results = Pipeline(g).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -512,7 +534,8 @@ int test_roundup_in_update_stage() {
 
     g.set_estimate(x, 0, 10).set_estimate(y, 0, 2048);
 
-    Pipeline(g).apply_autoscheduler(target, params);
+    const auto results = Pipeline(g).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -559,7 +582,8 @@ int test_convolution_pyramid() {
 
     out.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-    Pipeline(out).apply_autoscheduler(target, params);
+    const auto results = Pipeline(out).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -581,7 +605,8 @@ int test_unknown_2() {
 
     casted.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
 
-    Pipeline(casted).apply_autoscheduler(target, params);
+    const auto results = Pipeline(casted).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -603,7 +628,8 @@ int test_histogram() {
     f.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
     output.set_estimate(i, 0, 256);
 
-    Pipeline(output).apply_autoscheduler(target, params);
+    const auto results = Pipeline(output).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
@@ -619,7 +645,8 @@ int test_scalars_with_reduction() {
     f() = 5;
     output() = sum(im(r.x, r.y)) + f();
 
-    Pipeline(output).apply_autoscheduler(target, params);
+    const auto results = Pipeline(output).apply_autoscheduler(target, params);
+    debug(1) << results.schedule_source;
     return 0;
 }
 
