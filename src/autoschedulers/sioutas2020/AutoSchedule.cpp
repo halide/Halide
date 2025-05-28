@@ -4558,7 +4558,9 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     if (can_prove(def_par < arch_params.parallelism)) {
-        user_warning << "Insufficient parallelism for " << f_handle.name() << '\n';
+        user_warning << "Insufficient parallelism for " << f_handle.name()
+                     << " [Parallelism: " << simplify(def_par) << '/' << arch_params.parallelism
+                     << "]\n";
     }
 
     int tile_inner_index = dims.size() - outer_dims.size() - 1;
