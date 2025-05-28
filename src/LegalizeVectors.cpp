@@ -105,6 +105,8 @@ Expr simplify_shuffle(const Shuffle *op) {
 }
 
 class LiftLetToLetStmt : public IRMutator {
+    using IRMutator::visit;
+
     vector<const Let *> lets;
     Expr visit(const Let *op) override {
         lets.push_back(op);
@@ -127,6 +129,8 @@ public:
 };
 
 class ExtractLanes : public IRMutator {
+    using IRMutator::visit;
+
     int lane_start;
     int lane_count;
     int max_legal_lanes;
@@ -305,6 +309,8 @@ public:
 };
 
 class LiftExceedingVectors : public IRMutator {
+    using IRMutator::visit;
+
     int max_lanes{max_lanes_for_device(DeviceAPI::Host, 0)};
 
     vector<pair<string, Expr>> lets;
@@ -416,6 +422,8 @@ public:
 };
 
 class LegalizeVectors : public IRMutator {
+    using IRMutator::visit;
+
     int max_lanes{max_lanes_for_device(DeviceAPI::Host, 0)};
 
     Stmt visit(const For *op) override {
