@@ -594,6 +594,7 @@ int test_convolution_pyramid() {
     out(x, y) = up[0](x, y);
 
     out.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
+    im.set_estimates({{0, 2048}, {0, 2048}});  // TODO: is this correct?
 
     const auto results = Pipeline(out).apply_autoscheduler(target, params);
     debug(1) << results.schedule_source;
@@ -701,7 +702,7 @@ int main(int argc, char **argv) {
         {"test_long_transpose_chain", test_long_transpose_chain},
         {"test_func_that_should_be_recomputed", test_func_that_should_be_recomputed},
         {"test_roundup_in_update_stage", test_roundup_in_update_stage},
-        // {"test_convolution_pyramid", test_convolution_pyramid},
+        {"test_convolution_pyramid", test_convolution_pyramid},
         // {"test_unknown_2", test_unknown_2},
         // {"test_histogram", test_histogram},
         // {"test_scalars_with_reduction", test_scalars_with_reduction},
