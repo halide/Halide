@@ -11,7 +11,7 @@ add_executable(sioutas2020_test_apps_autoscheduler test.cpp)
 target_link_libraries(
     sioutas2020_test_apps_autoscheduler
     PRIVATE
-    Halide::Halide
+    Halide::Test
     Halide::Tools
     ${CMAKE_DL_LIBS}
 )
