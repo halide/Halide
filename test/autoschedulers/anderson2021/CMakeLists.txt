@@ -1,3 +1,8 @@
+if (NOT "NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
+    message(STATUS "Not testing anderson2021 because PTX is not enabled for this build of Halide")
+    return()
+endif ()
+
 ##
 # Build rules for the Anderson2021 autoscheduler library
 ##
@@ -21,7 +26,7 @@ function(add_anderson2021_test NAME)
         "${NAME}"
         PROPERTIES
         LABELS "${ARGS_LABELS}"
-        ENVIRONMENT "${ENVIRONMENT}"
+        ENVIRONMENT_MODIFICATION "${ENVIRONMENT}"
     )
 endfunction()
 
@@ -88,5 +93,5 @@ add_anderson2021_test(
     anderson2021_test_apps_autoscheduler
     COMMAND anderson2021_test_apps_autoscheduler $<TARGET_FILE:Halide_Anderson2021>
     LABELS multithreaded rfactor
-    ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Anderson2021>:$ENV{LD_LIBRARY_PATH}"
+    ENVIRONMENT "LD_LIBRARY_PATH=path_list_prepend:$<TARGET_FILE_DIR:Halide_Anderson2021>"
 )
