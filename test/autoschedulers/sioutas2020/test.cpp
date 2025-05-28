@@ -271,7 +271,7 @@ int test_scan_with_pointwise_stages() {
     return 0;
 }
 
-int test_unknown_1() {
+int test_matmul_basic() {
     Buffer<float> im_a(1024, 1024, "im_a"), im_b(1024, 1024, "im_b");
 
     Func c("c"), a("a"), b("b"), out("out");
@@ -692,7 +692,7 @@ int main(int argc, char **argv) {
         {"test_separable_downsample", test_separable_downsample},
         {"test_multiple_stages", test_multiple_stages},
         {"test_scan_with_pointwise_stages", test_scan_with_pointwise_stages},
-        {"test_unknown_1", test_unknown_1},
+        {"test_matmul_basic", test_matmul_basic},
         {"test_scan_x_pointwise_downsample_y", test_scan_x_pointwise_downsample_y},
         {"test_gather_with_lut", test_gather_with_lut},
         {"test_alternate_indexing", test_alternate_indexing},
