@@ -36,6 +36,8 @@ int max_lanes_for_device(DeviceAPI api, int parent_max_lanes) {
         internal_error << "No GPU API was selected.";
         return 0;
     }
+    internal_error << "Unknown Device API";
+    return 0;
 }
 
 std::string vec_name(const string &name, int lane_start, int lane_count) {
