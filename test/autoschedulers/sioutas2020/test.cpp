@@ -601,7 +601,7 @@ int test_convolution_pyramid() {
     return 0;
 }
 
-int test_unknown_2() {
+int test_bidirectional_scan() {
     ImageParam im(Float(32), 2, "im");
 
     Func f("f"), scan("scan"), casted("casted");
@@ -618,6 +618,7 @@ int test_unknown_2() {
     casted(x, y) = scan(x, y);
 
     casted.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
+    im.set_estimates({{0, 2000}, {0, 2000}});
 
     const auto results = Pipeline(casted).apply_autoscheduler(target, params);
     debug(1) << results.schedule_source;
@@ -703,7 +704,7 @@ int main(int argc, char **argv) {
         {"test_func_that_should_be_recomputed", test_func_that_should_be_recomputed},
         {"test_roundup_in_update_stage", test_roundup_in_update_stage},
         {"test_convolution_pyramid", test_convolution_pyramid},
-        // {"test_unknown_2", test_unknown_2},
+        {"test_bidirectional_scan", test_bidirectional_scan},
         // {"test_histogram", test_histogram},
         // {"test_scalars_with_reduction", test_scalars_with_reduction},
     };
