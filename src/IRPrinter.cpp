@@ -555,8 +555,15 @@ std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
 }
 
 namespace {
-#if _WIN32
 bool supports_ansi(std::ostream &os) {
+    const char *term = getenv("TERM");
+    if (term) {
+        // Check if the terminal supports colors
+        if (!(strstr(term, "color") || strstr(term, "xterm"))) {
+            return false;
+        }
+    }
+#if _WIN32
     HANDLE h;
     if (&os == &std::cout) {
         h = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -569,17 +576,15 @@ bool supports_ansi(std::ostream &os) {
     DWORD mode;
     return GetConsoleMode(h, &mode) &&
            SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-}
 #else
-bool supports_ansi(std::ostream &os) {
     if (&os == &std::cout) {
         return isatty(fileno(stdout));
     } else if (&os == &std::cerr) {
         return isatty(fileno(stderr));
     }
     return false;
-}
 #endif
+}
 }  // namespace
 
 IRPrinter::IRPrinter(ostream &s)
@@ -593,17 +598,9 @@ IRPrinter::IRPrinter(ostream &s)
             use_colors = val != 0;
         } else {
             use_colors = supports_ansi(stream);
-            const char *term = getenv("TERM");
-            if (term) {
-                // Check if the terminal supports colors
-                if (!(strstr(term, "color") || strstr(term, "xterm"))) {
-                    use_colors = false;
-                }
-            }
         }
         if (use_colors) {
             ansi = true;
-
             // Simple palette using standard VGA colors.
             // clang-format off
             ansi_hl        = "\033[4m";
