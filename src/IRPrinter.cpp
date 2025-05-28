@@ -1062,8 +1062,10 @@ void IRPrinter::visit(const Let *op) {
 void IRPrinter::visit(const LetStmt *op) {
     ScopedBinding<> bind(known_type, op->name);
     stream << get_indent() << kw("let ") << var(op->name) << kw(" = ");
-    ScopedValue<int> reset_paren_depth(paren_depth, 0);
-    print_no_parens(op->value);
+    {
+        ScopedValue<int> reset_paren_depth(paren_depth, 0);
+        print_no_parens(op->value);
+    }
     stream << "\n";
 
     if (!is_summary) {
