@@ -586,41 +586,39 @@ IRPrinter::IRPrinter(ostream &s)
     : stream(s) {
     s.setf(std::ios::fixed, std::ios::floatfield);
     if (&stream == &std::cout || &stream == &std::cerr) {
-        bool support_colors = false;
-        const char *term = getenv("TERM");
-        if (term) {
-            // Check if the terminal supports colors
-            if (strstr(term, "color") || strstr(term, "xterm")) {
-                support_colors = true;
-            }
-        }
-        const char *opt = getenv("HL_NO_COLORS");
+        bool use_colors = false;
+        const char *opt = getenv("HL_COLORS");
         if (opt) {
             int val = std::atoi(opt);
-            if (val) {
-                support_colors = false;
+            use_colors = val != 0;
+        } else {
+            use_colors = supports_ansi(stream);
+            const char *term = getenv("TERM");
+            if (term) {
+                // Check if the terminal supports colors
+                if (!(strstr(term, "color") || strstr(term, "xterm"))) {
+                    use_colors = false;
+                }
             }
         }
-        if (support_colors) {
-            if (supports_ansi(stream)) {
-                ansi = true;
+        if (use_colors) {
+            ansi = true;
 
-                // Simple palette using standard VGA colors.
-                // clang-format off
-                ansi_hl        = "\033[4m";
-                ansi_dim       = "\033[2m";
-                ansi_kw        = "\033[35;1m";
-                ansi_imm_int   = "\033[36m";
-                ansi_imm_float = "\033[96m";
-                ansi_imm_str   = "\033[32m";
-                ansi_var       = "";
-                ansi_buf       = "\033[33m";
-                ansi_fn        = "\033[31m";
-                ansi_type      = "\033[34m";
-                ansi_reset_col = "\033[39m";
-                ansi_reset     = "\033[0m";
-                // clang-format on
-            }
+            // Simple palette using standard VGA colors.
+            // clang-format off
+            ansi_hl        = "\033[4m";
+            ansi_dim       = "\033[2m";
+            ansi_kw        = "\033[35;1m";
+            ansi_imm_int   = "\033[36m";
+            ansi_imm_float = "\033[96m";
+            ansi_imm_str   = "\033[32m";
+            ansi_var       = "";
+            ansi_buf       = "\033[33m";
+            ansi_fn        = "\033[31m";
+            ansi_type      = "\033[34m";
+            ansi_reset_col = "\033[39m";
+            ansi_reset     = "\033[0m";
+            // clang-format on
         }
     }
 }
