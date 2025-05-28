@@ -4562,7 +4562,7 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     int tile_inner_index = dims.size() - outer_dims.size() - 1;
-    VarOrRVar tile_inner_var("", false);
+    VarOrRVar tile_inner_var("ti", false);
     if (!outer_dims.empty()) {
         string var_name = get_base_name(dims[tile_inner_index].var);
         bool is_rvar = rvars.find(var_name) != rvars.end();
