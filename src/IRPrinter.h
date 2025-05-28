@@ -123,9 +123,13 @@ struct Ansi {
 
 template<typename T>
 std::ostream &operator<<(std::ostream &out, const Ansi<T> &a) {
-    if (a.open) out << a.open;
+    if (a.open) {
+        out << a.open;
+    }
     out << a.cnt;
-    if (a.close) out << a.close;
+    if (a.close) {
+        out << a.close;
+    }
     return out;
 }
 
