@@ -185,6 +185,19 @@ protected:
     bool ansi = false;
     int paren_depth = 0;
 
+    const char *ansi_hl = "";
+    const char *ansi_dim = "";
+    const char *ansi_kw = "";
+    const char *ansi_imm_int = "";
+    const char *ansi_imm_float = "";
+    const char *ansi_imm_str = "";
+    const char *ansi_var = "";
+    const char *ansi_buf = "";
+    const char *ansi_fn = "";
+    const char *ansi_type = "";
+    const char *ansi_reset_col = "";
+    const char *ansi_reset = "";
+
     // clang-format off
     template<typename T> Ansi<T> hl(const T &t);
     template<typename T> Ansi<T> kw(const T &t);

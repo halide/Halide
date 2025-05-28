@@ -15,6 +15,12 @@
 #include "Target.h"
 #include "Util.h"
 
+#if _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 namespace Halide {
 
 using std::ostream;
@@ -548,6 +554,34 @@ std::ostream &operator<<(std::ostream &out, const ModulusRemainder &c) {
     return out;
 }
 
+namespace {
+#if _WIN32
+bool supports_ansi(std::ostream &os) {
+    HANDLE h;
+    if (&os == &std::cout) {
+        h = GetStdHandle(STD_OUTPUT_HANDLE);
+    } else if (&os == &std::cerr) {
+        h = GetStdHandle(STD_ERROR_HANDLE);
+    } else {
+        return false;
+    }
+
+    DWORD mode;
+    return GetConsoleMode(h, &mode) &&
+           SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+}
+#else
+bool supports_ansi(std::ostream &os) {
+    if (&os == &std::cout) {
+        return isatty(fileno(stdout));
+    } else if (&os == &std::cerr) {
+        return isatty(fileno(stderr));
+    }
+    return false;
+}
+#endif
+}  // namespace
+
 IRPrinter::IRPrinter(ostream &s)
     : stream(s) {
     s.setf(std::ios::fixed, std::ios::floatfield);
@@ -568,23 +602,28 @@ IRPrinter::IRPrinter(ostream &s)
             }
         }
         if (support_colors) {
-            ansi = true;
+            if (supports_ansi(stream)) {
+                ansi = true;
+
+                // Simple palette using standard VGA colors.
+                // clang-format off
+                ansi_hl        = "\033[4m";
+                ansi_dim       = "\033[2m";
+                ansi_kw        = "\033[35;1m";
+                ansi_imm_int   = "\033[36m";
+                ansi_imm_float = "\033[96m";
+                ansi_imm_str   = "\033[32m";
+                ansi_var       = "";
+                ansi_buf       = "\033[33m";
+                ansi_fn        = "\033[31m";
+                ansi_type      = "\033[34m";
+                ansi_reset_col = "\033[39m";
+                ansi_reset     = "\033[0m";
+                // clang-format on
+            }
         }
     }
 }
-
-#define ansi_hl "\033[4m"
-#define ansi_dim "\033[2m"
-#define ansi_kw "\033[35;1m"
-#define ansi_imm_int "\033[36m"
-#define ansi_imm_float "\033[96m"
-#define ansi_imm_str "\033[32m"
-#define ansi_var ""
-#define ansi_buf "\033[33m"
-#define ansi_fn "\033[31m"
-#define ansi_type "\033[34m"
-#define ansi_reset_col "\033[39m"
-#define ansi_reset "\033[0m"
 
 #define ansi_helper(name)                                                          \
     template<typename T>                                                           \
@@ -597,19 +636,19 @@ IRPrinter::IRPrinter(ostream &s)
         return {t, ansi ? ansi_##name : nullptr, ansi ? ansi_reset : nullptr}; \
     }
 
-ansi_helper_r(hl)
-ansi_helper_r(kw)
-ansi_helper(imm_int)
-ansi_helper(imm_float)
-ansi_helper(imm_str)
-ansi_helper(var)
-ansi_helper(buf)
-ansi_helper(fn)
-ansi_helper(type)
+ansi_helper_r(hl);
+ansi_helper_r(kw);
+ansi_helper(imm_int);
+ansi_helper(imm_float);
+ansi_helper(imm_str);
+ansi_helper(var);
+ansi_helper(buf);
+ansi_helper(fn);
+ansi_helper(type);
 
 template<typename T>
 Ansi<T> IRPrinter::typep(const T &t) {
-    return {t, ansi ? ansi_type "(" : "(", ansi ? ")" ansi_reset : ")"};
+    return {t, ansi ? "\033[34m(" : "(", ansi ? ")\033[0m" : ")"};
 }
 
 template<typename T>
@@ -695,9 +734,7 @@ void IRPrinter::visit(const FloatImm *op) {
         stream << std::scientific;
     }
 
-    if (ansi) {
-        stream << ansi_imm_float;
-    }
+    stream << ansi_imm_float;
 
     switch (op->type.bits()) {
     case 64:
@@ -713,9 +750,7 @@ void IRPrinter::visit(const FloatImm *op) {
         internal_error << "Bad bit-width for float: " << op->type << "\n";
     }
 
-    if (ansi) {
-        stream << ansi_reset;
-    }
+    stream << ansi_reset;
 
     if (use_scientific_format) {
         stream << std::fixed;
@@ -723,9 +758,7 @@ void IRPrinter::visit(const FloatImm *op) {
 }
 
 void IRPrinter::visit(const StringImm *op) {
-    if (ansi) {
-        stream << ansi_imm_str;
-    }
+    stream << ansi_imm_str;
     stream << "\"";
     for (unsigned char c : op->value) {
         if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
@@ -755,9 +788,7 @@ void IRPrinter::visit(const StringImm *op) {
         }
     }
     stream << "\"";
-    if (ansi) {
-        stream << ansi_reset;
-    }
+    stream << ansi_reset;
 }
 
 void IRPrinter::visit(const Cast *op) {
@@ -964,16 +995,12 @@ void IRPrinter::visit(const Load *op) {
     stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
     if (show_alignment) {
-        if (ansi) {
-            stream << ansi_dim;
-        }
+        stream << ansi_dim;
         stream << " aligned("
                << imm_int(op->alignment.modulus)
                << ", "
                << imm_int(op->alignment.remainder) << ")";
-        if (ansi) {
-            stream << ansi_reset;
-        }
+        stream << ansi_reset;
     }
     stream << paren("]");
     paren_depth--;
@@ -994,16 +1021,14 @@ void IRPrinter::visit(const Ramp *op) {
 }
 
 void IRPrinter::visit(const Broadcast *op) {
-    if (ansi) {
-        stream << ansi_kw << "x" << op->lanes << ansi_reset;
-    } else {
-        stream << "x" << op->lanes;
-    }
+    stream << ansi_kw;
+    stream << "x" << op->lanes;
     stream << "(";
+    stream << ansi_reset;
     paren_depth++;
     print_no_parens(op->value);
     paren_depth--;
-    stream << ")";
+    stream << kw(")");
 }
 
 void IRPrinter::visit(const Call *op) {
@@ -1146,16 +1171,12 @@ void IRPrinter::visit(const Store *op) {
     stream << buf(op->name) << paren("[");
     print_no_parens(op->index);
     if (show_alignment) {
-        if (ansi) {
-            stream << ansi_dim;
-        }
+        stream << ansi_dim;
         stream << " aligned("
                << imm_int(op->alignment.modulus)
                << ", "
                << imm_int(op->alignment.remainder) << ")";
-        if (ansi) {
-            stream << ansi_reset;
-        }
+        stream << ansi_reset;
     }
     stream << paren("] = ");
     if (const Let *let = op->value.as<Let>()) {
