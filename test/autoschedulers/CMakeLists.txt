@@ -5,12 +5,7 @@
 # autoschedulers_cuda: this autoscheduler is expected to work on Cuda targets (but probably not other GPU targets)
 
 add_subdirectory(adams2019)
-
-if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
-    add_subdirectory(anderson2021)
-else ()
-    message(STATUS "Not testing anderson2021 because PTX is not enabled for this build of Halide")
-endif ()
-
+add_subdirectory(anderson2021)
 add_subdirectory(li2018)
 add_subdirectory(mullapudi2016)
+add_subdirectory(sioutas2020)
