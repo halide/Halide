@@ -642,6 +642,7 @@ int test_histogram() {
 
     f.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
     output.set_estimate(i, 0, 256);
+    im.set_estimates({{0, 2000}, {0, 2000}});
 
     const auto results = Pipeline(output).apply_autoscheduler(target, params);
     debug(1) << results.schedule_source;
@@ -659,6 +660,8 @@ int test_scalars_with_reduction() {
 
     f() = 5;
     output() = sum(im(r.x, r.y)) + f();
+
+    im.set_estimates({{0, 2000}, {0, 2000}});
 
     const auto results = Pipeline(output).apply_autoscheduler(target, params);
     debug(1) << results.schedule_source;
@@ -705,8 +708,8 @@ int main(int argc, char **argv) {
         {"test_roundup_in_update_stage", test_roundup_in_update_stage},
         {"test_convolution_pyramid", test_convolution_pyramid},
         {"test_bidirectional_scan", test_bidirectional_scan},
-        // {"test_histogram", test_histogram},
-        // {"test_scalars_with_reduction", test_scalars_with_reduction},
+        {"test_histogram", test_histogram},
+        {"test_scalars_with_reduction", test_scalars_with_reduction},
     };
 
 #ifdef HALIDE_WITH_EXCEPTIONS
