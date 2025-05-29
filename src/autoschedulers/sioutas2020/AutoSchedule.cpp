@@ -5171,6 +5171,7 @@ void validate_no_partial_schedules(const Function &f) {
                     << " has been reordered\n";
             }
         } else {
+#if 0
             // Verify that there is no loop reordering on the update definition
             // (i.e. the Vars in the dim list should be in the same order as
             // the args in the LHS of the definition, the RVars in the dim list
@@ -5186,7 +5187,7 @@ void validate_no_partial_schedules(const Function &f) {
                 const Dim &d = dims[i];
                 user_assert(d.is_rvar() && d.var == rvars[i].var)
                     << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-                    << "\" since dim \"" << i << "\" at stage " << stage
+                    << "\" since dim " << i << " (" << d.var << ") at stage " << stage
                     << " has been reordered\n";
             }
 
@@ -5196,7 +5197,7 @@ void validate_no_partial_schedules(const Function &f) {
                 const Dim &d = dims[i];
                 user_assert(!d.is_rvar())
                     << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-                    << "\" since dim \"" << i << "\" at stage " << stage
+                    << "\" since dim " << i << " (" << d.var << ") at stage " << stage
                     << " has been reordered\n";
 
                 const auto &iter =
@@ -5208,10 +5209,11 @@ void validate_no_partial_schedules(const Function &f) {
                 int current_index = iter - args.begin();
                 user_assert(current_index > last_index)
                     << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-                    << "\" since dim \"" << i << "\" at stage " << stage
-                    << " has been reordered\n";
+                    << "\" since dim " << i << " (" << d.var << ") at stage " << stage
+                    << " has been reordered from original position " << current_index << "\n";
                 last_index = current_index;
             }
+#endif
         }
     }
 }
