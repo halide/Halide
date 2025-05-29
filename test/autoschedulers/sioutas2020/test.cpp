@@ -32,6 +32,7 @@ int test_rfactor_with_split() {
     output(x, y) = sum_fn(x);
 
     output.set_estimates({{0, 8192}, {0, 32768}});
+    im.set_estimates({{0, 8192}, {0, 32768}});
 
     const auto results = Pipeline(output).apply_autoscheduler(target, params);
     debug(1) << results.schedule_source;
@@ -54,6 +55,7 @@ int test_rfactor_softmax() {
     output(x) = im(x) / f();
 
     output.set_estimate(x, 0, 8192);
+    im.set_estimates({{0, 8192}});
 
     const auto results = Pipeline(output).apply_autoscheduler(target, params);
     debug(1) << results.schedule_source;
@@ -684,8 +686,8 @@ int main(int argc, char **argv) {
     };
 
     std::vector<Task> tasks = {
-        // {"test_rfactor_with_split", test_rfactor_with_split},
-        // {"test_rfactor_softmax", test_rfactor_softmax},
+        {"test_rfactor_with_split", test_rfactor_with_split},
+        {"test_rfactor_softmax", test_rfactor_softmax},
         {"test_pointwise_fusion", test_pointwise_fusion},
         {"test_huge_stencils", test_huge_stencils},
         {"test_isotropic_stencils", test_isotropic_stencils},
