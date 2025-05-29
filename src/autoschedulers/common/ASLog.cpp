@@ -37,16 +37,10 @@ std::string get_env_variable(char const *env_var_name) {
 }  // namespace
 
 int aslog::aslog_level() {
-    static int cached_aslog_level = ([]() -> int {
-        // If HL_DEBUG_AUTOSCHEDULE is defined, use that value.
+    static int cached_aslog_level = [] {
         std::string lvl = get_env_variable("HL_DEBUG_AUTOSCHEDULE");
-        if (!lvl.empty()) {
-            return atoi(lvl.c_str());
-        }
-        // Otherwise, use HL_DEBUG_CODEGEN.
-        lvl = get_env_variable("HL_DEBUG_CODEGEN");
         return !lvl.empty() ? atoi(lvl.c_str()) : 0;
-    })();
+    }();
     return cached_aslog_level;
 }
 
