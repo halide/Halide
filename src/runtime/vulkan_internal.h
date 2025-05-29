@@ -279,6 +279,8 @@ const char *vk_get_error_name(VkResult error) {
         return "VK_ERROR_FORMAT_NOT_SUPPORTED";
     case VK_ERROR_FRAGMENTED_POOL:
         return "VK_ERROR_FRAGMENTED_POOL";
+    case VK_ERROR_UNKNOWN:
+        return "VK_ERROR_UNKNOWN";
     case VK_ERROR_SURFACE_LOST_KHR:
         return "VK_ERROR_SURFACE_LOST_KHR";
     case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
@@ -301,6 +303,8 @@ const char *vk_get_error_name(VkResult error) {
         return "<Unknown Vulkan Result Code>";
     }
 }
+
+#define vk_report_error(user_context, code, func) (error((user_context)) << "Vulkan: " << (func) << " returned " << vk_get_error_name((code)) << " (code: " << (code) << ") ")
 
 // --------------------------------------------------------------------------
 
