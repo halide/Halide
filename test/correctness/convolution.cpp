@@ -4,6 +4,13 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::Vulkan)) {
+        if (!target.has_feature(Target::VulkanInt16)) {
+            printf("[SKIP] Skipping test for Vulkan ... missing Int16 support!\n");
+            return 0;
+        }
+    }
 
     // int W = 64*3, H = 64*3;
     const int W = 128, H = 48;
@@ -63,8 +70,6 @@ int main(int argc, char **argv) {
      */
     Func blur2("blur2");
     blur2(x, y) = sum(tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1));
-
-    Target target = get_jit_target_from_environment();
 
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
