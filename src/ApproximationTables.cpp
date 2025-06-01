@@ -1019,6 +1019,30 @@ const Approximation *best_log_approximation(Halide::ApproximationPrecision preci
     return find_best_approximation("log", table_log, precision, type);
 }
 
+// ====
+
+const std::vector<Approximation> &get_table_atan() {
+  return table_atan;
+}
+const std::vector<Approximation> &get_table_sin() {
+  return table_sin;
+}
+const std::vector<Approximation> &get_table_cos() {
+  return table_cos;
+}
+const std::vector<Approximation> &get_table_tan() {
+  return table_tan;
+}
+const std::vector<Approximation> &get_table_expm1() {
+  return table_expm1;
+}
+const std::vector<Approximation> &get_table_exp() {
+  return table_exp;
+}
+const std::vector<Approximation> &get_table_log() {
+  return table_log;
+}
+
 }  // namespace ApproximationTables
 }  // namespace Internal
 }  // namespace Halide

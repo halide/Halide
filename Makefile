@@ -684,6 +684,7 @@ HEADER_FILES = \
   ExternFuncArgument.h \
   ExtractTileOperations.h \
   FastIntegerDivide.h \
+  FastMathFunctions.h \
   FindCalls.h \
   FindIntrinsics.h \
   FlattenNestedRamps.h \
