@@ -7,8 +7,6 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 constexpr double PI = 3.14159265358979323846;
-constexpr double ONE_OVER_PI = 1.0 / PI;
-constexpr double TWO_OVER_PI = 2.0 / PI;
 constexpr double PI_OVER_TWO = PI / 2;
 constexpr double PI_OVER_FOUR = PI / 4;
 
