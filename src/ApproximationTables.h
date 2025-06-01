@@ -32,13 +32,13 @@ struct Approximation {
 };
 
 namespace ApproximationTables {
-extern const std::vector<Approximation> table_atan;
-extern const std::vector<Approximation> table_sin;
-extern const std::vector<Approximation> table_cos;
-extern const std::vector<Approximation> table_tan;
-extern const std::vector<Approximation> table_expm1;
-extern const std::vector<Approximation> table_exp;
-extern const std::vector<Approximation> table_log;
+extern HALIDE_EXPORT_SYMBOL const std::vector<Approximation> table_atan;
+extern HALIDE_EXPORT_SYMBOL const std::vector<Approximation> table_sin;
+extern HALIDE_EXPORT_SYMBOL const std::vector<Approximation> table_cos;
+extern HALIDE_EXPORT_SYMBOL const std::vector<Approximation> table_tan;
+extern HALIDE_EXPORT_SYMBOL const std::vector<Approximation> table_expm1;
+extern HALIDE_EXPORT_SYMBOL const std::vector<Approximation> table_exp;
+extern HALIDE_EXPORT_SYMBOL const std::vector<Approximation> table_log;
 
 const Approximation *best_atan_approximation(Halide::ApproximationPrecision precision, Type type);
 const Approximation *best_sin_approximation(Halide::ApproximationPrecision precision, Type type);

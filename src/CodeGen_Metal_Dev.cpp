@@ -64,33 +64,37 @@ protected:
     extern_function_name_map[x "_f16"] = y; \
     extern_function_name_map[x "_f32"] = y
             alias("sqrt", "sqrt");
-            alias("sin", "sin");
-            alias("cos", "cos");
-            alias("exp", "exp");
-            alias("log", "log");
+            alias("sin", "precise::sin");
+            alias("cos", "precise::cos");
+            alias("exp", "precise::exp");
+            alias("log", "precise::log");
             alias("abs", "fabs");  // f-prefix!
             alias("floor", "floor");
             alias("ceil", "ceil");
             alias("trunc", "trunc");
-            alias("pow", "pow");
-            alias("asin", "asin");
-            alias("acos", "acos");
-            alias("tan", "tan");
-            alias("atan", "atan");
-            alias("atan2", "atan2");
-            alias("sinh", "sinh");
-            alias("asinh", "asinh");
-            alias("cosh", "cosh");
-            alias("acosh", "acosh");
-            alias("tanh", "tanh");
-            alias("atanh", "atanh");
+            alias("pow", "precise::pow");
+            alias("asin", "precise::asin");
+            alias("acos", "precise::acos");
+            alias("tan", "precise::tan");
+            alias("atan", "precise::atan");
+            alias("atan2", "precise::atan2");
+            alias("sinh", "precise::sinh");
+            alias("asinh", "precise::asinh");
+            alias("cosh", "precise::cosh");
+            alias("acosh", "precise::acosh");
+            alias("tanh", "precise::tanh");
+            alias("atanh", "precise::atanh");
 
             alias("is_nan", "isnan");
             alias("is_inf", "isinf");
             alias("is_finite", "isfinite");
 
-            alias("fast_sin", "fast::sin");
+            alias("fast_acos", "fast::asin");
+            alias("fast_asin", "fast::asin");
+            alias("fast_atan", "fast::atan");
+            alias("fast_atan2", "fast::atan2");
             alias("fast_cos", "fast::cos");
+            alias("fast_sin", "fast::sin");
             alias("fast_tan", "fast::tan");
             alias("fast_exp", "fast::exp");
             alias("fast_log", "fast::log");
