@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
     std::function<void(Func &)> schedule = [&](Func &f) {
         if (target.has_gpu_feature()) {
             f.never_partition_all();
-            f.gpu_tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::ShiftInwards);
+            f.gpu_tile(x, y, xo, yo, xi, yi, 64, 16, TailStrategy::ShiftInwards).vectorize(xi, 4);
         } else {
             f.vectorize(x, 8);
         }

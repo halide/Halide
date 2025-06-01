@@ -479,7 +479,10 @@ int main(int argc, char **argv) {
                 ref_func_gpu(i) = ftt.make_reference(arg_x, arg_y);
                 ref_func_gpu.never_partition_all();
                 // also vectorize to make sure that works on GPU as well...
-                ref_func_gpu.gpu_tile(i, io, ii, 256, TailStrategy::ShiftInwards).vectorize(ii, 2);
+                ref_func_gpu
+                    .gpu_tile(i, io, ii, 512, TailStrategy::ShiftInwards)
+                    .vectorize(ii, 4);
+                // TODO(mcourteaux): When vector legalization lowering pass is in, increase vectorize for testing purposes!
                 ref_func_gpu.realize(out_approx);
                 out_approx.copy_to_host();
 
@@ -519,8 +522,11 @@ int main(int argc, char **argv) {
                 approx_func.align_bounds(i, 8);
                 if (target.has_gpu_feature()) {
                     Var io, ii;
-                    approx_func.never_partition_all();
-                    approx_func.gpu_tile(i, io, ii, 256, TailStrategy::ShiftInwards);
+                    approx_func
+                        .never_partition_all()
+                        .gpu_tile(i, io, ii, 256, TailStrategy::ShiftInwards)
+                        .vectorize(ii, 4);
+                    // TODO(mcourteaux): When vector legalization lowering pass is in, increase vectorize for testing.
                 } else {
                     approx_func.vectorize(i, 8);
                 }
