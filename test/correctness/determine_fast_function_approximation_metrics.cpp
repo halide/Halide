@@ -91,7 +91,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::tan(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_tan(x, prec); },
         Halide::Internal::ApproximationTables::best_tan_approximation,
-        Halide::Internal::ApproximationTables::table_tan,
+        Halide::Internal::ApproximationTables::get_table_tan(),
         {0.0f, float(PI_OVER_FOUR)},
     },
     {
@@ -99,7 +99,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::atan(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_atan(x, prec); },
         Halide::Internal::ApproximationTables::best_atan_approximation,
-        Halide::Internal::ApproximationTables::table_atan,
+        Halide::Internal::ApproximationTables::get_table_atan(),
         {0.0f, 32.0f},
     },
     {
@@ -107,7 +107,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::sin(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_sin(x, prec); },
         Halide::Internal::ApproximationTables::best_sin_approximation,
-        Halide::Internal::ApproximationTables::table_sin,
+        Halide::Internal::ApproximationTables::get_table_sin(),
         {0.0f, float(PI_OVER_TWO)},
     },
     {
@@ -115,7 +115,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::cos(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_cos(x, prec); },
         Halide::Internal::ApproximationTables::best_cos_approximation,
-        Halide::Internal::ApproximationTables::table_cos,
+        Halide::Internal::ApproximationTables::get_table_cos(),
         {0.0f, float(PI_OVER_TWO)},
     },
     {
@@ -123,7 +123,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return makeshift_expm1(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_expm1(x, prec); },
         Halide::Internal::ApproximationTables::best_expm1_approximation,
-        Halide::Internal::ApproximationTables::table_expm1,
+        Halide::Internal::ApproximationTables::get_table_expm1(),
         {-float(0.5 * std::log(2.0)), float(0.5 * std::log(2.0))},
     },
     {
@@ -131,7 +131,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::exp(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_exp(x, prec); },
         Halide::Internal::ApproximationTables::best_exp_approximation,
-        Halide::Internal::ApproximationTables::table_exp,
+        Halide::Internal::ApproximationTables::get_table_exp(),
         {0.0f, float(std::log(2.0))},
     },
     {
@@ -139,7 +139,7 @@ struct FunctionToTest {
         [](Expr x, Expr y) { return Halide::log(x); },
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_log(x, prec); },
         Halide::Internal::ApproximationTables::best_log_approximation,
-        Halide::Internal::ApproximationTables::table_log,
+        Halide::Internal::ApproximationTables::get_table_log(),
         {0.75f, 1.50f},
     },
     // clang-format on
