@@ -1,4 +1,6 @@
 #include "Halide.h"
+#include "get_autoscheduler_params.hpp"
+
 using namespace Halide;
 
 int main(int argc, char **argv) {
@@ -30,7 +32,7 @@ int main(int argc, char **argv) {
 
     Target target = get_target_from_environment();
     Pipeline p(h);
-    p.apply_autoscheduler(target, {"Mullapudi2016"});
+    p.apply_autoscheduler(target, get_autoscheduler_params(target.has_gpu_feature()));
 
     in_param.set(in);
 
