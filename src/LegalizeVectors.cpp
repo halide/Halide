@@ -115,25 +115,14 @@ Expr simplify_shuffle(const Shuffle *op) {
 class LiftLetToLetStmt : public IRMutator {
     using IRMutator::visit;
 
-    int max_lanes{max_lanes_for_device(DeviceAPI::Host, 0)};
-
-    Stmt visit(const For *op) override {
-        ScopedValue<int> scoped_max_lanes(max_lanes, max_lanes_for_device(op->device_api, max_lanes));
-        return IRMutator::visit(op);
-    }
-
     vector<const Let *> lets;
     Expr visit(const Let *op) override {
-        if (max_lanes != 0) {
-            for (const Let *existing : lets) {
-                internal_assert(existing->name != op->name)
-                    << "Let " << op->name << " = ...  cannot be lifted to LetStmt because the name is not unique.";
-            }
-            lets.push_back(op);
-            return mutate(op->body);
-        } else {
-            return IRMutator::visit(op);
+        for (const Let *existing : lets) {
+            internal_assert(existing->name != op->name)
+                << "Let " << op->name << " = ...  cannot be lifted to LetStmt because the name is not unique.";
         }
+        lets.push_back(op);
+        return mutate(op->body);
     }
 
 public:
@@ -156,7 +145,6 @@ class ExtractLanes : public IRMutator {
 
     int lane_start;
     int lane_count;
-    int max_legal_lanes;
 
     Expr extract_lanes_from_make_struct(const Call *op) {
         internal_assert(op);
@@ -303,7 +291,7 @@ class ExtractLanes : public IRMutator {
         int vecs_per_reduction = op->value.type().lanes() / op->type.lanes();
         int input_lane_start = vecs_per_reduction * lane_start;
         int input_lane_count = vecs_per_reduction * lane_count;
-        Expr arg = ExtractLanes(input_lane_start, input_lane_count, max_legal_lanes).mutate(op->value);
+        Expr arg = ExtractLanes(input_lane_start, input_lane_count).mutate(op->value);
         // This might fail if the extracted lanes reference a non-existing variable!
         return VectorReduce::make(op->op, arg, lane_count);
     }
@@ -327,39 +315,30 @@ public:
         return IRMutator::mutate(s);
     }
 
-    ExtractLanes(int start, int count, int max_legal)
-        : lane_start(start), lane_count(count), max_legal_lanes(max_legal) {
+    ExtractLanes(int start, int count)
+        : lane_start(start), lane_count(count) {
     }
 };
 
 class LiftExceedingVectors : public IRMutator {
     using IRMutator::visit;
 
-    int max_lanes{max_lanes_for_device(DeviceAPI::Host, 0)};
+    int max_lanes;
 
     vector<pair<string, Expr>> lets;
     bool just_in_let_definition{false};
     int in_strict_float = 0;
 
-    Stmt visit(const For *op) override {
-        ScopedValue<int> scoped_max_lanes(max_lanes, max_lanes_for_device(op->device_api, max_lanes));
+    Expr visit(const Let *op) override {
+        internal_error << "We don't want to process Lets. They should have all been converted to LetStmts.";
         return IRMutator::visit(op);
     }
 
-    Expr visit(const Let *op) override {
-        if (max_lanes != 0) {
-            internal_error << "We don't want to process Lets. They should have all been converted to LetStmts.";
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
     Stmt visit(const LetStmt *op) override {
-        Expr def;
-        {
-            ScopedValue<bool> scoped_just_in_let(just_in_let_definition, true);
-            def = mutate(op->value);
-        }
+        just_in_let_definition = true;
+        Expr def = mutate(op->value);
+        just_in_let_definition = false;
+
         Stmt body = mutate(op->body);
         if (def.same_as(op->value) && body.same_as(op->body)) {
             return op;
@@ -370,7 +349,7 @@ class LiftExceedingVectors : public IRMutator {
     Expr visit(const Call *op) override {
         // Custom handling of Call, to prevent certain things from being extracted out
         // of the call arguments, as that's not always allowed.
-        bool exceeds_lanecount = max_lanes && op->type.lanes() > max_lanes;
+        bool exceeds_lanecount = op->type.lanes() > max_lanes;
         if (op->is_intrinsic(Call::strict_float)) {
             in_strict_float++;
         }
@@ -382,7 +361,14 @@ class LiftExceedingVectors : public IRMutator {
             for (int i = 0; i < int(op->args.size()); ++i) {
                 bool may_extract = true;
                 if (op->is_intrinsic(Call::require)) {
+                    // Call::require is special: it behaves a little like if-then-else:
+                    // it runs the 3rd argument (the error handling part) only when there
+                    // is an error. Extracting that would unconditionally print the error.
                     may_extract &= i < 2;
+                }
+                if (op->is_intrinsic(Call::if_then_else)) {
+                    // Only allow the condition to be extracted.
+                    may_extract &= i == 0;
                 }
                 const Expr &arg = op->args[i];
                 if (may_extract) {
@@ -412,7 +398,7 @@ class LiftExceedingVectors : public IRMutator {
 public:
     Stmt mutate(const Stmt &s) override {
         ScopedValue<decltype(lets)> scoped_lets(lets, {});
-        ScopedValue<bool> scoped_just_in_let(just_in_let_definition, false);
+        just_in_let_definition = false;
         Stmt mutated = IRMutator::mutate(s);
         for (auto &let : reverse_view(lets)) {
             // There is no recurse into let.second. This is handled by repeatedly calling this tranform.
@@ -422,7 +408,7 @@ public:
     }
 
     Expr mutate(const Expr &e) override {
-        bool exceeds_lanecount = max_lanes && e.type().lanes() > max_lanes;
+        bool exceeds_lanecount = e.type().lanes() > max_lanes;
 
         if (exceeds_lanecount) {
             bool should_extract = false;
@@ -446,23 +432,23 @@ public:
             }
         }
 
-        ScopedValue<bool> scoped_just_in_let(just_in_let_definition, false);
+        just_in_let_definition = false;
         return IRMutator::mutate(e);
+    }
+
+    LiftExceedingVectors(int max_lanes)
+        : max_lanes(max_lanes) {
+        internal_assert(max_lanes != 0) << "LiftExceedingVectors should not be called when there is no lane limit.";
     }
 };
 
 class LegalizeVectors : public IRMutator {
     using IRMutator::visit;
 
-    int max_lanes{max_lanes_for_device(DeviceAPI::Host, 0)};
-
-    Stmt visit(const For *op) override {
-        ScopedValue<int> scoped_max_lanes(max_lanes, max_lanes_for_device(op->device_api, max_lanes));
-        return IRMutator::visit(op);
-    }
+    int max_lanes;
 
     Stmt visit(const LetStmt *op) override {
-        bool exceeds_lanecount = max_lanes && op->value.type().lanes() > max_lanes;
+        bool exceeds_lanecount = op->value.type().lanes() > max_lanes;
 
         if (exceeds_lanecount) {
             int num_vecs = (op->value.type().lanes() + max_lanes - 1) / max_lanes;
@@ -474,7 +460,7 @@ class LegalizeVectors : public IRMutator {
                 int lane_count_for_vec = std::min(op->value.type().lanes() - lane_start, max_lanes);
                 std::string name = vec_name(op->name, lane_start, lane_count_for_vec);
 
-                Expr value = mutate(ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(op->value));
+                Expr value = mutate(ExtractLanes(lane_start, lane_count_for_vec).mutate(op->value));
 
                 debug(3) << "  Add: let " << name << " = " << value << "\n";
                 body = LetStmt::make(name, value, body);
@@ -486,14 +472,12 @@ class LegalizeVectors : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        if (max_lanes != 0) {
-            internal_error << "Lets should have been lifted into LetStmts.";
-        }
+        internal_error << "Lets should have been lifted into LetStmts.";
         return IRMutator::visit(op);
     }
 
     Stmt visit(const Store *op) override {
-        bool exceeds_lanecount = max_lanes && op->index.type().lanes() > max_lanes;
+        bool exceeds_lanecount = op->index.type().lanes() > max_lanes;
         if (exceeds_lanecount) {
             // Split up in multiple stores
             int num_vecs = (op->index.type().lanes() + max_lanes - 1) / max_lanes;
@@ -502,9 +486,9 @@ class LegalizeVectors : public IRMutator {
             for (int i = 0; i < num_vecs; ++i) {
                 int lane_start = i * max_lanes;
                 int lane_count_for_vec = std::min(op->value.type().lanes() - lane_start, max_lanes);
-                Expr rhs = ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(op->value);
-                Expr index = ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(op->index);
-                Expr predictate = ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(op->predicate);
+                Expr rhs = ExtractLanes(lane_start, lane_count_for_vec).mutate(op->value);
+                Expr index = ExtractLanes(lane_start, lane_count_for_vec).mutate(op->index);
+                Expr predictate = ExtractLanes(lane_start, lane_count_for_vec).mutate(op->predicate);
                 assignments.push_back(Store::make(
                     op->name, std::move(rhs), std::move(index),
                     op->param, std::move(predictate), op->alignment + lane_start));
@@ -517,9 +501,6 @@ class LegalizeVectors : public IRMutator {
     }
 
     Expr visit(const Shuffle *op) override {
-        if (max_lanes == 0) {
-            return IRMutator::visit(op);
-        }
         internal_assert(op->type.lanes() <= max_lanes) << Expr(op);
         bool requires_mutation = false;
         for (size_t i = 0; i < op->vectors.size(); ++i) {
@@ -545,7 +526,7 @@ class LegalizeVectors : public IRMutator {
                     for (int i = 0; i < num_vecs; i++) {
                         int lane_start = i * max_lanes;
                         int lane_count_for_vec = std::min(vec.type().lanes() - lane_start, max_lanes);
-                        new_vectors.push_back(ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(vec));
+                        new_vectors.push_back(ExtractLanes(lane_start, lane_count_for_vec).mutate(vec));
                     }
                 } else {
                     new_vectors.push_back(IRMutator::mutate(vec));
@@ -560,9 +541,6 @@ class LegalizeVectors : public IRMutator {
     }
 
     Expr visit(const VectorReduce *op) override {
-        if (max_lanes == 0) {
-            return IRMutator::visit(op);
-        }
         const Expr &arg = op->value;
         if (arg.type().lanes() > max_lanes) {
             // TODO: The transformation below is not allowed under strict_float, but
@@ -577,7 +555,7 @@ class LegalizeVectors : public IRMutator {
             for (int i = 0; i < num_vecs; i++) {
                 int lane_start = i * max_lanes;
                 int lane_count_for_vec = std::min(arg.type().lanes() - lane_start, max_lanes);
-                Expr partial_arg = mutate(ExtractLanes(lane_start, lane_count_for_vec, max_lanes).mutate(arg));
+                Expr partial_arg = mutate(ExtractLanes(lane_start, lane_count_for_vec).mutate(arg));
                 Expr partial_red = VectorReduce::make(op->op, std::move(partial_arg), op->type.lanes());
                 if (i == 0) {
                     result = partial_red;
@@ -612,17 +590,25 @@ class LegalizeVectors : public IRMutator {
             return IRMutator::visit(op);
         }
     }
+
+public:
+    LegalizeVectors(int max_lanes)
+        : max_lanes(max_lanes) {
+        internal_assert(max_lanes != 0) << "LegalizeVectors should not be called when there is no lane limit.";
+    }
 };
 
 }  // namespace
 
-Stmt legalize_vectors(const Stmt &s) {
+Stmt legalize_vectors_in_device_loop(const For *op) {
+    int max_lanes = max_lanes_for_device(op->device_api, 0);
+
     // Similar to CSE, lifting out stuff into variables.
     // Pass 1): lift out Shuffles that exceed lane count into variables
     // Pass 2): Rewrite those vector variables as bundles of vector variables, while legalizing all other stuff.
-    Stmt m0 = simplify(s);
+    Stmt m0 = simplify(op->body);
     Stmt m1 = common_subexpression_elimination(m0, false);
-    if (!m1.same_as(s)) {
+    if (!m1.same_as(op->body)) {
         debug(3) << "After CSE:\n"
                  << m1 << "\n";
     }
@@ -634,7 +620,7 @@ Stmt legalize_vectors(const Stmt &s) {
 
     Stmt m3 = m2;
     while (true) {
-        Stmt m = LiftExceedingVectors().mutate(m3);
+        Stmt m = LiftExceedingVectors(max_lanes).mutate(m3);
         bool modified = !m3.same_as(m);
         m3 = std::move(m);
         if (!modified) {
@@ -646,16 +632,32 @@ Stmt legalize_vectors(const Stmt &s) {
         }
     }
 
-    Stmt m4 = LegalizeVectors().mutate(m3);
+    Stmt m4 = LegalizeVectors(max_lanes).mutate(m3);
     if (!m4.same_as(m3)) {
         debug(3) << "After legalizing vectors:\n"
                  << m4 << "\n";
     }
     if (m4.same_as(m2)) {
         debug(3) << "Vector Legalization did do nothing, returning input.\n";
-        return s;
+        return op;
     }
-    return simplify(m4);
+    m4 = simplify(m4);
+    return For::make(op->name, op->min, op->extent, op->for_type,
+                     op->partition_policy, op->device_api, m4);
+}
+
+Stmt legalize_vectors(const Stmt &s) {
+    class LegalizeDeviceLoops : public IRMutator {
+        using IRMutator::visit;
+        Stmt visit(const For *op) override {
+            if (max_lanes_for_device(op->device_api, 0)) {
+                return legalize_vectors_in_device_loop(op);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+    } mutator;
+    return mutator.mutate(s);
 }
 }  // namespace Internal
 }  // namespace Halide
