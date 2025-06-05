@@ -185,7 +185,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
                 // with other shuffles.
                 // As the structure of this while loop makes it hard to peel off
                 // pure operations from _all_ arguments to the Shuffle, we will
-                // instead subsitute all of the vars that go in the shuffle, and
+                // instead substitute all of the vars that go in the shuffle, and
                 // instead guard against side effects by checking with `is_pure()`.
                 replacement = substitute(f.new_name, shuffle, replacement);
                 f.new_value = Expr();
