@@ -16,7 +16,13 @@ namespace {
 
 using namespace std;
 
+const char *legalization_error_guide = "\n(This issue can most likely be resolved by reducing lane count for vectorize() calls in the schedule, or disabling it.)";
+
 int max_lanes_for_device(DeviceAPI api, int parent_max_lanes) {
+    std::string envvar = Halide::Internal::get_env_variable("HL_FORCE_VECTOR_LEGALIZATION");
+    if (!envvar.empty()) {
+        return std::atoi(envvar.c_str());
+    }
     switch (api) {
     case DeviceAPI::Metal:
     case DeviceAPI::WebGPU:
@@ -109,10 +115,25 @@ Expr simplify_shuffle(const Shuffle *op) {
 class LiftLetToLetStmt : public IRMutator {
     using IRMutator::visit;
 
+    int max_lanes{max_lanes_for_device(DeviceAPI::Host, 0)};
+
+    Stmt visit(const For *op) override {
+        ScopedValue<int> scoped_max_lanes(max_lanes, max_lanes_for_device(op->device_api, max_lanes));
+        return IRMutator::visit(op);
+    }
+
     vector<const Let *> lets;
     Expr visit(const Let *op) override {
-        lets.push_back(op);
-        return mutate(op->body);
+        if (max_lanes != 0) {
+            for (const Let *existing : lets) {
+                internal_assert(existing->name != op->name)
+                    << "Let " << op->name << " = ...  cannot be lifted to LetStmt because the name is not unique.";
+            }
+            lets.push_back(op);
+            return mutate(op->body);
+        } else {
+            return IRMutator::visit(op);
+        }
     }
 
 public:
@@ -148,7 +169,6 @@ class ExtractLanes : public IRMutator {
     }
 
     Expr extract_lanes_trace(const Call *op) {
-        // user_error << "Cannot legalize vectors when tracing is enabled.";
         auto event = as_const_int(op->args[6]);
         internal_assert(event);
         if (*event == halide_trace_load || *event == halide_trace_store) {
@@ -176,11 +196,10 @@ class ExtractLanes : public IRMutator {
             Expr result = Call::make(Int(32), Call::trace, args, Call::Extern);
             debug(4) << "  => " << result << "\n";
             return result;
-        } else {
-            user_warning << "Discarding tracing during vector legalization: " << Expr(op) << "\n";
         }
 
-        // This is feasible: see VectorizeLoops.
+        internal_error << "Unhandled trace call in LegalizeVectors' ExtractLanes: " << *event << legalization_error_guide << "\n"
+                       << "Please report this error on GitHub." << legalization_error_guide;
         return Expr(0);
     }
 
@@ -234,7 +253,9 @@ class ExtractLanes : public IRMutator {
         args.reserve(op->args.size());
         for (int i = 0; i < int(op->args.size()); ++i) {
             const Expr &arg = op->args[i];
-            internal_assert(arg.type().lanes() == op->type.lanes()) << "Call argument " << arg << " lane count of " << arg.type().lanes() << " does not match op lane count of " << op->type.lanes();
+            internal_assert(arg.type().lanes() == op->type.lanes())
+                << "Call argument " << arg << " lane count of " << arg.type().lanes()
+                << " does not match op lane count of " << op->type.lanes();
             Expr mutated = mutate(arg);
             internal_assert(!mutated.same_as(arg));
             args.push_back(mutated);
@@ -266,7 +287,8 @@ class ExtractLanes : public IRMutator {
             //
             // TODO implement this for all scenarios
             internal_error << "Vector legalization for Reinterpret to different bit size per element is "
-                           << "not supported yet: reinterpret<" << result_type << ">(" << value.type() << ")";
+                           << "not supported yet: reinterpret<" << result_type << ">(" << value.type() << ")"
+                           << legalization_error_guide;
 
             // int input_lane_start = lane_start * result_scalar_bits / input_scalar_bits;
             // int input_lane_count = lane_count * result_scalar_bits / input_scalar_bits;
@@ -316,7 +338,7 @@ class LiftExceedingVectors : public IRMutator {
     int max_lanes{max_lanes_for_device(DeviceAPI::Host, 0)};
 
     vector<pair<string, Expr>> lets;
-    bool just_in_let_defintion{false};
+    bool just_in_let_definition{false};
     int in_strict_float = 0;
 
     Stmt visit(const For *op) override {
@@ -325,13 +347,19 @@ class LiftExceedingVectors : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        internal_error << "We don't want to process Lets. They should have all been converted to LetStmts.";
-        return {};
+        if (max_lanes != 0) {
+            internal_error << "We don't want to process Lets. They should have all been converted to LetStmts.";
+        } else {
+            return IRMutator::visit(op);
+        }
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedValue<bool> scoped_just_in_let(just_in_let_defintion, true);
-        Expr def = mutate(op->value);
+        Expr def;
+        {
+            ScopedValue<bool> scoped_just_in_let(just_in_let_definition, true);
+            def = mutate(op->value);
+        }
         Stmt body = mutate(op->body);
         if (def.same_as(op->value) && body.same_as(op->body)) {
             return op;
@@ -384,7 +412,7 @@ class LiftExceedingVectors : public IRMutator {
 public:
     Stmt mutate(const Stmt &s) override {
         ScopedValue<decltype(lets)> scoped_lets(lets, {});
-        ScopedValue<bool> scoped_just_in_let(just_in_let_defintion, false);
+        ScopedValue<bool> scoped_just_in_let(just_in_let_definition, false);
         Stmt mutated = IRMutator::mutate(s);
         for (auto &let : reverse_view(lets)) {
             // There is no recurse into let.second. This is handled by repeatedly calling this tranform.
@@ -406,7 +434,7 @@ public:
             // This should be redone once we overhaul strict_float.
             should_extract &= !in_strict_float;
 
-            should_extract &= !just_in_let_defintion;
+            should_extract &= !just_in_let_definition;
 
             debug((should_extract ? 3 : 4)) << "Max lanes (" << max_lanes << ") exceeded (" << e.type().lanes() << ") by: " << e << "\n";
             if (should_extract) {
@@ -418,7 +446,7 @@ public:
             }
         }
 
-        ScopedValue<bool> scoped_just_in_let(just_in_let_defintion, false);
+        ScopedValue<bool> scoped_just_in_let(just_in_let_definition, false);
         return IRMutator::mutate(e);
     }
 };
@@ -458,8 +486,10 @@ class LegalizeVectors : public IRMutator {
     }
 
     Expr visit(const Let *op) override {
-        internal_error << "Lets should have been lifted into letStmts.";
-        return {};
+        if (max_lanes != 0) {
+            internal_error << "Lets should have been lifted into LetStmts.";
+        }
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Store *op) override {
@@ -535,12 +565,13 @@ class LegalizeVectors : public IRMutator {
         }
         const Expr &arg = op->value;
         if (arg.type().lanes() > max_lanes) {
-            int vecs_per_reduction = op->value.type().lanes() / op->type.lanes();
-            if (vecs_per_reduction % max_lanes == 0) {
-                // This should be possible too. TODO
-            }
+            // TODO: The transformation below is not allowed under strict_float, but
+            // I won't bother right now, as strict_float is due for an overhaul.
+            // This should be an internal_assert.
 
-            internal_assert(op->type.lanes() == 1) << "Vector legalization currently does not support VectorReduce with lanes != 1: " << Expr(op);
+            internal_assert(op->type.lanes() == 1)
+                << "Vector legalization currently does not support VectorReduce with lanes != 1: " << Expr(op)
+                << legalization_error_guide;
             int num_vecs = (arg.type().lanes() + max_lanes - 1) / max_lanes;
             Expr result;
             for (int i = 0; i < num_vecs; i++) {
