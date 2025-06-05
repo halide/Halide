@@ -287,7 +287,7 @@ class ExtractLanes : public IRMutator {
             //
             // TODO implement this for all scenarios
             internal_error << "Vector legalization for Reinterpret to different bit size per element is "
-                           << "not supported yet: reinterpret<" << result_type << ">(" << value.type() << ")"
+                           << "not supported yet: reinterpret<" << op->type << ">(" << value.type() << ")"
                            << legalization_error_guide;
 
             // int input_lane_start = lane_start * result_scalar_bits / input_scalar_bits;
