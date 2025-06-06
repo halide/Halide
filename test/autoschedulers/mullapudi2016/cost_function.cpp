@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "get_autoscheduler_params.hpp"
 
 using namespace Halide;
 
@@ -48,7 +49,28 @@ int main(int argc, char **argv) {
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();
     Pipeline p(stencils[num_stencils - 1]);
-    AutoSchedulerResults results = p.apply_autoscheduler(target, {"Mullapudi2016"});
+
+    // Reduce the estimated available shared memory (L2 cache) from 48kB to 25kB
+    // to work around the following error:
+    //
+    // Error: CUDA error: CUDA_ERROR_INVALID_VALUE cuLaunchKernel failed
+    //
+    // This kernel launch failure occurs likely because:
+    // (i) most Halide users run on consumer-grade GPUs (e.g., Nvidia GTX 1660)
+    // with limited shared memory and/or register counts, and
+    // (ii) the autoscheduler heuristics tend to underestimate the actual shared
+    // memory consumed by GPU kernels.
+    constexpr Mullapudi2016Params gpu_specifications{
+        /* .last_level_cache_size = */ 25'000,
+        /* .parallelism = */ 128,
+    };
+
+    AutoSchedulerResults results = p.apply_autoscheduler(
+        target,
+        get_autoscheduler_params(target.has_gpu_feature(),
+                                 target.has_gpu_feature() ?
+                                     std::optional<Mullapudi2016Params>{gpu_specifications} :
+                                     std::nullopt));
 
     // Don't dump to stdout (this is only for debugging)
     // std::cout << "\n\n******************************************\nSCHEDULE:\n"
