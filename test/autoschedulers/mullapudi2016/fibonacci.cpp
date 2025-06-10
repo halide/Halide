@@ -27,7 +27,7 @@ double run_test(bool auto_schedule) {
     }
 
     // Inspect the schedule (only for debugging))
-    g.print_loop_nest();
+    // g.print_loop_nest();
 
     // Benchmark the schedule
     Buffer<int> out(100);
