@@ -610,9 +610,23 @@ struct Call : public ExprNode<Call> {
 
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
-        strict_float,
+
+        // strict floating point ops. These either round or need to handle inf/nan
+        strict_add,
+        strict_div,
+        strict_eq,
+        strict_le,
+        strict_lt,
+        strict_max,
+        strict_min,
+        strict_mul,
+        strict_sqrt,
+        strict_sub,
+
+        // Convert a list of Exprs to a string
         stringify,
 
+        // Query properties of the compiled-for target (resolved at compile-time)
         target_arch_is,
         target_bits,
         target_has_feature,
@@ -737,7 +751,7 @@ struct Call : public ExprNode<Call> {
     }
 
     bool is_tag() const {
-        return is_intrinsic({Call::likely, Call::likely_if_innermost, Call::strict_float});
+        return is_intrinsic({Call::likely, Call::likely_if_innermost});
     }
 
     /** Returns a pointer to a call node if the expression is a call to
@@ -754,13 +768,27 @@ struct Call : public ExprNode<Call> {
     }
 
     static const Call *as_tag(const Expr &e) {
-        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::strict_float});
+        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost});
     }
 
     bool is_extern() const {
         return (call_type == Extern ||
                 call_type == ExternCPlusPlus ||
                 call_type == PureExtern);
+    }
+
+    bool is_strict_float_intrinsic() const {
+        return is_intrinsic(
+            {Call::strict_add,
+             Call::strict_div,
+             Call::strict_max,
+             Call::strict_min,
+             Call::strict_mul,
+             Call::strict_sqrt,
+             Call::strict_sub,
+             Call::strict_lt,
+             Call::strict_le,
+             Call::strict_eq});
     }
 
     static const IRNodeType _node_type = IRNodeType::Call;

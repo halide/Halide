@@ -10,6 +10,7 @@
 #include "Lerp.h"
 #include "Param.h"
 #include "Simplify.h"
+#include "StrictifyFloat.h"
 #include "Substitute.h"
 #include "Type.h"
 #include "Util.h"
@@ -1835,10 +1836,10 @@ void CodeGen_C::visit(const Call *op) {
             << " + " << print_expr(base_offset) << "), /*rw*/0, /*locality*/0), 0)";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
-    } else if (op->is_intrinsic(Call::strict_float)) {
-        internal_assert(op->args.size() == 1);
-        string arg0 = print_expr(op->args[0]);
-        rhs << "(" << arg0 << ")";
+    } else if (op->is_strict_float_intrinsic()) {
+        // This depends on the generated C++ being compiled without -ffast-math
+        Expr equiv = unstrictify_float(op);
+        equiv.accept(this);
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (lowered.defined()) {

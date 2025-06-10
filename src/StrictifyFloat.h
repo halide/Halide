@@ -11,19 +11,25 @@
 namespace Halide {
 
 struct Target;
+class Expr;
 
 namespace Internal {
 
 class Function;
 
-/** Propagate strict_float intrinisics such that they immediately wrap
- * all floating-point expressions. This makes the IR nodes context
- * independent.  If the Target::StrictFloat flag is specified in
- * target, starts in strict_float mode so all floating-point type
- * Exprs in the compilation will be marked with strict_float. Returns
- * whether any strict floating-point is used in any function in the
- * passed in env.
- */
+/** Replace all rounding floating point ops and floating point ops that need to
+ * handle nan and inf differently with strict float intrinsics. */
+Expr strictify_float(const Expr &e);
+
+/** Replace all strict float intrinsics with their non-strict equivalents. */
+Expr unstrictify_float(const Expr &e);
+
+/** If the StrictFloat target feature is set, replace add, sub, mul, div, etc
+ * operations with strict float intrinsics for all Funcs in the environment. If
+ * StrictFloat is not set does nothing. Returns whether or not there's any usage
+ * of strict float intrinsics or if the target flag is set (i.e. returns whether
+ * or not the rest of lowering and codegen needs to worry about floating point
+ * strictness). */
 bool strictify_float(std::map<std::string, Function> &env, const Target &t);
 
 }  // namespace Internal

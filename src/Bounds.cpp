@@ -21,6 +21,7 @@
 #include "Simplify.h"
 #include "SimplifyCorrelatedDifferences.h"
 #include "Solve.h"
+#include "StrictifyFloat.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -1150,10 +1151,9 @@ private:
         TRACK_BOUNDS_INTERVAL;
         TRACK_BOUNDS_INFO("name:", op->name);
 
-        // Tags are hints that don't affect the results of the expression,
-        // and can be very deeply nested in the case of strict_float. The
-        // bounds of this call are *always* exactly that of its first argument,
-        // so short circuit it here.
+        // Tags are hints that don't affect the results of the expression, and
+        // can be very deeply nested. The bounds of this call are *always*
+        // exactly that of its first argument, so short circuit it here.
         if (op->is_tag()) {
             internal_assert(op->args.size() == 1);
             op->args[0].accept(this);
@@ -1517,7 +1517,7 @@ private:
             }
         } else if (op->args.size() == 1 &&
                    (op->is_intrinsic(Call::round) ||
-                    op->is_intrinsic(Call::strict_float) ||
+                    op->name == "sqrt_f32" || op->name == "sqrt_f64" ||
                     op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
                     op->name == "exp_f32" || op->name == "exp_f64" ||
@@ -1668,6 +1668,9 @@ private:
         } else if (op->is_intrinsic(Call::sorted_avg)) {
             internal_assert(op->args.size() == 2);
             Expr e = lower_sorted_avg(op->args[0], op->args[1]);
+            handle_expr_bounds(e);
+        } else if (op->is_strict_float_intrinsic()) {
+            Expr e = unstrictify_float(op);
             handle_expr_bounds(e);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
