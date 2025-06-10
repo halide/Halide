@@ -1226,7 +1226,7 @@ public:
     }
 
     /** Indicate the default dimension order of the Func. */
-    void setInitialOrder(const Func &func) {
+    void set_initial_order(const Func &func) {
         debug(2) << f.name() << ".initialOrder()\n";
 
         ordering.clear();
@@ -3140,7 +3140,7 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     GPUTilingDedup gpu_tiling{false, f_handle, g.output.stage_num};
-    gpu_tiling.setInitialOrder(Func(g_out));
+    gpu_tiling.set_initial_order(Func(g_out));
 
     // Reorder the dimensions for better spatial locality (i.e. smallest stride
     // is innermost). If we only have one dimension (excluding __outermost),
@@ -3366,7 +3366,7 @@ void Partitioner::generate_group_cpu_schedule(
             }
         }
         GPUTilingDedup gpu_tiling2{true, mem_handle, mem.stage_num};
-        gpu_tiling2.setInitialOrder(Func(mem.func));
+        gpu_tiling2.set_initial_order(Func(mem.func));
 
         // Reorder the dimensions for better spatial locality. If we only have
         // one dimension (excluding __outermost), there is nothing to reorder.
