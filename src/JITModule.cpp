@@ -323,7 +323,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 // Windows 64-bit: JIT session error: could not register eh-frame: __register_frame function not found
 #if LLVM_VERSION >= 210
         linkerBuilder = [&](llvm::orc::ExecutionSession &session) {
-            return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&]() {
+            return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&](const llvm::MemoryBuffer &) {
                 return std::make_unique<HalideJITMemoryManager>(dependencies);
             });
         };
