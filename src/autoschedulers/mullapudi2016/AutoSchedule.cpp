@@ -936,7 +936,7 @@ public:
     }
 
     /** Indicate the need to split the dimensions with `gpu_tile()` method. */
-    void applySplit(const split_info &x) {
+    void apply_split(const split_info &x) {
         vars.emplace_back(x);
     }
 
@@ -1306,7 +1306,7 @@ public:
             split_info new_entry{entry};
             new_entry.factor = simplify(min(threads_budget, new_entry.factor));
 
-            helper.applySplit(new_entry);
+            helper.apply_split(new_entry);
             threads_budget = simplify(max(threads_budget / new_entry.factor, 1));
         }
 
