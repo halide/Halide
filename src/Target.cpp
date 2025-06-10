@@ -155,12 +155,28 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
         }
         break;
     case 0x19:  // AMD Family 19h
-        if ((model & 0xf0) == 0 || model == 0x21) {
-            return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
-        } else if (model == 0x61) {
-            return Target::Processor::ZnVer4;  // 61h: Zen4
+        if (
+            // Zen 3
+            (0x50 <= model && model <= 0x5F) ||  // Cezanne
+            (0x40 <= model && model <= 0x4F) ||  // Rembrandt
+            (0x30 <= model && model <= 0x3F) ||  // Badami
+            (0x20 <= model && model <= 0x2F) ||  // Vermeer
+            (0x00 <= model && model <= 0x0F)     // Chagall, Milan, Genesis
+        ) {
+            return Target::Processor::ZnVer3;
+        } else if (
+            // Zen 4
+            (0xA0 <= model && model <= 0xAF) ||  // Genoa, Dragon Range
+            (0x78 <= model && model <= 0x7F) ||  // Phoenix 2, Hawk Point 2 (Zen 4c)
+            (0x70 <= model && model <= 0x77) ||  // Phoenix, Hawk Point 1
+            (0x60 <= model && model <= 0x6F) ||  // Raphael
+            (0x10 <= model && model <= 0x1F)     // Storm Peak
+        ) {
+            return Target::Processor::ZnVer4;
         }
         break;
+    case 0x1a:                             // AMD Family 1Ah
+        return Target::Processor::ZnVer5;  // Zen5
     default:
         break;  // Unknown AMD CPU.
     }
@@ -334,6 +350,14 @@ Target calculate_host_target() {
                             Target::AVX512_Skylake, Target::AVX512_Cannonlake,
                             Target::AVX512_Zen4});
             return t;
+        } else if (processor == Target::Processor::ZnVer5) {
+            Target t{os, arch, bits, processor, initial_features, vector_bits};
+            t.set_features({Target::SSE41, Target::AVX,
+                            Target::F16C, Target::FMA,
+                            Target::AVX2, Target::AVXVNNI, Target::AVX512,
+                            Target::AVX512_Skylake, Target::AVX512_Cannonlake,
+                            Target::AVX512_Zen4, Target::AVX512_Zen5});
+            return t;
         }
     }
 
@@ -394,9 +418,11 @@ Target calculate_host_target() {
                 const uint32_t avxvnni = 1U << 4;     // avxvnni (note, not avx512vnni) result in eax
                 const uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, with cpuid(eax=7, ecx=1)
                 // TODO: port to family/model -based detection.
-                if ((info3[0] & avxvnni) == avxvnni &&
-                    (info3[0] & avx512bf16) == avx512bf16) {
-                    initial_features.push_back(Target::AVX512_SapphireRapids);
+                if ((info3[0] & avxvnni) == avxvnni) {
+                    initial_features.push_back(Target::AVXVNNI);
+                    if ((info3[0] & avx512bf16) == avx512bf16) {
+                        initial_features.push_back(Target::AVX512_SapphireRapids);
+                    }
                 }
             }
         }
@@ -605,6 +631,7 @@ const std::map<std::string, Target::Processor> processor_name_map = {
     {"tune_znver2", Target::Processor::ZnVer2},
     {"tune_znver3", Target::Processor::ZnVer3},
     {"tune_znver4", Target::Processor::ZnVer4},
+    {"tune_znver5", Target::Processor::ZnVer5},
 };
 
 bool lookup_processor(const std::string &tok, Target::Processor &result) {
@@ -624,6 +651,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sse41", Target::SSE41},
     {"avx", Target::AVX},
     {"avx2", Target::AVX2},
+    {"avxvnni", Target::AVXVNNI},
     {"fma", Target::FMA},
     {"fma4", Target::FMA4},
     {"f16c", Target::F16C},
@@ -667,6 +695,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
     {"avx512_sapphirerapids", Target::AVX512_SapphireRapids},
     {"avx512_zen4", Target::AVX512_Zen4},
+    {"avx512_zen5", Target::AVX512_Zen5},
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
@@ -794,7 +823,7 @@ bool merge_string(Target &t, const std::string &target) {
     vector<string> tokens;
     size_t first_dash;
     while ((first_dash = rest.find('-')) != string::npos) {
-        // Internal::debug(0) << first_dash << ", " << rest << "\n";
+        // debug(0) << first_dash << ", " << rest << "\n";
         tokens.push_back(rest.substr(0, first_dash));
         rest = rest.substr(first_dash + 1);
     }
@@ -976,12 +1005,14 @@ void Target::validate_features() const {
         do_check_bad(*this, {
                                 AVX,
                                 AVX2,
+                                AVXVNNI,
                                 AVX512,
                                 AVX512_Cannonlake,
                                 AVX512_KNL,
                                 AVX512_SapphireRapids,
                                 AVX512_Skylake,
                                 AVX512_Zen4,
+                                AVX512_Zen5,
                                 F16C,
                                 FMA,
                                 FMA4,
@@ -1002,12 +1033,14 @@ void Target::validate_features() const {
                                 ARMv81a,
                                 AVX,
                                 AVX2,
+                                AVXVNNI,
                                 AVX512,
                                 AVX512_Cannonlake,
                                 AVX512_KNL,
                                 AVX512_SapphireRapids,
                                 AVX512_Skylake,
                                 AVX512_Zen4,
+                                AVX512_Zen5,
                                 F16C,
                                 FMA,
                                 FMA4,
@@ -1460,6 +1493,7 @@ int Target::natural_vector_size(const Halide::Type &t) const {
         if (is_integer && (has_feature(Halide::Target::AVX512_Skylake) ||
                            has_feature(Halide::Target::AVX512_Cannonlake) ||
                            has_feature(Halide::Target::AVX512_Zen4) ||
+                           has_feature(Halide::Target::AVX512_Zen5) ||
                            has_feature(Halide::Target::AVX512_SapphireRapids))) {
             // AVX512BW exists on any of these avx512 variants
             return 64 / data_size;
@@ -1468,6 +1502,7 @@ int Target::natural_vector_size(const Halide::Type &t) const {
                                     has_feature(Halide::Target::AVX512_Skylake) ||
                                     has_feature(Halide::Target::AVX512_Cannonlake) ||
                                     has_feature(Halide::Target::AVX512_Zen4) ||
+                                    has_feature(Halide::Target::AVX512_Zen5) ||
                                     has_feature(Halide::Target::AVX512_SapphireRapids))) {
             // AVX512F is on all AVX512 architectures
             return 64 / data_size;
@@ -1557,16 +1592,18 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 14> intersection_features = {{
+    const std::array<Feature, 16> intersection_features = {{
         ARMv7s,
         AVX,
         AVX2,
+        AVXVNNI,
         AVX512,
         AVX512_Cannonlake,
         AVX512_KNL,
         AVX512_SapphireRapids,
         AVX512_Skylake,
         AVX512_Zen4,
+        AVX512_Zen5,
         F16C,
         FMA,
         FMA4,
@@ -1607,16 +1644,16 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if (arch != other.arch || bits != other.bits || os != other.os) {
-        Internal::debug(1) << "runtime targets must agree on platform (arch-bits-os)\n"
-                           << "  this:  " << *this << "\n"
-                           << "  other: " << other << "\n";
+        debug(1) << "runtime targets must agree on platform (arch-bits-os)\n"
+                 << "  this:  " << *this << "\n"
+                 << "  other: " << other << "\n";
         return false;
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, SanitizerCoverage\n"
-                           << "  this:  " << *this << "\n"
-                           << "  other: " << other << "\n";
+        debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, SanitizerCoverage\n"
+                 << "  this:  " << *this << "\n"
+                 << "  other: " << other << "\n";
         return false;
     }
 

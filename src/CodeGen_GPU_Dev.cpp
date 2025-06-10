@@ -1,5 +1,6 @@
 #include "CodeGen_GPU_Dev.h"
 #include "CanonicalizeGPUVars.h"
+#include "CodeGen_Internal.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
@@ -219,13 +220,58 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_GPU_C::visit(const Call *op) {
-    // In metal and opencl, "rint" is a polymorphic function that matches our
-    // rounding semantics. GLSL handles it separately using "roundEven".
-    if (op->is_intrinsic(Call::round)) {
-        print_assignment(op->type, "rint(" + print_expr(op->args[0]) + ")");
+    if (op->is_intrinsic(Call::abs)) {
+        internal_assert(op->args.size() == 1);
+        if (op->type.is_float()) {
+            std::stringstream fn;
+            fn << "abs_f" << op->type.bits();
+            Expr equiv = Call::make(op->type, fn.str(), op->args, Call::PureExtern);
+            equiv.accept(this);
+        } else {
+            // Note: The integer-abs doesn't have suffixes in Halide.
+            if (abs_returns_unsigned_type) {
+                // Halide also returns unsigned, so we're good. Just replace it
+                // with a PureExtern function call.
+                Expr abs = Call::make(op->type, "abs", op->args, Call::PureExtern);
+                Expr equiv = cast(op->type, abs);
+                equiv.accept(this);
+            } else {
+                // Halide does `unsigned T abs(signed T)`, whereas C and most other
+                // APIs do `T abs(T)`. So we have to wrap it in an additional cast.
+                Type arg_type = op->args[0].type();
+                Expr abs = Call::make(arg_type, "abs", op->args, Call::PureExtern);
+                Expr equiv = cast(op->type, abs);
+                equiv.accept(this);
+            }
+        }
     } else {
         CodeGen_C::visit(op);
     }
+}
+
+std::string CodeGen_GPU_C::print_extern_call(const Call *op) {
+    internal_assert(!function_takes_user_context(op->name)) << op->name;
+
+    // Here we do not scalarize function calls with vector arguments.
+    // Backends should provide those functions, and if not available,
+    // we could compose them by writing out a call element by element,
+    // but that's never happened until 2025, so I guess we can leave
+    // this to be an error for now, just like it was.
+
+    std::ostringstream rhs;
+    std::vector<std::string> args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        args[i] = print_expr(op->args[i]);
+    }
+    std::string name = op->name;
+    auto it = extern_function_name_map.find(name);
+    if (it != extern_function_name_map.end()) {
+        name = it->second;
+        debug(3) << "Rewriting " << op->name << " as " << name << "\n";
+    }
+    debug(3) << "Writing out call to " << name << "\n";
+    rhs << name << "(" << with_commas(args) << ")";
+    return rhs.str();
 }
 
 }  // namespace Internal

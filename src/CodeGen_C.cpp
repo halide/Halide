@@ -1902,7 +1902,14 @@ string CodeGen_C::print_extern_call(const Call *op) {
     if (function_takes_user_context(op->name)) {
         args.insert(args.begin(), "_ucon");
     }
-    rhs << op->name << "(" << with_commas(args) << ")";
+    std::string name = op->name;
+    auto it = extern_function_name_map.find(name);
+    if (it != extern_function_name_map.end()) {
+        name = it->second;
+        debug(3) << "Rewriting " << op->name << " as " << name << "\n";
+    }
+    debug(3) << "Writing out call to " << name << "\n";
+    rhs << name << "(" << with_commas(args) << ")";
     return rhs.str();
 }
 

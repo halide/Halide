@@ -9,9 +9,12 @@ set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 
-find_package(LLVM ${PACKAGE_FIND_VERSION} CONFIG)
+find_package(LLVM CONFIG)
 
-set(Halide_LLVM_VERSION "${LLVM_PACKAGE_VERSION}")
+# Neither LLVM_VERSION nor LLVM_PACKAGE_VERSION work as find_package arguments
+# in git/development builds as they include a "git" suffix. This applies at
+# time of writing to versions 18-21, inclusive.
+set(Halide_LLVM_VERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
 
 if (NOT DEFINED Halide_LLVM_SHARED_LIBS)
     # Normally, we don't like making decisions for our users. However,
@@ -28,18 +31,14 @@ endif ()
 option(Halide_LLVM_SHARED_LIBS "Enable to link to shared libLLVM" "${Halide_LLVM_SHARED_LIBS}")
 
 if (LLVM_FOUND)
-    # LLVM sadly doesn't provide *ConfigVersion.cmake files for its
-    # sub-components, including Clang and LLD. Consequently, attempting to
-    # constrain the version to LLVM_PACKAGE_VERSION prevents these find_package
-    # calls from succeeding at all. Worse, package maintainers have some
-    # "interesting" ideas as to how they should lay out the -dev packages,
-    # especially when they want to support multiple parallel versions. These
-    # hints take effect at a lower precedence than Halide_LLVM_ROOT
-    # or CMAKE_PREFIX_PATH (which are the standard ways of setting up the
-    # dependency search), but at a higher precedence than the system-wide
-    # fallback locations.
+    # Package maintainers have some "interesting" ideas as to how they should
+    # lay out the -dev packages, especially when they want to support multiple
+    # parallel versions. These hints take effect at a lower precedence than
+    # Halide_LLVM_ROOT or CMAKE_PREFIX_PATH (which are the standard ways of
+    # setting up the dependency search), but at a higher precedence than the
+    # system-wide fallback locations.
     find_package(
-        Clang
+        Clang "${Halide_LLVM_VERSION}" EXACT
         HINTS
         "${LLVM_INSTALL_PREFIX}" # Same root as the LLVM we found
         "${LLVM_DIR}/../clang" # LLVM found in $ROOT/lib/cmake/llvm
@@ -51,7 +50,8 @@ if (LLVM_FOUND)
             set(Halide_LLVM_${comp}_FOUND 0)
 
             find_package(
-                LLD HINTS
+                LLD "${Halide_LLVM_VERSION}" EXACT
+                HINTS
                 "${LLVM_INSTALL_PREFIX}"
                 # Homebrew split the LLVM and LLD packages as of version 19, so
                 # having multiple LLVM versions installed leads to the newest
@@ -99,7 +99,6 @@ find_package_handle_standard_args(
     REASON_FAILURE_MESSAGE "${REASON_FAILURE_MESSAGE}"
     HANDLE_COMPONENTS
     HANDLE_VERSION_RANGE
-    NAME_MISMATCHED
 )
 
 function(_Halide_LLVM_link target visibility)

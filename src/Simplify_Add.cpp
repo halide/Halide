@@ -106,6 +106,12 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
              rewrite(x*y + y*z, (x + z)*y) ||
              rewrite(y*x + z*y, y*(x + z)) ||
              rewrite(y*x + y*z, y*(x + z)) ||
+
+             rewrite((x*y) + (z - (w*x)), z + (x*(y - w))) ||
+             rewrite((x*y) + (z - (w*y)), z + (y*(x - w))) ||
+             rewrite((x*y) + (z - (x*w)), z + (x*(y - w))) ||
+             rewrite((x*y) + (z - (y*w)), z + (y*(x - w))) ||
+
              rewrite(x*c0 + y*c1, (x + y*fold(c1/c0)) * c0, c1 % c0 == 0) ||
              rewrite(x*c0 + y*c1, (x*fold(c0/c1) + y) * c1, c0 % c1 == 0) ||
 

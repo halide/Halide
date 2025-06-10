@@ -359,15 +359,17 @@ Stmt add_image_checks_inner(Stmt s,
         }
 
         // Check that the region passed in (after applying constraints) is within the region used
-        if (debug::debug_level() >= 3) {
-            debug(3) << "In image " << name << " region touched is:\n";
+        debug(3) << [&] {
+            std::stringstream ss;
+            ss << "In image " << name << " region touched is:\n";
             for (int j = 0; j < dimensions; j++) {
-                debug(3) << "  " << j << ": " << (touched.empty() ? Expr() : touched[j].min)
-                         << " .. "
-                         << (touched.empty() ? Expr() : touched[j].max)
-                         << "\n";
+                ss << "  " << j << ": " << (touched.empty() ? Expr() : touched[j].min)
+                   << " .. "
+                   << (touched.empty() ? Expr() : touched[j].max)
+                   << "\n";
             }
-        }
+            return ss.str();
+        }();
 
         for (int j = 0; j < dimensions; j++) {
             string dim = std::to_string(j);

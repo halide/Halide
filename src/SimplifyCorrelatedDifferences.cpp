@@ -227,7 +227,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             e = PartiallyCancelDifferences().mutate(e);
             e = simplify(e);
 
-            const bool check_non_monotonic = debug::debug_level() > 0 || get_compiler_logger() != nullptr;
+            const bool check_non_monotonic = debug_is_active(1) || get_compiler_logger() != nullptr;
             if (check_non_monotonic &&
                 is_monotonic(e, loop_var) == Monotonic::Unknown) {
                 // Might be a missed simplification opportunity. Log to help improve the simplifier.
