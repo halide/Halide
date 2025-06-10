@@ -1514,10 +1514,12 @@ struct Partitioner {
     // Bounds of each function stage in the pipeline. These bounds are inferred from the
     // estimates of the outputs and other functions in the pipeline.
     const map<string, Box> &pipeline_bounds;
+    // The active target
+    const Target &target;
     // Parameters of the machine model that is used for estimating the cost of each
     // group in the pipeline.
     const ArchParams &arch_params;
-    // Dependency analysis of the pipeline. This support queries on regions
+    // Dependency analysis of the pipeline. This supports queries on regions
     // accessed and computed for producing some regions of some functions.
     DependenceAnalysis &dep_analysis;
     // The arithmetic and memory costs of evaluating the expressions which define
@@ -1527,6 +1529,7 @@ struct Partitioner {
     const vector<Function> &outputs;
 
     Partitioner(const map<string, Box> &_pipeline_bounds,
+                const Target &_target,
                 const ArchParams &_arch_params,
                 const vector<Function> &_outputs,
                 DependenceAnalysis &_dep_analysis,
@@ -1638,12 +1641,12 @@ struct Partitioner {
     // visible to the user. Additionally, functions like sum and maximum are not
     // user visible. More thought needs to go into interaction between the user and
     // auto scheduling.
-    void generate_cpu_schedule(const Target &t, AutoSchedule &sched);
+    void generate_cpu_schedule(AutoSchedule &sched);
 
     // Same as \ref Partitioner::generate_cpu_schedule, but this generates and
     // applies schedules for a group of function stages.
 
-    void generate_group_cpu_schedule(const Group &g, const Target &t,
+    void generate_group_cpu_schedule(const Group &g,
                                      const map<FStage, DimBounds> &group_loop_bounds,
                                      const map<string, Box> &group_storage_bounds,
                                      const set<string> &inlines,
@@ -1656,13 +1659,13 @@ struct Partitioner {
         const Group &g, Stage f_handle, int stage_num, const Definition &def,
         bool is_group_output, const VarOrRVar &v, const Expr &factor, const string &in_suffix,
         const string &out_suffix, map<string, Expr> &estimates, AutoSchedule &sched,
-        const Target &t, GPUTilingDedup *gpu_tiling = nullptr);
+        GPUTilingDedup *gpu_tiling = nullptr);
 
     // Loop over the dimensions of function stage 'f_handle' starting from innermost
     // and vectorize the first pure dimension encountered.
     std::optional<pair<VarOrRVar, VarOrRVar>> vectorize_stage(
         const Group &g, Stage f_handle, int stage_num, Definition def,
-        const Function &func, bool is_group_output, const Target &t, set<string> &rvars,
+        const Function &func, bool is_group_output, set<string> &rvars,
         map<string, Expr> &estimates, AutoSchedule &sched, GPUTilingDedup &gpu_tiling);
 
     // Reorder the dimensions to preserve spatial locality. This function
@@ -1671,7 +1674,7 @@ struct Partitioner {
     // This takes the strides along each dimension as input.
     void reorder_dims(Stage f_handle, int stage_num, Definition def,
                       map<string, Expr> strides, AutoSchedule &sched,
-                      const Target &t, GPUTilingDedup &gpu_tiling);
+                      GPUTilingDedup &gpu_tiling);
 
     // Helper functions to display partition information of the pipeline.
     void disp_pipeline_costs();
@@ -1769,11 +1772,12 @@ void Partitioner::disp_pipeline_costs() {
 // Construct a partitioner and build the pipeline graph on which the grouping
 // algorithm operates.
 Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
+                         const Target &_target,
                          const ArchParams &_arch_params,
                          const vector<Function> &_outputs,
                          DependenceAnalysis &_dep_analysis,
                          RegionCosts &_costs)
-    : pipeline_bounds(_pipeline_bounds), arch_params(_arch_params),
+    : pipeline_bounds(_pipeline_bounds), target(_target), arch_params(_arch_params),
       dep_analysis(_dep_analysis), costs(_costs), outputs(_outputs) {
     // Place each stage of a function in its own group. Each stage is
     // a node in the pipeline graph.
@@ -2775,7 +2779,7 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
     const Group &g, Stage f_handle, int stage_num, const Definition &def,
     bool is_group_output, const VarOrRVar &v, const Expr &factor, const string &in_suffix,
     const string &out_suffix, map<string, Expr> &estimates, AutoSchedule &sched,
-    const Target &t, GPUTilingDedup *gpu_tiling) {
+    GPUTilingDedup *gpu_tiling) {
     // Create new variables for the split dimensions
     string arg_name = v.name();
     string inner_name = arg_name + in_suffix;
@@ -2824,7 +2828,7 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
         strategy = TailStrategy::GuardWithIf;
     }
 
-    if (t.has_gpu_feature() && gpu_tiling) {
+    if (target.has_gpu_feature() && arch_params.experimental_gpu_schedule && gpu_tiling) {
         gpu_tiling->has_split(v, outer, inner, factor, strategy);
     }
 
@@ -2852,7 +2856,7 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
 
 std::optional<pair<VarOrRVar, VarOrRVar>> Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
                                                                        Definition def, const Function &func, bool is_group_output,
-                                                                       const Target &t, set<string> &rvars,
+                                                                       set<string> &rvars,
                                                                        map<string, Expr> &estimates, AutoSchedule &sched,
                                                                        GPUTilingDedup &gpu_tiling) {
     vector<Dim> &dims = def.schedule().dims();
@@ -2861,7 +2865,7 @@ std::optional<pair<VarOrRVar, VarOrRVar>> Partitioner::vectorize_stage(const Gro
     // Set the vector length as the maximum of the natural vector size of all
     // values produced by the function.
     const auto vec_len = [&]() -> int {
-        if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
+        if (target.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
             /** Section 5.4 of the Mullapudi2016 article: We configure the
              * auto-scheduler to target the GPU by set- ting the ...,
              * VECTOR_WIDTH to 32.
@@ -2871,7 +2875,7 @@ std::optional<pair<VarOrRVar, VarOrRVar>> Partitioner::vectorize_stage(const Gro
 
         int vec_len = 0;
         for (const auto &type : func.output_types()) {
-            vec_len += t.natural_vector_size(type);
+            vec_len += target.natural_vector_size(type);
         }
         return vec_len;
     }();
@@ -2898,14 +2902,14 @@ std::optional<pair<VarOrRVar, VarOrRVar>> Partitioner::vectorize_stage(const Gro
 
         VarOrRVar vec_var(vec_dim_name, is_rvar);
         auto [inner, outer, accepted] = [&]() -> std::tuple<VarOrRVar, VarOrRVar, bool> {
-            if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
+            if (target.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
                 VarOrRVar inner{vec_var.name() + "_vi", vec_var.is_rvar}, outer{vec_var.name() + "_vo", vec_var.is_rvar};
                 const bool accepted = gpu_tiling.can_vectorize(vec_var, outer, inner, vec_len);
                 return {inner, outer, accepted};
             }
 
             auto split_vars = split_dim(g, f_handle, stage_num, def, is_group_output, vec_var, vec_len,
-                                        "_vi", "_vo", estimates, sched, t);
+                                        "_vi", "_vo", estimates, sched);
 
             f_handle.vectorize(split_vars.first);
             sched.push_schedule(f_handle.name(), stage_num,
@@ -2960,7 +2964,7 @@ inline bool operator!=(const vector<Dim> &dims, const vector<VarOrRVar> &orderin
 }
 
 void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
-                               map<string, Expr> strides, AutoSchedule &sched, const Target &t, GPUTilingDedup &gpu_tiling) {
+                               map<string, Expr> strides, AutoSchedule &sched, GPUTilingDedup &gpu_tiling) {
     vector<Dim> &dims = def.schedule().dims();
     internal_assert(dims.size() > 1);
     vector<pair<string, int>> order;
@@ -3055,7 +3059,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     }
 
     if (dims != ordering) {
-        if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
+        if (target.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
             gpu_tiling.canReorder(ordering);
         } else {
             f_handle.reorder(ordering);
@@ -3085,7 +3089,7 @@ public:
 };
 
 void Partitioner::generate_group_cpu_schedule(
-    const Group &g, const Target &t,
+    const Group &g,
     const map<FStage, DimBounds> &group_loop_bounds,
     const map<string, Box> &group_storage_bounds,
     const set<string> &inlines,
@@ -3149,7 +3153,7 @@ void Partitioner::generate_group_cpu_schedule(
         map<string, Expr> strides =
             analyze_spatial_locality(g.output, group_storage_bounds, inlines);
         if (!strides.empty()) {
-            reorder_dims(f_handle, g.output.stage_num, def, strides, sched, t, gpu_tiling);
+            reorder_dims(f_handle, g.output.stage_num, def, strides, sched, gpu_tiling);
         }
     }
 
@@ -3173,7 +3177,7 @@ void Partitioner::generate_group_cpu_schedule(
             } else {
                 pair<VarOrRVar, VarOrRVar> tile_vars =
                     split_dim(g, f_handle, g.output.stage_num, def, true, v,
-                              tile_size, "_i", "_o", stg_estimates, sched, t, &gpu_tiling);
+                              tile_size, "_i", "_o", stg_estimates, sched, &gpu_tiling);
 
                 inner_dims.push_back(tile_vars.first);
                 outer_dims.push_back(tile_vars.second);
@@ -3208,7 +3212,7 @@ void Partitioner::generate_group_cpu_schedule(
         }
 
         if (dims != ordering) {
-            if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
+            if (target.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
                 gpu_tiling.canReorder(ordering);
             } else {
                 f_handle.reorder(ordering);
@@ -3219,10 +3223,10 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     {
-        auto vectorized_split = vectorize_stage(g, f_handle, g.output.stage_num, def, g_out, true, t,
+        auto vectorized_split = vectorize_stage(g, f_handle, g.output.stage_num, def, g_out, true,
                                                 rvars, stg_estimates, sched, gpu_tiling);
 
-        if (t.has_gpu_feature() && vectorized_split && arch_params.experimental_gpu_schedule) {
+        if (target.has_gpu_feature() && arch_params.experimental_gpu_schedule && vectorized_split) {
             auto [v_i, v_o] = *vectorized_split;
             inner_dims.emplace_back(v_i);
             outer_dims.emplace_back(v_o);
@@ -3268,7 +3272,7 @@ void Partitioner::generate_group_cpu_schedule(
             if ((iter != stg_estimates.end()) && iter->second.defined()) {
                 if (!seq_var.empty()) {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
-                    if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
+                    if (target.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
                         gpu_tiling.canReorder({seq, v});
                     } else {
                         f_handle.reorder(seq, v);
@@ -3277,7 +3281,7 @@ void Partitioner::generate_group_cpu_schedule(
                                             {seq_var, var});
                     }
                 }
-                if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
+                if (target.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
                     auto parallelized_split = gpu_tiling.can_parallelize(v, iter->second);
                     if (parallelized_split) {
                         auto split_vars = *parallelized_split;
@@ -3300,7 +3304,7 @@ void Partitioner::generate_group_cpu_schedule(
         debug(1) << "Insufficient parallelism for " << f_handle.name() << "\n";
     }
 
-    if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
+    if (target.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
         gpu_tiling.apply(sched);
     }
 
@@ -3382,20 +3386,20 @@ void Partitioner::generate_group_cpu_schedule(
             map<string, Expr> mem_strides =
                 analyze_spatial_locality(mem, group_storage_bounds, inlines);
             if (!mem_strides.empty()) {
-                reorder_dims(mem_handle, mem.stage_num, mem_def, mem_strides, sched, t, gpu_tiling2);
+                reorder_dims(mem_handle, mem.stage_num, mem_def, mem_strides, sched, gpu_tiling2);
             }
         }
 
         vectorize_stage(g, mem_handle, mem.stage_num, mem_def, mem.func, false,
-                        t, mem_rvars, mem_estimates, sched, gpu_tiling2);
+                        mem_rvars, mem_estimates, sched, gpu_tiling2);
 
-        if (t.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
+        if (target.has_gpu_feature() && arch_params.experimental_gpu_schedule) {
             gpu_tiling2.apply(sched);
         }
     }
 }
 
-void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
+void Partitioner::generate_cpu_schedule(AutoSchedule &sched) {
     // Grab the group bounds early as they rely on the dimensions of the group
     // outputs which will be altered by modifying schedules.
     map<FStage, map<FStage, DimBounds>> loop_bounds = group_loop_bounds();
@@ -3419,7 +3423,7 @@ void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
 
     // Realize schedule for each group in the pipeline.
     for (const auto &g : groups) {
-        generate_group_cpu_schedule(g.second, t, get_element(loop_bounds, g.first),
+        generate_group_cpu_schedule(g.second, get_element(loop_bounds, g.first),
                                     get_element(storage_bounds, g.first), inlines, sched);
     }
 }
@@ -3845,7 +3849,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     }
 
     debug(2) << "Initializing partitioner...\n";
-    Partitioner part(pipeline_bounds, arch_params, outputs, dep_analysis, costs);
+    Partitioner part(pipeline_bounds, target, arch_params, outputs, dep_analysis, costs);
 
     // Compute and display reuse
     /* TODO: Use the reuse estimates to reorder loops
@@ -3895,7 +3899,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     debug(2) << "Initializing AutoSchedule...\n";
     AutoSchedule sched(env, top_order);
     debug(2) << "Generating CPU schedule...\n";
-    part.generate_cpu_schedule(target, sched);
+    part.generate_cpu_schedule(sched);
 
     std::ostringstream oss;
     oss << sched;
