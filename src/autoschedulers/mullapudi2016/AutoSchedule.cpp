@@ -44,9 +44,26 @@ struct ArchParams {
      * to target the GPU by setting the PARALLELISM_THRESHOLD to 128, ..., and
      * CACHE_SIZE to 48 KB.
      */
-    constexpr ArchParams(bool has_gpu_feature)
-        : parallelism(has_gpu_feature ? 128 : 16), last_level_cache_size(has_gpu_feature ? 48 * 1024 : 16 * 1024 * 1024),
-          balance(has_gpu_feature ? 20 : 40) {
+    ArchParams(const Target &target, const AutoschedulerParams &params_in) {
+        bool has_gpu_feature = target.has_gpu_feature();
+
+        ParamParser parser(params_in.extra);
+        parser.parse("experimental_gpu_schedule", &experimental_gpu_schedule);
+
+        if (has_gpu_feature && experimental_gpu_schedule) {
+            parallelism = 128;
+            last_level_cache_size = 48 * 1024;
+            balance = 20;
+        } else {
+            parallelism = 16;
+            last_level_cache_size = 16 * 1024 * 1024;
+            balance = 40;
+        }
+
+        parser.parse("parallelism", &parallelism);
+        parser.parse("last_level_cache_size", &last_level_cache_size);
+        parser.parse("balance", &balance);
+        parser.finish();
     }
 };
 
@@ -3929,15 +3946,7 @@ struct Mullapudi2016 {
             pipeline_outputs.push_back(f.function());
         }
 
-        ArchParams arch_params{target.has_gpu_feature()};
-        {
-            ParamParser parser(params_in.extra);
-            parser.parse("experimental_gpu_schedule", &arch_params.experimental_gpu_schedule);
-            parser.parse("parallelism", &arch_params.parallelism);
-            parser.parse("last_level_cache_size", &arch_params.last_level_cache_size);
-            parser.parse("balance", &arch_params.balance);
-            parser.finish();
-        }
+        ArchParams arch_params{target, params_in};
         results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);
         results.autoscheduler_params = params_in;
         // this autoscheduler has no featurization
