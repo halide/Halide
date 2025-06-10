@@ -1285,7 +1285,7 @@ public:
         GPUTileHelper helper{f, stage_num};
         Expr threads_budget = max_n_threads;
 
-        // Traverse the dimensions, ordered by the variable names (x, y, z) in lexilogical order.
+        // Traverse the dimensions, ordered by the variable names (x, y, z) in lexicographic order.
         for (const auto &v : ordering) {
 
             const auto &v_name = v.name();
