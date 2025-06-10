@@ -923,7 +923,7 @@ std::string_view to_string(TailStrategy strategy) {
 class GPUTileHelper {
 public:
     /** A data structure documenting the split factor and tail strategy. */
-    struct split_t {
+    struct split_info {
         VarOrRVar v;
         VarOrRVar outer;
         VarOrRVar inner;
@@ -936,7 +936,7 @@ public:
     }
 
     /** Indicate the need to split the dimensions with `gpu_tile()` method. */
-    void applySplit(const split_t &x) {
+    void applySplit(const split_info &x) {
         vars.emplace_back(x);
     }
 
@@ -1056,7 +1056,7 @@ private:
     Stage &f;
     const uint32_t stage_num;
 
-    std::vector<split_t> vars;
+    std::vector<split_info> vars;
 };
 
 /** Idempotent Halide scheduling for GPU.
@@ -1090,8 +1090,8 @@ private:
     Stage &f;
     const uint32_t stage_num;
 
-    using split_t = GPUTileHelper::split_t;
-    std::map<std::string, split_t> parallelize;
+    using split_info = GPUTileHelper::split_info;
+    std::map<std::string, split_info> parallelize;
 
     bool is_initial_order = true;
     std::vector<VarOrRVar> ordering;
@@ -1150,7 +1150,7 @@ public:
      * @param[in] v dimension to parallelize.
      * @param[in] factor expected extent of the dimension.
      */
-    std::optional<split_t> can_parallelize(const VarOrRVar &v, const Expr &factor) {
+    std::optional<split_info> can_parallelize(const VarOrRVar &v, const Expr &factor) {
         const auto &var = v.name();
 
         if (is_outer(var) || is_inner(var)) {
@@ -1164,7 +1164,7 @@ public:
         VarOrRVar outer{var + "_o", v.is_rvar};
         VarOrRVar inner{var + "_i", v.is_rvar};
 
-        split_t entry{v, outer, inner, factor, TailStrategy::Auto};
+        split_info entry{v, outer, inner, factor, TailStrategy::Auto};
         const auto [_, insertion_happened] = parallelize.try_emplace(var, entry);
         if (!insertion_happened) {
             return std::nullopt;
@@ -1199,7 +1199,7 @@ public:
             return false;
         }
 
-        parallelize.try_emplace(var, split_t{v, vo, vi, factor, TailStrategy::Auto});
+        parallelize.try_emplace(var, split_info{v, vo, vi, factor, TailStrategy::Auto});
         return true;
     }
 
@@ -1222,7 +1222,7 @@ public:
         outer_vars.emplace(vo.name());
         inner_vars.emplace(vi.name());
 
-        parallelize.try_emplace(v.name(), split_t{v, vo, vi, factor, strategy});
+        parallelize.try_emplace(v.name(), split_info{v, vo, vi, factor, strategy});
     }
 
     /** Indicate the default dimension order of the Func. */
@@ -1303,7 +1303,7 @@ public:
                 continue;
             }
 
-            split_t new_entry{entry};
+            split_info new_entry{entry};
             new_entry.factor = simplify(min(threads_budget, new_entry.factor));
 
             helper.applySplit(new_entry);
