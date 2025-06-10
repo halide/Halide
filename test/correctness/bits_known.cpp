@@ -24,10 +24,12 @@ int main(int argc, char **argv) {
 
         (min(i32, -1) ^ (i32 & 255)) < 0,
 
-        // The next is currently beyond us, because we'd have to carry expr
-        // information in the bits_known format through the modulus
-        // op. Currently just known the second-lowest-bit is 2 but nothing else
-        // doesn't give us an alignment or bounds.
+        // The commented out next case is currently beyond us, because we'd have
+        // to carry expr information in the bits_known format through the
+        // modulus op. From the bitwise or we know the second-lowest-bit is set,
+        // but that information isn't representable as a bound or an alignment,
+        // so it's lost during the analysis on the modulo op.
+
         // (i64 | 2) % 4 >= 2,
 
         (u64 & 1) < 2,

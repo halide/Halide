@@ -540,10 +540,10 @@ Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known(const Type &type
         }
         // A lower bound might tell us that there are some leading ones, and an
         // upper bound might tell us that there are some leading
-        // zeros. Unfortunately we'll never learn about leading ones, because
-        // uint64_ts that start with leading ones can't have a min represented
-        // as an int64_t, which is what ConstantInverval uses, so
-        // bounds.min_defined will never be true.
+        // zeros. Unfortunately we'll never learn about leading ones, because to
+        // know that there's a leading one from the bounds would require knowing
+        // that the min is at least 2^63, and ConstantInterval can't represent
+        // mins that large.
         if (bounds.max_defined) {
             result.mask |= leading_zeros_mask(bounds.max);
         }
