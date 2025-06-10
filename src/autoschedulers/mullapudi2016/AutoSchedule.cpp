@@ -3305,6 +3305,14 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     // Find the level at which group members will be computed.
+    //
+    // note(antonysigma): For tensor multiplications, the assertion
+    // dims.size() > outer_dims.size() fails because the GPU schedule
+    // wants to map outer dimensions to gpu_blocks. If the assertion
+    // is ignored, integer tile_inner_index becomes invalid (i.e.
+    // value less than zero). Here, I am trying to clamp the
+    // tile_inner_index to zero. This may break more test case.
+    // Help wanted here.
     internal_assert(dims.size() >= outer_dims.size());
     const auto tile_inner_index = std::max(int(dims.size() - outer_dims.size()) - 1, 0);
     VarOrRVar tile_inner_var(Var::outermost());
