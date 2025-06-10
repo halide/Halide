@@ -60,17 +60,17 @@ int main(int argc, char **argv) {
     // with limited shared memory and/or register counts, and
     // (ii) the autoscheduler heuristics tend to underestimate the actual shared
     // memory consumed by GPU kernels.
-    constexpr Mullapudi2016Params gpu_specifications{
+    constexpr Mullapudi2016TestParams gpu_specifications{
         /* .last_level_cache_size = */ 25'000,
         /* .parallelism = */ 128,
     };
 
     AutoSchedulerResults results = p.apply_autoscheduler(
         target,
-        get_autoscheduler_params(target.has_gpu_feature(),
-                                 target.has_gpu_feature() ?
-                                     std::optional<Mullapudi2016Params>{gpu_specifications} :
-                                     std::nullopt));
+        get_mullapudi2016_test_params(target.has_gpu_feature(),
+                                      target.has_gpu_feature() ?
+                                          std::optional<Mullapudi2016TestParams>{gpu_specifications} :
+                                          std::nullopt));
 
     // Don't dump to stdout (this is only for debugging)
     // std::cout << "\n\n******************************************\nSCHEDULE:\n"

@@ -24,7 +24,7 @@ void run_test_1() {
     Target target = get_jit_target_from_environment();
     Pipeline p(g);
 
-    p.apply_autoscheduler(target, get_autoscheduler_params(target.has_gpu_feature()));
+    p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
 
     // Inspect the schedule (only for debugging))
     // g.print_loop_nest();
@@ -51,7 +51,7 @@ void run_test_2() {
     Target target = get_jit_target_from_environment();
     Pipeline p(g);
 
-    p.apply_autoscheduler(target, get_autoscheduler_params(target.has_gpu_feature()));
+    p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
 
     // Inspect the schedule (only for debugging))
     // g.print_loop_nest();
@@ -78,7 +78,7 @@ void run_test_3() {
     Target target = get_jit_target_from_environment();
     Pipeline p(output);
 
-    p.apply_autoscheduler(target, get_autoscheduler_params(target.has_gpu_feature()));
+    p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
 
     // Inspect the schedule (only for debugging))
     // output.print_loop_nest();
@@ -108,7 +108,7 @@ void run_test_4() {
     Target target = get_jit_target_from_environment();
     Pipeline p(output);
 
-    p.apply_autoscheduler(target, get_autoscheduler_params(target.has_gpu_feature()));
+    p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
 
     // Inspect the schedule (only for debugging))
     // output.print_loop_nest();

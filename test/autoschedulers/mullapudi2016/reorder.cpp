@@ -32,7 +32,7 @@ double run_test_1(bool auto_schedule) {
         // Provide estimates on the pipeline output
         r.set_estimates({{0, W}, {0, H}, {0, 3}});
         // Auto-schedule the pipeline
-        p.apply_autoscheduler(target, get_autoscheduler_params(target.has_gpu_feature()));
+        p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
     } else {
         Var par;
         r.update(0).fuse(c, y, par).parallel(par).reorder(x, dom.x, dom.y).vectorize(x, 4);
@@ -94,13 +94,13 @@ double run_test_2(bool auto_schedule) {
         //
         // Reference:
         // https://developer.nvidia.com/blog/cuda-pro-tip-write-flexible-kernels-grid-stride-loops/
-        constexpr Mullapudi2016Params gpu_specifications{
+        constexpr Mullapudi2016TestParams gpu_specifications{
             /* .last_level_cache_size = */ 47'000,
             /* .parallelism = */ 2048,
         };
 
         p.apply_autoscheduler(
-            target, get_autoscheduler_params(target.has_gpu_feature(), {gpu_specifications}));
+            target, get_mullapudi2016_test_params(target.has_gpu_feature(), {gpu_specifications}));
     } else {
         Var t("t");
         diff.reorder(c, z).fuse(c, z, t).parallel(t).vectorize(x, 16);
@@ -148,7 +148,7 @@ double run_test_3(bool auto_schedule) {
         // successful code generation.
         //
         // Reference: https://developer.nvidia.com/blog/cuda-pro-tip-write-flexible-kernels-grid-stride-loops/
-        p.apply_autoscheduler(target, get_autoscheduler_params(target.has_gpu_feature()));
+        p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
     } else {
         Var par("par");
         r.update(0).fuse(c, y, par).parallel(par).reorder(x, dom.x, dom.y).vectorize(x, 4);

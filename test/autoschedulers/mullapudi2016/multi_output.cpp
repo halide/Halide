@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     Pipeline p(outs);
 
     Target target = get_jit_target_from_environment();
-    p.apply_autoscheduler(target, get_autoscheduler_params(target.has_gpu_feature()));
+    p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
 
     // Inspect the schedule (only for debugging))
     // h.print_loop_nest();

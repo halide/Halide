@@ -73,7 +73,7 @@ double run_test(bool auto_schedule) {
             .set_estimate(y, 0, in.height())
             .set_estimate(c, 0, in.channels());
         // Auto-schedule the pipeline
-        p.apply_autoscheduler(target, get_autoscheduler_params(target.has_gpu_feature()));
+        p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
     } else if (target.has_gpu_feature()) {
         slice_for_radius.compute_root();
         filter_height.compute_root();
