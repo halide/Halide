@@ -3335,10 +3335,33 @@ void CodeGen_LLVM::visit(const Call *op) {
         const llvm::DataLayout &d = module->getDataLayout();
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(halide_buffer_t_type));
     } else if (op->is_strict_float_intrinsic()) {
-        // There may be non-strict operations in the args that we could evaluate
-        // outside the guard. It's simpler to just make everything strict.
-        ScopedValue<bool> old_in_strict_float(in_strict_float, true);
-        value = codegen(unstrictify_float(op));
+        // Evaluate the args first outside the strict scope, as they may use
+        // non-strict operations.
+        std::vector<Expr> new_args(op->args.size());
+        for (size_t i = 0; i < op->args.size(); i++) {
+            const Expr &arg = op->args[i];
+            if (arg.as<Variable>() || is_const(arg)) {
+                new_args[i] = arg;
+            } else {
+                std::string name = unique_name('t');
+                sym_push(name, codegen(arg));
+                new_args[i] = Variable::make(arg.type(), name);
+            }
+        }
+
+        Expr call = Call::make(op->type, op->name, new_args, op->call_type);
+        {
+            ScopedValue<bool> old_in_strict_float(in_strict_float, true);
+            value = codegen(unstrictify_float(call.as<Call>()));
+        }
+
+        for (size_t i = 0; i < op->args.size(); i++) {
+            const Expr &arg = op->args[i];
+            if (!arg.as<Variable>() && !is_const(arg)) {
+                sym_pop(new_args[i].as<Variable>()->name);
+            }
+        }
+
     } else if (is_float16_transcendental(op) && !supports_call_as_float16(op)) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic(Call::mux)) {
@@ -3404,8 +3427,14 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr e = op->args[0];
         internal_assert(e.type().is_float());
         Expr inf = e.type().max();
-        ScopedValue<bool> old_in_strict_float(in_strict_float, true);
-        codegen(abs(e) == inf);
+        std::string name = unique_name('t');
+        Expr var = Variable::make(e.type(), name);
+        sym_push(name, codegen(e));
+        {
+            ScopedValue<bool> old_in_strict_float(in_strict_float, true);
+            codegen(abs(var) == inf);
+        }
+        sym_pop(name);
     } else if (op->call_type == Call::PureExtern &&
                (op->name == "is_finite_f32" || op->name == "is_finite_f64" || op->name == "is_finite_f16")) {
         internal_assert(op->args.size() == 1);
@@ -3413,10 +3442,16 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         // isfinite(e) -> (fabs(e) != infinity && !isnan(e)) -> (fabs(e) != infinity && e == e)
         Expr e = op->args[0];
-        internal_assert(e.type().is_float());
         Expr inf = e.type().max();
-        ScopedValue<bool> old_in_strict_float(in_strict_float, true);
-        codegen(common_subexpression_elimination(abs(e) != inf && e == e));
+        internal_assert(e.type().is_float());
+        std::string name = unique_name('t');
+        Expr var = Variable::make(e.type(), name);
+        sym_push(name, codegen(e));
+        {
+            ScopedValue<bool> old_in_strict_float(in_strict_float, true);
+            codegen(abs(var) != inf && var == var);
+        }
+        sym_pop(name);
     } else {
         // It's an extern call.
 

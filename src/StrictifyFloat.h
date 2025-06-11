@@ -16,13 +16,14 @@ class Expr;
 namespace Internal {
 
 class Function;
+class Call;
 
 /** Replace all rounding floating point ops and floating point ops that need to
  * handle nan and inf differently with strict float intrinsics. */
 Expr strictify_float(const Expr &e);
 
-/** Replace all strict float intrinsics with their non-strict equivalents. */
-Expr unstrictify_float(const Expr &e);
+/** Replace a strict float intrinsic with its non-strict equivalent. Non-recursive. */
+Expr unstrictify_float(const Call *op);
 
 /** If the StrictFloat target feature is set, replace add, sub, mul, div, etc
  * operations with strict float intrinsics for all Funcs in the environment. If

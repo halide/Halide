@@ -1670,6 +1670,11 @@ private:
             Expr e = lower_sorted_avg(op->args[0], op->args[1]);
             handle_expr_bounds(e);
         } else if (op->is_strict_float_intrinsic()) {
+            // We'll just unstrictify it to do the analysis. This is
+            // dubious. Constructing a bounds expression that uses non-strict
+            // operations might get simplified during bounds analysis (we call
+            // simplify above!) to something approximate, resulting in an
+            // out-of-bounds read. See https://github.com/halide/Halide/issues/8646
             Expr e = unstrictify_float(op);
             handle_expr_bounds(e);
         } else if (op->call_type == Call::Halide) {

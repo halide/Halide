@@ -611,7 +611,10 @@ struct Call : public ExprNode<Call> {
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
 
-        // strict floating point ops. These either round or need to handle inf/nan
+        // strict floating point ops. These are floating point ops that we would
+        // like to optimize around (or let llvm optimize around) by treating
+        // them as reals and ignoring the existence of nan and inf. Using these
+        // intrinsics instead prevents any such optimizations.
         strict_add,
         strict_div,
         strict_eq,
@@ -620,7 +623,6 @@ struct Call : public ExprNode<Call> {
         strict_max,
         strict_min,
         strict_mul,
-        strict_sqrt,
         strict_sub,
 
         // Convert a list of Exprs to a string
@@ -784,7 +786,6 @@ struct Call : public ExprNode<Call> {
              Call::strict_max,
              Call::strict_min,
              Call::strict_mul,
-             Call::strict_sqrt,
              Call::strict_sub,
              Call::strict_lt,
              Call::strict_le,

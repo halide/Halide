@@ -685,7 +685,6 @@ const char *const intrinsic_op_names[] = {
     "strict_max",
     "strict_min",
     "strict_mul",
-    "strict_sqrt",
     "strict_sub",
     "stringify",
     "target_arch_is",

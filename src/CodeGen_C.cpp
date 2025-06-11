@@ -940,6 +940,13 @@ void CodeGen_C::compile(const Module &input) {
             set_name_mangling_mode(NameMangling::C);
             e.emit_c_declarations(stream);
         }
+
+        // Add a check to make sure we compile strict_float C++ code appropriately
+        if (input.any_strict_float()) {
+            stream << "#if defined(__FAST_MATH__) || defined(_M_FP_FAST)\n"
+                   << "#warning \"This Halide module uses strict float intrinsics or the strict_float target flag, but is being compiled with fast-math flags. Floating point math will not actually be strict.\"\n"
+                   << "#endif\n";
+        }
     }
 
     for (const auto &b : input.buffers()) {
@@ -1839,7 +1846,7 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_strict_float_intrinsic()) {
         // This depends on the generated C++ being compiled without -ffast-math
         Expr equiv = unstrictify_float(op);
-        equiv.accept(this);
+        rhs << print_expr(equiv);
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (lowered.defined()) {
