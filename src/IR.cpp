@@ -915,6 +915,25 @@ bool Shuffle::is_interleave() const {
     return true;
 }
 
+std::vector<std::pair<int, int>> Shuffle::vector_and_lane_indices() const {
+
+    // Construct the mapping for each shuffled element and find the index
+    // of which vector to use and the index for which of its lanes to use
+    std::vector<std::pair<int, int>> all_indices;
+    all_indices.reserve(indices.size());
+    for (int i = 0; i < (int)vectors.size(); i++) {
+        for (int j = 0; j < vectors[i].type().lanes(); j++) {
+            all_indices.emplace_back(i, j);
+        }
+    }
+    std::vector<std::pair<int, int>> result;
+    result.reserve(indices.size());
+    for (int i : indices) {
+        result.push_back(all_indices[i]);
+    }
+    return result;
+}
+
 Stmt Atomic::make(const std::string &producer_name,
                   const std::string &mutex_name,
                   Stmt body) {

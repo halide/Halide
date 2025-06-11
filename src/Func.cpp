@@ -271,7 +271,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
         // It's important to use func.dimensions() here, *not* this->dimensions(),
         // since the latter can return the Func's required dimensions rather than its actual dimensions.
         while ((int)args.size() < func.dimensions()) {
-            Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+            debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
             count++;
@@ -304,7 +304,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
         // It's important to use func.dimensions() here, *not* this->dimensions(),
         // since the latter can return the Func's required dimensions rather than its actual dimensions.
         while ((int)args.size() < func.dimensions()) {
-            Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+            debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
             count++;
@@ -905,18 +905,29 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
     }
 
+    ReductionDomain rdom{definition.schedule().rvars(), definition.predicate(), true};
+    SubstitutionMap rdom_promises;
+    for (int i = 0; i < (int)rdom.domain().size(); i++) {
+        const auto &[var, min, extent] = rdom.domain()[i];
+        rdom_promises.emplace(var, promise_clamped(RVar(rdom, i), min, min + extent - 1));
+    }
+
     // Project the RDom into each side
     ReductionDomain intermediate_rdom, preserved_rdom;
     SubstitutionMap intermediate_map, preserved_map;
     {
-        ReductionDomain rdom{definition.schedule().rvars(), definition.predicate(), true};
-
         // Intermediate
         std::tie(intermediate_rdom, intermediate_map) = project_rdom(intermediate_rdims, rdom, rvar_splits);
         for (size_t i = 0; i < preserved.size(); i++) {
             add_let(intermediate_map, preserved_rdims[i].var, preserved_vars[i]);
         }
-        intermediate_rdom.set_predicate(simplify(substitute(intermediate_map, intermediate_rdom.predicate())));
+
+        {
+            Expr pred = intermediate_rdom.predicate();
+            pred = substitute(rdom_promises, pred);
+            pred = substitute(intermediate_map, pred);
+            intermediate_rdom.set_predicate(simplify(pred));
+        }
 
         // Preserved
         std::tie(preserved_rdom, preserved_map) = project_rdom(preserved_rdims, rdom, rvar_splits);
@@ -926,7 +937,13 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
             const auto &[_, min, extent] = intermediate_rdom.domain()[i];
             intm_rdom.push(var, Interval{min, min + extent - 1});
         }
-        preserved_rdom.set_predicate(or_condition_over_domain(substitute(preserved_map, preserved_rdom.predicate()), intm_rdom));
+        {
+            Expr pred = preserved_rdom.predicate();
+            pred = substitute(rdom_promises, pred);
+            pred = substitute(preserved_map, pred);
+            pred = or_condition_over_domain(pred, intm_rdom);
+            preserved_rdom.set_predicate(pred);
+        }
     }
 
     // Intermediate func
@@ -943,10 +960,12 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     {
         vector<Expr> args = definition.args();
         args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
+        args = substitute(rdom_promises, args);
         args = substitute(intermediate_map, args);
 
         vector<Expr> values = definition.values();
         values = substitute_self_reference(values, function.name(), intm.function(), preserved_vars);
+        values = substitute(rdom_promises, values);
         values = substitute(intermediate_map, values);
         intm.function().define_update(args, values, intermediate_rdom);
 
@@ -1041,7 +1060,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         definition.args() = dim_vars_exprs;
-        definition.values() = substitute(preserved_map, prover_result.pattern.ops);
+        definition.values() = substitute(preserved_map, substitute(rdom_promises, prover_result.pattern.ops));
         definition.predicate() = preserved_rdom.predicate();
         definition.schedule().dims() = subst_dims(preserved_map, reducing_dims);
         definition.schedule().rvars() = preserved_rdom.domain();
@@ -3063,7 +3082,7 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &exprs) const {
             internal_assert(implicit_count == 0)
                 << "Pure definition can't possibly already have implicit variables defined\n";
 
-            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
+            debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
 
             vector<Expr>::iterator iter = result.begin() + implicit_placeholder_pos;
             for (int i = 0; i < count.count; i++) {

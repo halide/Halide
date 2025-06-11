@@ -33,7 +33,7 @@ public:
         warnings_occurred++;
     }
 
-    void error(const char *msg) override {
+    [[noreturn]] void error(const char *msg) override {
         // Emitting "error.*:" to stdout or stderr will cause CMake to report the
         // test as a failure on Windows, regardless of error code returned.
         // The error text we get from ErrorReport probably contains some variant
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     MyCustomErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
-    Halide::Internal::ErrorReport("", 0, nullptr, Halide::Internal::ErrorReport::User | Halide::Internal::ErrorReport::Warning) << "Here is a warning.";
+    Halide::Internal::WarningReport("", "", 0, nullptr) << "Here is a warning.";
 
     // This call should not return.
     _halide_user_assert(argc == 0) << should_be_evaluated();

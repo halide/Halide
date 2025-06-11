@@ -670,13 +670,18 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     std::string mattrs =
         get_md_string(module.getModuleFlag("halide_mattrs")).value_or(std::string{});
 
-    auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
-                                                mcpu_target,
-                                                mattrs,
-                                                options,
-                                                use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
-                                                use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
-                                                CodeGenOptLevel::Aggressive);
+    auto *tm = llvm_target->createTargetMachine(
+#if LLVM_VERSION >= 210
+        triple,
+#else
+        triple.str(),
+#endif
+        mcpu_target,
+        mattrs,
+        options,
+        use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
+        use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
+        CodeGenOptLevel::Aggressive);
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 
@@ -718,10 +723,10 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
 }
 
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
-    // Save llvm.compiler.used and remote it.
+    // Save llvm.compiler.used and remove it.
     SmallVector<Constant *, 2> used_array;
     SmallVector<GlobalValue *, 4> used_globals;
-    llvm::Type *used_element_type = PointerType::get(llvm::Type::getInt8Ty(M->getContext()), 0);
+    llvm::Type *used_element_type = PointerType::get(M->getContext(), 0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
         if (GV->getName() != "llvm.embedded.module" &&

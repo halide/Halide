@@ -271,6 +271,9 @@ TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 # In the tests, default to exporting no symbols that aren't explicitly exported
 TEST_CXX_FLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
 
+# In the tests, enable the debug() and internal_assert() macros
+TEST_CXX_FLAGS += -DHALIDE_KEEP_MACROS
+
 # gcc 4.8 fires a bogus warning on old versions of png.h
 ifneq (,$(findstring g++,$(CXX_VERSION)))
 ifneq (,$(findstring 4.8,$(CXX_VERSION)))
@@ -713,6 +716,7 @@ HEADER_FILES = \
   LLVM_Output.h \
   LLVM_Runtime_Linker.h \
   LoopCarry.h \
+  LoopPartitioningDirective.h \
   Lower.h \
   LowerParallelTasks.h \
   LowerWarpShuffles.h \
@@ -731,6 +735,7 @@ HEADER_FILES = \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
+  PrefetchDirective.h \
   Profiling.h \
   PurifyIndexMath.h \
   PythonExtensionGen.h \
