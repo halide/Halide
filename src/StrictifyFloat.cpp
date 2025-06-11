@@ -121,6 +121,9 @@ Expr strictify_float(const Expr &e) {
 }
 
 Expr unstrictify_float(const Call *op) {
+    internal_assert(op->is_strict_float_intrinsic())
+        << "Called unstrictify_float on something other than a strict float intrinsic: "
+        << Expr(op) << "\n";
     if (op->is_intrinsic(Call::strict_add)) {
         return op->args[0] + op->args[1];
     } else if (op->is_intrinsic(Call::strict_sub)) {
@@ -140,6 +143,8 @@ Expr unstrictify_float(const Call *op) {
     } else if (op->is_intrinsic(Call::strict_eq)) {
         return op->args[0] == op->args[1];
     } else {
+        internal_error << "Missing lowering of strict float intrinsic: "
+                       << Expr(op) << "\n";
         return Expr{};
     }
 }
