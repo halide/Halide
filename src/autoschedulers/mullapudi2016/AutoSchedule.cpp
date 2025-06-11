@@ -46,7 +46,7 @@ struct ArchParams {
     ArchParams(const Target &target, const AutoschedulerParams &params_in) {
         ParamParser parser(params_in.extra);
 
-        bool experimental_gpu_schedule;
+        bool experimental_gpu_schedule = false;
         parser.parse("experimental_gpu_schedule", &experimental_gpu_schedule);
 
         is_gpu_schedule = target.has_gpu_feature() && experimental_gpu_schedule;
