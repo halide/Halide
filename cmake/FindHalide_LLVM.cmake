@@ -14,7 +14,11 @@ find_package(LLVM CONFIG)
 # Neither LLVM_VERSION nor LLVM_PACKAGE_VERSION work as find_package arguments
 # in git/development builds as they include a "git" suffix. This applies at
 # time of writing to versions 18-21, inclusive.
-set(Halide_LLVM_VERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
+if (LLVM_FOUND)
+    set(Halide_LLVM_VERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
+else ()
+    set(Halide_LLVM_VERSION "")
+endif ()
 
 if (NOT DEFINED Halide_LLVM_SHARED_LIBS)
     # Normally, we don't like making decisions for our users. However,
