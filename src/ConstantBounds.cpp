@@ -125,6 +125,10 @@ ConstantInterval bounds_helper(const Expr &e,
                 ConstantInterval cq = recurse(op->args[2]);
                 ConstantInterval rounding_term = 1 << (cq - 1);
                 return (ca * cb + rounding_term) >> cq;
+            } else if (op->is_intrinsic(Call::bitwise_not)) {
+                // We can't do much with the other bitwise ops, but we can treat
+                // bitwise_not as an all-ones bit pattern minus the argument.
+                return recurse(make_const(e.type(), -1) - op->args[0]);
             }
             // If you add a new intrinsic here, also add it to the expression
             // generator in test/correctness/lossless_cast.cpp
