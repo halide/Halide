@@ -11,12 +11,12 @@
 namespace Halide {
 
 struct Target;
-class Expr;
+struct Expr;
 
 namespace Internal {
 
 class Function;
-class Call;
+struct Call;
 
 /** Replace all rounding floating point ops and floating point ops that need to
  * handle nan and inf differently with strict float intrinsics. */
