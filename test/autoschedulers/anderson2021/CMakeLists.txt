@@ -79,7 +79,7 @@ add_halide_test(
 add_executable(anderson2021_test_apps_autoscheduler test.cpp)
 target_link_libraries(
     anderson2021_test_apps_autoscheduler
-    PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS}
+    PRIVATE Halide::Test Halide::Tools ${CMAKE_DL_LIBS}
 )
 add_dependencies(anderson2021_test_apps_autoscheduler Halide::Anderson2021)
 
