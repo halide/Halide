@@ -25,6 +25,8 @@ find_package(LLVM PATHS ${llvm_paths})
 # time of writing to versions 21-23, inclusive.
 if (LLVM_FOUND)
     set(Halide_LLVM_VERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
+else ()
+    set(Halide_LLVM_VERSION "")
 endif ()
 
 if (NOT DEFINED Halide_LLVM_SHARED_LIBS)
