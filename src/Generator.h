@@ -1447,6 +1447,7 @@ public:
     // These should only be called from configure() methods.
     // TODO: find a way to enforce this. Better yet, find a way to remove these.
     void set_type(const Type &type);
+    void set_type(const std::vector<Type> &types);
     void set_dimensions(int dims);
     void set_array_size(int size);
 
@@ -3212,11 +3213,21 @@ public:
     // long as all Outputs have been defined.)
     Pipeline get_pipeline();
 
+protected:
+    void claim_name(const std::string &name, const char *param_type) {
+        user_assert(param_info_ptr->names.count(name) == 0)
+            << "Cannot add " << param_type << " with name " << name
+            << ". It is already taken by another input or output parameter.";
+        param_info_ptr->names.insert(name);
+    }
+
+public:
     // Create Input<Func> with dynamic type & dimensions
     template<typename T,
              typename std::enable_if<std::is_same<T, Halide::Func>::value>::type * = nullptr>
     GeneratorInput<T> *add_input(const std::string &name, const Type &t, int dimensions) {
         check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "input");
         auto *p = new GeneratorInput<T>(name, t, dimensions);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
@@ -3231,6 +3242,7 @@ public:
         static_assert(!T::has_static_halide_type, "You can only call this version of add_input() for a Buffer<T, D> where T is void or omitted .");
         static_assert(!T::has_static_dimensions, "You can only call this version of add_input() for a Buffer<T, D> where D is -1 or omitted.");
         check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "input");
         auto *p = new GeneratorInput<T>(name, t, dimensions);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
@@ -3245,6 +3257,7 @@ public:
         static_assert(T::has_static_halide_type, "You can only call this version of add_input() for a Buffer<T, D> where T is not void.");
         static_assert(!T::has_static_dimensions, "You can only call this version of add_input() for a Buffer<T, D> where D is -1 or omitted.");
         check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "input");
         auto *p = new GeneratorInput<T>(name, dimensions);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
@@ -3259,6 +3272,7 @@ public:
         static_assert(T::has_static_halide_type, "You can only call this version of add_input() for a Buffer<T, D> where T is not void.");
         static_assert(T::has_static_dimensions, "You can only call this version of add_input() for a Buffer<T, D> where D is not -1.");
         check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "input");
         auto *p = new GeneratorInput<T>(name);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
@@ -3270,6 +3284,7 @@ public:
              typename std::enable_if<std::is_arithmetic<T>::value>::type * = nullptr>
     GeneratorInput<T> *add_input(const std::string &name) {
         check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "input");
         auto *p = new GeneratorInput<T>(name);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
@@ -3281,6 +3296,7 @@ public:
              typename std::enable_if<std::is_same<T, Expr>::value>::type * = nullptr>
     GeneratorInput<T> *add_input(const std::string &name, const Type &type) {
         check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "input");
         auto *p = new GeneratorInput<Expr>(name);
         p->generator = this;
         p->set_type(type);
@@ -3292,22 +3308,30 @@ public:
     // Create Output<Func> with dynamic type & dimensions
     template<typename T,
              typename std::enable_if<std::is_same<T, Halide::Func>::value>::type * = nullptr>
-    GeneratorOutput<T> *add_output(const std::string &name, const Type &t, int dimensions) {
+    GeneratorOutput<T> *add_output(const std::string &name, const std::vector<Type> &t, int dimensions) {
         check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "output");
         auto *p = new GeneratorOutput<T>(name, t, dimensions);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
         param_info_ptr->filter_outputs.push_back(p);
         return p;
+    }
+
+    template<typename T,
+             typename std::enable_if<std::is_same<T, Halide::Func>::value>::type * = nullptr>
+    GeneratorOutput<T> *add_output(const std::string &name, const Type &t, int dimensions) {
+        return add_output<T>(name, std::vector<Type>{t}, dimensions);
     }
 
     // Create Output<Buffer> with dynamic type & dimensions
     template<typename T,
              typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
-    GeneratorOutput<T> *add_output(const std::string &name, const Type &t, int dimensions) {
+    GeneratorOutput<T> *add_output(const std::string &name, const std::vector<Type> &t, int dimensions) {
         static_assert(!T::has_static_halide_type, "You can only call this version of add_output() for a Buffer<T, D> where T is void or omitted .");
         static_assert(!T::has_static_dimensions, "You can only call this version of add_output() for a Buffer<T, D> where D is -1 or omitted.");
         check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "output");
         auto *p = new GeneratorOutput<T>(name, t, dimensions);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
@@ -3315,13 +3339,20 @@ public:
         return p;
     }
 
-    // Create Output<Buffer> with compile-time type
+    template<typename T,
+             typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
+    GeneratorOutput<T> *add_output(const std::string &name, const Type &t, int dimensions) {
+        return add_output<T>(name, std::vector<Type>{t}, dimensions);
+    }
+
+    // Create Output<Buffer> with either a compile-time type or a
+    // to-be-set-later type and dynamic dimensions
     template<typename T,
              typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
     GeneratorOutput<T> *add_output(const std::string &name, int dimensions) {
-        static_assert(T::has_static_halide_type, "You can only call this version of add_output() for a Buffer<T, D> where T is not void.");
         static_assert(!T::has_static_dimensions, "You can only call this version of add_output() for a Buffer<T, D> where D is -1 or omitted.");
         check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "output");
         auto *p = new GeneratorOutput<T>(name, dimensions);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
@@ -3329,13 +3360,35 @@ public:
         return p;
     }
 
-    // Create Output<Buffer> with compile-time type & dimensions
+    // Create Output<Buffer> with compile-time dimensions and dynamic type
+    template<typename T,
+             typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
+    GeneratorOutput<T> *add_output(const std::string &name, const std::vector<Type> &t) {
+        static_assert(!T::has_static_halide_type, "You can only call this version of add_output() for a Buffer<T, D> where T is void or omitted.");
+        static_assert(T::has_static_dimensions, "You can only call this version of add_output() for a Buffer<void, D> where D is not -1.");
+        check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "output");
+        auto *p = new GeneratorOutput<T>(name, t);
+        p->generator = this;
+        param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
+        param_info_ptr->filter_outputs.push_back(p);
+        return p;
+    }
+
+    template<typename T,
+             typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
+    GeneratorOutput<T> *add_output(const std::string &name, const Type &t) {
+        return add_output<T>(name, std::vector<Type>{t});
+    }
+
+    // Create Output<Buffer> with compile-time type and dimensions
     template<typename T,
              typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
     GeneratorOutput<T> *add_output(const std::string &name) {
         static_assert(T::has_static_halide_type, "You can only call this version of add_output() for a Buffer<T, D> where T is not void.");
         static_assert(T::has_static_dimensions, "You can only call this version of add_output() for a Buffer<T, D> where D is not -1.");
         check_exact_phase(GeneratorBase::ConfigureCalled);
+        claim_name(name, "output");
         auto *p = new GeneratorOutput<T>(name);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
