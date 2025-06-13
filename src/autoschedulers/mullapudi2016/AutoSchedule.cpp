@@ -1290,10 +1290,10 @@ public:
      * order, and override the previous ones.
      */
     void reorder(const std::vector<VarOrRVar> &vars) {
-        debug(2) << f.name() << ".reorder(" << vars.front().name();
         ordering = vars;
         is_initial_order = false;
 
+        debug(2) << f.name() << ".reorder(" << vars.front().name();
         for (auto iter = ordering.begin() + 1; iter != ordering.end(); ++iter) {
             debug(2) << ", " << iter->name();
         }
@@ -1306,13 +1306,14 @@ public:
      * The nested parallelism always ensures the inner and outer vars are
      * adjacent to each order when this function is called.
      */
-    void ensure_ordering(const VarOrRVar &inner, const VarOrRVar &outer) {
-        debug(2) << f.name() << ".ensure_ordering(" << inner.name() << ", " << outer.name() << ")\n";
+    void reorder(const VarOrRVar &inner, const VarOrRVar &outer) {
+        debug(2) << f.name() << ".reorder(" << inner.name() << ", " << outer.name() << ")\n";
 
         const auto findItem = [&](const VarOrRVar &v) {
-            return std::find_if(ordering.begin(), ordering.end(), [v_name = v.name()](const VarOrRVar &item) {
-                return item.name() == v_name;
-            });
+            return std::find_if(ordering.begin(), ordering.end(),
+                                [v_name = v.name()](const VarOrRVar &item) {
+                                    return item.name() == v_name;
+                                });
         };
 
         auto inner_iter = findItem(inner);
@@ -1326,9 +1327,12 @@ public:
         // Assert the requirement here.
         internal_assert(std::abs(std::distance(inner_iter, outer_iter)) == 1);
 
-        if (inner_iter > outer_iter) {
-            std::iter_swap(inner_iter, outer_iter);
+        if (inner_iter < outer_iter) {
+            // Skip if the Var pair is already reordered.
+            return;
         }
+
+        std::iter_swap(inner_iter, outer_iter);
         is_initial_order = false;
     }
 
@@ -3392,7 +3396,7 @@ void Partitioner::generate_group_cpu_schedule(
                 if (!seq_var.empty()) {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
                     if (arch_params.is_gpu_schedule) {
-                        gpu_tiling.ensure_ordering(seq, v);
+                        gpu_tiling.reorder(seq, v);
                     } else {
                         f_handle.reorder(seq, v);
                         sched.push_schedule(f_handle.name(), g.output.stage_num,
