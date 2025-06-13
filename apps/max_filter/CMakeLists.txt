@@ -18,7 +18,8 @@ add_halide_generator(max_filter.generator SOURCES max_filter_generator.cpp)
 add_halide_library(max_filter FROM max_filter.generator)
 add_halide_library(max_filter_auto_schedule FROM max_filter.generator
                    GENERATOR max_filter
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(max_filter_filter filter.cpp)

@@ -20,7 +20,11 @@ add_halide_generator(local_laplacian.generator
 add_halide_library(local_laplacian FROM local_laplacian.generator)
 add_halide_library(local_laplacian_auto_schedule FROM local_laplacian.generator
                    GENERATOR local_laplacian
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   # When target=host-cuda or host-metal, limit the GPU shared
+                   # memory per block to avoid gpu kernel launch failure.
+                   PARAMS autoscheduler.last_level_cache_size=30000 autoscheduler.parallelism=4096 autoscheduler.experimental_gpu_schedule=1
+                   )
 
 # Main executable
 add_executable(local_laplacian_process process.cpp)

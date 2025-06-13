@@ -20,7 +20,8 @@ add_halide_generator(compositing.generator
 add_halide_library(compositing FROM compositing.generator)
 add_halide_library(compositing_auto_schedule FROM compositing.generator
                    GENERATOR compositing
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(compositing_process process.cpp)

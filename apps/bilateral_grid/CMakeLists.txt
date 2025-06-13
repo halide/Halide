@@ -25,7 +25,11 @@ add_halide_library(bilateral_grid_auto_schedule FROM bilateral_grid.generator
                    GENERATOR bilateral_grid
                    STMT bilateral_grid_auto_schedule_STMT
                    SCHEDULE bilateral_grid_auto_schedule_SCHEDULE
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   # When target=host-cuda or host-metal, limit the GPU shared
+                   # memory per block to avoid gpu kernel launch failure.
+                   PARAMS autoscheduler.last_level_cache_size=20000 autoscheduler.experimental_gpu_schedule=1
+                   )
 
 # Main executable
 add_executable(bilateral_grid_process filter.cpp)

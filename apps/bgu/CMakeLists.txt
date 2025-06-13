@@ -18,7 +18,8 @@ add_halide_generator(bgu.generator SOURCES bgu_generator.cpp)
 add_halide_library(bgu FROM bgu.generator)
 add_halide_library(bgu_auto_schedule FROM bgu.generator
                    GENERATOR bgu
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(bgu_filter filter.cpp)

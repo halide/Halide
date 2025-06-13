@@ -18,7 +18,8 @@ add_halide_generator(lens_blur.generator SOURCES lens_blur_generator.cpp)
 add_halide_library(lens_blur FROM lens_blur.generator)
 add_halide_library(lens_blur_auto_schedule FROM lens_blur.generator
                    GENERATOR lens_blur
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.parallelism=4096 autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(lens_blur_filter process.cpp)
