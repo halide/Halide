@@ -10,6 +10,7 @@
 #include "Lerp.h"
 #include "Param.h"
 #include "Simplify.h"
+#include "StrictifyFloat.h"
 #include "Substitute.h"
 #include "Type.h"
 #include "Util.h"
@@ -939,6 +940,13 @@ void CodeGen_C::compile(const Module &input) {
             set_name_mangling_mode(NameMangling::C);
             e.emit_c_declarations(stream);
         }
+
+        // Add a check to make sure we compile strict_float C++ code appropriately
+        if (input.any_strict_float()) {
+            stream << "#if defined(__FAST_MATH__) || defined(_M_FP_FAST)\n"
+                   << "#warning \"This Halide module uses strict float intrinsics or the strict_float target flag, but is being compiled with fast-math flags. Floating point math will not actually be strict.\"\n"
+                   << "#endif\n";
+        }
     }
 
     for (const auto &b : input.buffers()) {
@@ -1835,10 +1843,10 @@ void CodeGen_C::visit(const Call *op) {
             << " + " << print_expr(base_offset) << "), /*rw*/0, /*locality*/0), 0)";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
-    } else if (op->is_intrinsic(Call::strict_float)) {
-        internal_assert(op->args.size() == 1);
-        string arg0 = print_expr(op->args[0]);
-        rhs << "(" << arg0 << ")";
+    } else if (op->is_strict_float_intrinsic()) {
+        // This depends on the generated C++ being compiled without -ffast-math
+        Expr equiv = unstrictify_float(op);
+        rhs << print_expr(equiv);
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (lowered.defined()) {

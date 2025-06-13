@@ -249,30 +249,16 @@ void populate_ops_table_single_uint32_select(const vector<Type> &types, vector<A
     table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
 }
 
-// This function exists because the Solve module strips strict_float on one side of the pattern matching.
-// This leads to failed pattern matches in the nan-propagating min/max patterns.
-// TODO: Once strict_float has been reworked, this should be removed.
-Expr is_nan_not_strict(Expr x) {
-    Type t = Bool(x.type().lanes());
-    if (x.type().element_of() == Float(64)) {
-        return Call::make(t, "is_nan_f64", {std::move(x)}, Call::PureExtern);
-    }
-    if (x.type().element_of() == Float(16)) {
-        return Call::make(t, "is_nan_f16", {std::move(x)}, Call::PureExtern);
-    }
-    internal_assert(x.type().element_of() == Float(32));
-    return Call::make(t, "is_nan_f32", {std::move(x)}, Call::PureExtern);
-}
-
 void populate_ops_table_single_float_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
+
     // Propagating max operators
-    table.emplace_back(select(is_nan_not_strict(x0) || x0 > y0, x0, y0), tmin_0, true);
-    table.emplace_back(select(is_nan_not_strict(x0) || x0 >= y0, x0, y0), tmin_0, true);
+    table.emplace_back(select(is_nan(x0) || x0 > y0, x0, y0), tmin_0, true);
+    table.emplace_back(select(is_nan(x0) || x0 >= y0, x0, y0), tmin_0, true);
 
     // Propagating min operators
-    table.emplace_back(select(is_nan_not_strict(x0) || x0 < y0, x0, y0), tmax_0, true);
-    table.emplace_back(select(is_nan_not_strict(x0) || x0 <= y0, x0, y0), tmax_0, true);
+    table.emplace_back(select(is_nan(x0) || x0 < y0, x0, y0), tmax_0, true);
+    table.emplace_back(select(is_nan(x0) || x0 <= y0, x0, y0), tmax_0, true);
 }
 
 const map<TableKey, void (*)(const vector<Type> &types, vector<AssociativePattern> &)> val_type_to_populate_luts_fn = {

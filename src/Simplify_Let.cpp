@@ -194,9 +194,8 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
                 Expr op_b = var_a ? new_var : shuffle->vectors[1];
                 replacement = substitute(f.new_name, Shuffle::make_concat({op_a, op_b}), replacement);
                 f.new_value = var_a ? shuffle->vectors[1] : shuffle->vectors[0];
-            } else if ((tag = Call::as_tag(f.new_value)) != nullptr && !tag->is_intrinsic(Call::strict_float)) {
-                // Most tags should be stripped here, but not strict_float(); removing it will change the semantics
-                // of the let-expr we are producing.
+            } else if ((tag = Call::as_tag(f.new_value))) {
+                // tags should be stripped here.
                 replacement = substitute(f.new_name, Call::make(tag->type, tag->name, {new_var}, Call::PureIntrinsic), replacement);
                 f.new_value = tag->args[0];
             } else {

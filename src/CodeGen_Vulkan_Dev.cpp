@@ -17,6 +17,7 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "SpirvIR.h"
+#include "StrictifyFloat.h"
 #include "Target.h"
 
 #ifdef WITH_SPIRV
@@ -1187,10 +1188,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             Expr e = lower_signed_shift_left(op->args[0], op->args[1]);
             e.accept(this);
         }
-    } else if (op->is_intrinsic(Call::strict_float)) {
+    } else if (op->is_strict_float_intrinsic()) {
         // TODO: Enable/Disable RelaxedPrecision flags?
-        internal_assert(op->args.size() == 1);
-        op->args[0].accept(this);
+        Expr e = unstrictify_float(op);
+        e.accept(this);
     } else if (op->is_intrinsic(Call::IntrinsicOp::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         // b > a, so the following works without widening:

@@ -10,16 +10,6 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
         return const_false(op->type.lanes());
     }
 
-    if (!may_simplify(op->a.type())) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return op;
-        } else {
-            return EQ::make(a, b);
-        }
-    }
-
     if (op->a.type().is_bool()) {
         Expr a = mutate(op->a, nullptr);
         Expr b = mutate(op->b, nullptr);
@@ -133,16 +123,6 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
 
 // ne redirects to not eq
 Expr Simplify::visit(const NE *op, ExprInfo *info) {
-    if (!may_simplify(op->a.type())) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return op;
-        } else {
-            return NE::make(a, b);
-        }
-    }
-
     Expr mutated = mutate(Not::make(EQ::make(op->a, op->b)), info);
     if (const NE *ne = mutated.as<NE>()) {
         if (ne->a.same_as(op->a) && ne->b.same_as(op->b)) {
