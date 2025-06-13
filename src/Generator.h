@@ -1447,7 +1447,6 @@ public:
     // These should only be called from configure() methods.
     // TODO: find a way to enforce this. Better yet, find a way to remove these.
     void set_type(const Type &type);
-    void set_type(const std::vector<Type> &types);
     void set_dimensions(int dims);
     void set_array_size(int size);
 
@@ -2341,6 +2340,11 @@ public:
 
 #undef HALIDE_OUTPUT_FORWARD
 #undef HALIDE_OUTPUT_FORWARD_CONST
+
+    using GIOBase::set_type;
+
+    /** Set types dynamically for tuple outputs. */
+    void set_type(const std::vector<Type> &types);
 
 protected:
     GeneratorOutputBase(size_t array_size,
