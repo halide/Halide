@@ -50,68 +50,6 @@ std::string vec_name(const string &name, int lane_start, int lane_count) {
     return name + ".lanes_" + std::to_string(lane_start) + "_" + std::to_string(lane_start + lane_count - 1);
 }
 
-Expr simplify_shuffle(const Shuffle *op) {
-    if (op->is_extract_element()) {
-        if (op->vectors.size() == 1) {
-            if (op->vectors[0].type().is_scalar()) {
-                return op->vectors[0];
-            } else {
-                return Expr(op);
-            }
-        } else {
-            // Figure out which element is comes from.
-            int index = op->indices[0];
-            internal_assert(index >= 0);
-            for (const Expr &vector : op->vectors) {
-                if (index < vector.type().lanes()) {
-                    if (vector.type().is_scalar()) {
-                        return vector;
-                    } else {
-                        return Shuffle::make_extract_element(vector, index);
-                    }
-                }
-                index -= vector.type().lanes();
-            }
-            internal_error << "Index out of bounds.";
-        }
-    }
-
-    // Figure out if all extracted lanes come from 1 component.
-    vector<pair<int, int>> src_vec_and_lane_idx = op->vector_and_lane_indices();
-    bool all_from_the_same = true;
-    bool is_full_vec = src_vec_and_lane_idx[0].second == 0;
-    for (int i = 1; i < int(op->indices.size()); ++i) {
-        if (src_vec_and_lane_idx[i].first != src_vec_and_lane_idx[0].first) {
-            all_from_the_same = false;
-            is_full_vec = false;
-            break;
-        }
-        if (src_vec_and_lane_idx[i].second != i) {
-            is_full_vec = false;
-        }
-    }
-    if (all_from_the_same) {
-        const Expr &src_vec = op->vectors[src_vec_and_lane_idx[0].first];
-        is_full_vec &= src_vec.type().lanes() == int(op->indices.size());
-        int first_lane_in_src = src_vec_and_lane_idx[0].second;
-        if (is_full_vec) {
-            return src_vec;
-        } else {
-            const Ramp *ramp = src_vec.as<Ramp>();
-            if (ramp && op->is_slice() && op->slice_stride() == 1) {
-                return simplify(Ramp::make(ramp->base + first_lane_in_src * ramp->stride, ramp->stride, op->indices.size()));
-            }
-            vector<int> new_indices;
-            for (int i = 0; i < int(op->indices.size()); ++i) {
-                new_indices.push_back(src_vec_and_lane_idx[i].second);
-            }
-            return Shuffle::make({src_vec}, new_indices);
-        }
-    }
-
-    return op;
-}
-
 class LiftLetToLetStmt : public IRMutator {
     using IRMutator::visit;
 
@@ -196,8 +134,7 @@ class ExtractLanes : public IRMutator {
         for (int i = 0; i < lane_count; ++i) {
             new_indices.push_back(op->indices[lane_start + i]);
         }
-        Expr result = Shuffle::make(op->vectors, new_indices);
-        return simplify_shuffle(result.as<Shuffle>());
+        return simplify(Shuffle::make(op->vectors, new_indices));
     }
 
     Expr visit(const Ramp *op) override {
@@ -532,8 +469,7 @@ class LegalizeVectors : public IRMutator {
                     new_vectors.push_back(IRMutator::mutate(vec));
                 }
             }
-            Expr result = Shuffle::make(new_vectors, op->indices);
-            result = simplify_shuffle(result.as<Shuffle>());
+            Expr result = simplify(Shuffle::make(new_vectors, op->indices));
             debug(3) << "Legalized " << Expr(op) << " => " << result << "\n";
             return result;
         }
@@ -641,9 +577,13 @@ Stmt legalize_vectors_in_device_loop(const For *op) {
         debug(3) << "Vector Legalization did do nothing, returning input.\n";
         return op;
     }
-    m4 = simplify(m4);
+    Stmt m5 = simplify(m4);
+    if (!m4.same_as(m5)) {
+        debug(3) << "After simplify:\n"
+                 << m5 << "\n";
+    }
     return For::make(op->name, op->min, op->extent, op->for_type,
-                     op->partition_policy, op->device_api, m4);
+                     op->partition_policy, op->device_api, m5);
 }
 
 Stmt legalize_vectors(const Stmt &s) {
