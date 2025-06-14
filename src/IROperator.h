@@ -1578,6 +1578,22 @@ Expr saturating_cast(Type t, Expr e);
  * generated code. */
 Expr strict_float(const Expr &e);
 
+/**
+ * Helper functions to the strict-float variants of the
+ * basic floating point operators.
+ */
+/// @{
+Expr strict_add(const Expr &a, const Expr &b);
+Expr strict_sub(const Expr &a, const Expr &b);
+Expr strict_mul(const Expr &a, const Expr &b);
+Expr strict_div(const Expr &a, const Expr &b);
+Expr strict_max(const Expr &a, const Expr &b);
+Expr strict_min(const Expr &a, const Expr &b);
+Expr strict_eq(const Expr &a, const Expr &b);
+Expr strict_le(const Expr &a, const Expr &b);
+Expr strict_lt(const Expr &a, const Expr &b);
+/// @}
+
 /** Create an Expr that that promises another Expr is clamped but do
  * not generate code to check the assertion or modify the value. No
  * attempt is made to prove the bound at compile time. (If it is

@@ -111,7 +111,7 @@ constexpr RangedAccuracyTest::Validation rlx_abs_val = {1.02, 1e-7};
 constexpr RangedAccuracyTest::Validation vrlx_abs_val = {1.1, 1e-6};
 constexpr RangedAccuracyTest::Validation rsnbl_abs_val = {2.0, 1e-5};
 constexpr RangedAccuracyTest::Validation rlx_abs_val_pct(double pct) {
-    return {1.0 + 100 * pct, 1e-7};
+    return {1.0 + 0.01 * pct, 1e-7};
 }
 constexpr RangedAccuracyTest::Validation max_abs_val(double max_val) {
     return {0.0f, max_val};
@@ -171,7 +171,7 @@ struct FunctionToTest {
         [](Expr x, Expr y, Halide::ApproximationPrecision prec) { return Halide::fast_atan2(x, y, prec); },
         Halide::Internal::ApproximationTables::best_atan_approximation,
         {
-            { "precise" , {{ -10.0f, 10.0f}, {-10.0f, 10.0f}}, rlx_abs_val_pct(4), rlx_abs_val, rlx_ulp_val, rlx_ulp_val, 70, 30 },
+            { "precise" , {{ -10.0f, 10.0f}, {-10.0f, 10.0f}}, rlx_abs_val_pct(6), rlx_abs_val, rlx_ulp_val, rlx_ulp_val, 70, 30 },
         }
     },
     {
@@ -385,7 +385,7 @@ int main(int argc, char **argv) {
     Buffer<float, 1> out_ref{steps * steps};
     Buffer<float, 1> out_approx{steps * steps};
 
-    bool target_has_proper_strict_float_support = !target.has_gpu_feature();
+    bool target_has_proper_strict_float_support = !target.has_gpu_feature() || target.has_feature(Target::CUDA);
 
     double best_mae_for_backend = 0.0;
     if (target.has_feature(Halide::Target::Vulkan)) {
@@ -528,7 +528,7 @@ int main(int argc, char **argv) {
                         .vectorize(ii, 4);
                     // TODO(mcourteaux): When vector legalization lowering pass is in, increase vectorize for testing.
                 } else {
-                    approx_func.vectorize(i, 8);
+                    approx_func.vectorize(i, target.natural_vector_size<float>());
                 }
                 approx_func.realize(out_approx);
                 if (emit_asm) {
