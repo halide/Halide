@@ -2670,6 +2670,29 @@ Expr strict_float(const Expr &e) {
     return strictify_float(e);
 }
 
+inline Expr strict_float_op(const Expr &a, const Expr &b, Call::IntrinsicOp op) {
+    user_assert(a.type() == b.type()) << "strict_float ops should be done on equal types.";
+    user_assert(a.type().is_float()) << "strict_float ops should be done on floating point types.";
+    return Call::make(a.type(), op, {a, b}, Call::CallType::PureIntrinsic);
+}
+
+#define impl_strict_op(x)                                    \
+    Expr strict_##x(const Expr &a, const Expr &b) {     \
+        return strict_float_op(a, b, Call::strict_##x); \
+    }
+
+impl_strict_op(add);
+impl_strict_op(sub);
+impl_strict_op(div);
+impl_strict_op(mul);
+impl_strict_op(max);
+impl_strict_op(min);
+impl_strict_op(eq);
+impl_strict_op(le);
+impl_strict_op(lt);
+
+#undef impl_strict_op
+
 Expr undef(Type t) {
     return Call::make(t, Call::undef,
                       std::vector<Expr>(),

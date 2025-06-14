@@ -148,8 +148,8 @@ void lower_impl(const vector<Function> &output_funcs,
 
     lower_target_query_ops(env, t);
 
-    bool any_strict_float = strictify_float(env, t);
-    result_module.set_any_strict_float(any_strict_float);
+    bool has_any_strict_float = strictify_float(env, t);
+    result_module.set_any_strict_float(has_any_strict_float);
 
     // Output functions should all be computed and stored at root.
     for (const Function &f : outputs) {
@@ -333,6 +333,13 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Selecting fast math function implementations...\n";
     s = lower_fast_math_functions(s, t);
     log("Lowering after selecting fast math functions:", s);
+    if (!has_any_strict_float) {
+        has_any_strict_float = any_strict_float(s);
+        if (has_any_strict_float) {
+            debug(2) << "Detected strict_float ops after selecting fast math functions.\n";
+            result_module.set_any_strict_float(has_any_strict_float);
+        }
+    }
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);

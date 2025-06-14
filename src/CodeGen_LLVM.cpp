@@ -408,7 +408,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
     module->addModuleFlag(llvm::Module::Warning, "halide_mabi", MDString::get(*context, mabi()));
     module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
-    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
+    module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float ? 1 : 0);
     if (effective_vscale != 0) {
         module->addModuleFlag(llvm::Module::Warning, "halide_effective_vscale", effective_vscale);
     }
@@ -498,6 +498,7 @@ CodeGen_LLVM::ScopedFastMath::~ScopedFastMath() {
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     any_strict_float = input.any_strict_float();
+    debug(2) << "Module: any_strict_float = " << any_strict_float << "\n";
 
     init_codegen(input.name());
 

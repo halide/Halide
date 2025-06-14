@@ -164,5 +164,17 @@ bool strictify_float(std::map<std::string, Function> &env, const Target &t) {
     return checker.any_strict || t.has_feature(Target::StrictFloat);
 }
 
+bool any_strict_float(const Stmt &s) {
+    AnyStrictIntrinsics c;
+    s.accept(&c);
+    return c.any_strict;
+}
+
+bool any_strict_float(const Expr &e) {
+    AnyStrictIntrinsics c;
+    e.accept(&c);
+    return c.any_strict;
+}
+
 }  // namespace Internal
 }  // namespace Halide
