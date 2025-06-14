@@ -12,11 +12,11 @@ namespace Halide {
 
 struct Target;
 struct Expr;
-struct Stmt;
 
 namespace Internal {
 
 class Function;
+struct Stmt;
 struct Call;
 
 /** Replace all rounding floating point ops and floating point ops that need to
