@@ -507,18 +507,25 @@ public:
             }));
         }
 
+        std::vector<TestResult> failed_tests;
+        constexpr int tabstop = 32;
         for (auto &f : futures) {
             auto result = f.get();
-            constexpr int tabstop = 32;
             const int spaces = std::max(1, tabstop - (int)result.op.size());
             std::cout << result.op << std::string(spaces, ' ') << "(" << run_target_str << ")\n";
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
-                // The thread-pool destructor will block until in-progress tasks
-                // are done, and then will discard any tasks that haven't been
-                // launched yet.
-                return false;
+                failed_tests.push_back(std::move(result));
             }
+        }
+
+        if (!failed_tests.empty()) {
+            std::cerr << "SIMD op check summary: " << failed_tests.size() << " tests failed:\n";
+            for (auto &result : failed_tests) {
+                const int spaces = std::max(1, tabstop - (int)result.op.size());
+                std::cerr << "   " << result.op << std::string(spaces, ' ') << "(" << run_target_str << ")\n";
+            }
+            return false;
         }
 
         return true;

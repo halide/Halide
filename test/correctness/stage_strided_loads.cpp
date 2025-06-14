@@ -10,7 +10,7 @@ class CheckForStridedLoads : public IRMutator {
         if (const Ramp *r = op->index.as<Ramp>()) {
             if (op->name == buf_name) {
                 bool dense = is_const_one(r->stride);
-                found |= !dense;
+                found_strided_load |= !dense;
                 dense_loads += dense;
             }
         }
@@ -18,27 +18,27 @@ class CheckForStridedLoads : public IRMutator {
     }
 
 public:
-    bool found = false;
+    bool found_strided_load = false;
     int dense_loads = 0;
     std::string buf_name;
 
     void check(Func f, int desired_dense_loads, std::string name = "buf") {
-        found = false;
+        found_strided_load = false;
         dense_loads = 0;
         buf_name = name;
         f.add_custom_lowering_pass(this, nullptr);
         f.compile_jit();
-        assert(!found);
+        assert(!found_strided_load);
         assert(dense_loads == desired_dense_loads);
     }
 
     void check_not(Func f, int desired_dense_loads, std::string name = "buf") {
-        found = false;
+        found_strided_load = false;
         dense_loads = 0;
         buf_name = name;
         f.add_custom_lowering_pass(this, nullptr);
         f.compile_jit();
-        assert(found);
+        assert(found_strided_load);
         assert(dense_loads == desired_dense_loads);
     }
 } checker;
