@@ -509,6 +509,7 @@ SOURCE_FILES = \
   IRVisitor.cpp \
   JITModule.cpp \
   Lambda.cpp \
+  LegalizeVectors.cpp \
   Lerp.cpp \
   LICM.cpp \
   LLVM_Output.cpp \
@@ -711,6 +712,7 @@ HEADER_FILES = \
   WasmExecutor.h \
   JITModule.h \
   Lambda.h \
+  LegalizeVectors.h \
   Lerp.h \
   LICM.h \
   LLVM_Output.h \

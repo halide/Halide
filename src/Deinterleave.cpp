@@ -298,6 +298,10 @@ private:
         } else {
 
             Type t = op->type.with_lanes(new_lanes);
+            internal_assert((op->type.lanes() - starting_lane + lane_stride - 1) / lane_stride == new_lanes)
+                << "Deinterleaving with lane stride " << lane_stride << " and staring lane " << starting_lane
+                << " for var of Type " << op->type << " to " << t << " drops lanes unexpectedly."
+                << " Deinterleaver probably recursed too deep into types of different lane count.";
             if (external_lets.contains(op->name) &&
                 starting_lane == 0 &&
                 lane_stride == 2) {
@@ -392,8 +396,12 @@ private:
             int index = indices.front();
             for (const auto &i : op->vectors) {
                 if (index < i.type().lanes()) {
-                    ScopedValue<int> lane(starting_lane, index);
-                    return mutate(i);
+                    if (i.type().lanes() == op->type.lanes()) {
+                        ScopedValue<int> scoped_starting_lane(starting_lane, index);
+                        return mutate(i);
+                    } else {
+                        return Shuffle::make(op->vectors, indices);
+                    }
                 }
                 index -= i.type().lanes();
             }
@@ -405,10 +413,18 @@ private:
 };
 
 Expr deinterleave(Expr e, int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets) {
+    debug(3) << "Deinterleave "
+             << "(start:" << starting_lane << ", stide:" << lane_stride << ", new_lanes:" << new_lanes << "): "
+             << e << " of Type: " << e.type() << "\n";
+    Type original_type = e.type();
     e = substitute_in_all_lets(e);
     Deinterleaver d(starting_lane, lane_stride, new_lanes, lets);
     e = d.mutate(e);
     e = common_subexpression_elimination(e);
+    Type final_type = e.type();
+    int expected_lanes = (original_type.lanes() + lane_stride - starting_lane - 1) / lane_stride;
+    internal_assert(original_type.code() == final_type.code()) << "Underlying types not identical after interleaving.";
+    internal_assert(expected_lanes == final_type.lanes()) << "Number of lanes incorrect after interleaving: " << final_type.lanes() << "while expected was " << expected_lanes << ".";
     return simplify(e);
 }
 
@@ -419,12 +435,12 @@ Expr extract_odd_lanes(const Expr &e, const Scope<> &lets) {
 
 Expr extract_even_lanes(const Expr &e, const Scope<> &lets) {
     internal_assert(e.type().lanes() % 2 == 0);
-    return deinterleave(e, 0, 2, (e.type().lanes() + 1) / 2, lets);
+    return deinterleave(e, 0, 2, e.type().lanes() / 2, lets);
 }
 
 Expr extract_mod3_lanes(const Expr &e, int lane, const Scope<> &lets) {
     internal_assert(e.type().lanes() % 3 == 0);
-    return deinterleave(e, lane, 3, (e.type().lanes() + 2) / 3, lets);
+    return deinterleave(e, lane, 3, e.type().lanes() / 3, lets);
 }
 
 }  // namespace
