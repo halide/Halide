@@ -1186,15 +1186,16 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 create_bitcast(a_call->getArgOperand(1), native_ty),
                 create_bitcast(a_call->getArgOperand(0), native_ty), indices);
         } else if (ShuffleVectorInst *a_shuffle = dyn_cast<ShuffleVectorInst>(a)) {
-            bool is_identity = true;
-            for (int i = 0; i < a_elements; i++) {
-                int mask_i = a_shuffle->getMaskValue(i);
-                is_identity = is_identity && (mask_i == i || mask_i == -1);
+            std::vector<int> new_indices(indices.size());
+            for (size_t i = 0; i < indices.size(); i++) {
+                if (indices[i] != -1) {
+                    new_indices[i] = a_shuffle->getMaskValue(indices[i]);
+                } else {
+                    new_indices[i] = -1;
+                }
             }
-            if (is_identity) {
-                return shuffle_vectors(a_shuffle->getOperand(0),
-                                       a_shuffle->getOperand(1), indices);
-            }
+            return shuffle_vectors(a_shuffle->getOperand(0),
+                                   a_shuffle->getOperand(1), new_indices);
         }
     }
 
@@ -1556,6 +1557,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         Value *ret = nullptr;
         for (int i = 0; i < lut_elements; i += native_elements) {
             Value *lut_i = slice_vector(lut, i, native_elements);
+            internal_assert(get_vector_num_elements(lut_i->getType()) == native_elements);
             vector<int> indices_i(native_elements);
             vector<Constant *> mask(native_elements);
             bool all_used = true;
