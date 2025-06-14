@@ -264,7 +264,6 @@ class LiftExceedingVectors : public IRMutator {
 
     vector<pair<string, Expr>> lets;
     bool just_in_let_definition{false};
-    int in_strict_float = 0;
 
     Expr visit(const Let *op) override {
         internal_error << "We don't want to process Lets. They should have all been converted to LetStmts.";
@@ -287,9 +286,6 @@ class LiftExceedingVectors : public IRMutator {
         // Custom handling of Call, to prevent certain things from being extracted out
         // of the call arguments, as that's not always allowed.
         bool exceeds_lanecount = op->type.lanes() > max_lanes;
-        if (op->is_intrinsic(Call::strict_float)) {
-            in_strict_float++;
-        }
         Expr mutated = op;
         if (exceeds_lanecount) {
             std::vector<Expr> args;
@@ -326,9 +322,6 @@ class LiftExceedingVectors : public IRMutator {
         } else {
             mutated = IRMutator::visit(op);
         }
-        if (op->is_intrinsic(Call::strict_float)) {
-            in_strict_float--;
-        }
         return mutated;
     }
 
@@ -351,11 +344,6 @@ public:
             bool should_extract = false;
             should_extract |= e.node_type() == IRNodeType::Shuffle;
             should_extract |= e.node_type() == IRNodeType::VectorReduce;
-
-            // TODO: Handling of strict_float is not well done.
-            // But at least it covers a few basic scenarios.
-            // This should be redone once we overhaul strict_float.
-            should_extract &= !in_strict_float;
 
             should_extract &= !just_in_let_definition;
 
@@ -480,7 +468,7 @@ class LegalizeVectors : public IRMutator {
         const Expr &arg = op->value;
         if (arg.type().lanes() > max_lanes) {
             // TODO: The transformation below is not allowed under strict_float, but
-            // I won't bother right now, as strict_float is due for an overhaul.
+            // I don't immediately know what to do here.
             // This should be an internal_assert.
 
             internal_assert(op->type.lanes() == 1)
