@@ -2676,7 +2676,7 @@ inline Expr strict_float_op(const Expr &a, const Expr &b, Call::IntrinsicOp op) 
     return Call::make(a.type(), op, {a, b}, Call::CallType::PureIntrinsic);
 }
 
-#define impl_strict_op(x)                                    \
+#define impl_strict_op(x)                               \
     Expr strict_##x(const Expr &a, const Expr &b) {     \
         return strict_float_op(a, b, Call::strict_##x); \
     }
