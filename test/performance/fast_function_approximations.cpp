@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
             -1.0f, 1.0f,
             [](Expr x, Expr y, Expr z) { return Halide::tan(x + z); },
             [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_tan(x + z, prec); },
-            {Target::Feature::WebGPU, Target::Feature::Metal},
+            {Target::Feature::WebGPU, Target::Feature::Metal, Target::Feature::Vulkan},
         },
         {
             "atan",
@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
             f.never_partition_all();
             f.gpu_tile(x, y, xo, yo, xi, yi, 64, 16, TailStrategy::ShiftInwards).vectorize(xi, 4);
         } else {
-            f.vectorize(x, 8);
+            f.vectorize(x, target.natural_vector_size<float>());
         }
     };
     Buffer<float> buffer_out(test_w, test_h);
@@ -248,6 +248,10 @@ int main(int argc, char **argv) {
                     if (target.has_feature(f)) {
                         should_be_faster = false;
                     }
+                }
+            } else {
+                if (target.has_gpu_feature() && precision.precision.optimized_for != ApproximationPrecision::AUTO) {
+                    should_be_faster = false;
                 }
             }
             if (should_be_faster) num_tests++;
