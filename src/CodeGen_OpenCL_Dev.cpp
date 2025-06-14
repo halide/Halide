@@ -97,6 +97,20 @@ protected:
             alias("fast_inverse", "native_recip");
             alias("fast_inverse_sqrt", "native_rsqrt");
 #undef alias
+
+            extern_function_name_map["fast_sin_f32"] = "native_sin";
+            extern_function_name_map["fast_cos_f32"] = "native_cos";
+            extern_function_name_map["fast_tan_f32"] = "native_tan";
+            extern_function_name_map["fast_exp_f32"] = "native_exp";
+            extern_function_name_map["fast_log_f32"] = "native_log";
+            extern_function_name_map["fast_pow_f32"] = "native_powr";
+
+            extern_function_name_map["fast_sin_f16"] = "half_sin";
+            extern_function_name_map["fast_cos_f16"] = "half_cos";
+            extern_function_name_map["fast_tan_f16"] = "half_tan";
+            extern_function_name_map["fast_exp_f16"] = "half_exp";
+            extern_function_name_map["fast_log_f16"] = "half_log";
+            extern_function_name_map["fast_pow_f16"] = "half_powr";
         }
         void add_kernel(Stmt stmt,
                         const std::string &name,
@@ -1136,7 +1150,12 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "inline float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << "inline float nan_f32() { return NAN; }\n"
                << "inline float neg_inf_f32() { return -INFINITY; }\n"
-               << "inline float inf_f32() { return INFINITY; }\n";
+               << "inline float inf_f32() { return INFINITY; }\n"
+               << "inline bool is_nan_f32(float x) {return isnan(x); }\n"
+               << "inline bool is_inf_f32(float x) {return isinf(x); }\n"
+               << "inline bool is_finite_f32(float x) {return isfinite(x); }\n"
+               << "#define fast_inverse_f32 native_recip \n"
+               << "#define fast_inverse_sqrt_f32 native_rsqrt \n";
 
     // There does not appear to be a reliable way to safely ignore unused
     // variables in OpenCL C. See https://github.com/halide/Halide/issues/4918.
