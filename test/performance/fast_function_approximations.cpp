@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
             -10, 10,
             [](Expr x, Expr y, Expr z) { return Halide::tanh(x + z); },
             [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_tanh(x + z, prec); },
-            {Target::Feature::CUDA, Target::Feature::Vulkan},
+            {Target::Feature::CUDA, Target::Feature::Vulkan, Target::Feature::OpenCL},
         },
         {
             "asin",

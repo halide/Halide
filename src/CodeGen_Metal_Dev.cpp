@@ -89,7 +89,7 @@ protected:
             alias("is_inf", "isinf");
             alias("is_finite", "isfinite");
 
-            alias("fast_acos", "fast::asin");
+            alias("fast_acos", "fast::acos");
             alias("fast_asin", "fast::asin");
             alias("fast_atan", "fast::atan");
             alias("fast_atan2", "fast::atan2");
