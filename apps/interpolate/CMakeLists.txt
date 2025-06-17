@@ -18,8 +18,7 @@ add_halide_generator(interpolate.generator SOURCES interpolate_generator.cpp)
 add_halide_library(interpolate FROM interpolate.generator)
 add_halide_library(interpolate_auto_schedule FROM interpolate.generator
                    GENERATOR interpolate
-                   AUTOSCHEDULER Halide::Mullapudi2016
-                   PARAMS autoscheduler.experimental_gpu_schedule=1)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(interpolate_filter filter.cpp)

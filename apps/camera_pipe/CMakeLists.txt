@@ -20,8 +20,7 @@ add_halide_generator(camera_pipe.generator
 add_halide_library(camera_pipe FROM camera_pipe.generator)
 add_halide_library(camera_pipe_auto_schedule FROM camera_pipe.generator
                    GENERATOR camera_pipe
-                   AUTOSCHEDULER Halide::Mullapudi2016
-                   PARAMS autoscheduler.last_level_cache_size=35000 autoscheduler.experimental_gpu_schedule=1)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(camera_pipe_process process.cpp)
