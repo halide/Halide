@@ -1167,14 +1167,6 @@ public:
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
                        const std::vector<Type> &types, int dimensionality,
-                       NameMangling mangling) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality), mangling);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types, int dimensionality,
                        NameMangling mangling = NameMangling::Default,
                        DeviceAPI device_api = DeviceAPI::Host) {
         define_extern(function_name, params, types,
