@@ -354,12 +354,6 @@ public:
 #endif
 
     bool remove_dead_code;
-    bool no_float_simplify = false;
-
-    HALIDE_ALWAYS_INLINE
-    bool may_simplify(const Type &t) const {
-        return !no_float_simplify || !t.is_float();
-    }
 
     // Returns true iff t is an integral type where overflow is undefined
     HALIDE_ALWAYS_INLINE

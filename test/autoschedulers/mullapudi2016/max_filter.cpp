@@ -1,6 +1,7 @@
 // Circular-support max filter. Does some trickery to get O(r) per pixel for radius r, not O(r^2).
 
 #include "Halide.h"
+#include "get_autoscheduler_params.hpp"
 #include "halide_benchmark.h"
 #include <iostream>
 #include <limits>
@@ -72,7 +73,7 @@ double run_test(bool auto_schedule) {
             .set_estimate(y, 0, in.height())
             .set_estimate(c, 0, in.channels());
         // Auto-schedule the pipeline
-        p.apply_autoscheduler(target, {"Mullapudi2016"});
+        p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
     } else if (target.has_gpu_feature()) {
         slice_for_radius.compute_root();
         filter_height.compute_root();

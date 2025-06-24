@@ -28,7 +28,6 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
         return const_false(lanes, info);
     }
 
-    int lanes = op->type.lanes();
     auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, ty);
 
     // clang-format off
@@ -512,16 +511,6 @@ Expr Simplify::visit(const LT *op, ExprInfo *info) {
 
 // The other comparison operators redirect to the less-than operator
 Expr Simplify::visit(const LE *op, ExprInfo *info) {
-    if (!may_simplify(op->a.type())) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return op;
-        } else {
-            return LE::make(a, b);
-        }
-    }
-
     Expr mutated = mutate(!(op->b < op->a), info);
     if (const LE *le = mutated.as<LE>()) {
         if (le->a.same_as(op->a) && le->b.same_as(op->b)) {
@@ -532,30 +521,10 @@ Expr Simplify::visit(const LE *op, ExprInfo *info) {
 }
 
 Expr Simplify::visit(const GT *op, ExprInfo *info) {
-    if (!may_simplify(op->a.type())) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return op;
-        } else {
-            return GT::make(a, b);
-        }
-    }
-
     return mutate(op->b < op->a, info);
 }
 
 Expr Simplify::visit(const GE *op, ExprInfo *info) {
-    if (!may_simplify(op->a.type())) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return op;
-        } else {
-            return GE::make(a, b);
-        }
-    }
-
     return mutate(!(op->a < op->b), info);
 }
 
