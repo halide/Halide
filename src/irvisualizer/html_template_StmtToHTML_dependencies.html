@@ -2,7 +2,7 @@
 
 <!-- Assembly Code links (Speed Highlight) -->
 <script type="module" name="hl">
-  const shj = await import('https://cdn.jsdelivr.net/gh/speed-highlight/core/dist/index.js');
+  import {loadLanguage, highlightElement} from 'https://cdn.jsdelivr.net/gh/speed-highlight/core/dist/index.js';
   var asmRules = {}
   asmRules["default"] = [
     {
@@ -60,6 +60,20 @@
       type: 'label'
     }
   ];
-  shj.loadLanguage("asm", asmRules)
-  shj.highlightElement(document.getElementById("assemblyContent"), "asm", undefined, {hideLineNumbers: true});
+  loadLanguage("asm", asmRules)
+  highlightElement(document.getElementById("assemblyContent"), "asm", undefined, {hideLineNumbers: true});
+
+function highlightMetalDeviceCode() {
+    const first_five_lines =
+        document.querySelectorAll("#device-code-pane span:nth-child(-n + 5)");
+    const has_metal_code =
+        Array.from(first_five_lines).some(
+            (item) => {
+                return item.textContent.search(/using namespace metal/) !== -1;
+            });
+    if (has_metal_code) {
+        highlightElement(document.getElementById("device-code-pane"), "c", undefined, {hideLineNumbers: true});
+    }
+}
+highlightMetalDeviceCode();
 </script>
