@@ -58,20 +58,6 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
     if (op->is_intrinsic(Call::unreachable)) {
         in_unreachable = true;
         return op;
-    } else if (op->is_intrinsic(Call::strict_float)) {
-        if (Call::as_intrinsic(op->args[0], {Call::strict_float})) {
-            // Always simplify strict_float(strict_float(x)) -> strict_float(x).
-            Expr arg = mutate(op->args[0], nullptr);
-            return arg.same_as(op->args[0]) ? op->args[0] : arg;
-        } else {
-            ScopedValue<bool> save_no_float_simplify(no_float_simplify, true);
-            Expr arg = mutate(op->args[0], nullptr);
-            if (arg.same_as(op->args[0])) {
-                return op;
-            } else {
-                return strict_float(arg);
-            }
-        }
     } else if (op->is_intrinsic(Call::popcount) ||
                op->is_intrinsic(Call::count_leading_zeros) ||
                op->is_intrinsic(Call::count_trailing_zeros)) {

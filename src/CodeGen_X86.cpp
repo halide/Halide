@@ -268,7 +268,7 @@ const x86Intrinsic intrinsic_defs[] = {
 
     // 4-way dot product vector reduction
     // The LLVM intrinsics combine the bf16 pairs into i32, so provide a wrapper to correctly call the intrinsic.
-    
+
     // Currently, all targets which support avx_vnni inherit AVX512_Zen4, which also implies avx512vl.
     // This means AVX512_Zen4 can cover all 128, 256, 512 bit vectors of bf16 and vnni.
 
@@ -429,6 +429,7 @@ void CodeGen_X86::visit(const GT *op) {
             Value *sb = slice_vector(b, i, slice_size);
             Value *slice_value;
             if (t.is_float()) {
+                ScopedFastMath guard(this);
                 slice_value = builder->CreateFCmpOGT(sa, sb);
             } else if (t.is_int()) {
                 slice_value = builder->CreateICmpSGT(sa, sb);
@@ -462,6 +463,7 @@ void CodeGen_X86::visit(const EQ *op) {
             Value *sb = slice_vector(b, i, slice_size);
             Value *slice_value;
             if (t.is_float()) {
+                ScopedFastMath guard(this);
                 slice_value = builder->CreateFCmpOEQ(sa, sb);
             } else {
                 slice_value = builder->CreateICmpEQ(sa, sb);
@@ -531,6 +533,7 @@ void CodeGen_X86::visit(const Cast *op) {
         // This target doesn't support full float16 arithmetic, but it *does*
         // support float16 casts, so we emit a vanilla LLVM cast node.
         value = codegen(op->value);
+        ScopedFastMath guard(this);
         value = builder->CreateFPCast(value, llvm_type_of(dst));
         return;
     }

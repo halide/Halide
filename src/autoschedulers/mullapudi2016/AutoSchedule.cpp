@@ -949,8 +949,13 @@ public:
     }
 
     /** Indicate the need to split the dimensions with `gpu_tile()` method. */
-    void apply_split(const split_info &x) {
+    bool try_split(const split_info &x) {
+        if (vars.size() >= 3) {
+            return false;
+        }
+
         vars.emplace_back(x);
+        return true;
     }
 
     /** Apply Halide schedules.
@@ -969,6 +974,7 @@ public:
         }
 
         std::stringstream oss;
+
         switch (vars.size()) {
         case 0:
             return;
@@ -1154,6 +1160,32 @@ private:
         }
     }
 
+    /** Predict all inner and outer loops after executing `gpu_tile`, and
+     * rearrange all for-loops to be nested below all `gpu_blocks`.  */
+    std::pair<bool, std::vector<VarOrRVar>> post_split_ordering() const {
+        std::vector<VarOrRVar> loops;
+        std::vector<VarOrRVar> outer_loops;
+
+        for (const auto &v : ordering) {
+            const auto split_item = parallelize.find(v.name());
+            const bool has_split = split_item != parallelize.end();
+            if (!has_split) {
+                loops.emplace_back(v);
+                continue;
+            }
+
+            loops.emplace_back(split_item->second.inner);
+            outer_loops.emplace_back(split_item->second.outer);
+        }
+
+        const bool has_outer_loops = !outer_loops.empty();
+
+        for (auto &v : outer_loops) {
+            loops.emplace_back(std::move(v));
+        }
+        return {has_outer_loops, loops};
+    }
+
 public:
     GPUTilingDedup(bool i, Stage &_f, uint32_t n)
         : is_compute_at(i), f(_f), stage_num(n) {
@@ -1246,6 +1278,7 @@ public:
         for (const auto &v : func.args()) {
             ordering.emplace_back(v);
         }
+        is_initial_order = true;
     }
 
     /** Indicate to desire to reorder the dimensions.
@@ -1256,19 +1289,55 @@ public:
      * to map the tile orders. Here, we always cache the current dimension
      * order, and override the previous ones.
      */
-    void canReorder(const std::vector<VarOrRVar> &vars) {
-        debug(2) << f.name() << ".reorder(" << vars.front().name();
+    void reorder(const std::vector<VarOrRVar> &vars) {
         ordering = vars;
         is_initial_order = false;
 
+        debug(2) << f.name() << ".reorder(" << vars.front().name();
         for (auto iter = ordering.begin() + 1; iter != ordering.end(); ++iter) {
             debug(2) << ", " << iter->name();
         }
         debug(2) << ")\n";
     }
 
+    /** Ensure the ordering of the inner and outer variables.
+     *
+     * Used as a bubble sorting algorithm of the "nested_parallelism" algorithm.
+     * The nested parallelism always ensures the inner and outer vars are
+     * adjacent to each order when this function is called.
+     */
+    void reorder(const VarOrRVar &inner, const VarOrRVar &outer) {
+        debug(2) << f.name() << ".reorder(" << inner.name() << ", " << outer.name() << ")\n";
+
+        const auto findItem = [&](const VarOrRVar &v) {
+            return std::find_if(ordering.begin(), ordering.end(),
+                                [v_name = v.name()](const VarOrRVar &item) {
+                                    return item.name() == v_name;
+                                });
+        };
+
+        auto inner_iter = findItem(inner);
+        auto outer_iter = findItem(outer);
+
+        internal_assert(inner_iter != ordering.end());
+        internal_assert(outer_iter != ordering.end());
+
+        // The nested parallelism implements a bubble sorting algorithm, which
+        // ensures the inner and outer variables are adjacent to each other.
+        // Assert the requirement here.
+        internal_assert(std::abs(std::distance(inner_iter, outer_iter)) == 1);
+
+        if (inner_iter < outer_iter) {
+            // Skip if the Var pair is already reordered.
+            return;
+        }
+
+        std::iter_swap(inner_iter, outer_iter);
+        is_initial_order = false;
+    }
+
     /** Generate Halide GPU schedules. */
-    void apply(AutoSchedule &sched) const {
+    void apply(AutoSchedule &sched) {
         if (!ordering.empty() && !is_initial_order) {
             std::set<std::string> var_list;
             for (const auto &v : ordering) {
@@ -1298,7 +1367,20 @@ public:
         GPUTileHelper helper{f, stage_num};
         Expr threads_budget = max_n_threads;
 
-        // Traverse the dimensions, ordered by the variable names (x, y, z) in lexicographic order.
+        // Maximize GPU thread occupancy with the grid-stride loop.
+        //
+        // Given the user-provided parameter `parallelism`, measure the current
+        // active threads enabled by the splitting algorithm. If active threads
+        // <= parallelism, mark outer loops that are parallelizable as
+        // gpu_blocks. Terminate early if: (i) Active threads >= parallelism; or
+        // (ii) Number of GPU blocks reaches a maximum of 3.
+        //
+        // Outer loops are previously marked parallelizable from the original
+        // CPU-oriented algorithm. Please refer to the code block at
+        // `if(nested_parallelism) { ... }`.
+        //
+        // Now, traverse the dimensions, ordered by the variable names (x, y, z)
+        // in lexicographic order.
         for (const auto &v : ordering) {
 
             const auto &v_name = v.name();
@@ -1319,12 +1401,38 @@ public:
             split_info new_entry{entry};
             new_entry.factor = simplify(min(threads_budget, new_entry.factor));
 
-            helper.apply_split(new_entry);
+            const bool can_split = helper.try_split(new_entry);
+            if (!can_split) {
+                // If more than 3 gpu_blocks are defined, mark the current loop as the for-loop.
+                parallelize.erase(iter);
+                continue;
+            }
             threads_budget = simplify(max(threads_budget / new_entry.factor, 1));
         }
 
         if (!is_already_split) {
             helper.commit(sched, is_compute_at);
+        }
+
+        // After calling `gpu_tiles` from `GPUTileHelper::commit()`, a few of
+        // the for-loops may be sandwiched between `gpu_blocks`. Reorder the
+        // loops again to move all for-loops inside GPU blocks.
+        const auto [has_outer_loops, new_ordering] = post_split_ordering();
+        if (!is_initial_order && has_outer_loops && new_ordering.size() >= 2) {
+            std::set<std::string> var_list;
+            for (const auto &v : new_ordering) {
+                var_list.emplace(v.name());
+            }
+
+            std::stringstream oss;
+            oss << "reorder(" << new_ordering[0].name();
+            for (auto iter = new_ordering.begin() + 1; iter != new_ordering.end(); ++iter) {
+                oss << ", " << iter->name();
+            }
+            oss << ")";
+
+            f.reorder(new_ordering);
+            sched.push_schedule(f.name(), stage_num, oss.str(), var_list);
         }
     }
 };
@@ -3075,7 +3183,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
 
     if (dims != ordering) {
         if (arch_params.is_gpu_schedule) {
-            gpu_tiling.canReorder(ordering);
+            gpu_tiling.reorder(ordering);
         } else {
             f_handle.reorder(ordering);
             sched.push_schedule(f_handle.name(), stage_num, "reorder(" + var_order + ")", var_list);
@@ -3228,7 +3336,7 @@ void Partitioner::generate_group_cpu_schedule(
 
         if (dims != ordering) {
             if (arch_params.is_gpu_schedule) {
-                gpu_tiling.canReorder(ordering);
+                gpu_tiling.reorder(ordering);
             } else {
                 f_handle.reorder(ordering);
                 sched.push_schedule(f_handle.name(), g.output.stage_num,
@@ -3288,7 +3396,7 @@ void Partitioner::generate_group_cpu_schedule(
                 if (!seq_var.empty()) {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
                     if (arch_params.is_gpu_schedule) {
-                        gpu_tiling.canReorder({seq, v});
+                        gpu_tiling.reorder(seq, v);
                     } else {
                         f_handle.reorder(seq, v);
                         sched.push_schedule(f_handle.name(), g.output.stage_num,

@@ -1319,6 +1319,7 @@ void CodeGen_ARM::visit(const Sub *op) {
                     return;
                 }
             } else if (op->type.bits() >= 16 && op->type.is_float()) {
+                ScopedFastMath guard(this);
                 value = builder->CreateFNeg(codegen(op->b));
                 return;
             }
@@ -1344,6 +1345,7 @@ void CodeGen_ARM::visit(const Sub *op) {
                 if (op->type.lanes() > 1) {
                     a = get_splat(op->type.lanes(), a);
                 }
+                ScopedFastMath guard(this);
                 value = builder->CreateFSub(a, b);
                 return;
             }
@@ -1371,6 +1373,7 @@ void CodeGen_ARM::visit(const Sub *op) {
         if (op->type.lanes() > 1) {
             a = get_splat(op->type.lanes(), a);
         }
+        ScopedFastMath guard(this);
         value = builder->CreateFSub(a, b);
         return;
     }

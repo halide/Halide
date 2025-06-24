@@ -210,10 +210,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (get_jit_target_from_environment().has_gpu_feature()) {
-        std::cout << "Mullapudi for GPU test for Test Case 3 skipped because of reordering bug.\n";
-    } else {
-
+    {
         double manual_time = run_test_3(false);
         double auto_time = run_test_3(true);
 
