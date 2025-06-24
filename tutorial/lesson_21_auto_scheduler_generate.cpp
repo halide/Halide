@@ -126,8 +126,9 @@ public:
 
             // If HL_DEBUG_CODEGEN is set to 3 or greater, the schedule will be dumped
             // to stdout (along with much other information); a more useful way is
-            // to add "schedule" to the -e flag to the Generator. (In CMake and Bazel,
-            // this is done using the "extra_outputs" flag.)
+            // to add "schedule" to the -e flag to the Generator. In CMake, this is
+            // done by passing the argument SCHEDULE <outvar> to add_halide_library().
+            // See doc/HalideCMakePackage.md for more detail.
 
             // The generated schedule that is dumped to file is an actual
             // Halide C++ source, which is readily copy-pasteable back into

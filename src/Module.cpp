@@ -31,6 +31,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
     constexpr bool IsMulti = true;
     constexpr bool IsSingle = false;
     const bool is_windows_coff = target.os == Target::Windows;
+    // Keep in sync with cmake/HalideGeneratorHelpers.cmake
     std::map<OutputFileType, const OutputInfo> ext = {
         {OutputFileType::assembly, {"assembly", ".s", IsMulti}},
         {OutputFileType::bitcode, {"bitcode", ".bc", IsMulti}},
