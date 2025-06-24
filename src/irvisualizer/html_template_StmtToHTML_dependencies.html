@@ -63,23 +63,23 @@
   loadLanguage("asm", asmRules)
   highlightElement(document.getElementById("assemblyContent"), "asm", undefined, {hideLineNumbers: true});
 
-function highlightMetalDeviceCode() {
+  function highlightMetalDeviceCode() {
     const first_five_lines =
-        document.querySelectorAll("#device-code-pane span:nth-child(-n + 5)");
+      document.querySelectorAll("#device-code-pane span:nth-child(-n + 5)");
     const has_metal_code =
-        Array.from(first_five_lines).some((item) => {
-            return item.textContent.search(/using namespace metal/) !== -1;
-        });
+      Array.from(first_five_lines).some((item) => {
+        return item.textContent.search(/using namespace metal/) !== -1;
+      });
 
     const has_opencl_code =
-        Array.from(first_five_lines).some((item) => {
-            return item.textContent.search(/#pragma OPENCL/) !== -1;
-        });
+      Array.from(first_five_lines).some((item) => {
+        return item.textContent.search(/#pragma OPENCL/) !== -1;
+      });
 
     if (has_metal_code || has_opencl_code) {
-        highlightElement(document.getElementById("device-code-pane"),
-                         "c", undefined, {hideLineNumbers : true});
+      highlightElement(document.getElementById("device-code-pane"),
+                       "c", undefined, {hideLineNumbers : true});
     }
-}
-highlightMetalDeviceCode();
+  }
+  highlightMetalDeviceCode();
 </script>
