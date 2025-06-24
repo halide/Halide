@@ -17,6 +17,7 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "SpirvIR.h"
+#include "StrictifyFloat.h"
 #include "Target.h"
 
 #ifdef WITH_SPIRV
@@ -148,6 +149,7 @@ protected:
 
         SpvFactory::Components split_vector(Type type, SpvId value_id);
         SpvId join_vector(Type type, const SpvFactory::Components &value_components);
+        SpvId fill_vector(Type type, SpvId value_id);
         SpvId cast_type(Type target_type, Type value_type, SpvId value_id);
         SpvId convert_to_bool(Type target_type, Type value_type, SpvId value_id);
 
@@ -1186,10 +1188,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             Expr e = lower_signed_shift_left(op->args[0], op->args[1]);
             e.accept(this);
         }
-    } else if (op->is_intrinsic(Call::strict_float)) {
+    } else if (op->is_strict_float_intrinsic()) {
         // TODO: Enable/Disable RelaxedPrecision flags?
-        internal_assert(op->args.size() == 1);
-        op->args[0].accept(this);
+        Expr e = unstrictify_float(op);
+        e.accept(this);
     } else if (op->is_intrinsic(Call::IntrinsicOp::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         // b > a, so the following works without widening:
@@ -1298,14 +1300,26 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
     } else if (op->name == "nan_f32") {
         float value = NAN;
         SpvId result_id = builder.declare_constant(Float(32), &value);
+        if (op->type.is_vector()) {
+            SpvId value_id = result_id;
+            result_id = fill_vector(op->type, value_id);
+        }
         builder.update_id(result_id);
     } else if (op->name == "inf_f32") {
         float value = INFINITY;
         SpvId result_id = builder.declare_constant(Float(32), &value);
+        if (op->type.is_vector()) {
+            SpvId value_id = result_id;
+            result_id = fill_vector(op->type, value_id);
+        }
         builder.update_id(result_id);
     } else if (op->name == "neg_inf_f32") {
         float value = -INFINITY;
         SpvId result_id = builder.declare_constant(Float(32), &value);
+        if (op->type.is_vector()) {
+            SpvId value_id = result_id;
+            result_id = fill_vector(op->type, value_id);
+        }
         builder.update_id(result_id);
     } else if (starts_with(op->name, "is_nan_f")) {
         internal_assert(op->args.size() == 1);
@@ -2230,6 +2244,16 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::join_vector(Type type, const SpvFactory
     return result_id;
 }
 
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::fill_vector(Type type, SpvId value_id) {
+    SpvId type_id = builder.declare_type(type);
+    SpvId result_id = builder.reserve_id(SpvResultId);
+
+    SpvFactory::Components constituents;
+    constituents.insert(constituents.end(), type.lanes(), value_id);
+    builder.append(SpvFactory::composite_construct(type_id, result_id, constituents));
+    return result_id;
+}
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::reset() {
     kernel_index = 0;
     builder.reset();
@@ -2866,9 +2890,10 @@ void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
     emitter.encode_spirv_module(spirv_module);
 
     // Dump the SPIR-V if debug is enabled
-    if (debug::debug_level() >= 2) {
+    debug(2) << [&] {
         emitter.dump_spirv_module();
-    }
+        return "";
+    }();
 
     // Copy the SPIR-V module into the Kernel Module table
     KernelModule kernel_module;

@@ -18,7 +18,8 @@ add_halide_generator(conv_layer.generator SOURCES conv_layer_generator.cpp)
 add_halide_library(conv_layer FROM conv_layer.generator)
 add_halide_library(conv_layer_auto_schedule FROM conv_layer.generator
                    GENERATOR conv_layer
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.parallelism=4096 autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(conv_layer_process process.cpp)

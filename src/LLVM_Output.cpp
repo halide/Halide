@@ -328,7 +328,7 @@ namespace {
 // llvm::CloneModule has issues with debug info. As a workaround,
 // serialize it to bitcode in memory, and then parse the bitcode back in.
 std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
-    Internal::debug(2) << "Cloning module " << module_in.getName().str() << "\n";
+    debug(2) << "Cloning module " << module_in.getName().str() << "\n";
 
     // Write the module to a buffer.
     llvm::SmallVector<char, 16> clone_buffer;
@@ -351,11 +351,11 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
 
 void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
                llvm::CodeGenFileType file_type) {
-    Internal::debug(1) << "emit_file.Compiling to native code...\n";
+    debug(1) << "emit_file.Compiling to native code...\n";
 #if LLVM_VERSION >= 210
-    Internal::debug(2) << "Target triple: " << module_in.getTargetTriple().str() << "\n";
+    debug(2) << "Target triple: " << module_in.getTargetTriple().str() << "\n";
 #else
-    Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
+    debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
 #endif
 
     auto time_start = std::chrono::high_resolution_clock::now();
@@ -394,7 +394,7 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
 
     if (target_machine->isPositionIndependent()) {
-        Internal::debug(1) << "Target machine is Position Independent!\n";
+        debug(1) << "Target machine is Position Independent!\n";
     }
 
     // Override default to generate verbose assembly.

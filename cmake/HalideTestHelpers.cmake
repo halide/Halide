@@ -18,6 +18,9 @@ if (NOT TARGET Halide::Test)
     # Obviously link to libHalide, but also grant all tests access to the threads library.
     target_link_libraries(Halide_test INTERFACE Halide::Halide Threads::Threads)
 
+    # Make internal_assert, debug, etc. available to tests
+    target_compile_definitions(Halide_test INTERFACE HALIDE_KEEP_MACROS)
+
     # Everyone gets to see the common headers
     target_include_directories(Halide_test
                                INTERFACE

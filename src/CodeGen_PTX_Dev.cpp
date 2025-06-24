@@ -262,9 +262,16 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         auto fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
 
-        llvm::Function *barrier0 = module->getFunction("llvm.nvvm.barrier0");
-        internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
-        builder->CreateCall(barrier0);
+        llvm::Function *barrier;
+        if ((barrier = module->getFunction("llvm.nvvm.barrier.cta.sync.aligned.all")) && barrier->getIntrinsicID() != 0) {
+            // LLVM 20.1.6 and above: https://github.com/llvm/llvm-project/pull/140615
+            builder->CreateCall(barrier, builder->getInt32(0));
+        } else if ((barrier = module->getFunction("llvm.nvvm.barrier0")) && barrier->getIntrinsicID() != 0) {
+            // LLVM 21.1.5 and below: Testing for llvm.nvvm.barrier0 can be removed once we drop support for LLVM 20
+            builder->CreateCall(barrier);
+        } else {
+            internal_error << "Could not find PTX barrier intrinsic llvm.nvvm.barrier0 nor llvm.nvvm.barrier.cta.sync.aligned.all\n";
+        }
         value = ConstantInt::get(i32_t, 0);
         return;
     }
@@ -730,10 +737,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     module_pass_manager.run(*module);
 
     // Codegen pipeline completed.
-    if (debug::debug_level() >= 2) {
+    debug(2) << [&] {
         dump();
-    }
-    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
+        return "Done with CodeGen_PTX_Dev::compile_to_src";
+    }();
 
     debug(1) << "PTX kernel:\n"
              << outstr.c_str() << "\n";
@@ -741,9 +748,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     vector<char> buffer(outstr.begin(), outstr.end());
 
     // Dump the SASS too if the cuda SDK is in the path
-    if (debug::debug_level() >= 2) {
-        debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";
-
+    debug(2) << "Compiling PTX to SASS. Will fail if CUDA SDK is not installed (and in the path).\n";
+    debug(2) << [&] {
         TemporaryFile ptx(get_current_kernel_name(), ".ptx");
         TemporaryFile sass(get_current_kernel_name(), ".sass");
 
@@ -772,7 +778,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
             f.read(buffer.data(), sz);
         }
         */
-    }
+        return "";
+    }();
 
     // Null-terminate the ptx source
     buffer.push_back(0);

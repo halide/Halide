@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "get_autoscheduler_params.hpp"
 #include "halide_benchmark.h"
 
 using namespace Halide;
@@ -22,7 +23,7 @@ double run_test(bool auto_schedule) {
 
     if (auto_schedule) {
         // Auto-schedule the pipeline
-        p.apply_autoscheduler(target, {"Mullapudi2016"});
+        p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
     }
 
     // Inspect the schedule (only for debugging))

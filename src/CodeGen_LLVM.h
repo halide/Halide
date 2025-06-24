@@ -168,9 +168,30 @@ protected:
     std::unique_ptr<llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>> builder;
     llvm::Value *value = nullptr;
     llvm::MDNode *very_likely_branch = nullptr;
-    llvm::MDNode *default_fp_math_md = nullptr;
+    llvm::MDNode *fast_fp_math_md = nullptr;
     llvm::MDNode *strict_fp_math_md = nullptr;
     std::vector<LoweredArgument> current_function_args;
+
+    bool in_strict_float = false;
+    bool any_strict_float = false;
+
+    /** Change floating-point math op emission to use fast flags. */
+    void set_fast_fp_math();
+
+    /** Change floating-point math op emission to use strict flags. */
+    void set_strict_fp_math();
+
+    /** If any_strict_float is true, sets fast math flags for the lifetime of
+     * this object, then sets them to strict on destruction. If any_strict_float
+     * is false, does nothing.  Any call to an IRBuilder method that starts with
+     * "CreateF" should probably be wrapped in one of these, but it's safe to
+     * miss one - we just miss out on some optimizations. In this way codegen is
+     * designed to fail safe. */
+    struct ScopedFastMath {
+        CodeGen_LLVM *codegen;
+        ScopedFastMath(CodeGen_LLVM *);
+        ~ScopedFastMath();
+    };
 
     /** The target we're generating code for */
     Halide::Target target;
@@ -717,7 +738,7 @@ private:
 
     void codegen_atomic_rmw(const Store *op);
 
-    void init_codegen(const std::string &name, bool any_strict_float = false);
+    void init_codegen(const std::string &name);
     std::unique_ptr<llvm::Module> finish_codegen();
 
     /** A helper routine for generating folded vector reductions. */

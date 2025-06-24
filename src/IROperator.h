@@ -1443,7 +1443,7 @@ Expr saturating_cast(Type t, Expr e);
  * all backends. (E.g. it is difficult to do this for C++ code
  * generation as it depends on the compiler flags used to compile the
  * generated code. */
-Expr strict_float(Expr e);
+Expr strict_float(const Expr &e);
 
 /** Create an Expr that that promises another Expr is clamped but do
  * not generate code to check the assertion or modify the value. No

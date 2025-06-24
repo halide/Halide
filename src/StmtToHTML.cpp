@@ -28,12 +28,12 @@
 #include <filesystem>
 #endif
 
-namespace Halide {
-namespace Internal {
-
 extern "C" unsigned char halide_html_template_StmtToHTML_dependencies_html[];
 extern "C" unsigned char halide_html_template_StmtToHTML_css[];
 extern "C" unsigned char halide_html_template_StmtToHTML_js[];
+
+namespace Halide {
+namespace Internal {
 
 // Classes defined within this file
 class CostModel;

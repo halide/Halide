@@ -18,7 +18,8 @@ add_halide_generator(depthwise_separable_conv.generator SOURCES depthwise_separa
 add_halide_library(depthwise_separable_conv FROM depthwise_separable_conv.generator)
 add_halide_library(depthwise_separable_conv_auto_schedule FROM depthwise_separable_conv.generator
                    GENERATOR depthwise_separable_conv
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(depthwise_separable_conv_process process.cpp)
