@@ -20,18 +20,25 @@ Expr Simplify::visit(const Select *op, ExprInfo *info) {
 
     // clang-format off
     if (EVAL_IN_LAMBDA
-        (rewrite(select(IRMatcher::likely(true), x, y), x) ||
-         rewrite(select(IRMatcher::likely(false), x, y), y) ||
-         rewrite(select(IRMatcher::likely_if_innermost(true), x, y), x) ||
-         rewrite(select(IRMatcher::likely_if_innermost(false), x, y), y) ||
-         rewrite(select(1, x, y), x) ||
-         rewrite(select(0, x, y), y) ||
-         rewrite(select(x, y, y), y) ||
+        (rewrite(select(IRMatcher::likely(true), x, y), true_value) ||
+         rewrite(select(IRMatcher::likely(false), x, y), false_value) ||
+         rewrite(select(IRMatcher::likely_if_innermost(true), x, y), true_value) ||
+         rewrite(select(IRMatcher::likely_if_innermost(false), x, y), false_value) ||
+         rewrite(select(1, x, y), true_value) ||
+         rewrite(select(0, x, y), false_value) ||
+         rewrite(select(x, y, y), false_value) ||
          rewrite(select(x, likely(y), y), false_value) ||
          rewrite(select(x, y, likely(y)), true_value) ||
          rewrite(select(x, likely_if_innermost(y), y), false_value) ||
          rewrite(select(x, y, likely_if_innermost(y)), true_value) ||
          false)) {
+        if (info) {
+            if (rewrite.result.same_as(true_value)) {
+                *info = t_info;
+            } else if (rewrite.result.same_as(false_value)) {
+                *info = f_info;
+            }
+        }
         return rewrite.result;
     }
     // clang-format on
