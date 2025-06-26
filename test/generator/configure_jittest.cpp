@@ -85,6 +85,14 @@ int main(int argc, char **argv) {
         Buffer<int, 3> output(kSize, kSize, 3);
         Buffer<float, 3> extra_buffer_output(kSize, kSize, 3);
         Buffer<double, 2> extra_func_output(kSize, kSize);
+        Buffer<double, 2> extra_tuple_func_output_0(kSize, kSize);
+        Buffer<int, 2> extra_tuple_func_output_1(kSize, kSize);
+        Buffer<double, 2> extra_tuple_buffer_output_static_dims_0(kSize, kSize);
+        Buffer<int, 2> extra_tuple_buffer_output_static_dims_1(kSize, kSize);
+        Buffer<double, 2> extra_tuple_buffer_output_dynamic_dims_0(kSize, kSize);
+        Buffer<int, 2> extra_tuple_buffer_output_dynamic_dims_1(kSize, kSize);
+        Buffer<double, 2> extra_tuple_buffer_output_unset_types_0(kSize, kSize);
+        Buffer<int, 2> extra_tuple_buffer_output_unset_types_1(kSize, kSize);
 
         // All inputs to a Callable must be fully realized, so any Func inputs
         // that the Generator has implicitly become Buffer inputs of the same type
@@ -102,7 +110,15 @@ int main(int argc, char **argv) {
                           output,
                           // extra outputs are in the order they were added, after all predeclared outputs
                           extra_buffer_output,
-                          extra_func_output);
+                          extra_func_output,
+                          extra_tuple_func_output_0,
+                          extra_tuple_func_output_1,
+                          extra_tuple_buffer_output_static_dims_0,
+                          extra_tuple_buffer_output_static_dims_1,
+                          extra_tuple_buffer_output_dynamic_dims_0,
+                          extra_tuple_buffer_output_dynamic_dims_1,
+                          extra_tuple_buffer_output_unset_types_0,
+                          extra_tuple_buffer_output_unset_types_1);
         assert(r == 0);
 
         output.for_each_element([&](int x, int y, int c) {
@@ -116,9 +132,29 @@ int main(int argc, char **argv) {
         extra_func_output.for_each_element([&](int x, int y) {
             assert(extra_func_output(x, y) == output(x, y, 0));
         });
+
+        for (auto &buf : {extra_tuple_func_output_0,
+                          extra_tuple_buffer_output_static_dims_0,
+                          extra_tuple_buffer_output_dynamic_dims_0,
+                          extra_tuple_buffer_output_unset_types_0}) {
+            buf.for_each_element([&](int x, int y) {
+                assert(buf(x, y) == output(x, y, 0));
+            });
+        }
+
+        for (auto &buf : {extra_tuple_func_output_1,
+                          extra_tuple_buffer_output_static_dims_1,
+                          extra_tuple_buffer_output_dynamic_dims_1,
+                          extra_tuple_buffer_output_unset_types_1}) {
+            buf.for_each_element([&](int x, int y) {
+                assert(buf(x, y) == output(x, y, 1));
+            });
+        }
     }
 
-    // We can also make an explicitly-typed std::function if we prefer.
+    // We can also make an explicitly-typed std::function if we prefer. This
+    // code is almost identical to the above, but we will repeat it just to make
+    // these two usage examples each entirely self-contained.
     {
         auto configure = create_callable_from_generator(context, "configure")
                              .make_std_function<
@@ -133,11 +169,27 @@ int main(int argc, char **argv) {
                                  int8_t,
                                  Buffer<int, 3>,
                                  Buffer<float, 3>,
-                                 Buffer<double, 2>>();
+                                 Buffer<double, 2>,
+                                 Buffer<double, 2>,
+                                 Buffer<int, 2>,
+                                 Buffer<double, 2>,
+                                 Buffer<int, 2>,
+                                 Buffer<double, 2>,
+                                 Buffer<int, 2>,
+                                 Buffer<double, 2>,
+                                 Buffer<int, 2>>();
 
         Buffer<int, 3> output(kSize, kSize, 3);
         Buffer<float, 3> extra_buffer_output(kSize, kSize, 3);
         Buffer<double, 2> extra_func_output(kSize, kSize);
+        Buffer<double, 2> extra_tuple_func_output_0(kSize, kSize);
+        Buffer<int, 2> extra_tuple_func_output_1(kSize, kSize);
+        Buffer<double, 2> extra_tuple_buffer_output_static_dims_0(kSize, kSize);
+        Buffer<int, 2> extra_tuple_buffer_output_static_dims_1(kSize, kSize);
+        Buffer<double, 2> extra_tuple_buffer_output_dynamic_dims_0(kSize, kSize);
+        Buffer<int, 2> extra_tuple_buffer_output_dynamic_dims_1(kSize, kSize);
+        Buffer<double, 2> extra_tuple_buffer_output_unset_types_0(kSize, kSize);
+        Buffer<int, 2> extra_tuple_buffer_output_unset_types_1(kSize, kSize);
 
         // All inputs to a Callable must be fully realized, so any Func inputs
         // that the Generator has implicitly become Buffer inputs of the same type
@@ -155,7 +207,16 @@ int main(int argc, char **argv) {
                           output,
                           // extra outputs are in the order they were added, after all predeclared outputs
                           extra_buffer_output,
-                          extra_func_output);
+                          extra_func_output,
+                          extra_tuple_func_output_0,
+                          extra_tuple_func_output_1,
+                          extra_tuple_buffer_output_static_dims_0,
+                          extra_tuple_buffer_output_static_dims_1,
+                          extra_tuple_buffer_output_dynamic_dims_0,
+                          extra_tuple_buffer_output_dynamic_dims_1,
+                          extra_tuple_buffer_output_unset_types_0,
+                          extra_tuple_buffer_output_unset_types_1);
+
         assert(r == 0);
 
         output.for_each_element([&](int x, int y, int c) {
@@ -169,6 +230,24 @@ int main(int argc, char **argv) {
         extra_func_output.for_each_element([&](int x, int y) {
             assert(extra_func_output(x, y) == output(x, y, 0));
         });
+
+        for (auto &buf : {extra_tuple_func_output_0,
+                          extra_tuple_buffer_output_static_dims_0,
+                          extra_tuple_buffer_output_dynamic_dims_0,
+                          extra_tuple_buffer_output_unset_types_0}) {
+            buf.for_each_element([&](int x, int y) {
+                assert(buf(x, y) == output(x, y, 0));
+            });
+        }
+
+        for (auto &buf : {extra_tuple_func_output_1,
+                          extra_tuple_buffer_output_static_dims_1,
+                          extra_tuple_buffer_output_dynamic_dims_1,
+                          extra_tuple_buffer_output_unset_types_1}) {
+            buf.for_each_element([&](int x, int y) {
+                assert(buf(x, y) == output(x, y, 1));
+            });
+        }
     }
 
     printf("Success!\n");
