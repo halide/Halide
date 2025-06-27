@@ -3292,7 +3292,11 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::concat_bits)) {
         value = codegen(lower_concat_bits(op));
     } else if (op->is_intrinsic(Call::get_runtime_vscale)) {
+#if LLVM_VERSION >= 210
+        value = builder->CreateVScale(i32_t);
+#else
         value = builder->CreateVScale(ConstantInt::get(i32_t, 1));
+#endif
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (!lowered.defined()) {
