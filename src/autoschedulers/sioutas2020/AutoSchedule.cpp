@@ -136,7 +136,6 @@ string get_sanitized_name(string name) {
 
 // Representation of the gpu arch constants per CC
 struct GPU_Params {
-
     Expr max_regs_per_thread;
     Expr total_regs_per_SM;
     Expr max_regs_per_block;
@@ -151,20 +150,6 @@ struct GPU_Params {
     Expr n_SM;
     Expr warp_alloc_granularity;
     Expr reg_alloc_unit_size;
-
-    /*const Expr &max_regs_per_thread=make_const(Float(64),64);
-  const Expr &total_regs_per_SM=make_const(Float(64),65536);
-  const Expr &max_regs_per_block=make_const(Float(64),65536);
-  const Expr &limit_threads_per_warp=make_const(Float(64),32);
-  const Expr &min_shared_mem_unit=make_const(Float(64),256);
-            //const Expr &reg_alloc_unit_size=make_const(Float(64),256);
-  const Expr &limit_warps_per_SM=make_const(Float(64),64);
-  const Expr &max_blocks_per_SM=make_const(Float(64),16);
-  const Expr &limit_shared_mem_per_SM=make_const(Float(64),49152);
-  const Expr &limit_threads_per_SM=make_const(Float(64),2048);
-  const Expr &n_SM=make_const(Int(32),arch_params.parallelism);
-  const Expr &warp_alloc_granularity=make_const(Float(32),4);
-  const Expr &reg_alloc_unit_size=make_const(Float(32),256);*/
 };
 
 // Representation of a function stage in the pipeline.
@@ -1794,34 +1779,22 @@ void Partitioner::initialize_groups() {
     grouping_cache.clear();
 }
 
-/*const Expr &max_regs_per_thread=make_const(Float(64),64);
-const Expr &total_regs_per_SM=make_const(Float(64),65536);
-const Expr &max_regs_per_block=make_const(Float(64),65536);
-const Expr &limit_threads_per_warp=make_const(Float(64),32);
-const Expr &min_shared_mem_unit=make_const(Float(64),256);
-          //const Expr &reg_alloc_unit_size=make_const(Float(64),256);
-const Expr &limit_warps_per_SM=make_const(Float(64),64);
-const Expr &max_blocks_per_SM=make_const(Float(64),16);
-const Expr &limit_shared_mem_per_SM=make_const(Float(64),49152);
-const Expr &limit_threads_per_SM=make_const(Float(64),2048);
-const Expr &n_SM=make_const(Int(32),arch_params.parallelism);
-const Expr &warp_alloc_granularity=make_const(Float(32),4);
-const Expr &reg_alloc_unit_size=make_const(Float(32),256);*/
-
+// These parameters are drawn from the compute capability table here:
+// https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#features-and-technical-specifications-technical-specifications-per-compute-capability
 void Partitioner::get_gpu_params(const Target &target) {
     internal_assert(target.has_feature(Target::CUDA));
     int cuda_capability = target.get_cuda_capability_lower_bound();
     switch (cuda_capability) {
     case 30:
         gparams.max_regs_per_thread = make_const(Float(32), 63);
-        gparams.total_regs_per_SM = make_const(Float(32), 65536);
-        gparams.max_regs_per_block = make_const(Float(32), 65536);
+        gparams.total_regs_per_SM = make_const(Float(32), 64 * 1024);
+        gparams.max_regs_per_block = make_const(Float(32), 64 * 1024);
         gparams.limit_threads_per_warp = make_const(Float(32), 32);
         gparams.min_shared_mem_unit = make_const(Float(32), 256);
         gparams.limit_warps_per_SM = make_const(Float(32), 64);
         gparams.max_blocks_per_SM = make_const(Float(32), 16);
-        gparams.limit_shared_mem_per_SM = make_const(Float(32), 49152);
-        gparams.limit_shared_mem_per_block = make_const(Float(32), 49152);
+        gparams.limit_shared_mem_per_SM = make_const(Float(32), 48 * 1024);
+        gparams.limit_shared_mem_per_block = make_const(Float(32), 48 * 1024);
         gparams.limit_threads_per_SM = make_const(Float(32), 2048);
         gparams.limit_threads_per_block = make_const(Float(32), 1024);
         gparams.n_SM = arch_params.parallelism;
@@ -1836,8 +1809,8 @@ void Partitioner::get_gpu_params(const Target &target) {
         gparams.min_shared_mem_unit = make_const(Float(32), 256);
         gparams.limit_warps_per_SM = make_const(Float(32), 64);
         gparams.max_blocks_per_SM = make_const(Float(32), 16);
-        gparams.limit_shared_mem_per_SM = make_const(Float(32), 49152);
-        gparams.limit_shared_mem_per_block = make_const(Float(32), 49152);
+        gparams.limit_shared_mem_per_SM = make_const(Float(32), 48 * 1024);
+        gparams.limit_shared_mem_per_block = make_const(Float(32), 48 * 1024);
         gparams.limit_threads_per_SM = make_const(Float(32), 2048);
         gparams.limit_threads_per_block = make_const(Float(32), 1024);
         gparams.n_SM = arch_params.parallelism;
@@ -1846,14 +1819,14 @@ void Partitioner::get_gpu_params(const Target &target) {
         break;
     case 35:
         gparams.max_regs_per_thread = make_const(Float(32), 255);
-        gparams.total_regs_per_SM = make_const(Float(32), 65536);
-        gparams.max_regs_per_block = make_const(Float(32), 65536);
+        gparams.total_regs_per_SM = make_const(Float(32), 64 * 1024);
+        gparams.max_regs_per_block = make_const(Float(32), 64 * 1024);
         gparams.limit_threads_per_warp = make_const(Float(32), 32);
         gparams.min_shared_mem_unit = make_const(Float(32), 256);
         gparams.limit_warps_per_SM = make_const(Float(32), 64);
         gparams.max_blocks_per_SM = make_const(Float(32), 16);
-        gparams.limit_shared_mem_per_SM = make_const(Float(32), 49152);
-        gparams.limit_shared_mem_per_block = make_const(Float(32), 49152);
+        gparams.limit_shared_mem_per_SM = make_const(Float(32), 48 * 1024);
+        gparams.limit_shared_mem_per_block = make_const(Float(32), 48 * 1024);
         gparams.limit_threads_per_SM = make_const(Float(32), 2048);
         gparams.limit_threads_per_block = make_const(Float(32), 1024);
         gparams.n_SM = arch_params.parallelism;
@@ -1862,14 +1835,14 @@ void Partitioner::get_gpu_params(const Target &target) {
         break;
     case 50:
         gparams.max_regs_per_thread = make_const(Float(32), 255);
-        gparams.total_regs_per_SM = make_const(Float(32), 65536);
-        gparams.max_regs_per_block = make_const(Float(32), 65536);
+        gparams.total_regs_per_SM = make_const(Float(32), 64 * 1024);
+        gparams.max_regs_per_block = make_const(Float(32), 64 * 1024);
         gparams.limit_threads_per_warp = make_const(Float(32), 32);
         gparams.min_shared_mem_unit = make_const(Float(32), 256);
         gparams.limit_warps_per_SM = make_const(Float(32), 64);
         gparams.max_blocks_per_SM = make_const(Float(32), 32);
-        gparams.limit_shared_mem_per_SM = make_const(Float(32), 65536);
-        gparams.limit_shared_mem_per_block = make_const(Float(32), 49152);
+        gparams.limit_shared_mem_per_SM = make_const(Float(32), 64 * 1024);
+        gparams.limit_shared_mem_per_block = make_const(Float(32), 48 * 1024);
         gparams.limit_threads_per_SM = make_const(Float(32), 2048);
         gparams.limit_threads_per_block = make_const(Float(32), 1024);
         gparams.n_SM = arch_params.parallelism;
@@ -1878,18 +1851,48 @@ void Partitioner::get_gpu_params(const Target &target) {
         break;
     case 61:
         gparams.max_regs_per_thread = make_const(Float(32), 255);
-        gparams.total_regs_per_SM = make_const(Float(32), 65536);
-        gparams.max_regs_per_block = make_const(Float(32), 65536);
+        gparams.total_regs_per_SM = make_const(Float(32), 64 * 1024);
+        gparams.max_regs_per_block = make_const(Float(32), 64 * 1024);
         gparams.limit_threads_per_warp = make_const(Float(32), 32);
         gparams.min_shared_mem_unit = make_const(Float(32), 256);
         gparams.limit_warps_per_SM = make_const(Float(32), 64);
         gparams.max_blocks_per_SM = make_const(Float(32), 32);
         gparams.limit_shared_mem_per_SM = make_const(Float(32), 98304);
-        gparams.limit_shared_mem_per_block = make_const(Float(32), 49152);
+        gparams.limit_shared_mem_per_block = make_const(Float(32), 48 * 1024);
         gparams.limit_threads_per_SM = make_const(Float(32), 2048);
         gparams.limit_threads_per_block = make_const(Float(32), 1024);
         gparams.n_SM = arch_params.parallelism;
         gparams.warp_alloc_granularity = make_const(Float(32), 4);
+        gparams.reg_alloc_unit_size = make_const(Float(32), 256);
+        break;
+    case 86:
+        // Maximum number of 32-bit registers per thread
+        gparams.max_regs_per_thread = make_const(Float(32), 255);
+        // Number of 32-bit registers per SM
+        gparams.total_regs_per_SM = make_const(Float(32), 64 * 1024);
+        // Maximum number of 32-bit registers per thread block
+        gparams.max_regs_per_block = make_const(Float(32), 64 * 1024);
+        // Warp size
+        gparams.limit_threads_per_warp = make_const(Float(32), 32);
+        // TODO: find source
+        gparams.min_shared_mem_unit = make_const(Float(32), 256);
+        // Maximum number of resident warps per SM
+        gparams.limit_warps_per_SM = make_const(Float(32), 48);
+        // Maximum number of resident blocks per SM
+        gparams.max_blocks_per_SM = make_const(Float(32), 16);
+        // Maximum amount of shared memory per SM
+        gparams.limit_shared_mem_per_SM = make_const(Float(32), 100 * 1024);
+        // Maximum amount of shared memory per thread block
+        gparams.limit_shared_mem_per_block = make_const(Float(32), 99 * 1024);
+        // Maximum number of resident threads per SM
+        gparams.limit_threads_per_SM = make_const(Float(32), 1536);
+        // Maximum number of threads per block
+        gparams.limit_threads_per_block = make_const(Float(32), 1024);
+        // TODO: limited by particular GPU
+        gparams.n_SM = arch_params.parallelism;
+        // TODO: find source
+        gparams.warp_alloc_granularity = make_const(Float(32), 4);
+        // TODO: find source
         gparams.reg_alloc_unit_size = make_const(Float(32), 256);
         break;
     default:
@@ -2491,31 +2494,7 @@ vector<Expr> Partitioner::estimate_occupancy(const Expr &threads,
 
     debug(5) << "Threads " << simplify(threads) << " memory " << shared_mem << '\n';
 
-    /*const Expr &max_regs_per_thread=make_const(Float(64),64);
-  const Expr &total_regs_per_SM=make_const(Float(64),65536);
-  const Expr &max_regs_per_block=make_const(Float(64),65536);
-  const Expr &limit_threads_per_warp=make_const(Float(64),32);
-  const Expr &min_shared_mem_unit=make_const(Float(64),256);
-            //const Expr &reg_alloc_unit_size=make_const(Float(64),256);
-  const Expr &limit_warps_per_SM=make_const(Float(64),64);
-  const Expr &max_blocks_per_SM=make_const(Float(64),16);
-  const Expr &limit_shared_mem_per_SM=make_const(Float(64),49152);
-  const Expr &limit_threads_per_SM=make_const(Float(64),2048);
-  const Expr &n_SM=make_const(Int(32),arch_params.parallelism);
-  const Expr &warp_alloc_granularity=make_const(Float(32),4);
-  const Expr &reg_alloc_unit_size=make_const(Float(32),256);*/
-    /*int max_regs_per_thread=255;
-  int total_regs_per_SM=65536;
-  int max_regs_per_block=65536;
-  int limit_threads_per_warp=32;
-  int min_shared_mem_unit=256;
-  //int warp_alloc_granularity=4;
-
-  int limit_warps_per_SM=64;
-  int max_blocks_per_SM=16;
-  int limit_shared_mem_per_SM=49152;*/
-
-    // num_reg <= min( max_reg_per_thread,  total_reg/num_thread)
+    // num_reg <= min( max_reg_per_thread, total_reg/num_thread)
 
     // estimate the worst case num of regs (should be able to do better)
     Expr num_regs = simplify(cast<int>(
