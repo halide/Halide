@@ -82,7 +82,7 @@ struct BenchmarksBase {
         } else if (benchmark == "gemm_transAB") {
             bench_gemm_transAB(size);
         } else {
-            std::cout << "subroutine: <" << benchmark << "> not know\n";
+            std::cout << "subroutine: <" << benchmark << "> not known\n";
             return;
         }
     }
