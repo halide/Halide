@@ -55,7 +55,7 @@ LLD_HAS_DRIVER(wasm)
 // prevents deleting them and writes a debug message giving the path name.
 #define SAVE_TEMP_OBJECT_FILES 0
 
-// Do an expensive areana validation with significant frequency when allocator is used.
+// Do an expensive arena validation with significant frequency when allocator is used.
 #define FULL_MALLOC_VALIDATION 0
 
 // Print input/output buffers at execution entry/exit.
