@@ -130,7 +130,7 @@ private:
     }
 
     // Logical and where undefined Exprs are considered true
-    Expr p_and(Expr a, Expr b) {
+    Expr p_and(const Expr &a, const Expr &b) {
         if (!a.defined()) {
             return b;
         } else if (!b.defined()) {
@@ -143,7 +143,7 @@ private:
     }
 
     // Logical or where undefined Exprs are considered true
-    Expr p_or(Expr a, Expr b) {
+    Expr p_or(const Expr &a, const Expr &b) {
         if (!a.defined() || !b.defined()) {
             return Expr();
         } else {
