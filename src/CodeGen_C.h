@@ -88,7 +88,7 @@ protected:
     std::string id;
 
     /** The target being generated for. */
-    Target target;
+    const Target target;
 
     /** Controls whether this instance is generating declarations or
      * definitions and whether the interface us extern "C" or C++. */
@@ -304,7 +304,7 @@ protected:
     void emit_constexpr_function_info(const std::string &function_name,
                                       const std::vector<LoweredArgument> &args,
                                       const MetadataNameMap &metadata_name_map);
-    void emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function);
+    virtual void emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function);
 };
 
 }  // namespace Internal
