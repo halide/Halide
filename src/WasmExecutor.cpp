@@ -585,7 +585,7 @@ JITUserContext *get_jit_user_context(WabtContext &wabt_context, const wabt::inte
 }
 
 void dump_hostbuf(WabtContext &wabt_context, const halide_buffer_t *buf, const std::string &label) {
-#if DUMP_HOSTBUFS
+#if DUMP_HOST_BUFFERS
     const halide_dimension_t *dim = buf->dim;
     const uint8_t *host = buf->host;
 
