@@ -129,10 +129,38 @@ private:
         }
     }
 
+    // Logical and where undefined Exprs are considered true
+    Expr p_and(Expr a, Expr b) {
+        if (!a.defined()) {
+            return b;
+        } else if (!b.defined()) {
+            return a;
+        } else if (a.same_as(b)) {
+            return a;
+        } else {
+            return a && b;  // Combine the predicates
+        }
+    }
+
+    // Logical or where undefined Exprs are considered true
+    Expr p_or(Expr a, Expr b) {
+        if (!a.defined() || !b.defined()) {
+            return Expr();
+        } else {
+            return a || b;
+        }
+    }
+
     Expr visit(const Select *op) override {
         Expr cond = mutate(op->condition);
+        Expr old_predicate = predicate;
+        predicate = Expr();
         Expr t = mutate(op->true_value);
+        Expr t_predicate = predicate;
+        predicate = Expr();
         Expr f = mutate(op->false_value);
+        Expr f_predicate = predicate;
+        predicate = old_predicate;
 
         if (!cond.defined()) {
             return Expr();
@@ -146,21 +174,25 @@ private:
             // Swap the cases so that we only need to deal with the
             // case when false is not defined below.
             cond = Not::make(cond);
-            t = f;
-            f = Expr();
+            std::swap(t, f);
+            std::swap(t_predicate, f_predicate);
         }
 
         if (!f.defined()) {
-            // We need to convert this to an if-then-else
-            if (predicate.defined()) {
-                predicate = predicate && cond;
-            } else {
-                predicate = cond;
-            }
+            // We need to convert this to an if-then-else. We can ignore the
+            // f_predicate because we're dropping that side entirely.
+            predicate = p_and(p_and(predicate, t_predicate), cond);
             return t;
-        } else if (cond.same_as(op->condition) &&
-                   t.same_as(op->true_value) &&
-                   f.same_as(op->false_value)) {
+        }
+
+        // Both sides are defined, and both sides may have a predicate, but we
+        // don't care about the predicate of a side if we're evaluating to the
+        // other side.
+        predicate = p_and(p_and(predicate, p_or(!cond, t_predicate)), p_or(cond, f_predicate));
+
+        if (cond.same_as(op->condition) &&
+            t.same_as(op->true_value) &&
+            f.same_as(op->false_value)) {
             return op;
         } else {
             return Select::make(cond, t, f);
