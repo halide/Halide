@@ -206,7 +206,7 @@ public:
         auto next = std::next(it);
         if (next != regions.end() && !next->second.used) {
             debug(4) << "combine next: " << next->first << " w/ " << it->first << " "
-                       << "\n";
+                     << "\n";
             it->second.size += next->second.size;
             regions.erase(next);
         }
