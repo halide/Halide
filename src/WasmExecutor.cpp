@@ -779,7 +779,7 @@ void copy_hostbuf_to_existing_wasmbuf(WabtContext &wabt_context, const halide_bu
 
     wasm_halide_buffer_t *dst = (wasm_halide_buffer_t *)(base + dst_ptr);
     internal_assert(src->device == 0);
-    internal_assert(src->device_interface == 0);
+    internal_assert(src->device_interface == nullptr);
     internal_assert(src->dimensions == dst->dimensions);
     internal_assert(src->type == dst->type);
 
@@ -1171,7 +1171,7 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
                                      wabt::interp::Trap::Ptr *trap) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
-    internal_assert(arg_types.size() >= 1);
+    internal_assert(!arg_types.empty());
     const size_t arg_types_len = arg_types.size() - 1;
     const ExternArgType &ret_type = arg_types[0];
 
