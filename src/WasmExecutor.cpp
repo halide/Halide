@@ -2311,12 +2311,11 @@ WasmModuleContents::WasmModuleContents(
         << wabt::FormatErrorsToString(errors, wabt::Location::Type::Binary) << "\n"
         << "  log: " << to_string(log_stream) << "\n";
 
-    if (debug_is_active(2)) {
+    debug(2) << "Disassembly:\n" << [&] {
         wabt::MemoryStream dis_stream;
         module_desc.istream.Disassemble(&dis_stream);
-        debug(2) << "Disassembly:\n"
-                 << to_string(dis_stream) << "\n";
-    }
+        return to_string(dis_stream);
+    }() << "\n";
 
     module = wabt::interp::Module::New(store, module_desc);
 
@@ -2551,11 +2550,11 @@ int WasmModuleContents::run(const void *const *args) {
     wabt::interp::Thread thread(store);
 
     auto r = func->Call(thread, wabt_args, wabt_results, &trap);
-    if (debug_is_active(2)) {
+    debug(2) << [&] {
         wabt::MemoryStream call_stream;
         WriteCall(&call_stream, func_name, *func_type, wabt_args, wabt_results, trap);
-        debug(2) << to_string(call_stream) << "\n";
-    }
+        return to_string(call_stream);
+    }() << "\n";
     internal_assert(Succeeded(r)) << "Func::Call failed: " << trap->message() << "\n";
     internal_assert(wabt_results.size() == 1);
     int32_t result = wabt_results[0].Get<int32_t>();
