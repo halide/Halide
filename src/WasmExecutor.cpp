@@ -10,6 +10,7 @@
 
 #include "CodeGen_Posix.h"
 #include "CodeGen_Targets.h"
+#include "Debug.h"
 #include "Error.h"
 #include "Float16.h"
 #include "Func.h"
@@ -49,6 +50,20 @@
 LLD_HAS_DRIVER(wasm)
 #endif
 
+// Some extra debiugging flags that can be turned on at compile time.
+// Gode generation and linking has to work through temporary files. This flag
+// prevents deleting them and writes a debug message giving the path name.
+#define SAVE_TEMP_OBJECT_FILES 0
+
+// Do an expensive areana validation with significant frequency when allocator is used.
+#define FULL_MALLOC_VALIDATION 0
+
+// Print input/output buffers at execution entry/exit.
+#define DUMP_HOST_BUFFERS 0
+
+// Print data in wasm memory at various points. Somewhat redundant with DUMP_HOST_BUFFERS but not entirely.
+#define DUMP_WASM_BUFFERS 0
+
 namespace Halide {
 namespace Internal {
 
@@ -72,41 +87,9 @@ static_assert(V8_API_VERSION >= 98,
 namespace {
 
 // ---------------------
-// General debug helpers
-// ---------------------
-
-// Debugging the WebAssembly JIT support is usually disconnected from the rest of HL_DEBUG_CODEGEN
-#define WASM_DEBUG_LEVEL 0
-
-struct debug_sink {
-    debug_sink() = default;
-
-    template<typename T>
-    debug_sink &operator<<(T &&x) {
-        return *this;
-    }
-};
-
-#if WASM_DEBUG_LEVEL
-#define wdebug(x) Halide::Internal::debug(((x) <= WASM_DEBUG_LEVEL) ? 0 : 255)
-#define wassert(x) internal_assert(x)
-#else
-#define wdebug(x) debug_sink()
-#define wassert(x) debug_sink()
-#endif
-
 // ---------------------
 // BDMalloc
 // ---------------------
-
-// Debugging our Malloc is extremely noisy and usually undesired
-
-#define BDMALLOC_DEBUG_LEVEL 0
-#if BDMALLOC_DEBUG_LEVEL
-#define bddebug(x) Halide::Internal::debug(((x) <= BDMALLOC_DEBUG_LEVEL) ? 0 : 255)
-#else
-#define bddebug(x) debug_sink()
-#endif
 
 // BDMalloc aka BrainDeadMalloc. This is an *extremely* simple-minded implementation
 // of malloc/free on top of a WasmMemoryObject, and is intended to be just barely adequate
@@ -151,7 +134,7 @@ public:
     uint32_t alloc_region(uint32_t requested_size) {
         internal_assert(requested_size > 0);
 
-        bddebug(1) << "begin alloc_region " << requested_size << "\n";
+        debug(4) << "begin alloc_region " << requested_size << "\n";
         validate();
 
         // TODO: this would be faster with a basic free list,
@@ -167,36 +150,36 @@ public:
 
         constexpr uint32_t kMaxAllocSize = 0x7fffffff;
         internal_assert(size <= kMaxAllocSize);
-        bddebug(2) << "size -> " << size << "\n";
+        debug(4) << "size -> " << size << "\n";
 
         for (auto &region : regions) {
             const uint32_t start = region.first;
             Region &r = region.second;
             if (!r.used && r.size >= size) {
-                bddebug(2) << "alloc @ " << start << "," << (uint32_t)r.size << "\n";
+                debug(4) << "alloc @ " << start << "," << (uint32_t)r.size << "\n";
                 if (r.size > size + kAlignment) {
                     // Split the block
                     const uint32_t r2_start = start + size;
                     const uint32_t r2_size = r.size - size;
                     regions[r2_start] = {r2_size, false};
                     r.size = size;
-                    bddebug(2) << "split: r-> " << start << "," << (uint32_t)r.size << "," << (start + r.size) << "\n";
-                    bddebug(2) << "split: r2-> " << r2_start << "," << r2_size << "," << (r2_start + r2_size) << "\n";
+                    debug(4) << "split: r-> " << start << "," << (uint32_t)r.size << "," << (start + r.size) << "\n";
+                    debug(4) << "split: r2-> " << r2_start << "," << r2_size << "," << (r2_start + r2_size) << "\n";
                 }
                 // Just return the block
                 r.used = true;
-                bddebug(1) << "end alloc_region " << requested_size << "\n";
+                debug(4) << "end alloc_region " << requested_size << "\n";
                 validate();
                 return start;
             }
         }
-        bddebug(1) << "fail alloc_region " << requested_size << "\n";
+        debug(4) << "fail alloc_region " << requested_size << "\n";
         validate();
         return 0;
     }
 
     void free_region(uint32_t start) {
-        bddebug(1) << "begin free_region " << start << "\n";
+        debug(4) << "begin free_region " << start << "\n";
         validate();
 
         // Can't free region at zero
@@ -213,7 +196,7 @@ public:
         if (it != regions.begin()) {
             auto prev = std::prev(it);
             if (!prev->second.used) {
-                bddebug(2) << "combine prev: " << prev->first << " w/ " << it->first << "\n";
+                debug(4) << "combine prev: " << prev->first << " w/ " << it->first << "\n";
                 prev->second.size += it->second.size;
                 regions.erase(it);
                 it = prev;
@@ -222,18 +205,18 @@ public:
         // If next region is free, combine with it
         auto next = std::next(it);
         if (next != regions.end() && !next->second.used) {
-            bddebug(2) << "combine next: " << next->first << " w/ " << it->first << " "
+            debug(4) << "combine next: " << next->first << " w/ " << it->first << " "
                        << "\n";
             it->second.size += next->second.size;
             regions.erase(next);
         }
 
-        bddebug(1) << "end free_region " << start << "\n";
+        debug(4) << "end free_region " << start << "\n";
         validate();
     }
 
     void grow_total_size(uint32_t new_total_size) {
-        bddebug(1) << "begin grow_total_size " << new_total_size << "\n";
+        debug(4) << "begin grow_total_size " << new_total_size << "\n";
         validate();
 
         internal_assert(new_total_size > total_size);
@@ -254,27 +237,27 @@ public:
         // bookkeeping
         total_size = new_total_size;
 
-        bddebug(1) << "end grow_total_size " << new_total_size << "\n";
+        debug(4) << "end grow_total_size " << new_total_size << "\n";
         validate();
     }
 
     void validate() const {
         internal_assert(total_size > 0);
-#if (BDMALLOC_DEBUG_LEVEL >= 1) || (WASM_DEBUG_LEVEL >= 1)
+#if FULL_MALLOC_VALIDATION
         uint32_t prev_end = 0;
         bool prev_used = false;
         for (auto it : regions) {
             const uint32_t start = it.first;
             const Region &r = it.second;
-            bddebug(2) << "R: " << start << ".." << (start + r.size - 1) << "," << r.used << "\n";
-            wassert(start == prev_end) << "start " << start << " prev_end " << prev_end << "\n";
+            debug(4) << "R: " << start << ".." << (start + r.size - 1) << "," << r.used << "\n";
+            internal_assert(start == prev_end) << "start " << start << " prev_end " << prev_end << "\n";
             // it's OK to have two used regions in a row, but not two free ones
-            wassert(!(!prev_used && !r.used));
+            internal_assert(!(!prev_used && !r.used));
             prev_end = start + r.size;
             prev_used = r.used;
         }
-        wassert(prev_end == total_size) << "prev_end " << prev_end << " total_size " << total_size << "\n";
-        bddebug(2) << "\n";
+        internal_assert(prev_end == total_size) << "prev_end " << prev_end << " total_size " << total_size << "\n";
+        debug(4) << "\n";
 #endif
     }
 };
@@ -312,7 +295,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     }
 
     stack_size = align_up(stack_size, 32);
-    wdebug(1) << "Requesting stack size of " << stack_size << "\n";
+    debug(1) << "compile_to_wasm: Requesting stack size of " << stack_size << "\n";
 
     std::unique_ptr<llvm::Module> llvm_module =
         link_with_wasm_jit_runtime(&context, module.target(), std::move(fn_module));
@@ -325,9 +308,10 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     // out to temp files
     TemporaryFile obj_file("", ".o");
     write_entire_file(obj_file.pathname(), object.data(), object.size());
-#if WASM_DEBUG_LEVEL
+
+#if SAVE_TEMP_OBJECT_FILES
     obj_file.detach();
-    wdebug(1) << "Dumping obj_file to " << obj_file.pathname() << "\n";
+    debug(0) << "Dumping obj_file to " << obj_file.pathname() << "\n";
 #endif
 
     TemporaryFile wasm_output("", ".wasm");
@@ -377,9 +361,9 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
 
     std::signal(SIGABRT, old_abort_handler);
 
-#if WASM_DEBUG_LEVEL
+#if SAVE_TEMP_OBJECT_FILES
     wasm_output.detach();
-    wdebug(1) << "Dumping linked wasm to " << wasm_output.pathname() << "\n";
+    debug(0) << "Dumping linked wasm to " << wasm_output.pathname() << "\n";
 #endif
 
     return read_entire_file(wasm_output.pathname());
@@ -454,14 +438,14 @@ bool build_extern_arg_types(const std::string &fn_name,
                             std::vector<ExternArgType> &arg_types_out) {
     const auto it = jit_externs.find(fn_name);
     if (it == jit_externs.end()) {
-        wdebug(1) << "Extern symbol not found in JIT Externs: " << fn_name << "\n";
+        debug(1) << "Extern symbol not found in JIT Externs: " << fn_name << "\n";
         return false;
     }
     const ExternSignature &sig = it->second.extern_c_function().signature();
 
     const auto &tramp_it = trampolines.exports().find(fn_name + kTrampolineSuffix);
     if (tramp_it == trampolines.exports().end()) {
-        wdebug(1) << "Extern symbol not found in trampolines: " << fn_name << "\n";
+        debug(1) << "Extern symbol not found in trampolines: " << fn_name << "\n";
         return false;
     }
 
@@ -556,7 +540,7 @@ struct WabtContext {
 
 WabtContext &get_wabt_context(wabt::interp::Thread &thread) {
     void *host_info = thread.GetCallerInstance()->host_info();
-    wassert(host_info);
+    internal_assert(host_info);
     return *(WabtContext *)host_info;
 }
 
@@ -569,7 +553,7 @@ wasm32_ptr_t wabt_malloc(WabtContext &wabt_context, size_t size) {
     if (!p) {
         constexpr int kWasmPageSize = 65536;
         const int32_t pages_needed = (size + kWasmPageSize - 1) / 65536;
-        wdebug(1) << "attempting to grow by pages: " << pages_needed << "\n";
+        debug(1) << "attempting to grow by pages: " << pages_needed << "\n";
 
         wabt::Result r = wabt_context.memory.Grow(pages_needed);
         internal_assert(Succeeded(r)) << "Memory::Grow() failed";
@@ -578,12 +562,12 @@ wasm32_ptr_t wabt_malloc(WabtContext &wabt_context, size_t size) {
         p = wabt_context.bdmalloc.alloc_region(size);
     }
 
-    wdebug(2) << "allocation of " << size << " at: " << p << "\n";
+    debug(4) << "allocation of " << size << " at: " << p << "\n";
     return p;
 }
 
 void wabt_free(WabtContext &wabt_context, wasm32_ptr_t ptr) {
-    wdebug(2) << "freeing ptr at: " << ptr << "\n";
+    debug(4) << "freeing ptr at: " << ptr << "\n";
     wabt_context.bdmalloc.free_region(ptr);
 }
 
@@ -594,67 +578,67 @@ JITUserContext *get_jit_user_context(WabtContext &wabt_context, const wabt::inte
     if (ucon_magic == 0) {
         return nullptr;
     }
-    wassert(ucon_magic == kMagicJitUserContextValue);
+    internal_assert(ucon_magic == kMagicJitUserContextValue);
     JITUserContext *jit_user_context = wabt_context.jit_user_context;
-    wassert(jit_user_context);
+    internal_assert(jit_user_context);
     return jit_user_context;
 }
 
 void dump_hostbuf(WabtContext &wabt_context, const halide_buffer_t *buf, const std::string &label) {
-#if WASM_DEBUG_LEVEL >= 2
+#if DUMP_HOSTBUFS
     const halide_dimension_t *dim = buf->dim;
     const uint8_t *host = buf->host;
 
-    wdebug(1) << label << " = " << (const void *)buf << " = {\n";
-    wdebug(1) << "  device = " << buf->device << "\n";
-    wdebug(1) << "  device_interface = " << buf->device_interface << "\n";
-    wdebug(1) << "  host = " << (const void *)host << " = {\n";
+    debug(1) << label << " = " << (const void *)buf << " = {\n";
+    debug(1) << "  device = " << buf->device << "\n";
+    debug(1) << "  device_interface = " << buf->device_interface << "\n";
+    debug(1) << "  host = " << (const void *)host << " = {\n";
     if (host) {
-        wdebug(1) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
+        debug(1) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
     }
-    wdebug(1) << "  }\n";
-    wdebug(1) << "  flags = " << buf->flags << "\n";
-    wdebug(1) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
-    wdebug(1) << "  dimensions = " << buf->dimensions << "\n";
-    wdebug(1) << "  dim = " << (void *)buf->dim << " = {\n";
+    debug(1) << "  }\n";
+    debug(1) << "  flags = " << buf->flags << "\n";
+    debug(1) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
+    debug(1) << "  dimensions = " << buf->dimensions << "\n";
+    debug(1) << "  dim = " << (void *)buf->dim << " = {\n";
     for (int i = 0; i < buf->dimensions; i++) {
         const auto &d = dim[i];
-        wdebug(1) << "    {" << d.min << "," << d.extent << "," << d.stride << "," << d.flags << "},\n";
+        debug(1) << "    {" << d.min << "," << d.extent << "," << d.stride << "," << d.flags << "},\n";
     }
-    wdebug(1) << "  }\n";
-    wdebug(1) << "  padding = " << buf->padding << "\n";
-    wdebug(1) << "}\n";
+    debug(1) << "  }\n";
+    debug(1) << "  padding = " << buf->padding << "\n";
+    debug(1) << "}\n";
 #endif
 }
 
 void dump_wasmbuf(WabtContext &wabt_context, wasm32_ptr_t buf_ptr, const std::string &label) {
-#if WASM_DEBUG_LEVEL >= 2
-    wassert(buf_ptr);
+#if DUMP_WASM_BUFFERS
+    internal_assert(buf_ptr);
 
     uint8_t *base = get_wasm_memory_base(wabt_context);
     wasm_halide_buffer_t *buf = (wasm_halide_buffer_t *)(base + buf_ptr);
     halide_dimension_t *dim = buf->dim ? (halide_dimension_t *)(base + buf->dim) : nullptr;
     uint8_t *host = buf->host ? (base + buf->host) : nullptr;
 
-    wdebug(1) << label << " = " << buf_ptr << " -> " << (void *)buf << " = {\n";
-    wdebug(1) << "  device = " << buf->device << "\n";
-    wdebug(1) << "  device_interface = " << buf->device_interface << "\n";
-    wdebug(1) << "  host = " << buf->host << " -> " << (void *)host << " = {\n";
+    debug(1) << label << " = " << buf_ptr << " -> " << (void *)buf << " = {\n";
+    debug(1) << "  device = " << buf->device << "\n";
+    debug(1) << "  device_interface = " << buf->device_interface << "\n";
+    debug(1) << "  host = " << buf->host << " -> " << (void *)host << " = {\n";
     if (host) {
-        wdebug(1) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
+        debug(1) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
     }
-    wdebug(1) << "  }\n";
-    wdebug(1) << "  flags = " << buf->flags << "\n";
-    wdebug(1) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
-    wdebug(1) << "  dimensions = " << buf->dimensions << "\n";
-    wdebug(1) << "  dim = " << buf->dim << " -> " << (void *)dim << " = {\n";
+    debug(1) << "  }\n";
+    debug(1) << "  flags = " << buf->flags << "\n";
+    debug(1) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
+    debug(1) << "  dimensions = " << buf->dimensions << "\n";
+    debug(1) << "  dim = " << buf->dim << " -> " << (void *)dim << " = {\n";
     for (int i = 0; i < buf->dimensions; i++) {
         const auto &d = dim[i];
-        wdebug(1) << "    {" << d.min << "," << d.extent << "," << d.stride << "," << d.flags << "},\n";
+        debug(1) << "    {" << d.min << "," << d.extent << "," << d.stride << "," << d.flags << "},\n";
     }
-    wdebug(1) << "  }\n";
-    wdebug(1) << "  padding = " << buf->padding << "\n";
-    wdebug(1) << "}\n";
+    debug(1) << "  }\n";
+    debug(1) << "  padding = " << buf->padding << "\n";
+    debug(1) << "}\n";
 #endif
 }
 
@@ -666,15 +650,15 @@ wasm32_ptr_t hostbuf_to_wasmbuf(WabtContext &wabt_context, const halide_buffer_t
     static_assert(sizeof(halide_dimension_t) == 16, "halide_dimension_t");
     static_assert(sizeof(wasm_halide_buffer_t) == 40, "wasm_halide_buffer_t");
 
-    wdebug(2) << "\nhostbuf_to_wasmbuf:\n";
+    debug(4) << "\nhostbuf_to_wasmbuf:\n";
     if (!src) {
         return 0;
     }
 
     dump_hostbuf(wabt_context, src, "src");
 
-    wassert(src->device == 0);
-    wassert(src->device_interface == nullptr);
+    internal_assert(src->device == 0);
+    internal_assert(src->device_interface == nullptr);
 
     // Assume our malloc() has everything 32-byte aligned,
     // and insert enough padding for host to also be 32-byte aligned.
@@ -686,7 +670,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf(WabtContext &wabt_context, const halide_buffer_t
     const size_t mem_needed = host_offset + host_size_in_bytes;
 
     const wasm32_ptr_t dst_ptr = wabt_malloc(wabt_context, mem_needed);
-    wassert(dst_ptr);
+    internal_assert(dst_ptr);
 
     uint8_t *base = get_wasm_memory_base(wabt_context);
 
@@ -715,18 +699,18 @@ wasm32_ptr_t hostbuf_to_wasmbuf(WabtContext &wabt_context, const halide_buffer_t
 // Given a pointer to a wasm_halide_buffer_t in wasm memory space,
 // allocate a Buffer<> on the host and copy all relevant data.
 void wasmbuf_to_hostbuf(WabtContext &wabt_context, wasm32_ptr_t src_ptr, Halide::Runtime::Buffer<> &dst) {
-    wdebug(2) << "\nwasmbuf_to_hostbuf:\n";
+    debug(4) << "\nwasmbuf_to_hostbuf:\n";
 
     dump_wasmbuf(wabt_context, src_ptr, "src");
 
-    wassert(src_ptr);
+    internal_assert(src_ptr);
 
     uint8_t *base = get_wasm_memory_base(wabt_context);
 
     wasm_halide_buffer_t *src = (wasm_halide_buffer_t *)(base + src_ptr);
 
-    wassert(src->device == 0);
-    wassert(src->device_interface == 0);
+    internal_assert(src->device == 0);
+    internal_assert(src->device_interface == 0);
 
     halide_buffer_t dst_tmp;
     dst_tmp.device = 0;
@@ -753,18 +737,18 @@ void wasmbuf_to_hostbuf(WabtContext &wabt_context, wasm32_ptr_t src_ptr, Halide:
 // Given a wasm_halide_buffer_t, copy possibly-changed data into a halide_buffer_t.
 // Both buffers are asserted to match in type and dimensions.
 void copy_wasmbuf_to_existing_hostbuf(WabtContext &wabt_context, wasm32_ptr_t src_ptr, halide_buffer_t *dst) {
-    wassert(src_ptr && dst);
+    internal_assert(src_ptr && dst);
 
-    wdebug(2) << "\ncopy_wasmbuf_to_existing_hostbuf:\n";
+    debug(4) << "\ncopy_wasmbuf_to_existing_hostbuf:\n";
     dump_wasmbuf(wabt_context, src_ptr, "src");
 
     uint8_t *base = get_wasm_memory_base(wabt_context);
 
     wasm_halide_buffer_t *src = (wasm_halide_buffer_t *)(base + src_ptr);
-    wassert(src->device == 0);
-    wassert(src->device_interface == 0);
-    wassert(src->dimensions == dst->dimensions);
-    wassert(src->type == dst->type);
+    internal_assert(src->device == 0);
+    internal_assert(src->device_interface == 0);
+    internal_assert(src->dimensions == dst->dimensions);
+    internal_assert(src->type == dst->type);
 
     dump_hostbuf(wabt_context, dst, "dst_pre");
 
@@ -786,18 +770,18 @@ void copy_wasmbuf_to_existing_hostbuf(WabtContext &wabt_context, wasm32_ptr_t sr
 // Given a halide_buffer_t, copy possibly-changed data into a wasm_halide_buffer_t.
 // Both buffers are asserted to match in type and dimensions.
 void copy_hostbuf_to_existing_wasmbuf(WabtContext &wabt_context, const halide_buffer_t *src, wasm32_ptr_t dst_ptr) {
-    wassert(src && dst_ptr);
+    internal_assert(src && dst_ptr);
 
-    wdebug(1) << "\ncopy_hostbuf_to_existing_wasmbuf:\n";
+    debug(1) << "\ncopy_hostbuf_to_existing_wasmbuf:\n";
     dump_hostbuf(wabt_context, src, "src");
 
     uint8_t *base = get_wasm_memory_base(wabt_context);
 
     wasm_halide_buffer_t *dst = (wasm_halide_buffer_t *)(base + dst_ptr);
-    wassert(src->device == 0);
-    wassert(src->device_interface == 0);
-    wassert(src->dimensions == dst->dimensions);
-    wassert(src->type == dst->type);
+    internal_assert(src->device == 0);
+    internal_assert(src->device_interface == 0);
+    internal_assert(src->dimensions == dst->dimensions);
+    internal_assert(src->type == dst->type);
 
     dump_wasmbuf(wabt_context, dst_ptr, "dst_pre");
 
@@ -912,7 +896,7 @@ wabt::Result wabt_posix_math_1(wabt::interp::Thread &thread,
                                const wabt::interp::Values &args,
                                wabt::interp::Values &results,
                                wabt::interp::Trap::Ptr *trap) {
-    wassert(args.size() == 1);
+    internal_assert(args.size() == 1);
     const T in = args[0].Get<T>();
     const T out = some_func(in);
     results[0] = wabt::interp::Value::Make(out);
@@ -924,7 +908,7 @@ wabt::Result wabt_posix_math_2(wabt::interp::Thread &thread,
                                const wabt::interp::Values &args,
                                wabt::interp::Values &results,
                                wabt::interp::Trap::Ptr *trap) {
-    wassert(args.size() == 2);
+    internal_assert(args.size() == 2);
     const T in1 = args[0].Get<T>();
     const T in2 = args[1].Get<T>();
     const T out = some_func(in1, in2);
@@ -1009,7 +993,7 @@ WABT_HOST_CALLBACK(getenv) {
 WABT_HOST_CALLBACK(halide_print) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
-    wassert(args.size() == 2);
+    internal_assert(args.size() == 2);
 
     JITUserContext *jit_user_context = get_jit_user_context(wabt_context, args[0]);
     const int32_t str_address = args[1].Get<int32_t>();
@@ -1028,7 +1012,7 @@ WABT_HOST_CALLBACK(halide_print) {
 WABT_HOST_CALLBACK(halide_trace_helper) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
-    wassert(args.size() == 12);
+    internal_assert(args.size() == 12);
 
     uint8_t *base = get_wasm_memory_base(wabt_context);
 
@@ -1046,7 +1030,7 @@ WABT_HOST_CALLBACK(halide_trace_helper) {
     const int dimensions = args[10].Get<int32_t>();
     const wasm32_ptr_t trace_tag_ptr = args[11].Get<int32_t>();
 
-    wassert(dimensions >= 0 && dimensions < 1024);  // not a hard limit, just a sanity check
+    internal_assert(dimensions >= 0 && dimensions < 1024);  // not a hard limit, just a sanity check
 
     halide_trace_event_t event;
     event.func = (const char *)(base + func_name_ptr);
@@ -1075,7 +1059,7 @@ WABT_HOST_CALLBACK(halide_trace_helper) {
 WABT_HOST_CALLBACK(halide_error) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
-    wassert(args.size() == 2);
+    internal_assert(args.size() == 2);
 
     JITUserContext *jit_user_context = get_jit_user_context(wabt_context, args[0]);
     const int32_t str_address = args[1].Get<int32_t>();
@@ -1187,7 +1171,7 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
                                      wabt::interp::Trap::Ptr *trap) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
-    wassert(arg_types.size() >= 1);
+    internal_assert(arg_types.size() >= 1);
     const size_t arg_types_len = arg_types.size() - 1;
     const ExternArgType &ret_type = arg_types[0];
 
@@ -1203,7 +1187,7 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
             // (even for wasm, where pointers are int32), and trying to extract it as an
             // int64 from a Value that is int32 will assert-fail. In JIT mode the value
             // doesn't even matter (except for guarding that it is our predicted constant).
-            wassert(args[i].Get<int32_t>() == 0 || args[i].Get<int32_t>() == kMagicJitUserContextValue);
+            internal_assert(args[i].Get<int32_t>() == 0 || args[i].Get<int32_t>() == kMagicJitUserContextValue);
             store_value(Int(32), args[i], &scalars[i]);
             trampoline_args[i] = &scalars[i];
         } else if (a.is_buffer) {
@@ -1255,7 +1239,7 @@ wabt::interp::HostFunc::Ptr make_extern_callback(wabt::interp::Store &store,
                                                  const wabt::interp::ImportDesc &import) {
     const std::string &fn_name = import.type.name;
     if (should_skip_extern_symbol(fn_name)) {
-        wdebug(1) << "Skipping extern symbol: " << fn_name << "\n";
+        debug(1) << "Skipping extern symbol: " << fn_name << "\n";
         return wabt::interp::HostFunc::Ptr();
     }
 
@@ -1454,8 +1438,8 @@ wasm32_ptr_t v8_WasmMemoryObject_malloc(const Local<Context> &context, size_t si
         Local<Object> buffer_string = context->GetEmbedderData(kString_buffer).As<Object>();
         Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(context, buffer_string).ToLocalChecked());
 
-        wdebug(0) << "heap_base is: " << heap_base << "\n";
-        wdebug(0) << "initial memory size is: " << wasm_memory->ByteLength() << "\n";
+        debug(0) << "heap_base is: " << heap_base << "\n";
+        debug(0) << "initial memory size is: " << wasm_memory->ByteLength() << "\n";
         bdmalloc->init(wasm_memory->ByteLength(), heap_base);
     }
 
@@ -1465,7 +1449,7 @@ wasm32_ptr_t v8_WasmMemoryObject_malloc(const Local<Context> &context, size_t si
 
         constexpr int kWasmPageSize = 65536;
         const int32_t pages_needed = (size + kWasmPageSize - 1) / 65536;
-        wdebug(0) << "attempting to grow by pages: " << pages_needed << "\n";
+        debug(0) << "attempting to grow by pages: " << pages_needed << "\n";
 
         Local<Value> args[1] = {Integer::New(isolate, pages_needed)};
         int32_t result = memory_value
@@ -1476,23 +1460,23 @@ wasm32_ptr_t v8_WasmMemoryObject_malloc(const Local<Context> &context, size_t si
                              .ToLocalChecked()
                              ->Int32Value(context)
                              .ToChecked();
-        wdebug(0) << "grow result: " << result << "\n";
+        debug(0) << "grow result: " << result << "\n";
         internal_assert(result == (int)(bdmalloc->get_total_size() / kWasmPageSize));
 
         Local<Object> buffer_string = context->GetEmbedderData(kString_buffer).As<Object>();
         Local<ArrayBuffer> wasm_memory = Local<ArrayBuffer>::Cast(memory_value->Get(context, buffer_string).ToLocalChecked());
-        wdebug(0) << "New ArrayBuffer size is: " << wasm_memory->ByteLength() << "\n";
+        debug(0) << "New ArrayBuffer size is: " << wasm_memory->ByteLength() << "\n";
 
         bdmalloc->grow_total_size(wasm_memory->ByteLength());
         p = bdmalloc->alloc_region(size);
     }
 
-    wdebug(2) << "allocation of " << size << " at: " << p << "\n";
+    debug(4) << "allocation of " << size << " at: " << p << "\n";
     return p;
 }
 
 void v8_WasmMemoryObject_free(const Local<Context> &context, wasm32_ptr_t ptr) {
-    wdebug(2) << "freeing ptr at: " << ptr << "\n";
+    debug(4) << "freeing ptr at: " << ptr << "\n";
     BDMalloc *bdmalloc = (BDMalloc *)context->GetAlignedPointerFromEmbedderData(kBDMallocPtr);
     bdmalloc->free_region(ptr);
 }
@@ -1506,34 +1490,34 @@ uint8_t *get_wasm_memory_base(const Local<Context> &context) {
 }
 
 void dump_hostbuf(const Local<Context> &context, const halide_buffer_t *buf, const std::string &label) {
-#if WASM_DEBUG_LEVEL >= 2
+#if DUMP_HOST_BUFFERS
     const halide_dimension_t *dim = buf->dim;
     const uint8_t *host = buf->host;
 
-    wdebug(0) << label << " = " << (const void *)buf << " = {\n";
-    wdebug(0) << "  device = " << buf->device << "\n";
-    wdebug(0) << "  device_interface = " << buf->device_interface << "\n";
-    wdebug(0) << "  host = " << (const void *)host << " = {\n";
+    debug(0) << label << " = " << (const void *)buf << " = {\n";
+    debug(0) << "  device = " << buf->device << "\n";
+    debug(0) << "  device_interface = " << buf->device_interface << "\n";
+    debug(0) << "  host = " << (const void *)host << " = {\n";
     if (host) {
-        wdebug(0) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
+        debug(0) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
     }
-    wdebug(0) << "  }\n";
-    wdebug(0) << "  flags = " << buf->flags << "\n";
-    wdebug(0) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
-    wdebug(0) << "  dimensions = " << buf->dimensions << "\n";
-    wdebug(0) << "  dim = " << (void *)buf->dim << " = {\n";
+    debug(0) << "  }\n";
+    debug(0) << "  flags = " << buf->flags << "\n";
+    debug(0) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
+    debug(0) << "  dimensions = " << buf->dimensions << "\n";
+    debug(0) << "  dim = " << (void *)buf->dim << " = {\n";
     for (int i = 0; i < buf->dimensions; i++) {
         const auto &d = dim[i];
-        wdebug(0) << "    {" << d.min << "," << d.extent << "," << d.stride << "," << d.flags << "},\n";
+        debug(0) << "    {" << d.min << "," << d.extent << "," << d.stride << "," << d.flags << "},\n";
     }
-    wdebug(0) << "  }\n";
-    wdebug(0) << "  padding = " << buf->padding << "\n";
-    wdebug(0) << "}\n";
+    debug(0) << "  }\n";
+    debug(0) << "  padding = " << buf->padding << "\n";
+    debug(0) << "}\n";
 #endif
 }
 
 void dump_wasmbuf(const Local<Context> &context, wasm32_ptr_t buf_ptr, const std::string &label) {
-#if WASM_DEBUG_LEVEL >= 2
+#if DUMP_WASM_BUFFERS
     internal_assert(buf_ptr);
 
     uint8_t *base = get_wasm_memory_base(context);
@@ -1541,25 +1525,25 @@ void dump_wasmbuf(const Local<Context> &context, wasm32_ptr_t buf_ptr, const std
     halide_dimension_t *dim = buf->dim ? (halide_dimension_t *)(base + buf->dim) : nullptr;
     uint8_t *host = buf->host ? (base + buf->host) : nullptr;
 
-    wdebug(0) << label << " = " << buf_ptr << " -> " << (void *)buf << " = {\n";
-    wdebug(0) << "  device = " << buf->device << "\n";
-    wdebug(0) << "  device_interface = " << buf->device_interface << "\n";
-    wdebug(0) << "  host = " << buf->host << " -> " << (void *)host << " = {\n";
+    debug(0) << label << " = " << buf_ptr << " -> " << (void *)buf << " = {\n";
+    debug(0) << "  device = " << buf->device << "\n";
+    debug(0) << "  device_interface = " << buf->device_interface << "\n";
+    debug(0) << "  host = " << buf->host << " -> " << (void *)host << " = {\n";
     if (host) {
-        wdebug(0) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
+        debug(0) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
     }
-    wdebug(0) << "  }\n";
-    wdebug(0) << "  flags = " << buf->flags << "\n";
-    wdebug(0) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
-    wdebug(0) << "  dimensions = " << buf->dimensions << "\n";
-    wdebug(0) << "  dim = " << buf->dim << " -> " << (void *)dim << " = {\n";
+    debug(0) << "  }\n";
+    debug(0) << "  flags = " << buf->flags << "\n";
+    debug(0) << "  type = " << (int)buf->type.code << "," << (int)buf->type.bits << "," << buf->type.lanes << "\n";
+    debug(0) << "  dimensions = " << buf->dimensions << "\n";
+    debug(0) << "  dim = " << buf->dim << " -> " << (void *)dim << " = {\n";
     for (int i = 0; i < buf->dimensions; i++) {
         const auto &d = dim[i];
-        wdebug(0) << "    {" << d.min << "," << d.extent << "," << d.stride << "," << d.flags << "},\n";
+        debug(0) << "    {" << d.min << "," << d.extent << "," << d.stride << "," << d.flags << "},\n";
     }
-    wdebug(0) << "  }\n";
-    wdebug(0) << "  padding = " << buf->padding << "\n";
-    wdebug(0) << "}\n";
+    debug(0) << "  }\n";
+    debug(0) << "  padding = " << buf->padding << "\n";
+    debug(0) << "}\n";
 #endif
 }
 
@@ -1571,7 +1555,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf(const Local<Context> &context, const halide_buff
     static_assert(sizeof(halide_dimension_t) == 16, "halide_dimension_t");
     static_assert(sizeof(wasm_halide_buffer_t) == 40, "wasm_halide_buffer_t");
 
-    wdebug(0) << "\nhostbuf_to_wasmbuf:\n";
+    debug(0) << "\nhostbuf_to_wasmbuf:\n";
     if (!src) {
         return 0;
     }
@@ -1620,7 +1604,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf(const Local<Context> &context, const halide_buff
 // Given a pointer to a wasm_halide_buffer_t in wasm memory space,
 // allocate a Buffer<> on the host and copy all relevant data.
 void wasmbuf_to_hostbuf(const Local<Context> &context, wasm32_ptr_t src_ptr, Halide::Runtime::Buffer<> &dst) {
-    wdebug(0) << "\nwasmbuf_to_hostbuf:\n";
+    debug(0) << "\nwasmbuf_to_hostbuf:\n";
     dump_wasmbuf(context, src_ptr, "src");
 
     internal_assert(src_ptr);
@@ -1659,7 +1643,7 @@ void wasmbuf_to_hostbuf(const Local<Context> &context, wasm32_ptr_t src_ptr, Hal
 void copy_wasmbuf_to_existing_hostbuf(const Local<Context> &context, wasm32_ptr_t src_ptr, halide_buffer_t *dst) {
     internal_assert(src_ptr && dst);
 
-    wdebug(0) << "\ncopy_wasmbuf_to_existing_hostbuf:\n";
+    debug(0) << "\ncopy_wasmbuf_to_existing_hostbuf:\n";
     dump_wasmbuf(context, src_ptr, "src");
 
     uint8_t *base = get_wasm_memory_base(context);
@@ -1692,7 +1676,7 @@ void copy_wasmbuf_to_existing_hostbuf(const Local<Context> &context, wasm32_ptr_
 void copy_hostbuf_to_existing_wasmbuf(const Local<Context> &context, const halide_buffer_t *src, wasm32_ptr_t dst_ptr) {
     internal_assert(src && dst_ptr);
 
-    wdebug(0) << "\ncopy_hostbuf_to_existing_wasmbuf:\n";
+    debug(0) << "\ncopy_hostbuf_to_existing_wasmbuf:\n";
     dump_hostbuf(context, src, "src");
 
     uint8_t *base = get_wasm_memory_base(context);
@@ -2049,7 +2033,7 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
             // (even for wasm, where pointers are int32), and trying to extract it as an
             // int64 from a Value that is int32 will assert-fail. In JIT mode the value
             // doesn't even matter (except for guarding that it is our predicted constant).
-            wassert(args[i].Get<int32_t>() == 0 || args[i].Get<int32_t>() == kMagicJitUserContextValue);
+            internal_assert(args[i].Get<int32_t>() == 0 || args[i].Get<int32_t>() == kMagicJitUserContextValue);
             store_scalar<int32_t>(context, args[i], &scalars[i]);
             trampoline_args[i] = &scalars[i];
         } else if (arg_types[i].is_buffer) {
@@ -2294,7 +2278,7 @@ WasmModuleContents::WasmModuleContents(
 {
 
 #if WITH_WABT || WITH_V8
-    wdebug(1) << "Compiling wasm function " << fn_name << "\n";
+    debug(1) << "Compiling wasm function " << fn_name << "\n";
 #endif  // WITH_WABT || WITH_V8
 
 #if WITH_WABT
@@ -2327,11 +2311,11 @@ WasmModuleContents::WasmModuleContents(
         << wabt::FormatErrorsToString(errors, wabt::Location::Type::Binary) << "\n"
         << "  log: " << to_string(log_stream) << "\n";
 
-    if (WASM_DEBUG_LEVEL >= 2) {
+    if (debug_is_active(2)) {
         wabt::MemoryStream dis_stream;
         module_desc.istream.Disassemble(&dis_stream);
-        wdebug(WASM_DEBUG_LEVEL) << "Disassembly:\n"
-                                 << to_string(dis_stream) << "\n";
+        debug(2) << "Disassembly:\n"
+                 << to_string(dis_stream) << "\n";
     }
 
     module = wabt::interp::Module::New(store, module_desc);
@@ -2340,7 +2324,7 @@ WasmModuleContents::WasmModuleContents(
     wabt::interp::RefVec imports;
     const HostCallbackMap &host_callback_map = get_host_callback_map();
     for (const auto &import : module->desc().imports) {
-        wdebug(1) << "import=" << import.type.module << "." << import.type.name << "\n";
+        debug(1) << "import=" << import.type.module << "." << import.type.name << "\n";
         if (import.type.type->kind == wabt::interp::ExternKind::Func && import.type.module == "env") {
             auto it = host_callback_map.find(import.type.name);
             if (it != host_callback_map.end()) {
@@ -2371,14 +2355,14 @@ WasmModuleContents::WasmModuleContents(
         if (e.type.name == "__heap_base") {
             internal_assert(e.type.type->kind == wabt::ExternalKind::Global);
             heap_base = store.UnsafeGet<wabt::interp::Global>(instance->globals()[e.index])->Get().Get<int32_t>();
-            wdebug(1) << "__heap_base is " << heap_base << "\n";
+            debug(1) << "__heap_base is " << heap_base << "\n";
             continue;
         }
         if (e.type.name == "memory") {
             internal_assert(e.type.type->kind == wabt::ExternalKind::Memory);
             internal_assert(!memory.get()) << "Expected exactly one memory object but saw " << (void *)memory.get();
             memory = store.UnsafeGet<wabt::interp::Memory>(instance->memories()[e.index]);
-            wdebug(1) << "heap_size is " << memory->ByteSize() << "\n";
+            debug(1) << "heap_size is " << memory->ByteSize() << "\n";
             continue;
         }
     }
@@ -2518,7 +2502,7 @@ int WasmModuleContents::run(const void *const *args) {
 
     for (const auto &e : module_desc.exports) {
         if (e.type.type->kind == wabt::ExternalKind::Func) {
-            wdebug(1) << "Selecting export '" << e.type.name << "'\n";
+            debug(1) << "Selecting export '" << e.type.name << "'\n";
             internal_assert(!func_type && !func) << "Multiple exported funcs found";
             func_type = wabt::cast<wabt::interp::FuncType>(e.type.type.get());
             func = store.UnsafeGet<wabt::interp::Func>(instance->funcs()[e.index]);
@@ -2567,16 +2551,16 @@ int WasmModuleContents::run(const void *const *args) {
     wabt::interp::Thread thread(store);
 
     auto r = func->Call(thread, wabt_args, wabt_results, &trap);
-    if (WASM_DEBUG_LEVEL >= 2) {
+    if (debug_is_active(2)) {
         wabt::MemoryStream call_stream;
         WriteCall(&call_stream, func_name, *func_type, wabt_args, wabt_results, trap);
-        wdebug(WASM_DEBUG_LEVEL) << to_string(call_stream) << "\n";
+        debug(2) << to_string(call_stream) << "\n";
     }
     internal_assert(Succeeded(r)) << "Func::Call failed: " << trap->message() << "\n";
     internal_assert(wabt_results.size() == 1);
     int32_t result = wabt_results[0].Get<int32_t>();
 
-    wdebug(1) << "Result is " << result << "\n";
+    debug(1) << "Result is " << result << "\n";
 
     if (result == 0) {
         // Update any output buffers
