@@ -51,7 +51,7 @@ LLD_HAS_DRIVER(wasm)
 #endif
 
 // Some extra debiugging flags that can be turned on at compile time.
-// Gode generation and linking has to work through temporary files. This flag
+// Code generation and linking has to work through temporary files. This flag
 // prevents deleting them and writes a debug message giving the path name.
 #define SAVE_TEMP_OBJECT_FILES 0
 
