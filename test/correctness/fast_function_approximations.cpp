@@ -432,13 +432,6 @@ int main(int argc, char **argv) {
 
             Func input{"input"};
 
-            // Prepare the arguments to the functions. We scan over the
-            // entire range specified in the table above. Notice how
-            // we strict_float() those arguments to make sure we are actually
-            // not constant folding those arguments into the expanded
-            // polynomial. Note that this strict_float() does not influence
-            // the computations of the approximation itself, but only the
-            // arguments to the approximated function.
             Expr arg_x, arg_y;
             if (is_2d) {
                 Expr ix = i % steps;
