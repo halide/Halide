@@ -11,6 +11,63 @@ namespace Halide {
 namespace Internal {
 
 namespace {
+
+template<typename T>
+struct split {
+    T hi;
+    T lo;
+};
+
+HALIDE_NEVER_INLINE double f64_strict_add(double a, double b) {
+    return a + b;
+}
+HALIDE_NEVER_INLINE double f64_strict_sub(double a, double b) {
+    return a - b;
+}
+
+split<float> make_split_float(const split<double> s) {
+    // s = s.hi + s.lo
+    internal_assert(s.hi == s.hi + s.lo) << "s= " << s.hi + s.lo << " = " << s.hi << " + " << s.lo;
+    float f_hi = static_cast<float>(s.hi);
+    // s.hi + s.lo = f.hi + f.lo
+    // f.lo = s.hi + s.lo - f.hi
+    // f.lo = (s.hi - f.hi) + s.lo
+    double R = f64_strict_add(f64_strict_sub(s.hi, double(f_hi)), s.lo);
+    float f_lo = static_cast<float>(R);
+    internal_assert(float(f_hi + f_lo) == float(s.hi + s.lo)) << "f=" << f_hi + f_lo << " = " << f_hi << " + " << f_lo << " whereas s= " << s.hi + s.lo << " = " << s.hi << " + " << s.lo;
+    return {f_hi, f_lo};
+}
+
+split<Halide::float16_t> make_split_half(const double s) {
+    using Halide::float16_t;
+    float16_t hi = float16_t(s);
+    double res = s - double(hi);
+    float16_t lo = float16_t(res);
+    return {hi, lo};
+}
+
+constexpr split<double> Sp64_PI = {
+    3.14159265358979311599796346854418516159057617187500,
+    0.00000000000000012246467991473531772260659322750011};
+constexpr split<double> Sp64_PI_OVER_TWO = {
+    1.57079632679489655799898173427209258079528808593750,
+    0.00000000000000006123233995736765886130329661375005};
+
+split<Expr> make_split_for(Type type, split<double> x) {
+    if (type == Float(64)) {
+        auto [lo, hi] = x;
+        return {make_const(type, lo), make_const(type, hi)};
+    } else if (type == Float(32)) {
+        auto [lo, hi] = make_split_float(x);
+        return {make_const(type, lo), make_const(type, hi)};
+    } else if (type == Float(16)) {
+        auto [lo, hi] = make_split_half(x.hi);
+        return {make_const(type, lo), make_const(type, hi)};
+    } else {
+        internal_error << "Unsupported type.";
+    }
+}
+
 constexpr double PI = 3.14159265358979323846;
 constexpr double ONE_OVER_PI = 1.0 / PI;
 constexpr double TWO_OVER_PI = 2.0 / PI;
@@ -31,12 +88,6 @@ uint32_t ae_to_ulp(float smallest, float ae) {
 }  // namespace
 
 namespace ApproxImpl {
-
-std::pair<float, float> split_float(double value) {
-    float high = float(value);                // Convert to single precision
-    float low = float(value - double(high));  // Compute the residual part
-    return {high, low};
-}
 
 Expr eval_poly_fast(Expr x, const std::vector<double> &coeff) {
     int n = coeff.size();
@@ -173,9 +224,9 @@ Expr fast_sin(const Expr &x_full, ApproximationPrecision precision) {
     // Reduce the angle modulo pi/2: i.e., to the angle within the quadrant.
     Expr x = x_abs - k_real * make_const(type, PI_OVER_TWO);
     Expr pi_over_two_minus_x = make_const(type, PI_OVER_TWO) - x;
-    if (type == Float(32) && precision.optimized_for == ApproximationPrecision::MULPE) {
-        auto [hi, lo] = split_float(PI_OVER_TWO);
-        pi_over_two_minus_x = strict_sub(make_const(type, hi), x) + make_const(type, lo);
+    if (precision.optimized_for == ApproximationPrecision::MULPE) {
+        auto [hi, lo] = make_split_for(type, Sp64_PI_OVER_TWO);
+        pi_over_two_minus_x = strict_add(strict_sub(hi, x), lo);
     }
     x = select(mirror, pi_over_two_minus_x, x);
 
@@ -204,11 +255,12 @@ Expr fast_cos(const Expr &x_full, ApproximationPrecision precision) {
 
     // Reduce the angle modulo pi/2: i.e., to the angle within the quadrant.
     Expr x = x_abs - k_real * make_const(type, PI_OVER_TWO);
-    Expr pi_over_two_minus_x = make_const(type, PI_OVER_TWO) - x;
-    if (type == Float(32) && precision.optimized_for == ApproximationPrecision::MULPE) {
-        auto [hi, lo] = split_float(PI_OVER_TWO);
-        // TODO(mcourteaux): replace with proper strict_float intrinsic ops.
-        pi_over_two_minus_x = strict_add(strict_sub(make_const(type, hi), x), make_const(type, lo));
+    Expr pi_over_two_minus_x;
+    if (precision.optimized_for == ApproximationPrecision::MULPE) {
+        auto [hi, lo] = make_split_for(type, Sp64_PI_OVER_TWO);
+        pi_over_two_minus_x = strict_add(strict_sub(hi, x), lo);
+    } else {
+        pi_over_two_minus_x = make_const(type, PI_OVER_TWO) - x;
     }
     x = select(mirror, pi_over_two_minus_x, x);
 
@@ -234,9 +286,9 @@ Expr fast_tan(const Expr &x_full, ApproximationPrecision precision) {
     Expr k_real = round(scaled);
 
     Expr x = x_full - k_real * make_const(type, PI);
-    if (type == Float(32) && precision.optimized_for == ApproximationPrecision::MULPE) {
-        auto [pi_hi, pi_lo] = split_float(PI);
-        x = strict_sub((x_full - k_real * make_const(type, pi_hi)), (k_real * make_const(type, pi_lo)));
+    if (precision.optimized_for == ApproximationPrecision::MULPE) {
+        auto [pi_hi, pi_lo] = make_split_for(type, Sp64_PI);
+        x = strict_sub((x_full - k_real * pi_hi), (k_real * pi_lo));
     }
 
     // When polynomial: x is assumed to be reduced to [-pi/2, pi/2]!
@@ -245,14 +297,9 @@ Expr fast_tan(const Expr &x_full, ApproximationPrecision precision) {
     Expr abs_x = abs(x);
     Expr flip = x < make_const(type, 0.0);
     Expr use_cotan = abs_x > make_const(type, PI / 4.0);
-    Expr pi_over_two_minus_abs_x;
-    if (type == Float(64)) {
-        // TODO(mcourteaux): We could do split floats here too.
-        pi_over_two_minus_abs_x = make_const(type, PI_OVER_TWO) - abs_x;
-    } else if (type == Float(32)) {  // We want to do this trick always, because we invert later.
-        auto [hi, lo] = split_float(PI_OVER_TWO);
-        pi_over_two_minus_abs_x = strict_sub(make_const(type, hi), abs_x) + make_const(type, lo);
-    }
+    // We want to use split floats always here, because we invert later.
+    auto [hi, lo] = make_split_for(type, Sp64_PI_OVER_TWO);
+    Expr pi_over_two_minus_abs_x = strict_add(strict_sub(hi, abs_x), lo);
     Expr arg = select(use_cotan, pi_over_two_minus_abs_x, abs_x);
 
     Expr result;
