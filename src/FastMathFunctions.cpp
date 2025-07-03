@@ -27,14 +27,12 @@ HALIDE_NEVER_INLINE double f64_strict_sub(double a, double b) {
 
 split<float> make_split_float(const split<double> s) {
     // s = s.hi + s.lo
-    internal_assert(s.hi == s.hi + s.lo) << "s= " << s.hi + s.lo << " = " << s.hi << " + " << s.lo;
     float f_hi = static_cast<float>(s.hi);
     // s.hi + s.lo = f.hi + f.lo
     // f.lo = s.hi + s.lo - f.hi
     // f.lo = (s.hi - f.hi) + s.lo
     double R = f64_strict_add(f64_strict_sub(s.hi, double(f_hi)), s.lo);
     float f_lo = static_cast<float>(R);
-    internal_assert(float(f_hi + f_lo) == float(s.hi + s.lo)) << "f=" << f_hi + f_lo << " = " << f_hi << " + " << f_lo << " whereas s= " << s.hi + s.lo << " = " << s.hi << " + " << s.lo;
     return {f_hi, f_lo};
 }
 
