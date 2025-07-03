@@ -360,16 +360,17 @@ Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) 
     Expr ati = fast_atan_helper(atan_input, precision, true);
     Expr pi_over_two = make_const(type, PI_OVER_TWO);
     Expr pi = make_const(type, PI);
-    Expr at = select(swap, select(atan_input >= 0.0f, pi_over_two, -pi_over_two) - ati, ati);
+    Expr zero = make_const(type, 0.0);
+    Expr at = select(swap, select(atan_input >= zero, pi_over_two, -pi_over_two) - ati, ati);
     // This select statement is literally taken over from the definition on Wikipedia.
     // There might be optimizations to be done here, but I haven't tried that yet. -- Martijn
     Expr result = select(
-        x > 0.0f, at,
-        x < 0.0f && y >= 0.0f, at + pi,
-        x < 0.0f && y < 0.0f, at - pi,
-        x == 0.0f && y > 0.0f, pi_over_two,
-        x == 0.0f && y < 0.0f, -pi_over_two,
-        0.0f);
+        x > zero, at,
+        x < zero && y >= zero, at + pi,
+        x < zero && y < zero, at - pi,
+        x == zero && y > zero, pi_over_two,
+        x == zero && y < zero, -pi_over_two,
+        zero);
     result = common_subexpression_elimination(result, true);
     return result;
 }

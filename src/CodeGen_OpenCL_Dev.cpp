@@ -129,6 +129,7 @@ protected:
 
         std::string shared_name;
 
+        void visit(const FloatImm *) override;
         void visit(const For *) override;
         void visit(const Ramp *op) override;
         void visit(const Broadcast *op) override;
@@ -251,6 +252,29 @@ string simt_intrinsic(const string &name) {
     return "";
 }
 }  // namespace
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const FloatImm *op) {
+    if (op->type == Float(16)) {
+        // The C backend asserts for Float(16), so let's handle that here separately.
+        float16_t f(op->value);
+        if (f.is_nan()) {
+            id = "nan_f16()";
+        } else if (f.is_infinity()) {
+            if (!f.is_negative()) {
+                id = "inf_f16()";
+            } else {
+                id = "neg_inf_f16()";
+            }
+        } else {
+            // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
+            ostringstream oss;
+            oss << "half_from_bits(" << f.to_bits() << " /* " << float(f) << " */)";
+            print_assignment(op->type, oss.str());
+        }
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     user_assert(loop->for_type != ForType::GPULane)
@@ -496,6 +520,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::round)) {
         // In OpenCL, rint matches our rounding semantics
         Expr equiv = Call::make(op->type, "rint", op->args, Call::PureExtern);
+        equiv.accept(this);
+    } else if (op->type == Float(16) && op->name == "abs") {
+        // Built-in f16 funcs are not supported on NVIDIA.
+        Expr val = op->args[0];
+        Expr equiv = select(val < make_const(op->type, 0.0), -val, val);
         equiv.accept(this);
     } else {
         CodeGen_GPU_C::visit(op);
@@ -902,11 +931,29 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Max *op) {
-    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+    if (op->type.is_float()) {
+        if (op->type.bits() == 16) {
+            // builtin math functions not supported on NVIDIA.
+            print_expr(select(op->a > op->b, op->a, op->b));
+            return;
+        }
+        print_expr(Call::make(op->type, "fmax", {op->a, op->b}, Call::Extern));
+    } else {
+        print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+    }
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Min *op) {
-    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+    if (op->type.is_float()) {
+        if (op->type.bits() == 16) {
+            // builtin math functions not supported on NVIDIA.
+            print_expr(select(op->a < op->b, op->a, op->b));
+            return;
+        }
+        print_expr(Call::make(op->type, "fmin", {op->a, op->b}, Call::Extern));
+    } else {
+        print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+    }
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
