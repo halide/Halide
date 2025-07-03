@@ -493,6 +493,12 @@ function(add_halide_library TARGET)
         message(AUTHOR_WARNING "Arguments to add_halide_library were not recognized: ${ARG_UNPARSED_ARGUMENTS}")
     endif ()
 
+     if (NOT "${ARG_KEYWORDS_MISSING_VALUES}" STREQUAL "")
+        foreach(name IN LISTS ARG_KEYWORDS_MISSING_VALUES)
+            message(AUTHOR_WARNING "The argument ${name} passed to add_halide_library is undefined")
+        endforeach()
+    endif ()
+
     if (ARG_C_BACKEND AND ARG_TARGETS)
         message(AUTHOR_WARNING "The C backend sources will be compiled with the current CMake toolchain.")
     endif ()
