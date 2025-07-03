@@ -869,7 +869,9 @@ const Approximation *find_best_approximation(const char *name, const std::vector
 
     Approximation::Metrics Approximation::*metrics_ptr = nullptr;
     if (type == Float(16)) {
-        metrics_ptr = &Approximation::metrics_f16;
+        user_warning << "Fast math function approximations are not measured in f16 precision. Will assume f32 precision data.";
+        // TODO(mcourteaux): Measure and use: metrics_ptr = &Approximation::metrics_f16;
+        metrics_ptr = &Approximation::metrics_f32;
     } else if (type == Float(32)) {
         metrics_ptr = &Approximation::metrics_f32;
     } else if (type == Float(64)) {

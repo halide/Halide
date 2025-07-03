@@ -15,8 +15,8 @@ int main(int argc, char *argv[]) {
     Expr val = cast(Float(16), cast(Float(16), x + y) + 1.f);
     Expr clamp_val = clamp(cast(Float(16), 0.1f) * val, cast(Float(16), 0), cast(Float(16), 1));
 
-    output(x, y) = cast(Float(16), select(clamp_val > 1, cast<float>(abs(clamp_val)), cast<float>(fast_pow(clamp_val, cast(Float(16), 1.f / 2.2f)))));
-    output_cpu(x, y) = cast(Float(16), select(clamp_val > 1, cast<float>(abs(clamp_val)), cast<float>(fast_pow(clamp_val, cast(Float(16), 1.f / 2.2f)))));
+    output(x, y) = cast(Float(16), select(clamp_val > 1, cast<float>(abs(clamp_val)), cast<float>(fast_atan2(clamp_val, cast(Float(16), 1.f / 2.2f)))));
+    output_cpu(x, y) = cast(Float(16), select(clamp_val > 1, cast<float>(abs(clamp_val)), cast<float>(fast_atan2(clamp_val, cast(Float(16), 1.f / 2.2f)))));
 
     Var xi, xo, yi, yo;
     output.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);

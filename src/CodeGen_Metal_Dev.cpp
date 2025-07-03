@@ -596,6 +596,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const FloatImm *op) {
     if (op->type.bits() == 16) {
+        // The C backend asserts for Float(16), so let's handle that here separately.
         float16_t f(op->value);
         if (f.is_nan()) {
             id = "nan_f16()";
@@ -612,31 +613,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const FloatImm *op) {
             print_assignment(op->type, oss.str());
         }
     } else {
-        if (std::isnan(op->value)) {
-            id = "nan_f32()";
-        } else if (std::isinf(op->value)) {
-            if (op->value > 0) {
-                id = "inf_f32()";
-            } else {
-                id = "neg_inf_f32()";
-            }
-        } else {
-            // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
-            ostringstream oss;
-            union {
-                uint32_t as_uint;
-                float as_float;
-            } u;
-            u.as_float = op->value;
-            if (op->type.bits() == 64) {
-                user_error << "Metal does not support 64-bit floating point literals.\n";
-            } else if (op->type.bits() == 32) {
-                oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
-            } else {
-                user_error << "Unsupported floating point literal with " << op->type.bits() << " bits.\n";
-            }
-            print_assignment(op->type, oss.str());
-        }
+        user_assert(op->type != Float(64)) << "Metal does not support 64-bit floating points.\n";
+
+        CodeGen_GPU_C::visit(op);
     }
 }
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
