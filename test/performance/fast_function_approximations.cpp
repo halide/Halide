@@ -21,13 +21,13 @@ struct PrecisionToTest {
     {{}, "AUTO"},
 
     // Test performance of polynomials.
-    {ApproximationPrecision::poly_mae(2), "Poly2"},
-    {ApproximationPrecision::poly_mae(3), "Poly3"},
-    {ApproximationPrecision::poly_mae(4), "Poly4"},
-    {ApproximationPrecision::poly_mae(5), "Poly5"},
-    {ApproximationPrecision::poly_mae(6), "Poly6"},
-    {ApproximationPrecision::poly_mae(7), "Poly7"},
-    {ApproximationPrecision::poly_mae(8), "Poly8"},
+    {ApproximationPrecision::poly_mae(2), "MAE-Poly2"},
+    {ApproximationPrecision::poly_mae(3), "MAE-Poly3"},
+    {ApproximationPrecision::poly_mae(4), "MAE-Poly4"},
+    {ApproximationPrecision::poly_mae(5), "MAE-Poly5"},
+    {ApproximationPrecision::poly_mae(6), "MAE-Poly6"},
+    {ApproximationPrecision::poly_mae(7), "MAE-Poly7"},
+    {ApproximationPrecision::poly_mae(8), "MAE-Poly8"},
 
     // Test performance of intrinsics and perhaps later of polynomials if intrinsic precision is insufficient.
     {ApproximationPrecision::max_abs_error(1e-2), "MAE 1e-2"},
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
             -10, 10,
             [](Expr x, Expr y, Expr z) { return Halide::tanh(x + z); },
             [](Expr x, Expr y, Expr z, Halide::ApproximationPrecision prec) { return Halide::fast_tanh(x + z, prec); },
-            {Target::Feature::CUDA, Target::Feature::Vulkan, Target::Feature::OpenCL},
+            {Target::Feature::WebGPU, Target::Feature::CUDA, Target::Feature::Vulkan, Target::Feature::OpenCL},
         },
         {
             "asin",
@@ -217,13 +217,13 @@ int main(int argc, char **argv) {
         double pipeline_time_ref = benchmark([&]() { ref_func.realize(buffer_out); buffer_out.device_sync(); }, bcfg);
 
         // Print results for this function
-        printf("      %s           : %9.5f ns per evaluation  [per invokation: %6.3f ms]\n",
+        printf("      %s             : %9.5f ns per evaluation  [per invokation: %6.3f ms]\n",
                ftt.name.c_str(),
                pipeline_time_ref * pipeline_time_to_ns_per_evaluation,
                pipeline_time_ref * 1e3);
 
         for (PrecisionToTest &precision : precisions_to_test) {
-            printf(" fast_%s (%8s):", ftt.name.c_str(), precision.name);
+            printf(" fast_%s (%10s):", ftt.name.c_str(), precision.name);
 
             Func approx_func{ftt.name + "_approx"};
             approx_func(x, y) = sum(ftt.make_approximation(arg_x, arg_y, arg_z, precision.precision));

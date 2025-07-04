@@ -58,6 +58,7 @@ protected:
     public:
         CodeGen_Metal_C(std::ostream &s, const Target &t)
             : CodeGen_GPU_C(s, t) {
+            float16_datatype = "half";
             abs_returns_unsigned_type = false;
 
 #define alias(x, y)                         \
@@ -141,7 +142,6 @@ protected:
         void visit(const Cast *op) override;
         void visit(const VectorReduce *op) override;
         void visit(const Atomic *op) override;
-        void visit(const FloatImm *op) override;
     };
 
     std::ostringstream src_stream;
@@ -594,30 +594,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
     user_assert(false) << "Atomic updates are not supported inside Metal kernels";
 }
 
-void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const FloatImm *op) {
-    if (op->type.bits() == 16) {
-        // The C backend asserts for Float(16), so let's handle that here separately.
-        float16_t f(op->value);
-        if (f.is_nan()) {
-            id = "nan_f16()";
-        } else if (f.is_infinity()) {
-            if (!f.is_negative()) {
-                id = "inf_f16()";
-            } else {
-                id = "neg_inf_f16()";
-            }
-        } else {
-            // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
-            ostringstream oss;
-            oss << "half_from_bits(" << f.to_bits() << " /* " << float(f) << " */)";
-            print_assignment(op->type, oss.str());
-        }
-    } else {
-        user_assert(op->type != Float(64)) << "Metal does not support 64-bit floating points.\n";
-
-        CodeGen_GPU_C::visit(op);
-    }
-}
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const string &name,
                                    const vector<DeviceArgument> &args) {

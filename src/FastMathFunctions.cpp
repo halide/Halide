@@ -415,7 +415,7 @@ Expr fast_exp(const Expr &x_full, ApproximationPrecision prec) {
 
 Expr fast_expm1(const Expr &x_full, ApproximationPrecision prec) {
     Type type = x_full.type();
-    user_assert(x_full.type() == Float(32)) << "fast_exp only works for Float(32)";
+    user_assert(x_full.type() == Float(32)) << "fast_expm1 only works for Float(32)";
 
     Expr log2 = make_const(type, std::log(2.0));
 
@@ -460,8 +460,8 @@ Expr fast_log(const Expr &x, ApproximationPrecision prec) {
 Expr fast_tanh(const Expr &x, ApproximationPrecision prec) {
     // Rewrite with definition:
     // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
-    //         = (1 - exp(-2x)) / (1 + exp(-2x))
-    //         = (expm1(2x)) / (expm1(2x) + 2)
+    //         = (1 - exp(-2x)) / (1 + exp(-2x))  [ MAE-optimized, faster if hardware has exp intrinsic]
+    //         = (expm1(2x)) / (expm1(2x) + 2)    [ MULPE-optimized ]
     // But abs(x) the argument, and flip when negative.
     Type type = x.type();
     Expr abs_x = abs(x);
