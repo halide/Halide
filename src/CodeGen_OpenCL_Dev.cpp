@@ -61,6 +61,7 @@ protected:
         CodeGen_OpenCL_C(std::ostream &s, Target t)
             : CodeGen_GPU_C(s, t) {
             integer_suffix_style = IntegerSuffixStyle::OpenCL;
+            float16_datatype = "half";
             vector_declaration_style = VectorDeclarationStyle::OpenCLSyntax;
             abs_returns_unsigned_type = true;
 
@@ -129,7 +130,6 @@ protected:
 
         std::string shared_name;
 
-        void visit(const FloatImm *) override;
         void visit(const For *) override;
         void visit(const Ramp *op) override;
         void visit(const Broadcast *op) override;
@@ -252,29 +252,6 @@ string simt_intrinsic(const string &name) {
     return "";
 }
 }  // namespace
-
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const FloatImm *op) {
-    if (op->type == Float(16)) {
-        // The C backend asserts for Float(16), so let's handle that here separately.
-        float16_t f(op->value);
-        if (f.is_nan()) {
-            id = "nan_f16()";
-        } else if (f.is_infinity()) {
-            if (!f.is_negative()) {
-                id = "inf_f16()";
-            } else {
-                id = "neg_inf_f16()";
-            }
-        } else {
-            // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
-            ostringstream oss;
-            oss << "half_from_bits(" << f.to_bits() << " /* " << float(f) << " */)";
-            print_assignment(op->type, oss.str());
-        }
-    } else {
-        CodeGen_C::visit(op);
-    }
-}
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     user_assert(loop->for_type != ForType::GPULane)

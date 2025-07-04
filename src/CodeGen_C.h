@@ -57,14 +57,25 @@ public:
     static void test();
 
 protected:
+    /** How to emit 64-bit integer constants */
     enum class IntegerSuffixStyle {
         PlainC = 0,
         OpenCL = 1,
         HLSL = 2
-    };
+    } integer_suffix_style = IntegerSuffixStyle::PlainC;
 
-    /** How to emit 64-bit integer constants */
-    IntegerSuffixStyle integer_suffix_style = IntegerSuffixStyle::PlainC;
+    /** How to emit floating point constants */
+    enum class FloatingPointStyle {
+        CONVERT_FROM_BITS = 0,
+        SCIENTIFIC = 1,
+        HEXFLOAT = 2
+    } floating_point_style = FloatingPointStyle::SCIENTIFIC;
+
+    /**
+     * If the C-style language supports a float16 (half-precision) datatype,
+     * this variable will hold the string representing the name of that datatype.
+     */
+    std::string float16_datatype{};
 
     /** Emit a declaration. */
     // @{

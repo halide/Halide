@@ -5,8 +5,9 @@ int main(int argc, char *argv[]) {
 
     auto target = get_jit_target_from_environment();
     if (!target.has_feature(Target::Metal) &&
+        !target.has_feature(Target::CUDA) &&
         !target.features_all_of({Target::OpenCL, Target::CLHalf})) {
-        printf("[SKIP] Test only applies to Metal and OpenCL+CLHalf.\n");
+        printf("[SKIP] Test only applies to CUDA, Metal and OpenCL+CLHalf.\n");
         return 0;
     }
 

@@ -658,6 +658,8 @@ WEAK cl_program compile_kernel(void *user_context, cl_context ctx, const char *s
             }
         }
 
+        halide_print(user_context, "OpenCL compilation log:");
+        halide_print(user_context, log);
         error(user_context) << "CL: clBuildProgram failed: " << get_opencl_error_name(err)
                             << "\nBuild Log:\n"
                             << log << "\n";
