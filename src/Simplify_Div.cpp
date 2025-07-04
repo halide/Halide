@@ -24,7 +24,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
             // also cases with a bounded denominator (e.g. [5, 7]/[4, 5] = 1).
             if (info->bounds.is_single_point()) {
                 if (op->type.can_represent(info->bounds.min)) {
-                    return make_const(op->type, info->bounds.min);
+                    return make_const(op->type, info->bounds.min, nullptr);
                 } else {
                     // Even though this is 'no-overflow-int', if the result
                     // we calculate can't fit into the destination type,
