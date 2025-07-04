@@ -2663,7 +2663,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     _6 = 3;
    } // if _7 else
    int32_t _11 = _6;
-   float _12 = float_from_bits(1082130432 /* 4 */);
+   float _12 = 4.0000000e+00f;
    bool _13 = _alpha > _12;
    int32_t _14 = (int32_t)(_13 ? _11 : 2);
    ((int32_t *)_buf)[_5] = _14;
