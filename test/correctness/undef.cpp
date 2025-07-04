@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
             f3(rx) = Tuple(undef<float>(), (f3(rx)[0] + f3(left)[0] + f3(right)[0]) / 3);
         }
 
-        Buffer<float> o1({100}), o2({100});
+        Buffer<float> o1(100), o2(100);
         o1.fill(17);
         o2.fill(18);
         f3.realize({o1, o2});
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
         // g is undef outside of [0, 1]
         g(x) = select(x == 0, f(x), -f(1 - x));
 
-        Buffer<int> output({4});
+        Buffer<int> output(4);
         output.fill(17);
         g.realize(output);
         int expected[4] = {1, -1, 17, 17};
