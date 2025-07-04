@@ -597,6 +597,9 @@ protected:
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
+            auto is_y_same_int = op->type.is_int() && is_int(y, bits);
+            auto is_y_same_uint = op->type.is_uint() && is_uint(y, bits);
+            auto is_y_same_int_or_uint = is_y_same_int || is_y_same_uint;
             auto x_y_same_sign = (is_int(x) && is_int(y)) || (is_uint(x) && is_uint(y));
 
             if (
@@ -662,9 +665,9 @@ protected:
                         rounding_halving_add(x, y),
                         is_x_same_int_or_uint) ||
 
-                rewrite(halving_add(widening_add(x, 1), y),
+                rewrite(halving_add(widening_add(x, 1), cast(op->type, y)),
                         rounding_halving_add(x, y),
-                        is_x_same_int_or_uint) ||
+                        is_x_same_int_or_uint && is_y_same_int_or_uint) ||
 
                 rewrite(rounding_shift_right(widening_add(x, y), 1),
                         rounding_halving_add(x, y),
