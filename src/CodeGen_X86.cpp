@@ -277,16 +277,16 @@ const x86Intrinsic intrinsic_defs[] = {
     {"dpbf16psx4", Float(32, 4), "dot_product", {Float(32, 4), BFloat(16, 8), BFloat(16, 8)}, Target::AVX512_Zen4},
 
     {"dpbusdx16", Int(32, 16), "dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_Zen4},
-    {"dpbusdx8", Int(32, 8), "dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_Zen4},
-    {"dpbusdx4", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_Zen4},
+    {"dpbusdx8", Int(32, 8), "dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVXVNNI},
+    {"dpbusdx4", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVXVNNI},
 
     {"dpwssdx16", Int(32, 16), "dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_Zen4},
     {"dpwssdx8", Int(32, 8), "dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_Zen4},
     {"dpwssdx4", Int(32, 4), "dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_Zen4},
 
     {"dpbusdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_Zen4},
-    {"dpbusdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_Zen4},
-    {"dpbusdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_Zen4},
+    {"dpbusdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVXVNNI},
+    {"dpbusdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVXVNNI},
 
     {"dpwssdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_Zen4},
     {"dpwssdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_Zen4},
@@ -1063,6 +1063,9 @@ string CodeGen_X86::mattrs() const {
     if (target.has_feature(Target::F16C)) {
         attrs.emplace_back("+f16c");
     }
+    if (target.has_feature(Target::AVXVNNI)) {
+        attrs.emplace_back("+avxvnni");
+    }
     if (target.has_feature(Target::AVX512) ||
         target.has_feature(Target::AVX512_KNL) ||
         target.has_feature(Target::AVX512_Skylake) ||
@@ -1089,9 +1092,9 @@ string CodeGen_X86::mattrs() const {
             attrs.emplace_back("+avx512bitalg");
             attrs.emplace_back("+avx512vbmi2");
         }
-        if (target.has_feature(Target::AVXVNNI)) {
-            attrs.emplace_back("+avxvnni");
-        }
+        //if (target.has_feature(Target::AVXVNNI)) {
+            //attrs.emplace_back("+avxvnni");
+        //}
         if (target.has_feature(Target::AVX512_SapphireRapids)) {
             attrs.emplace_back("+amx-int8");
             attrs.emplace_back("+amx-bf16");

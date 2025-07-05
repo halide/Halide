@@ -109,6 +109,8 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         int info2[4];
         cpuid(info2, 7);
+        int32_t info3[4];
+        cpuid(info3, 7, 1);
         constexpr uint32_t avx2 = 1U << 5;
         constexpr uint32_t avx512f = 1U << 16;
         constexpr uint32_t avx512dq = 1U << 17;
@@ -126,6 +128,9 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
         constexpr uint32_t avx512_cannonlake = avx512_skylake | avx512ifma;  // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
             halide_set_available_cpu_feature(features, halide_target_feature_avx2);
+            if ((info3[0] & avxvnni) == avxvnni) {
+                halide_set_available_cpu_feature(features, halide_target_feature_avxvnni);
+            }
         }
         if ((info2[1] & avx512) == avx512) {
             halide_set_available_cpu_feature(features, halide_target_feature_avx512);
@@ -138,13 +143,8 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 halide_set_available_cpu_feature(features, halide_target_feature_avx512_cannonlake);
 
-                int32_t info3[4];
-                cpuid(info3, 7, 1);
-                if ((info3[0] & avxvnni) == avxvnni) {
-                    halide_set_available_cpu_feature(features, halide_target_feature_avxvnni);
-                    if ((info3[0] & avx512bf16) == avx512bf16) {
-                        halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
-                    }
+                if ((info3[0] & avx512bf16) == avx512bf16) {
+                    halide_set_available_cpu_feature(features, halide_target_feature_avx512_sapphirerapids);
                 }
             }
         }
