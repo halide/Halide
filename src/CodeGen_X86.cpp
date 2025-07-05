@@ -46,6 +46,7 @@ Target complete_x86_target(Target t) {
         t.set_feature(Target::AVXVNNI);
     }
     if (t.has_feature(Target::AVX512_Zen4)) {
+        t.set_feature(Target::AVXVNNI);
         t.set_feature(Target::AVX512_Cannonlake);
     }
     if (t.has_feature(Target::AVX512_Cannonlake)) {
@@ -1092,9 +1093,6 @@ string CodeGen_X86::mattrs() const {
             attrs.emplace_back("+avx512bitalg");
             attrs.emplace_back("+avx512vbmi2");
         }
-        //if (target.has_feature(Target::AVXVNNI)) {
-            //attrs.emplace_back("+avxvnni");
-        //}
         if (target.has_feature(Target::AVX512_SapphireRapids)) {
             attrs.emplace_back("+amx-int8");
             attrs.emplace_back("+amx-bf16");
