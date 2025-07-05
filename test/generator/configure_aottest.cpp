@@ -41,14 +41,40 @@ int main(int argc, char **argv) {
     Buffer<int, 3> output(kSize, kSize, 3);
     Buffer<float, 3> extra_buffer_output(kSize, kSize, 3);
     Buffer<double, 2> extra_func_output(kSize, kSize);
+    Buffer<double, 2> extra_tuple_func_output_0(kSize, kSize);
+    Buffer<int, 2> extra_tuple_func_output_1(kSize, kSize);
+    Buffer<double, 2> extra_tuple_buffer_output_static_dims_0(kSize, kSize);
+    Buffer<int, 2> extra_tuple_buffer_output_static_dims_1(kSize, kSize);
+    Buffer<double, 2> extra_tuple_buffer_output_dynamic_dims_0(kSize, kSize);
+    Buffer<int, 2> extra_tuple_buffer_output_dynamic_dims_1(kSize, kSize);
+    Buffer<double, 2> extra_tuple_buffer_output_unset_types_0(kSize, kSize);
+    Buffer<int, 2> extra_tuple_buffer_output_unset_types_1(kSize, kSize);
 
     const int bias = 1;
     int result = configure(input, bias,
                            // extra inputs are in the order they were added, after all predeclared inputs
-                           extras[0], extras[1], extras[2], typed_extra, func_extra, extra_scalar, extra_dynamic_scalar,
+                           extras[0],
+                           extras[1],
+                           extras[2],
+                           typed_extra,
+                           func_extra,
+                           extra_scalar,
+                           extra_dynamic_scalar,
+
                            output,
+
                            // extra outputs are in the order they were added, after all predeclared outputs
-                           extra_buffer_output, extra_func_output);
+                           extra_buffer_output,
+                           extra_func_output,
+                           extra_tuple_func_output_0,
+                           extra_tuple_func_output_1,
+                           extra_tuple_buffer_output_static_dims_0,
+                           extra_tuple_buffer_output_static_dims_1,
+                           extra_tuple_buffer_output_dynamic_dims_0,
+                           extra_tuple_buffer_output_dynamic_dims_1,
+                           extra_tuple_buffer_output_unset_types_0,
+                           extra_tuple_buffer_output_unset_types_1);
+
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
         exit(1);
@@ -65,6 +91,24 @@ int main(int argc, char **argv) {
     extra_func_output.for_each_element([&](int x, int y) {
         assert(extra_func_output(x, y) == output(x, y, 0));
     });
+
+    for (auto &buf : {extra_tuple_func_output_0,
+                      extra_tuple_buffer_output_static_dims_0,
+                      extra_tuple_buffer_output_dynamic_dims_0,
+                      extra_tuple_buffer_output_unset_types_0}) {
+        buf.for_each_element([&](int x, int y) {
+            assert(buf(x, y) == output(x, y, 0));
+        });
+    }
+
+    for (auto &buf : {extra_tuple_func_output_1,
+                      extra_tuple_buffer_output_static_dims_1,
+                      extra_tuple_buffer_output_dynamic_dims_1,
+                      extra_tuple_buffer_output_unset_types_1}) {
+        buf.for_each_element([&](int x, int y) {
+            assert(buf(x, y) == output(x, y, 1));
+        });
+    }
 
     printf("Success!\n");
     return 0;
