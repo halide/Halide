@@ -12,7 +12,7 @@ maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Halide is a programming language designed to make it easier to write high-performance image and array processing code."
 license = { file = "LICENSE.txt" }
 readme = "./packaging/pip/README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "numpy>=2",
     "imageio>=2",
@@ -45,7 +45,6 @@ classifiers = [
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

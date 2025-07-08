@@ -31,7 +31,7 @@
   * [License](#license)
 <!-- TOC -->
 
-Halide provides Python bindings for most of its public API. Python 3.8 (or
+Halide provides Python bindings for most of its public API. Python 3.9 (or
 higher) is required. The Python bindings are supported on 64-bit Linux, OSX, and
 Windows systems.
 
@@ -88,9 +88,7 @@ $ python3 -m pip install -r requirements.txt
 Then build and install Halide:
 
 ```shell
-$ cmake -G Ninja -S . -B build \
-        -DCMAKE_BUILD_TYPE=Release \ 
-        -DWITH_PYTHON_BINDINGS=ON
+$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
 $ cmake --build build
 $ cmake --install build --prefix .local
 ```
