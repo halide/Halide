@@ -192,6 +192,7 @@ tests(GROUPS correctness
       intrinsics.cpp
       invalid_gpu_loop_nests.cpp
       inverse.cpp
+      irprinter.cpp
       isnan.cpp
       issue_3926.cpp
       iterate_over_circle.cpp

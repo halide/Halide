@@ -260,16 +260,19 @@ std::ostream &operator<<(std::ostream &stream, const RVar &v) {
 
 /** Emit an RDom in a human-readable form. */
 std::ostream &operator<<(std::ostream &stream, const RDom &dom) {
+    if (!dom.defined()) {
+        return stream << "RDom()";
+    }
+
     stream << "RDom(\n";
     for (int i = 0; i < dom.dimensions(); i++) {
         stream << "  " << dom[i] << "\n";
     }
     stream << ")";
-    Expr pred = simplify(dom.domain().predicate());
+    const Expr pred = dom.domain().predicate();
     if (!is_const_one(pred)) {
-        stream << " where (\n  " << pred << ")";
+        stream << " where (" << pred << ")";
     }
-    stream << "\n";
     return stream;
 }
 
