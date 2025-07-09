@@ -271,7 +271,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
         // It's important to use func.dimensions() here, *not* this->dimensions(),
         // since the latter can return the Func's required dimensions rather than its actual dimensions.
         while ((int)args.size() < func.dimensions()) {
-            Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+            debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
             count++;
@@ -304,7 +304,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
         // It's important to use func.dimensions() here, *not* this->dimensions(),
         // since the latter can return the Func's required dimensions rather than its actual dimensions.
         while ((int)args.size() < func.dimensions()) {
-            Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+            debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
             count++;
@@ -907,7 +907,7 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
 
     ReductionDomain rdom{definition.schedule().rvars(), definition.predicate(), true};
     SubstitutionMap rdom_promises;
-    for (int i = 0; i < rdom.domain().size(); i++) {
+    for (int i = 0; i < (int)rdom.domain().size(); i++) {
         const auto &[var, min, extent] = rdom.domain()[i];
         rdom_promises.emplace(var, promise_clamped(RVar(rdom, i), min, min + extent - 1));
     }
@@ -3088,7 +3088,7 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &exprs) const {
             internal_assert(implicit_count == 0)
                 << "Pure definition can't possibly already have implicit variables defined\n";
 
-            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
+            debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
 
             vector<Expr>::iterator iter = result.begin() + implicit_placeholder_pos;
             for (int i = 0; i < count.count; i++) {

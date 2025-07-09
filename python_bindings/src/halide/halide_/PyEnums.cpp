@@ -110,7 +110,9 @@ void define_enums(py::module &m) {
         .value("TuneK8_SSE3", Target::Processor::K8_SSE3)
         .value("TuneZnVer1", Target::Processor::ZnVer1)
         .value("TuneZnVer2", Target::Processor::ZnVer2)
-        .value("TuneZnVer3", Target::Processor::ZnVer3);
+        .value("TuneZnVer3", Target::Processor::ZnVer3)
+        .value("TuneZnVer4", Target::Processor::ZnVer4)
+        .value("TuneZnVer5", Target::Processor::ZnVer5);
 
     py::enum_<Target::Feature>(m, "TargetFeature")
         .value("JIT", Target::Feature::JIT)
@@ -120,6 +122,7 @@ void define_enums(py::module &m) {
         .value("SSE41", Target::Feature::SSE41)
         .value("AVX", Target::Feature::AVX)
         .value("AVX2", Target::Feature::AVX2)
+        .value("AVXVNNI", Target::Feature::AVXVNNI)
         .value("FMA", Target::Feature::FMA)
         .value("FMA4", Target::Feature::FMA4)
         .value("F16C", Target::Feature::F16C)
@@ -158,6 +161,7 @@ void define_enums(py::module &m) {
         .value("AVX512_Skylake", Target::Feature::AVX512_Skylake)
         .value("AVX512_Cannonlake", Target::Feature::AVX512_Cannonlake)
         .value("AVX512_Zen4", Target::Feature::AVX512_Zen4)
+        .value("AVX512_Zen5", Target::Feature::AVX512_Zen5)
         .value("AVX512_SapphireRapids", Target::Feature::AVX512_SapphireRapids)
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)

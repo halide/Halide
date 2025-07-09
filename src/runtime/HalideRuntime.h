@@ -1360,12 +1360,13 @@ typedef enum halide_target_feature_t {
     halide_target_feature_no_asserts,       ///< Disable all runtime checks, for slightly tighter code.
     halide_target_feature_no_bounds_query,  ///< Disable the bounds querying functionality.
 
-    halide_target_feature_sse41,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
-    halide_target_feature_avx,    ///< Use AVX 1 instructions. Only relevant on x86.
-    halide_target_feature_avx2,   ///< Use AVX 2 instructions. Only relevant on x86.
-    halide_target_feature_fma,    ///< Enable x86 FMA instruction
-    halide_target_feature_fma4,   ///< Enable x86 (AMD) FMA4 instruction set
-    halide_target_feature_f16c,   ///< Enable x86 16-bit float support
+    halide_target_feature_sse41,    ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
+    halide_target_feature_avx,      ///< Use AVX 1 instructions. Only relevant on x86.
+    halide_target_feature_avx2,     ///< Use AVX 2 instructions. Only relevant on x86.
+    halide_target_feature_avxvnni,  ///< Enable the AVX-VNNI features supported by AVX2 instructions. Supports 256-bit VNNI instructions without EVEX encoding.
+    halide_target_feature_fma,      ///< Enable x86 FMA instruction
+    halide_target_feature_fma4,     ///< Enable x86 (AMD) FMA4 instruction set
+    halide_target_feature_f16c,     ///< Enable x86 16-bit float support
 
     halide_target_feature_armv7s,   ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
     halide_target_feature_no_neon,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
@@ -1409,6 +1410,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_skylake,         ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake,      ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
     halide_target_feature_avx512_zen4,            ///< Enable the AVX512 features supported by Zen4 processors. This include all of the Cannonlake features, plus AVX512-VNNI, AVX512-BF16, and more.
+    halide_target_feature_avx512_zen5,            ///< Enable the AVX512 features supported by Zen5 processors. This include all of the Cannonlake features, plus AVX512-VNNI, AVX512-BF16, AVX-VNNI and more.
     halide_target_feature_avx512_sapphirerapids,  ///< Enable the AVX512 features supported by Sapphire Rapids processors. This include all of the Zen4 features, plus AVX-VNNI and AMX instructions.
     halide_target_feature_trace_loads,            ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
     halide_target_feature_trace_stores,           ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.

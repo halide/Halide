@@ -27,16 +27,25 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     return result;
 }
 
+}  // namespace
+}  // namespace Halide
+
 #define DECLARE_INITMOD(mod)                                                              \
     extern "C" unsigned char halide_internal_initmod_##mod[];                             \
     extern "C" int halide_internal_initmod_##mod##_length;                                \
+    namespace Halide {                                                                    \
+    namespace {                                                                           \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context) {         \
         llvm::StringRef sb = llvm::StringRef((const char *)halide_internal_initmod_##mod, \
                                              halide_internal_initmod_##mod##_length);     \
         return parse_bitcode_file(sb, context, #mod);                                     \
+    }                                                                                     \
+    }                                                                                     \
     }
 
 #define DECLARE_NO_INITMOD(mod)                                                                                         \
+    namespace Halide {                                                                                                  \
+    namespace {                                                                                                         \
     [[maybe_unused]] std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool = false, bool = false) { \
         user_error << "Halide was compiled without support for this target\n";                                          \
         return std::unique_ptr<llvm::Module>();                                                                         \
@@ -44,6 +53,8 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     [[maybe_unused]] std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {                        \
         user_error << "Halide was compiled without support for this target\n";                                          \
         return std::unique_ptr<llvm::Module>();                                                                         \
+    }                                                                                                                   \
+    }                                                                                                                   \
     }
 
 #define DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, bits)              \
@@ -56,15 +67,21 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     } while (0)
 
 #define DECLARE_CPP_INITMOD_LOOKUP(mod)                                                                     \
+    namespace Halide {                                                                                      \
+    namespace {                                                                                             \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
         if (bits_64) {                                                                                      \
             DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 64);                                                       \
         } else {                                                                                            \
             DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 32);                                                       \
         }                                                                                                   \
+    }                                                                                                       \
+    }                                                                                                       \
     }
 
 #define DECLARE_CPP_INITMOD_LOOKUP_64(mod)                                                                  \
+    namespace Halide {                                                                                      \
+    namespace {                                                                                             \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
         if (bits_64) {                                                                                      \
             DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 64);                                                       \
@@ -72,6 +89,8 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
             internal_error << "No support for 32-bit initmod: " #mod;                                       \
             return nullptr; /* appease warnings */                                                          \
         }                                                                                                   \
+    }                                                                                                       \
+    }                                                                                                       \
     }
 
 #define DECLARE_CPP_INITMOD(mod)    \
@@ -314,6 +333,9 @@ DECLARE_CPP_INITMOD(riscv_cpu_features)
 // DECLARE_NO_INITMOD(riscv)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
+
+namespace Halide {
+namespace {
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {

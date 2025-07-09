@@ -14,6 +14,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Interval.h"
+#include "StrictifyFloat.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -2704,10 +2705,8 @@ Expr likely_if_innermost(Expr e) {
                       {std::move(e)}, Call::PureIntrinsic);
 }
 
-Expr strict_float(Expr e) {
-    Type t = e.type();
-    return Call::make(t, Call::strict_float,
-                      {std::move(e)}, Call::PureIntrinsic);
+Expr strict_float(const Expr &e) {
+    return strictify_float(e);
 }
 
 Expr undef(Type t) {

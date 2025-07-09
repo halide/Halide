@@ -18,7 +18,8 @@ add_halide_generator(hist.generator SOURCES hist_generator.cpp)
 add_halide_library(hist FROM hist.generator)
 add_halide_library(hist_auto_schedule FROM hist.generator
                    GENERATOR hist
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(hist_filter filter.cpp)

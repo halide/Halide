@@ -9,9 +9,12 @@ set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 
-find_package(LLVM ${PACKAGE_FIND_VERSION} CONFIG)
+find_package(LLVM CONFIG)
 
-set(Halide_LLVM_VERSION "${LLVM_PACKAGE_VERSION}")
+# Neither LLVM_VERSION nor LLVM_PACKAGE_VERSION work as find_package arguments
+# in git/development builds as they include a "git" suffix. This applies at
+# time of writing to versions 18-21, inclusive.
+set(Halide_LLVM_VERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
 
 if (NOT DEFINED Halide_LLVM_SHARED_LIBS)
     # Normally, we don't like making decisions for our users. However,
@@ -28,13 +31,35 @@ endif ()
 option(Halide_LLVM_SHARED_LIBS "Enable to link to shared libLLVM" "${Halide_LLVM_SHARED_LIBS}")
 
 if (LLVM_FOUND)
-    find_package(Clang HINTS "${LLVM_INSTALL_PREFIX}" "${LLVM_DIR}/../clang" "${LLVM_DIR}/../lib/cmake/clang")
+    # Package maintainers have some "interesting" ideas as to how they should
+    # lay out the -dev packages, especially when they want to support multiple
+    # parallel versions. These hints take effect at a lower precedence than
+    # Halide_LLVM_ROOT or CMAKE_PREFIX_PATH (which are the standard ways of
+    # setting up the dependency search), but at a higher precedence than the
+    # system-wide fallback locations.
+    find_package(
+        Clang "${Halide_LLVM_VERSION}" EXACT
+        HINTS
+        "${LLVM_INSTALL_PREFIX}" # Same root as the LLVM we found
+        "${LLVM_DIR}/../clang" # LLVM found in $ROOT/lib/cmake/llvm
+        "${LLVM_DIR}/../lib/cmake/clang" # LLVM found in $ROOT/cmake
+    )
 
     foreach (comp IN LISTS LLVM_TARGETS_TO_BUILD)
         if (comp STREQUAL "WebAssembly")
             set(Halide_LLVM_${comp}_FOUND 0)
 
-            find_package(LLD HINTS "${LLVM_INSTALL_PREFIX}" "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")
+            find_package(
+                LLD "${Halide_LLVM_VERSION}" EXACT
+                HINTS
+                "${LLVM_INSTALL_PREFIX}"
+                # Homebrew split the LLVM and LLD packages as of version 19, so
+                # having multiple LLVM versions installed leads to the newest
+                # LLD being found without this hint.
+                "${LLVM_INSTALL_PREFIX}/../lld@${LLVM_VERSION_MAJOR}"
+                "${LLVM_DIR}/../lld"
+                "${LLVM_DIR}/../lib/cmake/lld"
+            )
             if (NOT LLD_FOUND)
                 string(APPEND REASON_FAILURE_MESSAGE
                        "WebAssembly was not found because liblld is missing. "
@@ -74,7 +99,6 @@ find_package_handle_standard_args(
     REASON_FAILURE_MESSAGE "${REASON_FAILURE_MESSAGE}"
     HANDLE_COMPONENTS
     HANDLE_VERSION_RANGE
-    NAME_MISMATCHED
 )
 
 function(_Halide_LLVM_link target visibility)
@@ -114,11 +138,6 @@ if (Halide_LLVM_FOUND)
 
         set_property(TARGET Halide_LLVM::Core PROPERTY INTERFACE_CXX_RTTI "${LLVM_ENABLE_RTTI}")
         set_property(TARGET Halide_LLVM::Core APPEND PROPERTY COMPATIBLE_INTERFACE_BOOL CXX_RTTI)
-
-        if (LLVM_LIBCXX GREATER -1)
-            target_compile_options(Halide_LLVM::Core INTERFACE "$<$<LINK_LANGUAGE:CXX>:-stdlib=libc++>")
-            target_link_options(Halide_LLVM::Core INTERFACE "$<$<LINK_LANGUAGE:CXX>:-stdlib=libc++>")
-        endif ()
 
         if (Halide_LLVM_SHARED_LIBS)
             target_link_libraries(Halide_LLVM::Core INTERFACE LLVM ${CMAKE_DL_LIBS})

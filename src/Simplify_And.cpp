@@ -5,7 +5,7 @@ namespace Internal {
 
 Expr Simplify::visit(const And *op, ExprInfo *info) {
     if (falsehoods.count(op)) {
-        return const_false(op->type.lanes());
+        return const_false(op->type.lanes(), info);
     }
 
     Expr a = mutate(op->a, nullptr);
@@ -16,12 +16,50 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
         std::swap(a, b);
     }
 
+    if (info) {
+        info->cast_to(op->type);
+    }
+
     auto rewrite = IRMatcher::rewriter(IRMatcher::and_op(a, b), op->type);
 
     // clang-format off
+
+    // Cases that fold to a constant
+    if (EVAL_IN_LAMBDA
+        (rewrite(x && false, false) ||
+         rewrite(x != y && x == y, false) ||
+         rewrite(x != y && y == x, false) ||
+         rewrite((z && x != y) && x == y, false) ||
+         rewrite((z && x != y) && y == x, false) ||
+         rewrite((x != y && z) && x == y, false) ||
+         rewrite((x != y && z) && y == x, false) ||
+         rewrite((z && x == y) && x != y, false) ||
+         rewrite((z && x == y) && y != x, false) ||
+         rewrite((x == y && z) && x != y, false) ||
+         rewrite((x == y && z) && y != x, false) ||
+         rewrite(x && !x, false) ||
+         rewrite(!x && x, false) ||
+         rewrite(y <= x && x < y, false) ||
+         rewrite(y < x && x < y, false) ||
+         rewrite(x == c0 && x == c1, false, c0 != c1) ||
+         // Note: In the predicate below, if undefined overflow
+         // occurs, the predicate counts as false. If well-defined
+         // overflow occurs, the condition couldn't possibly
+         // trigger because c0 + 1 will be the smallest possible
+         // value.
+         rewrite(c0 < x && x < c1, false, !is_float(x) && c1 <= c0 + 1) ||
+         rewrite(x < c1 && c0 < x, false, !is_float(x) && c1 <= c0 + 1) ||
+         rewrite(x <= c1 && c0 < x, false, c1 <= c0) ||
+         rewrite(c0 <= x && x < c1, false, c1 <= c0) ||
+         rewrite(c0 <= x && x <= c1, false, c1 < c0) ||
+         rewrite(x <= c1 && c0 <= x, false, c1 < c0))) {
+        set_expr_info_to_constant(info, false);
+        return rewrite.result;
+    }
+
+    // Cases that fold to one of the args
     if (EVAL_IN_LAMBDA
         (rewrite(x && true, a) ||
-         rewrite(x && false, b) ||
          rewrite(x && x, a) ||
 
          rewrite((x && y) && x, a) ||
@@ -43,33 +81,7 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
          rewrite((x || y) && y, b) ||
          rewrite(y && (x || y), a) ||
 
-         rewrite(x != y && x == y, false) ||
-         rewrite(x != y && y == x, false) ||
-         rewrite((z && x != y) && x == y, false) ||
-         rewrite((z && x != y) && y == x, false) ||
-         rewrite((x != y && z) && x == y, false) ||
-         rewrite((x != y && z) && y == x, false) ||
-         rewrite((z && x == y) && x != y, false) ||
-         rewrite((z && x == y) && y != x, false) ||
-         rewrite((x == y && z) && x != y, false) ||
-         rewrite((x == y && z) && y != x, false) ||
-         rewrite(x && !x, false) ||
-         rewrite(!x && x, false) ||
-         rewrite(y <= x && x < y, false) ||
-         rewrite(y < x && x < y, false) ||
          rewrite(x != c0 && x == c1, b, c0 != c1) ||
-         rewrite(x == c0 && x == c1, false, c0 != c1) ||
-         // Note: In the predicate below, if undefined overflow
-         // occurs, the predicate counts as false. If well-defined
-         // overflow occurs, the condition couldn't possibly
-         // trigger because c0 + 1 will be the smallest possible
-         // value.
-         rewrite(c0 < x && x < c1, false, !is_float(x) && c1 <= c0 + 1) ||
-         rewrite(x < c1 && c0 < x, false, !is_float(x) && c1 <= c0 + 1) ||
-         rewrite(x <= c1 && c0 < x, false, c1 <= c0) ||
-         rewrite(c0 <= x && x < c1, false, c1 <= c0) ||
-         rewrite(c0 <= x && x <= c1, false, c1 < c0) ||
-         rewrite(x <= c1 && c0 <= x, false, c1 < c0) ||
          rewrite(c0 < x && c1 < x, fold(max(c0, c1)) < x) ||
          rewrite(c0 <= x && c1 <= x, fold(max(c0, c1)) <= x) ||
          rewrite(x < c0 && x < c1, x < fold(min(c0, c1))) ||

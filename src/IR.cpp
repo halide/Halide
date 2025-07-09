@@ -677,7 +677,15 @@ const char *const intrinsic_op_names[] = {
     "skip_stages_marker",
     "sliding_window_marker",
     "sorted_avg",
-    "strict_float",
+    "strict_add",
+    "strict_div",
+    "strict_eq",
+    "strict_le",
+    "strict_lt",
+    "strict_max",
+    "strict_min",
+    "strict_mul",
+    "strict_sub",
     "stringify",
     "target_arch_is",
     "target_bits",
@@ -913,6 +921,25 @@ bool Shuffle::is_interleave() const {
     }
 
     return true;
+}
+
+std::vector<std::pair<int, int>> Shuffle::vector_and_lane_indices() const {
+
+    // Construct the mapping for each shuffled element and find the index
+    // of which vector to use and the index for which of its lanes to use
+    std::vector<std::pair<int, int>> all_indices;
+    all_indices.reserve(indices.size());
+    for (int i = 0; i < (int)vectors.size(); i++) {
+        for (int j = 0; j < vectors[i].type().lanes(); j++) {
+            all_indices.emplace_back(i, j);
+        }
+    }
+    std::vector<std::pair<int, int>> result;
+    result.reserve(indices.size());
+    for (int i : indices) {
+        result.push_back(all_indices[i]);
+    }
+    return result;
 }
 
 Stmt Atomic::make(const std::string &producer_name,

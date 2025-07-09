@@ -5,13 +5,8 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
-    if (target.has_feature(Target::Feature::Vulkan)) {
-        std::printf("[SKIP] Vulkan seems to be not working.\n");
-        return 0;
-    }
 
     Var x{"x"}, y{"y"};
-
     Func f0{"f0"}, f1{"f1"}, g{"g"};
     f0(x, y) = x * (y + 1);
     f1(x, y) = x * (y + 3);

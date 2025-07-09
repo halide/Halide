@@ -17,6 +17,7 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "SpirvIR.h"
+#include "StrictifyFloat.h"
 #include "Target.h"
 
 #ifdef WITH_SPIRV
@@ -148,6 +149,7 @@ protected:
 
         SpvFactory::Components split_vector(Type type, SpvId value_id);
         SpvId join_vector(Type type, const SpvFactory::Components &value_components);
+        SpvId fill_vector(Type type, SpvId value_id);
         SpvId cast_type(Type target_type, Type value_type, SpvId value_id);
         SpvId convert_to_bool(Type target_type, Type value_type, SpvId value_id);
 
@@ -1186,10 +1188,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             Expr e = lower_signed_shift_left(op->args[0], op->args[1]);
             e.accept(this);
         }
-    } else if (op->is_intrinsic(Call::strict_float)) {
+    } else if (op->is_strict_float_intrinsic()) {
         // TODO: Enable/Disable RelaxedPrecision flags?
-        internal_assert(op->args.size() == 1);
-        op->args[0].accept(this);
+        Expr e = unstrictify_float(op);
+        e.accept(this);
     } else if (op->is_intrinsic(Call::IntrinsicOp::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         // b > a, so the following works without widening:
@@ -1298,14 +1300,26 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
     } else if (op->name == "nan_f32") {
         float value = NAN;
         SpvId result_id = builder.declare_constant(Float(32), &value);
+        if (op->type.is_vector()) {
+            SpvId value_id = result_id;
+            result_id = fill_vector(op->type, value_id);
+        }
         builder.update_id(result_id);
     } else if (op->name == "inf_f32") {
         float value = INFINITY;
         SpvId result_id = builder.declare_constant(Float(32), &value);
+        if (op->type.is_vector()) {
+            SpvId value_id = result_id;
+            result_id = fill_vector(op->type, value_id);
+        }
         builder.update_id(result_id);
     } else if (op->name == "neg_inf_f32") {
         float value = -INFINITY;
         SpvId result_id = builder.declare_constant(Float(32), &value);
+        if (op->type.is_vector()) {
+            SpvId value_id = result_id;
+            result_id = fill_vector(op->type, value_id);
+        }
         builder.update_id(result_id);
     } else if (starts_with(op->name, "is_nan_f")) {
         internal_assert(op->args.size() == 1);
@@ -2003,18 +2017,28 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Evaluate *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
-    std::cout << " CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Shuffle): "
-              << "type=" << op->type << " "
-              << "vectors=" << (uint32_t)op->vectors.size() << " "
-              << "is_interleave=" << (op->is_interleave() ? "true" : "false") << " "
-              << "is_extract_element=" << (op->is_extract_element() ? "true" : "false") << "\n";
+    debug(2) << " CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Shuffle): "
+             << "type=" << op->type << " "
+             << "vectors=" << (uint32_t)op->vectors.size() << " "
+             << "is_interleave=" << (op->is_interleave() ? "true" : "false") << " "
+             << "is_extract_element=" << (op->is_extract_element() ? "true" : "false") << "\n";
 
-    // Traverse all the arg vectors
+    internal_assert(!op->vectors.empty());
+    internal_assert(op->type.lanes() == (int)op->indices.size());
+
+    // The Shuffle operator supports any combination of vector width for its
+    // arguments, as long as the indices match the number of lanes for the result
+    // type.  This means the arguments can be a mixed combination of vectors with
+    // any number of lanes (or a scalar).  We special case interleave and extract,
+    // and then use the vector and lane index mapping to determine which values to
+    // use from the arguments to do the shufffle.
+
+    // First, traverse all the arg vectors
     uint32_t arg_idx = 0;
     SpvFactory::Operands arg_ids;
     arg_ids.reserve(op->vectors.size());
     for (const Expr &e : op->vectors) {
-        debug(2) << " CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Shuffle): Arg[" << arg_idx++ << "] => " << e << "\n";
+        debug(3) << " CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Shuffle): Arg[" << arg_idx++ << "] => " << e << "\n";
         e.accept(this);
         arg_ids.push_back(builder.current_id());
     }
@@ -2024,11 +2048,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
         internal_assert(!arg_ids.empty());
         int arg_lanes = op->vectors[0].type().lanes();
 
-        std::cout << "    vector interleave x" << (uint32_t)op->vectors.size() << " : ";
+        debug(3) << "    vector interleave x" << (uint32_t)op->vectors.size() << " : ";
         for (int idx : op->indices) {
-            std::cout << idx << " ";
+            debug(3) << idx << " ";
         }
-        std::cout << "\n";
+        debug(3) << "\n";
 
         if (arg_ids.size() == 1) {
 
@@ -2096,77 +2120,41 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
             SpvId result_id = cast_type(op->type, op->vectors[0].type(), arg_ids[0]);
             builder.update_id(result_id);
         }
-    } else if (op->type.is_scalar()) {
-        // Deduce which vector we need. Apparently it's not required
-        // that all vectors have identical lanes, so a loop is required.
-        // Since idx of -1 means "don't care", we'll treat it as 0 to simplify.
-        SpvId result_id = SpvInvalidId;
-        int idx = std::max(0, op->indices[0]);
-        for (size_t vec_idx = 0; vec_idx < op->vectors.size(); vec_idx++) {
-            const int vec_lanes = op->vectors[vec_idx].type().lanes();
-            if (idx < vec_lanes) {
-                if (op->vectors[vec_idx].type().is_vector()) {
-                    SpvFactory::Indices indices = {(uint32_t)idx};
-                    SpvId type_id = builder.declare_type(op->type);
-                    result_id = builder.reserve_id(SpvResultId);
-                    builder.append(SpvFactory::composite_extract(type_id, result_id, arg_ids[vec_idx], indices));
-                } else {
-                    result_id = arg_ids[vec_idx];
-                }
-                break;
-            }
-            idx -= vec_lanes;
-        }
-
     } else {
+        // Shuffle with arbitrary number of lanes per arg
 
-        // vector shuffle ... not interleaving
-        int op_lanes = op->type.lanes();
-        int num_vectors = (int)op->vectors.size();
+        // Construct the mapping for each shuffled element to find
+        // the corresponding vector-index to use and which lane-index
+        // of the selected vector.
+        auto vector_lane_indices = op->vector_and_lane_indices();
 
-        std::cout << "    vector shuffle x" << num_vectors << " : ";
-        for (int idx : op->indices) {
-            std::cout << idx << " ";
-        }
-        std::cout << "\n";
+        SpvId type_id = builder.declare_type(op->type);
+        SpvId result_id = builder.reserve_id(SpvResultId);
 
-        if (num_vectors == 1) {
-            // 1 argument, just do a simple assignment via a cast
-            SpvId result_id = cast_type(op->type, op->vectors[0].type(), arg_ids[0]);
-            builder.update_id(result_id);
+        SpvFactory::Components constituents;
+        debug(3) << " Shuffle Composite(" << op->type << ") => ";
+        for (auto element_mapping : vector_lane_indices) {
+            int arg_idx = element_mapping.first;
+            int lane_idx = element_mapping.second;
 
-        } else if (num_vectors == 2) {
+            if (op->vectors[arg_idx].type().lanes() > 1) {
+                SpvFactory::Indices indices = {(uint32_t)lane_idx};
+                SpvId scalar_type_id = builder.declare_type(op->vectors[arg_idx].type().element_of());
+                SpvId scalar_id = builder.reserve_id(SpvResultId);
+                builder.append(SpvFactory::composite_extract(scalar_type_id, scalar_id, arg_ids[arg_idx], indices));
 
-            // 2 arguments, use the builtin vector shuffle that takes a pair of vectors
-            SpvFactory::Indices indices;
-            indices.reserve(op->indices.size());
-            indices.insert(indices.end(), op->indices.begin(), op->indices.end());
-            SpvId type_id = builder.declare_type(op->type);
-            SpvId result_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::vector_shuffle(type_id, result_id, arg_ids[0], arg_ids[1], indices));
-            builder.update_id(result_id);
-        } else {
-            std::vector<SpvFactory::Components> vector_component_ids(num_vectors);
-            for (uint32_t i = 0; i < (uint32_t)arg_ids.size(); ++i) {
-                if (op->vectors[i].type().is_vector()) {
-                    vector_component_ids[i] = split_vector(op->vectors[i].type(), arg_ids[i]);
-                } else {
-                    vector_component_ids[i] = {arg_ids[i]};
-                }
+                debug(3) << arg_ids[arg_idx] << "(v" << op->vectors[arg_idx].type().lanes() << "[" << lane_idx << "]) ";
+                constituents.push_back(scalar_id);  // insert a component from a vector
+            } else {
+                debug(3) << arg_ids[arg_idx] << " ";
+                SpvId scalar_id = cast_type(op->type.element_of(), op->vectors[arg_idx].type(), arg_ids[arg_idx]);
+                constituents.push_back(scalar_id);  // inserting a scalar
             }
-
-            SpvFactory::Components result_component_ids(op_lanes);
-            for (int i = 0; i < op_lanes && i < (int)op->indices.size(); i++) {
-                int idx = op->indices[i];
-                int arg = idx % num_vectors;
-                int arg_idx = idx / num_vectors;
-                internal_assert(arg_idx <= (int)vector_component_ids[arg].size());
-                result_component_ids[i] = vector_component_ids[arg][arg_idx];
-            }
-
-            SpvId result_id = join_vector(op->type, result_component_ids);
-            builder.update_id(result_id);
         }
+
+        debug(3) << "\n";
+        builder.append(SpvFactory::composite_construct(type_id, result_id, constituents));
+        builder.update_id(result_id);
     }
 }
 
@@ -2253,6 +2241,16 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::join_vector(Type type, const SpvFactory
     SpvId type_id = builder.declare_type(type);
     SpvId result_id = builder.reserve_id(SpvResultId);
     builder.append(SpvFactory::composite_construct(type_id, result_id, value_components));
+    return result_id;
+}
+
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::fill_vector(Type type, SpvId value_id) {
+    SpvId type_id = builder.declare_type(type);
+    SpvId result_id = builder.reserve_id(SpvResultId);
+
+    SpvFactory::Components constituents;
+    constituents.insert(constituents.end(), type.lanes(), value_id);
+    builder.append(SpvFactory::composite_construct(type_id, result_id, constituents));
     return result_id;
 }
 
@@ -2892,9 +2890,10 @@ void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
     emitter.encode_spirv_module(spirv_module);
 
     // Dump the SPIR-V if debug is enabled
-    if (debug::debug_level() >= 2) {
+    debug(2) << [&] {
         emitter.dump_spirv_module();
-    }
+        return "";
+    }();
 
     // Copy the SPIR-V module into the Kernel Module table
     KernelModule kernel_module;
