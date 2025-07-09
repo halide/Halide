@@ -194,11 +194,6 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         debug(3) << loop_vars.size() << "\n";
 
         const Load *maybe_load = op->value.as<Load>();
-        if (const Call *maybe_call = op->value.as<Call>()) {
-            if (maybe_call->is_intrinsic(Call::IntrinsicOp::strict_float)) {
-                maybe_load = maybe_call->args[0].as<Load>();
-            }
-        }
         // Has to be a direct load-to-store for now.
         user_assert(maybe_load) << "Only direct load-to-stores are supported in dma()";
 
