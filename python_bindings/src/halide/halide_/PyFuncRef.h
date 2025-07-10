@@ -6,6 +6,9 @@
 namespace Halide {
 namespace PythonBindings {
 
+struct StageFromInPlaceUpdate {
+    Stage new_stage;
+};
 void define_func_ref(py::module &m);
 
 }  // namespace PythonBindings

@@ -7,6 +7,9 @@ namespace Halide {
 namespace PythonBindings {
 
 void define_func_ref(py::module &m) {
+    auto stage_from_in_place_update_class =
+        py::class_<StageFromInPlaceUpdate>(m, "_StageFromInPlaceUpdate");
+
     auto func_tuple_element_ref_class =
         py::class_<FuncTupleElementRef>(m, "FuncTupleElementRef")
             .def("index", &FuncTupleElementRef::index);
@@ -33,60 +36,48 @@ void define_func_ref(py::module &m) {
              *     f.__setitem__(r, <Stage>)
              *
              * where <Stage> is the result of FuncRef::operator+=. This doesn't make sense.
-             * Instead, we return the same FuncRef. The same logic applies to the other
-             * in-place overloads.
+             * Instead, we return a special type (StageFromInPlaceUpdate) that signals to
+             * our __setitem__ implementation that this is the case.
              */
             // __iadd__
             .def("__iadd__", [](FuncRef &self, const Expr &other) {
-                self += other;
-                return self;
+                return StageFromInPlaceUpdate{self += other};
             })
             .def("__iadd__", [](FuncRef &self, const py::tuple &other) {
-                self += to_halide_tuple(other);
-                return self;
+                return StageFromInPlaceUpdate{self += to_halide_tuple(other)};
             })
             .def("__iadd__", [](FuncRef &self, const FuncRef &other) {
-                self += other;
-                return self;
+                return StageFromInPlaceUpdate{self += other};
             })
             // __isub__
             .def("__isub__", [](FuncRef &self, const Expr &other) {
-                self -= other;
-                return self;
+                return StageFromInPlaceUpdate{self -= other};
             })
             .def("__isub__", [](FuncRef &self, const py::tuple &other) {
-                self -= to_halide_tuple(other);
-                return self;
+                return StageFromInPlaceUpdate{self -= to_halide_tuple(other)};
             })
             .def("__isub__", [](FuncRef &self, const FuncRef &other) {
-                self -= other;
-                return self;
+                return StageFromInPlaceUpdate{self -= other};
             })
             // __imul__
             .def("__imul__", [](FuncRef &self, const Expr &other) {
-                self *= other;
-                return self;
+                return StageFromInPlaceUpdate{self *= other};
             })
             .def("__imul__", [](FuncRef &self, const py::tuple &other) {
-                self *= to_halide_tuple(other);
-                return self;
+                return StageFromInPlaceUpdate{self *= to_halide_tuple(other)};
             })
             .def("__imul__", [](FuncRef &self, const FuncRef &other) {
-                self *= other;
-                return self;
+                return StageFromInPlaceUpdate{self *= other};
             })
             // __idiv__
             .def("__itruediv__", [](FuncRef &self, const Expr &other) {
-                self /= other;
-                return self;
+                return StageFromInPlaceUpdate{self /= other};
             })
             .def("__itruediv__", [](FuncRef &self, const py::tuple &other) {
-                self /= to_halide_tuple(other);
-                return self;
+                return StageFromInPlaceUpdate{self /= to_halide_tuple(other)};
             })
             .def("__itruediv__", [](FuncRef &self, const FuncRef &other) {
-                self /= other;
-                return self;
+                return StageFromInPlaceUpdate{self /= other};
             });
 
     add_binary_operators(func_ref_class);

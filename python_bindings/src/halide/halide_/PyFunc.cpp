@@ -474,6 +474,16 @@ void define_func(py::module &m) {
     define_set<Expr, Expr>(func_class);
     define_set<Expr, Tuple>(func_class);
 
+    // When creating a new stage via +=, -=, *=, or /= a new stage
+    // is created as a side effect. This overload prevents creating
+    // an extra update stage (if we returned the FuncRef, we would
+    // add the equivalent of f(...) = f(...) as a separate update).
+    func_class.def(
+        "__setitem__",
+        [](Func &, const py::object &, StageFromInPlaceUpdate &stage) -> Stage {
+            return stage.new_stage;
+        });
+
     add_schedule_methods(func_class);
 
     define_stage(m);
