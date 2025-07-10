@@ -82,21 +82,11 @@ double run_test_2(bool auto_schedule) {
         // Provide estimates on the pipeline output
         diff.set_estimates({{0, left_im.width()}, {0, left_im.height()}, {0, 32}, {0, 3}});
 
-        // Auto-schedule the pipeline
-        //
-        // Increasing the GPU's active warp count estimate (aka parallelism)
-        // from 128 to 2048 to disable the Autoscheduler's grid-stride loop
-        // feature. At small parallelism value, the autoscheduler correctly
-        // designates dimension 'z' as the stride axis in the GPU grid-stride
-        // loop, which improves thread occupancy. However, it fails to reorder
-        // 'z' inside the gpu_blocks 'xo' and 'yo', which is required for proper
-        // loop nesting and successful code generation.
-        //
-        // Reference:
-        // https://developer.nvidia.com/blog/cuda-pro-tip-write-flexible-kernels-grid-stride-loops/
+        // note(antonysigma): Reducing the GPU's shared memory size estimate so that the GPU kernel
+        // can launch on consumer-grade GPUs.
         constexpr Mullapudi2016TestParams gpu_specifications{
-            /* .last_level_cache_size = */ 47'000,
-            /* .parallelism = */ 2048,
+            /* .last_level_cache_size = */ 20'000,
+            /* .parallelism = */ 128,
         };
 
         p.apply_autoscheduler(
@@ -139,16 +129,9 @@ double run_test_3(bool auto_schedule) {
     if (auto_schedule) {
         // Provide estimates on the pipeline output
         r.set_estimates({{0, 1024}, {0, 1024}, {0, 3}});
-        // Auto-schedule the pipeline
-        //
-        // Disabling this experimental GPU feature because the autoscheduler correctly
-        // identifies reduction domain 'r.x' as the stride axis for the GPU grid-stride loop,
-        // which helps retain threads efficiently. However, it fails to reorder 'r.x'
-        // inside the loop nests of gpu_blocks 'xo' and 'yo', which is necessary for
-        // successful code generation.
-        //
-        // Reference: https://developer.nvidia.com/blog/cuda-pro-tip-write-flexible-kernels-grid-stride-loops/
-        p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
+
+        p.apply_autoscheduler(target,
+                              get_mullapudi2016_test_params(target.has_gpu_feature()));
     } else {
         Var par("par");
         r.update(0).fuse(c, y, par).parallel(par).reorder(x, dom.x, dom.y).vectorize(x, 4);

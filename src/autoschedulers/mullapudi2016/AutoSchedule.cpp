@@ -123,6 +123,21 @@ string get_sanitized_name(string name) {
     return name;
 }
 
+// Similar to std::replace, but assuming the vector contains unique values. And
+// if the element is absent, append new value to the end of vector.
+void replace_or_emplace(std::vector<VarOrRVar> &dims_, const VarOrRVar &before, VarOrRVar after) {
+    auto iter = std::find_if(dims_.begin(), dims_.end(),
+                             [before_name = before.name()](const VarOrRVar &d) {
+                                 return d.name() == before_name;
+                             });
+    const bool is_found = (iter != dims_.end());
+    if (is_found) {
+        *iter = std::move(after);
+    } else {
+        dims_.emplace_back(std::move(after));
+    }
+}
+
 // Representation of a function stage in the pipeline.
 struct FStage {
     Function func;
@@ -1426,8 +1441,11 @@ public:
             threads_budget = simplify(max(threads_budget / new_entry.factor, 1));
         }
 
-        if (!is_already_split) {
-            helper.commit(sched, is_compute_at);
+        helper.commit(sched, is_compute_at);
+        if (is_compute_at) {
+            // There are dimensions that does not need splitting but marked as
+            // vectorizable. Mark them as gpu threads.
+            mark_gpu_threads(sched);
         }
 
         // After calling `gpu_tiles` from `GPUTileHelper::commit()`, a few of
@@ -3425,7 +3443,8 @@ void Partitioner::generate_group_cpu_schedule(
                     if (parallelized_split) {
                         auto split_vars = *parallelized_split;
                         inner_dims.emplace_back(split_vars.inner);
-                        outer_dims.emplace_back(split_vars.outer);
+
+                        replace_or_emplace(outer_dims, v, split_vars.outer);
                     }
                 } else {
                     f_handle.parallel(v);
