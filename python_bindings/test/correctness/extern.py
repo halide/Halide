@@ -1,5 +1,5 @@
-import halide as hl
-import numpy as np
+# import halide as hl
+# import numpy as np
 
 
 def test_extern():
@@ -9,9 +9,9 @@ def test_extern():
     """
 
     # Requires Makefile support to build the external function in linkable form
-    print("TODO: test_extern not yet implemented in Python; skipping...")
-    return 0
+    print("[SKIP] TODO: test_extern not yet implemented in Python")
 
+    """
     data = np.random.random(10).astype(np.float64)
     expected_result = np.sort(data)
     output_data = np.empty(10, dtype=np.float64)
@@ -58,8 +58,7 @@ def test_extern():
     sort_func.realize(output_data)
 
     assert np.isclose(expected_result, output_data)
-
-    return
+    """
 
 
 if __name__ == "__main__":
