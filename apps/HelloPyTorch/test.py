@@ -54,7 +54,7 @@ class TestAdd(unittest.TestCase):
                 print("  .Single-precision mode, backward_op:", backward_op)
 
             diff = (output-self.gt).sum().item()
-            assert diff == 0.0, "Test failed: sum should be 4, got %f" % diff
+            assert diff == 0.0, f"Test failed: sum should be 4, got {diff:f}"
 
             self.a.requires_grad = True
             self.b.requires_grad = True

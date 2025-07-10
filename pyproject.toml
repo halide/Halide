@@ -109,6 +109,9 @@ cmake.define.Halide_WASM_BACKEND = "OFF"
 select = [
     "UP" # Uses of old Python features
 ]
+ignore = [
+    "UP045" # Don't replace Optional[T] with T | None
+]
 
 [tool.tbump]
 github_url = "https://github.com/halide/Halide/"

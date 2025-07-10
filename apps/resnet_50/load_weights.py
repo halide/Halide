@@ -8,7 +8,7 @@ import sys
 
 def load_weights(dir):
     if not os.path.isdir(dir):
-        print("Path %s is not a dir" % dir)
+        print(f"Path {dir} is not a dir")
         sys.exit(1)
 
     print("-----------loading weights------------")

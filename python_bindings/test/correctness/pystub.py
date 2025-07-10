@@ -207,7 +207,7 @@ def test_complex(cls, extra_input_name=""):
             for c in range(3):
                 expected = constant_image[x, y, c]
                 actual = b[x, y, c]
-                assert expected == actual, "Expected %s Actual %s" % (expected, actual)
+                assert expected == actual, f"Expected {expected} Actual {actual}"
 
     b = tuple_output.realize([32, 32, 3], target)
     assert b[0].type() == hl.Float(32)
@@ -219,14 +219,8 @@ def test_complex(cls, extra_input_name=""):
                 expected1 = constant_image[x, y, c] * float_arg
                 expected2 = expected1 + int_arg
                 actual1, actual2 = b[0][x, y, c], b[1][x, y, c]
-                assert expected1 == actual1, "Expected1 %s Actual1 %s" % (
-                    expected1,
-                    actual1,
-                )
-                assert expected2 == actual2, "Expected2 %s Actual1 %s" % (
-                    expected2,
-                    actual2,
-                )
+                assert expected1 == actual1, f"Expected1 {expected1} Actual1 {actual1}"
+                assert expected2 == actual2, f"Expected2 {expected2} Actual1 {actual2}"
 
     # TODO: Output<Buffer<>> has additional behaviors useful when a Stub
     # is used within another Generator; this isn't yet implemented since there
@@ -239,7 +233,7 @@ def test_complex(cls, extra_input_name=""):
             for c in range(3):
                 expected = constant_image[x, y, c]
                 actual = b[x, y, c]
-                assert expected == actual, "Expected %s Actual %s" % (expected, actual)
+                assert expected == actual, f"Expected {expected} Actual {actual}"
 
     b = untyped_buffer_output.realize([32, 32, 3], target)
     assert b.type() == hl.UInt(8)
@@ -248,7 +242,7 @@ def test_complex(cls, extra_input_name=""):
             for c in range(3):
                 expected = constant_image[x, y, c]
                 actual = b[x, y, c]
-                assert expected == actual, "Expected %s Actual %s" % (expected, actual)
+                assert expected == actual, f"Expected {expected} Actual {actual}"
 
     b = static_compiled_buffer_output.realize([4, 4, 1], target)
     assert b.type() == hl.UInt(8)
@@ -257,7 +251,7 @@ def test_complex(cls, extra_input_name=""):
             for c in range(1):
                 expected = constant_image[x, y, c] + 42
                 actual = b[x, y, c]
-                assert expected == actual, "Expected %s Actual %s" % (expected, actual)
+                assert expected == actual, f"Expected {expected} Actual {actual}"
 
     b = scalar_output.realize([], target)
     assert b.type() == hl.Float(32)
@@ -272,7 +266,7 @@ def test_complex(cls, extra_input_name=""):
             else:
                 expected = 0
             actual = b[x, y]
-            assert expected == actual, "Expected %s Actual %s" % (expected, actual)
+            assert expected == actual, f"Expected {expected} Actual {actual}"
 
 
 if __name__ == "__main__":

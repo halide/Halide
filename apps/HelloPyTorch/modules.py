@@ -34,10 +34,10 @@ def _dispatch(opname, optype=th.float32, cuda=False):
     elif optype == th.float64:
         opname += "_float64"
     else:
-        raise ValueError("Optype %s not recognized %s" % optype)
+        raise ValueError("Optype {} not recognized {}".format(*optype))
     op = getattr(ops, opname)
     if not hasattr(ops, opname):
-        raise ValueError("Module has no operator %s" % opname)
+        raise ValueError(f"Module has no operator {opname}")
     return op
 
 def _forward_common(ctx, input_a, input_b):
@@ -81,7 +81,7 @@ def _backward_common(ctx, d_out, backward_op):
 class AddFunction_Grad(th.autograd.Function):
   """Version using the manually-written backprop"""
   def __init__(self):
-      super(AddFunction_Grad, self).__init__()
+      super().__init__()
 
   @staticmethod
   def forward(ctx, input_a, input_b):
@@ -94,7 +94,7 @@ class AddFunction_Grad(th.autograd.Function):
 class AddFunction_HalideGrad(th.autograd.Function):
   """Version using the Halide-generated backprop"""
   def __init__(self):
-      super(AddFunction_HalideGrad, self).__init__()
+      super().__init__()
 
   @staticmethod
   def forward(ctx, input_a, input_b):
@@ -110,7 +110,7 @@ class Add(th.nn.Module):
     This is so we can use it as an operator.
     """
     def __init__(self, backward_op):
-        super(Add, self).__init__()
+        super().__init__()
         if backward_op == "add_grad":
           self._adder = AddFunction_Grad
         elif backward_op == "add_halidegrad":

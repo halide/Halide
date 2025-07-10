@@ -39,7 +39,7 @@ def _is_valid_name(name: str) -> bool:
 def _check_valid_name(name: str) -> str:
     _check(
         _is_valid_name(name),
-        "The name '%s' is not valid for a GeneratorParam, Input, or Output." % name,
+        f"The name '{name}' is not valid for a GeneratorParam, Input, or Output.",
     )
     return name
 
@@ -57,7 +57,7 @@ def _sanitize_type(t: object) -> Type:
     elif t is float:
         return Float(32)
     else:
-        _check(isinstance(t, Type), "Expected a Halide Type, but saw: %s" % t)
+        _check(isinstance(t, Type), f"Expected a Halide Type, but saw: {t}")
         return t
 
 def _normalize_type_list(types: object) -> list[Type]:
@@ -88,7 +88,7 @@ _type_string_map = {
 
 
 def _parse_halide_type(s: str) -> Type:
-    _check(s in _type_string_map, "The value %s cannot be parsed as a Type." % s)
+    _check(s in _type_string_map, f"The value {s} cannot be parsed as a Type.")
     return _type_string_map[s]
 
 
@@ -115,13 +115,11 @@ class Requirement:
         self._dimensions = dimensions
         _check(
             len(self._types) > 0,
-            "No type has been specified for %s. Try specifying one in code, or by setting '%s.type' as a GeneratorParam."
-            % (self._name, self._name),
+            f"No type has been specified for {self._name}. Try specifying one in code, or by setting '{self._name}.type' as a GeneratorParam.",
         )
         _check(
             self._dimensions >= 0,
-            "No dimensionality has been specified for %s. Try specifying one in code, or by setting '%s.dim' as a GeneratorParam."
-            % (self._name, self._name),
+            f"No dimensionality has been specified for {self._name}. Try specifying one in code, or by setting '{self._name}.dim' as a GeneratorParam.",
         )
         self._check_types_and_dimensions(types, dimensions)
 
@@ -177,7 +175,7 @@ class GeneratorParam:
                 value = _parse_halide_type_list(str(value))
             return value
         else:
-            _fail("GeneratorParam %s has unsupported type %s" % (name, gp_type))
+            _fail(f"GeneratorParam {name} has unsupported type {gp_type}")
             return None
 
     def _make_replacement(self, value: Any, r: Requirement) -> Any:
@@ -218,11 +216,11 @@ class InputBuffer(ImageParam):
 
         _check(
             isinstance(value, (Buffer, ImageParam)),
-            "Input %s requires an ImageParam or Buffer argument when using call(), but saw %s" % (r._name, str(value)),
+            f"Input {r._name} requires an ImageParam or Buffer argument when using call(), but saw {str(value)}",
         )
         _check(
             value.defined(),
-            "Cannot set the value for %s to an undefined value." % r._name,
+            f"Cannot set the value for {r._name} to an undefined value.",
         )
         if isinstance(value, Buffer):
             im = ImageParam(value.type(), value.dimensions(), r._name)
@@ -256,12 +254,11 @@ class InputScalar(Param):
         else:
             _check(
                 isinstance(value, Param),
-                "Input %s requires a Param (or scalar literal) argument when using call(), but saw %s." %
-                (r._name, str(value)),
+                f"Input {r._name} requires a Param (or scalar literal) argument when using call(), but saw {str(value)}.",
             )
             _check(
                 value.defined(),
-                "Cannot set the value for %s to an undefined value." % r._name,
+                f"Cannot set the value for {r._name} to an undefined value.",
             )
             r._check_types_and_dimensions([value.type()], 0)
             return value
@@ -290,11 +287,11 @@ class OutputBuffer(Func):
 
         _check(
             isinstance(value, (Buffer, Func)),
-            "Output %s requires a Func or Buffer argument when using call(), but saw %s" % (r._name, str(value)),
+            f"Output {r._name} requires a Func or Buffer argument when using call(), but saw {str(value)}",
         )
         _check(
             value.defined(),
-            "Cannot set the value for %s to an undefined value." % r._name,
+            f"Cannot set the value for {r._name} to an undefined value.",
         )
 
         value_types = [value.type()] if isinstance(value, Buffer) else value.output_types
@@ -324,11 +321,11 @@ class OutputScalar(OutputBuffer):
 
         _check(
             isinstance(value, Expr),
-            "Output %s requires an Expr argument when using call(), but saw %s" % (r._name, str(value)),
+            f"Output {r._name} requires an Expr argument when using call(), but saw {str(value)}",
         )
         _check(
             value.defined(),
-            "Cannot set the value for %s to an undefined value." % r._name,
+            f"Cannot set the value for {r._name} to an undefined value.",
         )
         r._check_types_and_dimensions(value.type(), 0)
         f = Func(value.type(), 0, r._name)
@@ -359,8 +356,7 @@ def _unsorted_cls_dir(cls):
     # Don't use dir(): it will alphabetize the result. It's critical that
     # we produce this list in order of declaration, which __dict__ should guarantee
     # in Python 3.7+.
-    for k, v in cls.__dict__.items():
-        yield (k, v)
+    yield from cls.__dict__.items()
 
 
 _halide_generator_context = ContextVar('halide_generator_context', default=None)
@@ -422,14 +418,14 @@ class Generator(ABC):
             a = generator._arginfos_in[i]
             k = a.name
             v = args[i]
-            _check(k not in inputs_set, "Input %s was specified multiple times." % k)
+            _check(k not in inputs_set, f"Input {k} was specified multiple times.")
             inputs_set.append(k)
             generator._bind_input(k, [v])
 
         input_names = [a.name for a in generator._arginfos_in]
         for k, v in kwargs.items():
-            _check(k in input_names, "Unknown input '%s' specified via keyword argument." % k)
-            _check(k not in inputs_set, "Input %s specified multiple times." % k)
+            _check(k in input_names, f"Unknown input '{k}' specified via keyword argument.")
+            _check(k not in inputs_set, f"Input {k} specified multiple times.")
             inputs_set.append(k)
             generator._bind_input(k, [v])
 
@@ -459,7 +455,7 @@ class Generator(ABC):
         r = getattr(self, "_requirements", None)
         s = getattr(self, "_stage", None)
         if r and s and (name in r) and (s != _Stage.configure_called) and (s != _Stage.gp_created):
-            raise AttributeError("Invalid write to field '%s'" % name)
+            raise AttributeError(f"Invalid write to field '{name}'")
         super().__setattr__(name, value)
 
     def __init__(self, generator_params: dict = {}):
@@ -502,7 +498,7 @@ class Generator(ABC):
         _check_valid_name(name)
         _check(
             name not in self._requirements,
-            "The name '%s' is used more than once in Generator %s." % (name, self._get_name()),
+            f"The name '{name}' is used more than once in Generator {self._get_name()}.",
         )
         types, dimensions = io._get_types_and_dimensions()
         types, dimensions = self._set_io_types_and_dimensions_from_gp(name, types, dimensions)
@@ -515,17 +511,17 @@ class Generator(ABC):
     def add_input(self, name: str, io) -> None:
         _check(self._in_configure > 0, "Can only call add_input() from the configure() method.")
         _check(not hasattr(self, name),
-               "Cannot call add_input('%s') because the class already has a member of that name." % name)
+               f"Cannot call add_input('{name}') because the class already has a member of that name.")
         _check(isinstance(io, (InputBuffer, InputScalar)),
-               "Cannot call add_input() with an object of type '%s'." % type(io))
+               f"Cannot call add_input() with an object of type '{type(io)}'.")
         self._add_gpio(name, io, self._inputs_dict, self._arginfos_in)
 
     def add_output(self, name: str, io) -> None:
         _check(self._in_configure > 0, "Can only call add_output() from the configure() method.")
         _check(not hasattr(self, name),
-               "Cannot call add_output('%s') because the class already has a member of that name." % name)
+               f"Cannot call add_output('{name}') because the class already has a member of that name.")
         _check(isinstance(io, (OutputBuffer, OutputScalar)),
-               "Cannot call add_output() with an object of type '%s'." % type(io))
+               f"Cannot call add_output() with an object of type '{type(io)}'.")
         self._add_gpio(name, io, self._outputs_dict, self._arginfos_out)
 
     def _advance_to_stage(self, new_stage: _Stage):
@@ -593,8 +589,7 @@ class Generator(ABC):
 
         _check(
             len(self._unhandled_generator_params) == 0,
-            "Generator %s has no GeneratorParam(s) named: %s" %
-            (self._get_name(), list(self._unhandled_generator_params.keys())),
+            f"Generator {self._get_name()} has no GeneratorParam(s) named: {list(self._unhandled_generator_params.keys())}",
         )
 
         self._stage = _Stage.io_created
@@ -604,24 +599,22 @@ class Generator(ABC):
         new_types = current_types
         new_dimensions = current_dimensions
 
-        type_name = "%s.type" % name
+        type_name = f"{name}.type"
         if type_name in self._unhandled_generator_params:
             value = self._unhandled_generator_params.pop(type_name)
             new_types = GeneratorParam._parse_value(type_name, Type, value)
             _check(
                 len(current_types) == 0,
-                "Cannot set the GeneratorParam %s for %s because the value is explicitly specified in the Python source."
-                % (type_name, self._get_name()),
+                f"Cannot set the GeneratorParam {type_name} for {self._get_name()} because the value is explicitly specified in the Python source.",
             )
 
-        dimensions_name = "%s.dim" % name
+        dimensions_name = f"{name}.dim"
         if dimensions_name in self._unhandled_generator_params:
             value = self._unhandled_generator_params.pop(dimensions_name)
             new_dimensions = GeneratorParam._parse_value(dimensions_name, int, value)
             _check(
                 current_dimensions == -1,
-                "Cannot set the GeneratorParam %s for %s because the value is explicitly specified in the Python source."
-                % (dimensions_name, self._get_name()),
+                f"Cannot set the GeneratorParam {dimensions_name} for {self._get_name()} because the value is explicitly specified in the Python source.",
             )
 
         return new_types, new_dimensions
@@ -635,7 +628,7 @@ class Generator(ABC):
 
         _check(
             len(self._outputs_dict) > 0,
-            "Generator '%s' must declare at least one output." % self._get_name(),
+            f"Generator '{self._get_name()}' must declare at least one output.",
         )
 
         self._stage = _Stage.configure_called
@@ -670,7 +663,7 @@ class Generator(ABC):
     def _set_generatorparam_value(self, name: str, value: Any):
         _check(
             name != "target",
-            "The GeneratorParam named %s cannot be set by set_generatorparam_value." % name,
+            f"The GeneratorParam named {name} cannot be set by set_generatorparam_value.",
         )
         assert self._stage == _Stage.gp_created
         assert not self._pipeline
@@ -682,12 +675,12 @@ class Generator(ABC):
             # Do not mutate the existing GP in place; it could be shared across multiple Generators.
             self._gp_dict[name] = GeneratorParam(new_value)
         elif name == "autoscheduler":
-            _check(not self.autoscheduler().name, "The GeneratorParam %s cannot be set more than once" % name)
+            _check(not self.autoscheduler().name, f"The GeneratorParam {name} cannot be set more than once")
             self.autoscheduler().name = value
         elif name.startswith("autoscheduler."):
             sub_key = name[len("autoscheduler."):]
             _check(sub_key not in self.autoscheduler().extra,
-                   "The GeneratorParam %s cannot be set more than once" % name)
+                   f"The GeneratorParam {name} cannot be set more than once")
             self.autoscheduler().extra[sub_key] = value
         else:
             self._unhandled_generator_params[name] = value
@@ -710,12 +703,12 @@ class Generator(ABC):
         self._output_funcs = {n: getattr(self, n) for n in self._outputs_dict}
         _check(
             len(self._output_funcs) > 0,
-            "Generator %s must declare at least one Output in Arguments." % self._get_name(),
+            f"Generator {self._get_name()} must declare at least one Output in Arguments.",
         )
 
         funcs = []
         for name, f in self._output_funcs.items():
-            _check(f.defined(), "Output '%s' was not defined." % name)
+            _check(f.defined(), f"Output '{name}' was not defined.")
             self._requirements[name]._check_types_and_dimensions(f.types(), f.dimensions())
             funcs.append(f)
 
@@ -727,19 +720,19 @@ class Generator(ABC):
 
     def _get_input_parameter(self, name: str) -> InternalParameter:
         assert self._stage == _Stage.pipeline_built
-        _check(name in self._input_parameters, "Unknown input: %s" % name)
+        _check(name in self._input_parameters, f"Unknown input: {name}")
         return self._input_parameters[name]
 
     def _get_output_func(self, name: str) -> Func:
         assert self._stage == _Stage.pipeline_built
-        _check(name in self._output_funcs, "Unknown output: %s" % name)
+        _check(name in self._output_funcs, f"Unknown output: {name}")
         return self._output_funcs[name]
 
     def _bind_input(self, name: str, values: list[object]):
         assert self._stage < _Stage.io_replaced
         self._advance_to_stage(_Stage.configure_called)
-        _check(len(values) == 1, "Too many values specified for input: %s" % name)
-        _check(name in self._inputs_dict, "There is no input with the name: %s" % name)
+        _check(len(values) == 1, f"Too many values specified for input: {name}")
+        _check(name in self._inputs_dict, f"There is no input with the name: {name}")
         assert name not in self._replacements
         self._replacements[name] = self._inputs_dict[name]._make_replacement(values[0], self._requirements[name])
 
@@ -788,7 +781,7 @@ def _check_generator_name_in_use(n:str):
         #     builtins.print("REDEFINING ", n)
         return
 
-    _check(n not in _python_generators, "The Generator name %s is already in use." % n)
+    _check(n not in _python_generators, f"The Generator name {n} is already in use.")
 
 
 def alias(**kwargs):
@@ -798,7 +791,7 @@ def alias(**kwargs):
             _check_valid_name(k)
             _check(hasattr(cls, "_halide_registered_name"), "@alias can only be used in conjunction with @generator.")
             _check_generator_name_in_use(k)
-            _check(type(v) is dict, "The Generator alias %s specifies something other than a dict." % k)
+            _check(type(v) is dict, f"The Generator alias {k} specifies something other than a dict.")
             new_cls = type(k, (cls,), {"_halide_registered_name": k, "_halide_alias_generator_params": v})
             _python_generators[k] = new_cls
         return cls
