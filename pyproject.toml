@@ -111,10 +111,12 @@ select = [
     "E7", # Default rule set
     "E9", # Default rule set
     "F", # Default rule set
+    "SIM", # Flake 8 - simplify
     "UP" # Uses of old Python features
 ]
 ignore = [
-    "UP045" # Don't replace Optional[T] with T | None
+    "UP045", # Don't replace Optional[T] with T | None
+    "SIM108", # Don't replace an if statement with ternary
 ]
 
 [tool.tbump]

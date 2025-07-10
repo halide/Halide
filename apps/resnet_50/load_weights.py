@@ -16,7 +16,7 @@ def load_weights(dir):
     dic = resnet50.state_dict()
     # numpy stores weights in output channel, input channel, h, w order
     # we want to transpose to output channel, h, w, input channel order
-    for k in dic.keys():
+    for k in dic:
         weight = dic[k].cpu().detach().numpy()
         weight = weight.astype(np.float32)
         print("weight shape before transpose")

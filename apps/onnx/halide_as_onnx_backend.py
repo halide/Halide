@@ -1,7 +1,8 @@
 """Backend for running ONNX using Halide"""
 
-from onnx.backend.base import Backend as BackendBase
 import onnx
+from onnx.backend.base import Backend as BackendBase
+
 import model as halide_model
 
 
@@ -85,10 +86,9 @@ class HalideBackend(BackendBase):
         Checks whether the backend is compiled with support for the requested
         device and that device is available on the machine.
         """
-        if device == "CPU":
+        if device == "CPU":  # noqa: SIM103 - We don't support anything else at this time
             return True
         else:
-            # We don't support anything else at this time
             return False
 
 

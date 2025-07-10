@@ -85,9 +85,7 @@ def _sanitize_type(t: object) -> Type:
 
 def _normalize_type_list(types: object) -> list[Type]:
     # Always treat _UnspecifiedType as a non-type
-    if types is None:
-        types = []
-    elif isinstance(types, Type) and types == _UnspecifiedType():
+    if types is None or isinstance(types, Type) and types == _UnspecifiedType():
         types = []
     if type(types) is not list:
         types = [types]
@@ -812,7 +810,7 @@ def _get_python_generator_names() -> list[str]:
 
 
 def _create_python_generator(name: str, context: GeneratorContext):
-    cls = _python_generators.get(name, None)
+    cls = _python_generators.get(name)
     if not isclass(cls):
         return None
     with context:
