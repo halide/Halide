@@ -59,10 +59,11 @@ void define_func_ref(py::module &m) {
             .def("index", &FuncTupleElementRef::index);
     add_binary_operators(func_tuple_element_ref_class);
 
-    auto func_ref_class = py::class_<FuncRef>(m, "FuncRef")
-                              .def("__getitem__", &FuncRef::operator[])
-                              .def("size", &FuncRef::size)
-                              .def("__len__", &FuncRef::size);
+    auto func_ref_class =
+        py::class_<FuncRef>(m, "FuncRef")
+            .def("__getitem__", &FuncRef::operator[])
+            .def("size", &FuncRef::size)
+            .def("__len__", &FuncRef::size);
     DEF_IOPS(func_ref_class, FuncRef);
     add_binary_operators(func_ref_class);
 }
