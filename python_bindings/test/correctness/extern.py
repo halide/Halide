@@ -12,8 +12,6 @@ def test_extern():
     print("TODO: test_extern not yet implemented in Python; skipping...")
     return 0
 
-    x = hl.Var("x")
-
     data = np.random.random(10).astype(np.float64)
     expected_result = np.sort(data)
     output_data = np.empty(10, dtype=np.float64)
@@ -32,7 +30,7 @@ def test_extern():
 
     try:
         sort_func.compile_jit()
-    except hl.HalideError:
+    except hl.HalideError as e:
         assert "cannot be converted to a bool" in str(e)
     else:
         assert False, "Did not see expected exception!"
@@ -44,14 +42,14 @@ def test_extern():
 
     try:
         sort_func.compile_jit()
-    except hl.HalideError:
+    except hl.HalideError as e:
         assert "cannot be converted to a bool" in str(e)
     else:
         assert False, "Did not see expected exception!"
 
     lib_path = "the_sort_function.so"
     load_error = load_library_into_llvm(lib_path)
-    assert load_error == False
+    assert not load_error
 
     sort_func.compile_jit()
 
@@ -65,5 +63,4 @@ def test_extern():
 
 
 if __name__ == "__main__":
-
     test_extern()

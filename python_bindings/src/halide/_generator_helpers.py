@@ -7,7 +7,6 @@ from .halide_ import *
 from .halide_ import _unique_name, _UnspecifiedType
 from inspect import isclass
 from typing import Any, Optional
-import builtins
 import re
 import sys
 import warnings
@@ -67,7 +66,7 @@ def _normalize_type_list(types: object) -> list[Type]:
     elif isinstance(types, Type) and types == _UnspecifiedType():
         types = []
     if type(types) is not list:
-        types = [types];
+        types = [types]
     types = [_sanitize_type(t) for t in types]
     return types
 

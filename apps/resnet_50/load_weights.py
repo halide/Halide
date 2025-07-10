@@ -1,5 +1,3 @@
-import argparse
-import numpy as np
 import numpy as np
 import torchvision.models.resnet as resnet
 import struct

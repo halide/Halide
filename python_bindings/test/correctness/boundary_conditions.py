@@ -15,8 +15,8 @@ def schedule_test(f, vector_width, target, partition_policy):
     if vector_width != 1:
         f.vectorize(x, vector_width)
 
-    f.partition(x, partition_policy);
-    f.partition(y, partition_policy);
+    f.partition(x, partition_policy)
+    f.partition(y, partition_policy)
 
     if target.has_gpu_feature() and vector_width <= 16:
         xo, yo, xi, yi = hl.vars("xo yo xi yi")

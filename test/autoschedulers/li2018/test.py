@@ -22,7 +22,7 @@ def main():
     print(result.schedule_source)
 
     p.compile_jit() # compile
-    buf = p.realize([1000]) # compute and get the buffer
+    p.realize([1000]) # compute and get the buffer
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:

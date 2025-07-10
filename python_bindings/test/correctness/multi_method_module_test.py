@@ -37,7 +37,7 @@ def test_aot_call_failure_throws_exception():
         simplecpp(buffer_input, float_arg, simple_output)
     except RuntimeError as e:
         assert "Halide Runtime Error: -3" in str(e), str(e)
-    else:
+    except Exception as e:
         assert False, "Did not see expected exception, saw: " + str(e)
 
 

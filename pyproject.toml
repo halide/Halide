@@ -107,6 +107,10 @@ cmake.define.Halide_WASM_BACKEND = "OFF"
 
 [tool.ruff.lint]
 select = [
+    "E4", # Default rule set
+    "E7", # Default rule set
+    "E9", # Default rule set
+    "F", # Default rule set
     "UP" # Uses of old Python features
 ]
 ignore = [

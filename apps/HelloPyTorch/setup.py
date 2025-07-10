@@ -2,10 +2,9 @@
 import os
 import platform
 import re
-from setuptools import setup, find_packages
+from setuptools import setup
 
 from torch.utils.cpp_extension import BuildExtension
-import torch as th
 
 
 def generate_pybind_wrapper(path, headers, has_cuda):

@@ -39,7 +39,7 @@ def main():
 
     # For each pixel of the input image.
     value = input[x, y, c]
-    assert type(value) == hl.Expr
+    assert isinstance(value, hl.Expr)
 
     # Cast it to a floating point value.
     value = hl.cast(hl.Float(32), value)

@@ -1,6 +1,5 @@
 import torch
 import torchvision.models.resnet as resnet
-import torchvision.transforms as transforms
 import torch.nn as nn
 import numpy as np
 import sys

@@ -18,8 +18,6 @@ def _realize_and_check(f, offset=0):
 
 
 def test_simple(cls):
-    x, y = hl.Var(), hl.Var()
-
     b_in = hl.Buffer(hl.UInt(8), [2, 2])
     b_in.fill(123)
     for xx in range(2):

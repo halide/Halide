@@ -405,7 +405,7 @@ def main():
         #     .parallel(tile_index)
 
         print("Evaluating gradient tiles in parallel")
-        output = gradient.realize([4, 4])
+        gradient.realize([4, 4])
 
         # The tiles should occur in arbitrary order, but within each
         # tile the pixels will be traversed in row-major order.

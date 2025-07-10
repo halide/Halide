@@ -30,7 +30,7 @@ def call_name(value):
 
 @summary_string
 def call_lldb_string(value):
-    return value.EvaluateExpression(f"Halide::Internal::lldb_string(*this)", lldb.SBExpressionOptions())
+    return value.EvaluateExpression("Halide::Internal::lldb_string(*this)", lldb.SBExpressionOptions())
 
 
 class ProxyChildrenProvider:
@@ -92,7 +92,7 @@ def __lldb_init_module(debugger, _):
         )
 
     debugger.HandleCommand(
-        f'type synthetic add Halide::Internal::Function -l lldbhalide.FunctionChildrenProvider'
+        'type synthetic add Halide::Internal::Function -l lldbhalide.FunctionChildrenProvider'
     )
 
     debugger.HandleCommand("type summary add Halide::Internal::Dim -s '${var.var%S}'")

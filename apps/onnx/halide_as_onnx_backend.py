@@ -4,10 +4,6 @@
 from onnx.backend.base import Backend as BackendBase
 import onnx
 import model as halide_model
-import signal
-import base64
-import hashlib
-import datetime
 
 
 class HalideBackend(BackendBase):

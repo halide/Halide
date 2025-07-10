@@ -1,5 +1,4 @@
 import halide as hl
-import numpy as np
 
 
 def test_tuple_select():

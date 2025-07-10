@@ -1,7 +1,6 @@
 """Verifies the Halide operator functions properly."""
 
 
-import os
 import unittest
 import warnings
 

@@ -111,12 +111,8 @@ def main():
         # uint8_t  []
         win_64_magic = [0x64, 0x86]
 
-        f = open("lesson_11_x86_64_windows.obj", "rb")
-        try:
+        with open("lesson_11_x86_64_windows.obj", "rb") as f:
             header_bytes = f.read(2)
-        except:
-            assert False, "Windows object file not generated"
-        f.close()
 
         header = list(unpack("B" * 2, header_bytes))
         assert header == win_64_magic, "Unexpected header bytes in 64-bit windows object file."
@@ -130,12 +126,8 @@ def main():
             12,  # CPU type is ARM
             11,  # CPU subtype is ARMv7s
             1]  # It's a relocatable object file.
-        f = open("lesson_11_arm_32_ios.o", "rb")
-        try:
+        with open("lesson_11_arm_32_ios.o", "rb") as f:
             header_bytes = f.read(4 * 4)
-        except:
-            assert False, "ios object file not generated"
-        f.close()
 
         header = list(unpack("I" * 4, header_bytes))
         assert header == arm_32_ios_magic, "Unexpected header bytes in 32-bit arm ios object file."
