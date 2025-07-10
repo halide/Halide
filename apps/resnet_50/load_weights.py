@@ -34,8 +34,10 @@ def load_weights(dir):
             f.write(data)
         with open(path + "_shape.data", "wb") as f:
             f.write(struct.pack("i", len(weight.shape)))
-            for i in list(reversed(range(len(weight.shape)))):
-                f.write(struct.pack("i", weight.shape[i]))
+            f.writelines(
+                struct.pack("i", weight.shape[i])
+                for i in reversed(range(len(weight.shape)))
+            )
 
 
 if __name__ == "__main__":

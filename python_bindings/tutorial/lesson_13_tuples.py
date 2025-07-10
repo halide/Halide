@@ -295,7 +295,7 @@ def main():
                     print(f"{code[index]}", end="")
                 else:
                     pass  # is lesson 13 cpp version buggy ?
-            print("")
+            print()
 
     print("Success!")
 

@@ -111,6 +111,7 @@ select = [
     "E7", # Default rule set
     "E9", # Default rule set
     "F", # Default rule set
+    "FURB", # Rules for upgrading old Python usage
     "RUF", # Ruff-specific rules
     "SIM", # Flake 8 - simplify
     "UP" # Uses of old Python features
