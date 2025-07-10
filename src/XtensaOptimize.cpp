@@ -1833,6 +1833,11 @@ private:
 
         const int total_lanes = op->type.lanes();
         int native_lanes = get_native_vector_lanes_num(op->type);
+        // These are actually comparison ops, so use the vector lenght of the argument.
+        if (op->type.is_bool() && op->is_strict_float_intrinsic()) {
+            native_lanes = get_native_vector_lanes_num(op->args[0].type());
+        }
+
         std::set<std::string> skip_slicing = {"halide_xtensa_widening_load", "halide_xtensa_interleave_i16",
                                               "halide_xtensa_narrow_i24_with_shift_i16",
                                               // TODO(vksnk): ugly to list them all.
