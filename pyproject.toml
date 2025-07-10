@@ -106,16 +106,17 @@ inherit.cmake.define = "append"
 cmake.define.Halide_WASM_BACKEND = "OFF"
 
 [tool.ruff.lint]
+# docs: https://docs.astral.sh/ruff/rules/
 select = [
-    "E4", # Default rule set
-    "E7", # Default rule set
-    "E9", # Default rule set
-    "F", # Default rule set
-    "FURB", # Rules for upgrading old Python usage
-    "PERF", # Rules for performance pitfalls
+    "E4", # pycodestyle / import statements
+    "E7", # pycodestyle / superfluous or misused syntax
+    "E9", # pycodestyle / internal error (odd this can be disabled)
+    "F", # pyflakes
+    "FURB", # refurb / rules for upgrading old Python usage
+    "PERF", # perflint / rules for performance pitfalls
     "RUF", # Ruff-specific rules
-    "SIM", # Flake 8 - simplify
-    "UP" # Uses of old Python features
+    "SIM", # flake8 / simplify
+    "UP" # pyupgrade / detect uses of old Python features
 ]
 ignore = [
     "UP045", # Don't replace Optional[T] with T | None
