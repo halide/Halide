@@ -231,8 +231,8 @@ class MyPipeline:
             for yy in range(self.input.height()):
                 for xx in range(self.input.width()):
                     assert output[xx, yy, cc] == reference_output[xx, yy, cc], \
-                        "Mismatch between output (%d) and reference output (%d) at %d, %d, %d" % (
-                            output[xx, yy, cc], reference_output[xx, yy, cc], xx, yy, cc)
+                        f"Mismatch between output ({output[xx, yy, cc]}) and reference output " \
+                        f"({reference_output[xx, yy, cc]}) at {xx}, {yy}, {cc}"
 
         print("CPU and GPU outputs are consistent.")
 

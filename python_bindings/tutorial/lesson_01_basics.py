@@ -83,8 +83,7 @@ def main():
             # syntax to defining and using functions.
             assert output[i, j] == i + j, \
                 "Something went wrong!\n" + \
-                "Pixel %d, %d was supposed to be %d, but instead it's %d\n" % (
-                    i, j, i + j, output[i, j])
+                f"Pixel {i}, {j} was supposed to be {i + j}, but instead it's {output[i, j]}\n"
 
     # Everything worked! We defined a hl.Func, then called 'realize' on
     # it to generate and run machine code that produced a hl.Buffer.

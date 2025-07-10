@@ -8,7 +8,7 @@ x, y = hl.vars("x y")
 
 
 def expect_eq(actual, expected):
-    assert expected == actual, "Failed: expected %d, actual %d" % (expected, actual)
+    assert expected == actual, f"Failed: expected {expected}, actual {actual}"
 
 
 def schedule_test(f, vector_width, target, partition_policy):

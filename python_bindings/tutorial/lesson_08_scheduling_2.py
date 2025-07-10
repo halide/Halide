@@ -635,8 +635,7 @@ def main():
                 error = halide_result[xx, yy] - c_result[yy][xx]
                 # It's floating-point math, so we'll allow some slop:
                 assert abs(error) <= 0.001, \
-                    "halide_result(%d, %d) = %f instead of %f" % (
-                        xx, yy, halide_result[xx, yy], c_result[yy][xx])
+                    f"halide_result({xx}, {yy}) = {halide_result[xx, yy]} instead of {c_result[yy][xx]}"
 
     # This stuff is hard. We ended up in a three-way trade-off
     # between memory bandwidth, redundant work, and

@@ -130,16 +130,16 @@ class Requirement:
 
         _check(
             len(types) == len(self._types),
-            "Type mismatch for %s: expected %d types but saw %d" % (self._name, len(self._types), len(types)),
+            f"Type mismatch for {self._name}: expected {len(self._types)} types but saw {len(types)}",
         )
         for i in range(0, len(types)):
             _check(
                 self._types[i] == types[i],
-                "Type mismatch for %s:%d: expected %s saw %s" % (self._name, i, self._types[i], types[i]),
+                f"Type mismatch for {self._name}:{i}: expected {self._types[i]} saw {types[i]}",
             )
         _check(
             dimensions == self._dimensions,
-            "Dimensions mismatch for %s: expected %d saw %d" % (self._name, self._dimensions, dimensions),
+            f"Dimensions mismatch for {self._name}: expected {self._dimensions} saw {dimensions}",
         )
 
 
@@ -410,8 +410,7 @@ class Generator(ABC):
 
         _check(
             len(args) <= len(generator._arginfos_in),
-            "Generator '%s' allows at most %d positional args, but %d were specified." %
-            (generator._get_name(), len(generator._arginfos_in), len(args)))
+            f"Generator '{generator._get_name()}' allows at most {len(generator._arginfos_in)} positional args, but {len(args)} were specified.")
 
         inputs_set = []
         for i in range(0, len(args)):
@@ -430,8 +429,8 @@ class Generator(ABC):
             generator._bind_input(k, [v])
 
         _check(
-            len(inputs_set) == len(generator._arginfos_in), "Generator '%s' requires %d args, but %d were specified." %
-            (generator._get_name(), len(generator._arginfos_in), len(inputs_set)))
+            len(inputs_set) == len(generator._arginfos_in),
+            f"Generator '{generator._get_name()}' requires {len(generator._arginfos_in)} args, but {len(inputs_set)} were specified.")
 
         generator._build_pipeline()
 

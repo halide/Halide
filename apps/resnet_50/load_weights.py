@@ -21,13 +21,13 @@ def load_weights(dir):
         weight = dic[k].cpu().detach().numpy()
         weight = weight.astype(np.float32)
         print("weight shape before transpose")
-        print("%s,%s,%d" % (k, str(weight.shape), len(weight.shape)))
+        print(f"{k},{weight.shape},{len(weight.shape)}")
         if len(weight.shape) == 4:
             weight = np.transpose(weight, (1, 2, 3, 0))
         if len(weight.shape) == 2:
             weight = np.transpose(weight, (1, 0))
         print("weight shape after transpose")
-        print("%s,%s,%d" % (k, str(weight.shape), len(weight.shape)))
+        print(f"{k},{weight.shape},{len(weight.shape)}")
 
         data = weight.tobytes()
         path = os.path.join(dir, k.replace('.','_'))
