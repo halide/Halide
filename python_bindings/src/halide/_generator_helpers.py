@@ -450,9 +450,7 @@ class Generator(ABC):
 
         generator._build_pipeline()
 
-        outputs = []
-        for o in generator._arginfos_out:
-            outputs.append(generator._get_output_func(o.name))
+        outputs = [generator._get_output_func(o.name) for o in generator._arginfos_out]
 
         return outputs[0] if len(outputs) == 1 else tuple(outputs)
 
