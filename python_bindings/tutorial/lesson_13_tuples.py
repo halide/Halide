@@ -288,7 +288,7 @@ def main():
             for xx in range(result.width()):
                 index = result[xx, yy]
                 if index < len(code):
-                    print(f"{code[index]:c}", end="")
+                    print(f"{code[index]}", end="")
                 else:
                     pass  # is lesson 13 cpp version buggy ?
             print("")

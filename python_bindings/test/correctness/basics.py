@@ -99,13 +99,13 @@ def test_basics():
 
 def test_basics2():
     input = hl.ImageParam(hl.Float(32), 3, "input")
-    r_sigma = hl.Param(hl.Float(32), "r_sigma", 0.1)
+    hl.Param(hl.Float(32), "r_sigma", 0.1)
     s_sigma = 8
 
     x = hl.Var("x")
     y = hl.Var("y")
-    z = hl.Var("z")
-    c = hl.Var("c")
+    hl.Var("z")
+    hl.Var("c")
 
     # Add a boundary condition
     clamped = hl.Func("clamped")
@@ -115,16 +115,16 @@ def test_basics2():
 
     # Construct the bilateral grid
     r = hl.RDom([(0, s_sigma), (0, s_sigma)], "r")
-    val0 = clamped[x * s_sigma, y * s_sigma]
-    val00 = clamped[x * s_sigma * hl.i32(1), y * s_sigma * hl.i32(1)]
-    val22 = clamped[
+    clamped[x * s_sigma, y * s_sigma]
+    clamped[x * s_sigma * hl.i32(1), y * s_sigma * hl.i32(1)]
+    clamped[
         x * s_sigma - hl.i32(s_sigma // 2), y * s_sigma - hl.i32(s_sigma // 2)
     ]
-    val2 = clamped[x * s_sigma - s_sigma // 2, y * s_sigma - s_sigma // 2]
-    val3 = clamped[x * s_sigma + r.x - s_sigma // 2, y * s_sigma + r.y - s_sigma // 2]
+    clamped[x * s_sigma - s_sigma // 2, y * s_sigma - s_sigma // 2]
+    clamped[x * s_sigma + r.x - s_sigma // 2, y * s_sigma + r.y - s_sigma // 2]
 
     try:
-        val1 = clamped[x * s_sigma - s_sigma / 2, y * s_sigma - s_sigma / 2]
+        clamped[x * s_sigma - s_sigma / 2, y * s_sigma - s_sigma / 2]
     except hl.HalideError as e:
         assert "Implicit cast from float32 to int" in str(e)
     else:
@@ -289,7 +289,7 @@ def test_vector_tile():
     xo, yo, zo = [hl.Var(c + "o") for c in "xyz"]
     f = hl.Func("f")
     g = hl.Func("g")
-    h = hl.Func("h")
+    hl.Func("h")
     f[x, y] = y
     f[x, y] += x
     g[x, y, z] = x + y
@@ -324,7 +324,6 @@ def test_bool_conversion():
     x = hl.Var("x")
     f = hl.Func("f")
     f[x] = x
-    s = True
     # Verify that this doesn't fail with 'Argument passed to specialize must be of type bool'
     f.compute_root().specialize(True)
 

@@ -532,7 +532,6 @@ class Generator(ABC):
         }
         assert new_stage in _stage_advancers
         a = _stage_advancers[new_stage]
-        old_stage = self._stage
         if self._stage < new_stage:
             a()
         assert self._stage >= new_stage

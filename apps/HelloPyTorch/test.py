@@ -68,7 +68,7 @@ class TestAdd(unittest.TestCase):
                 "ignore", module=r".*gradcheck*")
 
             # Test the gradient is correct
-            res = th.autograd.gradcheck(add, [self.a, self.b], eps=1e-2)
+            th.autograd.gradcheck(add, [self.a, self.b], eps=1e-2)
 
             print("     Test ran successfully: difference is", diff)
 
