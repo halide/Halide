@@ -36,7 +36,7 @@ def main():
     # appropriate operator overloading so that expressions like
     # 'x + y' become 'hl.Expr' objects.
     e = x + y
-    assert type(e) == hl.Expr
+    assert isinstance(e, hl.Expr)
 
     # Now we'll add a definition for the hl.Func object. At pixel x, y,
     # the image will have the value of the hl.Expr e. On the left hand

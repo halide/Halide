@@ -23,7 +23,7 @@ def _dispatch(opname, optype=th.float32, cuda=False):
       op: a python function wrapping the requested Halide operator.
     """
 
-    assert type(opname) == str, "opname should be a string"
+    assert type(opname) is str, "opname should be a string"
     assert type(optype) == th.dtype, "optype should be a tensor datatype (torch.dtype)"
 
     if cuda:

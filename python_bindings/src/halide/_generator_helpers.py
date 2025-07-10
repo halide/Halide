@@ -3,8 +3,28 @@ from abc import ABC, abstractmethod
 from contextvars import ContextVar
 from enum import Enum
 from functools import total_ordering
-from .halide_ import *
-from .halide_ import _unique_name, _UnspecifiedType
+from .halide_ import (
+    ArgInfo,
+    ArgInfoDirection,
+    ArgInfoKind,
+    Bool,
+    Buffer,
+    Expr,
+    Float,
+    Func,
+    GeneratorContext,
+    HalideError,
+    ImageParam,
+    Int,
+    Param,
+    Pipeline,
+    Type,
+    UInt,
+    Var,
+    _,
+    _UnspecifiedType,
+    _unique_name,
+)
 from inspect import isclass
 from typing import Any, Optional
 import re
@@ -715,7 +735,7 @@ class Generator(ABC):
         self._stage = _Stage.pipeline_built
         return self._pipeline
 
-    def _get_input_parameter(self, name: str) -> InternalParameter:
+    def _get_input_parameter(self, name: str):
         assert self._stage == _Stage.pipeline_built
         _check(name in self._input_parameters, f"Unknown input: {name}")
         return self._input_parameters[name]

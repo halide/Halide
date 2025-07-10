@@ -1,5 +1,5 @@
-def make_oklch(l, c, h):
-    return f"oklch({l * 100:.1f}% {c:.2f} {h:.0f})"
+def make_oklch(L, c, h):
+    return f"oklch({L * 100:.1f}% {c:.2f} {h:.0f})"
 
 
 STEPS = 20
@@ -41,8 +41,8 @@ print()
 print("Theme agnostic")
 print()
 
-def make_oklch(l, c, h):
-    return f"oklch(calc({l * 100:.1f}% * var(--cost-Lf)) {c:.2f} {h:.0f})"
+def make_oklch(L, c, h):
+    return f"oklch(calc({L * 100:.1f}% * var(--cost-Lf)) {c:.2f} {h:.0f})"
 
 
 for i in range(STEPS):

@@ -214,7 +214,7 @@ def test_float_or_int():
     assert (2 * (x % 2)).type() == i32
     assert ((x // 2) - 1 + 2 * (x % 2)).type() == i32
 
-    assert type(x) == hl.Var
+    assert type(x) is hl.Var
     assert (hl.Expr(x)).type() == i32
     assert (hl.Expr(2.0)).type() == f32
     assert (hl.Expr(2)).type() == i32
@@ -335,7 +335,7 @@ def test_typed_funcs():
     f = hl.Func("f")
     assert not f.defined()
     try:
-        assert f.type() == Int(32)
+        assert f.type() == hl.Int(32)
     except hl.HalideError as e:
         assert "it is undefined" in str(e)
     else:

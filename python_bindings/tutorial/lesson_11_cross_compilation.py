@@ -93,12 +93,8 @@ def main():
                                 1]       # Current version of elf
 
         length = len(arm_32_android_magic)
-        f = open("lesson_11_arm_32_android.o", "rb")
-        try:
+        with open("lesson_11_arm_32_android.o", "rb") as f:
             header_bytes = f.read(length)
-        except:
-            assert False, "Android object file not generated"
-        f.close()
 
         header = list(unpack("B" * length, header_bytes))
         assert header == arm_32_android_magic, \

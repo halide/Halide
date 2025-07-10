@@ -18,5 +18,6 @@ with tf.device('/GPU:0'):
                 strides = (1, 1, 1, 1), padding = 'VALID')
         end = time.time()
         t = (end - start) / num_iter
-        if not best or t < best: best = t
+        if not best or t < best:
+            best = t
     print(f'time: {1000 * best} ms')
