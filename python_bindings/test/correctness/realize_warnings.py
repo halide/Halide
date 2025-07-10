@@ -30,7 +30,7 @@ def test_warnings():
 
 def test_unscheduled(suppress):
     x = hl.Var()
-    f = hl.Func(f"f_{str(suppress)}")
+    f = hl.Func(f"f_{suppress}")
     f[x] = 0
     f[x] += 5
     f.vectorize(x, 8)
