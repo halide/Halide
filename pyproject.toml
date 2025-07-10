@@ -105,6 +105,11 @@ if.platform-system = "^win32"
 inherit.cmake.define = "append"
 cmake.define.Halide_WASM_BACKEND = "OFF"
 
+[tool.ruff.lint]
+select = [
+    "UP" # Uses of old Python features
+]
+
 [tool.tbump]
 github_url = "https://github.com/halide/Halide/"
 

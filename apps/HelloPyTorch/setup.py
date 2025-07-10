@@ -19,8 +19,7 @@ def generate_pybind_wrapper(path, headers, has_cuda):
     s += "\nPYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {\n"
     for h in headers:
         name = os.path.splitext(h)[0]
-        s += "  m.def(\"{}\", &{}_th_, \"PyTorch wrapper of the Halide pipeline {}\");\n".format(
-          name, name, name)
+        s += f"  m.def(\"{name}\", &{name}_th_, \"PyTorch wrapper of the Halide pipeline {name}\");\n"
     s += "}\n"
     with open(path, 'w') as fid:
         fid.write(s)
@@ -30,12 +29,12 @@ if __name__ == "__main__":
     # wrapper in this directory
     build_dir = os.getenv("BIN")
     if build_dir is None or not os.path.exists(build_dir):
-        raise ValueError("Bin directory {} is invalid".format(build_dir))
+        raise ValueError(f"Bin directory {build_dir} is invalid")
 
     # Path to a distribution of Halide
     halide_dir = os.getenv("HALIDE_DISTRIB_PATH")
     if halide_dir is None or not os.path.exists(halide_dir):
-        raise ValueError("Halide directory {} is invalid".format(halide_dir))
+        raise ValueError(f"Halide directory {halide_dir} is invalid")
 
     has_cuda = os.getenv("HAS_CUDA")
     if has_cuda is None or has_cuda == "0":

@@ -206,11 +206,11 @@ def test_float_or_int():
     assert (x / 2).type() == i32
     assert ((x // 2) - 1 + 2 * (x % 2)).type() == i32
     assert ((x / 2) - 1 + 2 * (x % 2)).type() == i32
-    assert ((x / 2)).type() == i32
-    assert ((x / 2.0)).type() == f32
-    assert ((x // 2)).type() == i32
+    assert (x / 2).type() == i32
+    assert (x / 2.0).type() == f32
+    assert (x // 2).type() == i32
     assert ((x // 2) - 1).type() == i32
-    assert ((x % 2)).type() == i32
+    assert (x % 2).type() == i32
     assert (2 * (x % 2)).type() == i32
     assert ((x // 2) - 1 + 2 * (x % 2)).type() == i32
 
@@ -232,7 +232,7 @@ def test_float_or_int():
     assert (2 * x).type() == i32
     assert (x * 2).type() == i32
     assert (x * 2).type() == i32
-    assert ((x % 2)).type() == i32
+    assert (x % 2).type() == i32
     assert ((x % 2) * 2).type() == i32
     assert (2 * (x % 2)).type() == i32
     assert ((x + 2) * 2).type() == i32
@@ -324,7 +324,7 @@ def test_bool_conversion():
     x = hl.Var("x")
     f = hl.Func("f")
     f[x] = x
-    s = bool(True)
+    s = True
     # Verify that this doesn't fail with 'Argument passed to specialize must be of type bool'
     f.compute_root().specialize(True)
 

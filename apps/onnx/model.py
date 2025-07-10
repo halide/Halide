@@ -1,7 +1,7 @@
 import model_cpp
 
 
-class Model():
+class Model:
     def __init__(self):
         self.pipeline = None
 

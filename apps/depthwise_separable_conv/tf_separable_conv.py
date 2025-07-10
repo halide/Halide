@@ -19,4 +19,4 @@ with tf.device('/GPU:0'):
         end = time.time()
         t = (end - start) / num_iter
         if not best or t < best: best = t
-    print('time: {} ms'.format(1000 * best))
+    print(f'time: {1000 * best} ms')
