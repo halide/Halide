@@ -6,7 +6,7 @@ import lldb
 
 
 def normalize(raw):
-    return raw.lstrip('"').rstrip('"').replace(r'\n', ' ').replace('  ', ' ')
+    return raw.lstrip('"').rstrip('"').replace(r"\n", " ").replace("  ", " ")
 
 
 def summary_string(summary_fn):
@@ -30,7 +30,9 @@ def call_name(value):
 
 @summary_string
 def call_lldb_string(value):
-    return value.EvaluateExpression("Halide::Internal::lldb_string(*this)", lldb.SBExpressionOptions())
+    return value.EvaluateExpression(
+        "Halide::Internal::lldb_string(*this)", lldb.SBExpressionOptions()
+    )
 
 
 class ProxyChildrenProvider:
@@ -63,27 +65,55 @@ class BoxChildrenProvider(IRChildrenProvider):
 
 class FunctionChildrenProvider(ProxyChildrenProvider):
     def __init__(self, valobj, _):
-        contents = valobj.EvaluateExpression("*this->contents.get()", lldb.SBExpressionOptions())
+        contents = valobj.EvaluateExpression(
+            "*this->contents.get()", lldb.SBExpressionOptions()
+        )
         print(contents)
         super().__init__(contents, None)
 
 
 def __lldb_init_module(debugger, _):
-    base_exprs = ["Add", "And", "Broadcast", "Call", "Cast", "Div", "EQ", "GE", "GT", "LE", "LT", "Let", "Load", "Max",
-                  "Min", "Mod", "Mul", "NE", "Not", "Or", "Ramp", "Reinterpret", "Select", "Shuffle", "Sub", "Variable",
-                  "VectorReduce"]
+    base_exprs = [
+        "Add",
+        "And",
+        "Broadcast",
+        "Call",
+        "Cast",
+        "Div",
+        "EQ",
+        "GE",
+        "GT",
+        "LE",
+        "LT",
+        "Let",
+        "Load",
+        "Max",
+        "Min",
+        "Mod",
+        "Mul",
+        "NE",
+        "Not",
+        "Or",
+        "Ramp",
+        "Reinterpret",
+        "Select",
+        "Shuffle",
+        "Sub",
+        "Variable",
+        "VectorReduce",
+    ]
 
     for ty in base_exprs:
         debugger.HandleCommand(
             f"type summary add Halide::Internal::{ty} --python-function lldbhalide.call_lldb_string"
         )
 
-    for ty in ('Expr', 'Internal::Stmt'):
+    for ty in ("Expr", "Internal::Stmt"):
         debugger.HandleCommand(
             f"type summary add Halide::{ty} --python-function lldbhalide.call_lldb_string"
         )
         debugger.HandleCommand(
-            f'type synthetic add Halide::{ty} -l lldbhalide.IRChildrenProvider'
+            f"type synthetic add Halide::{ty} -l lldbhalide.IRChildrenProvider"
         )
 
     for ty in ("Definition", "FuncSchedule", "ReductionDomain", "StageSchedule"):
@@ -92,12 +122,20 @@ def __lldb_init_module(debugger, _):
         )
 
     debugger.HandleCommand(
-        'type synthetic add Halide::Internal::Function -l lldbhalide.FunctionChildrenProvider'
+        "type synthetic add Halide::Internal::Function -l lldbhalide.FunctionChildrenProvider"
     )
 
     debugger.HandleCommand("type summary add Halide::Internal::Dim -s '${var.var%S}'")
-    debugger.HandleCommand("type summary add Halide::RVar --python-function lldbhalide.call_name")
-    debugger.HandleCommand("type summary add Halide::Var --python-function lldbhalide.call_name")
+    debugger.HandleCommand(
+        "type summary add Halide::RVar --python-function lldbhalide.call_name"
+    )
+    debugger.HandleCommand(
+        "type summary add Halide::Var --python-function lldbhalide.call_name"
+    )
 
-    debugger.HandleCommand("type summary add halide_type_t -s '${var.code%S} bits=${var.bits%u} lanes=${var.lanes%u}'")
-    debugger.HandleCommand("type summary add Halide::Internal::RefCount -s ${var.count.Value%S}")
+    debugger.HandleCommand(
+        "type summary add halide_type_t -s '${var.code%S} bits=${var.bits%u} lanes=${var.lanes%u}'"
+    )
+    debugger.HandleCommand(
+        "type summary add Halide::Internal::RefCount -s ${var.count.Value%S}"
+    )

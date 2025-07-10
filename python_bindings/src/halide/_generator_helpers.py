@@ -31,6 +31,7 @@ import re
 import sys
 import warnings
 
+
 def _fail(msg: str):
     raise HalideError(msg)
 
@@ -39,11 +40,13 @@ def _check(cond: bool, msg: str):
     if not cond:
         _fail(msg)
 
+
 # Basically, a valid C identifier, except:
 #
 # -- initial _ is forbidden (rather than merely "reserved")
 # -- two underscores in a row is also forbidden
 _NAME_RE = re.compile(r"^(?!.*__)[A-Za-z0-9][A-Za-z0-9_]*$")
+
 
 def _is_valid_name(name: str) -> bool:
     if not name:
@@ -78,6 +81,7 @@ def _sanitize_type(t: object) -> Type:
     else:
         _check(isinstance(t, Type), f"Expected a Halide Type, but saw: {t}")
         return t
+
 
 def _normalize_type_list(types: object) -> list[Type]:
     # Always treat _UnspecifiedType as a non-type
@@ -168,7 +172,7 @@ class GeneratorParam:
     # on this object. (We don't, actually, but it defeats
     # PyType's complaints about using len(), arithmetic operators, etc.
     # on GeneratorParam fields, since they are replaced at runtime.)
-    _HAS_DYNAMIC_ATTRIBUTES:bool = True
+    _HAS_DYNAMIC_ATTRIBUTES: bool = True
 
     _name: str = ""
     _value: Any = None
@@ -215,7 +219,6 @@ class GeneratorParam:
 
 
 class InputBuffer(ImageParam):
-
     def __init__(self, type: Optional[Type], dimensions: Optional[int]):
         type = _sanitize_type(type)
         if dimensions is None:
@@ -250,7 +253,6 @@ class InputBuffer(ImageParam):
 
 
 class InputScalar(Param):
-
     def __init__(self, type: Optional[Type]):
         type = _sanitize_type(type)
         super().__init__(type, _unique_name())
@@ -284,7 +286,6 @@ class InputScalar(Param):
 
 
 class OutputBuffer(Func):
-
     def __init__(self, types: Optional[Type], dimensions: Optional[int]):
         types = _normalize_type_list(types)
         if dimensions is None:
@@ -313,7 +314,9 @@ class OutputBuffer(Func):
             f"Cannot set the value for {r._name} to an undefined value.",
         )
 
-        value_types = [value.type()] if isinstance(value, Buffer) else value.output_types
+        value_types = (
+            [value.type()] if isinstance(value, Buffer) else value.output_types
+        )
         r._check_types_and_dimensions(value_types, value.dimensions())
 
         if isinstance(value, Buffer):
@@ -329,7 +332,6 @@ class OutputBuffer(Func):
 
 # OutputScalar is just like OutputBuffer, except it is always dimensions = 0
 class OutputScalar(OutputBuffer):
-
     def __init__(self, types: Optional[Type]):
         super().__init__(types, 0)
 
@@ -378,7 +380,7 @@ def _unsorted_cls_dir(cls):
     yield from cls.__dict__.items()
 
 
-_halide_generator_context = ContextVar('halide_generator_context', default=None)
+_halide_generator_context = ContextVar("halide_generator_context", default=None)
 
 
 def _generatorcontext_enter(self: GeneratorContext) -> GeneratorContext:
@@ -429,7 +431,8 @@ class Generator(ABC):
 
         _check(
             len(args) <= len(generator._arginfos_in),
-            f"Generator '{generator._get_name()}' allows at most {len(generator._arginfos_in)} positional args, but {len(args)} were specified.")
+            f"Generator '{generator._get_name()}' allows at most {len(generator._arginfos_in)} positional args, but {len(args)} were specified.",
+        )
 
         inputs_set = []
         for i in range(0, len(args)):
@@ -442,14 +445,17 @@ class Generator(ABC):
 
         input_names = [a.name for a in generator._arginfos_in]
         for k, v in kwargs.items():
-            _check(k in input_names, f"Unknown input '{k}' specified via keyword argument.")
+            _check(
+                k in input_names, f"Unknown input '{k}' specified via keyword argument."
+            )
             _check(k not in inputs_set, f"Input {k} specified multiple times.")
             inputs_set.append(k)
             generator._bind_input(k, [v])
 
         _check(
             len(inputs_set) == len(generator._arginfos_in),
-            f"Generator '{generator._get_name()}' requires {len(generator._arginfos_in)} args, but {len(inputs_set)} were specified.")
+            f"Generator '{generator._get_name()}' requires {len(generator._arginfos_in)} args, but {len(inputs_set)} were specified.",
+        )
 
         generator._build_pipeline()
 
@@ -472,7 +478,13 @@ class Generator(ABC):
     def __setattr__(self, name, value):
         r = getattr(self, "_requirements", None)
         s = getattr(self, "_stage", None)
-        if r and s and (name in r) and (s != _Stage.configure_called) and (s != _Stage.gp_created):
+        if (
+            r
+            and s
+            and (name in r)
+            and (s != _Stage.configure_called)
+            and (s != _Stage.gp_created)
+        ):
             raise AttributeError(f"Invalid write to field '{name}'")
         super().__setattr__(name, value)
 
@@ -498,7 +510,9 @@ class Generator(ABC):
 
         self._advance_to_gp_created()
         if generator_params:
-            _check(isinstance(generator_params, dict), "generator_params must be a dict")
+            _check(
+                isinstance(generator_params, dict), "generator_params must be a dict"
+            )
             for k, v in generator_params.items():
                 self._set_generatorparam_value(k, v)
 
@@ -519,27 +533,45 @@ class Generator(ABC):
             f"The name '{name}' is used more than once in Generator {self._get_name()}.",
         )
         types, dimensions = io._get_types_and_dimensions()
-        types, dimensions = self._set_io_types_and_dimensions_from_gp(name, types, dimensions)
+        types, dimensions = self._set_io_types_and_dimensions_from_gp(
+            name, types, dimensions
+        )
         r = Requirement(name, types, dimensions)
         self._requirements[name] = r
         io_dict[name] = io
         if arginfos is not None:
-            arginfos.append(ArgInfo(name, *io._get_direction_and_kind(), types, dimensions))
+            arginfos.append(
+                ArgInfo(name, *io._get_direction_and_kind(), types, dimensions)
+            )
 
     def add_input(self, name: str, io) -> None:
-        _check(self._in_configure > 0, "Can only call add_input() from the configure() method.")
-        _check(not hasattr(self, name),
-               f"Cannot call add_input('{name}') because the class already has a member of that name.")
-        _check(isinstance(io, (InputBuffer, InputScalar)),
-               f"Cannot call add_input() with an object of type '{type(io)}'.")
+        _check(
+            self._in_configure > 0,
+            "Can only call add_input() from the configure() method.",
+        )
+        _check(
+            not hasattr(self, name),
+            f"Cannot call add_input('{name}') because the class already has a member of that name.",
+        )
+        _check(
+            isinstance(io, (InputBuffer, InputScalar)),
+            f"Cannot call add_input() with an object of type '{type(io)}'.",
+        )
         self._add_gpio(name, io, self._inputs_dict, self._arginfos_in)
 
     def add_output(self, name: str, io) -> None:
-        _check(self._in_configure > 0, "Can only call add_output() from the configure() method.")
-        _check(not hasattr(self, name),
-               f"Cannot call add_output('{name}') because the class already has a member of that name.")
-        _check(isinstance(io, (OutputBuffer, OutputScalar)),
-               f"Cannot call add_output() with an object of type '{type(io)}'.")
+        _check(
+            self._in_configure > 0,
+            "Can only call add_output() from the configure() method.",
+        )
+        _check(
+            not hasattr(self, name),
+            f"Cannot call add_output('{name}') because the class already has a member of that name.",
+        )
+        _check(
+            isinstance(io, (OutputBuffer, OutputScalar)),
+            f"Cannot call add_output() with an object of type '{type(io)}'.",
+        )
         self._add_gpio(name, io, self._outputs_dict, self._arginfos_out)
 
     def _advance_to_stage(self, new_stage: _Stage):
@@ -591,11 +623,17 @@ class Generator(ABC):
             if not (is_input or is_output):
                 continue
 
-            if is_input and outputs_seen and not self.allow_out_of_order_inputs_and_outputs():
-                io_order_warning = ("Generators will always produce code that orders all Inputs before all Outputs; "
-                                   "this Generator declares the Inputs and Outputs in a different order, so the calling convention may not be as expected. "
-                                   "A future version of Halide will make this illegal, and require all Inputs to be declared before all Outputs. "
-                                   "(You can avoid this requirement by overriding Generator::allow_out_of_order_inputs_and_outputs().)")
+            if (
+                is_input
+                and outputs_seen
+                and not self.allow_out_of_order_inputs_and_outputs()
+            ):
+                io_order_warning = (
+                    "Generators will always produce code that orders all Inputs before all Outputs; "
+                    "this Generator declares the Inputs and Outputs in a different order, so the calling convention may not be as expected. "
+                    "A future version of Halide will make this illegal, and require all Inputs to be declared before all Outputs. "
+                    "(You can avoid this requirement by overriding Generator::allow_out_of_order_inputs_and_outputs().)"
+                )
                 warnings.warn(io_order_warning)
 
             if is_output:
@@ -611,8 +649,9 @@ class Generator(ABC):
 
         self._stage = _Stage.io_created
 
-    def _set_io_types_and_dimensions_from_gp(self, name: str, current_types: list[Type],
-                                             current_dimensions: int) -> (list[Type], int):
+    def _set_io_types_and_dimensions_from_gp(
+        self, name: str, current_types: list[Type], current_dimensions: int
+    ) -> (list[Type], int):
         new_types = current_types
         new_dimensions = current_dimensions
 
@@ -692,12 +731,17 @@ class Generator(ABC):
             # Do not mutate the existing GP in place; it could be shared across multiple Generators.
             self._gp_dict[name] = GeneratorParam(new_value)
         elif name == "autoscheduler":
-            _check(not self.autoscheduler().name, f"The GeneratorParam {name} cannot be set more than once")
+            _check(
+                not self.autoscheduler().name,
+                f"The GeneratorParam {name} cannot be set more than once",
+            )
             self.autoscheduler().name = value
         elif name.startswith("autoscheduler."):
-            sub_key = name[len("autoscheduler."):]
-            _check(sub_key not in self.autoscheduler().extra,
-                   f"The GeneratorParam {name} cannot be set more than once")
+            sub_key = name[len("autoscheduler.") :]
+            _check(
+                sub_key not in self.autoscheduler().extra,
+                f"The GeneratorParam {name} cannot be set more than once",
+            )
             self.autoscheduler().extra[sub_key] = value
         else:
             self._unhandled_generator_params[name] = value
@@ -716,7 +760,9 @@ class Generator(ABC):
         with self.context():
             self.generate()
 
-        self._input_parameters = {n: getattr(self, n).parameter() for n in self._inputs_dict}
+        self._input_parameters = {
+            n: getattr(self, n).parameter() for n in self._inputs_dict
+        }
         self._output_funcs = {n: getattr(self, n) for n in self._outputs_dict}
         _check(
             len(self._output_funcs) > 0,
@@ -726,7 +772,9 @@ class Generator(ABC):
         funcs = []
         for name, f in self._output_funcs.items():
             _check(f.defined(), f"Output '{name}' was not defined.")
-            self._requirements[name]._check_types_and_dimensions(f.types(), f.dimensions())
+            self._requirements[name]._check_types_and_dimensions(
+                f.types(), f.dimensions()
+            )
             funcs.append(f)
 
         self._pipeline = Pipeline(funcs)
@@ -751,7 +799,9 @@ class Generator(ABC):
         _check(len(values) == 1, f"Too many values specified for input: {name}")
         _check(name in self._inputs_dict, f"There is no input with the name: {name}")
         assert name not in self._replacements
-        self._replacements[name] = self._inputs_dict[name]._make_replacement(values[0], self._requirements[name])
+        self._replacements[name] = self._inputs_dict[name]._make_replacement(
+            values[0], self._requirements[name]
+        )
 
 
 _python_generators: dict = {}
@@ -785,10 +835,10 @@ def active_generator_context() -> GeneratorContext:
 
 
 def _is_interactive_mode() -> bool:
-    return hasattr(sys, 'ps1')
+    return hasattr(sys, "ps1")
 
 
-def _check_generator_name_in_use(n:str):
+def _check_generator_name_in_use(n: str):
     if _is_interactive_mode():
         # In interactive mode, it's OK to redefine generators... in fact, it's really
         # annoying not to allow this (e.g. in Colab)
@@ -802,23 +852,34 @@ def _check_generator_name_in_use(n:str):
 
 
 def alias(**kwargs):
-
     def alias_impl(cls):
         for k, v in kwargs.items():
             _check_valid_name(k)
-            _check(hasattr(cls, "_halide_registered_name"), "@alias can only be used in conjunction with @generator.")
+            _check(
+                hasattr(cls, "_halide_registered_name"),
+                "@alias can only be used in conjunction with @generator.",
+            )
             _check_generator_name_in_use(k)
-            _check(type(v) is dict, f"The Generator alias {k} specifies something other than a dict.")
-            new_cls = type(k, (cls,), {"_halide_registered_name": k, "_halide_alias_generator_params": v})
+            _check(
+                type(v) is dict,
+                f"The Generator alias {k} specifies something other than a dict.",
+            )
+            new_cls = type(
+                k,
+                (cls,),
+                {"_halide_registered_name": k, "_halide_alias_generator_params": v},
+            )
             _python_generators[k] = new_cls
         return cls
 
     return alias_impl
 
-def generator(name:str=""):
+
+def generator(name: str = ""):
     # This code relies on dicts preserving key-insertion order, which is only
     # guaranteed for all Python implementations as of v3.7.
     _check(sys.version_info >= (3, 7), "Halide Generators require Python 3.7 or later.")
+
     def generator_impl(cls):
         n = name if name else _fqname(cls)
         _check_generator_name_in_use(n)
@@ -829,17 +890,20 @@ def generator(name:str=""):
         if issubclass(cls, Generator):
             new_cls = type(cls.__name__, (cls,), {"_halide_registered_name": n})
         else:
-            new_cls = type(cls.__name__, (cls, Generator), {"_halide_registered_name": n})
+            new_cls = type(
+                cls.__name__, (cls, Generator), {"_halide_registered_name": n}
+            )
         _python_generators[n] = new_cls
         return new_cls
 
     return generator_impl
 
-def funcs(names:str) -> tuple(Func):
+
+def funcs(names: str) -> tuple(Func):
     """Given a space-delimited string, create a Func for each substring and return as a tuple."""
-    return (Func(n) for n in names.split(' '))
+    return (Func(n) for n in names.split(" "))
 
 
-def vars(names:str) -> tuple(Var):
+def vars(names: str) -> tuple(Var):
     """Given a space-delimited string, create a Var for each substring and return as a tuple."""
-    return (Var(n) for n in names.split(' '))
+    return (Var(n) for n in names.split(" "))

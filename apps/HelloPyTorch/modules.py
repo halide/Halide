@@ -7,6 +7,7 @@ import halide_ops as ops
 # TODO(mgharbi): maybe find a way to wrap function and module directly in C++
 # instead of generating the C++ wrapper on the fly?
 
+
 def _dispatch(opname, optype=th.float32, cuda=False):
     """
     Helper function that matches an opname and type to the Halide backend.
@@ -40,6 +41,7 @@ def _dispatch(opname, optype=th.float32, cuda=False):
         raise ValueError(f"Module has no operator {opname}")
     return op
 
+
 def _forward_common(ctx, input_a, input_b):
     tp = input_a.dtype
     cuda = input_a.is_cuda
@@ -56,6 +58,7 @@ def _forward_common(ctx, input_a, input_b):
 
     fn_(input_a, input_b, out)
     return out
+
 
 def _backward_common(ctx, d_out, backward_op):
     tp = d_out.dtype
@@ -75,48 +78,54 @@ def _backward_common(ctx, d_out, backward_op):
     fn_(input_a, input_b, d_out.contiguous(), d_input_a, d_input_b)
     return d_input_a, d_input_b
 
+
 # TODO(srj): surely there's a better way to do this,
 # but PyTorch seems to make it tricky to pass in
 # extra info to the backward() method.
 class AddFunction_Grad(th.autograd.Function):
-  """Version using the manually-written backprop"""
-  def __init__(self):
-      super().__init__()
+    """Version using the manually-written backprop"""
 
-  @staticmethod
-  def forward(ctx, input_a, input_b):
-      return _forward_common(ctx, input_a, input_b)
+    def __init__(self):
+        super().__init__()
 
-  @staticmethod
-  def backward(ctx, d_out):
-      return _backward_common(ctx, d_out, "add_grad")
+    @staticmethod
+    def forward(ctx, input_a, input_b):
+        return _forward_common(ctx, input_a, input_b)
+
+    @staticmethod
+    def backward(ctx, d_out):
+        return _backward_common(ctx, d_out, "add_grad")
+
 
 class AddFunction_HalideGrad(th.autograd.Function):
-  """Version using the Halide-generated backprop"""
-  def __init__(self):
-      super().__init__()
+    """Version using the Halide-generated backprop"""
 
-  @staticmethod
-  def forward(ctx, input_a, input_b):
-      return _forward_common(ctx, input_a, input_b)
+    def __init__(self):
+        super().__init__()
 
-  @staticmethod
-  def backward(ctx, d_out):
-      return _backward_common(ctx, d_out, "add_halidegrad")
+    @staticmethod
+    def forward(ctx, input_a, input_b):
+        return _forward_common(ctx, input_a, input_b)
+
+    @staticmethod
+    def backward(ctx, d_out):
+        return _backward_common(ctx, d_out, "add_halidegrad")
+
 
 class Add(th.nn.Module):
     """Defines a module that uses our autograd function.
 
     This is so we can use it as an operator.
     """
+
     def __init__(self, backward_op):
         super().__init__()
         if backward_op == "add_grad":
-          self._adder = AddFunction_Grad
+            self._adder = AddFunction_Grad
         elif backward_op == "add_halidegrad":
-          self._adder = AddFunction_HalideGrad
+            self._adder = AddFunction_HalideGrad
         else:
-          assert False
+            assert False
 
     def forward(self, a, b):
         return self._adder.apply(a, b)

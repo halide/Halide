@@ -13,7 +13,6 @@ from struct import unpack
 
 
 def main():
-
     # We'll define the simple one-stage pipeline that we used in lesson 10.
     brighter = hl.Func("brighter")
     x, y = hl.Var("x"), hl.Var("y")
@@ -49,12 +48,13 @@ def main():
         target = hl.Target()
         target.os = hl.TargetOS.Android  # The operating system
         target.arch = hl.TargetArch.ARM  # The CPU architecture
-        target.bits = 32              # The bit-width of the architecture
-        arm_features = []             # A list of features to set
+        target.bits = 32  # The bit-width of the architecture
+        arm_features = []  # A list of features to set
         target.set_features(arm_features)
         # Pass the target as the last argument.
-        brighter.compile_to_file("lesson_11_arm_32_android", args,
-                                 "lesson_11_arm_32_android", target)
+        brighter.compile_to_file(
+            "lesson_11_arm_32_android", args, "lesson_11_arm_32_android", target
+        )
 
     if create_windows:
         # And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
@@ -63,8 +63,9 @@ def main():
         target.arch = hl.TargetArch.X86
         target.bits = 64
         target.set_features([hl.TargetFeature.AVX, hl.TargetFeature.SSE41])
-        brighter.compile_to_file("lesson_11_x86_64_windows", args,
-                                 "lesson_11_x86_64_windows", target)
+        brighter.compile_to_file(
+            "lesson_11_x86_64_windows", args, "lesson_11_x86_64_windows", target
+        )
 
     if create_ios:
         # And finally an iOS mach-o object file for one of Apple's 32-bit
@@ -78,8 +79,9 @@ def main():
         target.arch = hl.TargetArch.ARM
         target.bits = 32
         target.set_features([hl.TargetFeature.ARMv7s])
-        brighter.compile_to_file("lesson_11_arm_32_ios", args,
-                                 "lesson_11_arm_32_ios", target)
+        brighter.compile_to_file(
+            "lesson_11_arm_32_ios", args, "lesson_11_arm_32_ios", target
+        )
 
     # Now let's check these files are what they claim, by examining
     # their first few bytes.
@@ -87,19 +89,25 @@ def main():
     if create_android:
         # 32-arm android object files start with the magic bytes:
         # uint8_t []
-        arm_32_android_magic = [0x7f, ord('E'), ord('L'), ord('F'),  # ELF format
-                                1,       # 32-bit
-                                1,       # 2's complement little-endian
-                                1]       # Current version of elf
+        arm_32_android_magic = [
+            0x7F,
+            ord("E"),
+            ord("L"),
+            ord("F"),  # ELF format
+            1,  # 32-bit
+            1,  # 2's complement little-endian
+            1,
+        ]  # Current version of elf
 
         length = len(arm_32_android_magic)
         with open("lesson_11_arm_32_android.o", "rb") as f:
             header_bytes = f.read(length)
 
         header = list(unpack("B" * length, header_bytes))
-        assert header == arm_32_android_magic, \
-            "Unexpected header bytes in 32-bit arm object file: " + \
-            str([x == y for x, y in zip(header, arm_32_android_magic)])
+        assert header == arm_32_android_magic, (
+            "Unexpected header bytes in 32-bit arm object file: "
+            + str([x == y for x, y in zip(header, arm_32_android_magic)])
+        )
 
     if create_windows:
         # 64-bit windows object files start with the magic 16-bit value 0x8664
@@ -111,22 +119,27 @@ def main():
             header_bytes = f.read(2)
 
         header = list(unpack("B" * 2, header_bytes))
-        assert header == win_64_magic, "Unexpected header bytes in 64-bit windows object file."
+        assert header == win_64_magic, (
+            "Unexpected header bytes in 64-bit windows object file."
+        )
 
     if create_ios:
         # 32-bit arm iOS mach-o files start with the following magic bytes:
         #  uint32_t []
         arm_32_ios_magic = [
-            0xfeedface,  # Mach-o magic bytes
+            0xFEEDFACE,  # Mach-o magic bytes
             # 0xfe, 0xed, 0xfa, 0xce, # Mach-o magic bytes
             12,  # CPU type is ARM
             11,  # CPU subtype is ARMv7s
-            1]  # It's a relocatable object file.
+            1,
+        ]  # It's a relocatable object file.
         with open("lesson_11_arm_32_ios.o", "rb") as f:
             header_bytes = f.read(4 * 4)
 
         header = list(unpack("I" * 4, header_bytes))
-        assert header == arm_32_ios_magic, "Unexpected header bytes in 32-bit arm ios object file."
+        assert header == arm_32_ios_magic, (
+            "Unexpected header bytes in 32-bit arm ios object file."
+        )
 
     # It looks like the object files we produced are plausible for
     # those targets. We'll count that as a success for the purposes

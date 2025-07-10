@@ -198,9 +198,11 @@ if __name__ == "__main__":
 
     vector_width_power_max = 6
     # https://github.com/halide/Halide/issues/2148
-    if target.has_feature(hl.TargetFeature.Metal) or \
-        target.has_feature(hl.TargetFeature.Vulkan) or \
-        target.has_feature(hl.TargetFeature.D3D12Compute):
+    if (
+        target.has_feature(hl.TargetFeature.Metal)
+        or target.has_feature(hl.TargetFeature.Vulkan)
+        or target.has_feature(hl.TargetFeature.D3D12Compute)
+    ):
         vector_width_power_max = 2
 
     for i in range(0, vector_width_power_max):

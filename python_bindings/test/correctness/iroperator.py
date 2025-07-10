@@ -3,6 +3,7 @@ import halide as hl
 import sys
 import io
 
+
 # redirect_stdout() requires Python3, alas
 @contextlib.contextmanager
 def _redirect_stdout(out):

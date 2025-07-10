@@ -20,10 +20,12 @@ def main():
     x, y = hl.Var("x"), hl.Var("y")
 
     # Load a grayscale image to use as an input.
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/gray.png")
+    image_path = os.path.join(
+        os.path.dirname(__file__), "../../tutorial/images/gray.png"
+    )
     input_data = halide.imageio.imread(image_path)
     if True:
-         # making the image smaller to go faster
+        # making the image smaller to go faster
         input_data = input_data[:150, :160]
     assert input_data.dtype == np.uint8
     input = hl.Buffer(input_data)
@@ -89,8 +91,8 @@ def main():
         # before the next one begins. Let's trace the loads and
         # stores for a simpler example:
         g = hl.Func("g")
-        g[x, y] = x + y   # Pure definition
-        g[2, 1] = 42      # First update definition
+        g[x, y] = x + y  # Pure definition
+        g[2, 1] = 42  # First update definition
         g[x, 0] = g[x, 1]  # Second update definition
 
         g.trace_loads()
@@ -156,13 +158,13 @@ def main():
         # Check the results match:
         for yy in range(100):
             for xx in range(100):
-                assert halide_result[xx, yy] == py_result[yy][xx], \
+                assert halide_result[xx, yy] == py_result[yy][xx], (
                     f"halide_result({xx}, {yy}) = {halide_result[xx, yy]} instead of {py_result[yy][xx]}"
+                )
 
     # Now we'll examine a real-world use for an update definition:
     # computing a histogram.
     if True:
-
         # Some operations on images can't be cleanly expressed as a pure
         # function from the output coordinates to the value stored
         # there. The classic example is computing a histogram. The
@@ -194,8 +196,9 @@ def main():
 
         # Check the answers agree:
         for xx in range(256):
-            assert py_result[xx] == halide_result[xx], \
+            assert py_result[xx] == halide_result[xx], (
                 f"halide_result({xx}) = {halide_result[xx]} instead of {py_result[xx]}"
+            )
 
     # Scheduling update steps
     if True:
@@ -263,8 +266,9 @@ def main():
         # Check the C and Halide results match:
         for yy in range(16):
             for xx in range(16):
-                assert halide_result[xx, yy] == py_result[yy][xx], \
+                assert halide_result[xx, yy] == py_result[yy][xx], (
                     f"halide_result({xx}, {yy}) = {halide_result[xx, yy]} instead of {py_result[yy][xx]}"
+                )
 
     # That covers how to schedule the variables within a hl.Func that
     # uses update steps, but what about producer-consumer
@@ -295,8 +299,9 @@ def main():
 
         # Check the results match
         for xx in range(10):
-            assert halide_result[xx] == py_result[xx], \
+            assert halide_result[xx] == py_result[xx], (
                 f"halide_result({xx}) = {halide_result[xx]} instead of {py_result[xx]}"
+            )
 
         # For all other compute_at/store_at options, the reduction
         # gets placed where you would expect, somewhere in the loop
@@ -353,8 +358,9 @@ def main():
 
             # Check the results match
             for xx in range(10):
-                assert halide_result[xx] == py_result[xx], \
+                assert halide_result[xx] == py_result[xx], (
                     f"halide_result({xx}) = {halide_result[xx]} instead of {py_result[xx]}"
+                )
 
         if True:
             # Case 2: The consumer references the producer in the update step
@@ -395,8 +401,9 @@ def main():
 
             # Check the results match
             for xx in range(10):
-                assert halide_result[xx] == py_result[xx], \
+                assert halide_result[xx] == py_result[xx], (
                     f"halide_result({xx}) = {halide_result[xx]} instead of {py_result[xx]}"
+                )
 
         if True:
             # Case 3: The consumer references the producer in
@@ -433,8 +440,9 @@ def main():
 
             # Check the results match
             for xx in range(10):
-                assert halide_result[xx] == py_result[xx], \
+                assert halide_result[xx] == py_result[xx], (
                     f"halide_result({xx}) = {halide_result[xx]} instead of {py_result[xx]}"
+                )
 
         if True:
             # Case 4: The consumer references the producer in
@@ -459,7 +467,11 @@ def main():
             # those instead:
 
             # Attempt 2:
-            producer_wrapper_1, producer_wrapper_2, consumer_2 = hl.Func(), hl.Func(), hl.Func()
+            producer_wrapper_1, producer_wrapper_2, consumer_2 = (
+                hl.Func(),
+                hl.Func(),
+                hl.Func(),
+            )
             producer_wrapper_1[x, y] = producer[x, y]
             producer_wrapper_2[x, y] = producer[x, y]
 
@@ -497,8 +509,9 @@ def main():
             # Check the results match
             for yy in range(10):
                 for xx in range(10):
-                    assert halide_result[xx, yy] == py_result[yy][xx], \
+                    assert halide_result[xx, yy] == py_result[yy][xx], (
                         f"halide_result({xx}, {yy}) = {halide_result[xx, yy]} instead of {py_result[yy][xx]}"
+                    )
 
         if True:
             # Case 5: Scheduling a producer under a reduction domain
@@ -542,8 +555,9 @@ def main():
 
             # Check the results match
             for xx in range(10):
-                assert halide_result[xx] == py_result[xx], \
+                assert halide_result[xx] == py_result[xx], (
                     f"halide_result({xx}) = {halide_result[xx]} instead of {py_result[xx]}"
+                )
 
     # A real-world example of a reduction inside a producer-consumer chain.
     if True:
@@ -576,7 +590,7 @@ def main():
         # because the default schedule for reductions is
         # compute-innermost. Here's the equivalent Python:
 
-        #cast_to_uint8 = lambda x_: np.array([x_], dtype=np.uint8)[0]
+        # cast_to_uint8 = lambda x_: np.array([x_], dtype=np.uint8)[0]
         local_sum = np.empty((1), dtype=np.int32)
 
         py_result = hl.Buffer(hl.UInt(8), [input.width(), input.height()])
@@ -595,15 +609,16 @@ def main():
 
                 # Pure step of blurry
                 # py_result(x, y) = (uint8_t)(local_sum[0] / 25)
-                #py_result[xx, yy] = cast_to_uint8(local_sum[0] / 25)
+                # py_result[xx, yy] = cast_to_uint8(local_sum[0] / 25)
                 # hl.cast done internally
                 py_result[xx, yy] = int(local_sum[0] / 25)
 
         # Check the results match
         for yy in range(input.height()):
             for xx in range(input.width()):
-                assert halide_result[xx, yy] == py_result[xx, yy], \
+                assert halide_result[xx, yy] == py_result[xx, yy], (
                     f"halide_result({xx}, {yy}) = {halide_result[xx, yy]} instead of {py_result[xx, yy]}"
+                )
 
     # Reduction helpers.
     if True:
@@ -640,10 +655,12 @@ def main():
 
         # Check they all match.
         for xx in range(10):
-            assert halide_result_1[xx] == py_result[xx], \
+            assert halide_result_1[xx] == py_result[xx], (
                 f"halide_result_1({xx}) = {halide_result_1[xx]} instead of {py_result[xx]}"
-            assert halide_result_2[xx] == py_result[xx], \
+            )
+            assert halide_result_2[xx] == py_result[xx], (
                 f"halide_result_2({xx}) = {halide_result_2[xx]} instead of {py_result[xx]}"
+            )
 
     print("Success!")
     return 0

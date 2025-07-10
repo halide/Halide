@@ -13,7 +13,6 @@ import halide as hl
 
 
 def main():
-
     # We'll start by defining the simple single-stage imaging
     # pipeline from lesson 1.
 

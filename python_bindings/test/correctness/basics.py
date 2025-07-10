@@ -117,9 +117,7 @@ def test_basics2():
     r = hl.RDom([(0, s_sigma), (0, s_sigma)], "r")
     clamped[x * s_sigma, y * s_sigma]
     clamped[x * s_sigma * hl.i32(1), y * s_sigma * hl.i32(1)]
-    clamped[
-        x * s_sigma - hl.i32(s_sigma // 2), y * s_sigma - hl.i32(s_sigma // 2)
-    ]
+    clamped[x * s_sigma - hl.i32(s_sigma // 2), y * s_sigma - hl.i32(s_sigma // 2)]
     clamped[x * s_sigma - s_sigma // 2, y * s_sigma - s_sigma // 2]
     clamped[x * s_sigma + r.x - s_sigma // 2, y * s_sigma + r.y - s_sigma // 2]
 
@@ -444,8 +442,8 @@ def test_requirements():
 
 
 def test_implicit_convert_int64():
-    assert (hl.i32(0) + 0x7fffffff).type() == hl.Int(32)
-    assert (hl.i32(0) + (0x7fffffff + 1)).type() == hl.Int(64)
+    assert (hl.i32(0) + 0x7FFFFFFF).type() == hl.Int(32)
+    assert (hl.i32(0) + (0x7FFFFFFF + 1)).type() == hl.Int(64)
 
 
 def test_pow_rpow():
@@ -454,8 +452,8 @@ def test_pow_rpow():
     for three in (3, hl.Expr(3)):
         f = hl.Func("f")
         f[x] = 0.0
-        f[0] = two ** three
-        f[1] = three ** two
+        f[0] = two**three
+        f[1] = three**two
         assert list(f.realize([2])) == [8.0, 9.0]
 
 

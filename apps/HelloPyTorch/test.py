@@ -1,6 +1,5 @@
 """Verifies the Halide operator functions properly."""
 
-
 import unittest
 import warnings
 
@@ -11,8 +10,8 @@ import modules
 class TestAdd(unittest.TestCase):
     def setUp(self):
         self.a = th.ones(1, 2, 8, 8)
-        self.b = th.ones(1, 2, 8, 8)*3
-        self.gt = th.ones(1, 2, 8, 8)*4
+        self.b = th.ones(1, 2, 8, 8) * 3
+        self.gt = th.ones(1, 2, 8, 8) * 4
 
     def test_cpu_single(self):
         self._test_add(is_double=False)
@@ -52,7 +51,7 @@ class TestAdd(unittest.TestCase):
             else:
                 print("  .Single-precision mode, backward_op:", backward_op)
 
-            diff = (output-self.gt).sum().item()
+            diff = (output - self.gt).sum().item()
             assert diff == 0.0, f"Test failed: sum should be 4, got {diff:f}"
 
             self.a.requires_grad = True
@@ -61,11 +60,10 @@ class TestAdd(unittest.TestCase):
             for i in range(100):
                 output = add(self.a, self.b).sum()
                 output.backward()
-            
+
             # Inputs are float, the gradient checker wants double inputs and
             # will issue a warning.
-            warnings.filterwarnings(
-                "ignore", module=r".*gradcheck*")
+            warnings.filterwarnings("ignore", module=r".*gradcheck*")
 
             # Test the gradient is correct
             th.autograd.gradcheck(add, [self.a, self.b], eps=1e-2)

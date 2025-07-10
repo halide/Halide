@@ -18,8 +18,7 @@ import struct
 from datetime import datetime
 
 # Define some Vars to use.
-x, y, c, i, xo, yo, xi, yi = hl.Var("x"), hl.Var("y"), hl.Var("c"), hl.Var(
-    "i"), hl.Var("xo"), hl.Var("yo"), hl.Var("xi"), hl.Var("yi")
+x, y, c, i, xo, yo, xi, yi = hl.vars("x y c i xo yo xi yi")
 
 # We're going to want to schedule a pipeline in several ways, so we
 # define the pipeline in a class so that we can recreate it several
@@ -27,9 +26,7 @@ x, y, c, i, xo, yo, xi, yi = hl.Var("x"), hl.Var("y"), hl.Var("c"), hl.Var(
 
 
 class MyPipeline:
-
     def __init__(self, input):
-
         assert input.type() == hl.UInt(8)
 
         self.lut = hl.Func("lut")
@@ -47,18 +44,24 @@ class MyPipeline:
         self.lut[i] = hl.u8(hl.clamp(hl.pow(i / 255.0, gamma) * 255.0, 0, 255))
 
         # Augment the input with a boundary condition.
-        self.padded[x, y, c] = input[hl.clamp(x, 0, input.width() - 1),
-                                     hl.clamp(y, 0, input.height() - 1), c]
+        self.padded[x, y, c] = input[
+            hl.clamp(x, 0, input.width() - 1), hl.clamp(y, 0, input.height() - 1), c
+        ]
 
         # Cast it to 16-bit to do the math.
         self.padded16[x, y, c] = hl.u16(self.padded[x, y, c])
 
         # Next we sharpen it with a five-tap filter.
-        self.sharpen[x, y, c] = (self.padded16[x, y, c] * 2 -
-                                 (self.padded16[x - 1, y, c] +
-                                  self.padded16[x, y - 1, c] +
-                                  self.padded16[x + 1, y, c] +
-                                  self.padded16[x, y + 1, c]) / 4)
+        self.sharpen[x, y, c] = (
+            self.padded16[x, y, c] * 2
+            - (
+                self.padded16[x - 1, y, c]
+                + self.padded16[x, y - 1, c]
+                + self.padded16[x + 1, y, c]
+                + self.padded16[x, y + 1, c]
+            )
+            / 4
+        )
 
         # Then apply the LUT.
         self.curved[x, y, c] = self.lut[self.sharpen[x, y, c]]
@@ -71,14 +74,11 @@ class MyPipeline:
 
         # Compute color channels innermost. Promise that there will
         # be three of them and unroll across them.
-        self.curved.reorder(c, x, y) \
-            .bound(c, 0, 3) \
-            .unroll(c)
+        self.curved.reorder(c, x, y).bound(c, 0, 3).unroll(c)
 
         # Look-up-tables don't vectorize well, so just parallelize
         # curved in slices of 16 scanlines.
-        self.curved.split(y, yo, yi, 16) \
-            .parallel(yo)
+        self.curved.split(y, yo, yi, 16).parallel(yo)
 
         # Compute sharpen as needed per scanline of curved, reusing
         # previous values computed within the same strip of 16
@@ -91,8 +91,7 @@ class MyPipeline:
         # Compute the padded input at the same granularity as the
         # sharpen. We'll leave the cast to 16-bit inlined into
         # sharpen.
-        self.padded.store_at(self.curved, yo) \
-            .compute_at(self.curved, yi)
+        self.padded.store_at(self.curved, yo).compute_at(self.curved, yi)
 
         # Also vectorize the padding. It's 8-bit, so we'll vectorize
         # 16-wide.
@@ -137,8 +136,7 @@ class MyPipeline:
         # Then we tell cuda that our Vars 'block' and 'thread'
         # correspond to CUDA's notions of blocks and threads, or
         # OpenCL's notions of thread groups and threads.
-        self.lut.gpu_blocks(block) \
-                .gpu_threads(thread)
+        self.lut.gpu_blocks(block).gpu_threads(thread)
 
         # This is a very common scheduling pattern on the GPU, so
         # there's a shorthand for it:
@@ -152,9 +150,7 @@ class MyPipeline:
 
         # Compute color channels innermost. Promise that there will
         # be three of them and unroll across them.
-        self.curved.reorder(c, x, y) \
-                   .bound(c, 0, 3) \
-                   .unroll(c)
+        self.curved.reorder(c, x, y).bound(c, 0, 3).unroll(c)
 
         # Compute curved in 2D 8x8 tiles using the GPU.
         self.curved.gpu_tile(x, y, xo, yo, xi, yi, 8, 8)
@@ -189,8 +185,9 @@ class MyPipeline:
     def test_performance(self):
         # Test the performance of the scheduled MyPipeline.
 
-        output = hl.Buffer(hl.UInt(8),
-                           [self.input.width(), self.input.height(), self.input.channels()])
+        output = hl.Buffer(
+            hl.UInt(8), [self.input.width(), self.input.height(), self.input.channels()]
+        )
 
         # Run the filter once to initialize any GPU runtime state.
         self.curved.realize(output)
@@ -198,7 +195,6 @@ class MyPipeline:
         # Now take the best of 3 runs for timing.
         best_time = float("inf")
         for i in range(3):
-
             t1 = datetime.now()
 
             # Run the filter 100 times.
@@ -219,31 +215,35 @@ class MyPipeline:
         print("%1.4f milliseconds" % (best_time * 1000))
 
     def test_correctness(self, reference_output):
-
         assert reference_output.type() == hl.UInt(8)
-        output = self.curved.realize([self.input.width(),
-                                      self.input.height(),
-                                      self.input.channels()])
+        output = self.curved.realize(
+            [self.input.width(), self.input.height(), self.input.channels()]
+        )
         assert output.type() == hl.UInt(8)
 
         # Check against the reference output.
         for cc in range(self.input.channels()):
             for yy in range(self.input.height()):
                 for xx in range(self.input.width()):
-                    assert output[xx, yy, cc] == reference_output[xx, yy, cc], \
-                        f"Mismatch between output ({output[xx, yy, cc]}) and reference output " \
+                    assert output[xx, yy, cc] == reference_output[xx, yy, cc], (
+                        f"Mismatch between output ({output[xx, yy, cc]}) and reference output "
                         f"({reference_output[xx, yy, cc]}) at {xx}, {yy}, {cc}"
+                    )
 
         print("CPU and GPU outputs are consistent.")
 
 
 def main():
     # Load an input image.
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(
+        os.path.dirname(__file__), "../../tutorial/images/rgb.png"
+    )
     input = hl.Buffer(halide.imageio.imread(image_path))
 
     # Allocated an image that will store the correct output
-    reference_output = hl.Buffer(hl.UInt(8), [input.width(), input.height(), input.channels()])
+    reference_output = hl.Buffer(
+        hl.UInt(8), [input.width(), input.height(), input.channels()]
+    )
 
     print("Running pipeline on CPU:")
     p1 = MyPipeline(input)
@@ -267,6 +267,7 @@ def main():
         p2.test_performance()
 
     return 0
+
 
 # A helper function to check if OpenCL, Metal or D3D12 is present on the
 # host machine.
@@ -294,10 +295,12 @@ def find_gpu_target():
     # features_to_try.append(hl.TargetFeature.CUDA);
     for f in features_to_try:
         new_target = target.with_feature(f)
-        if (hl.host_supports_target_device(new_target)):
+        if hl.host_supports_target_device(new_target):
             return new_target
 
-    print("Requested GPU(s) are not supported. (Do you have the proper hardware and/or driver installed?)")
+    print(
+        "Requested GPU(s) are not supported. (Do you have the proper hardware and/or driver installed?)"
+    )
     return target
 
 

@@ -82,7 +82,9 @@ def test_tuple_select():
         f = hl.Func("f")
         f[x, y] = hl.select((x < 30, y < 30), (x, y, 0), (1, 2, 3, 4))
     except hl.HalideError as e:
-        assert "select() on Tuples requires all Tuples to have identical sizes." in str(e)
+        assert "select() on Tuples requires all Tuples to have identical sizes." in str(
+            e
+        )
     else:
         assert False, "Did not see expected exception!"
 

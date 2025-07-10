@@ -1,4 +1,5 @@
 """Synthesizes the cpp wrapper code and builds dynamic Python extension."""
+
 import os
 import platform
 import re
@@ -8,20 +9,21 @@ from torch.utils.cpp_extension import BuildExtension
 
 
 def generate_pybind_wrapper(path, headers, has_cuda):
-    s = "#include \"torch/extension.h\"\n\n"
+    s = '#include "torch/extension.h"\n\n'
     if has_cuda:
-        s += "#include \"HalidePyTorchCudaHelpers.h\"\n"
-    s += "#include \"HalidePyTorchHelpers.h\"\n"
+        s += '#include "HalidePyTorchCudaHelpers.h"\n'
+    s += '#include "HalidePyTorchHelpers.h"\n'
     for h in headers:
-        s += "#include \"{}\"\n".format(os.path.splitext(h)[0]+".pytorch.h")
+        s += '#include "{}"\n'.format(os.path.splitext(h)[0] + ".pytorch.h")
 
     s += "\nPYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {\n"
     for h in headers:
         name = os.path.splitext(h)[0]
-        s += f"  m.def(\"{name}\", &{name}_th_, \"PyTorch wrapper of the Halide pipeline {name}\");\n"
+        s += f'  m.def("{name}", &{name}_th_, "PyTorch wrapper of the Halide pipeline {name}");\n'
     s += "}\n"
-    with open(path, 'w') as fid:
+    with open(path, "w") as fid:
         fid.write(s)
+
 
 if __name__ == "__main__":
     # This is where the generate Halide ops headers live. We also generate the .cpp
@@ -74,27 +76,38 @@ if __name__ == "__main__":
         print("Generating CUDA wrapper")
         generate_pybind_wrapper(wrapper_path, hl_headers, True)
         from torch.utils.cpp_extension import CUDAExtension
-        extension = CUDAExtension(ext_name, sources,
-                                  include_dirs=include_dirs,
-                                  extra_objects=hl_libs,
-                                  libraries=["cuda"],  # Halide ops need the full cuda lib, not just the RT library
-                                  extra_compile_args=compile_args)
+
+        extension = CUDAExtension(
+            ext_name,
+            sources,
+            include_dirs=include_dirs,
+            extra_objects=hl_libs,
+            libraries=[
+                "cuda"
+            ],  # Halide ops need the full cuda lib, not just the RT library
+            extra_compile_args=compile_args,
+        )
     else:
         print("Generating CPU wrapper")
         generate_pybind_wrapper(wrapper_path, hl_headers, False)
         from torch.utils.cpp_extension import CppExtension
-        extension = CppExtension(ext_name, sources,
-                                 include_dirs=include_dirs,
-                                 extra_objects=hl_libs,
-                                 extra_compile_args=compile_args)
+
+        extension = CppExtension(
+            ext_name,
+            sources,
+            include_dirs=include_dirs,
+            extra_objects=hl_libs,
+            extra_compile_args=compile_args,
+        )
 
     # Build the Python extension module
-    setup(name=ext_name,
-          verbose=True,
-          url="",
-          author_email="your@email.com",
-          author="Some Author",
-          version="0.0.0",
-          ext_modules=[extension],
-          cmdclass={"build_ext": BuildExtension}
-          )
+    setup(
+        name=ext_name,
+        verbose=True,
+        url="",
+        author_email="your@email.com",
+        author="Some Author",
+        version="0.0.0",
+        ext_modules=[extension],
+        cmdclass={"build_ext": BuildExtension},
+    )

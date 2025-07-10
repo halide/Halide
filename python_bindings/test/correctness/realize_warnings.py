@@ -27,6 +27,7 @@ def test_warnings():
     for line in stdout_lines:
         assert line == expected_warning
 
+
 def test_unscheduled(suppress):
     x = hl.Var()
     f = hl.Func(f"f_{str(suppress)}")
@@ -45,10 +46,13 @@ def test_unscheduled(suppress):
     if suppress:
         assert len(stdout_lines) == 0
     else:
-        expected_warning = "Warning: Update definition 0 of function f_False has not been scheduled"
+        expected_warning = (
+            "Warning: Update definition 0 of function f_False has not been scheduled"
+        )
         assert len(stdout_lines) > 0
         for line in stdout_lines:
             assert line.startswith(expected_warning), f"\n{line}\n{expected_warning}"
+
 
 if __name__ == "__main__":
     test_warnings()

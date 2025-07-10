@@ -12,7 +12,6 @@ import halide as hl
 
 
 def main():
-
     gradient = hl.Func("gradient")
     x, y = hl.Var("x"), hl.Var("y")
 

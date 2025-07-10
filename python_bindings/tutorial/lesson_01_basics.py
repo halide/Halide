@@ -12,7 +12,6 @@ import halide as hl
 
 
 def main():
-
     # This program defines a single-stage imaging pipeline that
     # outputs a grayscale diagonal gradient.
 
@@ -81,15 +80,17 @@ def main():
         for i in range(output.width()):
             # We can access a pixel of an hl.Buffer object using similar
             # syntax to defining and using functions.
-            assert output[i, j] == i + j, \
-                "Something went wrong!\n" + \
+            assert output[i, j] == i + j, (
+                "Something went wrong!\n"
                 f"Pixel {i}, {j} was supposed to be {i + j}, but instead it's {output[i, j]}\n"
+            )
 
     # Everything worked! We defined a hl.Func, then called 'realize' on
     # it to generate and run machine code that produced a hl.Buffer.
     print("Success!")
 
     return 0
+
 
 if __name__ == "__main__":
     main()

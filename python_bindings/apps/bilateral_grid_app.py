@@ -4,6 +4,7 @@ Bilateral histogram.
 
 from bilateral_grid import bilateral_grid
 from bilateral_grid_Adams2019 import bilateral_grid_Adams2019
+
 # from bilateral_grid_Li2018 import bilateral_grid_Li2018
 from bilateral_grid_Mullapudi2016 import bilateral_grid_Mullapudi2016
 import halide.imageio

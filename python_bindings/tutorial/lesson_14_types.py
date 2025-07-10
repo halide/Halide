@@ -13,7 +13,6 @@ import halide as hl
 
 
 def main():
-
     # All Exprs have a scalar type, and all Funcs evaluate to one or
     # more scalar types. The scalar types in Halide are unsigned
     # integers of various bit widths, signed integers of the same set
@@ -22,9 +21,18 @@ def main():
     # following array contains all the legal types.
 
     valid_halide_types = [
-        hl.UInt(8), hl.UInt(16), hl.UInt(32), hl.UInt(64),
-        hl.Int(8), hl.Int(16), hl.Int(32), hl.Int(64),
-        hl.Float(32), hl.Float(64), hl.Handle()]
+        hl.UInt(8),
+        hl.UInt(16),
+        hl.UInt(32),
+        hl.UInt(64),
+        hl.Int(8),
+        hl.Int(16),
+        hl.Int(32),
+        hl.Int(64),
+        hl.Float(32),
+        hl.Float(64),
+        hl.Handle(),
+    ]
 
     # Constructing and inspecting types.
     if True:
@@ -185,7 +193,9 @@ def main():
         x = hl.Var("x")
         assert average(hl.cast(hl.Float(32), x), 3.0).type() == hl.Float(32)
         assert average(x, 3).type() == hl.Int(32)
-        assert average(hl.cast(hl.UInt(8), x), hl.cast(hl.UInt(8), 3)).type() == hl.UInt(8)
+        assert average(
+            hl.cast(hl.UInt(8), x), hl.cast(hl.UInt(8), 3)
+        ).type() == hl.UInt(8)
 
     print("Success!")
 
@@ -193,7 +203,6 @@ def main():
 
 
 def average(a, b):
-
     if type(a) is not hl.Expr:
         a = hl.Expr(a)
 
@@ -205,7 +214,7 @@ def average(a, b):
     assert a.type() == b.type()
 
     # For floating point types:
-    if (a.type().is_float()):
+    if a.type().is_float():
         # The '2' will be promoted to the floating point type due to
         # rule 3 above.
         return (a + b) / 2

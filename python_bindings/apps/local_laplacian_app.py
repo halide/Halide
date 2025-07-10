@@ -12,9 +12,7 @@ import timeit
 
 def main():
     if len(sys.argv) < 6:
-        print(
-            f"Usage: {sys.argv[0]} input.png input.png levels alpha beta output.png"
-        )
+        print(f"Usage: {sys.argv[0]} input.png input.png levels alpha beta output.png")
         print(f"e.g. {sys.argv[0]} input.png 8 1 1 output.png 10")
         sys.exit(1)
 
@@ -41,7 +39,9 @@ def main():
 
     for name, fn in tests.items():
         print(f"Running {name}... ", end="")
-        t = timeit.Timer(lambda: fn(input_buf, levels, alpha / (levels - 1), beta, output_buf))
+        t = timeit.Timer(
+            lambda: fn(input_buf, levels, alpha / (levels - 1), beta, output_buf)
+        )
         avg_time_sec = t.timeit(number=timing_iterations) / timing_iterations
         print("time: %fms" % (avg_time_sec * 1e3))
 
