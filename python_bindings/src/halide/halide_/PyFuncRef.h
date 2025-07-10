@@ -8,6 +8,7 @@ namespace PythonBindings {
 
 struct StageFromInPlaceUpdate {
     Stage new_stage;
+    FuncRef func_ref;
 };
 void define_func_ref(py::module &m);
 
