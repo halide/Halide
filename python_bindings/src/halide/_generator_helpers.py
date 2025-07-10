@@ -85,7 +85,7 @@ def _sanitize_type(t: object) -> Type:
 
 def _normalize_type_list(types: object) -> list[Type]:
     # Always treat _UnspecifiedType as a non-type
-    if types is None or isinstance(types, Type) and types == _UnspecifiedType():
+    if types is None or (isinstance(types, Type) and types == _UnspecifiedType()):
         types = []
     if type(types) is not list:
         types = [types]
@@ -118,21 +118,14 @@ def _parse_halide_type_list(s: str) -> list[Type]:
 
 
 class Requirement:
-    # Name
-    _name: str = ""
-
-    # List of the required types, if any. An empty list means
-    # no constraints. The list will usually be a single type,
-    # except for Outputs that have Tuple-valued results, which
-    # can have multiple types.
-    _types: list[Type] = []
-
-    # Required dimensions. 0 = scalar. -1 = unconstrained.
-    _dimensions: int = -1
-
     def __init__(self, name: str, types: object, dimensions: int):
         self._name = _check_valid_name(name)
+        # List of the required types, if any. An empty list means
+        # no constraints. The list will usually be a single type,
+        # except for Outputs that have Tuple-valued results, which
+        # can have multiple types.
         self._types = _normalize_type_list(types)
+        # Required dimensions. 0 = scalar. -1 = unconstrained.
         self._dimensions = dimensions
         _check(
             len(self._types) > 0,
@@ -236,7 +229,7 @@ class InputBuffer(ImageParam):
 
         _check(
             isinstance(value, (Buffer, ImageParam)),
-            f"Input {r._name} requires an ImageParam or Buffer argument when using call(), but saw {str(value)}",
+            f"Input {r._name} requires an ImageParam or Buffer argument when using call(), but saw {value}",
         )
         _check(
             value.defined(),
@@ -273,7 +266,7 @@ class InputScalar(Param):
         else:
             _check(
                 isinstance(value, Param),
-                f"Input {r._name} requires a Param (or scalar literal) argument when using call(), but saw {str(value)}.",
+                f"Input {r._name} requires a Param (or scalar literal) argument when using call(), but saw {value}.",
             )
             _check(
                 value.defined(),
@@ -305,7 +298,7 @@ class OutputBuffer(Func):
 
         _check(
             isinstance(value, (Buffer, Func)),
-            f"Output {r._name} requires a Func or Buffer argument when using call(), but saw {str(value)}",
+            f"Output {r._name} requires a Func or Buffer argument when using call(), but saw {value}",
         )
         _check(
             value.defined(),
@@ -340,7 +333,7 @@ class OutputScalar(OutputBuffer):
 
         _check(
             isinstance(value, Expr),
-            f"Output {r._name} requires an Expr argument when using call(), but saw {str(value)}",
+            f"Output {r._name} requires an Expr argument when using call(), but saw {value}",
         )
         _check(
             value.defined(),
