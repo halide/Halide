@@ -80,6 +80,24 @@ public:
             }
         }
 
+        uint64_t largest_power_of_two_factor(uint64_t x) const {
+            // Consider the bits of x from MSB to LSB. Say there are three
+            // trailing zeros, and the four high bits are unknown:
+            // a b c d 1 0 0 0
+            // The largest power of two factor of a number is the trailing bits
+            // up to and including the first 1. In this example that's 1000
+            // (i.e. 8).
+            // Negating is flipping the bits and adding one. First we flip:
+            // ~a ~b ~c ~d 0 1 1 1
+            // Then we add one:
+            // ~a ~b ~c ~d 1 0 0 0
+            // If we bitwise and this with the original, the unknown bits cancel
+            // out, and we get left with just the largest power of two
+            // factor. If we want a mask of the trailing zeros instead, we can
+            // just subtract one.
+            return x & -x;
+        }
+
         void cast_to(Type t) {
             if ((!t.is_int() && !t.is_uint()) || (t.is_int() && t.bits() >= 32)) {
                 return;
@@ -96,10 +114,8 @@ public:
                     // representable as any 64-bit integer type, so there's no
                     // wraparound.
                     if (alignment.modulus > 0) {
-                        // This masks off all bits except for the lowest set one,
-                        // giving the largest power-of-two factor of a number.
-                        alignment.modulus &= -alignment.modulus;
-                        alignment.remainder = mod_imp(alignment.remainder, alignment.modulus);
+                        alignment.modulus = largest_power_of_two_factor(alignment.modulus);
+                        alignment.remainder &= alignment.modulus - 1;
                     }
                 } else {
                     // A narrowing integer cast that could possibly overflow adds
@@ -125,13 +141,144 @@ public:
             alignment = ModulusRemainder::intersect(alignment, other.alignment);
             trim_bounds_using_alignment();
         }
+
+        // An alternative representation for information about integers is that
+        // certain bits have known values in the 2s complement
+        // representation. This is a useful form for analyzing bitwise ops, so
+        // we provide conversions to and from that representation. For narrow
+        // types, this represent what the bits would be if they were sign or
+        // zero-extended to 64 bits, so for uints the high bits are known to be
+        // zero, and for ints it depends on whether or not we knew the high bit
+        // to begin with.
+        struct BitsKnown {
+            // A mask which is 1 where we know the value of that bit
+            uint64_t mask;
+            // The actual value of the known bits
+            uint64_t value;
+
+            uint64_t known_zeros() const {
+                return mask & ~value;
+            }
+
+            uint64_t known_ones() const {
+                return mask & value;
+            }
+
+            bool all_bits_known() const {
+                return mask == (uint64_t)(-1);
+            }
+
+            BitsKnown operator&(const BitsKnown &other) const {
+                // Where either has known zeros, we have known zeros in the result
+                uint64_t zeros = known_zeros() | other.known_zeros();
+                // Where both have a known one, we have a known one in the result
+                uint64_t ones = known_ones() & other.known_ones();
+                return {zeros | ones, ones};
+            }
+
+            BitsKnown operator|(const BitsKnown &other) const {
+                // Where either has known ones, we have known ones in the result
+                uint64_t ones = known_ones() | other.known_ones();
+                // Where both have a known zero, we have a known zero in the result.
+                uint64_t zeros = known_zeros() & other.known_zeros();
+                return {zeros | ones, ones};
+            }
+
+            BitsKnown operator^(const BitsKnown &other) const {
+                // Unlike & and |, we need to know both bits to know anything.
+                uint64_t new_mask = mask & other.mask;
+                return {new_mask, (value ^ other.value) & new_mask};
+            }
+        };
+
+        BitsKnown to_bits_known(const Type &type) const;
+        void from_bits_known(BitsKnown known, const Type &type);
     };
 
     HALIDE_ALWAYS_INLINE
-    void clear_expr_info(ExprInfo *b) {
-        if (b) {
-            *b = ExprInfo{};
+    void clear_expr_info(ExprInfo *info) {
+        if (info) {
+            *info = ExprInfo{};
         }
+    }
+
+    void set_expr_info_to_constant(ExprInfo *info, int64_t c) const {
+        if (info) {
+            info->bounds = ConstantInterval::single_point(c);
+            info->alignment = ModulusRemainder{0, c};
+        }
+    }
+
+    int64_t normalize_constant(const Type &t, int64_t c) {
+        // If this is supposed to be an int32, but the constant is not
+        // representable as an int32, we have a problem, because the Halide
+        // simplifier is unsound with respect to int32 overflow (see
+        // https://github.com/halide/Halide/issues/3245).
+
+        // It's tempting to just say we return a signed_integer_overflow, for
+        // which we know nothing, but if we're in this function we're making a
+        // constant, so we clearly decided not to do that in the caller. Is this
+        // a bug in the caller? No, this intentionally happens when
+        // constant-folding narrowing casts, and changing that behavior to
+        // return signed_integer_overflow breaks a bunch of real code, because
+        // unfortunately that's how people express wrapping casts to int32. We
+        // could return an ExprInfo that says "I know nothing", but we're also
+        // returning a constant Expr, so the next mutation is just going to
+        // infer everything there is to infer about a constant. The best we can
+        // do at this point is just wrap to the right number of bits.
+        int dropped_bits = 64 - t.bits();
+        if (t.is_int()) {
+            c <<= dropped_bits;
+            c >>= dropped_bits;  // sign-extend
+        } else if (t.is_uint()) {
+            // For uints, normalization is considerably less problematic
+            c <<= dropped_bits;
+            c = (int64_t)(((uint64_t)c >> dropped_bits));  // zero-extend
+        }
+        return c;
+    }
+
+    // We never want to return make_const anything in the simplifier without
+    // also setting the ExprInfo, so shadow the global make_const.
+    Expr make_const(const Type &t, int64_t c, ExprInfo *info) {
+        c = normalize_constant(t, c);
+        set_expr_info_to_constant(info, c);
+        return Halide::Internal::make_const(t, c);
+    }
+
+    Expr make_const(const Type &t, uint64_t c, ExprInfo *info) {
+        c = normalize_constant(t, c);
+
+        if ((int64_t)c >= 0) {
+            // This is representable as an int64_t
+            set_expr_info_to_constant(info, (int64_t)c);
+        } else if (info) {
+            // If it's not representable as an int64, we can't express
+            // everything we know about it in ExprInfo.
+            // We can say that it's big:
+            info->bounds = ConstantInterval::bounded_below(INT64_MAX);
+            // And we can say what we know about the bottom 62 bits (2^62 is the
+            // largest power of two we can represent as an int64_t):
+            int64_t modulus = (int64_t)1 << 62;
+            info->alignment = {modulus, (int64_t)c & (modulus - 1)};
+        }
+        return Halide::Internal::make_const(t, c);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make_const(const Type &t, double c, ExprInfo *info) {
+        // We don't currently track information about floats
+        return Halide::Internal::make_const(t, c);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr const_false(int lanes, ExprInfo *info) {
+        return make_const(UInt(1, lanes), (int64_t)0, info);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr const_true(int lanes, ExprInfo *info) {
+        return make_const(UInt(1, lanes), (int64_t)1, info);
     }
 
 #if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
@@ -154,13 +301,23 @@ public:
                 debug(1)
                     << spaces << "Bounds: " << b->bounds << " " << b->alignment << "\n";
                 if (auto i = as_const_int(new_e)) {
-                    internal_assert(b->bounds.contains(*i)) << e << "\n"
-                                                            << new_e << "\n"
-                                                            << b->bounds;
+                    internal_assert(b->bounds.contains(*i))
+                        << e << "\n"
+                        << new_e << "\n"
+                        << b->bounds;
                 } else if (auto i = as_const_uint(new_e)) {
-                    internal_assert(b->bounds.contains(*i)) << e << "\n"
-                                                            << new_e << "\n"
-                                                            << b->bounds;
+                    internal_assert(b->bounds.contains(*i))
+                        << e << "\n"
+                        << new_e << "\n"
+                        << b->bounds;
+                }
+                if (new_e.type().is_uint() &&
+                    new_e.type().bits() < 64 &&
+                    !is_signed_integer_overflow(new_e)) {
+                    internal_assert(b->bounds.min_defined && b->bounds.min >= 0)
+                        << e << "\n"
+                        << new_e << "\n"
+                        << b->bounds;
                 }
             }
         }
@@ -197,12 +354,6 @@ public:
 #endif
 
     bool remove_dead_code;
-    bool no_float_simplify = false;
-
-    HALIDE_ALWAYS_INLINE
-    bool may_simplify(const Type &t) const {
-        return !no_float_simplify || !t.is_float();
-    }
 
     // Returns true iff t is an integral type where overflow is undefined
     HALIDE_ALWAYS_INLINE

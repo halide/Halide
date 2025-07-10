@@ -18,7 +18,8 @@ add_halide_generator(harris.generator SOURCES harris_generator.cpp)
 add_halide_library(harris FROM harris.generator)
 add_halide_library(harris_auto_schedule FROM harris.generator
                    GENERATOR harris
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS autoscheduler.experimental_gpu_schedule=1)
 
 # Main executable
 add_executable(harris_filter filter.cpp)

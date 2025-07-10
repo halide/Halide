@@ -26,6 +26,7 @@
 #include "LowerParallelTasks.h"
 #include "Pipeline.h"
 #include "Simplify.h"
+#include "StrictifyFloat.h"
 #include "Util.h"
 
 // MSVC won't set __cplusplus correctly unless certain compiler flags are set
@@ -265,21 +266,8 @@ void CodeGen_LLVM::init_context() {
     // Branch weights for very likely branches
     llvm::MDBuilder md_builder(*context);
     very_likely_branch = md_builder.createBranchWeights(1 << 30, 0);
-    default_fp_math_md = md_builder.createFPMath(0.0);
+    fast_fp_math_md = md_builder.createFPMath(0.0);
     strict_fp_math_md = md_builder.createFPMath(0.0);
-    builder->setDefaultFPMathTag(default_fp_math_md);
-    llvm::FastMathFlags fast_flags;
-    fast_flags.setNoNaNs();
-    fast_flags.setNoInfs();
-    fast_flags.setNoSignedZeros();
-    // Don't use approximate reciprocals for division. It's too inaccurate even for Halide.
-    // fast_flags.setAllowReciprocal();
-    // Theoretically, setAllowReassoc could be setUnsafeAlgebra for earlier versions, but that
-    // turns on all the flags.
-    fast_flags.setAllowReassoc();
-    fast_flags.setAllowContract(true);
-    fast_flags.setApproxFunc();
-    builder->setFastMathFlags(fast_flags);
 
     // Define some types
     void_t = llvm::Type::getVoidTy(*context);
@@ -399,7 +387,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
     return codegen->finish_codegen();
 }
 
-void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) {
+void CodeGen_LLVM::init_codegen(const std::string &name) {
     init_module();
 
     internal_assert(module && context);
@@ -452,10 +440,66 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
 
     semaphore_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_t");
     internal_assert(semaphore_t_type) << "Did not find halide_semaphore_t in initial module";
+
+    if (any_strict_float) {
+        // Default all operations to strict, and relax any non-strict operations
+        // when possible. This is better than defaulting to relaxed and making
+        // some operations strict, because properties like no-nans are
+        // viral. It's no use having a strict comparison that respects nans if
+        // the source of the inputs was an op tagged with no-nans.
+        set_strict_fp_math();
+        // If the target has the strict_float flag, we act as if we're already
+        // inside a strict_float intrinsic.
+        in_strict_float = target.has_feature(Target::StrictFloat);
+    } else {
+        // Default all operations to relaxed.
+        set_fast_fp_math();
+    }
+}
+
+void CodeGen_LLVM::set_fast_fp_math() {
+    internal_assert(!target.has_feature(Target::StrictFloat))
+        << "Setting fast math flags in a module compiled with target flag strict_float\n";
+    llvm::FastMathFlags fp_flags;
+    fp_flags.clear();
+    fp_flags.setNoNaNs();
+    fp_flags.setNoInfs();
+    fp_flags.setNoSignedZeros();
+    // Don't use approximate reciprocals for division. It's too inaccurate even for Halide.
+    // fp_flags.setAllowReciprocal();
+    // Theoretically, setAllowReassoc could be setUnsafeAlgebra for earlier versions, but that
+    // turns on all the flags.
+    fp_flags.setAllowReassoc();
+    fp_flags.setAllowContract(true);
+    fp_flags.setApproxFunc();
+    builder->setDefaultFPMathTag(fast_fp_math_md);
+    builder->setFastMathFlags(fp_flags);
+}
+
+void CodeGen_LLVM::set_strict_fp_math() {
+    llvm::FastMathFlags fp_flags;
+    fp_flags.clear();
+    builder->setDefaultFPMathTag(strict_fp_math_md);
+    builder->setFastMathFlags(fp_flags);
+}
+
+CodeGen_LLVM::ScopedFastMath::ScopedFastMath(CodeGen_LLVM *codegen)
+    : codegen(codegen) {
+    if (codegen->any_strict_float && !codegen->in_strict_float) {
+        codegen->set_fast_fp_math();
+    }
+}
+
+CodeGen_LLVM::ScopedFastMath::~ScopedFastMath() {
+    if (codegen->any_strict_float) {
+        codegen->set_strict_fp_math();
+    }
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
-    init_codegen(input.name(), input.any_strict_float());
+    any_strict_float = input.any_strict_float();
+
+    init_codegen(input.name());
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
@@ -1449,6 +1493,7 @@ void CodeGen_LLVM::visit(const Cast *op) {
     } else if (!src.is_float() && !dst.is_float()) {
         value = builder->CreateIntCast(value, llvm_dst, src.is_int());
     } else if (src.is_float() && dst.is_int()) {
+        ScopedFastMath guard(this);
         value = builder->CreateFPToSI(value, llvm_dst);
     } else if (src.is_float() && dst.is_uint()) {
         // fptoui has undefined behavior on overflow. Seems reasonable
@@ -1457,6 +1502,7 @@ void CodeGen_LLVM::visit(const Cast *op) {
         // behavior manifests itself as uint1 values greater than 1,
         // which could in turn break our bounds inference
         // guarantees. So go via uint8 in this case.
+        ScopedFastMath guard(this);
         if (dst.bits() < 8) {
             value = builder->CreateFPToUI(value, llvm_type_of(dst.with_bits(8)));
             value = builder->CreateIntCast(value, llvm_dst, false);
@@ -1470,6 +1516,7 @@ void CodeGen_LLVM::visit(const Cast *op) {
     } else {
         internal_assert(src.is_float() && dst.is_float());
         // Float widening or narrowing
+        ScopedFastMath guard(this);
         value = builder->CreateFPCast(value, llvm_dst);
     }
 }
@@ -1526,6 +1573,7 @@ void CodeGen_LLVM::visit(const Add *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
+        ScopedFastMath guard(this);
         if (!try_vector_predication_intrinsic("llvm.vp.fadd", llvm_type_of(t), t.lanes(), AllEnabledMask(),
                                               {VPArg(a, 0), VPArg(b)})) {
             value = builder->CreateFAdd(a, b);
@@ -1555,6 +1603,7 @@ void CodeGen_LLVM::visit(const Sub *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
+        ScopedFastMath guard(this);
         if (!try_vector_predication_intrinsic("llvm.vp.fsub", llvm_type_of(t), t.lanes(), AllEnabledMask(),
                                               {VPArg(a, 0), VPArg(b)})) {
             value = builder->CreateFSub(a, b);
@@ -1588,6 +1637,7 @@ void CodeGen_LLVM::visit(const Mul *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
+        ScopedFastMath guard(this);
         if (!try_vector_predication_intrinsic("llvm.vp.fmul", llvm_type_of(t), t.lanes(), AllEnabledMask(),
                                               {VPArg(a, 0), VPArg(b)})) {
             value = builder->CreateFMul(a, b);
@@ -1623,6 +1673,7 @@ void CodeGen_LLVM::visit(const Div *op) {
         // output hard.
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
+        ScopedFastMath guard(this);
         if (!try_vector_predication_intrinsic("llvm.vp.fdiv", llvm_type_of(t), t.lanes(), AllEnabledMask(),
                                               {VPArg(a, 0), VPArg(b)})) {
             value = builder->CreateFDiv(a, b);
@@ -1696,6 +1747,7 @@ void CodeGen_LLVM::visit(const EQ *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
+        ScopedFastMath guard(this);
         if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "oeq")) {
             value = builder->CreateFCmpOEQ(a, b);
         }
@@ -1716,6 +1768,7 @@ void CodeGen_LLVM::visit(const NE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
+        ScopedFastMath guard(this);
         if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "one")) {
             value = builder->CreateFCmpONE(a, b);
         }
@@ -1736,6 +1789,7 @@ void CodeGen_LLVM::visit(const LT *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
+        ScopedFastMath guard(this);
         if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "olt")) {
             value = builder->CreateFCmpOLT(a, b);
         }
@@ -1760,6 +1814,7 @@ void CodeGen_LLVM::visit(const LE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
+        ScopedFastMath guard(this);
         if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "ole")) {
             value = builder->CreateFCmpOLE(a, b);
         }
@@ -1785,6 +1840,7 @@ void CodeGen_LLVM::visit(const GT *op) {
     Value *b = codegen(op->b);
 
     if (t.is_float()) {
+        ScopedFastMath guard(this);
         if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "ogt")) {
             value = builder->CreateFCmpOGT(a, b);
         }
@@ -1809,6 +1865,7 @@ void CodeGen_LLVM::visit(const GE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
+        ScopedFastMath guard(this);
         if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "oge")) {
             value = builder->CreateFCmpOGE(a, b);
         }
@@ -2136,6 +2193,7 @@ void CodeGen_LLVM::visit(const Ramp *op) {
         for (int i = 0; i < op->type.lanes(); i++) {
             if (i > 0) {
                 if (op->type.is_float()) {
+                    ScopedFastMath guard(this);
                     base = builder->CreateFAdd(base, stride);
                 } else if (op->type.is_int() && op->type.bits() >= 32) {
                     base = builder->CreateNSWAdd(base, stride);
@@ -3276,13 +3334,34 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         const llvm::DataLayout &d = module->getDataLayout();
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(halide_buffer_t_type));
-    } else if (op->is_intrinsic(Call::strict_float)) {
-        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
-        llvm::FastMathFlags safe_flags;
-        safe_flags.clear();
-        builder->setFastMathFlags(safe_flags);
-        builder->setDefaultFPMathTag(strict_fp_math_md);
-        value = codegen(op->args[0]);
+    } else if (op->is_strict_float_intrinsic()) {
+        // Evaluate the args first outside the strict scope, as they may use
+        // non-strict operations.
+        std::vector<Expr> new_args(op->args.size());
+        for (size_t i = 0; i < op->args.size(); i++) {
+            const Expr &arg = op->args[i];
+            if (arg.as<Variable>() || is_const(arg)) {
+                new_args[i] = arg;
+            } else {
+                std::string name = unique_name('t');
+                sym_push(name, codegen(arg));
+                new_args[i] = Variable::make(arg.type(), name);
+            }
+        }
+
+        Expr call = Call::make(op->type, op->name, new_args, op->call_type);
+        {
+            ScopedValue<bool> old_in_strict_float(in_strict_float, true);
+            value = codegen(unstrictify_float(call.as<Call>()));
+        }
+
+        for (size_t i = 0; i < op->args.size(); i++) {
+            const Expr &arg = op->args[i];
+            if (!arg.as<Variable>() && !is_const(arg)) {
+                sym_pop(new_args[i].as<Variable>()->name);
+            }
+        }
+
     } else if (is_float16_transcendental(op) && !supports_call_as_float16(op)) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic(Call::mux)) {
@@ -3343,44 +3422,40 @@ void CodeGen_LLVM::visit(const Call *op) {
          * treated as strict. Note that compilation may still be in
          * fast-math mode due to global options, but that's ok due to
          * the aforementioned special casing. */
-        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
-        llvm::FastMathFlags safe_flags;
-        safe_flags.clear();
-        builder->setFastMathFlags(safe_flags);
-        builder->setDefaultFPMathTag(strict_fp_math_md);
-
         value = builder->CreateFCmpUNO(a, a);
     } else if (op->call_type == Call::PureExtern &&
                (op->name == "is_inf_f32" || op->name == "is_inf_f64" || op->name == "is_inf_f16")) {
         internal_assert(op->args.size() == 1);
 
-        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
-        llvm::FastMathFlags safe_flags;
-        safe_flags.clear();
-        builder->setFastMathFlags(safe_flags);
-        builder->setDefaultFPMathTag(strict_fp_math_md);
-
         // isinf(e) -> (fabs(e) == infinity)
         Expr e = op->args[0];
         internal_assert(e.type().is_float());
         Expr inf = e.type().max();
-        codegen(abs(e) == inf);
+        std::string name = unique_name('t');
+        Expr var = Variable::make(e.type(), name);
+        sym_push(name, codegen(e));
+        {
+            ScopedValue<bool> old_in_strict_float(in_strict_float, true);
+            codegen(abs(var) == inf);
+        }
+        sym_pop(name);
     } else if (op->call_type == Call::PureExtern &&
                (op->name == "is_finite_f32" || op->name == "is_finite_f64" || op->name == "is_finite_f16")) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->args[0].type().is_float());
 
-        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
-        llvm::FastMathFlags safe_flags;
-        safe_flags.clear();
-        builder->setFastMathFlags(safe_flags);
-        builder->setDefaultFPMathTag(strict_fp_math_md);
-
         // isfinite(e) -> (fabs(e) != infinity && !isnan(e)) -> (fabs(e) != infinity && e == e)
         Expr e = op->args[0];
-        internal_assert(e.type().is_float());
         Expr inf = e.type().max();
-        codegen(abs(e) != inf && e == e);
+        internal_assert(e.type().is_float());
+        std::string name = unique_name('t');
+        Expr var = Variable::make(e.type(), name);
+        sym_push(name, codegen(e));
+        {
+            ScopedValue<bool> old_in_strict_float(in_strict_float, true);
+            codegen(abs(var) != inf && var == var);
+        }
+        sym_pop(name);
     } else {
         // It's an extern call.
 

@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
 
             Buffer<int32_t> output = sink.realize({100, 100});
 
-            // Should be all zeroes.
+            // Should be all zeros.
             RDom r(output);
             uint32_t error = evaluate_may_gpu<uint32_t>(sum(abs(output(r.x, r.y))));
             if (error != 0) {

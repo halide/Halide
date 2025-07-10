@@ -9,15 +9,28 @@ set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release RelWithDebInfo "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 
-find_package(LLVM CONFIG)
+set(llvm_paths "")
+foreach (
+    template IN ITEMS
+    "/opt/homebrew/opt/llvm@@VERSION@" # Homebrew on macOS
+    "/usr/lib/llvm-@VERSION@" # Debian/Ubuntu packages
+    "/usr/local/lib/llvm-@VERSION@" # Third-party packages
+    "/opt/llvm-@VERSION@" # Third-party packages
+)
+    foreach (VERSION RANGE 18 21) # inclusive!
+        string(CONFIGURE "${template}" path @ONLY)
+        list(APPEND llvm_paths "${path}")
+    endforeach ()
+endforeach ()
+list(REVERSE llvm_paths) # search more recent versions first
+
+find_package(LLVM PATHS ${llvm_paths})
 
 # Neither LLVM_VERSION nor LLVM_PACKAGE_VERSION work as find_package arguments
 # in git/development builds as they include a "git" suffix. This applies at
 # time of writing to versions 18-21, inclusive.
 if (LLVM_FOUND)
     set(Halide_LLVM_VERSION "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
-else ()
-    set(Halide_LLVM_VERSION "")
 endif ()
 
 if (NOT DEFINED Halide_LLVM_SHARED_LIBS)

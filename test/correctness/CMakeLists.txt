@@ -12,6 +12,7 @@ tests(GROUPS correctness
       autodiff.cpp
       bad_likely.cpp
       bit_counting.cpp
+      bits_known.cpp
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
       bool_predicate_cast.cpp
@@ -191,6 +192,7 @@ tests(GROUPS correctness
       intrinsics.cpp
       invalid_gpu_loop_nests.cpp
       inverse.cpp
+      irprinter.cpp
       isnan.cpp
       issue_3926.cpp
       iterate_over_circle.cpp

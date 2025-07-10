@@ -1,5 +1,4 @@
 import halide as hl
-import numpy as np
 
 
 def test_compiletime_error():
@@ -447,7 +446,18 @@ def test_requirements():
 
 def test_implicit_convert_int64():
     assert (hl.i32(0) + 0x7fffffff).type() == hl.Int(32)
-    assert (hl.i32(0) + (0x7fffffff+1)).type() == hl.Int(64)
+    assert (hl.i32(0) + (0x7fffffff + 1)).type() == hl.Int(64)
+
+
+def test_pow_rpow():
+    two = hl.Expr(2.0)
+    x = hl.Var("x")
+    for three in (3, hl.Expr(3)):
+        f = hl.Func("f")
+        f[x] = 0.0
+        f[0] = two ** three
+        f[1] = three ** two
+        assert list(f.realize([2])) == [8.0, 9.0]
 
 
 if __name__ == "__main__":
@@ -469,3 +479,4 @@ if __name__ == "__main__":
     test_bool_conversion()
     test_requirements()
     test_implicit_convert_int64()
+    test_pow_rpow()

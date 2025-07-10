@@ -174,12 +174,12 @@ void add_binary_operators(PythonClass &class_instance) {
     add_binary_operators_with<int>(class_instance);
 
     // Halide::pow() has only an Expr, Expr variant
-    const auto pow_wrap = [](const Expr &self, const Expr &other) -> decltype(Halide::pow(self, other)) {
-        return Halide::pow(self, other);
-    };
     class_instance
-        .def("__pow__", pow_wrap, py::is_operator())
-        .def("__rpow__", pow_wrap, py::is_operator());
+        .def("__pow__", Halide::pow, py::is_operator())
+        .def("__rpow__", [](const Expr &self, const Expr &other) {
+            return Halide::pow(other, self);  //
+        },
+             py::is_operator());
 
     const auto logical_not_wrap = [](const self_t &self) -> decltype(!self) {
         return !self;

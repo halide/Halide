@@ -1050,7 +1050,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         // This will cause a difference in MemSize and FileSize like so:
         //        FileSize = (MemSize - size_of_bss)
         // When the Hexagon loader is used on 8998 and later targets,
-        // the difference is filled with zeroes thereby initializing the .bss
+        // the difference is filled with zeros thereby initializing the .bss
         // section.
         bss->set_type(Elf::Section::SHT_PROGBITS);
         std::fill(bss->contents_begin(), bss->contents_end(), 0);

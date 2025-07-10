@@ -31,6 +31,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
     constexpr bool IsMulti = true;
     constexpr bool IsSingle = false;
     const bool is_windows_coff = target.os == Target::Windows;
+    // Keep in sync with cmake/HalideGeneratorHelpers.cmake
     std::map<OutputFileType, const OutputInfo> ext = {
         {OutputFileType::assembly, {"assembly", ".s", IsMulti}},
         {OutputFileType::bitcode, {"bitcode", ".bc", IsMulti}},
@@ -1058,6 +1059,7 @@ void compile_multitarget(const std::string &fn_name,
                                     .without_feature(Target::NoAsserts);
 
         Module wrapper_module(fn_name, wrapper_target, metadata_name_map);
+        wrapper_module.set_any_strict_float(base_target.has_feature(Target::StrictFloat));
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
         std::string wrapper_path = contains(output_files, OutputFileType::static_library) ?
