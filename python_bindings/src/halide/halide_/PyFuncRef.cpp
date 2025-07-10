@@ -30,6 +30,7 @@ namespace {
 #define X_FuncRef(op, rhs) (StageFromInPlaceUpdate{self.operator op(rhs), self})
 #define X_StageFromInPlaceUpdate(op, rhs) (self.func_ref.operator op(rhs), self)
 
+// NOLINTBEGIN(bugprone-macro-parentheses)
 #define DEF_IOP(T, pyop, op)                           \
     .def(pyop, [](T &self, const Expr &other) {        \
         return X##_##T(op, other);                     \
@@ -38,6 +39,7 @@ namespace {
       }).def(pyop, [](T &self, const FuncRef &other) { \
         return X##_##T(op, other);                     \
     })
+// NOLINTEND(bugprone-macro-parentheses)
 
 #define DEF_IOPS(cls, T)                    \
     do {                                    \
