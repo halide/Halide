@@ -26,7 +26,7 @@ Expr strictify_float(const Expr &e);
 Expr unstrictify_float(const Call *op);
 
 /** Replace all of the strict float intrinsics with its non-strict equivalent in a given expression. */
-Expr unstrictify_all(const Expr& e);
+Expr unstrictify_all(const Expr &e);
 
 /** If the StrictFloat target feature is set, replace add, sub, mul, div, etc
  * operations with strict float intrinsics for all Funcs in the environment. If

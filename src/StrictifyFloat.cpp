@@ -165,20 +165,20 @@ Expr unstrictify_float(const Call *op) {
 }
 
 namespace {
-    class Unstrictify : public IRMutator {
-        using IRMutator::visit;
-        Expr visit(const Call* op) override {
-            if (op->is_strict_float_intrinsic()) {
-                Expr unstricted = unstrictify_float(op);
-                return mutate(unstricted);
-            } else {
-                return IRMutator::visit(op);
-            }
+class Unstrictify : public IRMutator {
+    using IRMutator::visit;
+    Expr visit(const Call *op) override {
+        if (op->is_strict_float_intrinsic()) {
+            Expr unstricted = unstrictify_float(op);
+            return mutate(unstricted);
+        } else {
+            return IRMutator::visit(op);
         }
-    };
-}
+    }
+};
+}  // namespace
 
-Expr unstrictify_all(const Expr& e) {
+Expr unstrictify_all(const Expr &e) {
     Unstrictify mutator;
     return mutator.mutate(e);
 }
