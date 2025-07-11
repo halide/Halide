@@ -1368,7 +1368,7 @@ public:
     }
 
     /** Generate Halide GPU schedules. */
-    void apply(AutoSchedule &sched) {
+    void apply(AutoSchedule &sched, const Expr &parallelism) {
         if (!ordering.empty() && !is_initial_order) {
             std::set<std::string> var_list;
             for (const auto &v : ordering) {
@@ -1396,7 +1396,7 @@ public:
         }
 
         GPUTileHelper helper{f, stage_num};
-        Expr threads_budget = max_n_threads;
+        Expr threads_budget = min(parallelism, max_n_threads);
 
         // Maximize GPU thread occupancy with the grid-stride loop.
         //
@@ -1423,14 +1423,8 @@ public:
 
             const auto &[var, entry] = *iter;
 
-            const bool should_unroll = can_prove(entry.factor <= 1);
-            if (should_unroll) {
-                // Skip thread size of 1.
-                continue;
-            }
-
             split_info new_entry{entry};
-            new_entry.factor = 1;
+            new_entry.factor = simplify(min(threads_budget, entry.factor));
 
             const bool can_split = helper.try_split(new_entry);
             if (!can_split) {
@@ -1438,7 +1432,7 @@ public:
                 parallelize.erase(iter);
                 continue;
             }
-            threads_budget = simplify(max(threads_budget / entry.factor, 1));
+            threads_budget = simplify(max(threads_budget / new_entry.factor, 1));
         }
 
         helper.commit(sched, is_compute_at);
@@ -2210,7 +2204,7 @@ Partitioner::find_best_tile_config(const Group &g) {
     Group no_tile = g;
     no_tile.tile_sizes = no_tile_config;
 
-    bool show_analysis = false;
+    constexpr bool show_analysis = false;
     GroupAnalysis no_tile_analysis = analyze_group(no_tile, show_analysis);
 
     GroupAnalysis best_analysis = no_tile_analysis;
@@ -2233,7 +2227,7 @@ Partitioner::find_best_tile_config(const Group &g) {
         Expr benefit = estimate_benefit(best_analysis, new_analysis,
                                         no_redundant_work, true);
 
-        if (show_analysis) {
+        if constexpr (show_analysis) {
             debug(0) << "Benefit relative to not tiling:" << benefit << "\n";
             debug(0) << "Best analysis:" << new_analysis;
             debug(0) << "No tile analysis:" << no_tile_analysis;
@@ -3439,7 +3433,8 @@ void Partitioner::generate_group_cpu_schedule(
                     }
                 }
                 if (arch_params.is_gpu_schedule) {
-                    auto parallelized_split = gpu_tiling.can_parallelize(v, iter->second);
+                    const Expr gpu_threads = simplify(min(iter->second, arch_params.parallelism / def_par));
+                    auto parallelized_split = gpu_tiling.can_parallelize(v, gpu_threads);
                     if (parallelized_split) {
                         auto split_vars = *parallelized_split;
                         inner_dims.emplace_back(split_vars.inner);
@@ -3463,7 +3458,7 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     if (arch_params.is_gpu_schedule) {
-        gpu_tiling.apply(sched);
+        gpu_tiling.apply(sched, arch_params.parallelism);
     }
 
     // Find the level at which group members will be computed.
@@ -3552,7 +3547,7 @@ void Partitioner::generate_group_cpu_schedule(
                         mem_rvars, mem_estimates, sched, gpu_tiling2);
 
         if (arch_params.is_gpu_schedule) {
-            gpu_tiling2.apply(sched);
+            gpu_tiling2.apply(sched, arch_params.parallelism);
         }
     }
 }
