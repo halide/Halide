@@ -3940,7 +3940,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 
     // Compute the bounds of function values which are used for dependence analysis.
     debug(2) << "Computing function value bounds...\n";
-    FuncValueBounds func_val_bounds = compute_function_value_bounds(order, env);
+    FuncValueBounds func_val_bounds = compute_function_value_bounds(order, env, false);
 
     // Initialize the cost model.
     // Compute the expression costs for each function in the pipeline.
@@ -3979,7 +3979,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         order = realization_order(outputs, env).first;
 
         debug(2) << "Re-computing function value bounds...\n";
-        func_val_bounds = compute_function_value_bounds(order, env);
+        func_val_bounds = compute_function_value_bounds(order, env, false);
         debug(2) << "Re-initializing region costs...\n";
         RegionCosts costs(env, order);
         debug(2) << "Re-initializing dependence analysis...\n";

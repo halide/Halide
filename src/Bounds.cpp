@@ -1833,7 +1833,7 @@ private:
 };
 
 // Version that exposes 'indent' is for internal use only
-Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound, int indent) {
+Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound, int indent, bool any_strict_float) {
 #if DO_TRACK_BOUNDS_INTERVALS
     const string spaces(indent, ' ');
     debug(0) << spaces << "BoundsOfExprInScope {\n"
@@ -1843,8 +1843,12 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
 #if DO_TRACK_BOUNDS_INTERVALS
     b.log_indent = indent + 1;
 #endif
-    Expr unstricted = unstrictify(expr);
-    unstricted.accept(&b);
+    if (any_strict_float) {
+        Expr unstricted = unstrictify_all(expr);
+        unstricted.accept(&b);
+    } else {
+        expr.accept(&b);
+    }
 #if DO_TRACK_BOUNDS_INTERVALS
     debug(0) << spaces << " mn=" << simplify(b.interval.min) << "\n"
              << spaces << " mx=" << simplify(b.interval.max) << "\n"
@@ -1868,8 +1872,8 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
 
 }  // namespace
 
-Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
-    return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0);
+Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound, bool any_strict_float) {
+    return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0, any_strict_float);
 }
 
 void merge_boxes(Box &a, const Box &b) {
@@ -3321,14 +3325,14 @@ Box box_touched(Stmt s, const string &fn, const Scope<Interval> &scope, const Fu
 namespace {
 // Compute interval of all possible function's values (default + specialized values)
 Interval compute_pure_function_definition_value_bounds(
-    const Definition &def, const Scope<Interval> &scope, const FuncValueBounds &fb, int dim) {
+    const Definition &def, const Scope<Interval> &scope, const FuncValueBounds &fb, int dim, bool any_strict_float) {
 
-    Interval result = bounds_of_expr_in_scope(def.values()[dim], scope, fb);
+    Interval result = bounds_of_expr_in_scope(def.values()[dim], scope, fb, any_strict_float);
 
     // Pure function might have different values due to specialization.
     // We need to take the union of min and max bounds of all those possible values.
     for (const Specialization &s : def.specializations()) {
-        Interval s_interval = compute_pure_function_definition_value_bounds(s.definition, scope, fb, dim);
+        Interval s_interval = compute_pure_function_definition_value_bounds(s.definition, scope, fb, dim, any_strict_float);
         result.include(s_interval);
     }
     return result;
@@ -3336,7 +3340,7 @@ Interval compute_pure_function_definition_value_bounds(
 }  // namespace
 
 FuncValueBounds compute_function_value_bounds(const vector<string> &order,
-                                              const map<string, Function> &env) {
+                                              const map<string, Function> &env, bool any_strict_float) {
     FuncValueBounds fb;
 
     for (const auto &func_name : order) {
@@ -3355,7 +3359,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                     arg_scope.push(f_args[k], Interval::everything());
                 }
 
-                result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j);
+                result = compute_pure_function_definition_value_bounds(f.definition(), arg_scope, fb, j, any_strict_float);
                 // These can expand combinatorially as we go down the
                 // pipeline if we don't run CSE on them.
                 bool fixed = result.is_single_point();

@@ -33,7 +33,8 @@ const FuncValueBounds &empty_func_value_bounds();
 Interval bounds_of_expr_in_scope(const Expr &expr,
                                  const Scope<Interval> &scope,
                                  const FuncValueBounds &func_bounds = empty_func_value_bounds(),
-                                 bool const_bound = false);
+                                 bool const_bound = false,
+                                 bool any_strict_float = true);
 
 /** Given a varying expression, try to find a constant that is either:
  * An upper bound (always greater than or equal to the expression), or
@@ -171,7 +172,8 @@ Box box_touched(Stmt s, const std::string &fn,
 /** Compute the maximum and minimum possible value for each function
  * in an environment. */
 FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
-                                              const std::map<std::string, Function> &env);
+                                              const std::map<std::string, Function> &env,
+                                              bool any_strict_float);
 
 /* Find an upper bound of bounds.max - bounds.min. */
 Expr span_of_bounds(const Interval &bounds);

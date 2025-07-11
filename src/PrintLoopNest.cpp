@@ -205,7 +205,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
 
     // Compute the maximum and minimum possible value of each
     // function. Used in later bounds inference passes.
-    FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
+    FuncValueBounds func_bounds = compute_function_value_bounds(order, env, false);
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We

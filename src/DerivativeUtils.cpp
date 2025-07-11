@@ -241,7 +241,7 @@ map<string, Box> inference_bounds(const vector<Func> &funcs,
     }
     // Sort functions
     vector<string> order = realization_order(functions, env).first;
-    FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
+    FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env, false);
 
     map<string, Box> bounds;
     // Set up bounds for outputs

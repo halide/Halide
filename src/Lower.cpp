@@ -196,7 +196,7 @@ void lower_impl(const vector<Function> &output_funcs,
     // Compute the maximum and minimum possible value of each
     // function. Used in later bounds inference passes.
     debug(1) << "Computing bounds of each function's value\n";
-    FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
+    FuncValueBounds func_bounds = compute_function_value_bounds(order, env, any_strict_float);
 
     // Clamp unsafe instances where a Func f accesses a Func g using
     // an index which depends on a third Func h.

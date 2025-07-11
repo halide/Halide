@@ -666,7 +666,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                 node.region_computed.resize(consumer.dimensions());
             }
 
-            FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
+            FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env, false);
             for (int j = 0; j < consumer.dimensions(); j++) {
                 // The region computed always uses the full extent of the rvars
                 Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope_with_concrete_rvar_bounds, func_value_bounds);
