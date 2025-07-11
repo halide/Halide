@@ -120,6 +120,21 @@ Expr strictify_float(const Expr &e) {
     return Strictify{}.mutate(e);
 }
 
+bool strictify_float(std::map<std::string, Function> &env, const Target &t) {
+    Strictify mutator;
+    AnyStrictIntrinsics checker;
+
+    for (auto &iter : env) {
+        Function &func = iter.second;
+        if (t.has_feature(Target::StrictFloat)) {
+            func.mutate(&mutator);
+        } else {
+            func.accept(&checker);
+        }
+    }
+    return checker.any_strict || t.has_feature(Target::StrictFloat);
+}
+
 Expr unstrictify_float(const Call *op) {
     internal_assert(op->is_strict_float_intrinsic())
         << "Called unstrictify_float on something other than a strict float intrinsic: "
@@ -149,19 +164,23 @@ Expr unstrictify_float(const Call *op) {
     }
 }
 
-bool strictify_float(std::map<std::string, Function> &env, const Target &t) {
-    Strictify mutator;
-    AnyStrictIntrinsics checker;
-
-    for (auto &iter : env) {
-        Function &func = iter.second;
-        if (t.has_feature(Target::StrictFloat)) {
-            func.mutate(&mutator);
-        } else {
-            func.accept(&checker);
+namespace {
+    class Unstrictify : public IRMutator {
+        using IRMutator::visit;
+        Expr visit(const Call* op) override {
+            if (op->is_strict_float_intrinsic()) {
+                Expr unstricted = unstrictify_float(op);
+                return mutate(unstricted);
+            } else {
+                return IRMutator::visit(op);
+            }
         }
-    }
-    return checker.any_strict || t.has_feature(Target::StrictFloat);
+    };
+}
+
+Expr unstrictify_all(const Expr& e) {
+    Unstrictify mutator;
+    return mutator.mutate(e);
 }
 
 }  // namespace Internal

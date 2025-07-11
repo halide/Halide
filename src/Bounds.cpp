@@ -1843,7 +1843,8 @@ Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Inter
 #if DO_TRACK_BOUNDS_INTERVALS
     b.log_indent = indent + 1;
 #endif
-    expr.accept(&b);
+    Expr unstricted = unstrictify(expr);
+    unstricted.accept(&b);
 #if DO_TRACK_BOUNDS_INTERVALS
     debug(0) << spaces << " mn=" << simplify(b.interval.min) << "\n"
              << spaces << " mx=" << simplify(b.interval.max) << "\n"
