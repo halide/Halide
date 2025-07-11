@@ -21,7 +21,7 @@ add_halide_library(stencil_chain_auto_schedule FROM stencil_chain.generator
                    AUTOSCHEDULER Halide::Mullapudi2016
                    # When target=host-cuda or host-metal, limit the GPU shared
                    # memory per block to avoid gpu kernel launch failure.
-                   PARAMS autoscheduler.last_level_cache_size=1000 autoscheduler.experimental_gpu_schedule=1
+                   PARAMS autoscheduler.last_level_cache_size=2000 autoscheduler.experimental_gpu_schedule=1
                    )
 
 # Main executable

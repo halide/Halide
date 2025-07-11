@@ -1430,7 +1430,7 @@ public:
             }
 
             split_info new_entry{entry};
-            new_entry.factor = simplify(min(threads_budget, new_entry.factor));
+            new_entry.factor = 1;
 
             const bool can_split = helper.try_split(new_entry);
             if (!can_split) {
@@ -1438,7 +1438,7 @@ public:
                 parallelize.erase(iter);
                 continue;
             }
-            threads_budget = simplify(max(threads_budget / new_entry.factor, 1));
+            threads_budget = simplify(max(threads_budget / entry.factor, 1));
         }
 
         helper.commit(sched, is_compute_at);
