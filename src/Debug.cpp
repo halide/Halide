@@ -93,7 +93,7 @@ std::vector<DebugRule> parse_rules(const std::string &env) {
     std::vector<DebugRule> rules;
     if (env.empty()) {
         // Treat an unset env var as HL_DEBUG_CODEGEN=0
-        rules.push_back(DebugRule{});
+        rules.emplace_back(DebugRule{});
         return rules;
     }
     for (const std::string &spec : split_string(env, ";")) {
