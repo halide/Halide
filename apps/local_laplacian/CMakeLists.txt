@@ -18,13 +18,13 @@ add_halide_generator(local_laplacian.generator
 
 set(_local_laplacian_autoscheduler_params autoscheduler.experimental_gpu_schedule=1)
 
-if(NOT Halide_TARGET MATCHES "cuda")
+if(Halide_TARGET MATCHES "cuda")
     # Last level cache size estimate of the Nvidia GPU on the Buildbot. Hand
     # tuned to pass the Builbot tests.
     list(APPEND _local_laplacian_autoscheduler_params
         autoscheduler.last_level_cache_size=10000
     )
-elseif(NOT Halide_TARGET MATCHES "metal|opencl")
+elseif(Halide_TARGET MATCHES "metal|opencl")
     # Set last_level_cache per GPU block to an extremely small value. This
     # eliminates all `.compute_at` in the generated schedules, which in turn
     # eliminates all GPU shared memory allocations.
