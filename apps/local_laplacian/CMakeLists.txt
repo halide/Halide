@@ -16,6 +16,23 @@ add_halide_generator(local_laplacian.generator
                      SOURCES local_laplacian_generator.cpp
                      LINK_LIBRARIES Halide::Tools)
 
+set(_local_laplacian_autoscheduler_params autoscheduler.experimental_gpu_schedule=1)
+
+if(NOT Halide_TARGET MATCHES "cuda")
+    # Last level cache size estimate of the Nvidia GPU on the Buildbot. Hand
+    # tuned to pass the Builbot tests.
+    list(APPEND _local_laplacian_autoscheduler_params
+        autoscheduler.last_level_cache_size=10000
+    )
+elseif(NOT Halide_TARGET MATCHES "metal|opencl")
+    # Set last_level_cache per GPU block to an extremely small value. This
+    # eliminates all `.compute_at` in the generated schedules, which in turn
+    # eliminates all GPU shared memory allocations.
+    list(APPEND _local_laplacian_autoscheduler_params
+        autoscheduler.last_level_cache_size=1000
+    )
+endif()
+
 # Filters
 add_halide_library(local_laplacian FROM local_laplacian.generator)
 add_halide_library(local_laplacian_auto_schedule FROM local_laplacian.generator
@@ -23,8 +40,7 @@ add_halide_library(local_laplacian_auto_schedule FROM local_laplacian.generator
                    AUTOSCHEDULER Halide::Mullapudi2016
                    # When target=host-cuda or host-metal, limit the GPU shared
                    # memory per block to avoid gpu kernel launch failure.
-                   PARAMS autoscheduler.last_level_cache_size=30000 autoscheduler.experimental_gpu_schedule=1
-                   )
+                   PARAMS ${_local_laplacian_autoscheduler_params})
 
 # Main executable
 add_executable(local_laplacian_process process.cpp)

@@ -14,12 +14,29 @@ find_package(Halide REQUIRED)
 # Generator
 add_halide_generator(lens_blur.generator SOURCES lens_blur_generator.cpp)
 
+set(_lens_blur_autoscheduler_params autoscheduler.experimental_gpu_schedule=1)
+
+if(NOT Halide_TARGET MATCHES "cuda|metal")
+    # Last level cache size estimate of the Nvidia GPU on the Buildbot. Hand
+    # tuned to pass the Builbot tests.
+    list(APPEND _lens_blur_autoscheduler_params
+        autoscheduler.last_level_cache_size=10000
+    )
+elseif(NOT Halide_TARGET MATCHES "opencl")
+    # Set last_level_cache per GPU block to an extremely small value. This
+    # eliminates all `.compute_at` in the generated schedules, which in turn
+    # eliminates all GPU shared memory allocations.
+    list(APPEND _lens_blur_autoscheduler_params
+        autoscheduler.last_level_cache_size=1000
+    )
+endif()
+
 # Filters
 add_halide_library(lens_blur FROM lens_blur.generator)
 add_halide_library(lens_blur_auto_schedule FROM lens_blur.generator
                    GENERATOR lens_blur
                    AUTOSCHEDULER Halide::Mullapudi2016
-                   PARAMS autoscheduler.last_level_cache_size=10000 autoscheduler.experimental_gpu_schedule=1)
+                   PARAMS ${_lens_blur_autoscheduler_params})
 
 # Main executable
 add_executable(lens_blur_filter process.cpp)

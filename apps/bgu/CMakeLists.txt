@@ -17,9 +17,9 @@ add_halide_generator(bgu.generator SOURCES bgu_generator.cpp)
 set(_bgu_autoscheduler_params autoscheduler.experimental_gpu_schedule=1)
 
 if(NOT Halide_TARGET MATCHES "cuda|metal|opencl")
-    # When target=host-cuda or host-metal, set last_level_cache per GPU block
-    # eliminates all `.compute_at` in the generated schedules, which eliminates
-    # all GPU shared memory allocations.
+    # Set last_level_cache per GPU block to an extremely small value. This
+    # eliminates all `.compute_at` in the generated schedules, which in turn
+    # eliminates all GPU shared memory allocations.
     list(APPEND _bgu_autoscheduler_params
         autoscheduler.last_level_cache_size=2000
     )
