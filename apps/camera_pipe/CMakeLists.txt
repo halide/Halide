@@ -24,7 +24,7 @@ if(Halide_TARGET MATCHES "cuda|metal")
     list(APPEND _camera_pipe_autoscheduler_params
         autoscheduler.last_level_cache_size=10000
     )
-elseif(Halide_TARGET MATCHES "opencl")
+elseif(Halide_TARGET MATCHES "opencl|vulkan")
     # Set last_level_cache per GPU block to an extremely small value. This
     # eliminates all `.compute_at` in the generated schedules, which in turn
     # eliminates all GPU shared memory allocations.

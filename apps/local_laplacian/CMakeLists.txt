@@ -24,12 +24,12 @@ if(Halide_TARGET MATCHES "cuda")
     list(APPEND _local_laplacian_autoscheduler_params
         autoscheduler.last_level_cache_size=10000
     )
-elseif(Halide_TARGET MATCHES "metal|opencl")
-    # Set last_level_cache per GPU block to an extremely small value. This
-    # eliminates all `.compute_at` in the generated schedules, which in turn
-    # eliminates all GPU shared memory allocations.
+elseif(Halide_TARGET MATCHES "metal|opencl|vulkan")
+    # The pipeline is shared GPU memory bounded. Limit the parallelism to
+    # minimal value (=32) to cap the shared GPU memory size.
     list(APPEND _local_laplacian_autoscheduler_params
         autoscheduler.last_level_cache_size=1000
+        autoscheduler.parallelism=32
     )
 endif()
 
