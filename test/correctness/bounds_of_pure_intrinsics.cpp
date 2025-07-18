@@ -27,5 +27,7 @@ int main(int argc, char **argv) {
         bounds_of_expr_in_scope(e, scope);
     }
 
+    printf("Success!\n");
+
     return 0;
 }
