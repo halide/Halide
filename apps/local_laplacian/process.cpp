@@ -30,7 +30,7 @@ DeviceState ensure_cuda_device() {
         return ENV_VARIABLE_ABSENT;
     }
 
-    if (std::regex_search(hl_target, std::regex{"cuda|metal|vulkan|opencl"})) {
+    if (std::regex_search(hl_target, std::regex{"metal|vulkan|opencl"})) {
         // note(antonysigma): Error messages if we don't skip the test:
         //
         // OpenCL error: CL_INVALID_WORK_GROUP_SIZE clEnqueueNDRangeKernel
@@ -44,7 +44,7 @@ DeviceState ensure_cuda_device() {
         // threadgroup size limit)'
         //
         // Vulkan: vkQueueWaitIdle returned VK_ERROR_DEVICE_LOST
-        printf("[SKIP] Mullapudi2016 experimental GPU schedules "
+        printf("[SKIP] Mullapudi2016 experimental GPU schedule "
                "generates the gpu_threads where thread count per block "
                "is not an multiple of 32. Target = %s. Skipping...\n",
                hl_target);
