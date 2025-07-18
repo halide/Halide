@@ -18,18 +18,11 @@ add_halide_generator(local_laplacian.generator
 
 set(_local_laplacian_autoscheduler_params autoscheduler.experimental_gpu_schedule=1)
 
-if(Halide_TARGET MATCHES "cuda")
+if(Halide_TARGET MATCHES "cuda|metal|opencl|vulkan")
     # Last level cache size estimate of the Nvidia GPU on the Buildbot. Hand
     # tuned to pass the Builbot tests.
     list(APPEND _local_laplacian_autoscheduler_params
         autoscheduler.last_level_cache_size=10000
-    )
-elseif(Halide_TARGET MATCHES "metal|opencl|vulkan")
-    # The pipeline is shared GPU memory bounded. Limit the parallelism to
-    # minimal value (=32) to cap the shared GPU memory size.
-    list(APPEND _local_laplacian_autoscheduler_params
-        autoscheduler.last_level_cache_size=1000
-        autoscheduler.parallelism=32
     )
 endif()
 
@@ -58,5 +51,9 @@ if (EXISTS ${IMAGE})
     set_tests_properties(local_laplacian_process PROPERTIES
                          LABELS local_laplacian
                          PASS_REGULAR_EXPRESSION "Success!"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
+                         # Pass in the keyword "metal" etc to skip the test
+                         # explicitly. Buildbot can print a nice test report
+                         # for all skipped tests.
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 endif ()
