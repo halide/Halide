@@ -10,7 +10,7 @@ x, y, c, k = hl.vars("x y c k")
 
 def _func_list(name, size):
     """Return a list containing `size` Funcs, named `name_n` for n in 0..size-1."""
-    return [hl.Func("%s_%d" % (name, i)) for i in range(size)]
+    return [hl.Func(f"{name}_{i}") for i in range(size)]
 
 
 def _downsample(f):

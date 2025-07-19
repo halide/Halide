@@ -3,6 +3,7 @@ import halide as hl
 import sys
 import io
 
+
 # redirect_stdout() requires Python3, alas
 @contextlib.contextmanager
 def _redirect_stdout(out):
@@ -26,7 +27,7 @@ def test_print_expr():
         f.realize(buf)
         expected = "0 is what the 1 and 3.141500 saw\n"
         actual = output.getvalue()
-        assert expected == actual, "Expected: %s, Actual: %s" % (expected, actual)
+        assert expected == actual, f"Expected: {expected}, Actual: {actual}"
 
 
 def test_print_when():
@@ -39,7 +40,7 @@ def test_print_when():
         f.realize(buf)
         expected = "9 is result at 3\n"
         actual = output.getvalue()
-        assert expected == actual, "Expected: %s, Actual: %s" % (expected, actual)
+        assert expected == actual, f"Expected: {expected}, Actual: {actual}"
 
 
 def test_select():

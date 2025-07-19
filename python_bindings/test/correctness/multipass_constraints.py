@@ -42,7 +42,6 @@ def test_multipass_constraints():
         or query_buf.dim(1).min() != 2
         or query_buf.dim(1).extent() != 8
     ):
-
         print(
             "Constraints not correctly satisfied:\n",
             "in:",
