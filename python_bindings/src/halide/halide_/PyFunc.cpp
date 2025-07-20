@@ -27,41 +27,27 @@ void define_get(py::class_<Func> &func_class) {
 }
 
 template<typename LHS, typename RHS>
+void setitem_impl(Func &func, const LHS &lhs, const RHS &rhs) {
+    if constexpr (std::is_same_v<RHS, UnevaluatedFuncRefExpr>) {
+        if (static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func)) {
+            return;
+        }
+    }
+    func(lhs) = rhs;
+}
+
+template<typename LHS, typename RHS>
 void define_set(py::class_<Func> &func_class) {
     func_class
-        .def("__setitem__",
-             [](Func &func, const LHS &lhs, const RHS &rhs) {
-                 if constexpr (std::is_same_v<RHS, UnevaluatedFuncRefExpr>) {
-                     if (static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func)) {
-                         return;
-                     }
-                 }
-                 func(lhs) = rhs;
-             })
-        .def("__setitem__",
-             [](Func &func, const std::vector<LHS> &lhs, const RHS &rhs) {
-                 if constexpr (std::is_same_v<RHS, UnevaluatedFuncRefExpr>) {
-                     if (static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func)) {
-                         return;
-                     }
-                 }
-                 func(lhs) = rhs;
-             });
+        .def("__setitem__", setitem_impl<LHS, RHS>)
+        .def("__setitem__", setitem_impl<std::vector<LHS>, RHS>);
 }
 
 // See the usages below this function to see why we are specializing this function.
 template<typename RHS>
 void define_set_func_ref(py::class_<Func> &func_class) {
     func_class
-        .def("__setitem__",
-             [](const Func &func, const FuncRef &lhs, const RHS &rhs) {
-                 if constexpr (std::is_same_v<RHS, UnevaluatedFuncRefExpr>) {
-                     if (static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func)) {
-                         return;
-                     }
-                 }
-                 func(lhs) = rhs;
-             });
+        .def("__setitem__", setitem_impl<FuncRef, RHS>);
 }
 
 // Special case: there is no implicit conversion of double in C++ Halide
