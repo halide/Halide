@@ -655,7 +655,7 @@ void define_buffer(py::module &m) {
                 return o.str();  //
             })
 
-            .def("_get_raw_halide_runtime_buffer", [](const Buffer<> &b) -> uintptr_t {
+            .def("_get_raw_halide_buffer_t", [](const Buffer<> &b) -> uintptr_t {
                 return reinterpret_cast<uintptr_t>(b.raw_buffer());  //
             });
 }

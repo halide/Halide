@@ -319,6 +319,7 @@ template<int dimensions>
 struct PyHalideBuffer {
     // Must allocate at least 1, even if d=0
     static constexpr int dims_to_allocate = (dimensions < 1) ? 1 : dimensions;
+    static constexpr const char* get_raw_halide_runtime_buffer_fn = "_get_raw_halide_buffer_t";
 
     Py_buffer py_buf;
     halide_buffer_t* halide_buf = nullptr;
@@ -326,11 +327,11 @@ struct PyHalideBuffer {
     bool needs_device_free = false;
 
     bool unpack_from_halide_buffer(PyObject *py_obj) {
-        if (!PyObject_HasAttrString(py_obj, "_get_raw_halide_runtime_buffer")) {
+        if (!PyObject_HasAttrString(py_obj, get_raw_halide_runtime_buffer_fn)) {
             return false;
         }
 
-        PyObject *py_raw_buffer = PyObject_CallMethod(py_obj, "_get_raw_halide_runtime_buffer", NULL);
+        PyObject *py_raw_buffer = PyObject_CallMethod(py_obj, get_raw_halide_runtime_buffer_fn, NULL);
         if (!py_raw_buffer) {
             PyErr_Clear();
             return false;
