@@ -1,7 +1,6 @@
 #include "PyFuncRef.h"
 
 #include "PyBinaryOperators.h"
-#include "PyTuple.h"
 
 namespace Halide {
 namespace PythonBindings {
