@@ -3,6 +3,7 @@
 #include <iomanip>
 
 #include "PyBinaryOperators.h"
+#include "PyFuncRef.h"
 #include "PyType.h"
 
 namespace Halide {
@@ -44,6 +45,7 @@ void define_expr(py::module &m) {
             .def(py::init([](const RDom &r) -> Expr { return r; }))
             .def(py::init([](const RVar &r) -> Expr { return r; }))
             .def(py::init([](const Var &v) -> Expr { return v; }))
+            .def(py::init([](const UnevaluatedFuncRefExpr &v) -> Expr { return v; }))
 
             .def("__bool__", to_bool)
             .def("__nonzero__", to_bool)
@@ -77,6 +79,7 @@ void define_expr(py::module &m) {
     py::implicitly_convertible<RDom, Expr>();
     py::implicitly_convertible<RVar, Expr>();
     py::implicitly_convertible<Var, Expr>();
+    py::implicitly_convertible<UnevaluatedFuncRefExpr, Expr>();
 
     auto range_class =
         py::class_<Range>(m, "Range")

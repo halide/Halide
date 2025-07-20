@@ -30,12 +30,22 @@ template<typename LHS, typename RHS>
 void define_set(py::class_<Func> &func_class) {
     func_class
         .def("__setitem__",
-             [](Func &func, const LHS &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
+             [](Func &func, const LHS &lhs, const RHS &rhs) {
+                 if constexpr (std::is_same_v<RHS, UnevaluatedFuncRefExpr>) {
+                     if (static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func)) {
+                         return;
+                     }
+                 }
+                 func(lhs) = rhs;
              })
         .def("__setitem__",
-             [](Func &func, const std::vector<LHS> &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
+             [](Func &func, const std::vector<LHS> &lhs, const RHS &rhs) {
+                 if constexpr (std::is_same_v<RHS, UnevaluatedFuncRefExpr>) {
+                     if (static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func)) {
+                         return;
+                     }
+                 }
+                 func(lhs) = rhs;
              });
 }
 
@@ -44,8 +54,13 @@ template<typename RHS>
 void define_set_func_ref(py::class_<Func> &func_class) {
     func_class
         .def("__setitem__",
-             [](Func &func, const FuncRef &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
+             [](const Func &func, const FuncRef &lhs, const RHS &rhs) {
+                 if constexpr (std::is_same_v<RHS, UnevaluatedFuncRefExpr>) {
+                     if (static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func)) {
+                         return;
+                     }
+                 }
+                 func(lhs) = rhs;
              });
 }
 
@@ -55,7 +70,7 @@ template<>
 void define_set_func_ref<double>(py::class_<Func> &func_class) {
     func_class
         .def("__setitem__",
-             [](Func &func, const FuncRef &lhs, const double &rhs) -> Stage {
+             [](Func &func, const FuncRef &lhs, const double &rhs) {
                  // Implicitly convert rhs to single precision. Issue warnings if
                  // we detect loss of precision.
                  float f = rhs;
@@ -67,7 +82,7 @@ void define_set_func_ref<double>(py::class_<Func> &func_class) {
                      std::string msg = os.str();
                      PyErr_WarnEx(nullptr, msg.c_str(), 1);
                  }
-                 return func(lhs) = Expr(f);
+                 func(lhs) = Expr(f);
              });
 }
 
@@ -462,27 +477,20 @@ void define_func(py::module &m) {
     define_set_func_ref<Tuple>(func_class);
     define_set_func_ref<int>(func_class);
     define_set_func_ref<double>(func_class);
+    define_set_func_ref<UnevaluatedFuncRefExpr>(func_class);
 
     // LHS(Var, ...Var) is LHS of an ordinary Func definition.
     define_set<Var, FuncRef>(func_class);
     define_set<Var, Expr>(func_class);
     define_set<Var, Tuple>(func_class);
+    define_set<Var, UnevaluatedFuncRefExpr>(func_class);
     // define_set<Var, std::vector<Var>>(func_class);
 
     // LHS(Expr, ...Expr) can only be LHS of an update definition.
     define_set<Expr, FuncRef>(func_class);
     define_set<Expr, Expr>(func_class);
     define_set<Expr, Tuple>(func_class);
-
-    // When creating a new stage via +=, -=, *=, or /= a new stage
-    // is created as a side effect. This overload prevents creating
-    // an extra update stage (if we returned the FuncRef, we would
-    // add the equivalent of f(...) = f(...) as a separate update).
-    func_class.def(
-        "__setitem__",
-        [](Func &, const py::object &, StageFromInPlaceUpdate &stage) -> Stage {
-            return stage.new_stage;
-        });
+    define_set<Expr, UnevaluatedFuncRefExpr>(func_class);
 
     add_schedule_methods(func_class);
 
