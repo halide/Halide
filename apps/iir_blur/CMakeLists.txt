@@ -38,9 +38,5 @@ if (EXISTS ${IMAGE})
     set_tests_properties(iir_blur_filter PROPERTIES
                         LABELS iir_blur
                         PASS_REGULAR_EXPRESSION "Success!"
-                        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
-                        # Pass in the keyword "metal" etc to skip the test
-                        # explicitly. Buildbot can print a nice test report
-                        # for all skipped tests.
-                        ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

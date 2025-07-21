@@ -1,6 +1,5 @@
 #include <cassert>
 #include <cstdio>
-#include <cstdlib>
 #include <regex>
 
 #include "HalideBuffer.h"
@@ -19,14 +18,14 @@ namespace {
 enum DeviceState {
     USING_METAL_OR_OPENCL,
     NOT_METAL_OR_OPENCL,
-    ENV_VARIABLE_ABSENT,
+    METADATA_ABSENT,
 };
 DeviceState ensure_cuda_device() {
-    const auto hl_target = std::getenv("HL_TARGET");
+    const auto hl_target = iir_blur_auto_schedule_metadata()->target;
     if (hl_target == nullptr) {
-        printf("Warning: Environment variable HL_TARGET not specified. "
+        printf("Warning: variable *_metadata()->target not specified. "
                "Proceeding to the tests...\n");
-        return ENV_VARIABLE_ABSENT;
+        return METADATA_ABSENT;
     }
 
     if (std::regex_search(hl_target, std::regex{"metal|opencl"})) {
