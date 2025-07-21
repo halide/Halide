@@ -5,6 +5,16 @@
 namespace Halide {
 namespace PythonBindings {
 
+template<typename T, typename = std::enable_if_t<!std::is_same_v<T, UnevaluatedFuncRefExpr>>>
+Expr operator-(const UnevaluatedFuncRefExpr &lhs, const T &rhs) {
+    return Expr(lhs) - rhs;
+}
+
+template<typename T>
+Expr operator-(const T &lhs, const UnevaluatedFuncRefExpr &rhs) {
+    return lhs - Expr(rhs);
+}
+
 Expr operator-(const UnevaluatedFuncRefExpr &expr) {
     return -Expr(expr);
 }
