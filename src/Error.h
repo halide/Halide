@@ -163,19 +163,23 @@ struct ErrorReport : ReportBase<ErrorReport<Exception>> {
         this->msg << "Error: ";
     }
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4722)
+#endif
     /** When you're done using << on the object, and let it fall out of
-     * scope, this errors out, or throws an exception if they are
-     * enabled. This is a little dangerous because the destructor will
-     * also be called if there's an exception in flight due to an
-     * error in one of the arguments passed to operator<<. We handle
-     * this by rethrowing the current exception, if it exists.
+     * scope, this throws an exception or abort if they are disabled.
+     * This is a little dangerous because the destructor will also be
+     * called if there's an exception in flight due to an error in one
+     * of the arguments passed to operator<<. We handle this by rethrowing
+     * the current exception, if it exists.
      */
     [[noreturn]] ~ErrorReport() noexcept(false) {
         throw_error(Exception(this->finalize_message()));
-#ifdef _MSC_VER
-#pragma warning(suppress : 4722)
-#endif
     }
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 };
 
 struct WarningReport : ReportBase<WarningReport> {
