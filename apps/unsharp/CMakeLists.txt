@@ -30,9 +30,7 @@ elseif(Halide_TARGET MATCHES "metal")
     # threadsPerThreadgroup.height(8) * threadsPerThreadgroup.depth(1))(560)
     # must be <= 448. (kernel threadgroup size limit)`
     list(APPEND _unsharp_autoscheduler_params
-        autoscheduler.last_level_cache_size=20000
-        autoscheduler.parallelism=32
-    )
+        autoscheduler.last_level_cache_size=1000)
 endif()
 
 # Filters
