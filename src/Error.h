@@ -168,11 +168,13 @@ struct ErrorReport : ReportBase<ErrorReport<Exception>> {
      * enabled. This is a little dangerous because the destructor will
      * also be called if there's an exception in flight due to an
      * error in one of the arguments passed to operator<<. We handle
-     * this by only actually throwing if there isn't an exception in
-     * flight already.
+     * this by rethrowing the current exception, if it exists.
      */
     [[noreturn]] ~ErrorReport() noexcept(false) {
         throw_error(Exception(this->finalize_message()));
+#ifdef _MSC_VER
+#pragma warning(suppress : 4722)
+#endif
     }
 };
 
