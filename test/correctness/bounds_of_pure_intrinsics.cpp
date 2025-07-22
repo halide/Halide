@@ -15,11 +15,9 @@ int main(int argc, char **argv) {
 
     for (int limit = 1; limit < 500; limit++) {
         Expr e1 = p1, e2 = p2;
-        int ops = 0;
         for (int i = 0; i < limit; i++) {
             e1 = e1 * p1 + (i + 1);
             e2 = e2 * p2 + (i + 1);
-            ops += 4;
         }
         Expr e = e1 + e2;
         bounds_of_expr_in_scope(e, scope);
