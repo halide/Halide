@@ -8,15 +8,15 @@ x, y = hl.vars("x y")
 
 
 def expect_eq(actual, expected):
-    assert expected == actual, "Failed: expected %d, actual %d" % (expected, actual)
+    assert expected == actual, f"Failed: expected {expected}, actual {actual}"
 
 
 def schedule_test(f, vector_width, target, partition_policy):
     if vector_width != 1:
         f.vectorize(x, vector_width)
 
-    f.partition(x, partition_policy);
-    f.partition(y, partition_policy);
+    f.partition(x, partition_policy)
+    f.partition(y, partition_policy)
 
     if target.has_gpu_feature() and vector_width <= 16:
         xo, yo, xi, yi = hl.vars("xo yo xi yi")
@@ -198,9 +198,11 @@ if __name__ == "__main__":
 
     vector_width_power_max = 6
     # https://github.com/halide/Halide/issues/2148
-    if target.has_feature(hl.TargetFeature.Metal) or \
-        target.has_feature(hl.TargetFeature.Vulkan) or \
-        target.has_feature(hl.TargetFeature.D3D12Compute):
+    if (
+        target.has_feature(hl.TargetFeature.Metal)
+        or target.has_feature(hl.TargetFeature.Vulkan)
+        or target.has_feature(hl.TargetFeature.D3D12Compute)
+    ):
         vector_width_power_max = 2
 
     for i in range(0, vector_width_power_max):

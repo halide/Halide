@@ -1,5 +1,4 @@
 import math
-import sys
 import warnings
 
 import halide as hl
@@ -38,7 +37,7 @@ def test():
         for i, hl_value in enumerate(numpy.asarray(f.realize([10]))):
             py_value = i * c * (0.1 + 0.2)
             check = math.isclose(hl_value, py_value)
-            assert check, "{}[{}]: {} != {}".format(i, c, hl_value, py_value)
+            assert check, f"{i}[{c}]: {hl_value} != {py_value}"
 
     test_pattern(0.123456789012345678)
     test_pattern(0.987654321098765432)

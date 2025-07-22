@@ -23,5 +23,6 @@ function(add_python_test)
         LABELS "python"
         ENVIRONMENT "${ARG_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "${ARG_PYTHONPATH}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
     )
 endfunction()
