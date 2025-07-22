@@ -352,7 +352,7 @@ Stmt Simplify::visit(const Store *op) {
         return Evaluate::make(0);
     } else if (scalar_pred && !is_const_one(scalar_pred->value)) {
         return IfThenElse::make(scalar_pred->value,
-                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), align));
+                                Store::make(op->name, value, index, op->param, const_true(value.type().lanes(), nullptr), align));
     } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
         // foo[x] = foo[x] or foo[x] = undef is a no-op
         return Evaluate::make(0);

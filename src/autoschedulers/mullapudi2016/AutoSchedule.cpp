@@ -1000,9 +1000,14 @@ public:
         case 2: {
             const auto &x = vars.front();
             const auto &y = vars.back();
-            internal_assert(x.strategy == y.strategy);
+            const auto tail_strategy = std::any_of(
+                                           vars.begin(), vars.end(), [](const auto &v) {
+                                               return v.strategy == TailStrategy::GuardWithIf;
+                                           }) ?
+                                           TailStrategy::GuardWithIf :
+                                           TailStrategy::Auto;
 
-            f.tile(x.v, y.v, x.outer, y.outer, x.inner, y.inner, x.factor, y.factor);
+            f.tile(x.v, y.v, x.outer, y.outer, x.inner, y.inner, x.factor, y.factor, tail_strategy);
             oss << "tile("
                 << x.v.name() << ", "
                 << y.v.name() << ", "  //
@@ -1029,7 +1034,15 @@ public:
             const auto &x = vars[0];
             const auto &y = vars[1];
             const auto &z = vars[2];
-            f.tile({x.v, y.v, z.v}, {x.outer, y.outer, z.outer}, {x.inner, y.inner, z.inner}, {x.factor, y.factor, z.factor});
+
+            const auto tail_strategy = std::any_of(
+                                           vars.begin(), vars.end(), [](const auto &v) {
+                                               return v.strategy == TailStrategy::GuardWithIf;
+                                           }) ?
+                                           TailStrategy::GuardWithIf :
+                                           TailStrategy::Auto;
+
+            f.tile({x.v, y.v, z.v}, {x.outer, y.outer, z.outer}, {x.inner, y.inner, z.inner}, {x.factor, y.factor, z.factor}, tail_strategy);
 
             oss << "tile({"
                 << x.v.name() << ", "
@@ -1209,7 +1222,10 @@ public:
         VarOrRVar outer{var + "_o", v.is_rvar};
         VarOrRVar inner{var + "_i", v.is_rvar};
 
-        split_info entry{v, outer, inner, factor, TailStrategy::Auto};
+        split_info entry{v, outer, inner, factor,
+                         can_prove(factor >= min_n_threads) ?
+                             TailStrategy::Auto :
+                             TailStrategy::GuardWithIf};
         const auto [_, insertion_happened] = parallelize.try_emplace(var, entry);
         if (!insertion_happened) {
             return std::nullopt;

@@ -1059,6 +1059,7 @@ void compile_multitarget(const std::string &fn_name,
                                     .without_feature(Target::NoAsserts);
 
         Module wrapper_module(fn_name, wrapper_target, metadata_name_map);
+        wrapper_module.set_any_strict_float(base_target.has_feature(Target::StrictFloat));
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
         std::string wrapper_path = contains(output_files, OutputFileType::static_library) ?

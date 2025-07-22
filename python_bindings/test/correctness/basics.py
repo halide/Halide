@@ -1,5 +1,4 @@
 import halide as hl
-import numpy as np
 
 
 def test_compiletime_error():
@@ -100,13 +99,13 @@ def test_basics():
 
 def test_basics2():
     input = hl.ImageParam(hl.Float(32), 3, "input")
-    r_sigma = hl.Param(hl.Float(32), "r_sigma", 0.1)
+    hl.Param(hl.Float(32), "r_sigma", 0.1)
     s_sigma = 8
 
     x = hl.Var("x")
     y = hl.Var("y")
-    z = hl.Var("z")
-    c = hl.Var("c")
+    hl.Var("z")
+    hl.Var("c")
 
     # Add a boundary condition
     clamped = hl.Func("clamped")
@@ -116,16 +115,14 @@ def test_basics2():
 
     # Construct the bilateral grid
     r = hl.RDom([(0, s_sigma), (0, s_sigma)], "r")
-    val0 = clamped[x * s_sigma, y * s_sigma]
-    val00 = clamped[x * s_sigma * hl.i32(1), y * s_sigma * hl.i32(1)]
-    val22 = clamped[
-        x * s_sigma - hl.i32(s_sigma // 2), y * s_sigma - hl.i32(s_sigma // 2)
-    ]
-    val2 = clamped[x * s_sigma - s_sigma // 2, y * s_sigma - s_sigma // 2]
-    val3 = clamped[x * s_sigma + r.x - s_sigma // 2, y * s_sigma + r.y - s_sigma // 2]
+    clamped[x * s_sigma, y * s_sigma]
+    clamped[x * s_sigma * hl.i32(1), y * s_sigma * hl.i32(1)]
+    clamped[x * s_sigma - hl.i32(s_sigma // 2), y * s_sigma - hl.i32(s_sigma // 2)]
+    clamped[x * s_sigma - s_sigma // 2, y * s_sigma - s_sigma // 2]
+    clamped[x * s_sigma + r.x - s_sigma // 2, y * s_sigma + r.y - s_sigma // 2]
 
     try:
-        val1 = clamped[x * s_sigma - s_sigma / 2, y * s_sigma - s_sigma / 2]
+        clamped[x * s_sigma - s_sigma / 2, y * s_sigma - s_sigma / 2]
     except hl.HalideError as e:
         assert "Implicit cast from float32 to int" in str(e)
     else:
@@ -207,15 +204,15 @@ def test_float_or_int():
     assert (x / 2).type() == i32
     assert ((x // 2) - 1 + 2 * (x % 2)).type() == i32
     assert ((x / 2) - 1 + 2 * (x % 2)).type() == i32
-    assert ((x / 2)).type() == i32
-    assert ((x / 2.0)).type() == f32
-    assert ((x // 2)).type() == i32
+    assert (x / 2).type() == i32
+    assert (x / 2.0).type() == f32
+    assert (x // 2).type() == i32
     assert ((x // 2) - 1).type() == i32
-    assert ((x % 2)).type() == i32
+    assert (x % 2).type() == i32
     assert (2 * (x % 2)).type() == i32
     assert ((x // 2) - 1 + 2 * (x % 2)).type() == i32
 
-    assert type(x) == hl.Var
+    assert type(x) is hl.Var
     assert (hl.Expr(x)).type() == i32
     assert (hl.Expr(2.0)).type() == f32
     assert (hl.Expr(2)).type() == i32
@@ -233,7 +230,7 @@ def test_float_or_int():
     assert (2 * x).type() == i32
     assert (x * 2).type() == i32
     assert (x * 2).type() == i32
-    assert ((x % 2)).type() == i32
+    assert (x % 2).type() == i32
     assert ((x % 2) * 2).type() == i32
     assert (2 * (x % 2)).type() == i32
     assert ((x + 2) * 2).type() == i32
@@ -290,7 +287,7 @@ def test_vector_tile():
     xo, yo, zo = [hl.Var(c + "o") for c in "xyz"]
     f = hl.Func("f")
     g = hl.Func("g")
-    h = hl.Func("h")
+    hl.Func("h")
     f[x, y] = y
     f[x, y] += x
     g[x, y, z] = x + y
@@ -325,7 +322,6 @@ def test_bool_conversion():
     x = hl.Var("x")
     f = hl.Func("f")
     f[x] = x
-    s = bool(True)
     # Verify that this doesn't fail with 'Argument passed to specialize must be of type bool'
     f.compute_root().specialize(True)
 
@@ -337,7 +333,7 @@ def test_typed_funcs():
     f = hl.Func("f")
     assert not f.defined()
     try:
-        assert f.type() == Int(32)
+        assert f.type() == hl.Int(32)
     except hl.HalideError as e:
         assert "it is undefined" in str(e)
     else:
@@ -446,8 +442,19 @@ def test_requirements():
 
 
 def test_implicit_convert_int64():
-    assert (hl.i32(0) + 0x7fffffff).type() == hl.Int(32)
-    assert (hl.i32(0) + (0x7fffffff+1)).type() == hl.Int(64)
+    assert (hl.i32(0) + 0x7FFFFFFF).type() == hl.Int(32)
+    assert (hl.i32(0) + (0x7FFFFFFF + 1)).type() == hl.Int(64)
+
+
+def test_pow_rpow():
+    two = hl.Expr(2.0)
+    x = hl.Var("x")
+    for three in (3, hl.Expr(3)):
+        f = hl.Func("f")
+        f[x] = 0.0
+        f[0] = two**three
+        f[1] = three**two
+        assert list(f.realize([2])) == [8.0, 9.0]
 
 
 if __name__ == "__main__":
@@ -469,3 +476,4 @@ if __name__ == "__main__":
     test_bool_conversion()
     test_requirements()
     test_implicit_convert_int64()
+    test_pow_rpow()

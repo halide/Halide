@@ -12,7 +12,6 @@ import halide as hl
 
 
 def main():
-
     gradient = hl.Func("gradient")
     x, y = hl.Var("x"), hl.Var("y")
 
@@ -25,7 +24,7 @@ def main():
 
     # Realize the function over an 8x8 region.
     print("Evaluating gradient")
-    output = gradient.realize([8, 8])
+    gradient.realize([8, 8])
 
     # This will print out all the times gradient(x, y) gets
     # evaluated.

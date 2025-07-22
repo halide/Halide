@@ -125,7 +125,7 @@ Generator, and inits every element to zero:
 
 ```
 # Input is a 3-dimensional image with extent 123, 456, and 3
-# (bluring an image of all zeroes isn't very interesting, of course)
+# (bluring an image of all zeros isn't very interesting, of course)
 $ ./bin/local_laplacian.rungen --output_extents=[100,200,3] input=zero:[123,456,3] levels=8 alpha=1 beta=1 output=/tmp/out.png
 ```
 

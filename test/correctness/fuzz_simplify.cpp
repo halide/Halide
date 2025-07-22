@@ -119,6 +119,23 @@ Expr make_absd(Expr a, Expr b) {
     return cast(a.type(), absd(a, b));
 }
 
+Expr make_bitwise_or(Expr a, Expr b) {
+    return a | b;
+}
+
+Expr make_bitwise_and(Expr a, Expr b) {
+    return a & b;
+}
+
+Expr make_bitwise_xor(Expr a, Expr b) {
+    return a ^ b;
+}
+
+// This just exists to make sure bitwise not gets used somewhere
+Expr make_bitwise_nor(Expr a, Expr b) {
+    return ~a | ~b;
+}
+
 Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
     if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
@@ -193,6 +210,10 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
                 Div::make,
                 Mod::make,
                 make_absd,
+                make_bitwise_or,
+                make_bitwise_and,
+                make_bitwise_xor,
+                make_bitwise_nor,
             };
 
             Expr a = random_expr(rng, t, depth, overflow_undef);
