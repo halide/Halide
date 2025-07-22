@@ -97,19 +97,6 @@ public:
         // Provide estimates on the pipeline output
         output.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
 
-        // Hardcode the input and output dimensions to suppress the OpenCL/Metal
-        // launch failure:
-        //
-        //  OpenCL error: CL_INVALID_WORK_GROUP_SIZE clEnqueueNDRangeKernel
-        //  failed
-        input.dim(0).set_bounds(0, 1536).set_stride(1);
-        input.dim(1).set_bounds(0, 2560).set_stride(1536);
-        input.dim(2).set_bounds(0, 3).set_stride(1536 * 2560);
-
-        output.dim(0).set_bounds(0, 1536).set_stride(1);
-        output.dim(1).set_bounds(0, 2560).set_stride(1536);
-        output.dim(2).set_bounds(0, 3).set_stride(1536 * 2560);
-
         /* THE SCHEDULE */
         if (using_autoscheduler()) {
             // Nothing.

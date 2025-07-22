@@ -16,24 +16,28 @@ add_halide_generator(local_laplacian.generator
                      SOURCES local_laplacian_generator.cpp
                      LINK_LIBRARIES Halide::Tools)
 
-set(_local_laplacian_autoscheduler_params autoscheduler.experimental_gpu_schedule=1)
-
-if(Halide_TARGET MATCHES "cuda|metal|opencl|vulkan")
-    # Last level cache size estimate of the Nvidia GPU on the Buildbot. Hand
-    # tuned to pass the Builbot tests.
-    list(APPEND _local_laplacian_autoscheduler_params
-        autoscheduler.last_level_cache_size=10000
-    )
-endif()
-
 # Filters
 add_halide_library(local_laplacian FROM local_laplacian.generator)
 add_halide_library(local_laplacian_auto_schedule FROM local_laplacian.generator
                    GENERATOR local_laplacian
                    AUTOSCHEDULER Halide::Mullapudi2016
-                   # When target=host-cuda or host-metal, limit the GPU shared
-                   # memory per block to avoid gpu kernel launch failure.
-                   PARAMS ${_local_laplacian_autoscheduler_params})
+                   # note(antonysigma): Works on CUDA and CPU targets, but not
+                   # others. Error messages if we don't skip the test:
+                   #
+                   # OpenCL error: CL_INVALID_WORK_GROUP_SIZE
+                   # clEnqueueNDRangeKernel failed
+                   #
+                   # 2025-07-17 17:24:32.170
+                   # local_laplacian_process[63513:6587844] Metal API Validation
+                   # Enabled -[MTLDebugComputeCommandEncoder
+                   # _validateThreadsPerThreadgroup:]:1266: failed assertion
+                   # `(threadsPerThreadgroup.width(62) *
+                   # threadsPerThreadgroup.height(32)
+                   # * threadsPerThreadgroup.depth(1))(1984) must be <= 1024.
+                   # (device threadgroup size limit)'
+                   #
+                   # Vulkan: vkQueueWaitIdle returned VK_ERROR_DEVICE_LOST
+                   PARAMS autoscheduler.experimental_gpu_schedule=0)
 
 # Main executable
 add_executable(local_laplacian_process process.cpp)
