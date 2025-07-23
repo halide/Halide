@@ -555,8 +555,7 @@ def test_unevaluated_funcref():
 
         # This is invalid because the list of arguments changed
         f = hl.Func("f")
-        ref = f[x] + 1
-        f[0] = ref
+        f[0] = f[x] + 1
     except hl.HalideError as e:
         assert re.match(
             r"Cannot use an unevaluated reference to 'f(\$\d+)?' to define an update with different arguments\.",
