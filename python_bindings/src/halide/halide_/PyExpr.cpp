@@ -3,7 +3,6 @@
 #include <iomanip>
 
 #include "PyBinaryOperators.h"
-#include "PyFuncRef.h"
 #include "PyType.h"
 
 namespace Halide {
