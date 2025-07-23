@@ -168,7 +168,7 @@ struct ErrorReport : ReportBase<ErrorReport<Exception>> {
 #pragma warning(disable : 4722)
 #endif
     /** When you're done using << on the object, and let it fall out of
-     * scope, this throws an exception or abort if they are disabled.
+     * scope, this throws an exception (or aborts if exceptions are disabled).
      * This is a little dangerous because the destructor will also be
      * called if there's an exception in flight due to an error in one
      * of the arguments passed to operator<<. We handle this by rethrowing
