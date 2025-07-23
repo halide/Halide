@@ -399,12 +399,12 @@ def test_requirements():
     delta.set(1)
     p.realize([10])
 
-    with assert_throws(hl.HalideError, "Requirement Failed: \(false\)"):
+    with assert_throws(hl.HalideError, r"Requirement Failed: \(false\)"):
         delta.set(0)
         p.realize([10])
 
     with assert_throws(
-        hl.HalideError, "Requirement Failed: \(false\) negative values are bad -1"
+        hl.HalideError, r"Requirement Failed: \(false\) negative values are bad -1"
     ):
         delta.set(-1)
         p.realize([10])
@@ -462,7 +462,7 @@ def test_unevaluated_funcref():
 
     with assert_throws(
         hl.HalideError,
-        r"Cannot use an unevaluated reference to 'f\$\d+' to define an update in a different func 'f\$\d+'.",
+        r"Cannot use an unevaluated reference to 'f\$\d+' to define an update at a different location.",
     ):
         # We also can't use the unevaluated ref to define an update in a
         # different func (even if they look like they have the same name)
@@ -500,7 +500,7 @@ def test_unevaluated_funcref():
 
     with assert_throws(
         hl.HalideError,
-        r"Cannot use an unevaluated reference to 'f(\$\d+)?' to define an update with different arguments\.",
+        r"Cannot use an unevaluated reference to 'f(\$\d+)?' to define an update at a different location\.",
     ):
         # This is OK
         g = hl.Func("g")
@@ -518,6 +518,15 @@ def test_unevaluated_funcref():
     f = hl.Func("f")
     f[g[0]] += 1
     assert list(f.realize([3])) == [0, 0, 1]
+
+    # A test to make sure that placeholder args work
+    g = hl.Func("g")
+    g[x] = 2
+
+    print("------------------------")
+    f = hl.Func("f")
+    f[hl._] += g[hl._]
+    assert list(f.realize([1])) == [2]
 
 
 def test_implicit_update_by_int():

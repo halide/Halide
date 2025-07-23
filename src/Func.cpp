@@ -3328,6 +3328,21 @@ size_t FuncRef::size() const {
     return func.outputs();
 }
 
+bool FuncRef::equivalent_to(const FuncRef &other) const {
+    if (!func.same_as(other.func) ||
+        implicit_placeholder_pos != other.implicit_placeholder_pos ||
+        implicit_count != other.implicit_count ||
+        args.size() != other.args.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < args.size(); i++) {
+        if (!equal(args[i], other.args[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 FuncTupleElementRef::FuncTupleElementRef(
     const FuncRef &ref, const std::vector<Expr> &args, int idx)
     : func_ref(ref), args(args), idx(idx) {
