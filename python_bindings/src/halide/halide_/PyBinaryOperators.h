@@ -78,10 +78,19 @@ HANDLE_SCALAR_TYPE(double)
                   << (result) << ":" << type_desc(result) << "\n"; \
     } while (0)
 
+#define LOG_PY_BINARY_OP_UNEVAL(self, op, other, result)          \
+    do {                                                          \
+        std::cout << "undef funcref "(op) " " << (other) << "\n"; \
+    } while (0)
+
 #else  // DEBUG_BINARY_OPS
 
 #define LOG_PY_BINARY_OP(self, op, other, result) \
     do {                                          \
+    } while (0)
+
+#define LOG_PY_BINARY_OP_UNEVAL(self, op, other, result) \
+    do {                                                 \
     } while (0)
 
 #endif  // DEBUG_BINARY_OPS
@@ -147,7 +156,7 @@ void add_binary_operators_with(PythonClass &class_instance) {
                     return result;                                                                               \
                 } else {                                                                                         \
                     auto result = UnevaluatedFuncRefExpr{self, Promote(other), UnevaluatedFuncRefExpr::Op::val}; \
-                    std::cout << "quote-" #method ": undef funcref " #op " " << other << "\n";                   \
+                    LOG_PY_BINARY_OP_UNEVAL(self, #method, other, result);                                       \
                     return result;                                                                               \
                 }                                                                                                \
             },                                                                                                   \
