@@ -1,3 +1,5 @@
+import re
+
 import halide as hl
 
 
@@ -488,6 +490,39 @@ def test_unevaluated_funcref():
     # In fact, this can happen multiple times:
     f[x] = ref
     assert f.realize([1])[0] == 2
+
+    # A few more tests that check the results of various equivalent-looking rewrites.
+    f = hl.Func("f")
+    ref = f[x]
+    ref += 1
+    f[x] = ref
+    assert f.realize([1])[0] == 1
+
+    f = hl.Func("f")
+    ref = f[x] + 1
+    f[x] = ref
+    assert f.realize([1])[0] == 1
+
+    f = hl.Func("f")
+    f[x] = f[x] + 1
+    assert f.realize([1])[0] == 1
+
+    f = hl.Func("f")
+    f[x] += 1
+    assert f.realize([1])[0] == 1
+
+    try:
+        f = hl.Func("f")
+        # This is invalid because we only allow unevaluated func refs on the LHS of a
+        # binary operator.
+        f[x] = 1 + f[x]
+    except hl.HalideError as e:
+        assert re.match(
+            r"Error: Can't call Func \"f(\$\d+)?\" because it has not yet been defined\.",
+            str(e),
+        )
+    else:
+        assert False, "Did not see expected exception!"
 
 
 def test_implicit_update_by_int():
