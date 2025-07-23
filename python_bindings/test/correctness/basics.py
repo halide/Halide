@@ -564,6 +564,14 @@ def test_unevaluated_funcref():
     else:
         assert False, "Did not see expected exception!"
 
+    # A test to make sure that indexing at a FuncRef is OK
+    g = hl.Func("g")
+    g[x] = 2
+
+    f = hl.Func("f")
+    f[g[0]] += 1
+    assert list(f.realize([3])) == [0, 0, 1]
+
 
 def test_implicit_update_by_int():
     x = hl.Var("x")
