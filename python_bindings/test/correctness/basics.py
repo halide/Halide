@@ -547,6 +547,24 @@ def test_unevaluated_funcref():
     else:
         assert False, "Did not see expected exception!"
 
+    try:
+        # This is OK
+        g = hl.Func("g")
+        g[0] += 1
+        assert list(g.realize([2])) == [1, 0]
+
+        # This is invalid because the list of arguments changed
+        f = hl.Func("f")
+        ref = f[x] + 1
+        f[0] = ref
+    except hl.HalideError as e:
+        assert re.match(
+            r"Cannot use an unevaluated reference to 'f(\$\d+)?' to define an update with different arguments\.",
+            str(e),
+        )
+    else:
+        assert False, "Did not see expected exception!"
+
 
 def test_implicit_update_by_int():
     x = hl.Var("x")

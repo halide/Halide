@@ -591,6 +591,11 @@ public:
     Internal::Function function() const {
         return func;
     }
+
+    /** What are the arguments to the function? */
+    const std::vector<Expr> &get_args() const {
+        return args;
+    }
 };
 
 /** Explicit overloads of min and max for FuncRef. These exist to
