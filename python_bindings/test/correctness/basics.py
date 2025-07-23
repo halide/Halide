@@ -1,3 +1,5 @@
+import re
+
 import halide as hl
 
 
@@ -457,6 +459,91 @@ def test_pow_rpow():
         assert list(f.realize([2])) == [8.0, 9.0]
 
 
+def test_unevaluated_funcref():
+    x = hl.Var("x")
+    f = hl.Func("f")
+
+    # `ref` is a bound FuncRef
+    ref = f[x]
+
+    # Now `ref` is an unevaluated FuncRef with "+ 1" attached. In C++, this would
+    # immediately create a new update stage (and the associated pure definition).
+    ref += 1
+
+    try:
+        # We've gone too far... the unevaluated FuncRef will be converted to Expr in
+        # an effort to call operator+, but this will throw.
+        ref += 1
+    except hl.HalideError as e:
+        assert re.match(
+            r'Error: Can\'t call Func "f\$\d+" because it has not yet been defined.',
+            str(e),
+        )
+    else:
+        assert False, "Did not see expected exception!"
+
+    # Since `ref` is still an unevaluated FuncRef, this line will cause the creation
+    # of an update stage along with an implicit pure definition (because the operation
+    # is +, the initialization will be to 0).
+    f[x] = ref
+    # In fact, this can happen multiple times:
+    f[x] = ref
+    assert f.realize([1])[0] == 2
+
+
+def test_implicit_update_by_int():
+    x = hl.Var("x")
+
+    f = hl.Func("f")
+    f[x] += 1
+    assert f.realize([1])[0] == 1
+
+    f = hl.Func("f")
+    f[x] -= 1
+    assert f.realize([1])[0] == -1
+
+    f = hl.Func("f")
+    f[x] *= 2
+    assert f.realize([1])[0] == 2
+
+    f = hl.Func("f")
+    f[x] /= 1
+    assert f.realize([1])[0] == 1
+
+    f = hl.Func("f")
+    f[x] /= 2
+    assert f.realize([1])[0] == 0
+
+
+def test_implicit_update_by_float():
+    # The floating-point equality comparisons in this test
+    # should be exact in any halfway sane floating point
+    # implementation. If these checks fail because of
+    # imprecision, we should be informed.
+
+    x = hl.Var("x")
+
+    f = hl.Func("f")
+    f[x] += 1.0
+    assert f.realize([1])[0] == 1.0
+
+    f = hl.Func("f")
+    f[x] -= 1.0
+    assert f.realize([1])[0] == -1.0
+
+    f = hl.Func("f")
+    f[x] *= 2.0
+    assert f.realize([1])[0] == 2.0
+
+    f = hl.Func("f")
+    f[x] /= 1.0
+    assert f.realize([1])[0] == 1.0
+
+    f = hl.Func("f")
+    f[x] /= 2.0
+    assert f.realize([1])[0] == 0.5
+
+
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
@@ -477,3 +564,6 @@ if __name__ == "__main__":
     test_requirements()
     test_implicit_convert_int64()
     test_pow_rpow()
+    test_unevaluated_funcref()
+    test_implicit_update_by_int()
+    test_implicit_update_by_float()

@@ -37,19 +37,7 @@ void define_func_ref(py::module &m) {
         py::class_<FuncRef>(m, "FuncRef")
             .def("__getitem__", &FuncRef::operator[])
             .def("size", &FuncRef::size)
-            .def("__len__", &FuncRef::size)
-            .def("__add__", [](const FuncRef &self, const Expr &other) {
-                return UnevaluatedFuncRefExpr{self, other, UnevaluatedFuncRefExpr::Op::Add};
-            })
-            .def("__sub__", [](const FuncRef &self, const Expr &other) {
-                return UnevaluatedFuncRefExpr{self, other, UnevaluatedFuncRefExpr::Op::Sub};
-            })
-            .def("__mul__", [](const FuncRef &self, const Expr &other) {
-                return UnevaluatedFuncRefExpr{self, other, UnevaluatedFuncRefExpr::Op::Mul};
-            })
-            .def("__truediv__", [](const FuncRef &self, const Expr &other) {
-                return UnevaluatedFuncRefExpr{self, other, UnevaluatedFuncRefExpr::Op::Div};
-            });
+            .def("__len__", &FuncRef::size);
     add_binary_operators(func_ref_class);
 }
 

@@ -1,6 +1,7 @@
 #ifndef HALIDE_PYTHON_BINDINGS_PYBINARYOPERATORS_H
 #define HALIDE_PYTHON_BINDINGS_PYBINARYOPERATORS_H
 
+#include "PyFuncRef.h"
 #include "PyHalide.h"
 
 namespace Halide {
@@ -104,16 +105,20 @@ void add_binary_operators_with(PythonClass &class_instance) {
     using Promote = std::conditional_t<
         std::is_same_v<other_t, double>, DoubleToExprCheck, other_t>;
 
-#define BINARY_OP(op, method)                                       \
+#define BINARY_OP(op, method)                                   \
+    do {                                                        \
+        class_instance.def(                                     \
+            "__" #method "__",                                  \
+            [](const self_t &self, const other_t &other) {      \
+                auto result = self op Promote(other);           \
+                LOG_PY_BINARY_OP(self, #method, other, result); \
+                return result;                                  \
+            },                                                  \
+            py::is_operator());                                 \
+    } while (0)
+
+#define RBINARY_OP(op, method)                                      \
     do {                                                            \
-        class_instance.def(                                         \
-            "__" #method "__",                                      \
-            [](const self_t &self, const other_t &other) {          \
-                auto result = self op Promote(other);               \
-                LOG_PY_BINARY_OP(self, #method, other, result);     \
-                return result;                                      \
-            },                                                      \
-            py::is_operator());                                     \
         class_instance.def(                                         \
             "__r" #method "__",                                     \
             [](const self_t &self, const other_t &other) {          \
@@ -124,24 +129,60 @@ void add_binary_operators_with(PythonClass &class_instance) {
             py::is_operator());                                     \
     } while (0)
 
-    BINARY_OP(+, add);
-    BINARY_OP(-, sub);
-    BINARY_OP(*, mul);
-    BINARY_OP(/, truediv);
-    BINARY_OP(%, mod);
-    BINARY_OP(<<, lshift);
-    BINARY_OP(>>, rshift);
-    BINARY_OP(&, and);
-    BINARY_OP(|, or);
-    BINARY_OP(^, xor);
-    BINARY_OP(<, lt);
-    BINARY_OP(<=, le);
-    BINARY_OP(==, eq);
-    BINARY_OP(!=, ne);
-    BINARY_OP(>=, ge);
-    BINARY_OP(>, gt);
+#define BINARY_OPS(op, method)  \
+    do {                        \
+        BINARY_OP(op, method);  \
+        RBINARY_OP(op, method); \
+    } while (0)
+
+    if constexpr (std::is_same_v<self_t, FuncRef>) {
+#define BINARY_OPS_UNEVAL(op, method, val)                                                                       \
+    do {                                                                                                         \
+        class_instance.def(                                                                                      \
+            "__" #method "__",                                                                                   \
+            [](const self_t &self, const other_t &other) -> std::variant<UnevaluatedFuncRefExpr, Expr> {         \
+                if (self.function().has_pure_definition() || self.function().has_extern_definition()) {          \
+                    auto result = Expr(self) op Promote(other);                                                  \
+                    LOG_PY_BINARY_OP(self, #method, other, result);                                              \
+                    return result;                                                                               \
+                } else {                                                                                         \
+                    auto result = UnevaluatedFuncRefExpr{self, Promote(other), UnevaluatedFuncRefExpr::Op::val}; \
+                    std::cout << "quote-" #method ": undef funcref " #op " " << other << "\n";                   \
+                    return result;                                                                               \
+                }                                                                                                \
+            },                                                                                                   \
+            py::is_operator());                                                                                  \
+        RBINARY_OP(op, method);                                                                                  \
+    } while (0)
+
+        BINARY_OPS_UNEVAL(+, add, Add);
+        BINARY_OPS_UNEVAL(-, sub, Sub);
+        BINARY_OPS_UNEVAL(*, mul, Mul);
+        BINARY_OPS_UNEVAL(/, truediv, Div);
+#undef BINARY_OPS_UNEVAL
+    } else {
+        BINARY_OPS(+, add);
+        BINARY_OPS(-, sub);
+        BINARY_OPS(*, mul);
+        BINARY_OPS(/, truediv);
+    }
+
+    BINARY_OPS(%, mod);
+    BINARY_OPS(<<, lshift);
+    BINARY_OPS(>>, rshift);
+    BINARY_OPS(&, and);
+    BINARY_OPS(|, or);
+    BINARY_OPS(^, xor);
+    BINARY_OPS(<, lt);
+    BINARY_OPS(<=, le);
+    BINARY_OPS(==, eq);
+    BINARY_OPS(!=, ne);
+    BINARY_OPS(>=, ge);
+    BINARY_OPS(>, gt);
 
 #undef BINARY_OP
+#undef RBINARY_OP
+#undef BINARY_OPS
 
     const auto floordiv = [](const auto &a, const auto &b) {
         static_assert(std::is_same_v<decltype(a / b), Expr>,
