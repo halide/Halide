@@ -16,36 +16,31 @@ struct UnevaluatedFuncRefExpr {
         Div,
     } op;
 
-    operator Expr() const {
+    void define_update(const Func &func) {
+        const Internal::Function &f = func.function();
+        if (!f.same_as(lhs.function())) {
+            std::stringstream ss;
+            ss << "Cannot use an unevaluated reference to '" << lhs.function().name()
+               << "' to define an update in a different func '" << func.name() << "'.";
+            throw CompileError(ss.str());
+        }
+        if (f.has_pure_definition() || f.has_extern_definition()) {
+            std::stringstream ss;
+            ss << "Cannot use an unevaluated reference to '" << lhs.function().name()
+               << "' to define an update when a pure definition already exists.";
+            throw CompileError(ss.str());
+        }
         switch (op) {
         case Op::Add:
-            return lhs + rhs;
+            return (void)(lhs += rhs);
         case Op::Sub:
-            return lhs - rhs;
+            return (void)(lhs -= rhs);
         case Op::Mul:
-            return lhs * rhs;
+            return (void)(lhs *= rhs);
         case Op::Div:
-            return lhs / rhs;
+            return (void)(lhs /= rhs);
         }
-        throw std::runtime_error("Invalid operator");
-    }
-
-    bool define_update(const Func &func) {
-        const Internal::Function &f = func.function();
-        if (f.same_as(lhs.function()) && !(f.has_pure_definition() || f.has_extern_definition())) {
-            switch (op) {
-            case Op::Add:
-                return lhs += rhs, true;
-            case Op::Sub:
-                return lhs -= rhs, true;
-            case Op::Mul:
-                return lhs *= rhs, true;
-            case Op::Div:
-                return lhs /= rhs, true;
-            }
-            throw std::runtime_error("Invalid operator");
-        }
-        return false;
+        throw InternalError("Invalid Op value.");
     }
 };
 void define_func_ref(py::module &m);

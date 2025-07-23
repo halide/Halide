@@ -487,9 +487,32 @@ def test_unevaluated_funcref():
     # of an update stage along with an implicit pure definition (because the operation
     # is +, the initialization will be to 0).
     f[x] = ref
-    # In fact, this can happen multiple times:
-    f[x] = ref
-    assert f.realize([1])[0] == 2
+    try:
+        # Trying to do this twice is asking for problems, so we don't allow it.
+        f[x] = ref
+    except hl.HalideError as e:
+        assert re.match(
+            r"Cannot use an unevaluated reference to 'f(\$\d+)?' to define an update when a pure definition already exists.",
+            str(e),
+        )
+    else:
+        assert False, "Did not see expected exception!"
+
+    # Check that defining the first update stage worked.
+    assert f.realize([1])[0] == 1
+
+    try:
+        # We also can't use the unevaluated ref to define an update in a
+        # different func (even if they look like they have the same name)
+        f = hl.Func("f")
+        f[x] = ref
+    except hl.HalideError as e:
+        assert re.match(
+            r"Cannot use an unevaluated reference to 'f\$\d+' to define an update in a different func 'f\$\d+'.",
+            str(e),
+        )
+    else:
+        assert False, "Did not see expected exception!"
 
     # A few more tests that check the results of various equivalent-looking rewrites.
     f = hl.Func("f")

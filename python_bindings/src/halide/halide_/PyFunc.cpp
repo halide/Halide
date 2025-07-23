@@ -29,11 +29,10 @@ void define_get(py::class_<Func> &func_class) {
 template<typename LHS, typename RHS>
 void setitem_impl(Func &func, const LHS &lhs, const RHS &rhs) {
     if constexpr (std::is_same_v<RHS, UnevaluatedFuncRefExpr>) {
-        if (static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func)) {
-            return;
-        }
+        static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func);
+    } else {
+        func(lhs) = rhs;
     }
-    func(lhs) = rhs;
 }
 
 template<typename LHS, typename RHS>
