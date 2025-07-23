@@ -1,5 +1,3 @@
-import re
-
 import halide as hl
 
 
@@ -463,21 +461,22 @@ def test_unevaluated_funcref():
     x = hl.Var("x")
     f = hl.Func("f")
 
-    # `ref` is a bound FuncRef
+    # `ref` is a FuncRef
     ref = f[x]
 
-    # Now `ref` is an unevaluated FuncRef with "+ 1" attached. In C++, this would
+    # Because the func `f` did not have a pure definition, `ref` is set to an
+    # UnevaluatedFuncRefExpr with RHS `1` and operator `+`. In C++, this would
     # immediately create a new update stage (and the associated pure definition).
     ref += 1
 
     try:
-        # We've gone too far... the unevaluated FuncRef will be converted to Expr in
-        # an effort to call operator+, but this will throw.
+        # We've gone too far... UnevaluatedFuncRefExpr doesn't define any binary
+        # operators. This does not implicitly cast to Expr.
         ref += 1
-    except hl.HalideError as e:
-        assert re.match(
-            r'Error: Can\'t call Func "f\$\d+" because it has not yet been defined.',
-            str(e),
+    except TypeError as e:
+        assert (
+            str(e)
+            == "unsupported operand type(s) for +=: 'halide.halide_._UnevaluatedFuncRefExpr' and 'int'"
         )
     else:
         assert False, "Did not see expected exception!"
