@@ -139,7 +139,7 @@ $ uv sync
 
 If you need a different Python version, you can add `--python 3.xy` to this 
 command. If you wish to install compatible build tools into the venv (e.g. 
-CMake, ninja), rather than use your system tools, pass `--group tools` hwre.
+CMake, ninja), rather than use your system tools, pass `--group tools` here.
 
 ## Documentation and Examples
 
