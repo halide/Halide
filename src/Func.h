@@ -587,6 +587,9 @@ public:
     /** How many outputs does the function this refers to produce. */
     size_t size() const;
 
+    /** Is this FuncRef syntactically equivalent to another one? */
+    bool equivalent_to(const FuncRef &other) const;
+
     /** What function is this calling? */
     Internal::Function function() const {
         return func;

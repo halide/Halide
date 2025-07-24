@@ -1,6 +1,7 @@
 #ifndef HALIDE_PYTHON_BINDINGS_PYBINARYOPERATORS_H
 #define HALIDE_PYTHON_BINDINGS_PYBINARYOPERATORS_H
 
+#include "PyFuncRef.h"
 #include "PyHalide.h"
 
 namespace Halide {
@@ -77,10 +78,19 @@ HANDLE_SCALAR_TYPE(double)
                   << (result) << ":" << type_desc(result) << "\n"; \
     } while (0)
 
+#define LOG_PY_BINARY_OP_UNEVAL(self, op, other, result)          \
+    do {                                                          \
+        std::cout << "undef funcref "(op) " " << (other) << "\n"; \
+    } while (0)
+
 #else  // DEBUG_BINARY_OPS
 
 #define LOG_PY_BINARY_OP(self, op, other, result) \
     do {                                          \
+    } while (0)
+
+#define LOG_PY_BINARY_OP_UNEVAL(self, op, other, result) \
+    do {                                                 \
     } while (0)
 
 #endif  // DEBUG_BINARY_OPS
@@ -101,63 +111,98 @@ void add_binary_operators_with(PythonClass &class_instance) {
     // If 'other_t' is double, we want to wrap it as an Expr() prior to calling the binary op
     // (so that double literals that lose precision when converted to float issue warnings).
     // For any other type, we just want to leave it as-is.
-    using Promote = typename std::conditional<
-        std::is_same<other_t, double>::value,
-        DoubleToExprCheck,
-        other_t>::type;
+    using Promote = std::conditional_t<
+        std::is_same_v<other_t, double>, DoubleToExprCheck, other_t>;
 
-#define BINARY_OP(op, method)                                                                  \
-    do {                                                                                       \
-        class_instance.def(                                                                    \
-            "__" #method "__",                                                                 \
-            [](const self_t &self, const other_t &other) -> decltype(self op Promote(other)) { \
-                auto result = self op Promote(other);                                          \
-                LOG_PY_BINARY_OP(self, #method, other, result);                                \
-                return result;                                                                 \
-            },                                                                                 \
-            py::is_operator());                                                                \
-        class_instance.def(                                                                    \
-            "__r" #method "__",                                                                \
-            [](const self_t &self, const other_t &other) -> decltype(Promote(other) op self) { \
-                auto result = Promote(other) op self;                                          \
-                LOG_PY_BINARY_OP(self, "r" #method, other, result);                            \
-                return result;                                                                 \
-            },                                                                                 \
-            py::is_operator());                                                                \
+#define BINARY_OP(op, method)                                   \
+    do {                                                        \
+        class_instance.def(                                     \
+            "__" #method "__",                                  \
+            [](const self_t &self, const other_t &other) {      \
+                auto result = self op Promote(other);           \
+                LOG_PY_BINARY_OP(self, #method, other, result); \
+                return result;                                  \
+            },                                                  \
+            py::is_operator());                                 \
     } while (0)
 
-    BINARY_OP(+, add);
-    BINARY_OP(-, sub);
-    BINARY_OP(*, mul);
-    BINARY_OP(/, div);  // TODO: verify only needed for python 2.x (harmless for Python 3.x)
-    BINARY_OP(/, truediv);
-    BINARY_OP(%, mod);
-    BINARY_OP(<<, lshift);
-    BINARY_OP(>>, rshift);
-    BINARY_OP(&, and);
-    BINARY_OP(|, or);
-    BINARY_OP(^, xor);
-    BINARY_OP(<, lt);
-    BINARY_OP(<=, le);
-    BINARY_OP(==, eq);
-    BINARY_OP(!=, ne);
-    BINARY_OP(>=, ge);
-    BINARY_OP(>, gt);
+#define RBINARY_OP(op, method)                                      \
+    do {                                                            \
+        class_instance.def(                                         \
+            "__r" #method "__",                                     \
+            [](const self_t &self, const other_t &other) {          \
+                auto result = Promote(other) op self;               \
+                LOG_PY_BINARY_OP(self, "r" #method, other, result); \
+                return result;                                      \
+            },                                                      \
+            py::is_operator());                                     \
+    } while (0)
+
+#define BINARY_OPS(op, method)  \
+    do {                        \
+        BINARY_OP(op, method);  \
+        RBINARY_OP(op, method); \
+    } while (0)
+
+    if constexpr (std::is_same_v<self_t, FuncRef>) {
+#define BINARY_OPS_UNEVAL(op, method, val)                                                                       \
+    do {                                                                                                         \
+        class_instance.def(                                                                                      \
+            "__" #method "__",                                                                                   \
+            [](const self_t &self, const other_t &other) -> std::variant<UnevaluatedFuncRefExpr, Expr> {         \
+                if (self.function().has_pure_definition() || self.function().has_extern_definition()) {          \
+                    auto result = Expr(self) op Promote(other);                                                  \
+                    LOG_PY_BINARY_OP(self, #method, other, result);                                              \
+                    return result;                                                                               \
+                } else {                                                                                         \
+                    auto result = UnevaluatedFuncRefExpr{self, Promote(other), UnevaluatedFuncRefExpr::Op::val}; \
+                    LOG_PY_BINARY_OP_UNEVAL(self, #method, other, result);                                       \
+                    return result;                                                                               \
+                }                                                                                                \
+            },                                                                                                   \
+            py::is_operator());                                                                                  \
+        RBINARY_OP(op, method);                                                                                  \
+    } while (0)
+
+        BINARY_OPS_UNEVAL(+, add, Add);
+        BINARY_OPS_UNEVAL(-, sub, Sub);
+        BINARY_OPS_UNEVAL(*, mul, Mul);
+        BINARY_OPS_UNEVAL(/, truediv, Div);
+#undef BINARY_OPS_UNEVAL
+    } else {
+        BINARY_OPS(+, add);
+        BINARY_OPS(-, sub);
+        BINARY_OPS(*, mul);
+        BINARY_OPS(/, truediv);
+    }
+
+    BINARY_OPS(%, mod);
+    BINARY_OPS(<<, lshift);
+    BINARY_OPS(>>, rshift);
+    BINARY_OPS(&, and);
+    BINARY_OPS(|, or);
+    BINARY_OPS(^, xor);
+    BINARY_OPS(<, lt);
+    BINARY_OPS(<=, le);
+    BINARY_OPS(==, eq);
+    BINARY_OPS(!=, ne);
+    BINARY_OPS(>=, ge);
+    BINARY_OPS(>, gt);
 
 #undef BINARY_OP
+#undef RBINARY_OP
+#undef BINARY_OPS
 
-    const auto floordiv_wrap = [](const self_t &self, const other_t &other) -> decltype(self / Promote(other)) {
-        static_assert(std::is_same<decltype(self / Promote(other)), Expr>::value, "We expect all operator// overloads to produce Expr");
-        Expr e = self / Promote(other);
-        if (e.type().is_float()) {
-            e = Halide::floor(e);
-        }
-        return e;
+    const auto floordiv = [](const auto &a, const auto &b) {
+        static_assert(std::is_same_v<decltype(a / b), Expr>,
+                      "We expect all operator// overloads to produce Expr");
+        Expr e = a / b;
+        return e.type().is_float() ? Halide::floor(e) : e;
     };
 
     class_instance
-        .def("__floordiv__", floordiv_wrap, py::is_operator())
-        .def("__rfloordiv__", floordiv_wrap, py::is_operator());
+        .def("__floordiv__", [&](const self_t &self, const other_t &other) { return floordiv(self, Promote(other)); }, py::is_operator())
+        .def("__rfloordiv__", [&](const self_t &self, const other_t &other) { return floordiv(Promote(other), self); }, py::is_operator());
 }  // namespace PythonBindings
 
 template<typename PythonClass>

@@ -1,4 +1,5 @@
 import halide as hl
+import numpy as np
 
 
 def test_rdom():
@@ -45,5 +46,24 @@ def test_rdom():
     return 0
 
 
+def test_implicit_pure_definition():
+    a = np.random.ranf((2, 3)).astype(np.float32)
+    expected = a.sum(axis=1)
+
+    ha = hl.Buffer(a, name="ha")
+    da_cols = ha.dim(0).extent()
+
+    x = hl.Var("x")
+    k = hl.RDom([(0, da_cols)], name="k")
+
+    hc = hl.Func("hc")
+    # hc[x] = 0.0 # this is implicit
+    hc[x] += ha[k, x]
+
+    result = np.array(hc.realize([2]))
+    assert np.allclose(result, expected)
+
+
 if __name__ == "__main__":
     test_rdom()
+    test_implicit_pure_definition()

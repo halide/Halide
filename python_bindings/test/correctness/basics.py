@@ -1,4 +1,24 @@
+import re
+from contextlib import contextmanager
+
 import halide as hl
+
+
+@contextmanager
+def assert_throws(exn, msg):
+    try:
+        yield
+    except Exception as e:
+        if not isinstance(e, exn):
+            raise
+        if not re.search(msg, str(e)):
+            raise AssertionError(
+                f"Expected {exn.__name__} with message matching /{msg}/, but got: {type(e).__name__} '{e}'"
+            )
+    else:
+        raise AssertionError(
+            f"Expected {exn.__name__} to be raised, but no exception occurred."
+        )
 
 
 def test_compiletime_error():
@@ -8,15 +28,11 @@ def test_compiletime_error():
     f[x, y] = hl.u16(x + y)
     # Deliberate type-mismatch error
     buf = hl.Buffer(hl.UInt(8), [2, 2])
-    try:
+    with assert_throws(
+        hl.HalideError,
+        "Error: Output buffer f has type uint16 but type of the buffer passed in is uint8",
+    ):
         f.realize(buf)
-    except hl.HalideError as e:
-        assert (
-            "Output buffer f has type uint16 but type of the buffer passed in is uint8"
-            in str(e)
-        )
-    else:
-        assert False, "Did not see expected exception!"
 
 
 def test_runtime_error():
@@ -26,38 +42,29 @@ def test_runtime_error():
     f.bound(x, 0, 1)
     # Deliberate runtime error
     buf = hl.Buffer(hl.UInt(8), [10])
-    try:
+    with assert_throws(
+        hl.HalideError,
+        r"Error: Bounds given for f(\$\d+)? in x \(from 0 to 0\) do not cover required region \(from 0 to 9\)",
+    ):
         f.realize(buf)
-    except hl.HalideError as e:
-        assert "do not cover required region" in str(e)
-    else:
-        assert False, "Did not see expected exception!"
 
 
 def test_misused_and():
     x = hl.Var("x")
     y = hl.Var("y")
     f = hl.Func("f")
-    try:
+    with assert_throws(ValueError, "cannot be converted to a bool"):
         f[x, y] = hl.print_when(x == 0 and y == 0, 0, "x=", x, "y=", y)
         f.realize([10, 10])
-    except ValueError as e:
-        assert "cannot be converted to a bool" in str(e)
-    else:
-        assert False, "Did not see expected exception!"
 
 
 def test_misused_or():
     x = hl.Var("x")
     y = hl.Var("y")
     f = hl.Func("f")
-    try:
+    with assert_throws(ValueError, "cannot be converted to a bool"):
         f[x, y] = hl.print_when(x == 0 or y == 0, 0, "x=", x, "y=", y)
         f.realize([10, 10])
-    except ValueError as e:
-        assert "cannot be converted to a bool" in str(e)
-    else:
-        assert False, "Did not see expected exception!"
 
 
 def test_basics():
@@ -121,12 +128,8 @@ def test_basics2():
     clamped[x * s_sigma - s_sigma // 2, y * s_sigma - s_sigma // 2]
     clamped[x * s_sigma + r.x - s_sigma // 2, y * s_sigma + r.y - s_sigma // 2]
 
-    try:
+    with assert_throws(hl.HalideError, "Implicit cast from float32 to int"):
         clamped[x * s_sigma - s_sigma / 2, y * s_sigma - s_sigma / 2]
-    except hl.HalideError as e:
-        assert "Implicit cast from float32 to int" in str(e)
-    else:
-        assert False, "Did not see expected exception!"
 
 
 def test_basics3():
@@ -332,26 +335,14 @@ def test_typed_funcs():
 
     f = hl.Func("f")
     assert not f.defined()
-    try:
+    with assert_throws(hl.HalideError, "it is undefined"):
         assert f.type() == hl.Int(32)
-    except hl.HalideError as e:
-        assert "it is undefined" in str(e)
-    else:
-        assert False, "Did not see expected exception!"
 
-    try:
+    with assert_throws(hl.HalideError, "it is undefined"):
         assert f.outputs() == 0
-    except hl.HalideError as e:
-        assert "it is undefined" in str(e)
-    else:
-        assert False, "Did not see expected exception!"
 
-    try:
+    with assert_throws(hl.HalideError, "it is undefined"):
         assert f.dimensions() == 0
-    except hl.HalideError as e:
-        assert "it is undefined" in str(e)
-    else:
-        assert False, "Did not see expected exception!"
 
     f = hl.Func(hl.Int(32), 2, "f")
     assert not f.defined()
@@ -362,52 +353,36 @@ def test_typed_funcs():
 
     f = hl.Func([hl.Int(32), hl.Float(64)], 3, "f")
     assert not f.defined()
-    try:
+    with assert_throws(hl.HalideError, "it returns a Tuple"):
         assert f.type() == hl.Int(32)
-    except hl.HalideError as e:
-        assert "it returns a Tuple" in str(e)
-    else:
-        assert False, "Did not see expected exception!"
 
     assert f.types() == [hl.Int(32), hl.Float(64)]
     assert f.outputs() == 2
     assert f.dimensions() == 3
 
     f = hl.Func(hl.Int(32), 1, "f")
-    try:
+    with assert_throws(
+        hl.HalideError,
+        "is constrained to have exactly 1 dimensions, but is defined with 2 dimensions",
+    ):
         f[x, y] = hl.i32(0)
         f.realize([10, 10])
-    except hl.HalideError as e:
-        assert (
-            "is constrained to have exactly 1 dimensions, but is defined with 2 dimensions"
-            in str(e)
-        )
-    else:
-        assert False, "Did not see expected exception!"
 
     f = hl.Func(hl.Int(32), 2, "f")
-    try:
+    with assert_throws(
+        hl.HalideError,
+        "is constrained to only hold values of type int32 but is defined with values of type int16",
+    ):
         f[x, y] = hl.i16(0)
         f.realize([10, 10])
-    except hl.HalideError as e:
-        assert (
-            "is constrained to only hold values of type int32 but is defined with values of type int16"
-            in str(e)
-        )
-    else:
-        assert False, "Did not see expected exception!"
 
     f = hl.Func((hl.Int(32), hl.Float(32)), 2, "f")
-    try:
+    with assert_throws(
+        hl.HalideError,
+        r"is constrained to only hold values of type \(int32, float32\) "
+        r"but is defined with values of type \(int16, float64\)",
+    ):
         f[x, y] = (hl.i16(0), hl.f64(0))
-        f.realize([10, 10])
-    except hl.HalideError as e:
-        assert (
-            "is constrained to only hold values of type (int32, float32) but is defined with values of type (int16, float64)"
-            in str(e)
-        )
-    else:
-        assert False, "Did not see expected exception!"
 
 
 def test_requirements():
@@ -424,21 +399,15 @@ def test_requirements():
     delta.set(1)
     p.realize([10])
 
-    try:
+    with assert_throws(hl.HalideError, r"Requirement Failed: \(false\)"):
         delta.set(0)
         p.realize([10])
-    except hl.HalideError as e:
-        assert "Requirement Failed: (false)" in str(e)
-    else:
-        assert False, "Did not see expected exception!"
 
-    try:
+    with assert_throws(
+        hl.HalideError, r"Requirement Failed: \(false\) negative values are bad -1"
+    ):
         delta.set(-1)
         p.realize([10])
-    except hl.HalideError as e:
-        assert "Requirement Failed: (false) negative values are bad -1" in str(e)
-    else:
-        assert False, "Did not see expected exception!"
 
 
 def test_implicit_convert_int64():
@@ -455,6 +424,162 @@ def test_pow_rpow():
         f[0] = two**three
         f[1] = three**two
         assert list(f.realize([2])) == [8.0, 9.0]
+
+
+def test_unevaluated_funcref():
+    x = hl.Var("x")
+    f = hl.Func("f")
+
+    # `ref` is a FuncRef
+    ref = f[x]
+
+    # Because the func `f` did not have a pure definition, `ref` is set to an
+    # UnevaluatedFuncRefExpr with RHS `1` and operator `+`. In C++, this would
+    # immediately create a new update stage (and the associated pure definition).
+    ref += 1
+
+    with assert_throws(
+        TypeError,
+        r"unsupported operand type\(s\) for \+=: 'halide.halide_\._UnevaluatedFuncRefExpr' and 'int'",
+    ):
+        # We've gone too far... UnevaluatedFuncRefExpr doesn't define any binary
+        # operators. This does not implicitly cast to Expr.
+        ref += 1
+
+    # Since `ref` is still an unevaluated FuncRef, this line will cause the creation
+    # of an update stage along with an implicit pure definition (because the operation
+    # is +, the initialization will be to 0).
+    f[x] = ref
+    with assert_throws(
+        hl.HalideError,
+        r"Cannot use an unevaluated reference to 'f(\$\d+)?' to define an update when a pure definition already exists.",
+    ):
+        # Trying to do this twice is asking for problems, so we don't allow it.
+        f[x] = ref
+
+    # Check that defining the first update stage worked.
+    assert f.realize([1])[0] == 1
+
+    with assert_throws(
+        hl.HalideError,
+        r"Cannot use an unevaluated reference to 'f\$\d+' to define an update at a different location.",
+    ):
+        # We also can't use the unevaluated ref to define an update in a
+        # different func (even if they look like they have the same name)
+        f = hl.Func("f")
+        f[x] = ref
+
+    # A few more tests that check the results of various equivalent-looking rewrites.
+    f = hl.Func("f")
+    ref = f[x]
+    ref += 1
+    f[x] = ref
+    assert f.realize([1])[0] == 1
+
+    f = hl.Func("f")
+    ref = f[x] + 1
+    f[x] = ref
+    assert f.realize([1])[0] == 1
+
+    f = hl.Func("f")
+    f[x] = f[x] + 1
+    assert f.realize([1])[0] == 1
+
+    f = hl.Func("f")
+    f[x] += 1
+    assert f.realize([1])[0] == 1
+
+    with assert_throws(
+        hl.HalideError,
+        r"Error: Can't call Func \"f(\$\d+)?\" because it has not yet been defined\.",
+    ):
+        # This is invalid because we only allow unevaluated func refs on the LHS of a
+        # binary operator.
+        f = hl.Func("f")
+        f[x] = 1 + f[x]
+
+    with assert_throws(
+        hl.HalideError,
+        r"Cannot use an unevaluated reference to 'f(\$\d+)?' to define an update at a different location\.",
+    ):
+        # This is OK
+        g = hl.Func("g")
+        g[0] += 1
+        assert list(g.realize([2])) == [1, 0]
+
+        # This is invalid because the list of arguments changed
+        f = hl.Func("f")
+        f[0] = f[x] + 1
+
+    # A test to make sure that indexing at a FuncRef is OK
+    g = hl.Func("g")
+    g[x] = 2
+
+    f = hl.Func("f")
+    f[g[0]] += 1
+    assert list(f.realize([3])) == [0, 0, 1]
+
+    # A test to make sure that placeholder args work
+    g = hl.Func("g")
+    g[x] = 2
+
+    print("------------------------")
+    f = hl.Func("f")
+    f[hl._] += g[hl._]
+    assert list(f.realize([1])) == [2]
+
+
+def test_implicit_update_by_int():
+    x = hl.Var("x")
+
+    f = hl.Func("f")
+    f[x] += 1
+    assert f.realize([1])[0] == 1
+
+    f = hl.Func("f")
+    f[x] -= 1
+    assert f.realize([1])[0] == -1
+
+    f = hl.Func("f")
+    f[x] *= 2
+    assert f.realize([1])[0] == 2
+
+    f = hl.Func("f")
+    f[x] /= 1
+    assert f.realize([1])[0] == 1
+
+    f = hl.Func("f")
+    f[x] /= 2
+    assert f.realize([1])[0] == 0
+
+
+def test_implicit_update_by_float():
+    # The floating-point equality comparisons in this test
+    # should be exact in any halfway sane floating point
+    # implementation. If these checks fail because of
+    # imprecision, we should be informed.
+
+    x = hl.Var("x")
+
+    f = hl.Func("f")
+    f[x] += 1.0
+    assert f.realize([1])[0] == 1.0
+
+    f = hl.Func("f")
+    f[x] -= 1.0
+    assert f.realize([1])[0] == -1.0
+
+    f = hl.Func("f")
+    f[x] *= 2.0
+    assert f.realize([1])[0] == 2.0
+
+    f = hl.Func("f")
+    f[x] /= 1.0
+    assert f.realize([1])[0] == 1.0
+
+    f = hl.Func("f")
+    f[x] /= 2.0
+    assert f.realize([1])[0] == 0.5
 
 
 if __name__ == "__main__":
@@ -477,3 +602,6 @@ if __name__ == "__main__":
     test_requirements()
     test_implicit_convert_int64()
     test_pow_rpow()
+    test_unevaluated_funcref()
+    test_implicit_update_by_int()
+    test_implicit_update_by_float()
