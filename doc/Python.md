@@ -85,6 +85,13 @@ $ python3 -m pip install -U pip "setuptools[core]" wheel
 $ python3 -m pip install -r requirements.txt
 ```
 
+Or, if using `uv` the following command is equivalent:
+
+```shell
+uv venv --python 3.12  # for example
+uv pip install -r requirements.txt
+```
+
 Then build and install Halide:
 
 ```shell
@@ -123,6 +130,16 @@ Then it should be as simple as:
 ```shell
 $ pip install .
 ```
+
+When using `uv`, this entire workflow can be run via
+
+```shell
+$ uv sync
+```
+
+If you need a different Python version, you can add `--python 3.xy` to this 
+command. If you wish to install compatible build tools into the venv (e.g. 
+CMake, ninja), rather than use your system tools, pass `--group tools` hwre.
 
 ## Documentation and Examples
 

@@ -1,7 +1,7 @@
 [build-system]
 requires = [
-    "scikit-build-core==0.11.5",
     "pybind11>=2.11.1",
+    "scikit-build-core==0.11.5",
 ]
 build-backend = "scikit_build_core.build"
 
@@ -14,8 +14,8 @@ license = { file = "LICENSE.txt" }
 readme = "./packaging/pip/README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "numpy>=2",
     "imageio>=2",
+    "numpy>=1.26",
 ]
 dynamic = ['version']
 keywords = [
@@ -60,11 +60,17 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "pillow>=11.3",
-    "scipy>=1.12",
+    "pybind11>=2.11.1",
+    "scikit-build-core==0.11.5",
+    "setuptools-scm>=8.3.1",
+]
+tools = [
+    "cmake>=3.28",
+    "ninja>=1.11",
     "tbump>=6.11",
+    "ruff>=0.12",
 ]
 
 [project.urls]
