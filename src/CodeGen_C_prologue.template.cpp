@@ -190,6 +190,10 @@ inline float float_from_bits(uint32_t bits) {
     return reinterpret<float, uint32_t>(bits);
 }
 
+inline double double_from_bits(uint64_t bits) {
+    return reinterpret<double, uint64_t>(bits);
+}
+
 template<typename T>
 inline int halide_popcount_fallback(T a) {
     int bits_set = 0;
