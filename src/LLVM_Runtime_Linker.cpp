@@ -696,6 +696,29 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
         convert_weak_to_linkonce(gv);
     }
 
+    // Implement a quick-and-dirty trick to drop runtime functions for the runtime
+    // in case you want to replace them with your own version.
+    // WARNING: Do expect this environment variable to disappear in the future.
+    // Consider this an undocumented and unstable feature. @zvookin has better
+    // ideas for a more sustainable solution involving renaming those functions.
+    if (const char *drop_str = getenv("HL_RUNTIME_DROP_FUNCS")) {
+        int start = 0;
+        int len = strlen(drop_str);
+        while (start < len) {
+            int stop = start;
+            while (drop_str[stop] != 0 && drop_str[stop] != ',') {
+                stop++;
+            }
+            std::string_view func_name(drop_str + start, stop - start);
+            llvm::Function *func = modules[0]->getFunction(func_name);
+            user_assert(func) << "[HL_RUNTIME_DROP_FUNCS] No runtime function found by the name: " << func_name;
+            func->deleteBody();
+            func->setLinkage(llvm::GlobalValue::ExternalLinkage);
+
+            start = stop + 1;
+        }
+    }
+
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
         const std::string f_name = Internal::get_llvm_function_name(f);
