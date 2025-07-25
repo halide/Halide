@@ -167,6 +167,7 @@ struct Target {
         ARMv87a = halide_target_feature_armv87a,
         ARMv88a = halide_target_feature_armv88a,
         ARMv89a = halide_target_feature_armv89a,
+        ARM64e = halide_target_feature_arm64e,
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
         SPIRV = halide_target_feature_spirv,
