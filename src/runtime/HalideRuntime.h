@@ -1541,8 +1541,19 @@ typedef struct halide_dimension_t {
 }  // extern "C"
 #endif
 
-typedef enum { halide_buffer_flag_host_dirty = 1,
-               halide_buffer_flag_device_dirty = 2 } halide_buffer_flags;
+#if __cplusplus > 201100L || _MSVC_LANG > 201100L || __STDC_VERSION__ > 202300L
+// In C++, an underlying type is required to let the user define their own flag
+// values, without those values being undefined behavior when passed around as
+// this enum typedef.
+#define BUFFER_FLAGS_UNDERLYING_TYPE : uint64_t
+#else
+#define BUFFER_FLAGS_UNDERLYING_TYPE
+#endif
+typedef enum BUFFER_FLAGS_UNDERLYING_TYPE {
+    halide_buffer_flag_host_dirty = 1,
+    halide_buffer_flag_device_dirty = 2
+} halide_buffer_flags;
+#undef BUFFER_FLAGS_UNDERLYING_TYPE
 
 /**
  * The raw representation of an image passed around by generated
