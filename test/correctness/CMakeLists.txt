@@ -30,6 +30,7 @@ tests(GROUPS correctness
       bounds_of_func.cpp
       bounds_of_monotonic_math.cpp
       bounds_of_multiply.cpp
+      bounds_of_pure_intrinsics.cpp
       bounds_of_split.cpp
       bounds_query.cpp
       bounds_query_respects_specialize_fail.cpp
