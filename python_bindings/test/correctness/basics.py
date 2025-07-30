@@ -523,7 +523,6 @@ def test_unevaluated_funcref():
     g = hl.Func("g")
     g[x] = 2
 
-    print("------------------------")
     f = hl.Func("f")
     f[hl._] += g[hl._]
     assert list(f.realize([1])) == [2]
@@ -582,6 +581,20 @@ def test_implicit_update_by_float():
     assert f.realize([1])[0] == 0.5
 
 
+def test_print_ir():
+    im = hl.ImageParam()
+    assert str(im) == "<halide.ImageParam ImageParam()>"
+
+    im = hl.OutputImageParam()
+    assert str(im) == "<halide.OutputImageParam OutputImageParam()>"
+
+    im = hl.ImageParam(hl.UInt(16), 2, "input")
+    assert str(im) == "<halide.ImageParam 'input', dims: 2, type: uint16>"
+
+    r = hl.RDom()
+    assert str(r) == "<halide.RDom RDom()>"
+
+
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
@@ -605,3 +618,4 @@ if __name__ == "__main__":
     test_unevaluated_funcref()
     test_implicit_update_by_int()
     test_implicit_update_by_float()
+    test_print_ir()

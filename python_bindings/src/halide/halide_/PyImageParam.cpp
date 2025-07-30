@@ -44,12 +44,13 @@ void define_image_param(py::module &m) {
 
             .def("__repr__", [](const OutputImageParam &im) -> std::string {
                 std::ostringstream o;
-                o << "<halide.OutputImageParam '" << im.name() << "'";
+                o << "<halide.OutputImageParam ";
                 if (!im.defined()) {
-                    o << " (undefined)";
+                    o << "OutputImageParam()";
                 } else {
-                    // TODO: add dimensions to this
-                    o << " type " << halide_type_to_string(im.type());
+                    o << "'" << im.name() << "'"
+                      << ", dims: " << im.dimensions()
+                      << ", type: " << halide_type_to_string(im.type());
                 }
                 o << ">";
                 return o.str();
@@ -79,12 +80,13 @@ void define_image_param(py::module &m) {
 
             .def("__repr__", [](const ImageParam &im) -> std::string {
                 std::ostringstream o;
-                o << "<halide.ImageParam '" << im.name() << "'";
+                o << "<halide.ImageParam ";
                 if (!im.defined()) {
-                    o << " (undefined)";
+                    o << "ImageParam()";
                 } else {
-                    // TODO: add dimensions to this
-                    o << " type " << halide_type_to_string(im.type());
+                    o << "'" << im.name() << "'"
+                      << ", dims: " << im.dimensions()
+                      << ", type: " << halide_type_to_string(im.type());
                 }
                 o << ">";
                 return o.str();
