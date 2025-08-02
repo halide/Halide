@@ -80,7 +80,7 @@ public:
 
                 // Create vector with identical lanes
                 // (Note that later LLVMs will use 64-bit constants for some smaller splats)
-                check("i8x16.splat", 16 * w, u8_1 * u8(42));
+                check("i8x16.splat", 16 * w, u8_1 * u8(in_u8(2) << 1));
                 // LLVM13 likes to emit all of these as v128.const
                 check("v128.const", 8 * w, u16_1 * u16(42));
                 check("v128.const", 4 * w, u32_1 * u32(42));
