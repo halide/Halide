@@ -627,7 +627,8 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
 
     // Clone bool metadata
     for (const char *s : {"halide_use_soft_float_abi",
-                          "halide_use_pic"}) {
+                          "halide_use_pic",
+                          "halide_keep_frame_pointer"}) {
         if (auto md = get_md_bool(from.getModuleFlag(s))) {
             to.addModuleFlag(llvm::Module::Warning, s, *md ? 1 : 0);
         }
@@ -688,18 +689,18 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     llvm::Module &module = *fn.getParent();
 
-    std::string mcpu_target =
-        get_md_string(module.getModuleFlag("halide_mcpu_target")).value_or(std::string{});
-    std::string mcpu_tune =
-        get_md_string(module.getModuleFlag("halide_mcpu_tune")).value_or(std::string{});
-    std::string mattrs =
-        get_md_string(module.getModuleFlag("halide_mattrs")).value_or(std::string{});
-    int64_t vscale_range =
-        get_md_int(module.getModuleFlag("halide_effective_vscale")).value_or(0);
+    std::string mcpu_target = get_md_string(module.getModuleFlag("halide_mcpu_target")).value_or(std::string{});
+    std::string mcpu_tune = get_md_string(module.getModuleFlag("halide_mcpu_tune")).value_or(std::string{});
+    std::string mattrs = get_md_string(module.getModuleFlag("halide_mattrs")).value_or(std::string{});
+    int64_t vscale_range = get_md_int(module.getModuleFlag("halide_effective_vscale")).value_or(0);
+    bool keep_fp = get_md_int(module.getModuleFlag("halide_keep_frame_pointer")).value_or(0);
 
     fn.addFnAttr("target-cpu", mcpu_target);
     fn.addFnAttr("tune-cpu", mcpu_tune);
     fn.addFnAttr("target-features", mattrs);
+    if (keep_fp) {
+        fn.addFnAttr("frame-pointer", "all");
+    }
 
     // Halide-generated IR is not exception-safe.
     // No exception should unwind out of Halide functions.

@@ -401,6 +401,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
     module->setModuleIdentifier(name);
 
     // Add some target specific info to the module as metadata.
+    module->addModuleFlag(llvm::Module::Warning, "halide_keep_frame_pointer", target.has_feature(Target::Feature::KeepFramePointer) ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", MDString::get(*context, mcpu_target()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", MDString::get(*context, mcpu_tune()));

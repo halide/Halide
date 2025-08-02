@@ -84,6 +84,7 @@ struct Target {
     enum Feature {
         JIT = halide_target_feature_jit,
         Debug = halide_target_feature_debug,
+        KeepFramePointer = halide_target_feature_keep_frame_pointer,
         NoAsserts = halide_target_feature_no_asserts,
         NoBoundsQuery = halide_target_feature_no_bounds_query,
         SSE41 = halide_target_feature_sse41,
