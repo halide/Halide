@@ -531,7 +531,7 @@ if (WITH_SERIALIZATION)
     # package in terms of the case of the relevant CMake files. Fortunately,
     # the IMPORTED targets appear to be consistently named `flatbuffers`.
     find_package(
-        flatbuffers 25.2.10 REQUIRED
+        flatbuffers 23.5.26 REQUIRED
         NAMES flatbuffers Flatbuffers FlatBuffers
     )
     _Halide_pkgdep(flatbuffers)
