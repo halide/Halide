@@ -2,6 +2,7 @@
 requires = [
     "pybind11>=2.11.1",
     "scikit-build-core==0.11.5",
+    "setuptools-scm>=8.3.1",
 ]
 build-backend = "scikit_build_core.build"
 
@@ -111,6 +112,9 @@ if.platform-system = "^win32"
 inherit.cmake.define = "append"
 cmake.define.Halide_WASM_BACKEND = "OFF"
 
+[tool.setuptools_scm]
+# Needs to exist for scikit-build-core to use setuptools_scm
+
 [tool.ruff.lint]
 # docs: https://docs.astral.sh/ruff/rules/
 select = [
@@ -165,7 +169,3 @@ search = "#define HALIDE_VERSION_MINOR {current_version}"
 src = "src/runtime/HalideRuntime.h"
 version_template = "{patch}"
 search = "#define HALIDE_VERSION_PATCH {current_version}"
-
-# Must be last table in file since pip.yml appends to it
-# See: https://github.com/pypa/setuptools-scm/issues/455
-[tool.setuptools_scm]
