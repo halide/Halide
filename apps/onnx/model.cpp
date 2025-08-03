@@ -126,7 +126,7 @@ void prepare_py_array_input(
         input_shape.push_back(ndarray.shape(i));
     }
     // Make sure the input is contiguous.
-    int stride = ndarray.itemsize();
+    int stride = ndarray.request().itemsize;
     for (int i = rank - 1; i >= 0; --i) {
         if (stride != ndarray.strides(i)) {
             throw std::invalid_argument(
