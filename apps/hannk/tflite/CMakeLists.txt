@@ -21,6 +21,13 @@ set(FLATBUFFERS_BUILD_FLATC OFF)
 # set(FETCHCONTENT_QUIET NO)
 
 FetchContent_Declare(
+    neon2sse
+    GIT_REPOSITORY https://github.com/intel/ARM_NEON_2_x86_SSE
+    GIT_TAG 4732aac1e6c02984a12635d85c4644c2ffe585ca
+    GIT_SHALLOW TRUE
+)
+
+FetchContent_Declare(
     tflite
     GIT_REPOSITORY https://github.com/tensorflow/tensorflow
     GIT_TAG ${TFLITE_TAG}
