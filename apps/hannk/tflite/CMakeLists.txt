@@ -20,6 +20,9 @@ set(FLATBUFFERS_BUILD_FLATC OFF)
 # Enable this to see details about downloading -- useful for debugging
 # set(FETCHCONTENT_QUIET NO)
 
+# tflite includes neon2sse transitively, but it's pinned to an old version
+# that declares a minimum CMake version of 3.0. We override it here to a
+# new enough version that CMake 4+ won't refuse to build it.
 FetchContent_Declare(
     neon2sse
     GIT_REPOSITORY https://github.com/intel/ARM_NEON_2_x86_SSE
