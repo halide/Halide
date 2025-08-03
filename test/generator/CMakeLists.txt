@@ -80,7 +80,7 @@ function(add_wasm_executable TARGET)
 
     add_custom_command(OUTPUT "${TARGET}.wasm" "${TARGET}.js"
                        COMMAND ${EMCC} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js"
-                       DEPENDS ${SRCS} ${DEPS}
+                       DEPENDS ${EMCC} ${SRCS} ${DEPS}
                        VERBATIM)
 
     add_custom_target("${TARGET}" ALL

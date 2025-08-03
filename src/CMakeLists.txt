@@ -551,7 +551,7 @@ if (WITH_SERIALIZATION)
     add_custom_command(
         OUTPUT "${fb_header}"
         COMMAND flatbuffers::flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix --filename-suffix ".fbs" -o "${fb_dir}" "${fb_def}"
-        DEPENDS "${fb_def}"
+        DEPENDS flatbuffers::flatc "${fb_def}"
         VERBATIM
     )
     add_custom_target(generate_fb_header DEPENDS "${fb_header}")
