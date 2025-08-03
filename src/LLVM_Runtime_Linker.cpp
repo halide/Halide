@@ -890,6 +890,13 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     constexpr bool allow_stripping_all_weak_functions = true;
     link_modules(modules, t, allow_stripping_all_weak_functions);
 
+    // The initmods are compiled by clang and have some attributes associated with
+    // them that are irrelevant to Wasm. Strip them out.
+    for (llvm::Function &F : *modules[0]) {
+        F.removeFnAttr("target-features");
+        F.removeFnAttr("target-cpu");
+    }
+
     return std::move(modules[0]);
 }
 
