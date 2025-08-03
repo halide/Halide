@@ -20,49 +20,39 @@ set(FLATBUFFERS_BUILD_FLATC OFF)
 # Enable this to see details about downloading -- useful for debugging
 # set(FETCHCONTENT_QUIET NO)
 
-FetchContent_Declare(tflite
-                     GIT_REPOSITORY https://github.com/tensorflow/tensorflow
-                     GIT_TAG ${TFLITE_TAG}
-                     GIT_SHALLOW TRUE)
+FetchContent_Declare(
+    tflite
+    GIT_REPOSITORY https://github.com/tensorflow/tensorflow
+    GIT_TAG ${TFLITE_TAG}
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR tensorflow/lite/c
+)
+
+block(SCOPE_FOR POLICIES VARIABLES)
+    # Suppress warnings about rotting CMake code we don't control
+    set(CMAKE_POLICY_DEFAULT_CMP0135 OLD) # DOWNLOAD_EXTRACT_TIMESTAMP
+    set(CMAKE_POLICY_DEFAULT_CMP0169 OLD) # FetchContent_Populate
+    set(CMAKE_POLICY_DEFAULT_CMP0177 OLD) # install() path normalization
+
+    # Configuration for tflite + upstream deps
+    set(ABSL_PROPAGATE_CXX_STD ON)
+
+    # Suppress warnings in tflite code
+    add_compile_options(
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-anon-enum-enum-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-deprecated-this-capture>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-uncaptured-local>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-tautological-type-limit-compare>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
+    )
+
+    FetchContent_MakeAvailable(tflite)
+
+    set_property(TARGET tensorflowlite_c PROPERTY EXCLUDE_FROM_ALL TRUE)
+endblock()
 
 FetchContent_GetProperties(tflite)
-if (NOT tflite_POPULATED)
-    FetchContent_Populate(tflite)
-    # Some of the subprojects (e.g. Eigen) are very noisy and emit status messages all the time.
-    # Temporary ignore status messages while adding this to silence it. Ugly but effective.
-    set(OLD_CMAKE_MESSAGE_LOG_LEVEL ${CMAKE_MESSAGE_LOG_LEVEL})
-    set(CMAKE_MESSAGE_LOG_LEVEL WARNING)
-    add_subdirectory(${tflite_SOURCE_DIR}/tensorflow/lite/c ${tflite_BINARY_DIR})
-    set(CMAKE_MESSAGE_LOG_LEVEL ${OLD_CMAKE_MESSAGE_LOG_LEVEL})
-endif ()
-
-# tensorflowlite_c is implicitly declared by this FetchContent.
-# Mark it as EXCLUDE_FROM_ALL so that it won't be built unless we actually
-# depend on it (which we might not depending on HANNK_BUILD_TFLITE)
-set_property(TARGET tensorflowlite_c PROPERTY EXCLUDE_FROM_ALL TRUE)
-
-# Disable some noisy warnings in abseil
-foreach (LIB IN ITEMS
-            absl_base
-            absl_graphcycles_internal
-            absl_malloc_internal
-            absl_synchronization
-            absl_time
-            absl_time_zone)
-    target_compile_options(${LIB}
-                           PRIVATE
-                           $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-tautological-type-limit-compare>
-                           $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
-                           $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow>
-                           $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-uncaptured-local>
-                           $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-anon-enum-enum-conversion>)
-endforeach ()
-
-# Disable some noisy warnings in tflite
-target_compile_options(tensorflow-lite
-                       PRIVATE
-                       $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-gnu-inline-cpp-without-extern>
-                       $<$<CXX_COMPILER_ID:GNU>:-Wno-ignored-attributes>)
 
 # Make an interface library that is just to get the tflite headers,
 # without any implied linkage
