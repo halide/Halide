@@ -209,9 +209,11 @@ jobs:
           CIBW_ENVIRONMENT_MACOS: >
             CMAKE_PREFIX_PATH='${{ github.workspace }}/opt'
             Python_ROOT_DIR=''
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
           CIBW_ENVIRONMENT_WINDOWS: >
             CMAKE_GENERATOR=Ninja
             CMAKE_PREFIX_PATH='${{ github.workspace }}\opt'
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
           CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/halide/manylinux_2_28_x86_64-llvm:${{ env.LLVM_VERSION }}"
           CIBW_TEST_COMMAND: >
             cmake -G Ninja -S {project}/python_bindings/apps -B build -DCMAKE_BUILD_TYPE=Release &&
