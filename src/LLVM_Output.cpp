@@ -403,10 +403,11 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
 
 #if LLVM_VERSION < 220
     if (triple.isMacOSX() && triple.isAArch64()) {
-        // The default syntax variant is able to display the arguments to SDOT
-        // while the Apple-specific one is bugged. See this GitHub issue for
+        // The AArch64 syntax variant is able to display the arguments to SDOT
+        // while the Darwin-specific one is bugged. See this GitHub issue for
         // more info: https://github.com/llvm/llvm-project/issues/151330
-        target_machine->Options.MCOptions.OutputAsmVariant = 0;
+        enum AsmVariant { AArch64 = 0, Darwin = 1 } variant = AArch64;
+        target_machine->Options.MCOptions.OutputAsmVariant = variant;
     }
 #endif
 
