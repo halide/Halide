@@ -68,10 +68,6 @@ function(add_halide_generator TARGET)
             add_custom_target("${ARG_PACKAGE_NAME}")
         endif ()
 
-        if (NOT Halide_FOUND)
-            find_package(Halide REQUIRED)
-        endif ()
-
         if (ARG_SOURCES MATCHES ".py$")
             if (ARG_LINK_LIBRARIES)
                 message(FATAL_ERROR "You cannot specify LINK_LIBRARIES in conjunction with Python source code.")
@@ -94,6 +90,10 @@ function(add_halide_generator TARGET)
         else ()
             add_executable(${TARGET} ${ARG_SOURCES})
             add_executable(${gen} ALIAS ${TARGET})
+
+            if (NOT TARGET Halide::Generator)
+                find_package(Halide REQUIRED)
+            endif ()
             target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
 
             _Halide_place_dll(${TARGET})

@@ -8,6 +8,8 @@ on:
       - '**.h'
       - '**.c'
       - '**.cpp'
+      - '**CMakeLists.txt'
+      - '**.cmake'
       - 'run-clang-tidy.sh'
       - 'run-clang-format.sh'
       - '.github/workflows/presubmit.yml'
