@@ -388,7 +388,8 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
     llvm::legacy::PassManager pass_manager;
 
-    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module->getTargetTriple())));
+    const auto &triple = llvm::Triple(module->getTargetTriple());
+    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(triple));
 
     // Make sure things marked as always-inline get inlined
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
@@ -399,6 +400,15 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
+
+#if LLVM_VERSION < 220
+    if (triple.isMacOSX() && triple.isAArch64()) {
+        // The default syntax variant is able to display the arguments to SDOT
+        // while the Apple-specific one is bugged. See this GitHub issue for
+        // more info: https://github.com/llvm/llvm-project/issues/151330
+        target_machine->Options.MCOptions.OutputAsmVariant = 0;
+    }
+#endif
 
     // Ask the target to add backend passes as necessary.
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
