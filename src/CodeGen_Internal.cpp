@@ -597,7 +597,7 @@ int get_modflag_int(const llvm::Module &mod, const char *flag, int or_default = 
     return get_md_int(mod.getModuleFlag(flag)).value_or(or_default);
 }
 
-std::string get_modflag_string(const llvm::Module &mod, const char *flag, std::string or_default = {}) {
+std::string get_modflag_string(const llvm::Module &mod, const char *flag, const std::string &or_default = {}) {
     return get_md_string(mod.getModuleFlag(flag)).value_or(or_default);
 }
 
