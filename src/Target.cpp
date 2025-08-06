@@ -646,6 +646,7 @@ bool lookup_processor(const std::string &tok, Target::Processor &result) {
 const std::map<std::string, Target::Feature> feature_name_map = {
     {"jit", Target::JIT},
     {"debug", Target::Debug},
+    {"enable_backtraces", Target::EnableBacktraces},
     {"no_asserts", Target::NoAsserts},
     {"no_bounds_query", Target::NoBoundsQuery},
     {"sse41", Target::SSE41},
