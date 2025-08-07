@@ -594,6 +594,9 @@ def test_print_ir():
     r = hl.RDom()
     assert str(r) == "<halide.RDom RDom()>"
 
+    p = hl.Pipeline()
+    assert str(p) == "<halide.Pipeline Pipeline()>"
+
 
 if __name__ == "__main__":
     test_compiletime_error()
