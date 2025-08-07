@@ -23,6 +23,7 @@ tests(GROUPS error
       bad_ring_buffer.cpp
       bad_extern_split.cpp
       bad_fold.cpp
+      bad_func_object.cpp
       bad_host_alignment.cpp
       bad_hoist_storage.cpp
       bad_partition_always.cpp
