@@ -66,7 +66,7 @@ public:
             const int kHeight = 2560;
             input.dim(0).set_estimate(0, kWidth);
             input.dim(1).set_estimate(0, kHeight);
-            input.dim(2).set_estimate(0, 3);
+            input.dim(2).set_estimate(0, 4);
             output.dim(0).set_estimate(3, kWidth - 6);
             output.dim(1).set_estimate(3, kHeight - 6);
         }
