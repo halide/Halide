@@ -729,6 +729,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"armv87a", Target::ARMv87a},
     {"armv88a", Target::ARMv88a},
     {"armv89a", Target::ARMv89a},
+    {"arm64e", Target::ARM64e},
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
     {"spirv", Target::SPIRV},
@@ -1547,7 +1548,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
-    const std::array<Feature, 33> union_features = {{
+    const std::array<Feature, 34> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
@@ -1588,6 +1589,8 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         ARMv87a,
         ARMv88a,
         ARMv89a,
+
+        ARM64e,
     }};
     // clang-format on
 

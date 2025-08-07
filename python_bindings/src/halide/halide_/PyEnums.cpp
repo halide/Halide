@@ -193,6 +193,7 @@ void define_enums(py::module &m) {
         .value("ARMv87a", Target::Feature::ARMv87a)
         .value("ARMv88a", Target::Feature::ARMv88a)
         .value("ARMv89a", Target::Feature::ARMv89a)
+        .value("ARM64e", Target::Feature::ARM64e)
         .value("SanitizerCoverage", Target::Feature::SanitizerCoverage)
         .value("ProfileByTimer", Target::Feature::ProfileByTimer)
         .value("SPIRV", Target::Feature::SPIRV)

@@ -1450,6 +1450,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_armv87a,                ///< Enable ARMv8.7a instructions
     halide_target_feature_armv88a,                ///< Enable ARMv8.8a instructions
     halide_target_feature_armv89a,                ///< Enable ARMv8.9a instructions
+    halide_target_feature_arm64e,                 ///< Enable ARM64e (requires ARMv8.3a)
     halide_target_feature_sanitizer_coverage,     ///< Enable hooks for SanitizerCoverage support.
     halide_target_feature_profile_by_timer,       ///< Alternative to halide_target_feature_profile using timer interrupt for systems without threads or applicartions that need to avoid them.
     halide_target_feature_spirv,                  ///< Enable SPIR-V code generation support.

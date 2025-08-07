@@ -31,6 +31,7 @@ int main(int argc, char **argv) {
         "arm-64-ios-armv87a",
         "arm-64-ios-armv88a",
         "arm-64-ios-armv89a",
+        "arm-64-ios-arm64e",
         "arm-64-linux",
         "arm-64-noos-semihosting",
         "arm-64-windows",
