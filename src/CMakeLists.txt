@@ -62,12 +62,14 @@ target_sources(
     Associativity.h
     AsyncProducers.h
     AutoScheduleUtils.h
+    BoundConstantExtentLoops.h
+    BoundSmallAllocations.h
     BoundaryConditions.h
     Bounds.h
     BoundsInference.h
-    BoundConstantExtentLoops.h
-    BoundSmallAllocations.h
     Buffer.h
+    CPlusPlusMangle.h
+    CSE.h
     Callable.h
     CanonicalizeGPUVars.h
     ClampUnsafeAccesses.h
@@ -79,18 +81,16 @@ target_sources(
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
     CodeGen_OpenCL_Dev.h
-    CodeGen_Posix.h
     CodeGen_PTX_Dev.h
+    CodeGen_Posix.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
     CodeGen_Vulkan_Dev.h
     CodeGen_WebGPU_Dev.h
     CompilerLogger.h
     ConciseCasts.h
-    CPlusPlusMangle.h
     ConstantBounds.h
     ConstantInterval.h
-    CSE.h
     Debug.h
     DebugArguments.h
     DebugToFile.h
@@ -127,6 +127,13 @@ target_sources(
     Generator.h
     HexagonOffload.h
     HexagonOptimize.h
+    IR.h
+    IREquality.h
+    IRMatch.h
+    IRMutator.h
+    IROperator.h
+    IRPrinter.h
+    IRVisitor.h
     ImageParam.h
     InferArguments.h
     InjectHostDevBufferCopies.h
@@ -135,19 +142,13 @@ target_sources(
     IntegerDivisionTable.h
     Interval.h
     IntrusivePtr.h
-    IR.h
-    IREquality.h
-    IRMatch.h
-    IRMutator.h
-    IROperator.h
-    IRPrinter.h
-    IRVisitor.h
     JITModule.h
-    Lambda.h
-    Lerp.h
     LICM.h
     LLVM_Output.h
     LLVM_Runtime_Linker.h
+    Lambda.h
+    LegalizeVectors.h
+    Lerp.h
     LoopCarry.h
     LoopPartitioningDirective.h
     Lower.h
@@ -173,8 +174,8 @@ target_sources(
     PurifyIndexMath.h
     PythonExtensionGen.h
     Qualify.h
-    Random.h
     RDom.h
+    Random.h
     Realization.h
     RealizationOrder.h
     RebaseLoopsToZero.h
@@ -320,6 +321,7 @@ target_sources(
     IRVisitor.cpp
     JITModule.cpp
     Lambda.cpp
+    LegalizeVectors.cpp
     Lerp.cpp
     LICM.cpp
     LLVM_Output.cpp
