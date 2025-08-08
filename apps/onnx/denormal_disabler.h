@@ -35,8 +35,8 @@ public:
     }
 
 private:
-    unsigned int csr_ = 0;
-    bool need_restore_ = false;
+    [[maybe_unused]] unsigned int csr_ = 0;
+    [[maybe_unused]] bool need_restore_ = false;
     // Interpret denormal as zero (DAZ) bit
     static constexpr unsigned int DAZ = 0x0040;
     // Flush denormal to zero (FTZ) bit
