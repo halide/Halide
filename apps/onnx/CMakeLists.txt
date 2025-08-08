@@ -120,32 +120,25 @@ if (NOT pybind11_FOUND)
     return()
 endif ()
 
-pybind11_add_module(model_cpp model.cpp)
-target_link_libraries(model_cpp PRIVATE Halide::Halide oclib)
 pybind11_add_module(
     model_cpp model.cpp benchmarking_utils.h common_types.h denormal_disabler.h
 )
+target_link_libraries(model_cpp PRIVATE Halide::Halide onnx::oclib)
 
 add_test(
     NAME model_test
     COMMAND ${Python3_EXECUTABLE} -m unittest ${CMAKE_CURRENT_SOURCE_DIR}/model_test.py -v
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
-set_tests_properties(
-    model_test PROPERTIES
-    LABELS onnx
-    PASS_REGULAR_EXPRESSION "OK"
-    SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
-    ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:model_cpp>;MODEL_AUTOSCHEDULER=$<TARGET_FILE:Halide::Adams2019>"
-)
-
 add_test(
     NAME halide_as_onnx_backend_test
     COMMAND ${Python3_EXECUTABLE} -m unittest ${CMAKE_CURRENT_SOURCE_DIR}/halide_as_onnx_backend_test.py -v
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 set_tests_properties(
-    halide_as_onnx_backend_test PROPERTIES
+    halide_as_onnx_backend_test
+    model_test
+    PROPERTIES
     LABELS onnx
     PASS_REGULAR_EXPRESSION "OK"
     SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
