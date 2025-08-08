@@ -392,6 +392,7 @@ add_halide_library(<target> FROM <generator-target>
                    [NAMESPACE cpp-namespace]
                    [USE_RUNTIME hl-target]
                    [PARAMS param1 [param2 ...]]
+                   [DEPENDS [dep1 dep2 ...]]
                    [TARGETS target1 [target2 ...]]
                    [FEATURES feature1 [feature2 ...]]
                    [FEATURES[<triple>] feature1 [feature2 ...]]
@@ -463,6 +464,12 @@ When `CMAKE_OSX_ARCHITECTURES` is set and the `TARGETS` argument resolves to
 `cmake`, the generator will be run once for each architecture and the results
 will be fused together using `lipo`. This behavior extends to runtime targets.
 
+Sometimes, the generation will need to read files that were generated during the
+build. To declare dependencies on these files, use the `DEPENDS` argument. Paths
+listed here will be passed verbatim to `add_custom_command`, and so will be
+relative to the source directory. Use absolute paths when referring to files
+outside the source directory.
+
 To use an autoscheduler, set the `AUTOSCHEDULER` argument to a target named like
 `Namespace::Scheduler`, for example `Halide::Adams2019`. This will set the
 `autoscheduler` GeneratorParam on the generator command line to `Scheduler`
@@ -532,8 +539,8 @@ will be added to the extension as a callable method of the module. Note that
 every library specified must be built with the `PYTHON_EXTENSION` keyword
 specified, and all libraries must use the same Halide runtime.
 
-The result will be a shared library of the form `<target>.<soabi>.so`, where 
-`<soabi>` describes the specific Python version and platform (e.g., 
+The result will be a shared library of the form `<target>.<soabi>.so`, where
+`<soabi>` describes the specific Python version and platform (e.g.,
 `cpython-310-darwin` for Python 3.10 on macOS.)
 
 ### `add_halide_runtime`
