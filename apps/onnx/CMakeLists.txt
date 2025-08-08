@@ -52,7 +52,7 @@ target_link_libraries(oclib PUBLIC Halide::Halide ${Protobuf_LITE_LIBRARIES})
 target_compile_definitions(oclib PUBLIC GOOGLE_PROTOBUF_NO_RTTI)
 
 add_executable(onnx_converter_test onnx_converter_test.cc)
-target_link_libraries(onnx_converter_test oclib)
+target_link_libraries(onnx_converter_test PRIVATE oclib)
 
 add_test(NAME onnx_converter_test COMMAND onnx_converter_test)
 set_tests_properties(
