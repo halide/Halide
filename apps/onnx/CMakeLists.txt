@@ -53,7 +53,8 @@ target_compile_definitions(oclib PUBLIC GOOGLE_PROTOBUF_NO_RTTI)
 add_executable(onnx_converter_test onnx_converter_test.cc)
 target_link_libraries(onnx_converter_test PRIVATE oclib)
 
-add_test(NAME onnx_converter_test COMMAND onnx_converter_test)
+add_test(NAME onnx_converter_test
+         COMMAND onnx_converter_test)
 set_tests_properties(
     onnx_converter_test PROPERTIES
     LABELS onnx
@@ -96,7 +97,8 @@ add_dependencies(test_model test_model_onnx)
 add_executable(onnx_converter_generator_test onnx_converter_generator_test.cc)
 target_link_libraries(onnx_converter_generator_test PRIVATE Halide::Runtime test_model)
 
-add_test(NAME onnx_converter_generator_test COMMAND onnx_converter_generator_test)
+add_test(NAME onnx_converter_generator_test
+         COMMAND onnx_converter_generator_test)
 set_tests_properties(
     onnx_converter_generator_test
     PROPERTIES
