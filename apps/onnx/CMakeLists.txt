@@ -18,23 +18,16 @@ endif ()
 find_package(Halide REQUIRED)
 
 # Download onnx.proto
-set(ONNX_PROTO_FILE ${CMAKE_CURRENT_BINARY_DIR}/onnx.proto)
-if (NOT EXISTS ${ONNX_PROTO_FILE})
-    file(
-        DOWNLOAD
-        "https://raw.githubusercontent.com/onnx/onnx/v1.4.1/onnx/onnx.proto"
-        ${ONNX_PROTO_FILE}
-        SHOW_PROGRESS
-        STATUS download_status
-    )
-    if (NOT download_status EQUAL 0)
-        message(FATAL_ERROR "Failed to download onnx.proto: ${download_status}")
-    endif ()
-
-    file(READ ${ONNX_PROTO_FILE} onnx_proto_content)
-    string(REPLACE "package onnx;" "package onnx;option optimize_for = LITE_RUNTIME;" onnx_proto_content "${onnx_proto_content}")
-    file(WRITE ${ONNX_PROTO_FILE} "${onnx_proto_content}")
-endif ()
+include(FetchContent)
+FetchContent_Declare(
+    onnx
+    GIT_REPOSITORY https://github.com/onnx/onnx.git
+    GIT_TAG c11b6a715daeb48b056e4c9bed3dfc0dcb243d12  # v1.4.1
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR do-not-load/
+)
+FetchContent_MakeAvailable(onnx)
+set(ONNX_PROTO_FILE ${onnx_SOURCE_DIR}/onnx/onnx.proto)
 
 # Generate sources from onnx.proto
 add_custom_target(onnx_proto)
