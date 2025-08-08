@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(onnx)
+project(onnx_app)
 
 enable_testing()
 
@@ -29,7 +29,7 @@ FetchContent_MakeAvailable(onnx)
 
 # Add library that converts ONNX models to Halide operators
 add_library(oclib STATIC)
-add_library(onnx::oclib ALIAS oclib)
+add_library(onnx_app::oclib ALIAS oclib)
 
 target_sources(oclib PRIVATE onnx_converter.cc "${onnx_SOURCE_DIR}/onnx/onnx.proto")
 protobuf_generate(
@@ -44,7 +44,7 @@ target_compile_definitions(oclib PUBLIC GOOGLE_PROTOBUF_NO_RTTI)
 
 # Add test for the onnx converter library (oclib)
 add_executable(onnx_converter_test onnx_converter_test.cc)
-target_link_libraries(onnx_converter_test PRIVATE onnx::oclib)
+target_link_libraries(onnx_converter_test PRIVATE onnx_app::oclib)
 
 add_test(NAME onnx_converter_test
          COMMAND onnx_converter_test)
@@ -59,7 +59,7 @@ set_tests_properties(
 add_halide_generator(
     onnx_converter.generator
     SOURCES onnx_converter_generator.cc
-    LINK_LIBRARIES onnx::oclib
+    LINK_LIBRARIES onnx_app::oclib
 )
 
 # Generate test onnx model
@@ -117,7 +117,7 @@ endif ()
 pybind11_add_module(
     model_cpp model.cpp benchmarking_utils.h common_types.h denormal_disabler.h
 )
-target_link_libraries(model_cpp PRIVATE Halide::Halide onnx::oclib)
+target_link_libraries(model_cpp PRIVATE Halide::Halide onnx_app::oclib)
 
 add_test(
     NAME model_test
