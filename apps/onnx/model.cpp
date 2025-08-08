@@ -543,6 +543,11 @@ void print_lowered_statement(const HalideModel &pipeline) {
 }  // namespace
 
 PYBIND11_MODULE(model_cpp, m) {
+    if (const auto autoscheduler = Halide::Internal::get_env_variable("MODEL_AUTOSCHEDULER");
+        !autoscheduler.empty()) {
+        Halide::load_plugin(autoscheduler);
+    }
+
     py::class_<HalideModel>(m, "HalideModel");
 
     py::enum_<IOLayout>(m, "Layout")

@@ -128,12 +128,6 @@ endif ()
 
 pybind11_add_module(model_cpp model.cpp)
 target_link_libraries(model_cpp PRIVATE Halide::Halide oclib)
-if (UNIX)
-    target_link_libraries(model_cpp PRIVATE -Wl,--no-as-needed Halide::Adams2019 -Wl,--as-needed)
-endif ()
-if (WIN32)
-    target_link_libraries(model_cpp PRIVATE Halide::Adams2019)
-endif ()
 
 add_test(
     NAME model_test
@@ -145,7 +139,7 @@ set_tests_properties(
     LABELS onnx
     PASS_REGULAR_EXPRESSION "OK"
     SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
-    ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:model_cpp>"
+    ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:model_cpp>;MODEL_AUTOSCHEDULER=$<TARGET_FILE:Halide::Adams2019>"
 )
 
 add_test(
@@ -158,5 +152,5 @@ set_tests_properties(
     LABELS onnx
     PASS_REGULAR_EXPRESSION "OK"
     SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
-    ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:model_cpp>"
+    ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:model_cpp>;MODEL_AUTOSCHEDULER=$<TARGET_FILE:Halide::Adams2019>"
 )
