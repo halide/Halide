@@ -68,7 +68,7 @@ dev = [
     "setuptools-scm>=8.3.1",
 ]
 apps = [
-    "onnx",
+    "onnx==1.4.1",
     "pytest", # unspecified onnx dependency
 ]
 tools = [
