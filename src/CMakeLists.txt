@@ -469,7 +469,9 @@ set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(headers "$<TARGET_PROPERTY:Halide,HEADER_SET_private_headers>")
 add_custom_command(OUTPUT "${HALIDE_H}"
                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
-                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>"
+                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>.tmp"
+                   COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<SHELL_PATH:${HALIDE_H}>.tmp" "$<SHELL_PATH:${HALIDE_H}>"
+                   COMMAND ${CMAKE_COMMAND} -E rm "$<SHELL_PATH:${HALIDE_H}>.tmp"
                    DEPENDS build_halide_h "${LICENSE_PATH}" "${headers}"
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
                    COMMAND_EXPAND_LISTS

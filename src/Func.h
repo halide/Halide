@@ -756,7 +756,7 @@ public:
      * not contain free variables). */
     explicit Func(const Expr &e);
 
-    /** Construct a new Func to wrap an existing, already-define
+    /** Construct a new Func to wrap an existing, already-defined
      * Function object. */
     explicit Func(Internal::Function f);
 
