@@ -122,6 +122,9 @@ endif ()
 
 pybind11_add_module(model_cpp model.cpp)
 target_link_libraries(model_cpp PRIVATE Halide::Halide oclib)
+pybind11_add_module(
+    model_cpp model.cpp benchmarking_utils.h common_types.h denormal_disabler.h
+)
 
 add_test(
     NAME model_test
