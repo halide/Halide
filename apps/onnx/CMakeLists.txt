@@ -23,7 +23,6 @@ FetchContent_Declare(
     onnx
     GIT_REPOSITORY https://github.com/onnx/onnx.git
     GIT_TAG c11b6a715daeb48b056e4c9bed3dfc0dcb243d12  # v1.4.1
-    GIT_SHALLOW TRUE
     SOURCE_SUBDIR do-not-load/
 )
 FetchContent_MakeAvailable(onnx)
