@@ -68,7 +68,8 @@ dev = [
     "setuptools-scm>=8.3.1",
 ]
 apps = [
-    "onnx"
+    "onnx",
+    "pytest", # unspecified onnx dependency
 ]
 tools = [
     "cmake>=3.28",
