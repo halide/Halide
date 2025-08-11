@@ -209,7 +209,10 @@
     "webgpu": {
       "description": "Include WebGPU runtime support",
       "dependencies": [
-        "dawn"
+        {
+          "name": "dawn",
+          "platform": "!windows"
+        }
       ]
     }
   }
