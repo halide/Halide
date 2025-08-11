@@ -5,7 +5,7 @@
   "homepage": "https://github.com/halide/Halide",
   "license": "MIT",
   "supports": "!uwp",
-  "builtin-baseline": "d567b667adba0e72c5c3931ddbe745b66aa34b73",
+  "builtin-baseline": "dd3097e305afa53f7b4312371f62058d2e665320",
   "default-features": [
     "jit",
     "serialization"
@@ -39,7 +39,8 @@
             "serialization",
             "target-all",
             "tests",
-            "wasm-executor"
+            "wasm-executor",
+            "webgpu"
           ]
         },
         {
@@ -203,6 +204,12 @@
       "description": "Include built-in WASM executor",
       "dependencies": [
         "wabt"
+      ]
+    },
+    "webgpu": {
+      "description": "Include WebGPU runtime support",
+      "dependencies": [
+        "dawn"
       ]
     }
   }

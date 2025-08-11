@@ -1,0 +1,13 @@
+--- a/src/dawn/node/CMakeLists.txt
++++ b/src/dawn/node/CMakeLists.txt
+@@ -189,5 +189,10 @@ macro(javascript file)
+             "$<TARGET_FILE_DIR:dawn_node>/${file}")
+ endmacro()
+ 
+ javascript("index.js")
+ javascript("cts.js")
++
++# Install the dawn.node shared library
++if (DAWN_ENABLE_INSTALL)
++    install(TARGETS dawn_node LIBRARY DESTINATION lib/node_modules)
++endif ()

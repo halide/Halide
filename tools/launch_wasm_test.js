@@ -5,16 +5,11 @@
 const target_js_path = process.argv[2];
 const halide_target_string = process.argv[3];
 
-console.log("target_js_path is ", target_js_path)
-console.log("halide_target_string is ", halide_target_string)
 if (halide_target_string.includes("webgpu")) {
-    const webgpu_node_bindings = process.env["HL_WEBGPU_NODE_BINDINGS"];
-    if (!webgpu_node_bindings) {
-        console.log("You must define the env var HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node when running WebGPU tests for Halide");
-    }
-    const provider = require(webgpu_node_bindings);
+    const provider = require("dawn");
     const gpu = provider.create([]);
     // Not const: we want to redefine the global 'navigator' var
-    navigator = { gpu: gpu };
+    navigator = {gpu: gpu};
 }
+
 require(target_js_path);

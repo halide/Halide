@@ -37,8 +37,9 @@ When invoking `emcc` to link Halide-generated objects, include these flags:
 
 Tests that use AOT compilation can be run using a native WebGPU implementation
 that has Node.js bindings, such as [Dawn](https://dawn.googlesource.com/dawn/).
-You must set an environment variable named `HL_WEBGPU_NODE_BINDINGS` that
-has an absolute path to the bindings to run these tests, e.g. `HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`.
+You must have the Dawn Node.js bindings installed to run these tests. Set 
+the `NODE_PATH` environment variable to the path to the `node_modules`
+directory of the Dawn bindings.
 
 See [below](#setting-up-dawn) for instructions on building the Dawn Node.js
 bindings.
@@ -55,64 +56,62 @@ For testing purposes, Halide can also target native WebGPU libraries, such as
 This is currently the only path that can run the JIT correctness tests.
 See [below](#setting-up-dawn) for instructions on building Dawn.
 
-> Note that as of 2023-11-27, wgpu is not supported due to
-> [lacking `override` support for WGSL](https://github.com/gfx-rs/wgpu/issues/1762)
-> which we require > in order to set GPU block sizes.
+> Note that as of 2023-11-27, wgpu is not supported due to [lacking `override`
+> support for WGSL](https://github.com/gfx-rs/wgpu/issues/1762) which we require
+> to set GPU block sizes.
 
 When targeting WebGPU with a native target, Halide defaults to looking for a
 build of Dawn (with several common names and suffixes); you can override this
 by setting the `HL_WEBGPU_NATIVE_LIB` environment variable to the absolute path
 to the library you want.
 
-Note that it is explicitly legal to define both `HL_WEBGPU_NATIVE_LIB` and
-`HL_WEBGPU_NODE_BINDINGS` at the same time; the correct executable environment
-will be selected based on the Halide target specified.
-
-Note that it is explicitly legal to specify both WEBGPU_NATIVE_LIB and
-WEBGPU_NODE_BINDINGS for the same build; the correct executable environment
-will be selected based on the Halide target specified.
-
 ## Setting up Dawn
 
-Building Dawn's Node.js bindings currently requires using CMake.
-
-First, [install `depot_tools`](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up) and add it to the
-`PATH` environment variable.
-
-Next, get Dawn and its dependencies:
+Building Dawn's Node.js bindings currently requires using CMake. Start by
+cloning Dawn and its dependencies:
 
     # Clone the repo
     git clone https://dawn.googlesource.com/dawn
     cd dawn
 
-    # Bootstrap the gclient configuration with Node.js bindings enabled
-    cp scripts/standalone-with-node.gclient .gclient
+    # Fetch external dependencies
+    python3 tools/fetch_dawn_dependencies.py
 
-    # Fetch external dependencies and toolchains with gclient
-    gclient sync
+    # Their script misses a few:
+    git submodule update --init --depth 1 third_party/gpuweb
+    git submodule update --init --depth 1 third_party/node-addon-api
+    git submodule update --init --depth 1 third_party/node-api-headers
 
     # Other dependencies that must be installed manually:
     # - golang
 
+Now patch Dawn to install the Node.js bindings:
+
+    echo "install(TARGETS dawn_node LIBRARY DESTINATION lib/node_modules)" >> src/dawn/node/CMakeLists.txt
+
 Finally, build Dawn, enabling both the Node.js bindings and shared libraries:
 
-    mkdir -p <build_dir>
-    cd <build_dir>
-
-    cmake <dawn_root_dir> -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DDAWN_BUILD_NODE_BINDINGS=1 \
-        -DDAWN_ENABLE_PIC=1 \
-        -DBUILD_SHARED_LIBS=ON
-
-    ninja dawn.node webgpu_dawn
+    cmake -G Ninja -S . -B out/Release \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DDAWN_BUILD_MONOLITHIC_LIBRARY=SHARED \
+      -DDAWN_BUILD_NODE_BINDINGS=ON \
+      -DDAWN_BUILD_PROTOBUF=OFF \
+      -DDAWN_BUILD_SAMPLES=OFF \
+      -DDAWN_BUILD_TESTS=OFF \
+      -DDAWN_ENABLE_INSTALL=ON \
+      -DDAWN_ENABLE_PIC=ON \
+      -DTINT_BUILD_CMD_TOOLS=OFF \
+      -DTINT_BUILD_TESTS=OFF
+    cmake --build out/Release
+    cmake --install out/Release --prefix /opt/dawn
 
 This will produce the following artifacts:
-- Node.js bindings: `<build_dir>/dawn.node`
-- Native library: `<build_dir>/src/dawn/native/libwebgpu_dawn.{so,dylib,dll}`
+- Node.js bindings: `/opt/dawn/lib/node_modules/dawn.node`
+- Native library: `/opt/dawn/lib/libwebgpu_dawn.{so,dylib,dll}`
 
-These paths can then be used for the `HL_WEBGPU_NODE_BINDINGS` and
-`HL_WEBGPU_NATIVE_LIB` environment variables when using Halide.
+You can then add `/opt/dawn/lib/node_modules` to `NODE_PATH` and `/opt/dawn/lib`
+to `LD_LIBRARY_PATH`. You are, of course, free to choose any other installation
+prefix besides `/opt/dawn` (e.g. `/usr/local`).
 
 ## Updating mini_webgpu.h
 
