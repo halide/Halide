@@ -755,7 +755,7 @@ WEAK int webgpu_device_crop_from_offset(void *user_context,
     dst->device_interface = src->device_interface;
 
     WgpuBufferHandle *src_handle = (WgpuBufferHandle *)src->device;
-    wgpuBufferReference(src_handle->buffer);
+    wgpuBufferAddRef(src_handle->buffer);
 
     WgpuBufferHandle *dst_handle =
         (WgpuBufferHandle *)malloc(sizeof(WgpuBufferHandle));
