@@ -35,8 +35,10 @@ public:
     }
 
 private:
+#ifdef __SSE__
     unsigned int csr_ = 0;
     bool need_restore_ = false;
+#endif
     // Interpret denormal as zero (DAZ) bit
     static constexpr unsigned int DAZ = 0x0040;
     // Flush denormal to zero (FTZ) bit
