@@ -39,10 +39,10 @@ typedef ptrdiff_t ssize_t;
 #define UINT32_MAX ((uint32_t)-1)
 #define UINT64_MAX ((uint64_t)-1)
 
-#define UINT8_C(v)   (v)
-#define UINT16_C(v)  (v)
-#define UINT32_C(v)  (v ## U)
-#define UINT64_C(v)  (v ## ULL)
+#define UINT8_C(v) (v)
+#define UINT16_C(v) (v)
+#define UINT32_C(v) (v##U)
+#define UINT64_C(v) (v##ULL)
 
 // --------------
 
