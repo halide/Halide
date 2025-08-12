@@ -12,14 +12,14 @@ and versions of Emscripten.
 
 The following is a non-comprehensive list of known limitations:
 
--   Only 32-bit integers and floats have efficient support.
-    * 8-bit and 16-bit integers are implemented using emulation. Future
-      extensions to WGSL will allow them to be implemented more efficiently.
-    * 64-bit integers and floats will likely remain unsupported until WGSL gains
-      extensions to support them.
--   Wrapping native device buffer handles is not yet implemented.
--   You must use CMake/CTest to build/test Halide for WebGPU; using the Makefile
-    is not supported for WebGPU testing (and probably never will be).
+- Only 32-bit integers and floats have efficient support.
+  * 8-bit and 16-bit integers are implemented using emulation. Future extensions
+    to WGSL will allow them to be implemented more efficiently.
+  * 64-bit integers and floats will likely remain unsupported until WGSL gains
+    extensions to support them.
+- Wrapping native device buffer handles is not yet implemented.
+- You must use CMake/CTest to build/test Halide for WebGPU; using the Makefile
+  is not supported for WebGPU testing (and probably never will be).
 
 In addition to these functional limitations, the performance of the WebGPU
 backend has not yet been evaluated, and so optimizations in the runtime or
@@ -37,8 +37,8 @@ When invoking `emcc` to link Halide-generated objects, include these flags:
 
 Tests that use AOT compilation can be run using a native WebGPU implementation
 that has Node.js bindings, such as [Dawn](https://dawn.googlesource.com/dawn/).
-You must have the Dawn Node.js bindings installed to run these tests. Set 
-the `NODE_PATH` environment variable to the path to the `node_modules`
+You must have the Dawn Node.js bindings installed to run these tests. Set the
+`NODE_PATH` environment variable to the path to the `node_modules`
 directory of the Dawn bindings.
 
 See [below](#setting-up-dawn) for instructions on building the Dawn Node.js
@@ -52,18 +52,18 @@ JIT compilation is not supported when using WebGPU with WASM.
 
 For testing purposes, Halide can also target native WebGPU libraries, such as
 [Dawn](https://dawn.googlesource.com/dawn/) or
-[wgpu](https://github.com/gfx-rs/wgpu).
-This is currently the only path that can run the JIT correctness tests.
-See [below](#setting-up-dawn) for instructions on building Dawn.
+[wgpu](https://github.com/gfx-rs/wgpu). This is currently the only path that can
+run the JIT correctness tests. See [below](#setting-up-dawn) for instructions on
+building Dawn.
 
 > Note that as of 2023-11-27, wgpu is not supported due to [lacking `override`
 > support for WGSL](https://github.com/gfx-rs/wgpu/issues/1762) which we require
 > to set GPU block sizes.
 
 When targeting WebGPU with a native target, Halide defaults to looking for a
-build of Dawn (with several common names and suffixes); you can override this
-by setting the `HL_WEBGPU_NATIVE_LIB` environment variable to the absolute path
-to the library you want.
+build of Dawn (with several common names and suffixes); you can override this by
+setting the `HL_WEBGPU_NATIVE_LIB` environment variable to the absolute path to
+the library you want.
 
 ## Setting up Dawn
 
@@ -106,6 +106,7 @@ Finally, build Dawn, enabling both the Node.js bindings and shared libraries:
     cmake --install out/Release --prefix /opt/dawn
 
 This will produce the following artifacts:
+
 - Node.js bindings: `/opt/dawn/lib/node_modules/dawn.node`
 - Native library: `/opt/dawn/lib/libwebgpu_dawn.{so,dylib,dll}`
 
@@ -116,12 +117,10 @@ prefix besides `/opt/dawn` (e.g. `/usr/local`).
 ## Updating mini_webgpu.h
 
 The recommended method for updating `mini_webgpu.h` is to copy the
-`gen/include/dawn/webgpu.h` file from the Dawn build directory, then:
-- Restore the `// clang-format {off,on}` lines.
-- Comment out the `#include <std*>` lines.
-- Remove the `void` parameter from the `WGPUProc` declaration.
+`include/dawn/webgpu.h` file from the Dawn install directory, then comment out
+the `#include` lines.
 
 This guarantees a version of the WebGPU header that is compatible with Dawn.
-When the native API eventually stabilizes, it should be possible to obtain a
-header from the `webgpu-native` GitHub organization that will be compatible
-with Dawn, wgpu, and Emscripten.
+When the native API eventually stabilizes, it should be possible to get a header
+from the `webgpu-native` GitHub organization that will be compatible with Dawn,
+wgpu, and Emscripten.

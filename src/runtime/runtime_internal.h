@@ -33,6 +33,17 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 
 typedef ptrdiff_t ssize_t;
 
+#define NULL nullptr
+
+#define SIZE_MAX ((size_t)-1)
+#define UINT32_MAX ((uint32_t)-1)
+#define UINT64_MAX ((uint64_t)-1)
+
+#define UINT8_C(v)   (v)
+#define UINT16_C(v)  (v)
+#define UINT32_C(v)  (v ## U)
+#define UINT64_C(v)  (v ## ULL)
+
 // --------------
 
 // In Halide runtime code, most functions should just be WEAK, whether or not
@@ -137,6 +148,7 @@ void abort();
 struct halide_buffer_t;
 struct halide_type_t;
 WEAK char *halide_string_to_string(char *dst, char *end, const char *arg);
+WEAK char *halide_string_view_to_string(char *dst, char *end, const char *data, size_t length);
 WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scientific);
 WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int digits);
 WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int digits);

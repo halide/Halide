@@ -27,6 +27,27 @@ WEAK char *halide_string_to_string(char *dst, char *end, const char *arg) {
     }
 }
 
+WEAK char *halide_string_view_to_string(char *dst, char *end, char const *data, size_t length) {
+    halide_debug_assert(nullptr, dst <= end);
+    if (dst >= end) {
+        return dst;
+    }
+    if (!data) {
+        data = "<nullptr>";
+        length = sizeof("<nullptr>") - 1;
+    }
+    for (size_t i = 0; i < length; i++) {
+        if (dst == end) {
+            end[-1] = 0;
+            break;
+        }
+        if ((*dst++ = *data++) == 0) {
+            break;
+        }
+    }
+    return dst;
+}
+
 WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int min_digits) {
     halide_debug_assert(nullptr, dst <= end);
 
