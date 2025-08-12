@@ -16,12 +16,12 @@ def test_serialize_deserialize_pipeline_file():
         filename = Path(tmp.name)
 
     try:
-        hl.serialize_pipeline(pipeline, str(filename))
+        hl.serialize_pipeline(pipeline, filename)
 
         assert filename.exists()
         assert filename.stat().st_size > 0
 
-        deserialized_pipeline = hl.deserialize_pipeline(str(filename))
+        deserialized_pipeline = hl.deserialize_pipeline(filename)
 
         result = deserialized_pipeline.realize([10, 10])
         assert result.dim(0).extent() == 10
@@ -63,13 +63,13 @@ def test_serialize_deserialize_with_parameters():
         filename = Path(tmp.name)
 
     try:
-        params = hl.serialize_pipeline(pipeline, str(filename), get_params=True)
+        params = hl.serialize_pipeline(pipeline, filename, get_params=True)
 
         assert "multiplier" in params
         assert params["multiplier"].name() == "multiplier"
 
         user_params = {"multiplier": hl.Param(hl.Int(32), "multiplier", 5).parameter()}
-        deserialized_pipeline = hl.deserialize_pipeline(str(filename), user_params)
+        deserialized_pipeline = hl.deserialize_pipeline(filename, user_params)
 
         result = deserialized_pipeline.realize([3])
         assert result[2] == 10  # 2 * 5
@@ -113,8 +113,8 @@ def test_deserialize_parameters_file():
         filename = Path(tmp.name)
 
     try:
-        hl.serialize_pipeline(pipeline, str(filename))
-        params = hl.deserialize_parameters(str(filename))
+        hl.serialize_pipeline(pipeline, filename)
+        params = hl.deserialize_parameters(filename)
 
         assert "param1" in params
         assert "param2" in params

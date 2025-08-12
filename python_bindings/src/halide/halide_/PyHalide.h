@@ -37,7 +37,57 @@ Expr double_to_expr_check(double v);
 Target to_jit_target(const Target &target);
 Target to_aot_target(const Target &target);
 
+// TODO: when we move to C++20 & our base toolchains are modern enough,
+//   we can just use std::filesystem::path, since pybind11 has a built-in
+//   type caster in <pybind11/stl/filesystem.h>.
+class PathLike {
+    std::string path;
+
+public:
+    PathLike() = default;
+    PathLike(const py::bytes &path)
+        : path(path) {
+    }
+
+    operator const std::string &() const {
+        return path;
+    }
+
+    PyObject *decode() const {
+        return PyUnicode_DecodeFSDefaultAndSize(path.c_str(), static_cast<ssize_t>(path.size()));
+    }
+};
+
 }  // namespace PythonBindings
 }  // namespace Halide
+
+template<>
+class pybind11::detail::type_caster<Halide::PythonBindings::PathLike> {
+public:
+    PYBIND11_TYPE_CASTER(Halide::PythonBindings::PathLike, const_name("os.PathLike"));
+
+    bool load(handle src, bool) {
+        try {
+            PyObject *path = nullptr;
+            if (!PyUnicode_FSConverter(src.ptr(), &path)) {
+                throw error_already_set();
+            }
+            value = reinterpret_steal<bytes>(path);
+            return true;
+        } catch (error_already_set &) {
+            return false;
+        }
+    }
+
+    static handle cast(const Halide::PythonBindings::PathLike &path,
+                       return_value_policy, handle) {
+        if (auto *py_str = path.decode()) {
+            return module_::import("pathlib")
+                .attr("Path")(reinterpret_steal<object>(py_str))
+                .release();
+        }
+        return nullptr;
+    }
+};
 
 #endif  // HALIDE_PYTHON_BINDINGS_PYHALIDE_H
