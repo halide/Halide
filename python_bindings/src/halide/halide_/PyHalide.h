@@ -54,7 +54,7 @@ public:
     }
 
     PyObject *decode() const {
-        return PyUnicode_DecodeFSDefaultAndSize(path.c_str(), static_cast<ssize_t>(path.size()));
+        return PyUnicode_DecodeFSDefaultAndSize(path.c_str(), static_cast<Py_ssize_t>(path.size()));
     }
 };
 
