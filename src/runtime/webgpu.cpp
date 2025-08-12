@@ -633,7 +633,7 @@ int do_copy_to_host(void *user_context, WgpuContext *context, uint8_t *dst,
         buffer_map_cb.nextInChain = nullptr;
         buffer_map_cb.mode = WGPUCallbackMode_AllowSpontaneous;
         buffer_map_cb.callback = [](WGPUMapAsyncStatus status, WGPUStringView, void *userdata, void *) {
-            auto result = (BufferMapResult *)userdata;
+            auto *result = (BufferMapResult *)userdata;
             result->map_status = status;
             __atomic_clear(&result->map_complete, __ATOMIC_RELEASE);
         };
