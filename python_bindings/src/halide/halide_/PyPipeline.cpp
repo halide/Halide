@@ -277,13 +277,19 @@ void define_pipeline(py::module &m) {
 
             .def("__repr__", [](const Pipeline &p) -> std::string {
                 std::ostringstream o;
-                o << "<halide.Pipeline [";
-                std::string comma;
-                for (auto &f : p.outputs()) {
-                    o << comma << "'" << f.name() << "'";
-                    comma = ",";
+                o << "<halide.Pipeline ";
+                if (!p.defined()) {
+                    o << "Pipeline()";
+                } else {
+                    o << "[";
+                    std::string comma;
+                    for (auto &f : p.outputs()) {
+                        o << comma << "'" << f.name() << "'";
+                        comma = ",";
+                    }
+                    o << "]";
                 }
-                o << "]>";
+                o << ">";
                 return o.str();  //
             });
 
