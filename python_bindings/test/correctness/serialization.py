@@ -2,6 +2,7 @@ import tempfile
 from pathlib import Path
 
 import halide as hl
+import numpy as np
 
 
 def test_serialize_deserialize_pipeline_file():
@@ -26,7 +27,9 @@ def test_serialize_deserialize_pipeline_file():
         result = deserialized_pipeline.realize([10, 10])
         assert result.dim(0).extent() == 10
         assert result.dim(1).extent() == 10
-        assert result[5, 5] == 10  # 5 + 5
+
+        expected = np.add.outer(np.arange(10), np.arange(10))
+        assert np.array_equal(np.array(result), expected)
 
     finally:
         filename.unlink(missing_ok=True)
@@ -47,7 +50,8 @@ def test_serialize_deserialize_pipeline_bytes():
     deserialized_pipeline = hl.deserialize_pipeline(data)
 
     result = deserialized_pipeline.realize([5, 5])
-    assert result[2, 3] == 7  # 2 * 2 + 3
+    expected = np.fromfunction(lambda x, y: x * 2 + y, (5, 5), dtype=int).transpose()
+    assert np.array_equal(np.array(result), expected)
 
 
 def test_serialize_deserialize_with_parameters():
@@ -72,7 +76,7 @@ def test_serialize_deserialize_with_parameters():
         deserialized_pipeline = hl.deserialize_pipeline(filename, user_params)
 
         result = deserialized_pipeline.realize([3])
-        assert result[2] == 10  # 2 * 5
+        assert list(result) == [0, 5, 10]
 
     finally:
         filename.unlink(missing_ok=True)
@@ -96,7 +100,7 @@ def test_serialize_deserialize_with_parameters_bytes():
     deserialized_pipeline = hl.deserialize_pipeline(data, user_params)
 
     result = deserialized_pipeline.realize([3])
-    assert result[1] == 101  # 1 + 100
+    assert list(result) == [100, 101, 102]
 
 
 def test_deserialize_parameters_file():
@@ -163,8 +167,12 @@ def test_pipeline_with_multiple_outputs():
 
     results = deserialized_pipeline.realize([5, 5])
     assert len(results) == 2
-    assert results[0][2, 3] == 5  # 2 + 3
-    assert results[1][2, 3] == -1  # 2 - 3
+
+    expected = np.add.outer(np.arange(5), np.arange(5))
+    assert np.array_equal(np.array(results[0]), expected)
+
+    expected = np.subtract.outer(np.arange(5), np.arange(5)).transpose()
+    assert np.array_equal(np.array(results[1]), expected)
 
 
 def test_empty_user_params():
@@ -178,11 +186,11 @@ def test_empty_user_params():
 
     deserialized1 = hl.deserialize_pipeline(data, {})
     result1 = deserialized1.realize([3])
-    assert result1[2] == 4
+    assert list(result1) == [0, 1, 4]
 
     deserialized2 = hl.deserialize_pipeline(data)
     result2 = deserialized2.realize([3])
-    assert result2[2] == 4
+    assert list(result2) == [0, 1, 4]
 
 
 if __name__ == "__main__":
