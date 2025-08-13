@@ -37,9 +37,10 @@ Expr double_to_expr_check(double v);
 Target to_jit_target(const Target &target);
 Target to_aot_target(const Target &target);
 
-// TODO: when we move to C++20 & our base toolchains are modern enough,
-//   we can just use std::filesystem::path, since pybind11 has a built-in
-//   type caster in <pybind11/stl/filesystem.h>.
+// TODO: when out base toolchains are modern enough, we can just
+//   use std::filesystem::path, since pybind11 has a built-in type
+//   caster in <pybind11/stl/filesystem.h>.
+// See: https://github.com/halide/Halide/issues/8721
 class PathLike {
     std::string path;
 
