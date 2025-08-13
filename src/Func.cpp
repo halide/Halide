@@ -85,6 +85,8 @@ Func::Func(const Expr &e)
 
 Func::Func(Function f)
     : func(std::move(f)) {
+    internal_assert(func.get_contents().defined())
+        << "Can't construct Func from undefined Function";
 }
 
 const string &Func::name() const {
