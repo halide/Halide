@@ -40,7 +40,7 @@ Target to_aot_target(const Target &target);
 // TODO: when out base toolchains are modern enough, we can just
 //   use std::filesystem::path, since pybind11 has a built-in type
 //   caster in <pybind11/stl/filesystem.h>.
-// See: https://github.com/halide/Halide/issues/8721
+// See: https://github.com/halide/Halide/issues/8723
 class PathLike {
     std::string path;
 
