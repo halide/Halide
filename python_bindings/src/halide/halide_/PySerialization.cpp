@@ -44,6 +44,7 @@ void define_serialization(py::module &m) {
     m.def("deserialize_pipeline",  //
           [](const py::bytes &data, const std::map<std::string, Parameter> &user_params) -> Pipeline {
               // TODO: rework API in serialize_pipeline to take a std::span<> in C++20
+              // https://github.com/halide/Halide/issues/8722
               std::string_view view{data};
               std::vector<uint8_t> span{view.begin(), view.end()};
               return deserialize_pipeline(span, user_params);  //
@@ -64,6 +65,7 @@ void define_serialization(py::module &m) {
     m.def("deserialize_parameters",  //
           [](const py::bytes &data) -> std::map<std::string, Parameter> {
               // TODO: rework API in serialize_pipeline to take a std::span<> in C++20
+              // https://github.com/halide/Halide/issues/8722
               std::string_view view{data};
               std::vector<uint8_t> span{view.begin(), view.end()};
               return deserialize_parameters(span);  //
