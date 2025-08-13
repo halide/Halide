@@ -2,7 +2,7 @@
 #    uv export --all-groups --no-hashes --no-emit-project -o requirements.txt
 cli-ui==0.19.0
     # via tbump
-cmake==4.0.3
+cmake==4.1.0
 colorama==0.4.6
     # via
     #   cli-ui
@@ -19,7 +19,7 @@ importlib-metadata==8.7.0 ; python_full_version < '3.10'
     # via setuptools-scm
 iniconfig==2.1.0
     # via pytest
-ninja==1.11.1.4
+ninja==1.13.0
 numpy==2.0.2 ; python_full_version < '3.10'
     # via
     #   halide
