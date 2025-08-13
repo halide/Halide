@@ -68,7 +68,7 @@ add_custom_command(
     COMMAND
     protobuf::protoc
     --encode=onnx.ModelProto
-    "--proto_path=${CMAKE_CURRENT_BINARY_DIR}"
+    "--proto_path=${onnx_SOURCE_DIR}"
     "$<SHELL_PATH:${onnx_SOURCE_DIR}/onnx/onnx.proto>"
     < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/test_model_proto.txt>"
     > test_model.onnx
