@@ -486,7 +486,7 @@ function(add_halide_library TARGET)
 
     set(options C_BACKEND GRADIENT_DESCENT)
     set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER HEADER ${extra_output_names} NO_THREADS NO_DL_LIBS)
-    set(multiValueArgs TARGETS PARAMS PLUGINS ${features_args})
+    set(multiValueArgs DEPENDS TARGETS PARAMS PLUGINS ${features_args})
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT "${ARG_UNPARSED_ARGUMENTS}" STREQUAL "")
@@ -632,7 +632,7 @@ function(add_halide_library TARGET)
 
     set(generator_args
         COMMAND ${generator_cmd}
-        DEPENDS ${generator_cmd_deps}
+        DEPENDS ${generator_cmd_deps} ${ARG_DEPENDS}
         EXTRA_OUTPUTS ${extra_outputs}
         FUNCTION_NAME "${ARG_FUNCTION_NAME}"
         GENERATOR "${ARG_GENERATOR}"
