@@ -555,28 +555,40 @@ public:
         m.get_conceptual_stmt().accept(this);
     }
 
-    void generate(const std::string &code) {
+    void generate(std::string_view code) {
         // Find markers in asm code
-        std::istringstream asm_stream(code);
-        std::string line;
         int lno = 1;
-        while (getline(asm_stream, line)) {
-            // Try all markers
-            std::vector<uint64_t> matched_nodes;
-            for (auto const &[node, marker] : markers) {
-                if (std::regex_search(line, marker)) {
-                    // Save line number
-                    lnos[node] = lno;
-                    // Save this node's id
-                    matched_nodes.push_back(node);
+        size_t start = 0;
+
+        std::vector<uint64_t> matched_nodes;
+        while (start < code.size()) {
+            size_t end = code.find('\n', start);
+            if (end == std::string_view::npos) {
+                end = code.size();
+            }
+            std::string_view line = code.substr(start, end - start);
+            std::string_view marker_prefix("%\"", 2);
+
+            // Quick check if the line contains %".
+            if (line.find(marker_prefix) != std::string_view::npos) {
+                // Try all markers
+                matched_nodes.clear();
+                for (auto const &[node, marker] : markers) {
+                    if (std::regex_search(line.begin(), line.end(), marker)) {
+                        // Save line number
+                        lnos[node] = lno;
+                        // Save this node's id
+                        matched_nodes.push_back(node);
+                    }
+                }
+                // We map to the first match, stop
+                // checking matched nodes
+                for (auto const &node : matched_nodes) {
+                    markers.erase(node);
                 }
             }
-            // We map to the first match, stop
-            // checking matched nodes
-            for (auto const &node : matched_nodes) {
-                markers.erase(node);
-            }
 
+            start = end + 1;
             lno++;
         }
     }
@@ -2306,7 +2318,7 @@ public:
         // use comments in the generated assembly to infer association
         // between Halide IR and assembly -- unclear how reliable this is.
         host_asm_info.gather_nodes_from_functions(m);
-        host_asm_info.generate(asm_stream.str());
+        host_asm_info.generate(asm_buffer);
 
         Buffer<> device_code_buf = m.get_device_code_buffer();
         if (device_code_buf.defined()) {
@@ -2315,7 +2327,7 @@ public:
             debug(1) << "Generating device AssemblyInfo\n";
             // TODO(mcourteaux): This doesn't generate anything useful, as the
             // LLVM comments are only added later in the LLVM CodeGen IRVisitor.
-            // This conceptual Stmt hasn't seen this seen this
+            // This conceptual Stmt hasn't seen this pass yet.
             device_asm_info.gather_nodes_from_conceptual_stmt(m);
             device_asm_info.generate(device_assembly);
         } else {
@@ -2460,14 +2472,8 @@ private:
         stream << "<div id='host-assembly-pane' class='pane'>\n";
         stream << "<div id='assemblyContent' class='shj-lang-asm'>\n";
         stream << "<pre>\n";
-        std::istringstream ss{asm_stream.str()};
+        std::istringstream ss{asm_buffer};
         for (std::string line; std::getline(ss, line);) {
-            if (line.length() > 500) {
-                // Very long lines in the assembly are typically the _gpu_kernel_sources
-                // as a raw ASCII block in the assembly. Let's chop that off to make
-                // browsers faster when dealing with this.
-                line = line.substr(0, 100) + "\" # omitted the remainder of the ASCII buffer";
-            }
             stream << html_code_printer.escape_html(line) << "\n";
         }
         stream << "\n";
@@ -2517,7 +2523,7 @@ private:
     /* Misc helper methods */
 
     // Load assembly code from file
-    std::ostringstream asm_stream;
+    std::string asm_buffer;
     AssemblyInfo host_asm_info;
     AssemblyInfo device_asm_info;
 
@@ -2528,11 +2534,20 @@ private:
         std::ifstream assembly;
         assembly.open(asm_file.c_str());
 
-        // Slurp the code into asm_stream
+        // Slurp the code into asm_stream...
+        // Very inefficiently...
+        std::ostringstream stream;
         std::string line;
         while (getline(assembly, line)) {
-            asm_stream << line << "\n";
+            if (line.length() > 500) {
+                // Very long lines in the assembly are typically the _gpu_kernel_sources
+                // or other buffers (such as model weights) as a raw ASCII block in the
+                // assembly. Let's chop that off to make browsers faster when dealing with this.
+                line = line.substr(0, 100) + "\" # omitted the remainder of the buffer";
+            }
+            stream << line << "\n";
         }
+        asm_buffer = stream.str();
     }
 };
 
