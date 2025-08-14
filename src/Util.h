@@ -176,8 +176,12 @@ bool starts_with(const std::string &str, const std::string &prefix);
 /** Test if the first string ends with the second string */
 bool ends_with(const std::string &str, const std::string &suffix);
 
-/** Replace all matches of the second string in the first string with the last string */
-std::string replace_all(const std::string &str, const std::string &find, const std::string &replace);
+/** Replace all matches of the second string in the first string with the last string.
+ * The string to search-and-replace in is passed by value, offering the ability to
+ * std::move() a string in if you're not interested in keeping the original string.
+ * This is useful when the original string does not contain the find-string, causing
+ * this function to return the same string without any copies being made. */
+std::string replace_all(std::string str, const std::string &find, const std::string &replace);
 
 /** Split the source string using 'delim' as the divider. */
 std::vector<std::string> split_string(const std::string &source, const std::string &delim);

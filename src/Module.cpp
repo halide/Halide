@@ -223,10 +223,10 @@ static Registerer registerer;
             }
             std::string nsreg = "halide_nsreg_" + replace_all(f.name, "::", "_");
             std::string s = replace_all(registration_template, "$NAMESPACEOPEN$", nsopen);
-            s = replace_all(s, "$SHORTNAME$", simple_name);
-            s = replace_all(s, "$NAMESPACECLOSE$", nsclose);
-            s = replace_all(s, "$FULLNAME$", f.name);
-            s = replace_all(s, "$NREGS$", nsreg);
+            s = replace_all(std::move(s), "$SHORTNAME$", simple_name);
+            s = replace_all(std::move(s), "$NAMESPACECLOSE$", nsclose);
+            s = replace_all(std::move(s), "$FULLNAME$", f.name);
+            s = replace_all(std::move(s), "$NREGS$", nsreg);
             stream << s;
         }
     }
@@ -305,15 +305,15 @@ $NAMESPACECLOSE$
         target_string += t.to_string();
     }
     std::string body_text = indent_string(body, "    ");
-    s = replace_all(s, "$SCHEDULER$", scheduler_name);
-    s = replace_all(s, "$NAMESPACEOPEN$", nsopen);
-    s = replace_all(s, "$SHORTNAME$", simple_name);
-    s = replace_all(s, "$CLEANNAME$", clean_name);
-    s = replace_all(s, "$NAMESPACECLOSE$", nsclose);
-    s = replace_all(s, "$TARGET$", target_string);
-    s = replace_all(s, "$BODY$", body_text);
-    s = replace_all(s, "$MPNAME$", "autoscheduler_params");
-    s = replace_all(s, "$MACHINEPARAMS$", autoscheduler_params_string);
+    s = replace_all(std::move(s), "$SCHEDULER$", scheduler_name);
+    s = replace_all(std::move(s), "$NAMESPACEOPEN$", nsopen);
+    s = replace_all(std::move(s), "$SHORTNAME$", simple_name);
+    s = replace_all(std::move(s), "$CLEANNAME$", clean_name);
+    s = replace_all(std::move(s), "$NAMESPACECLOSE$", nsclose);
+    s = replace_all(std::move(s), "$TARGET$", target_string);
+    s = replace_all(std::move(s), "$BODY$", body_text);
+    s = replace_all(std::move(s), "$MPNAME$", "autoscheduler_params");
+    s = replace_all(std::move(s), "$MACHINEPARAMS$", autoscheduler_params_string);
     stream << s;
 }
 

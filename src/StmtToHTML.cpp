@@ -797,12 +797,12 @@ public:
     }
 
     std::string escape_html(std::string src) {
-        src = replace_all(src, "&", "&amp;");
-        src = replace_all(src, "<", "&lt;");
-        src = replace_all(src, ">", "&gt;");
-        src = replace_all(src, "\"", "&quot;");
-        src = replace_all(src, "/", "&#x2F;");
-        src = replace_all(src, "'", "&#39;");
+        src = replace_all(std::move(src), "&", "&amp;");
+        src = replace_all(std::move(src), "<", "&lt;");
+        src = replace_all(std::move(src), ">", "&gt;");
+        src = replace_all(std::move(src), "\"", "&quot;");
+        src = replace_all(std::move(src), "/", "&#x2F;");
+        src = replace_all(std::move(src), "'", "&#39;");
         return src;
     }
 
@@ -862,29 +862,29 @@ public:
                 scope.pop(current_kernel);
             }
 
-            line = replace_all(line, ".f32", ".<span class='OpF32'>f32</span>");
-            line = replace_all(line, ".f64", ".<span class='OpF64'>f64</span>");
+            line = replace_all(std::move(line), ".f32", ".<span class='OpF32'>f32</span>");
+            line = replace_all(std::move(line), ".f64", ".<span class='OpF64'>f64</span>");
 
-            line = replace_all(line, ".s8", ".<span class='OpI8'>s8</span>");
-            line = replace_all(line, ".s16", ".<span class='OpI16'>s16</span>");
-            line = replace_all(line, ".s32", ".<span class='OpI32'>s32</span>");
-            line = replace_all(line, ".s64", ".<span class='OpI64'>s64</span>");
+            line = replace_all(std::move(line), ".s8", ".<span class='OpI8'>s8</span>");
+            line = replace_all(std::move(line), ".s16", ".<span class='OpI16'>s16</span>");
+            line = replace_all(std::move(line), ".s32", ".<span class='OpI32'>s32</span>");
+            line = replace_all(std::move(line), ".s64", ".<span class='OpI64'>s64</span>");
 
-            line = replace_all(line, ".u8", ".<span class='OpI8'>u8</span>");
-            line = replace_all(line, ".u16", ".<span class='OpI16'>u16</span>");
-            line = replace_all(line, ".u32", ".<span class='OpI32'>u32</span>");
-            line = replace_all(line, ".u64", ".<span class='OpI64'>u64</span>");
+            line = replace_all(std::move(line), ".u8", ".<span class='OpI8'>u8</span>");
+            line = replace_all(std::move(line), ".u16", ".<span class='OpI16'>u16</span>");
+            line = replace_all(std::move(line), ".u32", ".<span class='OpI32'>u32</span>");
+            line = replace_all(std::move(line), ".u64", ".<span class='OpI64'>u64</span>");
 
-            line = replace_all(line, ".b8", ".<span class='OpB8'>b8</span>");
-            line = replace_all(line, ".b16", ".<span class='OpB16'>b16</span>");
-            line = replace_all(line, ".b32", ".<span class='OpB32'>b32</span>");
-            line = replace_all(line, ".b64", ".<span class='OpB64'>b64</span>");
+            line = replace_all(std::move(line), ".b8", ".<span class='OpB8'>b8</span>");
+            line = replace_all(std::move(line), ".b16", ".<span class='OpB16'>b16</span>");
+            line = replace_all(std::move(line), ".b32", ".<span class='OpB32'>b32</span>");
+            line = replace_all(std::move(line), ".b64", ".<span class='OpB64'>b64</span>");
 
-            line = replace_all(line, ".v2", ".<span class='OpVec2'>v2</span>");
-            line = replace_all(line, ".v4", ".<span class='OpVec4'>v4</span>");
+            line = replace_all(std::move(line), ".v2", ".<span class='OpVec2'>v2</span>");
+            line = replace_all(std::move(line), ".v4", ".<span class='OpVec4'>v4</span>");
 
-            line = replace_all(line, "ld.", "<span class='Memory'>ld</span>.");
-            line = replace_all(line, "st.", "<span class='Memory'>st</span>.");
+            line = replace_all(std::move(line), "ld.", "<span class='Memory'>ld</span>.");
+            line = replace_all(std::move(line), "st.", "<span class='Memory'>st</span>.");
 
             size_t idx;
             if ((idx = line.find("&#x2F;&#x2F")) != std::string::npos) {
@@ -2472,9 +2472,18 @@ private:
         stream << "<div id='host-assembly-pane' class='pane'>\n";
         stream << "<div id='assemblyContent' class='shj-lang-asm'>\n";
         stream << "<pre>\n";
-        std::istringstream ss{asm_buffer};
-        for (std::string line; std::getline(ss, line);) {
-            stream << html_code_printer.escape_html(line) << "\n";
+        // The loop below is preferred to avoid copying the data
+        // again into a new std::istringstream.
+        std::string_view asm_str = asm_buffer;
+        size_t start = 0;
+        while (start < asm_str.size()) {
+            size_t end = asm_str.find('\n', start);
+            if (end == std::string_view::npos) {
+                end = asm_str.size();
+            }
+            std::string line{asm_str.substr(start, end - start)};
+            stream << html_code_printer.escape_html(std::move(line)) << "\n";
+            start = end + 1;
         }
         stream << "\n";
         stream << "</pre>\n";
@@ -2534,20 +2543,26 @@ private:
         std::ifstream assembly;
         assembly.open(asm_file.c_str());
 
+        // Try to get size of the file for fewer allocations
+        asm_buffer.clear();
+        size_t file_size = assembly.seekg(0, std::ios::end).tellg();
+        asm_buffer.reserve(file_size + 16);
+        assembly.seekg(0);
+
         // Slurp the code into asm_stream...
-        // Very inefficiently...
-        std::ostringstream stream;
         std::string line;
         while (getline(assembly, line)) {
             if (line.length() > 500) {
                 // Very long lines in the assembly are typically the _gpu_kernel_sources
-                // or other buffers (such as model weights) as a raw ASCII block in the
+                // or other buffers (such as static LUTs) as a raw ASCII block in the
                 // assembly. Let's chop that off to make browsers faster when dealing with this.
-                line = line.substr(0, 100) + "\" # omitted the remainder of the buffer";
+                asm_buffer.append(line.begin(), line.begin() + 200);
+                asm_buffer.append("\" # omitted the remainder of the buffer\n");
+            } else {
+                asm_buffer.append(line);
+                asm_buffer.push_back('\n');
             }
-            stream << line << "\n";
         }
-        asm_buffer = stream.str();
     }
 };
 
