@@ -1357,7 +1357,7 @@ extern int halide_error_vscale_invalid(void *user_context, const char *func_name
 typedef enum halide_target_feature_t {
     halide_target_feature_jit = 0,            ///< Generate code that will run immediately inside the calling process.
     halide_target_feature_debug,              ///< Turn on debug info and output for runtime code.
-    halide_target_feature_enable_backtraces,  ///< Keep the frame pointer in tact in functions produced by LLVM.
+    halide_target_feature_enable_backtraces,  ///< Preserve frame pointers and include unwind tables to support accurate backtraces for debugging and profiling.
     halide_target_feature_no_asserts,         ///< Disable all runtime checks, for slightly tighter code.
     halide_target_feature_no_bounds_query,    ///< Disable the bounds querying functionality.
 
