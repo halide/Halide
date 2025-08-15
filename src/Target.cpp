@@ -646,6 +646,7 @@ bool lookup_processor(const std::string &tok, Target::Processor &result) {
 const std::map<std::string, Target::Feature> feature_name_map = {
     {"jit", Target::JIT},
     {"debug", Target::Debug},
+    {"enable_backtraces", Target::EnableBacktraces},
     {"no_asserts", Target::NoAsserts},
     {"no_bounds_query", Target::NoBoundsQuery},
     {"sse41", Target::SSE41},
@@ -1547,7 +1548,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
-    const std::array<Feature, 33> union_features = {{
+    const std::vector<Feature> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
@@ -1592,7 +1593,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 16> intersection_features = {{
+    const std::vector<Feature> intersection_features = {{
         ARMv7s,
         AVX,
         AVX2,
@@ -1613,9 +1614,10 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 9> matching_features = {{
+    const std::vector<Feature> matching_features = {{
         ASAN,
         Debug,
+        EnableBacktraces,
         HexagonDma,
         HVX,
         MSAN,
