@@ -184,11 +184,12 @@ private:
         Bounds *const self;
         BoundsLogger(Bounds *self, const char *pretty_function)
             : self(self) {
-            string name = replace_all(pretty_function, "(anonymous namespace)::", "");
-            name = replace_all(name, "virtual void Halide::Internal::", "");
-            name = replace_all(name, "(const Halide::Internal::", "(");
-            name = replace_all(name, "::visit", "");
-            name = replace_all(name, " *)", ")");
+            string name = pretty_function;
+            name = replace_all(std::move(name), "(anonymous namespace)::", "");
+            name = replace_all(std::move(name), "virtual void Halide::Internal::", "");
+            name = replace_all(std::move(name), "(const Halide::Internal::", "(");
+            name = replace_all(std::move(name), "::visit", "");
+            name = replace_all(std::move(name), " *)", ")");
             log_line(name, " {");
             self->log_indent++;
         }
@@ -2220,16 +2221,17 @@ private:
 
         BoxesTouchedLogger(BoxesTouched *self, const char *pretty_function)
             : self(self), parent_logger(self->current_logger), boxes(self->boxes) {
-            string name = replace_all(pretty_function, "(anonymous namespace)::", "");
-            name = replace_all(name, "virtual void Halide::Internal::", "");
-            name = replace_all(name, "(const Halide::Internal::", "(");
-            name = replace_all(name, "::visit", "");
-            name = replace_all(name, " *)", ")");
+            string name = pretty_function;
+            name = replace_all(std::move(name), "(anonymous namespace)::", "");
+            name = replace_all(std::move(name), "virtual void Halide::Internal::", "");
+            name = replace_all(std::move(name), "(const Halide::Internal::", "(");
+            name = replace_all(std::move(name), "::visit", "");
+            name = replace_all(std::move(name), " *)", ")");
 
             if (self->consider_calls && !self->consider_provides) {
-                name = replace_all(name, "BoxesTouched", "BoxesRequired");
+                name = replace_all(std::move(name), "BoxesTouched", "BoxesRequired");
             } else if (!self->consider_calls && self->consider_provides) {
-                name = replace_all(name, "BoxesTouched", "BoxesProvided");
+                name = replace_all(std::move(name), "BoxesTouched", "BoxesProvided");
             }
 
             log_line(name, " {");

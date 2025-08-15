@@ -1133,7 +1133,7 @@ std::string Target::to_string() const {
     // Use has_feature() multiple times (rather than features_any_of())
     // to avoid constructing a temporary vector for this rather-common call.
     if (has_feature(Target::TraceLoads) && has_feature(Target::TraceStores) && has_feature(Target::TraceRealizations)) {
-        result = Internal::replace_all(result, "trace_loads-trace_realizations-trace_stores", "trace_all");
+        result = Internal::replace_all(std::move(result), "trace_loads-trace_realizations-trace_stores", "trace_all");
     }
     if (vector_bits != 0) {
         result += "-vector_bits_" + std::to_string(vector_bits);
