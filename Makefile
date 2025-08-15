@@ -372,7 +372,7 @@ TEST_CXX_FLAGS += -I/usr/local/cuda/include
 endif
 
 # Compiling the tutorials requires libpng
-LIBPNG_LIBS_DEFAULT = $(shell pkg-config libpng --ldflags)
+LIBPNG_LIBS_DEFAULT = $(shell pkg-config libpng --libs)
 LIBPNG_CXX_FLAGS ?= $(shell pkg-config libpng --cflags)
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
 ifneq (,$(findstring -m32,$(CXX)))
