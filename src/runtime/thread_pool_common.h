@@ -351,6 +351,9 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
         if (!job) {
             // There is no runnable job. Go to sleep.
+            // The "stall" and "idle" function calls are not strictly necessary
+            // and could be inlined here, but having symbols for these situations
+            // is very informative when profiling.
             if (owned_job) {
                 worker_thread_stall(owned_job);
             } else {
