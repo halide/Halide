@@ -21,6 +21,7 @@
 #include "PyParameter.h"
 #include "PyPipeline.h"
 #include "PyRDom.h"
+#include "PySerialization.h"
 #include "PyTarget.h"
 #include "PyTuple.h"
 #include "PyType.h"
@@ -70,6 +71,7 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_type(m);
     define_derivative(m);
     define_generator(m);
+    define_serialization(m);
 
     // There is no PyUtil yet, so just put this here
     m.def("load_plugin", &Halide::load_plugin, py::arg("lib_name"));
