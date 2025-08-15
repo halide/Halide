@@ -80,6 +80,9 @@ struct Target {
     /** Optional features a target can have.
      * Corresponds to feature_name_map in Target.cpp.
      * See definitions in HalideRuntime.h for full information.
+     * 
+     * NOTE: When adding new features, also update the Python bindings in
+     * python_bindings/src/halide/halide_/PyEnums.cpp
      */
     enum Feature {
         JIT = halide_target_feature_jit,
