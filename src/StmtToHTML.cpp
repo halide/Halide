@@ -2551,12 +2551,13 @@ private:
 
         // Slurp the code into asm_stream...
         std::string line;
+        line.reserve(128);
         while (getline(assembly, line)) {
             if (line.length() > 500) {
                 // Very long lines in the assembly are typically the _gpu_kernel_sources
                 // or other buffers (such as static LUTs) as a raw ASCII block in the
                 // assembly. Let's chop that off to make browsers faster when dealing with this.
-                asm_buffer.append(line.begin(), line.begin() + 200);
+                asm_buffer.append(line.data(), 200);
                 asm_buffer.append("\" # omitted the remainder of the buffer\n");
             } else {
                 asm_buffer.append(line);
