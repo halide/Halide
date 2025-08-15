@@ -24,6 +24,11 @@ enum PrinterType { BasicPrinterType = 0,
 
 constexpr uint64_t default_printer_buffer_length = 1024;
 
+typedef struct PrinterStringView {
+    char const *data;
+    size_t length;
+} PrinterStringView;
+
 // A class for constructing debug messages from the runtime. Dumps
 // items into a stack array, then prints them when the object leaves
 // scope using halide_print. Think of it as a stringstream that prints
@@ -113,6 +118,11 @@ public:
     // in the runtime (it's a modest but nonzero difference).
     NEVER_INLINE PrinterBase &operator<<(const char *arg) {
         dst = halide_string_to_string(dst, end, arg);
+        return *this;
+    }
+
+    NEVER_INLINE PrinterBase &operator<<(PrinterStringView sv) {
+        dst = halide_string_view_to_string(dst, end, sv.data, sv.length);
         return *this;
     }
 
