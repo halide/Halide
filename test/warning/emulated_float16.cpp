@@ -1,10 +1,14 @@
 #include "Halide.h"
-#include "halide_test_dirs.h"
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
+using ::testing::HasSubstr;
 
-int main(int argc, char **argv) {
+TEST(WarningTests, EmulatedFloat16) {
+    testing::internal::CaptureStderr();
+
     Func f;
     Var x;
 
@@ -16,7 +20,9 @@ int main(int argc, char **argv) {
         t = t.without_feature(feature);
     }
 
-    f.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "unused.ll", f.infer_arguments(), "f", t);
+    f.compile_jit(t);
 
-    return 0;
+    const std::string captured_stderr = testing::internal::GetCapturedStderr();
+    EXPECT_THAT(captured_stderr, HasSubstr("Warning:"));
+    EXPECT_THAT(captured_stderr, HasSubstr("(b)float16 type operation is emulated"));
 }

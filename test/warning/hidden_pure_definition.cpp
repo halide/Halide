@@ -1,9 +1,13 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
+using ::testing::HasSubstr;
 
-int main(int argc, char **argv) {
+TEST(WarningTests, HiddenPureDefinition) {
+    testing::internal::CaptureStderr();
+
     Func f;
     Var x;
 
@@ -12,5 +16,7 @@ int main(int argc, char **argv) {
     // Hide the previous definition.
     f(x) = 2;
 
-    return 0;
+    const std::string captured_stderr = testing::internal::GetCapturedStderr();
+    EXPECT_THAT(captured_stderr, HasSubstr("Warning:"));
+    EXPECT_THAT(captured_stderr, HasSubstr("Update definition completely hides earlier definitions"));
 }
