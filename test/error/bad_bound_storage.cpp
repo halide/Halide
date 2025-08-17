@@ -18,5 +18,5 @@ void TestBadBoundStorage() {
 }  // namespace
 
 TEST(ErrorTests, BadBoundStorage) {
-    EXPECT_RUNTIME_ERROR(TestBadBoundStorage, HasSubstr("TODO"));
+    EXPECT_RUNTIME_ERROR(TestBadBoundStorage, MatchesPattern(R"(The explicit allocation bound \(9\) of dimension x of f(\$\d+)? is too small to store the required region \(10\)\.)"));
 }

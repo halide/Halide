@@ -26,5 +26,5 @@ void TestBadAsyncProducer2() {
 }  // namespace
 
 TEST(ErrorTests, BadAsyncProducer2) {
-    EXPECT_COMPILE_ERROR(TestBadAsyncProducer2, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestBadAsyncProducer2, MatchesPattern(R"(The Func f\d+ is consumed by async Func f\d+ and has a compute_at location in between the store_at location and the compute_at location of f\d+\. This is only legal when f\d+ is both async and has a store_at location outside the store_at location of the consumer\.)"));
 }

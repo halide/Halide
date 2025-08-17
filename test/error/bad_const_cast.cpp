@@ -15,5 +15,5 @@ void TestBadConstCast() {
 }  // namespace
 
 TEST(ErrorTests, BadConstCast) {
-    EXPECT_COMPILE_ERROR(TestBadConstCast, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestBadConstCast, MatchesPattern(R"(Integer constant 256 will be implicitly coerced to type uint\d+, which changes its value to \(uint\d+\)0\.)"));
 }

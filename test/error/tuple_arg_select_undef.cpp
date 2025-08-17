@@ -22,5 +22,5 @@ void TestTupleArgSelectUndef() {
 }  // namespace
 
 TEST(ErrorTests, TupleArgSelectUndef) {
-    EXPECT_COMPILE_ERROR(TestTupleArgSelectUndef, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestTupleArgSelectUndef, MatchesPattern(R"(Conditionally-undef args in a Tuple should have the same conditions\n  Condition 0: \(f(\$\d+)?\.s\d+\.r\d+\$x < 2\)\n  Condition 1: \(f(\$\d+)?\.s\d+\.r\d+\$x < 5\))"));
 }

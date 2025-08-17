@@ -15,5 +15,5 @@ void TestPredicateLoadsUsedInInnerSplits() {
 }  // namespace
 
 TEST(ErrorTests, PredicateLoadsUsedInInnerSplits) {
-    EXPECT_COMPILE_ERROR(TestPredicateLoadsUsedInInnerSplits, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestPredicateLoadsUsedInInnerSplits, MatchesPattern(R"(Can't use TailStrategy::PredicateLoads for splitting v\d+\.v\d+ in the definition of f\d+\. PredicateLoads may not be used to split a Var stemming from the inner Var of a prior split\.)"));
 }

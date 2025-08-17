@@ -26,5 +26,5 @@ void TestComputeWithCrossingEdges1() {
 }  // namespace
 
 TEST(ErrorTests, ComputeWithCrossingEdges1) {
-    EXPECT_COMPILE_ERROR(TestComputeWithCrossingEdges1, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestComputeWithCrossingEdges1, MatchesPattern(R"(Invalid compute_with: impossible to establish correct stage order between f(\$\d+)?\.s\d+ with g(\$\d+)?\.s\d+ and f(\$\d+)?\.s\d+ with g(\$\d+)?\.s\d+)"));
 }

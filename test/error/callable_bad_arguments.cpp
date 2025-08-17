@@ -19,5 +19,5 @@ void TestCallableBadArguments() {
 }  // namespace
 
 TEST(ErrorTests, CallableBadArguments) {
-    EXPECT_COMPILE_ERROR(TestCallableBadArguments, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestCallableBadArguments, MatchesPattern(R"(Generated code refers to parameter p\d+, which was not found in the argument list\.\n\nArgument list specified: __user_context p\d+ p\d+ \n\nParameters referenced in generated code: p\d+ p\d+ p\d+ \n)"));
 }

@@ -12,5 +12,5 @@ void TestInspectLoopLevel() {
 }  // namespace
 
 TEST(ErrorTests, InspectLoopLevel) {
-    EXPECT_COMPILE_ERROR(TestInspectLoopLevel, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestInspectLoopLevel, MatchesPattern(R"(Cannot inspect an unlocked LoopLevel: \.__root)"));
 }

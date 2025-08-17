@@ -15,5 +15,5 @@ void TestUndefinedPipelineRealize() {
 }  // namespace
 
 TEST(ErrorTests, UndefinedPipelineRealize) {
-    EXPECT_COMPILE_ERROR(TestUndefinedPipelineRealize, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestUndefinedPipelineRealize, MatchesPattern(R"(Func f(\$\d+)? is defined with 0 dimensions, but realize\(\) is requesting a realization with 3 dimensions\.)"));
 }

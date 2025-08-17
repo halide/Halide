@@ -18,5 +18,5 @@ void TestAutodiffUnbounded() {
 }  // namespace
 
 TEST(ErrorTests, AutodiffUnbounded) {
-    EXPECT_COMPILE_ERROR(TestAutodiffUnbounded, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestAutodiffUnbounded, MatchesPattern(R"(Access to function or buffer f(\$\d+)? at dimension 0 is not bounded\. We can only differentiate bounded accesses\.)"));
 }

@@ -14,5 +14,5 @@ void TestUnknownTarget() {
 }  // namespace
 
 TEST(ErrorTests, UnknownTarget) {
-    EXPECT_COMPILE_ERROR(TestUnknownTarget, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestUnknownTarget, MatchesPattern(R"(natural_vector_size cannot be used on a Target with Unknown values\.)"));
 }

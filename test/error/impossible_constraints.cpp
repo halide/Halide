@@ -17,5 +17,5 @@ void TestImpossibleConstraints() {
 }  // namespace
 
 TEST(ErrorTests, ImpossibleConstraints) {
-    EXPECT_COMPILE_ERROR(TestImpossibleConstraints, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestImpossibleConstraints, MatchesPattern(R"(Inferring input bounds on Pipeline didn't converge after 16 iterations\. There may be unsatisfiable constraints)"));
 }

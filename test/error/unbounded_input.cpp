@@ -19,5 +19,5 @@ void TestUnboundedInput() {
 }  // namespace
 
 TEST(ErrorTests, UnboundedInput) {
-    EXPECT_COMPILE_ERROR(TestUnboundedInput, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestUnboundedInput, MatchesPattern(R"(Buffer p\d+ may be accessed in an unbounded way in dimension 0)"));
 }

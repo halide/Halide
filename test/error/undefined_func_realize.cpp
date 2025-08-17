@@ -15,5 +15,5 @@ void TestUndefinedFuncRealize() {
 }  // namespace
 
 TEST(ErrorTests, UndefinedFuncRealize) {
-    EXPECT_COMPILE_ERROR(TestUndefinedFuncRealize, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestUndefinedFuncRealize, MatchesPattern(R"(Can't realize undefined Func\.)"));
 }

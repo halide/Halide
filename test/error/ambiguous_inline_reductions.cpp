@@ -22,5 +22,9 @@ void TestAmbiguousInlineReductions() {
 }  // namespace
 
 TEST(ErrorTests, AmbiguousInlineReductions) {
-    EXPECT_COMPILE_ERROR(TestAmbiguousInlineReductions, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(
+        TestAmbiguousInlineReductions,
+        MatchesPattern(R"(Inline reduction \"product(\$\d+)?\" refers )"
+                       R"(to reduction variables from multiple reduction )"
+                       R"(domains: r\d+\$x, r\d+\$x)"));
 }

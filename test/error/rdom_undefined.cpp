@@ -16,5 +16,5 @@ void TestRdomUndefined() {
 }  // namespace
 
 TEST(ErrorTests, RdomUndefined) {
-    EXPECT_COMPILE_ERROR(TestRdomUndefined, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestRdomUndefined, MatchesPattern(R"(RDom min cannot be represented as an int\d+: \(undefined\))"));
 }

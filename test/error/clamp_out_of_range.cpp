@@ -14,5 +14,5 @@ void TestClampOutOfRange() {
 }  // namespace
 
 TEST(ErrorTests, ClampOutOfRange) {
-    EXPECT_COMPILE_ERROR(TestClampOutOfRange, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestClampOutOfRange, MatchesPattern(R"(Type mismatch in call to clamp\. First argument \(int\d+\(v\d+\)\) has type int\d+, but third argument \(255\) has type int\d+\. Use an explicit cast\.)"));
 }

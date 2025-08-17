@@ -21,5 +21,5 @@ void TestWrapCustomAfterShared() {
 }  // namespace
 
 TEST(ErrorTests, WrapCustomAfterShared) {
-    EXPECT_COMPILE_ERROR(TestWrapCustomAfterShared, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestWrapCustomAfterShared, MatchesPattern(R"(Redefinition of shared wrapper \[f(\$\d+)? -> f(\$\d+)?_wrapper(\$\d+)?\] in g\d+(\$\d+)? is illegal since g\d+(\$\d+)? shares the same wrapper but is not part of the redefinition)"));
 }

@@ -26,5 +26,5 @@ void TestRfactorFusedVarAndRvar() {
 }  // namespace
 
 TEST(ErrorTests, RfactorFusedVarAndRvar) {
-    EXPECT_COMPILE_ERROR(TestRfactorFusedVarAndRvar, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestRfactorFusedVarAndRvar, MatchesPattern(R"(In schedule for f(\$\d+)?\.update\(0\): can't rfactor an Func that has fused a Var into an RVar: r\$z, y\nVars: r\$x\.rxy\.yr x __outermost)"));
 }

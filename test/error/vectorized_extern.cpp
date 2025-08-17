@@ -16,5 +16,5 @@ void TestVectorizedExtern() {
 }  // namespace
 
 TEST(ErrorTests, VectorizedExtern) {
-    EXPECT_COMPILE_ERROR(TestVectorizedExtern, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestVectorizedExtern, MatchesPattern(R"(Externally defined Func f\d+ cannot have loop type vectorized \(v\d+\.v\d+\))"));
 }

@@ -15,5 +15,5 @@ void TestTupleRealizationToBuffer() {
 }  // namespace
 
 TEST(ErrorTests, TupleRealizationToBuffer) {
-    EXPECT_COMPILE_ERROR(TestTupleRealizationToBuffer, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestTupleRealizationToBuffer, MatchesPattern(R"(Cannot cast Realization with 3 elements to a Buffer)"));
 }

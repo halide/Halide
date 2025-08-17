@@ -20,5 +20,5 @@ void TestBadPrefetch() {
 }  // namespace
 
 TEST(ErrorTests, BadPrefetch) {
-    EXPECT_COMPILE_ERROR(TestBadPrefetch, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestBadPrefetch, MatchesPattern(R"(Prefetch 'from' variable 'x' could not be found in an active loop\. \(Are the 'at' and 'from' variables swapped\?\))"));
 }

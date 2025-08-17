@@ -11,5 +11,5 @@ void TestForwardOnUndefinedBuffer() {
 }  // namespace
 
 TEST(ErrorTests, ForwardOnUndefinedBuffer) {
-    EXPECT_COMPILE_ERROR(TestForwardOnUndefinedBuffer, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestForwardOnUndefinedBuffer, MatchesPattern(R"(Undefined buffer calling const method raw_buffer)"));
 }

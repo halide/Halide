@@ -39,5 +39,5 @@ TEST(ErrorTests, MetalThreadsTooLarge) {
         GTEST_SKIP() << "MetalThreadsTooLarge ignored for non-OSX targets";
     }
 
-    EXPECT_RUNTIME_ERROR(TestMetalThreadsTooLarge, HasSubstr("TODO"));
+    EXPECT_RUNTIME_ERROR(TestMetalThreadsTooLarge, MatchesPattern(R"(Metal: threadsX\(65536\) \* threadsY\(1\) \* threadsZ\(1\) \(65536\) must be <= 1024\. \(device threadgroup size limit\))"));
 }

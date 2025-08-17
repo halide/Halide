@@ -29,5 +29,5 @@ void TestMemoizeDifferentComputeStore() {
 }  // namespace
 
 TEST(ErrorTests, MemoizeDifferentComputeStore) {
-    EXPECT_COMPILE_ERROR(TestMemoizeDifferentComputeStore, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestMemoizeDifferentComputeStore, MatchesPattern(R"(Function f\d+ cannot be memoized because it has compute and storage scheduled at different loop levels\.)"));
 }

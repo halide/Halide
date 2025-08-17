@@ -16,5 +16,5 @@ void TestBadReorderStorage() {
 }  // namespace
 
 TEST(ErrorTests, BadReorderStorage) {
-    EXPECT_COMPILE_ERROR(TestBadReorderStorage, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestBadReorderStorage, MatchesPattern(R"(In schedule for f\d+, call to reorder_storage references v\d+ twice)"));
 }

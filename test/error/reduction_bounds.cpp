@@ -23,5 +23,5 @@ void TestReductionBounds() {
 }  // namespace
 
 TEST(ErrorTests, ReductionBounds) {
-    EXPECT_COMPILE_ERROR(TestReductionBounds, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestReductionBounds, MatchesPattern(R"(In definition of Func \"g(\$\d+)?\":\nAll of a function's recursive references to itself must contain the same pure variables in the same places as on the left-hand-side\.)"));
 }

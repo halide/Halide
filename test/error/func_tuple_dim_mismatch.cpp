@@ -16,5 +16,5 @@ void TestFuncTupleDimMismatch() {
 }  // namespace
 
 TEST(ErrorTests, FuncTupleDimMismatch) {
-    EXPECT_COMPILE_ERROR(TestFuncTupleDimMismatch, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestFuncTupleDimMismatch, MatchesPattern(R"(Func \"f(\$\d+)?\" is constrained to have exactly 1 dimensions, but is defined with 2 dimensions\.)"));
 }

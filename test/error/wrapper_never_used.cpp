@@ -22,5 +22,5 @@ void TestWrapperNeverUsed() {
 }  // namespace
 
 TEST(ErrorTests, WrapperNeverUsed) {
-    EXPECT_COMPILE_ERROR(TestWrapperNeverUsed, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestWrapperNeverUsed, MatchesPattern(R"(Cannot wrap \"f(\$\d+)?\" in \"g(\$\d+)?\" because \"g(\$\d+)?\" does not call \"f(\$\d+)?\"\nDirect callees of \"g(\$\d+)?\" are:)"));
 }

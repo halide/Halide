@@ -22,5 +22,5 @@ void TestMemoizeRedefineEvictionKey() {
 }  // namespace
 
 TEST(ErrorTests, MemoizeRedefineEvictionKey) {
-    EXPECT_COMPILE_ERROR(TestMemoizeRedefineEvictionKey, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestMemoizeRedefineEvictionKey, MatchesPattern(R"(Can't redefine memoize eviction key\. First definition is: \(uint\d+\)memoize_expr\(reinterpret<uint\d+>\(\(int\d+\)42\), 0\) new definition is: \(uint\d+\)memoize_expr\(reinterpret<uint\d+>\(\(int\d+\)1764\), 0\))"));
 }

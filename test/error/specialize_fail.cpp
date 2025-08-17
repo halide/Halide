@@ -19,5 +19,5 @@ void TestSpecializeFail() {
 }  // namespace
 
 TEST(ErrorTests, SpecializeFail) {
-    EXPECT_RUNTIME_ERROR(TestSpecializeFail, HasSubstr("TODO"));
+    EXPECT_RUNTIME_ERROR(TestSpecializeFail, MatchesPattern(R"(A schedule specialized with specialize_fail\(\) was chosen: Expected failure)"));
 }

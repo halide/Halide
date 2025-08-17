@@ -29,5 +29,5 @@ void TestUndefinedRdomDimension() {
 }  // namespace
 
 TEST(ErrorTests, UndefinedRdomDimension) {
-    EXPECT_COMPILE_ERROR(TestUndefinedRdomDimension, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestUndefinedRdomDimension, MatchesPattern(R"(Use of undefined RDom dimension: r\$y)"));
 }

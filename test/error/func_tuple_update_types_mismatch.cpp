@@ -17,5 +17,5 @@ void TestFuncTupleUpdateTypesMismatch() {
 }  // namespace
 
 TEST(ErrorTests, FuncTupleUpdateTypesMismatch) {
-    EXPECT_COMPILE_ERROR(TestFuncTupleUpdateTypesMismatch, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestFuncTupleUpdateTypesMismatch, MatchesPattern(R"(In update definition 0 of Func \"f(\$\d+)?\":\nTuple element 0 of update definition has type int\d+, but pure definition has type uint\d+)"));
 }

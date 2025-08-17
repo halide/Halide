@@ -16,5 +16,5 @@ void TestFuncTupleTypesMismatch() {
 }  // namespace
 
 TEST(ErrorTests, FuncTupleTypesMismatch) {
-    EXPECT_COMPILE_ERROR(TestFuncTupleTypesMismatch, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestFuncTupleTypesMismatch, MatchesPattern(R"(Func \"f(\$\d+)?\" is constrained to only hold values of type \(uint\d+, float\d+\) but is defined with values of type \(int\d+, float\d+\)\.)"));
 }

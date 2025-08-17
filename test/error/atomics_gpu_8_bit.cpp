@@ -39,5 +39,9 @@ TEST(ErrorTests, AtomicsGPU8Bit) {
     if (t.has_feature(Target::WebGPU)) {
         GTEST_SKIP() << "WebGPU will (incorrectly) fail here because 8-bit types are currently emulated using atomics.";
     }
-    EXPECT_COMPILE_ERROR(TestAtomicsGPU8Bit, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(
+        TestAtomicsGPU8Bit,
+        AnyOf(
+            HasSubstr("Atomic updates are not supported inside Metal kernels"),
+            HasSubstr("OpenCL only support 32 and 64 bit atomics.")));
 }

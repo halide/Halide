@@ -15,5 +15,5 @@ void TestFuncExprTypeMismatch() {
 }  // namespace
 
 TEST(ErrorTests, FuncExprTypeMismatch) {
-    EXPECT_COMPILE_ERROR(TestFuncExprTypeMismatch, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestFuncExprTypeMismatch, MatchesPattern(R"(Func \"f(\$\d+)?\" is constrained to only hold values of type float\d+ but is defined with values of type int\d+\.)"));
 }

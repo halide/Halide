@@ -11,5 +11,5 @@ void TestBadDeviceApi() {
 }  // namespace
 
 TEST(ErrorTests, BadDeviceApi) {
-    EXPECT_COMPILE_ERROR(TestBadDeviceApi, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestBadDeviceApi, MatchesPattern(R"(get_device_interface_for_device_api called from Bad DeviceAPI requested unknown DeviceAPI \(-1\)\.)"));
 }

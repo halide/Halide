@@ -22,5 +22,5 @@ void TestBadRingBuffer() {
 }  // namespace
 
 TEST(ErrorTests, BadRingBuffer) {
-    EXPECT_COMPILE_ERROR(TestBadRingBuffer, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestBadRingBuffer, MatchesPattern(R"(Func \"f(\$\d+)?\" is scheduled with ring_buffer\(\), but has matching store_at and hoist_storage levels\. Add an explicit hoist_storage directive to the schedule to fix the issue\.)"));
 }

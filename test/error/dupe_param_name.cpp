@@ -34,5 +34,5 @@ void TestDupeParamName() {
 }  // namespace
 
 TEST(ErrorTests, DupeParamName) {
-    EXPECT_COMPILE_ERROR(TestDupeParamName, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestDupeParamName, MatchesPattern(R"(All Params and embedded Buffers must have unique names, but the name 'input' was seen multiple times\.)"));
 }

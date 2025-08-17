@@ -11,5 +11,5 @@ void TestDeviceTargetMismatch() {
 }  // namespace
 
 TEST(ErrorTests, DeviceTargetMismatch) {
-    EXPECT_COMPILE_ERROR(TestDeviceTargetMismatch, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestDeviceTargetMismatch, MatchesPattern(R"(get_device_interface_for_device_api called from Device Target Mistmatch Test DeviceAPI \(cuda\) is not supported by target \(arm-64-osx-arm_dot_prod-arm_fp\d+\)\.)"));
 }

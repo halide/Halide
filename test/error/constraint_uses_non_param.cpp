@@ -19,5 +19,5 @@ void TestConstraintUsesNonParam() {
 }  // namespace
 
 TEST(ErrorTests, ConstraintUsesNonParam) {
-    EXPECT_COMPILE_ERROR(TestConstraintUsesNonParam, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestConstraintUsesNonParam, MatchesPattern(R"(Requirement \(\(v\d+ == 4\) && \(f\d+\(3, 2\) == 5\)\) refers to Var or RVar v\d+)"));
 }

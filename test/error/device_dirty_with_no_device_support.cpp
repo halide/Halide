@@ -19,5 +19,5 @@ void TestDeviceDirtyWithNoDeviceSupport() {
 }  // namespace
 
 TEST(ErrorTests, DeviceDirtyWithNoDeviceSupport) {
-    EXPECT_RUNTIME_ERROR(TestDeviceDirtyWithNoDeviceSupport, HasSubstr("TODO"));
+    EXPECT_RUNTIME_ERROR(TestDeviceDirtyWithNoDeviceSupport, MatchesPattern(R"(The buffer Input buffer b\d+ is dirty on device, but this pipeline was compiled with no support for device to host copies\.)"));
 }

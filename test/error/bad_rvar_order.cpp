@@ -21,5 +21,5 @@ void TestBadRvarOrder() {
 }  // namespace
 
 TEST(ErrorTests, BadRvarOrder) {
-    EXPECT_COMPILE_ERROR(TestBadRvarOrder, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestBadRvarOrder, MatchesPattern(R"(In schedule for f(\$\d+)?\.update\(0\), can't reorder RVars r\d+\$y and r\d+\$x because it may change the meaning of the algorithm\.)"));
 }

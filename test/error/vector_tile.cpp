@@ -19,5 +19,5 @@ void TestVectorTile() {
 }  // namespace
 
 TEST(ErrorTests, VectorTile) {
-    EXPECT_COMPILE_ERROR(TestVectorTile, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestVectorTile, MatchesPattern(R"(Vectors passed to Stage::tile must all be the same length\.)"));
 }

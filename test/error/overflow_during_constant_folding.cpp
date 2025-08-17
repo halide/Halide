@@ -14,5 +14,5 @@ void TestOverflowDuringConstantFolding() {
 }  // namespace
 
 TEST(ErrorTests, OverflowDuringConstantFolding) {
-    EXPECT_COMPILE_ERROR(TestOverflowDuringConstantFolding, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestOverflowDuringConstantFolding, MatchesPattern(R"(Signed integer overflow occurred during constant-folding\. Signed integer overflow for int\d+ and int\d+ is undefined behavior in Halide\.)"));
 }

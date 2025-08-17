@@ -21,5 +21,5 @@ void TestUninitializedParam() {
 }  // namespace
 
 TEST(ErrorTests, UninitializedParam) {
-    EXPECT_COMPILE_ERROR(TestUninitializedParam, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestUninitializedParam, MatchesPattern(R"(Parameter scalar_param does not have a valid scalar value\.)"));
 }

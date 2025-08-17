@@ -19,5 +19,5 @@ void TestStoreAtWithoutComputeAt() {
 }  // namespace
 
 TEST(ErrorTests, StoreAtWithoutComputeAt) {
-    EXPECT_COMPILE_ERROR(TestStoreAtWithoutComputeAt, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestStoreAtWithoutComputeAt, MatchesPattern(R"(Func \"g(\$\d+)?\" is scheduled store_at\(\), but is inlined\. Funcs that use store_at must also call compute_at\.)"));
 }

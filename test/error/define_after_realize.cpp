@@ -18,5 +18,5 @@ void TestDefineAfterRealize() {
 }  // namespace
 
 TEST(ErrorTests, DefineAfterRealize) {
-    EXPECT_COMPILE_ERROR(TestDefineAfterRealize, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestDefineAfterRealize, MatchesPattern(R"(Func f\d+ cannot be given a new update definition, because it has already been realized or used in the definition of another Func\.)"));
 }

@@ -14,5 +14,5 @@ void TestUndefinedFuncCompile() {
 }  // namespace
 
 TEST(ErrorTests, UndefinedFuncCompile) {
-    EXPECT_COMPILE_ERROR(TestUndefinedFuncCompile, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestUndefinedFuncCompile, MatchesPattern(R"(Can't compile Pipeline with undefined output Func: f(\$\d+)?\.)"));
 }

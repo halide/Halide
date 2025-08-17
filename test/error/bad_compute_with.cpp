@@ -17,5 +17,5 @@ void TestBadComputeWith() {
 }  // namespace
 
 TEST(ErrorTests, BadComputeWith) {
-    EXPECT_COMPILE_ERROR(TestBadComputeWith, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestBadComputeWith, MatchesPattern(R"(Cannot schedule f(\$\d+)?\.update\(0\) to be computed with f(\$\d+)?\.s\d+\.x)"));
 }

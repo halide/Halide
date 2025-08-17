@@ -16,5 +16,5 @@ void TestWrongDimensionalityExternStage() {
 }  // namespace
 
 TEST(ErrorTests, WrongDimensionalityExternStage) {
-    EXPECT_COMPILE_ERROR(TestWrongDimensionalityExternStage, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestWrongDimensionalityExternStage, MatchesPattern(R"(Func \"f\d+\" was called with 2 arguments, but was defined with 3)"));
 }

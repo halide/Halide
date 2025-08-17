@@ -21,5 +21,5 @@ void TestMetalVectorTooLarge() {
 }  // namespace
 
 TEST(ErrorTests, MetalVectorTooLarge) {
-    EXPECT_COMPILE_ERROR(TestMetalVectorTooLarge, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestMetalVectorTooLarge, MatchesPattern(R"(Vectorization by widths greater than 4 is not supported by Metal -- type is uint\d+x\d+\.)"));
 }

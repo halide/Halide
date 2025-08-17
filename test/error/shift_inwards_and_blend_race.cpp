@@ -17,5 +17,5 @@ void TestShiftInwardsAndBlendRace() {
 }  // namespace
 
 TEST(ErrorTests, ShiftInwardsAndBlendRace) {
-    EXPECT_COMPILE_ERROR(TestShiftInwardsAndBlendRace, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestShiftInwardsAndBlendRace, MatchesPattern(R"(Tail strategy ShiftInwardsAndBlend may not be used to split v\d+ because other vars stemming from the same original Var or RVar are marked as parallel\.This could cause a race condition\.)"));
 }

@@ -17,5 +17,5 @@ void TestWrongType() {
 }  // namespace
 
 TEST(ErrorTests, WrongType) {
-    EXPECT_COMPILE_ERROR(TestWrongType, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestWrongType, MatchesPattern(R"(Type mismatch constructing Buffer\. Can't construct Buffer<float, -1> from Buffer<int\d+_t, -1>, dimensions\(\) = 1)"));
 }

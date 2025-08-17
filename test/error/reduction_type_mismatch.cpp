@@ -18,5 +18,5 @@ void TestReductionTypeMismatch() {
 }  // namespace
 
 TEST(ErrorTests, ReductionTypeMismatch) {
-    EXPECT_COMPILE_ERROR(TestReductionTypeMismatch, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestReductionTypeMismatch, MatchesPattern(R"(In update definition 0 of Func \"f\d+\":\nTuple element 0 of update definition has type float\d+, but pure definition has type uint\d+)"));
 }

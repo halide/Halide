@@ -25,5 +25,5 @@ void TestBadComputeWithParentFuncNotUsed() {
 }  // namespace
 
 TEST(ErrorTests, BadComputeWithParentFuncNotUsed) {
-    EXPECT_COMPILE_ERROR(TestBadComputeWithParentFuncNotUsed, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestBadComputeWithParentFuncNotUsed, MatchesPattern(R"(Fused groups must either be entirely used or unused)"));
 }

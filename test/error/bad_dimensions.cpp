@@ -20,5 +20,5 @@ void TestBadDimensions() {
 }  // namespace
 
 TEST(ErrorTests, BadDimensions) {
-    EXPECT_RUNTIME_ERROR(TestBadDimensions, HasSubstr("TODO"));
+    EXPECT_RUNTIME_ERROR(TestBadDimensions, MatchesPattern(R"(Input buffer p\d+ requires a buffer of exactly 2 dimensions, but the buffer passed in has 3 dimensions)"));
 }

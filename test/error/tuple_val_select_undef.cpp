@@ -16,5 +16,5 @@ void TestTupleValSelectUndef() {
 }  // namespace
 
 TEST(ErrorTests, TupleValSelectUndef) {
-    EXPECT_COMPILE_ERROR(TestTupleValSelectUndef, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestTupleValSelectUndef, MatchesPattern(R"(Conditionally-undef values in a Tuple should have the same conditions\n  Condition 0: \(undefined\)\n  Condition 1: \(f(\$\d+)?\.s\d+\.x < 20\))"));
 }

@@ -16,5 +16,5 @@ void TestPointerArithmetic() {
 }  // namespace
 
 TEST(ErrorTests, PointerArithmetic) {
-    EXPECT_COMPILE_ERROR(TestPointerArithmetic, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestPointerArithmetic, MatchesPattern(R"(Integer constant 2 will be implicitly coerced to type \(char const \*\), but Halide does not support pointer arithmetic\.)"));
 }

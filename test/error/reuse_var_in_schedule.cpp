@@ -16,5 +16,5 @@ void TestReuseVarInSchedule() {
 }  // namespace
 
 TEST(ErrorTests, ReuseVarInSchedule) {
-    EXPECT_COMPILE_ERROR(TestReuseVarInSchedule, HasSubstr("TODO"));
+    EXPECT_COMPILE_ERROR(TestReuseVarInSchedule, MatchesPattern(R"(In schedule for f\d+, can't create var v\d+ using a split or tile, because v\d+ is already used in this Func's schedule elsewhere\.\nVars: v\d+\.v\d+ v\d+\.v\d+ __outermost)"));
 }

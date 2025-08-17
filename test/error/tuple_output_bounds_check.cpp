@@ -28,5 +28,5 @@ void TestTupleOutputBoundsCheck() {
 }  // namespace
 
 TEST(ErrorTests, TupleOutputBoundsCheck) {
-    EXPECT_RUNTIME_ERROR(TestTupleOutputBoundsCheck, HasSubstr("TODO"));
+    EXPECT_RUNTIME_ERROR(TestTupleOutputBoundsCheck, MatchesPattern(R"(Output buffer f\d+\.0 is accessed at -100, which is before the min \(0\) in dimension 0)"));
 }
