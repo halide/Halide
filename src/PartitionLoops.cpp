@@ -559,7 +559,7 @@ class PartitionLoops : public IRMutator {
             ErrorIfNotMutated(const For *op, bool must_mutate)
                 : op(op), must_mutate(must_mutate) {
             }
-            ~ErrorIfNotMutated() {
+            ~ErrorIfNotMutated() noexcept(false) {
                 if (must_mutate && !mutated) {
                     user_error << "Loop Partition Policy is set to " << op->partition_policy
                                << " for " << op->name << ", but no loop partitioning was performed.";
