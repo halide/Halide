@@ -28,25 +28,12 @@ if (NOT TARGET Halide::Test)
                                ${Halide_SOURCE_DIR}/tools)
 endif ()
 
-if (NOT TARGET Halide::ExpectAbort)
-    # Add an OBJECT (not static) library to convert abort calls into exit(1).
-    add_library(Halide_expect_abort OBJECT ${Halide_SOURCE_DIR}/test/common/expect_abort.cpp)
-    add_library(Halide::ExpectAbort ALIAS Halide_expect_abort)
-    target_link_libraries(Halide_expect_abort PRIVATE Halide::Halide)
-endif ()
-
-if (NOT TARGET Halide::TerminateHandler)
-    # Add an OBJECT (not static) library to add a terminate_handler to catch unhandled exceptions.
-    add_library(Halide_terminate_handler OBJECT ${Halide_SOURCE_DIR}/test/common/terminate_handler.cpp)
-    add_library(Halide::TerminateHandler ALIAS Halide_terminate_handler)
-endif ()
-
 ##
 # Convenience methods for defining tests.
 ##
 
 function(add_halide_test TARGET)
-    set(options EXPECT_FAILURE USE_EXIT_CODE_ONLY)
+    set(options USE_EXIT_CODE_ONLY)
     set(oneValueArgs WORKING_DIRECTORY)
     set(multiValueArgs GROUPS COMMAND ARGS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -62,18 +49,10 @@ function(add_halide_test TARGET)
         set_halide_compiler_warnings(${TARGET})
     endif ()
 
-    # We can't add Halide::TerminateHandler here, because it requires Halide::Error
-    # and friends to be present in the final linkage, but some callers of add_halide_test()
-    # are AOT tests, which don't link in libHalide. (It's relatively rare for these
-    # tests to throw exceptions, though, so this isn't the dealbreaker you might think.)
-    #
-    # target_link_libraries("${TARGET}" PRIVATE Halide::TerminateHandler)
-
     set_tests_properties(${TARGET} PROPERTIES
                          LABELS "${args_GROUPS}"
                          ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
-                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
-                         WILL_FAIL ${args_EXPECT_FAILURE})
+                         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 
     if (NOT args_USE_EXIT_CODE_ONLY)
         set_tests_properties(${TARGET} PROPERTIES
@@ -103,7 +82,7 @@ function(add_halide_test TARGET)
 endfunction()
 
 function(tests)
-    set(options EXPECT_FAILURE USE_EXIT_CODE_ONLY)
+    set(options USE_EXIT_CODE_ONLY)
     set(oneValueArgs)
     set(multiValueArgs SOURCES GROUPS ARGS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -118,16 +97,9 @@ function(tests)
         list(APPEND TEST_NAMES "${TARGET}")
 
         add_executable("${TARGET}" "${file}")
-        target_link_libraries("${TARGET}" PRIVATE Halide::Test Halide::TerminateHandler)
+        target_link_libraries("${TARGET}" PRIVATE Halide::Test)
         if ("${file}" MATCHES ".cpp$")
             target_precompile_headers("${TARGET}" REUSE_FROM _test_internal)
-        endif ()
-
-        if (args_EXPECT_FAILURE)
-            target_link_libraries("${TARGET}" PRIVATE Halide::ExpectAbort)
-            set(args_EXPECT_FAILURE EXPECT_FAILURE)
-        else ()
-            set(args_EXPECT_FAILURE "")
         endif ()
 
         if (args_USE_EXIT_CODE_ONLY)
@@ -136,7 +108,7 @@ function(tests)
             set(args_USE_EXIT_CODE_ONLY "")
         endif ()
 
-        add_halide_test("${TARGET}" ARGS ${args_ARGS} GROUPS ${args_GROUPS} ${args_EXPECT_FAILURE} ${args_USE_EXIT_CODE_ONLY})
+        add_halide_test("${TARGET}" ARGS ${args_ARGS} GROUPS ${args_GROUPS} ${args_USE_EXIT_CODE_ONLY})
     endforeach ()
 
     set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)

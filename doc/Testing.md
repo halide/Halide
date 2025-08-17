@@ -26,6 +26,8 @@ the directory name. Thus, one can use `ctest -L generator` to run only the
 `generator` tests. The `performance` tests configure CTest to not run them
 concurrently with other tests (including each other).
 
+_TODO: Update this section to reflect the transition to GoogleTest_
+
 The vast majority of our tests are simple C++ executables that link to Halide,
 perform some checks, and print the special line `Success!` upon successful
 completion. There are three main exceptions to this:
