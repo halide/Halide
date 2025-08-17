@@ -30,5 +30,9 @@ void TestBadComputeAt() {
 }  // namespace
 
 TEST(ErrorTests, BadComputeAt) {
-    EXPECT_COMPILE_ERROR(TestBadComputeAt, MatchesPattern(R"(Func h(\$\d+)? is defined with 2 dimensions, but realize\(\) is requesting a realization with 1 dimensions\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestBadComputeAt,
+        MatchesPattern(R"(Func h(\$\d+)? is defined with 2 dimensions, )"
+                       R"(but realize\(\) is requesting a realization with )"
+                       R"(1 dimensions\.)"));
 }

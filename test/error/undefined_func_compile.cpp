@@ -14,5 +14,8 @@ void TestUndefinedFuncCompile() {
 }  // namespace
 
 TEST(ErrorTests, UndefinedFuncCompile) {
-    EXPECT_COMPILE_ERROR(TestUndefinedFuncCompile, MatchesPattern(R"(Can't compile Pipeline with undefined output Func: f(\$\d+)?\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestUndefinedFuncCompile,
+        MatchesPattern(R"(Can't compile Pipeline with undefined output )"
+                       R"(Func: f(\$\d+)?\.)"));
 }

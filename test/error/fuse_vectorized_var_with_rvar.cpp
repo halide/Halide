@@ -26,5 +26,19 @@ void TestFuseVectorizedVarWithRvar() {
 }  // namespace
 
 TEST(ErrorTests, FuseVectorizedVarWithRvar) {
-    EXPECT_COMPILE_ERROR(TestFuseVectorizedVarWithRvar, MatchesPattern(R"(In schedule for local_sum(\$\d+)?\.update\(0\), marking var r\d+ as parallel or vectorized may introduce a race condition resulting in incorrect output\. It is possible to parallelize this by using the atomic\(\) method if the operation is associative, or set override_associativity_test to true in the atomic method if you are certain that the operation is associative\. It is also possible to override this error using the allow_race_conditions\(\) method\. Use allow_race_conditions\(\) with great caution, and only when you are willing to accept non-deterministic output, or you can prove that any race conditions in this code do not change the output, or you can prove that there are actually no race conditions, and that Halide is being too cautious\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestFuseVectorizedVarWithRvar,
+        MatchesPattern(R"(In schedule for local_sum(\$\d+)?\.update\(0\), marking )"
+                       R"(var r\d+ as parallel or vectorized may introduce a race )"
+                       R"(condition resulting in incorrect output\. It is possible )"
+                       R"(to parallelize this by using the atomic\(\) method if the )"
+                       R"(operation is associative, or set override_associativity_test )"
+                       R"(to true in the atomic method if you are certain that the )"
+                       R"(operation is associative\. It is also possible to override )"
+                       R"(this error using the allow_race_conditions\(\) method\. )"
+                       R"(Use allow_race_conditions\(\) with great caution, and only )"
+                       R"(when you are willing to accept non-deterministic output, or )"
+                       R"(you can prove that any race conditions in this code do not )"
+                       R"(change the output, or you can prove that there are actually )"
+                       R"(no race conditions, and that Halide is being too cautious\.)"));
 }

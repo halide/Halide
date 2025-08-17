@@ -12,5 +12,8 @@ void TestLerpMismatch() {
 }  // namespace
 
 TEST(ErrorTests, LerpMismatch) {
-    EXPECT_COMPILE_ERROR(TestLerpMismatch, MatchesPattern(R"(Can't lerp between \(uint\d+\)0 of type uint\d+ and \(uint\d+\)42 of different type uint\d+)"));
+    EXPECT_COMPILE_ERROR(
+        TestLerpMismatch,
+        HasSubstr("Can't lerp between (uint16)0 of type uint16 and "
+                  "(uint8)42 of different type uint8"));
 }

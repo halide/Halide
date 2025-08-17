@@ -23,5 +23,9 @@ void TestAtomicsSelfReference() {
 }  // namespace
 
 TEST(ErrorTests, AtomicsSelfReference) {
-    EXPECT_COMPILE_ERROR(TestAtomicsSelfReference, MatchesPattern(R"(Can't use atomic\(\) on an update where the index written to depends on the current value of the Func)"));
+    EXPECT_COMPILE_ERROR(
+        TestAtomicsSelfReference,
+        HasSubstr("Can't use atomic() on an update where the "
+                  "index written to depends on the current value "
+                  "of the Func"));
 }

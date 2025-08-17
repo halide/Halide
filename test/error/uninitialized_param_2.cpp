@@ -43,5 +43,7 @@ void TestUninitializedParam2() {
 }  // namespace
 
 TEST(ErrorTests, UninitializedParam2) {
-    EXPECT_COMPILE_ERROR(TestUninitializedParam2, MatchesPattern(R"(Parameter scalar_input does not have a valid scalar value\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestUninitializedParam2,
+        HasSubstr("Parameter scalar_input does not have a valid scalar value."));
 }

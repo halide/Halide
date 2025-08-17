@@ -19,5 +19,8 @@ void TestTooManyArgs() {
 }  // namespace
 
 TEST(ErrorTests, TooManyArgs) {
-    EXPECT_COMPILE_ERROR(TestTooManyArgs, MatchesPattern(R"(Func \"f\d+\" was called with 2 arguments, but was defined with 1)"));
+    EXPECT_COMPILE_ERROR(
+        TestTooManyArgs,
+        MatchesPattern(R"(Func \"f\d+\" was called with 2 arguments, )"
+                       R"(but was defined with 1)"));
 }

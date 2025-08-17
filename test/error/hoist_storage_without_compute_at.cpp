@@ -19,5 +19,9 @@ void TestHoistStorageWithoutComputeAt() {
 }  // namespace
 
 TEST(ErrorTests, HoistStorageWithoutComputeAt) {
-    EXPECT_COMPILE_ERROR(TestHoistStorageWithoutComputeAt, MatchesPattern(R"(Func \"g(\$\d+)?\" is scheduled hoist_storage\(\), but is inlined\. Funcs that use hoist_storage_root must also call compute_at\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestHoistStorageWithoutComputeAt,
+        MatchesPattern(R"(Func \"g(\$\d+)?\" is scheduled hoist_storage\(\), but )"
+                       R"(is inlined\. Funcs that use hoist_storage_root must also )"
+                       R"(call compute_at\.)"));
 }

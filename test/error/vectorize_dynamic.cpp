@@ -24,5 +24,8 @@ void TestVectorizeDynamic() {
 }  // namespace
 
 TEST(ErrorTests, VectorizeDynamic) {
-    EXPECT_COMPILE_ERROR(TestVectorizeDynamic, MatchesPattern(R"(Can only vectorize for loops over a constant extent\.\nLoop over f\d+\.s\d+\.v\d+\.v\d+ has extent p\d+\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestVectorizeDynamic,
+        MatchesPattern(R"(Can only vectorize for loops over a constant extent\.\n)"
+                       R"(Loop over f\d+\.s\d+\.v\d+\.v\d+ has extent p\d+\.)"));
 }

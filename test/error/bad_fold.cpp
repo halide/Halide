@@ -18,5 +18,9 @@ void TestBadFold() {
 }  // namespace
 
 TEST(ErrorTests, BadFold) {
-    EXPECT_RUNTIME_ERROR(TestBadFold, MatchesPattern(R"(The fold factor \(2\) of dimension v\d+ of f\d+ is too small to store the required region accessed by loop f\d+\.s\d+\.v\d+\.\$n \(3\)\.)"));
+    EXPECT_RUNTIME_ERROR(
+        TestBadFold,
+        MatchesPattern(R"(The fold factor \(2\) of dimension v\d+ of )"
+                       R"(f\d+ is too small to store the required region )"
+                       R"(accessed by loop f\d+\.s\d+\.v\d+\.\$n \(3\)\.)"));
 }

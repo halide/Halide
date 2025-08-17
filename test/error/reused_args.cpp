@@ -14,5 +14,9 @@ void TestReusedArgs() {
 }  // namespace
 
 TEST(ErrorTests, ReusedArgs) {
-    EXPECT_COMPILE_ERROR(TestReusedArgs, MatchesPattern(R"(In pure definition of Func \"f\d+\":\nIn left-hand-side of definition, arguments 1 and 0 both have the name \"v\d+\")"));
+    EXPECT_COMPILE_ERROR(
+        TestReusedArgs,
+        MatchesPattern(R"(In pure definition of Func \"f\d+\":\n)"
+                       R"(In left-hand-side of definition, arguments 1 and 0 )"
+                       R"(both have the name \"v\d+\")"));
 }

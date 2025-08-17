@@ -20,5 +20,10 @@ void TestMissingArgs() {
 }  // namespace
 
 TEST(ErrorTests, MissingArgs) {
-    EXPECT_COMPILE_ERROR(TestMissingArgs, MatchesPattern(R"(Generated code refers to image parameter p\d+, which was not found in the argument list\.\n\nArgument list specified: \n\nParameters referenced in generated code: p\d+ p\d+ \n)"));
+    EXPECT_COMPILE_ERROR(
+        TestMissingArgs,
+        MatchesPattern(R"(Generated code refers to image parameter p\d+, which )"
+                       R"(was not found in the argument list\.\n\n)"
+                       R"(Argument list specified: \n\n)"
+                       R"(Parameters referenced in generated code: p\d+ p\d+ \n)"));
 }

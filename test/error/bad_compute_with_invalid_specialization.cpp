@@ -26,5 +26,8 @@ void TestBadComputeWithInvalidSpecialization() {
 }  // namespace
 
 TEST(ErrorTests, BadComputeWithInvalidSpecialization) {
-    EXPECT_COMPILE_ERROR(TestBadComputeWithInvalidSpecialization, MatchesPattern(R"(Func g(\$\d+)? is scheduled to be computed with f(\$\d+)?, so it must not have any specializations\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestBadComputeWithInvalidSpecialization,
+        MatchesPattern(R"(Func g(\$\d+)? is scheduled to be computed with )"
+                       R"(f(\$\d+)?, so it must not have any specializations\.)"));
 }

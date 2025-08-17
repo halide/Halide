@@ -20,5 +20,8 @@ void TestBadReorder() {
 }  // namespace
 
 TEST(ErrorTests, BadReorder) {
-    EXPECT_COMPILE_ERROR(TestBadReorder, MatchesPattern(R"(In schedule for f\d+, call to reorder references v\d+ twice\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestBadReorder,
+        MatchesPattern(R"(In schedule for f\d+, call to )"
+                       R"(reorder references v\d+ twice\.)"));
 }

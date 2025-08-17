@@ -16,5 +16,8 @@ void TestBadReorderStorage() {
 }  // namespace
 
 TEST(ErrorTests, BadReorderStorage) {
-    EXPECT_COMPILE_ERROR(TestBadReorderStorage, MatchesPattern(R"(In schedule for f\d+, call to reorder_storage references v\d+ twice)"));
+    EXPECT_COMPILE_ERROR(
+        TestBadReorderStorage,
+        MatchesPattern(R"(In schedule for f\d+, call to )"
+                       R"(reorder_storage references v\d+ twice)"));
 }

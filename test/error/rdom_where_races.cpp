@@ -19,5 +19,20 @@ void TestRdomWhereRaces() {
 }  // namespace
 
 TEST(ErrorTests, RdomWhereRaces) {
-    EXPECT_COMPILE_ERROR(TestRdomWhereRaces, MatchesPattern(R"(In schedule for f\d+\.update\(0\), marking var r\d+\$x as parallel or vectorized may introduce a race condition resulting in incorrect output\. It is possible to parallelize this by using the atomic\(\) method if the operation is associative, or set override_associativity_test to true in the atomic method if you are certain that the operation is associative\. It is also possible to override this error using the allow_race_conditions\(\) method\. Use allow_race_conditions\(\) with great caution, and only when you are willing to accept non-deterministic output, or you can prove that any race conditions in this code do not change the output, or you can prove that there are actually no race conditions, and that Halide is being too cautious\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestRdomWhereRaces,
+        MatchesPattern(
+            R"(In schedule for f\d+\.update\(0\), marking var r\d+\$x as )"
+            R"(parallel or vectorized may introduce a race condition )"
+            R"(resulting in incorrect output\. It is possible to )"
+            R"(parallelize this by using the atomic\(\) method if )"
+            R"(the operation is associative, or set override_associativity_test )"
+            R"(to true in the atomic method if you are certain that the operation )"
+            R"(is associative\. It is also possible to override this error using the )"
+            R"(allow_race_conditions\(\) method\. Use allow_race_conditions\(\) with )"
+            R"(great caution, and only when you are willing to accept )"
+            R"(non-deterministic output, or you can prove that any race conditions )"
+            R"(in this code do not change the output, or you can prove that there )"
+            R"(are actually no race conditions, and that Halide is being too )"
+            R"(cautious\.)"));
 }

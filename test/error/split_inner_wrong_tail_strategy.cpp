@@ -21,5 +21,11 @@ void TestSplitInnerWrongTailStrategy() {
 }  // namespace
 
 TEST(ErrorTests, SplitInnerWrongTailStrategy) {
-    EXPECT_COMPILE_ERROR(TestSplitInnerWrongTailStrategy, MatchesPattern(R"(Can't use TailStrategy::RoundUp for splitting v\d+\.v\d+ in update definition of f\d+\.update\(0\)\. It may redundantly recompute some values, which could change the meaning of the algorithm\. Use TailStrategy::GuardWithIf instead\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestSplitInnerWrongTailStrategy,
+        MatchesPattern(R"(Can't use TailStrategy::RoundUp for splitting v\d+\.v\d+ )"
+                       R"(in update definition of f\d+\.update\(0\)\. It may )"
+                       R"(redundantly recompute some values, which could change )"
+                       R"(the meaning of the algorithm\. Use )"
+                       R"(TailStrategy::GuardWithIf instead.)"));
 }

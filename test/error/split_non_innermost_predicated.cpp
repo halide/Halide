@@ -19,5 +19,8 @@ void TestSplitNonInnermostPredicated() {
 }  // namespace
 
 TEST(ErrorTests, SplitNonInnermostPredicated) {
-    EXPECT_COMPILE_ERROR(TestSplitNonInnermostPredicated, MatchesPattern(R"(Cannot split a loop variable resulting from a split using PredicateLoads or PredicateStores\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestSplitNonInnermostPredicated,
+        HasSubstr("Cannot split a loop variable resulting from a "
+                  "split using PredicateLoads or PredicateStores."));
 }

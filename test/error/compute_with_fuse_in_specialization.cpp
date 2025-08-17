@@ -21,5 +21,8 @@ void TestComputeWithFuseInSpecialization() {
 }  // namespace
 
 TEST(ErrorTests, ComputeWithFuseInSpecialization) {
-    EXPECT_COMPILE_ERROR(TestComputeWithFuseInSpecialization, MatchesPattern(R"(Invalid compute_with: cannot find x in out\d+(\$\d+)?\.s\d+)"));
+    EXPECT_COMPILE_ERROR(
+        TestComputeWithFuseInSpecialization,
+        MatchesPattern(R"(Invalid compute_with: cannot find x in )"
+                       R"(out\d+(\$\d+)?\.s\d+)"));
 }

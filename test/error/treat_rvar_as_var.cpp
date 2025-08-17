@@ -19,5 +19,8 @@ void TestTreatRvarAsVar() {
 }  // namespace
 
 TEST(ErrorTests, TreatRvarAsVar) {
-    EXPECT_COMPILE_ERROR(TestTreatRvarAsVar, MatchesPattern(R"(Var r\d+\$x used in scheduling directive has the same name as existing RVar r\d+\$x)"));
+    EXPECT_COMPILE_ERROR(
+        TestTreatRvarAsVar,
+        MatchesPattern(R"(Var r\d+\$x used in scheduling directive has the same name )"
+                       R"(as existing RVar r\d+\$x)"));
 }

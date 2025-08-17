@@ -22,5 +22,9 @@ void TestWrapperNeverUsed() {
 }  // namespace
 
 TEST(ErrorTests, WrapperNeverUsed) {
-    EXPECT_COMPILE_ERROR(TestWrapperNeverUsed, MatchesPattern(R"(Cannot wrap \"f(\$\d+)?\" in \"g(\$\d+)?\" because \"g(\$\d+)?\" does not call \"f(\$\d+)?\"\nDirect callees of \"g(\$\d+)?\" are:)"));
+    EXPECT_COMPILE_ERROR(
+        TestWrapperNeverUsed,
+        MatchesPattern(R"(Cannot wrap \"f(\$\d+)?\" in \"g(\$\d+)?\" because )"
+                       R"(\"g(\$\d+)?\" does not call \"f(\$\d+)?\"\n)"
+                       R"(Direct callees of \"g(\$\d+)?\" are:)"));
 }

@@ -12,5 +12,8 @@ void TestLerpFloatWeightOutOfRange() {
 }  // namespace
 
 TEST(ErrorTests, LerpFloatWeightOutOfRange) {
-    EXPECT_COMPILE_ERROR(TestLerpFloatWeightOutOfRange, MatchesPattern(R"(Floating-point weight for lerp with integer arguments is 1\.5, which is not in the range \[0\.0, 1\.0\]\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestLerpFloatWeightOutOfRange,
+        HasSubstr("Floating-point weight for lerp with integer arguments "
+                  "is 1.5, which is not in the range [0.0, 1.0]."));
 }

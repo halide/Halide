@@ -9,11 +9,13 @@ void TestUndefinedPipelineRealize() {
 
     Pipeline p(f);
     Buffer<int32_t> result = p.realize({100, 5, 3});
-
-    // We shouldn't reach here, because there should have been a compile error.
 }
 }  // namespace
 
 TEST(ErrorTests, UndefinedPipelineRealize) {
-    EXPECT_COMPILE_ERROR(TestUndefinedPipelineRealize, MatchesPattern(R"(Func f(\$\d+)? is defined with 0 dimensions, but realize\(\) is requesting a realization with 3 dimensions\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestUndefinedPipelineRealize,
+        MatchesPattern(R"(Func f(\$\d+)? is defined with 0 dimensions, but )"
+                       R"(realize\(\) is requesting a realization with 3 )"
+                       R"(dimensions\.)"));
 }

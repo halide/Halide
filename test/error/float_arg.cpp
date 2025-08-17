@@ -16,5 +16,8 @@ void TestFloatArg() {
 }  // namespace
 
 TEST(ErrorTests, FloatArg) {
-    EXPECT_COMPILE_ERROR(TestFloatArg, MatchesPattern(R"(Implicit cast from float\d+ to int in argument 1 in call to \"f\d+\" is not allowed\. Use an explicit cast\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestFloatArg,
+        MatchesPattern(R"(Implicit cast from float32 to int in argument 1 in call )"
+                       R"(to \"f\d+\" is not allowed\. Use an explicit cast\.)"));
 }

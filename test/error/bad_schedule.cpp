@@ -19,5 +19,8 @@ void TestBadSchedule() {
 }  // namespace
 
 TEST(ErrorTests, BadSchedule) {
-    EXPECT_COMPILE_ERROR(TestBadSchedule, MatchesPattern(R"(Cannot vectorize dimension v\d+\.v\d+ of function f\d+ because the function is scheduled inline\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestBadSchedule,
+        MatchesPattern(R"(Cannot vectorize dimension v\d+\.v\d+ of function )"
+                       R"(f\d+ because the function is scheduled inline\.)"));
 }

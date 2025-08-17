@@ -22,5 +22,20 @@ void TestBadStoreAt() {
 }  // namespace
 
 TEST(ErrorTests, BadStoreAt) {
-    EXPECT_COMPILE_ERROR(TestBadStoreAt, MatchesPattern(R"(Func \"f(\$\d+)?\" is computed at the following invalid location:\n  f(\$\d+)?\.store_at\(h(\$\d+)?, y\)\.compute_root\(\);\nLegal locations for this function are:\n  f(\$\d+)?\.compute_root\(\);\n  f(\$\d+)?\.compute_at\(h(\$\d+)?, Var::outermost\(\)\);\n  f(\$\d+)?\.compute_at\(h(\$\d+)?, y\);\n  f(\$\d+)?\.compute_at\(g(\$\d+)?, Var::outermost\(\)\);\n  f(\$\d+)?\.compute_at\(g(\$\d+)?, x\);\n\"f(\$\d+)?\" is used in the following places:\n for h(\$\d+)?\.s\d+\.y:\n  for g(\$\d+)?\.s\d+\.x:\n   g(\$\d+)? uses f(\$\d+)?\n  \.\.\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestBadStoreAt,
+        MatchesPattern(
+            R"(Func \"f(\$\d+)?\" is computed at the following invalid location:\n)"
+            R"(  f(\$\d+)?\.store_at\(h(\$\d+)?, y\)\.compute_root\(\);\n)"
+            R"(Legal locations for this function are:\n)"
+            R"(  f(\$\d+)?\.compute_root\(\);\n)"
+            R"(  f(\$\d+)?\.compute_at\(h(\$\d+)?, Var::outermost\(\)\);\n)"
+            R"(  f(\$\d+)?\.compute_at\(h(\$\d+)?, y\);\n)"
+            R"(  f(\$\d+)?\.compute_at\(g(\$\d+)?, Var::outermost\(\)\);\n)"
+            R"(  f(\$\d+)?\.compute_at\(g(\$\d+)?, x\);\n)"
+            R"(\"f(\$\d+)?\" is used in the following places:\n)"
+            R"( for h(\$\d+)?\.s\d+\.y:\n)"
+            R"(  for g(\$\d+)?\.s\d+\.x:\n)"
+            R"(   g(\$\d+)? uses f(\$\d+)?\n)"
+            R"(  \.\.\.)"));
 }

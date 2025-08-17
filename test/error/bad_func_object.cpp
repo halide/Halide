@@ -13,5 +13,7 @@ void TestBadFuncObject() {
 }  // namespace
 
 TEST(ErrorTests, BadFuncObject) {
-    EXPECT_INTERNAL_ERROR(TestBadFuncObject, MatchesPattern(R"(Can't construct Func from undefined Function)"));
+    EXPECT_INTERNAL_ERROR(
+        TestBadFuncObject,
+        HasSubstr("Can't construct Func from undefined Function"));
 }

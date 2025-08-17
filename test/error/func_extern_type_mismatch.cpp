@@ -14,5 +14,9 @@ void TestFuncExternTypeMismatch() {
 }  // namespace
 
 TEST(ErrorTests, FuncExternTypeMismatch) {
-    EXPECT_COMPILE_ERROR(TestFuncExternTypeMismatch, MatchesPattern(R"(Func \"f(\$\d+)?\" is constrained to only hold values of type \(uint\d+, float\d+\) but is defined with values of type \(int\d+, float\d+\)\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestFuncExternTypeMismatch,
+        MatchesPattern(R"(Func \"f(\$\d+)?\" is constrained to only hold values of )"
+                       R"(type \(uint8, float64\) but is defined with values of )"
+                       R"(type \(int32, float32\)\.)"));
 }

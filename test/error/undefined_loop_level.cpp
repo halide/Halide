@@ -20,5 +20,9 @@ void TestUndefinedLoopLevel() {
 }  // namespace
 
 TEST(ErrorTests, UndefinedLoopLevel) {
-    EXPECT_COMPILE_ERROR(TestUndefinedLoopLevel, MatchesPattern(R"(There should be no undefined LoopLevels at the start of lowering\. \(Did you mean to use LoopLevel::inlined\(\) instead of LoopLevel\(\) \?\))"));
+    EXPECT_COMPILE_ERROR(
+        TestUndefinedLoopLevel,
+        HasSubstr("There should be no undefined LoopLevels at the start of "
+                  "lowering. (Did you mean to use LoopLevel::inlined() "
+                  "instead of LoopLevel() ?)"));
 }

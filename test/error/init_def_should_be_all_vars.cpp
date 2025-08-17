@@ -15,5 +15,8 @@ void TestInitDefShouldBeAllVars() {
 }  // namespace
 
 TEST(ErrorTests, InitDefShouldBeAllVars) {
-    EXPECT_COMPILE_ERROR(TestInitDefShouldBeAllVars, MatchesPattern(R"(Argument 1 in initial definition of \"f(\$\d+)?\" is not a Var\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestInitDefShouldBeAllVars,
+        MatchesPattern(R"(Argument 1 in initial definition of )"
+                       R"(\"f(\$\d+)?\" is not a Var\.)"));
 }

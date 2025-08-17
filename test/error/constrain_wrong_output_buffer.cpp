@@ -17,5 +17,9 @@ void TestConstrainWrongOutputBuffer() {
 }  // namespace
 
 TEST(ErrorTests, ConstrainWrongOutputBuffer) {
-    EXPECT_COMPILE_ERROR(TestConstrainWrongOutputBuffer, MatchesPattern(R"(Can't constrain the min or extent of an output buffer beyond the first\. They are implicitly constrained to have the same min and extent as the first output buffer\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestConstrainWrongOutputBuffer,
+        HasSubstr("Can't constrain the min or extent of an output buffer beyond "
+                  "the first. They are implicitly constrained to have the same "
+                  "min and extent as the first output buffer."));
 }

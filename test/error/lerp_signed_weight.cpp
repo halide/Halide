@@ -12,5 +12,8 @@ void TestLerpSignedWeight() {
 }  // namespace
 
 TEST(ErrorTests, LerpSignedWeight) {
-    EXPECT_COMPILE_ERROR(TestLerpSignedWeight, MatchesPattern(R"(A lerp weight must be an unsigned integer or a float, but lerp weight \(int\d+\)16 has type int\d+\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestLerpSignedWeight,
+        HasSubstr("A lerp weight must be an unsigned integer or a float, but "
+                  "lerp weight (int8)16 has type int8."));
 }

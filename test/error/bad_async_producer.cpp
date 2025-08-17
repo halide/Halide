@@ -23,5 +23,12 @@ void TestBadAsyncProducer() {
 }  // namespace
 
 TEST(ErrorTests, BadAsyncProducer) {
-    EXPECT_COMPILE_ERROR(TestBadAsyncProducer, MatchesPattern(R"(The Func f(\$\d+)? is consumed by async Func g(\$\d+)? and has a compute_at location in between the store_at location and the compute_at location of g(\$\d+)?\. This is only legal when f(\$\d+)? is both async and has a store_at location outside the store_at location of the consumer\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestBadAsyncProducer,
+        MatchesPattern(R"(The Func f(\$\d+)? is consumed by async Func )"
+                       R"(g(\$\d+)? and has a compute_at location in )"
+                       R"(between the store_at location and the compute_at )"
+                       R"(location of g(\$\d+)?\. This is only legal when )"
+                       R"(f(\$\d+)? is both async and has a store_at location )"
+                       R"(outside the store_at location of the consumer\.)"));
 }

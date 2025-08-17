@@ -17,5 +17,7 @@ void TestExternFuncSelfArgument() {
 }  // namespace
 
 TEST(ErrorTests, ExternFuncSelfArgument) {
-    EXPECT_COMPILE_ERROR(TestExternFuncSelfArgument, MatchesPattern(R"(Extern Func has itself as an argument)"));
+    EXPECT_COMPILE_ERROR(
+        TestExternFuncSelfArgument,
+        HasSubstr("Extern Func has itself as an argument"));
 }

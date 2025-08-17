@@ -32,5 +32,11 @@ void TestBrokenPromise() {
 }  // namespace
 
 TEST(ErrorTests, BrokenPromise) {
-    EXPECT_RUNTIME_ERROR(TestBrokenPromise, MatchesPattern(R"(Requirement Failed: \(\(\(\(uint\d+\)p\d+\[f\d+\.s\d+\.v\d+ - p\d+\.min\.0\] >= \(uint\d+\)0\) && \(\(uint\d+\)p\d+\[f\d+\.s\d+\.v\d+ - p\d+\.min\.0\] <= \(uint\d+\)1023\)\)\) from unsafe_promise_clamped)"));
+    EXPECT_RUNTIME_ERROR(
+        TestBrokenPromise,
+        MatchesPattern(
+            R"(Requirement Failed: \(\(\(\(uint16\)p\d+\[f\d+\.s\d+\.v\d+ )"
+            R"(- p\d+\.min\.0\] >= \(uint16\)0\) && )"
+            R"(\(\(uint16\)p\d+\[f\d+\.s\d+\.v\d+ - p\d+\.min\.0\] <= )"
+            R"(\(uint16\)1023\)\)\) from unsafe_promise_clamped)"));
 }

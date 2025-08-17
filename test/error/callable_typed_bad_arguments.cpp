@@ -24,5 +24,9 @@ void TestCallableTypedBadArguments() {
 }  // namespace
 
 TEST(ErrorTests, CallableTypedBadArguments) {
-    EXPECT_RUNTIME_ERROR(TestCallableTypedBadArguments, MatchesPattern(R"(Error defining 'f_\d+': Argument 1 of 4 \('p\d+'\) was expected to be a scalar of type 'int\d+' and dimension 0\.)"));
+    EXPECT_RUNTIME_ERROR(
+        TestCallableTypedBadArguments,
+        MatchesPattern(R"(Error defining 'f_\d+': Argument 1 of 4 \('p\d+'\) )"
+                       R"(was expected to be a scalar of type 'int32' and )"
+                       R"(dimension 0\.)"));
 }

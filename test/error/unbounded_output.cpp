@@ -21,5 +21,8 @@ void TestUnboundedOutput() {
 }  // namespace
 
 TEST(ErrorTests, UnboundedOutput) {
-    EXPECT_COMPILE_ERROR(TestUnboundedOutput, MatchesPattern(R"(Update definition number 0 of Function f\d+ calls function f\d+ in an unbounded way in dimension 0)"));
+    EXPECT_COMPILE_ERROR(
+        TestUnboundedOutput,
+        MatchesPattern(R"(Update definition number 0 of Function f\d+ calls function )"
+                       R"(f\d+ in an unbounded way in dimension 0)"));
 }

@@ -23,5 +23,8 @@ void TestBadHostAlignment() {
 }  // namespace
 
 TEST(ErrorTests, BadHostAlignment) {
-    EXPECT_RUNTIME_ERROR(TestBadHostAlignment, MatchesPattern(R"(Input buffer p\d+ is accessed at 0, which is before the min \(1\) in dimension 0)"));
+    EXPECT_RUNTIME_ERROR(
+        TestBadHostAlignment,
+        MatchesPattern(R"(Input buffer p\d+ is accessed at 0, which is )"
+                       R"(before the min \(1\) in dimension 0)"));
 }

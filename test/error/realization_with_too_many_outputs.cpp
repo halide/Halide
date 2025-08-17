@@ -19,5 +19,8 @@ void TestRealizationWithTooManyOutputs() {
 }  // namespace
 
 TEST(ErrorTests, RealizationWithTooManyOutputs) {
-    EXPECT_COMPILE_ERROR(TestRealizationWithTooManyOutputs, MatchesPattern(R"(Realization requires 2 output\(s\) but pipeline produces 1 result\(s\)\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestRealizationWithTooManyOutputs,
+        HasSubstr("Realization requires 2 output(s) but pipeline "
+                  "produces 1 result(s)."));
 }

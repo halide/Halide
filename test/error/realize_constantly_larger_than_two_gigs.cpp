@@ -30,5 +30,8 @@ void TestRealizeConstantlyLargerThanTwoGigs() {
 }  // namespace
 
 TEST(ErrorTests, RealizeConstantlyLargerThanTwoGigs) {
-    EXPECT_COMPILE_ERROR(TestRealizeConstantlyLargerThanTwoGigs, MatchesPattern(R"(Total size for allocation f\d+ is constant but exceeds 2\^31 - 1\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestRealizeConstantlyLargerThanTwoGigs,
+        MatchesPattern(R"(Total size for allocation f\d+ is )"
+                       R"(constant but exceeds 2\^31 - 1\.)"));
 }

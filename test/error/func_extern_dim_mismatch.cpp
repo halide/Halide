@@ -13,5 +13,8 @@ void TestFuncExternDimMismatch() {
 }  // namespace
 
 TEST(ErrorTests, FuncExternDimMismatch) {
-    EXPECT_COMPILE_ERROR(TestFuncExternDimMismatch, MatchesPattern(R"(Func \"f(\$\d+)?\" is constrained to have exactly 1 dimensions, but is defined with 2 dimensions\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestFuncExternDimMismatch,
+        MatchesPattern(R"(Func \"f(\$\d+)?\" is constrained to have exactly )"
+                       R"(1 dimensions, but is defined with 2 dimensions\.)"));
 }

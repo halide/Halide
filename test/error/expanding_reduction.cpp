@@ -32,5 +32,10 @@ void TestExpandingReduction() {
 }  // namespace
 
 TEST(ErrorTests, ExpandingReduction) {
-    EXPECT_COMPILE_ERROR(TestExpandingReduction, MatchesPattern(R"(In definition of Func \"f\d+\":\nAll of a function's recursive references to itself must contain the same pure variables in the same places as on the left-hand-side\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestExpandingReduction,
+        MatchesPattern(R"(In definition of Func \"f\d+\":\n)"
+                       R"(All of a function's recursive references to itself must )"
+                       R"(contain the same pure variables in the same places as on )"
+                       R"(the left-hand-side\.)"));
 }

@@ -13,5 +13,8 @@ void TestNonexistentUpdateStage() {
 }  // namespace
 
 TEST(ErrorTests, NonexistentUpdateStage) {
-    EXPECT_COMPILE_ERROR(TestNonexistentUpdateStage, MatchesPattern(R"(Call to update with index larger than last defined update stage for Func \"f\d+\"\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestNonexistentUpdateStage,
+        MatchesPattern(R"(Call to update with index larger than last defined )"
+                       R"(update stage for Func \"f\d+\"\.)"));
 }

@@ -18,5 +18,8 @@ void TestVectorizeTooLittle() {
 }  // namespace
 
 TEST(ErrorTests, VectorizeTooLittle) {
-    EXPECT_COMPILE_ERROR(TestVectorizeTooLittle, MatchesPattern(R"(Can't split v\d+ by 0\. Split factors must be strictly positive)"));
+    EXPECT_COMPILE_ERROR(
+        TestVectorizeTooLittle,
+        MatchesPattern(R"(Can't split v\d+ by 0\. )"
+                       R"(Split factors must be strictly positive)"));
 }

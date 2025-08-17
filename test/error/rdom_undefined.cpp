@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include "halide_test_error.h"
+#include <cstdio>
 
 using namespace Halide;
 
@@ -16,5 +17,7 @@ void TestRdomUndefined() {
 }  // namespace
 
 TEST(ErrorTests, RdomUndefined) {
-    EXPECT_COMPILE_ERROR(TestRdomUndefined, MatchesPattern(R"(RDom min cannot be represented as an int\d+: \(undefined\))"));
+    EXPECT_COMPILE_ERROR(
+        TestRdomUndefined,
+        HasSubstr("RDom min cannot be represented as an int32: (undefined)"));
 }

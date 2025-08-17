@@ -24,5 +24,9 @@ void TestImplicitArgs() {
 }  // namespace
 
 TEST(ErrorTests, ImplicitArgs) {
-    EXPECT_COMPILE_ERROR(TestImplicitArgs, MatchesPattern(R"(The update definition of f(\$\d+)? uses 3 implicit variables, but the initial definition uses only 2 implicit variables\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestImplicitArgs,
+        MatchesPattern(R"(The update definition of f(\$\d+)? uses 3 implicit )"
+                       R"(variables, but the initial definition uses only 2 )"
+                       R"(implicit variables\.)"));
 }

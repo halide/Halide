@@ -16,5 +16,9 @@ void TestFuncExprUpdateTypeMismatch() {
 }  // namespace
 
 TEST(ErrorTests, FuncExprUpdateTypeMismatch) {
-    EXPECT_COMPILE_ERROR(TestFuncExprUpdateTypeMismatch, MatchesPattern(R"(In update definition 0 of Func \"f(\$\d+)?\":\nTuple element 0 of update definition has type uint\d+, but pure definition has type float\d+)"));
+    EXPECT_COMPILE_ERROR(
+        TestFuncExprUpdateTypeMismatch,
+        MatchesPattern(R"(In update definition 0 of Func \"f(\$\d+)?\":\n)"
+                       R"(Tuple element 0 of update definition has type uint8, )"
+                       R"(but pure definition has type float32)"));
 }

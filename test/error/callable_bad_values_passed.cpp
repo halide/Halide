@@ -25,5 +25,9 @@ void TestCallableBadValuesPassed() {
 }  // namespace
 
 TEST(ErrorTests, CallableBadValuesPassed) {
-    EXPECT_RUNTIME_ERROR(TestCallableBadValuesPassed, MatchesPattern(R"(Error calling 'f_\d+': Argument 2 of 4 \('p\d+'\) was expected to be a scalar of type 'int\d+' and dimension 0\.)"));
+    EXPECT_RUNTIME_ERROR(
+        TestCallableBadValuesPassed,
+        MatchesPattern(R"(Error calling 'f_\d+': Argument 2 of 4 \('p\d+'\) )"
+                       R"(was expected to be a scalar of type 'int32' and )"
+                       R"(dimension 0\.)"));
 }

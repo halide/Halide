@@ -18,5 +18,9 @@ void TestReductionTypeMismatch() {
 }  // namespace
 
 TEST(ErrorTests, ReductionTypeMismatch) {
-    EXPECT_COMPILE_ERROR(TestReductionTypeMismatch, MatchesPattern(R"(In update definition 0 of Func \"f\d+\":\nTuple element 0 of update definition has type float\d+, but pure definition has type uint\d+)"));
+    EXPECT_COMPILE_ERROR(
+        TestReductionTypeMismatch,
+        MatchesPattern(R"(In update definition 0 of Func \"f\d+\":\n)"
+                       "Tuple element 0 of update definition has type float32, "
+                       "but pure definition has type uint8"));
 }

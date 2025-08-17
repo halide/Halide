@@ -18,5 +18,8 @@ void TestVectorizeTooMuch() {
 }  // namespace
 
 TEST(ErrorTests, VectorizeTooMuch) {
-    EXPECT_RUNTIME_ERROR(TestVectorizeTooMuch, MatchesPattern(R"(Input buffer b\d+ is accessed at -3, which is before the min \(0\) in dimension 0)"));
+    EXPECT_RUNTIME_ERROR(
+        TestVectorizeTooMuch,
+        MatchesPattern(R"(Input buffer b\d+ is accessed at -3, which )"
+                       R"(is before the min \(0\) in dimension 0)"));
 }

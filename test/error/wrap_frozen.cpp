@@ -16,5 +16,9 @@ void TestWrapFrozen() {
 }  // namespace
 
 TEST(ErrorTests, WrapFrozen) {
-    EXPECT_COMPILE_ERROR(TestWrapFrozen, MatchesPattern(R"(Func f(\$\d+)?_in_g(\$\d+)?\$0 cannot be given a new update definition, because it has already been realized or used in the definition of another Func\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestWrapFrozen,
+        MatchesPattern(R"(Func f(\$\d+)?_in_g(\$\d+)?\$0 cannot be given a new )"
+                       R"(update definition, because it has already been realized )"
+                       R"(or used in the definition of another Func\.)"));
 }

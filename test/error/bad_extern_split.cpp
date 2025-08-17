@@ -16,5 +16,8 @@ void TestBadExternSplit() {
 }  // namespace
 
 TEST(ErrorTests, BadExternSplit) {
-    EXPECT_COMPILE_ERROR(TestBadExternSplit, MatchesPattern(R"(Externally defined Func f\d+ cannot have extern loop v\d+\.v\d+ outside a non-extern loop\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestBadExternSplit,
+        MatchesPattern(R"(Externally defined Func f\d+ cannot have extern )"
+                       R"(loop v\d+\.v\d+ outside a non-extern loop\.)"));
 }

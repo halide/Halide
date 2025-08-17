@@ -23,5 +23,8 @@ void TestRequireFail() {
 }  // namespace
 
 TEST(ErrorTests, RequireFail) {
-    EXPECT_RUNTIME_ERROR(TestRequireFail, MatchesPattern(R"(Requirement Failed: \(false\) 23757 The parameters should add to exactly 7829 but were 1 2)"));
+    EXPECT_RUNTIME_ERROR(
+        TestRequireFail,
+        HasSubstr("Requirement Failed: (false) 23757 The parameters should add "
+                  "to exactly 7829 but were 1 2"));
 }

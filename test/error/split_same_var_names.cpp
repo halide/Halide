@@ -13,5 +13,9 @@ void TestSplitSameVarNames() {
 }  // namespace
 
 TEST(ErrorTests, SplitSameVarNames) {
-    EXPECT_COMPILE_ERROR(TestSplitSameVarNames, MatchesPattern(R"(In schedule for f\d+, can't split v\d+ into v\d+ and v\d+ because the new Vars have the same name\.\nVars: v\d+ __outermost)"));
+    EXPECT_COMPILE_ERROR(
+        TestSplitSameVarNames,
+        MatchesPattern(R"(In schedule for f\d+, can't split v\d+ into v\d+ and v\d+ )"
+                       R"(because the new Vars have the same name\.\n)"
+                       R"(Vars: v\d+ __outermost)"));
 }

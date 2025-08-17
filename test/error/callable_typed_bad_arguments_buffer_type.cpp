@@ -24,5 +24,9 @@ void TestCallableTypedBadArgumentsBufferType() {
 }  // namespace
 
 TEST(ErrorTests, CallableTypedBadArgumentsBufferType) {
-    EXPECT_RUNTIME_ERROR(TestCallableTypedBadArgumentsBufferType, MatchesPattern(R"(Error defining 'f_\d+': Argument 1 of 4 \('p\d+'\) was expected to be a buffer of type 'uint\d+' and dimension 2\.)"));
+    EXPECT_RUNTIME_ERROR(
+        TestCallableTypedBadArgumentsBufferType,
+        MatchesPattern(R"(Error defining 'f_\d+': Argument 1 of 4 \('p\d+'\) )"
+                       R"(was expected to be a buffer of type 'uint8' and )"
+                       R"(dimension 2\.)"));
 }

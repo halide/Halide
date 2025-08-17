@@ -14,5 +14,9 @@ void TestBadBound() {
 }  // namespace
 
 TEST(ErrorTests, BadBound) {
-    EXPECT_COMPILE_ERROR(TestBadBound, MatchesPattern(R"(Can't bound variable y of function f(\$\d+)? because y is not one of the pure variables of f(\$\d+)?\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestBadBound,
+        MatchesPattern(R"(Can't bound variable y of function f(\$\d+)? )"
+                       R"(because y is not one of the pure variables of )"
+                       R"(f(\$\d+)?\.)"));
 }

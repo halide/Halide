@@ -28,5 +28,10 @@ void TestRfactorInnerDimNonCommutative() {
 }  // namespace
 
 TEST(ErrorTests, RfactorInnerDimNonCommutative) {
-    EXPECT_COMPILE_ERROR(TestRfactorInnerDimNonCommutative, MatchesPattern(R"(In schedule for g(\$\d+)?\.update\(0\): can't perform rfactor\(\) because we can't prove associativity of the operator\nVars: r\d+\$x r\d+\$y x y __outermost)"));
+    EXPECT_COMPILE_ERROR(
+        TestRfactorInnerDimNonCommutative,
+        MatchesPattern(R"(In schedule for g(\$\d+)?\.update\(0\): can't perform )"
+                       R"(rfactor\(\) because we can't prove associativity of the )"
+                       R"(operator\n)"
+                       R"(Vars: r\d+\$x r\d+\$y x y __outermost)"));
 }

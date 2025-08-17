@@ -11,7 +11,7 @@ void TestRoundUpAndBlendRace() {
     f(x) = 0;
     f(x) += 4;
 
-    // This schedule should be forbidden, because it causes a race condition.
+    // This schedule should be forbidden because it causes a race condition.
     Var xo, xi;
     f.update()
         .split(x, xo, xi, 8, TailStrategy::RoundUp)
@@ -21,5 +21,10 @@ void TestRoundUpAndBlendRace() {
 }  // namespace
 
 TEST(ErrorTests, RoundUpAndBlendRace) {
-    EXPECT_COMPILE_ERROR(TestRoundUpAndBlendRace, MatchesPattern(R"(Tail strategy RoundUpAndBlend may not be used to split v\d+\.v\d+ because other vars stemming from the same original Var or RVar are marked as parallel\.This could cause a race condition\.)"));
+    EXPECT_COMPILE_ERROR(
+        TestRoundUpAndBlendRace,
+        MatchesPattern(R"(Tail strategy RoundUpAndBlend may not be used to split )"
+                       R"(v\d+\.v\d+ because other vars stemming from the same )"
+                       R"(original Var or RVar are marked as parallel\.This could )"
+                       R"(cause a race condition\.)"));
 }
