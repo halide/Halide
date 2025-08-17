@@ -1,11 +1,11 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
-
-#include <cstdio>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestUndefinedPipelineCompile() {
     Func f("f");
 
     Pipeline p(f);
@@ -13,6 +13,9 @@ int main(int argc, char **argv) {
     p.compile_to_object(test_object, {}, "f");
 
     // We shouldn't reach here, because there should have been a compile error.
-    printf("Success!\n");
-    return 0;
+}
+}  // namespace
+
+TEST(ErrorTests, UndefinedPipelineCompile) {
+    EXPECT_COMPILE_ERROR(TestUndefinedPipelineCompile, HasSubstr("TODO"));
 }

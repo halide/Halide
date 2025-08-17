@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestVectorizedExtern() {
     Func f;
     Var x;
     f.define_extern("test", {}, Int(32), {x});
@@ -11,7 +12,9 @@ int main(int argc, char **argv) {
     f.split(x, xo, x, 8).vectorize(xo);
 
     f.compile_jit();
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, VectorizedExtern) {
+    EXPECT_COMPILE_ERROR(TestVectorizedExtern, HasSubstr("TODO"));
 }

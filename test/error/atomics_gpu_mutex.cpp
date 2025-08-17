@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestAtomicsGPUMutex() {
     int img_size = 10000;
 
     Func f;
@@ -26,7 +28,12 @@ int main(int argc, char **argv) {
     // it leads to deadlocks.
     // This should throw an error
     Realization out = f.realize({img_size});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, AtomicsGPUMutex) {
+    if (!get_target_from_environment().has_gpu_feature()) {
+        GTEST_SKIP() << "No GPU target enabled.";
+    }
+    EXPECT_COMPILE_ERROR(TestAtomicsGPUMutex, HasSubstr("TODO"));
 }

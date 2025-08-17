@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
-using namespace Halide::Internal;
 
-int main(int argc, char **argv) {
+namespace {
+void TestFuncExprUpdateTypeMismatch() {
     Var x("x"), y("y");
     Func f(Float(32), 2, "f");
 
@@ -12,7 +12,9 @@ int main(int argc, char **argv) {
     f(x, y) = cast<uint8_t>(0);
 
     f.realize({100, 100});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, FuncExprUpdateTypeMismatch) {
+    EXPECT_COMPILE_ERROR(TestFuncExprUpdateTypeMismatch, HasSubstr("TODO"));
 }

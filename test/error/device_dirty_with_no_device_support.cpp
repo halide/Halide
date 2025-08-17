@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestDeviceDirtyWithNoDeviceSupport() {
     Buffer<float> im(128, 128);
 
     Func f;
@@ -13,7 +15,9 @@ int main(int argc, char **argv) {
 
     // Explicitly don't use device support
     f.realize({128, 128}, Target{"host"});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, DeviceDirtyWithNoDeviceSupport) {
+    EXPECT_RUNTIME_ERROR(TestDeviceDirtyWithNoDeviceSupport, HasSubstr("TODO"));
 }

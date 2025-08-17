@@ -1,8 +1,9 @@
 #include "Halide.h"
-#include <memory>
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
+
+namespace {
 
 int error_occurred = false;
 void my_error(JITUserContext *ctx, const char *msg) {
@@ -10,7 +11,7 @@ void my_error(JITUserContext *ctx, const char *msg) {
     error_occurred = true;
 }
 
-int main(int argc, char **argv) {
+void TestRealizeConstantlyLargerThanTwoGigs() {
     Var x, y, z;
     RDom r(0, 4096, 0, 4096, 0, 256);
     Func big;
@@ -25,7 +26,9 @@ int main(int argc, char **argv) {
     Buffer<uint8_t> result = grand_total.realize();
 
     assert(error_occurred);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, RealizeConstantlyLargerThanTwoGigs) {
+    EXPECT_COMPILE_ERROR(TestRealizeConstantlyLargerThanTwoGigs, HasSubstr("TODO"));
 }

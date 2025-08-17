@@ -1,10 +1,11 @@
 // https://github.com/halide/Halide/issues/6808
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestRdomWhereRaces() {
     Func f;
     Var x;
 
@@ -14,7 +15,9 @@ int main(int argc, char **argv) {
     f(r) = 2;
 
     f.update().parallel(r);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, RdomWhereRaces) {
+    EXPECT_COMPILE_ERROR(TestRdomWhereRaces, HasSubstr("TODO"));
 }

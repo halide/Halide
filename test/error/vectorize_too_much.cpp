@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestVectorizeTooMuch() {
     Var x, y;
 
     Buffer<int> input(5, 5);
@@ -13,7 +14,9 @@ int main(int argc, char **argv) {
 
     // Should result in an error
     Buffer<int> out = f.realize({5, 5});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, VectorizeTooMuch) {
+    EXPECT_RUNTIME_ERROR(TestVectorizeTooMuch, HasSubstr("TODO"));
 }

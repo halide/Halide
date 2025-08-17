@@ -1,11 +1,14 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestIncompleteTarget() {
     Target t("debug");
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, IncompleteTarget) {
+    EXPECT_COMPILE_ERROR(TestIncompleteTarget, HasSubstr("TODO"));
 }

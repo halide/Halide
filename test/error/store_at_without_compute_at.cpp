@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestStoreAtWithoutComputeAt() {
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
@@ -14,7 +15,9 @@ int main(int argc, char **argv) {
     g.store_at(h, y);
 
     h.realize({10, 10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, StoreAtWithoutComputeAt) {
+    EXPECT_COMPILE_ERROR(TestStoreAtWithoutComputeAt, HasSubstr("TODO"));
 }

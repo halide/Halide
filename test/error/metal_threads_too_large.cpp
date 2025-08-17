@@ -1,14 +1,11 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().os != Target::OSX) {
-        printf("[SKIP] error/metal_threads_too_large ignored for non-OSX targets\n");
-        _halide_user_assert(0);
-    }
-
+namespace {
+void TestMetalThreadsTooLarge() {
     ImageParam im(UInt(16), 2, "input");
     Func f("f");
     Var x("x"), y("y");
@@ -34,7 +31,13 @@ int main(int argc, char **argv) {
             }
         }
     }
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, MetalThreadsTooLarge) {
+    if (get_jit_target_from_environment().os != Target::OSX) {
+        GTEST_SKIP() << "MetalThreadsTooLarge ignored for non-OSX targets";
+    }
+
+    EXPECT_RUNTIME_ERROR(TestMetalThreadsTooLarge, HasSubstr("TODO"));
 }

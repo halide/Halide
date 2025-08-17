@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBadFold() {
     Var x, y, c;
 
     Func f, g;
@@ -13,7 +14,9 @@ int main(int argc, char **argv) {
     f.store_root().compute_at(g, y).fold_storage(y, 2);
 
     Buffer<int> im = g.realize({100, 1000});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadFold) {
+    EXPECT_RUNTIME_ERROR(TestBadFold, HasSubstr("TODO"));
 }

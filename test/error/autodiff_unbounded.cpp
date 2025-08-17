@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestAutodiffUnbounded() {
     Buffer<float> b(10);
     Func f("f"), g("g");
     Var x("x");
@@ -13,7 +14,9 @@ int main(int argc, char **argv) {
     f(x) = b(clamp(x, 0, 10));
     g() += f(h(r));
     Derivative d = propagate_adjoints(g);  // access to f is unbounded
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, AutodiffUnbounded) {
+    EXPECT_COMPILE_ERROR(TestAutodiffUnbounded, HasSubstr("TODO"));
 }

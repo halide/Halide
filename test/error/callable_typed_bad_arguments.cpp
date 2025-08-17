@@ -1,14 +1,10 @@
 #include "Halide.h"
-#include <iostream>
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-void check(int r) {
-    assert(r == 0);
-}
-
-int main(int argc, char **argv) {
+namespace {
+void TestCallableTypedBadArguments() {
     Param<int32_t> p_int(42);
     Param<float> p_float(1.0f);
     ImageParam p_img(UInt(8), 2);
@@ -24,8 +20,9 @@ int main(int argc, char **argv) {
     // Should fail with "Error defining 'f': Argument 1 of 4 ('p_int') was expected to be a scalar of type 'int32'."
     auto c = f.compile_to_callable({p_int, p_float, p_img})
                  .make_std_function<Buffer<uint8_t>, uint8_t, float, Buffer<uint8_t>>();
+}
+}  // namespace
 
-    // Shouldn't get here, but if we do, return success, which is a failure...
-
-    printf("Success!\n");
+TEST(ErrorTests, CallableTypedBadArguments) {
+    EXPECT_RUNTIME_ERROR(TestCallableTypedBadArguments, HasSubstr("TODO"));
 }

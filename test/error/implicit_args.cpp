@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestImplicitArgs() {
     Var x("x"), y("y"), z("z");
 
     Func f("f"), g("g"), h("h");
@@ -19,7 +20,9 @@ int main(int argc, char **argv) {
     // h(_0, _1, _2), which is invalid.
     f(x, _) = g(_) + 2;
     f(x, _) += h(_) + 3;
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ImplicitArgs) {
+    EXPECT_COMPILE_ERROR(TestImplicitArgs, HasSubstr("TODO"));
 }

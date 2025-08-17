@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestUndefinedLoopLevel() {
     LoopLevel undefined;
 
     Var x;
@@ -15,7 +16,9 @@ int main(int argc, char **argv) {
 
     // Trying to lower/realize with an undefined LoopLevel should be fatal
     Buffer<int> result = g.realize({1});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, UndefinedLoopLevel) {
+    EXPECT_COMPILE_ERROR(TestUndefinedLoopLevel, HasSubstr("TODO"));
 }

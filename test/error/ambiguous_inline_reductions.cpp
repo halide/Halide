@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestAmbiguousInlineReductions() {
     Func f("f");
     Var x("x"), y("y");
     RDom r1(0, 10, "r1"), r2(0, 10, "r2"), r3(0, 10, "r3");
@@ -17,7 +18,9 @@ int main(int argc, char **argv) {
     f(r1, y) += product(sum(r2, r1 + r2 + r3));
 
     Buffer<int> result = f.realize({10, 10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, AmbiguousInlineReductions) {
+    EXPECT_COMPILE_ERROR(TestAmbiguousInlineReductions, HasSubstr("TODO"));
 }

@@ -1,10 +1,13 @@
 #include "Halide.h"
-#include <iostream>
+#include "halide_test_error.h"
+
 using namespace Halide;
+
+namespace {
 
 // From https://github.com/halide/Halide/issues/7871
 
-int main() {
+void TestFuseVectorizedVarWithRvar() {
     Func input("input");
     Func local_sum("local_sum");
     Func blurry("blurry");
@@ -19,7 +22,9 @@ int main() {
     // Should throw an error because we're trying to fuse a vectorized Var with
     // an impure RVar.
     local_sum.update(0).vectorize(y).fuse(y, r.y, yryf);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, FuseVectorizedVarWithRvar) {
+    EXPECT_COMPILE_ERROR(TestFuseVectorizedVarWithRvar, HasSubstr("TODO"));
 }

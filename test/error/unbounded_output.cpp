@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestUnboundedOutput() {
     Func f;
     Var x, y;
 
@@ -16,7 +17,9 @@ int main(int argc, char **argv) {
     f(x_coord(r.x, r.y), y_coord(r.x, r.y)) += in(r.x, r.y);
 
     f.compile_jit();
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, UnboundedOutput) {
+    EXPECT_COMPILE_ERROR(TestUnboundedOutput, HasSubstr("TODO"));
 }

@@ -1,10 +1,10 @@
 #include "Halide.h"
-
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestFloatArg() {
     Func f;
     Var x, y;
     f(x, y) = 3 * x + y;
@@ -12,7 +12,9 @@ int main(int argc, char **argv) {
     // Should result in an error
     Func g;
     g(x) = f(f(x, 3) * 17.0f, 3);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, FloatArg) {
+    EXPECT_COMPILE_ERROR(TestFloatArg, HasSubstr("TODO"));
 }

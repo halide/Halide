@@ -1,11 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-IRPrinter irp(std::cerr);
-int main(int argc, char **argv) {
+namespace {
+void TestBadHostAlignment() {
     Func f;
     Var x, y;
     ImageParam in(UInt(8), 2);
@@ -19,7 +19,9 @@ int main(int argc, char **argv) {
 
     in.set(param_buf);
     Buffer<uint8_t> result = f.realize({10, 10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadHostAlignment) {
+    EXPECT_RUNTIME_ERROR(TestBadHostAlignment, HasSubstr("TODO"));
 }

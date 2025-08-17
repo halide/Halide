@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestAutoScheduleNoParallel() {
     Func fib, g;
     Var x;
     RDom r(2, 18);
@@ -26,7 +27,10 @@ int main(int argc, char **argv) {
     // This should throw an error since auto-scheduler does not currently
     // support partial schedules
     p.apply_autoscheduler(target, {"Mullapudi2016"});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, AutoScheduleNoParallel) {
+    GTEST_SKIP() << "TODO: load the Mullapudi2016 autoscheduler";
+    EXPECT_COMPILE_ERROR(TestAutoScheduleNoParallel, HasSubstr("TODO"));
 }

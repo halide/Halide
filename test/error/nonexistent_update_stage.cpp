@@ -1,14 +1,17 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestNonexistentUpdateStage() {
     Func f;
     Var x;
     f(x) = x;
     f.update().vectorize(x, 4);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, NonexistentUpdateStage) {
+    EXPECT_COMPILE_ERROR(TestNonexistentUpdateStage, HasSubstr("TODO"));
 }

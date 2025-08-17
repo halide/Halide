@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+namespace {
+void TestShiftInwardsAndBlendRace() {
     Func f;
     Var x;
 
@@ -13,7 +13,9 @@ int main(int argc, char **argv) {
 
     // This schedule should be forbidden, because it causes a race condition.
     f.update().vectorize(x, 8, TailStrategy::ShiftInwardsAndBlend).parallel(x);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ShiftInwardsAndBlendRace) {
+    EXPECT_COMPILE_ERROR(TestShiftInwardsAndBlendRace, HasSubstr("TODO"));
 }

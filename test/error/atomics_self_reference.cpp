@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestAtomicsSelfReference() {
     Func f;
     Var x;
     RDom r(0, 100);
@@ -17,7 +19,9 @@ int main(int argc, char **argv) {
 
     // f references itself on the index, making the atomic illegal.
     Realization out = f.realize({100});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, AtomicsSelfReference) {
+    EXPECT_COMPILE_ERROR(TestAtomicsSelfReference, HasSubstr("TODO"));
 }

@@ -1,14 +1,10 @@
 #include "Halide.h"
-#include <iostream>
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-void check(int r) {
-    assert(r == 0);
-}
-
-int main(int argc, char **argv) {
+namespace {
+void TestCallableTypedBadArgumentsBufferType() {
     Param<int32_t> p_int(42);
     Param<float> p_float(1.0f);
     ImageParam p_img(UInt(8), 2);
@@ -24,8 +20,9 @@ int main(int argc, char **argv) {
     // Should fail with "Error defining 'f': Argument 1 of 4 ('p_img') was expected to be a buffer of type 'uint8' and dimension 2."
     auto c = f.compile_to_callable({p_img, p_int, p_float})
                  .make_std_function<Buffer<float, 2>, int32_t, float, Buffer<float, 2>>();
+}
+}  // namespace
 
-    // Shouldn't get here, but if we do, return success, which is a failure...
-
-    printf("Success!\n");
+TEST(ErrorTests, CallableTypedBadArgumentsBufferType) {
+    EXPECT_RUNTIME_ERROR(TestCallableTypedBadArgumentsBufferType, HasSubstr("TODO"));
 }

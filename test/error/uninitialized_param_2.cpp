@@ -1,11 +1,9 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
-
-#include "Halide.h"
 
 namespace {
 
@@ -33,14 +31,17 @@ public:
 
 HALIDE_REGISTER_GENERATOR(PleaseFail, PleaseFail)
 
-int main(int argc, char **argv) {
+namespace {
+void TestUninitializedParam2() {
     Halide::Internal::ExecuteGeneratorArgs args;
     args.output_dir = Internal::get_test_tmp_dir();
     args.output_types = std::set<OutputFileType>{OutputFileType::object};
     args.targets = std::vector<Target>{get_target_from_environment()};
     args.generator_name = "PleaseFail";
     execute_generator(args);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, UninitializedParam2) {
+    EXPECT_COMPILE_ERROR(TestUninitializedParam2, HasSubstr("TODO"));
 }

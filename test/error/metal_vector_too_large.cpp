@@ -1,9 +1,11 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestMetalVectorTooLarge() {
     ImageParam input(UInt(16), 2, "input");
     Func f("f");
     Var x("x"), y("y");
@@ -15,7 +17,9 @@ int main(int argc, char **argv) {
     Target mac_target("x86-64-osx-metal");
 
     f.compile_to_object(test_object, {input}, "f", mac_target);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, MetalVectorTooLarge) {
+    EXPECT_COMPILE_ERROR(TestMetalVectorTooLarge, HasSubstr("TODO"));
 }

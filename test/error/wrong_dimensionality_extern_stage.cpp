@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestWrongDimensionalityExternStage() {
     Func f, g;
     Var x, y;
 
@@ -10,7 +12,9 @@ int main(int argc, char **argv) {
 
     // Show throw an error immediately because g was defined with 3 dimensions.
     f(x, y) = cast<float>(g(x, y));
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, WrongDimensionalityExternStage) {
+    EXPECT_COMPILE_ERROR(TestWrongDimensionalityExternStage, HasSubstr("TODO"));
 }

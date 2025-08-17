@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestMemoizeDifferentComputeStore() {
     Param<float> val;
 
     Func f, g;
@@ -24,7 +25,9 @@ int main(int argc, char **argv) {
             assert(out(i, j) == (uint8_t)(3 * 23 + i + (i - 1) + (i + 1)));
         }
     }
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, MemoizeDifferentComputeStore) {
+    EXPECT_COMPILE_ERROR(TestMemoizeDifferentComputeStore, HasSubstr("TODO"));
 }

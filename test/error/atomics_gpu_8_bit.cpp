@@ -1,13 +1,10 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().has_feature(Target::WebGPU)) {
-        printf("[SKIP] WebGPU will (incorrectly) fail here because 8-bit types are currently emulated using atomics.\n");
-        return 0;
-    }
-
+namespace {
+void TestAtomicsGPU8Bit() {
     int img_size = 10000;
     int hist_size = 7;
 
@@ -31,7 +28,16 @@ int main(int argc, char **argv) {
 
     // GPU doesn't support 8/16-bit atomics
     Realization out = hist.realize({hist_size});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, AtomicsGPU8Bit) {
+    const Target t = get_jit_target_from_environment();
+    if (!t.has_gpu_feature()) {
+        GTEST_SKIP() << "No GPU target enabled.";
+    }
+    if (t.has_feature(Target::WebGPU)) {
+        GTEST_SKIP() << "WebGPU will (incorrectly) fail here because 8-bit types are currently emulated using atomics.";
+    }
+    EXPECT_COMPILE_ERROR(TestAtomicsGPU8Bit, HasSubstr("TODO"));
 }

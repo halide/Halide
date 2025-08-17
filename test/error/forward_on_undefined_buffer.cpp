@@ -1,12 +1,15 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestForwardOnUndefinedBuffer() {
     const Buffer<> foo;
     foo.raw_buffer();
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ForwardOnUndefinedBuffer) {
+    EXPECT_COMPILE_ERROR(TestForwardOnUndefinedBuffer, HasSubstr("TODO"));
 }

@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestVectorTile() {
     // Test reporting of mismatched sizes error in vector-of-strategies variant
     Var i, j;
 
@@ -14,7 +15,9 @@ int main(int argc, char **argv) {
     // Should result in an error
     // Bad because the vector lengths don't match
     f.tile({i, j}, {io, jo}, {i, j}, {8, 8}, {TailStrategy::RoundUp, TailStrategy::RoundUp, TailStrategy::RoundUp});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, VectorTile) {
+    EXPECT_COMPILE_ERROR(TestVectorTile, HasSubstr("TODO"));
 }

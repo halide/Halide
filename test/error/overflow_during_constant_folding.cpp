@@ -1,14 +1,18 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestOverflowDuringConstantFolding() {
     Func f;
     Var x;
     f(x) = Expr(0x12345678) * Expr(0x76543210);
 
     f.realize({10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, OverflowDuringConstantFolding) {
+    EXPECT_COMPILE_ERROR(TestOverflowDuringConstantFolding, HasSubstr("TODO"));
 }

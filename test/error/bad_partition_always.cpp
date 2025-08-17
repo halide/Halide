@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBadPartitionAlways() {
     Func f("f");
     Var x("x");
 
@@ -11,7 +12,9 @@ int main(int argc, char **argv) {
     f.partition(x, Partition::Always);
 
     f.realize({10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadPartitionAlways) {
+    EXPECT_COMPILE_ERROR(TestBadPartitionAlways, HasSubstr("TODO"));
 }

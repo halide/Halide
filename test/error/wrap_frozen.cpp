@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestWrapFrozen() {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
@@ -11,7 +12,9 @@ int main(int argc, char **argv) {
     g(x) = f(x);
     Func wrapper = f.in(g);
     wrapper(x) += 1;
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, WrapFrozen) {
+    EXPECT_COMPILE_ERROR(TestWrapFrozen, HasSubstr("TODO"));
 }

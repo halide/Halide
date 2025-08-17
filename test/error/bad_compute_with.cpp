@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBadComputeWith() {
     Func f("f");
     Var x("x"), y("y");
 
@@ -12,7 +13,9 @@ int main(int argc, char **argv) {
     f.update(0).compute_with(f, x);
 
     f.realize({10, 10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadComputeWith) {
+    EXPECT_COMPILE_ERROR(TestBadComputeWith, HasSubstr("TODO"));
 }

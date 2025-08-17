@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestComputeWithFuseInSpecialization() {
     Var x("x"), y("y"), f("f");
     ImageParam in(Int(16), 2, "in");
     Func out0("out0"), out1("out1");
@@ -16,7 +17,9 @@ int main(int argc, char **argv) {
     out0.specialize(in.dim(1).stride() == 128).fuse(x, y, f);
     Pipeline p({out0, out1});
     p.compile_jit();
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ComputeWithFuseInSpecialization) {
+    EXPECT_COMPILE_ERROR(TestComputeWithFuseInSpecialization, HasSubstr("TODO"));
 }

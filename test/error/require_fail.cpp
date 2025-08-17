@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <memory>
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestRequireFail() {
     const int kPrime1 = 7829;
     const int kPrime2 = 7919;
 
@@ -19,7 +19,9 @@ int main(int argc, char **argv) {
     p1.set(1);
     p2.set(2);
     result = f.realize({1});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, RequireFail) {
+    EXPECT_RUNTIME_ERROR(TestRequireFail, HasSubstr("TODO"));
 }

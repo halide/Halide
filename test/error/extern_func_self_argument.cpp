@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
@@ -6,12 +7,15 @@ extern "C" int extern_func() {
     return 0;
 }
 
-int main(int argc, char **argv) {
+namespace {
+void TestExternFuncSelfArgument() {
     Func f("f");
 
     f.define_extern("extern_func", {f}, Int(32), 2);
     f.infer_arguments();
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ExternFuncSelfArgument) {
+    EXPECT_COMPILE_ERROR(TestExternFuncSelfArgument, HasSubstr("TODO"));
 }

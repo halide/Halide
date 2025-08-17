@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestTooManyArgs() {
     Var x, y;
 
     Func one_arg;
@@ -14,7 +15,9 @@ int main(int argc, char **argv) {
 
     // Should result in an error
     Buffer<uint32_t> result = bad_call.realize({256, 256});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, TooManyArgs) {
+    EXPECT_COMPILE_ERROR(TestTooManyArgs, HasSubstr("TODO"));
 }

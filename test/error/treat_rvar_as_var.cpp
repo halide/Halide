@@ -1,10 +1,10 @@
 #include "Halide.h"
-
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestTreatRvarAsVar() {
     Func f;
     Var x, y;
 
@@ -15,7 +15,9 @@ int main(int argc, char **argv) {
     // an error. Otherwise it can permit schedules that aren't legal.
     Var xo, xi;
     f.update().split(Var(r.x.name()), xo, xi, 8, TailStrategy::RoundUp);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, TreatRvarAsVar) {
+    EXPECT_COMPILE_ERROR(TestTreatRvarAsVar, HasSubstr("TODO"));
 }

@@ -1,17 +1,18 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
-
-#include <cstdio>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestUndefinedFuncCompile() {
     Func f("f");
 
     std::string test_object = Internal::get_test_tmp_dir() + "compile_undefined.o";
     f.compile_to_object(test_object, {}, "f");
+}
+}  // namespace
 
-    // We shouldn't reach here, because there should have been a compile error.
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, UndefinedFuncCompile) {
+    EXPECT_COMPILE_ERROR(TestUndefinedFuncCompile, HasSubstr("TODO"));
 }

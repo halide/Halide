@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestConstrainWrongOutputBuffer() {
     Func f;
     Var x;
     f(x) = Tuple(x, sin(x));
@@ -12,7 +13,9 @@ int main(int argc, char **argv) {
     f.output_buffers()[1].dim(0).set_min(4);
 
     f.compile_jit();
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ConstrainWrongOutputBuffer) {
+    EXPECT_COMPILE_ERROR(TestConstrainWrongOutputBuffer, HasSubstr("TODO"));
 }

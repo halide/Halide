@@ -1,9 +1,12 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
 // From https://github.com/halide/Halide/issues/5201
-int main(int argc, char **argv) {
+
+namespace {
+void TestBadAsyncProducer2() {
     Func producer1, producer2, consumer;
     Var x, y;
 
@@ -19,5 +22,9 @@ int main(int argc, char **argv) {
     consumer.bound(x, 0, 16).bound(y, 0, 16);
 
     Buffer<int> out = consumer.realize({16, 16});
-    return 0;
+}
+}  // namespace
+
+TEST(ErrorTests, BadAsyncProducer2) {
+    EXPECT_COMPILE_ERROR(TestBadAsyncProducer2, HasSubstr("TODO"));
 }

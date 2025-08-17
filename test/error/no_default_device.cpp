@@ -1,12 +1,15 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestNoDefaultDevice() {
     Target t("host");
     (void)get_device_interface_for_device_api(DeviceAPI::Default_GPU, t, "No Default Device Test");
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, NoDefaultDevice) {
+    EXPECT_COMPILE_ERROR(TestNoDefaultDevice, HasSubstr("TODO"));
 }

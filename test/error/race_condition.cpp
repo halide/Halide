@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+namespace {
+void TestRaceCondition() {
     Func f, g;
     Var x, y;
 
@@ -17,6 +17,9 @@ int main(int argc, char **argv) {
     f.update().parallel(r.y);
 
     // We shouldn't reach here, because there should have been a compile error.
-    printf("Success!\n");
-    return 0;
+}
+}  // namespace
+
+TEST(ErrorTests, RaceCondition) {
+    EXPECT_COMPILE_ERROR(TestRaceCondition, HasSubstr("TODO"));
 }

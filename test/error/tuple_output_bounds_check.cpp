@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestTupleOutputBoundsCheck() {
     // The code below used to not inject appropriate bounds checks.
     // See https://github.com/halide/Halide/issues/7343
 
@@ -22,6 +24,9 @@ int main(int argc, char **argv) {
     Buffer<int> r0(size);
     Buffer<int> r1(size);
     h.realize({r0, r1});
+}
+}  // namespace
 
-    return 0;
+TEST(ErrorTests, TupleOutputBoundsCheck) {
+    EXPECT_RUNTIME_ERROR(TestTupleOutputBoundsCheck, HasSubstr("TODO"));
 }

@@ -1,10 +1,10 @@
-
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+namespace {
+void TestBadAsyncProducer() {
     Func f{"f"}, g{"g"}, h{"h"};
     Var x;
 
@@ -19,13 +19,9 @@ int main(int argc, char **argv) {
     g.store_root().compute_at(h, x).async();
 
     Buffer<uint8_t> buf = h.realize({32});
-    for (int i = 0; i < buf.dim(0).extent(); i++) {
-        uint8_t correct = i + 7;
-        if (buf(i) != correct) {
-            printf("buf(%d) = %d instead of %d\n", i, buf(i), correct);
-            return 1;
-        }
-    }
+}
+}  // namespace
 
-    return 0;
+TEST(ErrorTests, BadAsyncProducer) {
+    EXPECT_COMPILE_ERROR(TestBadAsyncProducer, HasSubstr("TODO"));
 }

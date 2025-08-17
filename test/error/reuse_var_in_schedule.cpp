@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestReuseVarInSchedule() {
     Func f;
     Var x;
 
@@ -10,7 +12,9 @@ int main(int argc, char **argv) {
 
     Var xo, xi;
     f.split(x, xo, xi, 4).split(xo, xo, xi, 4);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ReuseVarInSchedule) {
+    EXPECT_COMPILE_ERROR(TestReuseVarInSchedule, HasSubstr("TODO"));
 }

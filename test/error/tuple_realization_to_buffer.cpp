@@ -1,15 +1,19 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestTupleRealizationToBuffer() {
     Func f;
     Var x;
 
     f(x) = {x, x, x};
 
     Buffer<int> buf = f.realize({1024});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, TupleRealizationToBuffer) {
+    EXPECT_COMPILE_ERROR(TestTupleRealizationToBuffer, HasSubstr("TODO"));
 }

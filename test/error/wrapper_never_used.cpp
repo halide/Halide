@@ -1,9 +1,11 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-int main() {
+namespace {
+void TestWrapperNeverUsed() {
     Var x("x"), y("y");
     Func f("f"), g("g"), h("h");
     f(x, y) = x + y;
@@ -16,7 +18,9 @@ int main() {
     // This should cause an error since f.in(g) was called but 'f' is
     // never used in 'g'.
     h.realize({5, 5});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, WrapperNeverUsed) {
+    EXPECT_COMPILE_ERROR(TestWrapperNeverUsed, HasSubstr("TODO"));
 }

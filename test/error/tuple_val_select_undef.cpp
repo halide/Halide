@@ -1,17 +1,20 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-int main(int argc, char **argv) {
+namespace {
+void TestTupleValSelectUndef() {
     Var x("x");
     Func f("f");
 
     // Should result in an error
     f(x) = {x, select(x < 20, 20 * x, undef<int>())};
     f.realize({10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, TupleValSelectUndef) {
+    EXPECT_COMPILE_ERROR(TestTupleValSelectUndef, HasSubstr("TODO"));
 }

@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestWrapCustomAfterShared() {
     Func f("f"), g1("g1"), g2("g2"), g3("g3"), g4("g4");
     Var x("x"), y("y");
 
@@ -16,7 +17,9 @@ int main(int argc, char **argv) {
     // {g1, g2, g3}
     Func wrapper1 = f.in({g1, g4, g3});
     Func wrapper2 = f.in(g3);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, WrapCustomAfterShared) {
+    EXPECT_COMPILE_ERROR(TestWrapCustomAfterShared, HasSubstr("TODO"));
 }

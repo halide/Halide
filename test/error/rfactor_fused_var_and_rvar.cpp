@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestRfactorFusedVarAndRvar() {
     Func f{"f"};
     RDom r({{0, 5}, {0, 5}, {0, 5}}, "r");
     Var x{"x"}, y{"y"};
@@ -20,7 +22,9 @@ int main(int argc, char **argv) {
         .rfactor(yr, z);
 
     f.print_loop_nest();
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, RfactorFusedVarAndRvar) {
+    EXPECT_COMPILE_ERROR(TestRfactorFusedVarAndRvar, HasSubstr("TODO"));
 }

@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestExpandingReduction() {
     Func f, g;
     Var x, y;
     RDom r(0, 100);
@@ -27,7 +28,9 @@ int main(int argc, char **argv) {
 
     Buffer<int> in(input.get());
     assert(in.height() == 102 && in.width() == 100);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ExpandingReduction) {
+    EXPECT_COMPILE_ERROR(TestExpandingReduction, HasSubstr("TODO"));
 }

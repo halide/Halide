@@ -1,15 +1,18 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestUnknownTarget() {
     Target t;
 
     // Calling natural_vector_size() on a Target with Unknown fields
     // should generate user_error.
     (void)t.natural_vector_size<float>();
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, UnknownTarget) {
+    EXPECT_COMPILE_ERROR(TestUnknownTarget, HasSubstr("TODO"));
 }

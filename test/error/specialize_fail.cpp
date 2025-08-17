@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestSpecializeFail() {
     Var x;
     Param<int> p;
 
@@ -14,7 +15,9 @@ int main(int argc, char **argv) {
 
     p.set(42);  // arbitrary nonzero value
     f.realize({100});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, SpecializeFail) {
+    EXPECT_RUNTIME_ERROR(TestSpecializeFail, HasSubstr("TODO"));
 }

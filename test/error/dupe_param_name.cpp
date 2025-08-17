@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestDupeParamName() {
     constexpr int a = 3;
     constexpr int b = 5;
 
@@ -29,7 +30,9 @@ int main(int argc, char **argv) {
     //     fprintf(stderr, "Expected to see %d + %d = %d but saw %d\n", a, b, a + b, (int) result(0));
     //     abort();
     // }
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, DupeParamName) {
+    EXPECT_COMPILE_ERROR(TestDupeParamName, HasSubstr("TODO"));
 }

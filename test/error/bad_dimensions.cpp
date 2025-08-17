@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBadDimensions() {
     ImageParam im(UInt(8), 2);
 
     Var x, y;
@@ -15,7 +16,9 @@ int main(int argc, char **argv) {
     im.set(b);
 
     f.realize({10, 10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadDimensions) {
+    EXPECT_RUNTIME_ERROR(TestBadDimensions, HasSubstr("TODO"));
 }

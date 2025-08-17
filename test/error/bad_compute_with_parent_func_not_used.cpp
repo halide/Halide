@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBadComputeWithParentFuncNotUsed() {
     Var x("x"), y("y");
     Func f("f"), g("g"), h("h"), p("p");
 
@@ -20,7 +21,9 @@ int main(int argc, char **argv) {
     p.compute_with(f, x);
     g.compute_with(f, x);
     h.realize({200, 200});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadComputeWithParentFuncNotUsed) {
+    EXPECT_COMPILE_ERROR(TestBadComputeWithParentFuncNotUsed, HasSubstr("TODO"));
 }

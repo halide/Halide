@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestUninitializedParam() {
     ImageParam image_param(Int(32), 2, "image_param");
     Param<int> scalar_param("scalar_param");
 
@@ -16,7 +17,9 @@ int main(int argc, char **argv) {
     image_param.set(b);
 
     f.realize({10, 10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, UninitializedParam) {
+    EXPECT_COMPILE_ERROR(TestUninitializedParam, HasSubstr("TODO"));
 }

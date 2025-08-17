@@ -1,10 +1,10 @@
 #include "Halide.h"
-
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestRealizationWithTooManyOutputs() {
     Func f;
     Var x;
     f(x) = 42;
@@ -15,7 +15,9 @@ int main(int argc, char **argv) {
 
     Realization r({first, second});
     f.realize(r);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, RealizationWithTooManyOutputs) {
+    EXPECT_COMPILE_ERROR(TestRealizationWithTooManyOutputs, HasSubstr("TODO"));
 }

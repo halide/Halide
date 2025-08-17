@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestReductionBounds() {
     Func f("f"), g("g");
     Var x("x");
     RDom r(0, 100, "r");
@@ -18,7 +19,9 @@ int main(int argc, char **argv) {
     // Use of f is unbounded in g.
 
     g.realize({100});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ReductionBounds) {
+    EXPECT_COMPILE_ERROR(TestReductionBounds, HasSubstr("TODO"));
 }

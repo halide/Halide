@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestMissingArgs() {
     Func f;
     Var x;
     ImageParam im(Int(8), 2);
@@ -15,7 +16,9 @@ int main(int argc, char **argv) {
     // args.push_back(im);
     // args.push_back(arg);
     f.compile_to_object("f.o", args, "f");
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, MissingArgs) {
+    EXPECT_COMPILE_ERROR(TestMissingArgs, HasSubstr("TODO"));
 }

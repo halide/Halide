@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBadRvarOrder() {
     RDom r1(0, 10, 0, 10);
 
     Func f("f");
@@ -16,7 +17,9 @@ int main(int argc, char **argv) {
     f.update().reorder(r1.y, r1.x);
 
     f.realize({10, 10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadRvarOrder) {
+    EXPECT_COMPILE_ERROR(TestBadRvarOrder, HasSubstr("TODO"));
 }

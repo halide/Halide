@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestPointerArithmetic() {
     Param<const char *> p;
     p.set("Hello, world!\n");
 
@@ -11,7 +12,9 @@ int main(int argc, char **argv) {
     Var x;
     // Should error out during match_types
     f(x) = p + 2;
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, PointerArithmetic) {
+    EXPECT_COMPILE_ERROR(TestPointerArithmetic, HasSubstr("TODO"));
 }

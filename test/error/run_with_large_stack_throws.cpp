@@ -1,22 +1,21 @@
 #include "Halide.h"
-#include <iostream>
+#include "halide_test_error.h"
 
-int main() {
-#ifdef __cpp_exceptions
-    try {
-        Halide::Internal::run_with_large_stack([]() {
-            throw Halide::RuntimeError("Error from run_with_large_stack");
-        });
-    } catch (const Halide::RuntimeError &ex) {
-        std::cerr << ex.what() << "\n";
-        return 1;
-    }
+using namespace Halide;
 
+namespace {
+void TestRunWithLargeStackThrows() {
+    Internal::run_with_large_stack([] {
+#ifdef HALIDE_WITH_EXCEPTIONS
+        throw RuntimeError("Error from run_with_large_stack");
 #else
-    Halide::Internal::run_with_large_stack([]() {
         _halide_user_assert(0) << "Error from run_with_large_stack (no exceptions)";
-    });
 #endif
-    std::cout << "Success!\n";
-    return 0;
+    });
+}
+}  // namespace
+
+TEST(ErrorTests, RunWithLargeStackThrows) {
+    EXPECT_RUNTIME_ERROR(TestRunWithLargeStackThrows,
+                         HasSubstr("Error from run_with_large_stack"));
 }

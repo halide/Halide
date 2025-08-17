@@ -1,10 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-int main(int argc, char **argv) {
+namespace {
+void TestTupleArgSelectUndef() {
     Var x("x"), y("y");
     Func f("f"), g("g");
 
@@ -17,7 +18,9 @@ int main(int argc, char **argv) {
     f(arg_0, arg_1) = {f(arg_0, arg_1)[0] + 10, f(arg_0, arg_1)[1] + 5};
 
     f.realize({100, 100});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, TupleArgSelectUndef) {
+    EXPECT_COMPILE_ERROR(TestTupleArgSelectUndef, HasSubstr("TODO"));
 }

@@ -1,13 +1,16 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestInspectLoopLevel() {
     LoopLevel root = LoopLevel::root();
 
     printf("LoopLevel is %s\n", root.to_string().c_str());  // should fail
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, InspectLoopLevel) {
+    EXPECT_COMPILE_ERROR(TestInspectLoopLevel, HasSubstr("TODO"));
 }

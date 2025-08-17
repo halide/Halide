@@ -1,13 +1,17 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestSplitSameVarNames() {
     Var x;
     Func f;
     f(x) = x;
     f.split(x, x, x, 16, TailStrategy::RoundUp);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, SplitSameVarNames) {
+    EXPECT_COMPILE_ERROR(TestSplitSameVarNames, HasSubstr("TODO"));
 }

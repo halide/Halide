@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestThreadIdOutsideBlockId() {
     Target t = get_jit_target_from_environment();
     t.set_feature(Target::CUDA);
 
@@ -15,7 +16,9 @@ int main(int argc, char **argv) {
 
     f.compile_jit(t);
     Buffer<int> result = f.realize({16});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ThreadIdOutsideBlockId) {
+    EXPECT_COMPILE_ERROR(TestThreadIdOutsideBlockId, HasSubstr("TODO"));
 }

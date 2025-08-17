@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBadBoundStorage() {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
@@ -13,7 +14,9 @@ int main(int argc, char **argv) {
     f.compute_at(g, y);
     f.bound_storage(x, 9);
     g.realize({10, 10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadBoundStorage) {
+    EXPECT_RUNTIME_ERROR(TestBadBoundStorage, HasSubstr("TODO"));
 }

@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBrokenPromise() {
     Buffer<uint16_t> ten_bit_data(100);
     for (int i = 0; i < 100; i++) {
         ten_bit_data(i) = i * 20;
@@ -26,7 +28,9 @@ int main(int argc, char **argv) {
     lut.set(ten_bit_lut);
 
     auto result = f.realize({100}, get_jit_target_from_environment().with_feature(Target::CheckUnsafePromises));
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BrokenPromise) {
+    EXPECT_RUNTIME_ERROR(TestBrokenPromise, HasSubstr("TODO"));
 }

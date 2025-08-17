@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBadSchedule() {
     Func f, g;
     Var x, y;
 
@@ -14,7 +15,9 @@ int main(int argc, char **argv) {
     f.vectorize(x, 4);
 
     g.realize({10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadSchedule) {
+    EXPECT_COMPILE_ERROR(TestBadSchedule, HasSubstr("TODO"));
 }

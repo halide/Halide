@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestDefineAfterRealize() {
     Func f, g;
     Var x;
 
@@ -13,7 +14,9 @@ int main(int argc, char **argv) {
 
     // Now try to add an update definition to f
     f(x) += 1;
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, DefineAfterRealize) {
+    EXPECT_COMPILE_ERROR(TestDefineAfterRealize, HasSubstr("TODO"));
 }

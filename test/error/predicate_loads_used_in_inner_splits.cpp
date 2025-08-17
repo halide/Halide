@@ -1,15 +1,19 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestPredicateLoadsUsedInInnerSplits() {
     Func f;
     Var x, xo, xi, xio, xii;
     f(x) = x;
     f.split(x, xo, xi, 2, TailStrategy::Auto)
         .split(xi, xio, xii, 4, TailStrategy::PredicateLoads)
         .reorder(xo, xio, xii);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, PredicateLoadsUsedInInnerSplits) {
+    EXPECT_COMPILE_ERROR(TestPredicateLoadsUsedInInnerSplits, HasSubstr("TODO"));
 }

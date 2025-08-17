@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestReductionTypeMismatch() {
     Var x;
     Func f;
     RDom dom(0, 50);
@@ -13,7 +14,9 @@ int main(int argc, char **argv) {
 
     // Should result in an error
     Buffer<float> result = f.realize({50});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ReductionTypeMismatch) {
+    EXPECT_COMPILE_ERROR(TestReductionTypeMismatch, HasSubstr("TODO"));
 }

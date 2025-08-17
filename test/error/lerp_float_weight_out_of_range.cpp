@@ -1,14 +1,16 @@
 #include "Halide.h"
-
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestLerpFloatWeightOutOfRange() {
     // This should trigger an error.
     Func f;
     f() = lerp(0, 42, 1.5f);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, LerpFloatWeightOutOfRange) {
+    EXPECT_COMPILE_ERROR(TestLerpFloatWeightOutOfRange, HasSubstr("TODO"));
 }

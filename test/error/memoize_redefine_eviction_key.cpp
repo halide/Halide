@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestMemoizeRedefineEvictionKey() {
     Param<float> val;
 
     Func f, g;
@@ -17,7 +18,9 @@ int main(int argc, char **argv) {
 
     val.set(23.0f);
     Buffer<float> out = g.realize({128, 128});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, MemoizeRedefineEvictionKey) {
+    EXPECT_COMPILE_ERROR(TestMemoizeRedefineEvictionKey, HasSubstr("TODO"));
 }

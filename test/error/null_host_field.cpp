@@ -1,15 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not yet support non-host buffers.\n");
-        _halide_user_assert(0);
-    }
-
+namespace {
+void TestNullHostField() {
     Func f;
     Var x, y;
     ImageParam in(UInt(8), 2);
@@ -32,7 +28,14 @@ int main(int argc, char **argv) {
     // Avoid a freak-out in the destructor of param_buf.
     param_buf.raw_buffer()->device = 0;
     param_buf.raw_buffer()->device_interface = 0;
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, NullHostField) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        GTEST_SKIP() << "WebAssembly JIT does not yet support non-host buffers.";
+    }
+    // TODO: This test fails with an actual segfault, which the comments above
+    //   indicate should not happen.
+    EXPECT_DEATH(TestNullHostField(), HasSubstr(""));
 }

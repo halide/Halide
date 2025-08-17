@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestSplitNonInnermostPredicated() {
     Func f;
     Var x;
     f(x) = x;
@@ -13,7 +15,9 @@ int main(int argc, char **argv) {
     Func g;
     g(x) = f(x);
     g.realize({10});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, SplitNonInnermostPredicated) {
+    EXPECT_COMPILE_ERROR(TestSplitNonInnermostPredicated, HasSubstr("TODO"));
 }

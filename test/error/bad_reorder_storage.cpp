@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBadReorderStorage() {
     Var x, y, xi;
 
     Func f;
@@ -11,7 +12,9 @@ int main(int argc, char **argv) {
     f(x, y) = x;
 
     f.reorder_storage(x, y, x);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadReorderStorage) {
+    EXPECT_COMPILE_ERROR(TestBadReorderStorage, HasSubstr("TODO"));
 }

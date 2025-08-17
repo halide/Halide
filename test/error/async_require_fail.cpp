@@ -1,15 +1,10 @@
 #include "Halide.h"
-#include <memory>
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not yet support async().\n");
-        _halide_user_assert(0);
-    }
-
+namespace {
+void TestAsyncRequireFail() {
     const int kPrime1 = 7829;
     const int kPrime2 = 7919;
 
@@ -26,7 +21,13 @@ int main(int argc, char **argv) {
     p1.set(1);
     p2.set(2);
     result = g.realize({1});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, AsyncRequireFail) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        GTEST_SKIP() << "WebAssembly JIT does not yet support async().";
+    }
+
+    EXPECT_RUNTIME_ERROR(TestAsyncRequireFail, HasSubstr("TODO"));
 }

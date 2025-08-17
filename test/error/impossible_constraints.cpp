@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestImpossibleConstraints() {
     ImageParam input(Float(32), 2, "in");
 
     Func out("out");
@@ -12,7 +13,9 @@ int main(int argc, char **argv) {
     out() = input(input.width(), input.height()) + input(0, 0);
 
     out.infer_input_bounds({});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ImpossibleConstraints) {
+    EXPECT_COMPILE_ERROR(TestImpossibleConstraints, HasSubstr("TODO"));
 }

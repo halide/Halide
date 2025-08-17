@@ -1,12 +1,15 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestDeviceTargetMismatch() {
     Target t("host");
     (void)get_device_interface_for_device_api(DeviceAPI::CUDA, t, "Device Target Mistmatch Test");
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, DeviceTargetMismatch) {
+    EXPECT_COMPILE_ERROR(TestDeviceTargetMismatch, HasSubstr("TODO"));
 }

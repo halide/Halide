@@ -1,11 +1,10 @@
 #include "Halide.h"
-
-#include <map>
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestBadPrefetch() {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
@@ -17,7 +16,9 @@ int main(int argc, char **argv) {
     g.print_loop_nest();
 
     Module m = g.compile_to_module({});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, BadPrefetch) {
+    EXPECT_COMPILE_ERROR(TestBadPrefetch, HasSubstr("TODO"));
 }

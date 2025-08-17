@@ -1,8 +1,9 @@
 #include "Halide.h"
-#include <assert.h>
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
+
+namespace {
 
 int error_occurred = false;
 void my_error(JITUserContext *ctx, const char *msg) {
@@ -10,7 +11,7 @@ void my_error(JITUserContext *ctx, const char *msg) {
     error_occurred = true;
 }
 
-int main(int argc, char **argv) {
+void TestUndefinedRdomDimension() {
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y"), c("c");
 
@@ -24,7 +25,9 @@ int main(int argc, char **argv) {
     Buffer<int32_t> result = f.realize({100, 5, 3});
 
     assert(error_occurred);
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, UndefinedRdomDimension) {
+    EXPECT_COMPILE_ERROR(TestUndefinedRdomDimension, HasSubstr("TODO"));
 }
