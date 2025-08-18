@@ -1,17 +1,19 @@
-#include <cmath>
-
 #include "Halide.h"
+#include <gtest/gtest.h>
+#include <cmath>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
+namespace {
+
 template<typename T>
-inline void check(int line_number, T x, T target, T threshold = T(1e-6)) {
-    _halide_user_assert(std::fabs((x) - (target)) < threshold)
-        << "Line " << line_number << ": Expected " << (target) << " instead of " << (x) << "\n";
+void check(int line_number, T x, T target, T threshold = T(1e-6)) {
+    EXPECT_LT(std::fabs((x) - (target)), threshold)
+        << "Line " << line_number << ": Expected " << (target) << " instead of " << (x);
 }
 
-inline void check(int line_number, float16_t x, float16_t target) {
+void check(int line_number, float16_t x, float16_t target) {
     return check(line_number, (double)x, (double)target, 5e-3);
 }
 
@@ -192,7 +194,19 @@ void test_scalar() {
     }
 }
 
-void test_1d_box_no_clamp() {
+}  // namespace
+
+// Scalar Tests
+TEST(AutodiffTest, ScalarFloat) {
+    test_scalar<float>();
+}
+
+TEST(AutodiffTest, ScalarDouble) {
+    test_scalar<double>();
+}
+
+// Box Filter Tests
+TEST(AutodiffTest, BoxFilterNoClamp) {
     Var x("x");
     Buffer<float> input(3);
     input(0) = 1.f;
@@ -214,7 +228,7 @@ void test_1d_box_no_clamp() {
     // d input(x) = d blur(x) + d blur(x - 1)
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
-    _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
+    EXPECT_FALSE(has_non_pure_update(d_input)) << "Function has non pure update";
     Buffer<float> d_input_buf = d_input.realize({4});
     check(__LINE__, d_input_buf(0), d_blur_buf(0));
     check(__LINE__, d_input_buf(1), d_blur_buf(0) + d_blur_buf(1));
@@ -222,13 +236,13 @@ void test_1d_box_no_clamp() {
     check(__LINE__, d_input_buf(3), 0.f);
 }
 
-void test_1d_box() {
+TEST(AutodiffTest, BoxFilter1D) {
     Var x("x");
     Buffer<float> input(2);
     input(0) = 1.f;
     input(1) = 2.f;
     Func clamped("clamped");
-    Expr clamped_x = Halide::clamp(x, 0, input.width() - 1);
+    Expr clamped_x = clamp(x, 0, input.width() - 1);
     clamped(x) = input(clamped_x);
     Func blur("blur");
     blur(x) = clamped(x) + clamped(x + 1);
@@ -256,7 +270,7 @@ void test_1d_box() {
     check(__LINE__, d_input_buf(1), d_clamped_buf(1) + d_clamped_buf(2));
 }
 
-void test_2d_box() {
+TEST(AutodiffTest, BoxFilter2D) {
     Var x("x"), y("y");
     Buffer<float> input(5, 5, "input");
     for (int i = 0; i < input.width(); i++) {
@@ -265,8 +279,8 @@ void test_2d_box() {
         }
     }
     Func clamped("clamped");
-    Expr clamped_x = Halide::clamp(x, 0, input.width() - 1);
-    Expr clamped_y = Halide::clamp(y, 0, input.height() - 1);
+    Expr clamped_x = clamp(x, 0, input.width() - 1);
+    Expr clamped_y = clamp(y, 0, input.height() - 1);
     clamped(x, y) = input(clamped_x, clamped_y);
     Func blur_x("blur_x");
     blur_x(x, y) = clamped(x, y) + clamped(x + 1, y) + clamped(x + 2, y);
@@ -286,8 +300,8 @@ void test_2d_box() {
         for (int x = 0; x < 5; x++) {
             float target = 2 * blur_y_buf(x, y);
             float diff = fabs(d_blur_y_buf(x, y) - target);
-            _halide_user_assert(diff < eps)
-                << "Expected d_blur_y(" << x << ", " << y << ") to be " << target << " instead of " << d_blur_y_buf(x, y) << "\n";
+            EXPECT_LT(diff, eps)
+                << "Expected d_blur_y(" << x << ", " << y << ") to be " << target << " instead of " << d_blur_y_buf(x, y);
         }
     }
     // d loss / d blur_x = d blur_y(x, y) + d blur_y(x, y - 1) + d blur_y(x, y + 1)
@@ -302,8 +316,8 @@ void test_2d_box() {
                 target += d_blur_y_buf(x, y + 1);
             }
             float diff = fabs(d_blur_x_buf(x, y) - target);
-            _halide_user_assert(diff < eps)
-                << "Expected d_blur_x(" << x << ", " << y << ") to be " << target << " instead of " << d_blur_x_buf(x, y) << "\n";
+            EXPECT_LT(diff, eps)
+                << "Expected d_blur_x(" << x << ", " << y << ") to be " << target << " instead of " << d_blur_x_buf(x, y);
         }
     }
     Func d_clamped = d(clamped);
@@ -321,20 +335,20 @@ void test_2d_box() {
                 target += d_blur_x_buf(x - 2, y);
             }
             float diff = fabs(d_clamped_buf(x, y) - target);
-            _halide_user_assert(diff < eps)
-                << "Expected d_clamped(" << x << ", " << y << ") to be " << target << " instead of " << d_clamped_buf(x, y) << "\n";
+            EXPECT_LT(diff, eps)
+                << "Expected d_clamped(" << x << ", " << y << ") to be " << target << " instead of " << d_clamped_buf(x, y);
         }
     }
 }
 
-void test_update() {
+TEST(AutodiffTest, Update) {
     Var x("x");
     Buffer<float> input(3);
     input(0) = 1.f;
     input(1) = 2.f;
     input(2) = 3.f;
     Func clamped("clamped");
-    Expr clamped_x = Halide::clamp(x, 0, input.width() - 1);
+    Expr clamped_x = clamp(x, 0, input.width() - 1);
     clamped(x) = input(clamped_x);
     Func blur("blur");
     blur(x) = clamped(x);
@@ -360,14 +374,14 @@ void test_update() {
     check(__LINE__, d_clamped_buf(2), d_blur_buf(1) + d_blur_buf(2));
 }
 
-void test_nonlinear_update() {
+TEST(AutodiffTest, NonlinearUpdate) {
     Var x("x"), y("y");
     Buffer<float> input(3);
     input(0) = 1.f;
     input(1) = 2.f;
     input(2) = 3.f;
     Func clamped("clamped");
-    Expr clamped_x = Halide::clamp(x, 0, input.width() - 1);
+    Expr clamped_x = clamp(x, 0, input.width() - 1);
     clamped(x) = input(clamped_x);
     Func update("update");
     update(x, y) = 0.f;
@@ -391,7 +405,7 @@ void test_nonlinear_update() {
     check(__LINE__, d_clamped_buf(2), 2.f * input(2) + 1.f);
 }
 
-void test_rdom_conv() {
+TEST(AutodiffTest, RDomConvolution) {
     Var x("x");
     Buffer<float> input(4);
     input(0) = 1.f;
@@ -399,7 +413,7 @@ void test_rdom_conv() {
     input(2) = 3.f;
     input(3) = 4.f;
     Func clamped("clamped");
-    clamped(x) = input(Halide::clamp(x, 0, input.width() - 1));
+    clamped(x) = input(clamp(x, 0, input.width() - 1));
     Buffer<float> kernel(2);
     kernel(0) = 2.f;
     kernel(1) = 1.f;
@@ -438,7 +452,7 @@ void test_rdom_conv() {
     check(__LINE__, d_kernel(1), 72.f * kernel(0) + 90.f * kernel(1));
 }
 
-void test_horner_polynomial() {
+TEST(AutodiffTest, HornerPolynomial) {
     Var x("x"), y("y");
     Buffer<float> coeffs(8);
     for (int i = 0; i < 8; i++) {
@@ -475,14 +489,14 @@ void test_horner_polynomial() {
     for (int i = 0; i < 8; i++) {
         float d = 0.f;
         for (int j = 0; j < 1024; j++) {
-            d += std::pow(j / 1023.f, (float)(7 - i));
+            d += pow(j / 1023.f, (float)(7 - i));
         }
         d /= 1024.f;
         check(__LINE__, d_coeffs(i), d);
     }
 }
 
-void test_nonlinear_order_dependent_rdom() {
+TEST(AutodiffTest, NonlinearOrderDependentRDom) {
     Var x("x"), y("y");
     Buffer<float> in(2);
     for (int i = 0; i < 2; i++) {
@@ -525,7 +539,7 @@ void test_nonlinear_order_dependent_rdom() {
     check(__LINE__, d_in(1), din1);
 }
 
-void test_1d_to_2d() {
+TEST(AutodiffTest, DimensionChange1DTo2D) {
     Var x("x"), y("y");
     Buffer<float> input(2);
     input(0) = 1.f;
@@ -549,13 +563,13 @@ void test_1d_to_2d() {
 
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
-    _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
+    EXPECT_FALSE(has_non_pure_update(d_input)) << "Function has non pure update";
     Buffer<float> d_input_buf = d_input.realize({2});
     check(__LINE__, d_input_buf(0), 10.f);
     check(__LINE__, d_input_buf(1), 20.f);
 }
 
-void test_linear_resampling_1d() {
+TEST(AutodiffTest, LinearResampling1D) {
     // f(x) = i1(i0(x)) with linear resampling
     Var x("x");
     Buffer<float> input0(2);
@@ -566,9 +580,9 @@ void test_linear_resampling_1d() {
     input1(1) = 2.0f;
     input1(2) = 4.0f;
     Func clamped0("clamped0");
-    clamped0(x) = input0(Halide::clamp(x, 0, input0.width() - 1));
+    clamped0(x) = input0(clamp(x, 0, input0.width() - 1));
     Func clamped1("clamped1");
-    clamped1(x) = input1(Halide::clamp(x, 0, input1.width() - 1));
+    clamped1(x) = input1(clamp(x, 0, input1.width() - 1));
     Expr gx = clamped0(x);
     Expr fx = cast<int>(clamp(floor(clamped0(x)), 0.f, 1.f));
     Expr cx = fx + 1;
@@ -607,7 +621,7 @@ void test_linear_resampling_1d() {
     check(__LINE__, d_clamped1(2), 0.8f);
 }
 
-void test_linear_resampling_2d() {
+TEST(AutodiffTest, LinearResampling2D) {
     // f(x, y) = i1(i0(x), y) with linear resampling
     Var x("x"), y("y");
     Buffer<float> input0(2, 1);
@@ -618,12 +632,12 @@ void test_linear_resampling_2d() {
     input1(1, 0) = 2.0f;
     input1(2, 0) = 4.0f;
     Func clamped0("clamped0");
-    Expr clamped_x0 = Halide::clamp(x, 0, input0.width() - 1);
-    Expr clamped_y0 = Halide::clamp(y, 0, input0.height() - 1);
+    Expr clamped_x0 = clamp(x, 0, input0.width() - 1);
+    Expr clamped_y0 = clamp(y, 0, input0.height() - 1);
     clamped0(x, y) = input0(clamped_x0, clamped_y0);
     Func clamped1("clamped1");
-    Expr clamped_x1 = Halide::clamp(x, 0, input1.width() - 1);
-    Expr clamped_y1 = Halide::clamp(y, 0, input1.height() - 1);
+    Expr clamped_x1 = clamp(x, 0, input1.width() - 1);
+    Expr clamped_y1 = clamp(y, 0, input1.height() - 1);
     clamped1(x, y) = input1(clamped_x1, clamped_y1);
     Expr gx = clamped0(x, y);
     Expr fx = cast<int>(clamp(floor(clamped0(x, y)), 0.f, 1.f));
@@ -652,7 +666,7 @@ void test_linear_resampling_2d() {
     check(__LINE__, d_clamped1(2, 0), 0.8f);
 }
 
-void test_sparse_update() {
+TEST(AutodiffTest, SparseUpdate) {
     Var x("x");
     Buffer<float> input(3);
     input(0) = 1.f;
@@ -679,7 +693,7 @@ void test_sparse_update() {
     check(__LINE__, d_input(2), 0.0f);
 }
 
-void test_histogram() {
+TEST(AutodiffTest, Histogram) {
     Var x("x");
     Buffer<int> input(4, "input");
     input(0) = 2;
@@ -714,7 +728,7 @@ void test_histogram() {
     check(__LINE__, d_k(4), 0.0f);
 }
 
-void test_histogram_no_bounds() {
+TEST(AutodiffTest, HistogramNoBounds) {
     // Same as test histogram but the input is a func,
     // and we don't clamp it. For testing bounds inference.
     Var x("x");
@@ -752,7 +766,7 @@ void test_histogram_no_bounds() {
     check(__LINE__, d_k(4), 0.0f);
 }
 
-void test_multiple_updates_histogram() {
+TEST(AutodiffTest, MultipleUpdatesHistogram) {
     Var x("x");
     Buffer<int> input(4, "input");
     input(0) = 2;
@@ -798,7 +812,7 @@ void test_multiple_updates_histogram() {
     check(__LINE__, d_k(4), 0.0f);
 }
 
-void test_rdom_update() {
+TEST(AutodiffTest, RDomUpdate) {
     Var x("x");
     Buffer<float> input(3);
     input(0) = 1.f;
@@ -821,7 +835,7 @@ void test_rdom_update() {
     check(__LINE__, d_input(2), 0.0f);
 }
 
-void test_repeat_edge() {
+TEST(AutodiffTest, RepeatEdge) {
     Var x("x");
     Buffer<float> input(2);
     input(0) = 1.f;
@@ -843,7 +857,7 @@ void test_repeat_edge() {
     check(__LINE__, d_input_buf(1), 5.f);
 }
 
-void test_constant_exterior() {
+TEST(AutodiffTest, ConstantExterior) {
     Var x("x");
     Buffer<float> input(2);
     input(0) = 1.f;
@@ -865,7 +879,7 @@ void test_constant_exterior() {
     check(__LINE__, d_input_buf(1), 2.f);
 }
 
-void test_repeat_image() {
+TEST(AutodiffTest, RepeatImage) {
     Var x("x");
     Buffer<float> input(2);
     input(0) = 1.f;
@@ -887,7 +901,7 @@ void test_repeat_image() {
     check(__LINE__, d_input_buf(1), 3.f);
 }
 
-void test_mirror_image() {
+TEST(AutodiffTest, MirrorImage) {
     Var x("x");
     Buffer<float> input(2);
     input(0) = 1.f;
@@ -909,7 +923,7 @@ void test_mirror_image() {
     check(__LINE__, d_input_buf(1), 4.f);
 }
 
-void test_mirror_interior() {
+TEST(AutodiffTest, MirrorInterior) {
     Var x("x");
     Buffer<float> input(2);
     input(0) = 1.f;
@@ -931,7 +945,7 @@ void test_mirror_interior() {
     check(__LINE__, d_input_buf(1), 3.f);
 }
 
-void test_second_order() {
+TEST(AutodiffTest, SecondOrder) {
     Var x("x");
     Func input("input");
     input() = 1.f;
@@ -952,7 +966,7 @@ void test_second_order() {
     check(__LINE__, buf2(0), 2.f);
 }
 
-void test_second_order_conv() {
+TEST(AutodiffTest, SecondOrderConvolution) {
     Var x("x");
     Buffer<float> input(10, "input");
     for (int i = 0; i < 10; i++) {
@@ -1007,7 +1021,7 @@ void test_second_order_conv() {
     check(__LINE__, d2_input_buf(9), d2_conv_buf(8));
 }
 
-void test_implicit_vars() {
+TEST(AutodiffTest, ImplicitVariables) {
     Var x("x");
     Buffer<float> input(2);
     input(0) = 1.f;
@@ -1021,7 +1035,7 @@ void test_implicit_vars() {
 
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
-    _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
+    EXPECT_FALSE(has_non_pure_update(d_input)) << "Function has non pure update";
     Buffer<float> d_input_buf = d_input.realize({2});
     check(__LINE__, d_input_buf(0), 1.f);
     check(__LINE__, d_input_buf(1), 1.f);
@@ -1033,7 +1047,7 @@ void test_implicit_vars() {
     check(__LINE__, d_copy_buf(1), 1.f);
 }
 
-void test_tuple() {
+TEST(AutodiffTest, Tuple) {
     Var x("x");
     Buffer<float> input(3);
     input(0) = 1.f;
@@ -1069,14 +1083,14 @@ void test_tuple() {
 
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
-    _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
+    EXPECT_FALSE(has_non_pure_update(d_input)) << "Function has non pure update";
     Buffer<float> d_input_buf = d_input.realize({3});
     check(__LINE__, d_input_buf(0), 1.f);
     check(__LINE__, d_input_buf(1), 2.f);
     check(__LINE__, d_input_buf(2), 1.f);
 }
 
-void test_floor_ceil() {
+TEST(AutodiffTest, FloorCeil) {
     Var x("x");
     Buffer<float> input(3);
     input(0) = 1.f;
@@ -1104,7 +1118,7 @@ void test_floor_ceil() {
     check(__LINE__, d_input_buf(2), 3.f);
 }
 
-void test_downsampling() {
+TEST(AutodiffTest, Downsampling) {
     Var x("x");
     Buffer<float> input(10);
     for (int i = 0; i < 10; i++) {
@@ -1132,7 +1146,7 @@ void test_downsampling() {
     check(__LINE__, d_input_buf(9), 0.f);
 }
 
-void test_upsampling() {
+TEST(AutodiffTest, Upsampling) {
     Var x("x");
     Buffer<float> input(4);
     for (int i = 0; i < 4; i++) {
@@ -1146,7 +1160,7 @@ void test_upsampling() {
     Derivative d = propagate_adjoints(loss);
     Func d_input = d(input);
     // Every dependency of d_tuple should only use pure variables in lhs
-    _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
+    EXPECT_FALSE(has_non_pure_update(d_input)) << "Function has non pure update";
     Buffer<float> d_input_buf = d_input.realize({4});
 
     for (int i = 0; i < 4; i++) {
@@ -1154,7 +1168,7 @@ void test_upsampling() {
     }
 }
 
-void test_transpose() {
+TEST(AutodiffTest, Transpose) {
     Var x("x"), y("y");
     Buffer<float> input(5, 5);
     for (int i = 0; i < 5; i++) {
@@ -1183,7 +1197,7 @@ void test_transpose() {
     }
 }
 
-void test_change_var() {
+TEST(AutodiffTest, ChangeVar) {
     Var x("x"), y("y"), a("a"), b("b");
     Buffer<float> input(5, 5);
     for (int i = 0; i < 5; i++) {
@@ -1214,7 +1228,7 @@ void test_change_var() {
     }
 }
 
-void test_rdom_predicate() {
+TEST(AutodiffTest, RDomPredicate) {
     Var x("x"), y("y");
     Buffer<float> input(7, 7);
     for (int i = 0; i < 7; i++) {
@@ -1247,7 +1261,7 @@ void test_rdom_predicate() {
     }
 }
 
-void test_reverse_scan() {
+TEST(AutodiffTest, ReverseScan) {
     Var x("x");
     Buffer<float> input(5);
     for (int i = 0; i < 5; i++) {
@@ -1267,7 +1281,7 @@ void test_reverse_scan() {
     }
 }
 
-void test_diagonal() {
+TEST(AutodiffTest, Diagonal) {
     Buffer<float> input(5);
     for (int i = 0; i < 5; i++) {
         input(i) = float(i);
@@ -1289,7 +1303,7 @@ void test_diagonal() {
     check(__LINE__, d_input_buf(4), 1.f);
 }
 
-void test_input_bounds() {
+TEST(AutodiffTest, InputBounds) {
     Buffer<float> input(5);
     for (int i = 0; i < 5; i++) {
         input(i) = float(i + 1);
@@ -1323,7 +1337,7 @@ void test_input_bounds() {
     check(__LINE__, d_input_buf(4), d_f_buf(3) * input(3));
 }
 
-void test_select_guard() {
+TEST(AutodiffTest, SelectGuard) {
     Var x("x");
     Buffer<float> input(2);
     input(0) = 0.f;
@@ -1343,7 +1357,7 @@ void test_select_guard() {
     check(__LINE__, d_input_buf(1), -2.f + 0.5f - 0.5f + 1.f);
 }
 
-void test_param() {
+TEST(AutodiffTest, Param) {
     Param<float> param("param", 2.f);
     ImageParam buffer(Float(32), 1, "buffer");
     Buffer<float> b(2);
@@ -1363,7 +1377,7 @@ void test_param() {
     check(__LINE__, d_buffer_buf(1), 0.f);
 }
 
-void test_custom_adjoint_buffer() {
+TEST(AutodiffTest, CustomAdjointBuffer) {
     Var x("x");
     Buffer<float> input(3);
     input(0) = 1.f;
@@ -1383,14 +1397,14 @@ void test_custom_adjoint_buffer() {
     // d input(x) = d blur(x) + d blur(x - 1)
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
-    _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
+    EXPECT_FALSE(has_non_pure_update(d_input)) << "Function has non pure update";
     Buffer<float> d_input_buf = d_input.realize({3});
     check(__LINE__, d_input_buf(0), d_blur_buf(0));
     check(__LINE__, d_input_buf(1), d_blur_buf(0) + d_blur_buf(1));
     check(__LINE__, d_input_buf(2), d_blur_buf(1));
 }
 
-void test_print() {
+TEST(AutodiffTest, Print) {
     Buffer<float> input(1);
     input(0) = rand();
     RDom r(0, 1);
@@ -1402,7 +1416,7 @@ void test_print() {
     check(__LINE__, d(0), 1.f);
 }
 
-void test_random_float() {
+TEST(AutodiffTest, RandomFloat) {
     Func input;
     input() = 1.f;
     Var x;
@@ -1415,50 +1429,4 @@ void test_random_float() {
     Buffer<float> o = out.realize({1});
     Buffer<float> d_input = d_out_d_input.realize();
     check(__LINE__, d_input(), o(0));
-}
-
-int main(int argc, char **argv) {
-    test_scalar<float>();
-    test_scalar<double>();
-    test_1d_box_no_clamp();
-    test_1d_box();
-    test_2d_box();
-    test_update();
-    test_nonlinear_update();
-    test_rdom_conv();
-    test_horner_polynomial();
-    test_nonlinear_order_dependent_rdom();
-    test_1d_to_2d();
-    test_linear_resampling_1d();
-    test_linear_resampling_2d();
-    test_sparse_update();
-    test_histogram();
-    test_histogram_no_bounds();
-    test_multiple_updates_histogram();
-    test_rdom_update();
-    test_repeat_edge();
-    test_constant_exterior();
-    test_repeat_image();
-    test_mirror_image();
-    test_mirror_interior();
-    test_second_order();
-    test_second_order_conv();
-    test_implicit_vars();
-    test_tuple();
-    test_floor_ceil();
-    test_downsampling();
-    test_upsampling();
-    test_transpose();
-    test_change_var();
-    test_rdom_predicate();
-    test_reverse_scan();
-    test_diagonal();
-    test_input_bounds();
-    test_select_guard();
-    test_param();
-    test_custom_adjoint_buffer();
-    test_print();
-    test_random_float();
-    printf("[autodiff] Success!\n");
-    return 0;
 }

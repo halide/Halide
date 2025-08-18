@@ -1,17 +1,22 @@
 #include "Halide.h"
 #include <atomic>
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
+
+namespace {
 
 std::atomic<bool> error_occurred{false};
 
 void halide_error(JITUserContext *ctx, const char *msg) {
-    printf("Expected: %s\n", msg);
     error_occurred = true;
 }
 
-int main(int argc, char **argv) {
+}  // namespace
+
+TEST(AssertionFailureTest, InParallelFor) {
+    error_occurred = false;
+
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y"), xi("xi"), yi("yi");
 
@@ -38,11 +43,5 @@ int main(int argc, char **argv) {
     g.jit_handlers().custom_error = halide_error;
     g.realize({40, 40});
 
-    if (!error_occurred) {
-        printf("There was supposed to be an error\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_TRUE(error_occurred) << "There was supposed to be an error";
 }

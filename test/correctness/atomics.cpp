@@ -1,6 +1,7 @@
 #include <type_traits>
 
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
@@ -15,10 +16,10 @@ enum class Backend {
 template<typename T,
          typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr>
 inline void check(int line_number, T x, T target, T threshold = T(1e-6)) {
-    _halide_user_assert(std::fabs((x) - (target)) < threshold)
+    EXPECT_LT(std::fabs(x - target), threshold)
         << "Line " << line_number
         << ": Expected " << (target)
-        << " instead of " << (x) << "\n";
+        << " instead of " << (x);
 }
 
 inline void check(int line_number, float16_t x, float16_t target) {
@@ -32,10 +33,10 @@ inline void check(int line_number, bfloat16_t x, bfloat16_t target) {
 template<typename T,
          typename std::enable_if<std::is_integral<T>::value, int>::type * = nullptr>
 inline void check(int line_number, T x, T target) {
-    _halide_user_assert(x == target)
+    EXPECT_EQ(x, target)
         << "Line " << line_number
         << ": Expected " << (int64_t)(target)
-        << " instead of " << (int64_t)(x) << "\n";
+        << " instead of " << (int64_t)(x);
 }
 
 template<typename T>
@@ -137,7 +138,7 @@ void test_parallel_hist(const Backend &backend) {
             .vectorize(rii);
     } break;
     default: {
-        _halide_user_assert(false) << "Unsupported backend.\n";
+        FAIL() << "Unsupported backend.";
     } break;
     }
 
@@ -223,7 +224,7 @@ void test_parallel_cas_update(const Backend &backend) {
             .vectorize(rii);
     } break;
     default: {
-        _halide_user_assert(false) << "Unsupported backend.\n";
+        FAIL() << "Unsupported backend.";
     } break;
     }
 
@@ -369,7 +370,7 @@ void test_predicated_hist(const Backend &backend) {
                 .vectorize(rii);
         } break;
         default: {
-            _halide_user_assert(false) << "Unsupported backend.\n";
+            FAIL() << "Unsupported backend.";
         } break;
         }
     }
@@ -629,7 +630,7 @@ void test_hist_compute_at(const Backend &backend) {
         hist.update().atomic().split(r, ro, ri, 32).split(ri, rio, rii, 4).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(rio, DeviceAPI::CUDA).vectorize(rii);
     } break;
     default: {
-        _halide_user_assert(false) << "Unsupported backend.\n";
+        FAIL() << "Unsupported backend.";
     } break;
     }
 
@@ -777,7 +778,7 @@ void test_hist_store_at(const Backend &backend) {
         }
     } break;
     default: {
-        _halide_user_assert(false) << "Unsupported backend.\n";
+        FAIL() << "Unsupported backend.";
     }
     }
 
@@ -870,7 +871,7 @@ void test_hist_rfactor(const Backend &backend) {
             .vectorize(rii);
     } break;
     default: {
-        _halide_user_assert(false) << "Unsupported backend.\n";
+        FAIL() << "Unsupported backend.";
     } break;
     }
 
@@ -950,7 +951,7 @@ void test_hist_tuple_rfactor(const Backend &backend) {
         hist.update().atomic(true /*override_assciativity_test*/).split(r, ro, ri, 8).split(ri, rio, rii, 4).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(rio, DeviceAPI::CUDA).vectorize(rii);
     } break;
     default: {
-        _halide_user_assert(false) << "Unsupported backend.\n";
+        FAIL() << "Unsupported backend.";
     } break;
     }
 
@@ -1002,10 +1003,12 @@ void test_all(const Backend &backend) {
     }
 }
 
-extern "C" HALIDE_EXPORT_SYMBOL int extern_func(int x) {
+namespace {
+extern "C" HALIDE_EXPORT_SYMBOL int extern_func_atomics(int x) {
     return x + 1;
 }
-HalideExtern_1(int, extern_func, int);
+HalideExtern_1(int, extern_func_atomics, int);
+}  // namespace
 
 void test_extern_func(const Backend &backend) {
     int img_size = 10000;
@@ -1018,7 +1021,7 @@ void test_extern_func(const Backend &backend) {
     im(x) = (x * x) % hist_size;
 
     hist(x) = 0;
-    hist(im(r)) = extern_func(hist(im(r)));
+    hist(im(r)) = extern_func_atomics(hist(im(r)));
 
     hist.compute_root();
     switch (backend) {
@@ -1034,7 +1037,7 @@ void test_extern_func(const Backend &backend) {
             .vectorize(ri);
     } break;
     default: {
-        _halide_user_assert(false) << "Unsupported backend.\n";
+        FAIL() << "Unsupported backend.";
     } break;
     }
 
@@ -1054,7 +1057,8 @@ void test_extern_func(const Backend &backend) {
     }
 }
 
-extern "C" HALIDE_EXPORT_SYMBOL int expensive(int x) {
+namespace {
+extern "C" HALIDE_EXPORT_SYMBOL int expensive_atomics(int x) {
     float f = 3.0f;
     for (int i = 0; i < (1 << 10); i++) {
         f = sqrtf(sinf(cosf(f)));
@@ -1062,7 +1066,8 @@ extern "C" HALIDE_EXPORT_SYMBOL int expensive(int x) {
     if (f < 0) return 3;
     return x + 1;
 }
-HalideExtern_1(int, expensive, int);
+HalideExtern_1(int, expensive_atomics, int);
+}  // namespace
 
 void test_async(const Backend &backend) {
     int img_size = 10000;
@@ -1075,7 +1080,7 @@ void test_async(const Backend &backend) {
     producer(x) = (x * x) % hist_size;
 
     consumer(x) = 0;
-    consumer(producer(r)) = extern_func(consumer(producer(r)));
+    consumer(producer(r)) = expensive_atomics(consumer(producer(r)));
 
     consumer.compute_root();
     switch (backend) {
@@ -1093,7 +1098,7 @@ void test_async(const Backend &backend) {
             .vectorize(ri);
     } break;
     default: {
-        _halide_user_assert(false) << "Unsupported backend.\n";
+        FAIL() << "Unsupported backend.";
     } break;
     }
 
@@ -1149,7 +1154,7 @@ void test_async_tuple(const Backend &backend) {
             .parallel(rh);
     } break;
     default: {
-        _halide_user_assert(false) << "Unsupported backend.\n";
+        FAIL() << "Unsupported backend.";
     } break;
     }
 
@@ -1183,83 +1188,242 @@ void test_async_tuple(const Backend &backend) {
     }
 }
 
-int main(int argc, char **argv) {
-    const Target t = get_jit_target_from_environment();
-    if (t.arch == Target::WebAssembly) {
-        printf("[SKIP] Skipping test for WebAssembly as it does not support atomics yet.\n");
-        return 0;
-    }
+class AtomicsTest : public ::testing::Test {
+protected:
+    const Target target{get_jit_target_from_environment()};
 
-    if (t.os == Target::Windows && t.has_feature(Target::CUDA)) {
-        printf("[SKIP] Skipping test for Windows + CUDA because of unexplained sporadic failures (https://github.com/halide/Halide/issues/7423).\n");
-        return 0;
+    void SetUp() override {
+        if (target.arch == Target::WebAssembly) {
+            GTEST_SKIP() << "Skipping test for WebAssembly as it does not support atomics yet.";
+        }
+        if (target.os == Target::Windows && target.has_feature(Target::CUDA)) {
+            GTEST_SKIP() << "Skipping test for Windows + CUDA because of unexplained sporadic failures (https://github.com/halide/Halide/issues/7423).";
+        }
+        Halide::Internal::JITSharedRuntime::set_num_threads(4);
     }
+};
 
-    Target target = get_jit_target_from_environment();
-    // Most of the schedules used in this test are terrible for large
-    // thread count machines, due to massive amounts of
-    // contention. We'll just set the thread count to 4.
-    Halide::Internal::JITSharedRuntime::set_num_threads(4);
-    test_all<uint8_t>(Backend::CPU);
-    test_all<uint8_t>(Backend::CPUVectorize);
-    test_all<int8_t>(Backend::CPU);
-    test_all<int8_t>(Backend::CPUVectorize);
-    test_all<uint16_t>(Backend::CPU);
-    test_all<uint16_t>(Backend::CPUVectorize);
-    test_all<int16_t>(Backend::CPU);
-    test_all<int16_t>(Backend::CPUVectorize);
-    if (target.has_feature(Target::F16C)) {
-        test_all<float16_t>(Backend::CPU);
-        test_all<float16_t>(Backend::CPUVectorize);
-    }
-    test_all<bfloat16_t>(Backend::CPU);
-    test_all<bfloat16_t>(Backend::CPUVectorize);
-    test_all<uint32_t>(Backend::CPU);
-    test_all<uint32_t>(Backend::CPUVectorize);
-    test_all<int32_t>(Backend::CPU);
-    test_all<int32_t>(Backend::CPUVectorize);
-    test_all<float>(Backend::CPU);
-    test_all<float>(Backend::CPUVectorize);
-    test_all<uint64_t>(Backend::CPU);
-    test_all<uint64_t>(Backend::CPUVectorize);
-    test_all<int64_t>(Backend::CPU);
-    test_all<int64_t>(Backend::CPUVectorize);
-    test_all<double>(Backend::CPU);
-    test_all<double>(Backend::CPUVectorize);
-    if (target.has_feature(Target::OpenCL)) {
-        // No support for 8-bit & 16-bit atomics in OpenCL
-        test_all<uint32_t>(Backend::OpenCL);
-        test_all<int32_t>(Backend::OpenCL);
-        test_all<float>(Backend::OpenCL);
-        if (target.has_feature(Target::CLAtomics64)) {
-            test_all<uint64_t>(Backend::OpenCL);
-            test_all<int64_t>(Backend::OpenCL);
-            test_all<double>(Backend::OpenCL);
+template<Target::Feature backend>
+class AtomicsTestGPU : public AtomicsTest {
+protected:
+    void SetUp() override {
+        AtomicsTest::SetUp();
+        if (!target.has_feature(backend)) {
+            GTEST_SKIP() << Target::feature_to_name(backend) << " not enabled.";
         }
     }
-    if (target.has_feature(Target::CUDA)) {
-        // No support for 8-bit & 16-bit atomics in CUDA
-        // float16 is possible but not implemented yet.
-        test_all<uint32_t>(Backend::CUDA);
-        test_all<int32_t>(Backend::CUDA);
-        test_all<float>(Backend::CUDA);
-        test_all<uint64_t>(Backend::CUDA);
-        test_all<int64_t>(Backend::CUDA);
-        test_all<double>(Backend::CUDA);
+};
 
-        test_all<uint32_t>(Backend::CUDAVectorize);
-        test_all<int32_t>(Backend::CUDAVectorize);
-        test_all<float>(Backend::CUDAVectorize);
-        test_all<uint64_t>(Backend::CUDAVectorize);
-        test_all<int64_t>(Backend::CUDAVectorize);
-        test_all<double>(Backend::CUDAVectorize);
+using AtomicsTestOpenCL = AtomicsTestGPU<Target::OpenCL>;
+using AtomicsTestCUDA = AtomicsTestGPU<Target::CUDA>;
+
+// CPU Backend Tests
+TEST_F(AtomicsTest, Uint8CPU) {
+    test_all<uint8_t>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, Uint8CPUVectorize) {
+    test_all<uint8_t>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, Int8CPU) {
+    test_all<int8_t>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, Int8CPUVectorize) {
+    test_all<int8_t>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, Uint16CPU) {
+    test_all<uint16_t>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, Uint16CPUVectorize) {
+    test_all<uint16_t>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, Int16CPU) {
+    test_all<int16_t>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, Int16CPUVectorize) {
+    test_all<int16_t>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, Float16CPU) {
+    const Target target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::F16C)) {
+        GTEST_SKIP() << "Target does not support F16C.";
     }
-    test_extern_func(Backend::CPU);
-    test_extern_func(Backend::CPUVectorize);
-    test_async(Backend::CPU);
-    test_async(Backend::CPUVectorize);
-    test_async_tuple(Backend::CPU);
+    test_all<float16_t>(Backend::CPU);
+}
 
-    printf("Success!\n");
-    return 0;
+TEST_F(AtomicsTest, Float16CPUVectorize) {
+    const Target target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::F16C)) {
+        GTEST_SKIP() << "Target does not support F16C.";
+    }
+    test_all<float16_t>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, BFloat16CPU) {
+    test_all<bfloat16_t>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, BFloat16CPUVectorize) {
+    test_all<bfloat16_t>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, Uint32CPU) {
+    test_all<uint32_t>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, Uint32CPUVectorize) {
+    test_all<uint32_t>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, Int32CPU) {
+    test_all<int32_t>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, Int32CPUVectorize) {
+    test_all<int32_t>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, FloatCPU) {
+    test_all<float>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, FloatCPUVectorize) {
+    test_all<float>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, Uint64CPU) {
+    test_all<uint64_t>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, Uint64CPUVectorize) {
+    test_all<uint64_t>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, Int64CPU) {
+    test_all<int64_t>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, Int64CPUVectorize) {
+    test_all<int64_t>(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, DoubleCPU) {
+    test_all<double>(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, DoubleCPUVectorize) {
+    test_all<double>(Backend::CPUVectorize);
+}
+
+// OpenCL Backend Tests
+TEST_F(AtomicsTestOpenCL, Uint32OpenCL) {
+    test_all<uint32_t>(Backend::OpenCL);
+}
+
+TEST_F(AtomicsTestOpenCL, Int32OpenCL) {
+    test_all<int32_t>(Backend::OpenCL);
+}
+
+TEST_F(AtomicsTestOpenCL, FloatOpenCL) {
+    test_all<float>(Backend::OpenCL);
+}
+
+TEST_F(AtomicsTestOpenCL, Uint64OpenCL) {
+    if (!target.has_feature(Target::CLAtomics64)) {
+        GTEST_SKIP() << "OpenCL 64-bit atomics not supported.";
+    }
+    test_all<uint64_t>(Backend::OpenCL);
+}
+
+TEST_F(AtomicsTestOpenCL, Int64OpenCL) {
+    if (!target.has_feature(Target::CLAtomics64)) {
+        GTEST_SKIP() << "OpenCL 64-bit atomics not supported.";
+    }
+    test_all<int64_t>(Backend::OpenCL);
+}
+
+TEST_F(AtomicsTestOpenCL, DoubleOpenCL) {
+    if (!target.has_feature(Target::CLAtomics64)) {
+        GTEST_SKIP() << "OpenCL 64-bit atomics not supported.";
+    }
+    test_all<double>(Backend::OpenCL);
+}
+
+// CUDA Backend Tests
+TEST_F(AtomicsTestCUDA, Uint32CUDA) {
+    test_all<uint32_t>(Backend::CUDA);
+}
+
+TEST_F(AtomicsTestCUDA, Int32CUDA) {
+    test_all<int32_t>(Backend::CUDA);
+}
+
+TEST_F(AtomicsTestCUDA, FloatCUDA) {
+    test_all<float>(Backend::CUDA);
+}
+
+TEST_F(AtomicsTestCUDA, Uint64CUDA) {
+    test_all<uint64_t>(Backend::CUDA);
+}
+
+TEST_F(AtomicsTestCUDA, Int64CUDA) {
+    test_all<int64_t>(Backend::CUDA);
+}
+
+TEST_F(AtomicsTestCUDA, DoubleCUDA) {
+    test_all<double>(Backend::CUDA);
+}
+
+// CUDA Vectorize Backend Tests
+TEST_F(AtomicsTestCUDA, Uint32CUDAVectorize) {
+    test_all<uint32_t>(Backend::CUDAVectorize);
+}
+
+TEST_F(AtomicsTestCUDA, Int32CUDAVectorize) {
+    test_all<int32_t>(Backend::CUDAVectorize);
+}
+
+TEST_F(AtomicsTestCUDA, FloatCUDAVectorize) {
+    test_all<float>(Backend::CUDAVectorize);
+}
+
+TEST_F(AtomicsTestCUDA, Uint64CUDAVectorize) {
+    test_all<uint64_t>(Backend::CUDAVectorize);
+}
+
+TEST_F(AtomicsTestCUDA, Int64CUDAVectorize) {
+    test_all<int64_t>(Backend::CUDAVectorize);
+}
+
+TEST_F(AtomicsTestCUDA, DoubleCUDAVectorize) {
+    test_all<double>(Backend::CUDAVectorize);
+}
+
+// External Function Tests
+TEST_F(AtomicsTest, ExternFuncCPU) {
+    test_extern_func(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, ExternFuncCPUVectorize) {
+    test_extern_func(Backend::CPUVectorize);
+}
+
+// Async Tests
+TEST_F(AtomicsTest, AsyncCPU) {
+    test_async(Backend::CPU);
+}
+
+TEST_F(AtomicsTest, AsyncCPUVectorize) {
+    test_async(Backend::CPUVectorize);
+}
+
+TEST_F(AtomicsTest, AsyncTupleCPU) {
+    test_async_tuple(Backend::CPU);
 }

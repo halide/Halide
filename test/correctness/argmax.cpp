@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(ArgmaxTest, SingleDimensional) {
     // A single-dimensional argmax.
     Func f, arg_max_f;
     Var x;
@@ -21,15 +20,14 @@ int main(int argc, char **argv) {
 
     int result_f = evaluate_may_gpu<int>(arg_max_f());
 
-    if (result_f != 50) {
-        printf("Arg max of f is %d, but should have been 50\n", result_f);
-        return 1;
-    }
+    EXPECT_EQ(result_f, 50) << "Arg max of f is " << result_f << ", but should have been 50";
+}
 
-    // Now try a multi-dimensional argmax.
+TEST(ArgmaxTest, MultiDimensional) {
+    // Try a multi-dimensional argmax.
     Func g, arg_max_g;
-    Var y, c;
-    r = RDom(0, 100, 0, 100);
+    Var x, y;
+    RDom r(0, 100, 0, 100);
     g(x, y) = x * (100 - x) + y * (80 - y);
     g.compute_root();
 
@@ -41,34 +39,34 @@ int main(int argc, char **argv) {
     int best_x, best_y, best_val;
     evaluate_may_gpu(arg_max_g(), &best_x, &best_y, &best_val);
 
-    if (best_val != 4100) {
-        printf("Arg max of g is %d, but should have been 4100\n", best_val);
-        return 1;
-    }
+    EXPECT_EQ(best_val, 4100) << "Arg max of g is " << best_val << ", but should have been 4100";
+    EXPECT_EQ(best_x, 50) << "Arg max x of g is " << best_x << ", but should have been 50";
+    EXPECT_EQ(best_y, 40) << "Arg max y of g is " << best_y << ", but should have been 40";
+}
 
-    if (best_x != 50 || best_y != 40) {
-        printf("Arg max of g is %d, %d, but should have been 50, 40\n",
-               best_x, best_y);
-        return 1;
-    }
+TEST(ArgmaxTest, InlineArgmaxArgmin) {
+    // Try some inline argmaxs
+    Func g;
+    Var x, y;
+    RDom r(0, 100, 0, 100);
+    g(x, y) = x * (100 - x) + y * (80 - y);
+    g.compute_root();
 
-    // Now try some inline argmaxs
+    int best_x, best_y, best_val;
     evaluate_may_gpu(argmax(g(r.x, r.y)), &best_x, &best_y, &best_val);
 
-    if (best_x != 50 || best_y != 40 || best_val != 4100) {
-        printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
-               best_x, best_y, best_val, 50, 40, 4100);
-        return 1;
-    }
+    EXPECT_EQ(best_x, 50) << "Inline arg max x of g is " << best_x << ", but should have been 50";
+    EXPECT_EQ(best_y, 40) << "Inline arg max y of g is " << best_y << ", but should have been 40";
+    EXPECT_EQ(best_val, 4100) << "Inline arg max val of g is " << best_val << ", but should have been 4100";
 
     evaluate_may_gpu(argmin(g(r.x, r.y)), &best_x, &best_y, &best_val);
 
-    if (best_x != 0 || best_y != 99 || best_val != -1881) {
-        printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
-               best_x, best_y, best_val, 50, 40, 4100);
-        return 1;
-    }
+    EXPECT_EQ(best_x, 0) << "Inline arg min x of g is " << best_x << ", but should have been 0";
+    EXPECT_EQ(best_y, 99) << "Inline arg min y of g is " << best_y << ", but should have been 99";
+    EXPECT_EQ(best_val, -1881) << "Inline arg min val of g is " << best_val << ", but should have been -1881";
+}
 
+TEST(ArgmaxTest, InPlaceArgmaxVariousStarts) {
     // Try an in place argmax, using an elements at various places in
     // the sequence as the initial guess.  This tests some edge cases
     // for the atomicity of provides.
@@ -81,30 +79,22 @@ int main(int argc, char **argv) {
         100,
         101,
     };
+    
     for (size_t i = 0; i < sizeof(starts) / sizeof(starts[0]); i++) {
         int init = starts[i];
         Func h;
-        r = RDom(0, 100);
+        Var x;
+        RDom r(0, 100);
         h(x) = Tuple(x * (100 - x), x);
         h(init) = select(h(init)[0] >= h(r)[0], Tuple(h(init)), Tuple(h(r)));
 
         Func arg_max_h;
         arg_max_h() = h(init);
 
+        int best_val, best_x;
         evaluate_may_gpu(arg_max_h(), &best_val, &best_x);
 
-        if (best_val != 2500) {
-            printf("Arg max of h is %d, but should have been 2500\n", best_val);
-            return 1;
-        }
-
-        if (best_x != 50) {
-            printf("Arg max of h is %d, but should have been 50\n", best_x);
-            return 1;
-        }
+        EXPECT_EQ(best_val, 2500) << "Arg max val of h with init=" << init << " is " << best_val << ", but should have been 2500";
+        EXPECT_EQ(best_x, 50) << "Arg max x of h with init=" << init << " is " << best_x << ", but should have been 50";
     }
-
-    printf("Success!\n");
-
-    return 0;
 }
