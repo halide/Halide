@@ -26,7 +26,7 @@ void TestCallableTypedBadArgumentsBufferDims() {
 TEST(ErrorTests, CallableTypedBadArgumentsBufferDims) {
     EXPECT_RUNTIME_ERROR(
         TestCallableTypedBadArgumentsBufferDims,
-        MatchesPattern(R"(Error defining 'f_\d+': Argument 1 of 4 \('p\d+'\) )"
+        MatchesPattern(R"(Error defining 'f(_\d+)?': Argument 1 of 4 \('p\d+'\) )"
                        R"(was expected to be a buffer of type 'uint8' and )"
                        R"(dimension 2\.)"));
 }
