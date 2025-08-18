@@ -17,7 +17,7 @@ target_link_libraries(correctness_tests PRIVATE Halide::ImageIO Halide::ThreadPo
 target_sources(
     correctness_tests
     PRIVATE
-    #    gpu_multi_device.cpp
+    gpu_multi_device.cpp
 )
 
 target_sources(
