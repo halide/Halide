@@ -1,7 +1,18 @@
 find_package(GTest REQUIRED)
 
-add_executable(
+add_executable(error_tests)
+target_link_libraries(error_tests PRIVATE Halide::Test GTest::gtest_main)
+
+gtest_discover_tests(
     error_tests
+    PROPERTIES
+    ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+    LABELS "error"
+)
+
+target_sources(
+    error_tests
+    PRIVATE
     ambiguous_inline_reductions.cpp
     async_require_fail.cpp
     async_specialize.cpp
@@ -137,17 +148,3 @@ add_executable(
     wrong_dimensionality_extern_stage.cpp
     wrong_type.cpp
 )
-
-target_link_libraries(
-    error_tests
-    PRIVATE
-    Halide::Test
-    GTest::gtest_main
-)
-
-set(test_env
-    "HL_TARGET=${Halide_TARGET}"
-    "HL_JIT_TARGET=${Halide_TARGET}"
-)
-
-gtest_discover_tests(error_tests PROPERTIES ENVIRONMENT "${test_env}")

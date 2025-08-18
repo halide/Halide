@@ -1,9 +1,17 @@
 find_package(GTest REQUIRED)
 
 add_executable(correctness_tests)
-set_target_properties(correctness_tests PROPERTIES ENABLE_EXPORTS TRUE)
+target_link_libraries(correctness_tests PRIVATE Halide::Test GTest::gtest_main)
 
-target_link_libraries(correctness_tests PRIVATE Halide::Test GTest::gtest_main Halide::ImageIO Halide::ThreadPool)
+gtest_discover_tests(
+    correctness_tests
+    PROPERTIES
+    ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+    LABELS "correctness"
+)
+
+set_target_properties(correctness_tests PROPERTIES ENABLE_EXPORTS TRUE)
+target_link_libraries(correctness_tests PRIVATE Halide::ImageIO Halide::ThreadPool)
 
 # correctness_multi_gpu
 target_sources(
@@ -418,5 +426,3 @@ target_sources(
     #    tuple_vector_reduce.cpp
     #    unroll_huge_mux.cpp
 )
-
-gtest_discover_tests(correctness_tests)
