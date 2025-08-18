@@ -1,18 +1,18 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_dirs.h"
+
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(BoundsInferenceTest, Complex) {
     const int K = 8;
 
     Func f[K];
     Var x, y;
 
-    if (argc > 1)
-        srand(atoi(argv[1]));
-    else
-        srand(0);
+    std::string seed_str = Internal::get_env_variable("HL_TEST_SEED");
+    srand(seed_str.empty() ? 0 : atoi(seed_str.c_str()));
 
     f[0](x, y) = x + y;
     f[1](x, y) = x * y;
@@ -29,7 +29,4 @@ int main(int argc, char **argv) {
     }
 
     Buffer<int> out = f[K - 1].realize({32, 32});
-
-    printf("Success!\n");
-    return 0;
 }

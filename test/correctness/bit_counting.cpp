@@ -1,11 +1,12 @@
-
 #include "Halide.h"
-#include <stdint.h>
-#include <stdio.h>
+#include "gtest/gtest.h"
+
+#include <cstdint>
 #include <string>
 
 using namespace Halide;
 
+namespace {
 template<typename T>
 T local_popcount(T v) {
     T count = 0;
@@ -51,8 +52,9 @@ std::string as_bits(T v) {
 
 Var x("x");
 
-void schedule(Func f, const Target &t) {
+void schedule(Func f) {
     // TODO: Add GPU schedule where supported.
+    static const Target t = get_jit_target_from_environment();
     if (t.has_feature(Target::HVX)) {
         f.hexagon().vectorize(x, 128);
     } else {
@@ -61,7 +63,7 @@ void schedule(Func f, const Target &t) {
 }
 
 template<typename T>
-int test_bit_counting(const Target &target) {
+void test_bit_counting() {
     Buffer<T> input(256);
     for (int i = 0; i < 256; i++) {
         if (i < 16) {
@@ -75,57 +77,46 @@ int test_bit_counting(const Target &target) {
 
     Func popcount_test("popcount_test");
     popcount_test(x) = popcount(input(x));
-    schedule(popcount_test, target);
+    schedule(popcount_test);
 
     Buffer<T> popcount_result = popcount_test.realize({256});
     for (int i = 0; i < 256; ++i) {
-        if (popcount_result(i) != local_popcount(input(i))) {
-            std::string bits_string = as_bits(input(i));
-            printf("Popcount of %u [0b%s] returned %d (should be %d)\n",
-                   input(i), bits_string.c_str(), popcount_result(i),
-                   local_popcount(input(i)));
-            return 1;
-        }
+        ASSERT_EQ(popcount_result(i), local_popcount(input(i)))
+            << "Popcount of " << input(i) << "[0b" << as_bits(input(i))
+            << "] returned " << popcount_result(i) << " (should be "
+            << local_popcount(input(i)) << ")";
     }
 
     Func ctlz_test("ctlz_test");
     ctlz_test(x) = count_leading_zeros(input(x));
-    schedule(ctlz_test, target);
+    schedule(ctlz_test);
 
     Buffer<T> ctlz_result = ctlz_test.realize({256});
     for (int i = 0; i < 256; ++i) {
-        if (ctlz_result(i) != local_count_leading_zeros(input(i))) {
-            std::string bits_string = as_bits(input(i));
-            printf("Ctlz of %u [0b%s] returned %d (should be %d)\n",
-                   input(i), bits_string.c_str(), ctlz_result(i),
-                   local_count_leading_zeros(input(i)));
-            return 1;
-        }
+        ASSERT_EQ(ctlz_result(i), local_count_leading_zeros(input(i)))
+            << "Ctlz of " << input(i) << "[0b" << as_bits(input(i))
+            << "] returned " << ctlz_result(i) << " (should be "
+            << local_count_leading_zeros(input(i)) << ")";
     }
 
     Func cttz_test("cttz_test");
     cttz_test(x) = count_trailing_zeros(input(x));
-    schedule(cttz_test, target);
+    schedule(cttz_test);
 
     Buffer<T> cttz_result = cttz_test.realize({256});
     for (int i = 0; i < 256; ++i) {
-        if (cttz_result(i) != local_count_trailing_zeros(input(i))) {
-            std::string bits_string = as_bits(input(i));
-            printf("Cttz of %u [0b%s] returned %d (should be %d)\n",
-                   input(i), bits_string.c_str(), cttz_result(i),
-                   local_count_trailing_zeros(input(i)));
-            return 1;
-        }
+        ASSERT_EQ(cttz_result(i), local_count_trailing_zeros(input(i)))
+            << "Cttz of " << input(i) << "[0b" << as_bits(input(i))
+            << "] returned " << cttz_result(i) << " (should be "
+            << local_count_trailing_zeros(input(i)) << ")";
     }
-    return 0;
+}
+}  // namespace
+
+TEST(BitCountingTest, UInt16) {
+    test_bit_counting<uint16_t>();
 }
 
-int main() {
-    Target target = get_jit_target_from_environment();
-
-    if (test_bit_counting<uint16_t>(target) != 0) return 1;
-    if (test_bit_counting<uint32_t>(target) != 0) return 1;
-
-    printf("Success!\n");
-    return 0;
+TEST(BitCountingTest, UInt32) {
+    test_bit_counting<uint32_t>();
 }

@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
 // Verify that https://github.com/halide/Halide/issues/6186 is fixed
-int main(int argc, char **argv) {
+TEST(BoundsTest, SplitRegressionIssue6186) {
     Var x, y, chunk;
 
     ImageParam input(UInt(8), 2);
@@ -25,8 +25,4 @@ int main(int argc, char **argv) {
     output.output_buffer().dim(1).set_min(0).set_extent(100);
 
     auto result = output.realize({100, 100});
-
-    printf("Success!\n");
-
-    return 0;
 }

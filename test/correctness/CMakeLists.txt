@@ -30,30 +30,30 @@ target_sources(
     async_storage_folding.cpp
     autodiff.cpp
     bad_likely.cpp
-    #    bit_counting.cpp
-    #    bits_known.cpp
-    #    bitwise_ops.cpp
+    bit_counting.cpp
+    bits_known.cpp
+    bitwise_ops.cpp
     bool_compute_root_vectorize.cpp
-    #    bool_predicate_cast.cpp
-    #    bound.cpp
-    #    bound_small_allocations.cpp
-    #    bound_storage.cpp
-    #    boundary_conditions.cpp
-    #    bounds.cpp
-    #    bounds_inference.cpp
-    #    bounds_inference_chunk.cpp
-    #    bounds_inference_complex.cpp
-    #    bounds_inference_outer_split.cpp
-    #    bounds_of_abs.cpp
-    #    bounds_of_cast.cpp
-    #    bounds_of_func.cpp
+    bool_predicate_cast.cpp
+    bound.cpp
+    bound_small_allocations.cpp
+    bound_storage.cpp
+    boundary_conditions.cpp
+    bounds.cpp
+    bounds_inference.cpp
+    bounds_inference_chunk.cpp
+    bounds_inference_complex.cpp
+    bounds_inference_outer_split.cpp
+    bounds_of_abs.cpp
+    bounds_of_cast.cpp
+    bounds_of_func.cpp
     bounds_of_monotonic_math.cpp
-    #    bounds_of_multiply.cpp
-    #    bounds_of_pure_intrinsics.cpp
-    #    bounds_of_split.cpp
-    #    bounds_query.cpp
-    #    bounds_query_respects_specialize_fail.cpp
-    #    buffer_t.cpp
+    bounds_of_multiply.cpp
+    bounds_of_pure_intrinsics.cpp
+    bounds_of_split.cpp
+    bounds_query.cpp
+    bounds_query_respects_specialize_fail.cpp
+    buffer_t.cpp
     #    c_function.cpp
     #    callable.cpp
     #    callable_errors.cpp

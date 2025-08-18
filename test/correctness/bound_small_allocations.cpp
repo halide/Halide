@@ -1,15 +1,18 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
+
+namespace {
 Expr calc(Expr a) {
     Expr prod = cast<int64_t>(a) * cast<int64_t>(a);
     Expr scaled = (prod + (1 << 30)) >> 31;
     Expr clamped = clamp(scaled, Int(32).min(), Int(32).max());
     return cast<int32_t>(clamped);
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(BoundsTest, SmallAllocations) {
     Var x, y;
     Func f, g, h;
 
@@ -23,7 +26,4 @@ int main(int argc, char **argv) {
     Buffer<int32_t> imf = h.realize({32, 32});
 
     // No verification of output: just want to verify no compile-time assertion
-
-    printf("Success!\n");
-    return 0;
 }

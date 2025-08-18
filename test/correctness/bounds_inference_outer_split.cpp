@@ -1,10 +1,12 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
+
 using namespace Halide;
 using namespace Halide::Internal;
 
 // This was a failing case from https://github.com/halide/Halide/issues/1618
 
+namespace {
 class CheckAllocationSize : public IRVisitor {
 
     using IRVisitor::visit;
@@ -20,8 +22,9 @@ class CheckAllocationSize : public IRVisitor {
 public:
     Expr result;
 };
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(BoundsInferenceTest, OuterSplit) {
     Var x, y, xout, xin;
 
     ImageParam input(type_of<int16_t>(), 2);
@@ -67,12 +70,6 @@ int main(int argc, char **argv) {
     CheckAllocationSize checker;
     m.functions()[0].body.accept(&checker);
 
-    if (!is_const(checker.result, 512)) {
-        std::cerr << m.functions()[0].body << "\n\n"
-                  << "Allocation size was supposed to be 512 in dimension 0 in the stmt above\n";
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_TRUE(is_const(checker.result, 512))
+        << "Allocation size was supposed to be 512 in dimension 0 in the stmt above";
 }

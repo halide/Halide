@@ -1,5 +1,5 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
@@ -13,8 +13,7 @@ using namespace Halide;
 #define ALIGN_OF(x) alignof(x)
 #endif
 
-int main(int argc, char **argv) {
-
+TEST(BufferTTest, StaticAsserts) {
     CHECK(device, 0, 0);
     CHECK(device_interface, 8, 8);
     CHECK(host, 12, 16);
@@ -36,11 +35,5 @@ int main(int argc, char **argv) {
     // Also check that Halide understands the size correctly:
     int runtime_size = evaluate<int>(
         Internal::Call::make(Int(32), Internal::Call::size_of_halide_buffer_t, {}, Internal::Call::Intrinsic));
-    if (runtime_size != sizeof(halide_buffer_t)) {
-        printf("size_of_halide_buffer_t intrinsic returned %d instead of %d\n",
-               runtime_size, (int)sizeof(halide_buffer_t));
-    }
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_EQ(runtime_size, sizeof(halide_buffer_t)) << "size_of_halide_buffer_t intrinsic is wrong";
 }

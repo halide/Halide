@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(BoundsQueryTest, Basic) {
     Func first, second;
     Var x, y, yi;
 
@@ -26,9 +26,9 @@ int main(int argc, char **argv) {
 
     // Check the buffer was allocated and is of the expected size.
     Buffer<int> b = tmp.get();
-    assert(b.data());
-    assert(b.extent(0) == 1028);
-    assert(b.extent(1) == 1026);
+    EXPECT_EQ(b.extent(0), 1028);
+    EXPECT_EQ(b.extent(1), 1026);
+    ASSERT_NE(b.data(), nullptr);
 
     // Now fill the intermediate using the first pipeline, and then
     // run the second pipeline.
@@ -43,14 +43,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < 1024; y++) {
         for (int x = 0; x < 1024; x++) {
-            if (out(x, y) != reference(x, y)) {
-                printf("out(%d, %d) = %d instead of %d\n",
-                       x, y, out(x, y), reference(x, y));
-                return 1;
-            }
+            ASSERT_EQ(out(x, y), reference(x, y));
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
-
-// See https://github.com/halide/Halide/issues/3070
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+// See https://github.com/halide/Halide/issues/3070
+namespace {
 template<typename T>
 void test() {
     Param<T> bound;
@@ -21,12 +21,12 @@ void test() {
 
     auto result = f.realize({200});
 }
+}  // namespace
 
-int main(int argc, char **argv) {
-    printf("Trying int32_t\n");
+TEST(BoundsTest, MultiplyInClampInt32) {
     test<int32_t>();
-    printf("Trying int16_t\n");
+}
+
+TEST(BoundsTest, MultiplyInClampInt16) {
     test<int16_t>();
-    printf("Success!\n");
-    return 0;
 }

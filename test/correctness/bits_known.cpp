@@ -1,18 +1,19 @@
 #include "Halide.h"
-
+#include <gtest/gtest.h>
 using namespace Halide;
 using namespace Halide::Internal;
 
-int main(int argc, char **argv) {
+namespace {
+Param<int64_t> i64("i64");
+Param<int32_t> i32("i32");
+Param<int32_t> i16("i16");
+Param<uint64_t> u64("u64");
+Param<uint32_t> u32("u32");
+Param<uint16_t> u16("u16");
+Param<uint8_t> u8("u8");
+}  // namespace
 
-    Param<int64_t> i64("i64");
-    Param<int32_t> i32("i32");
-    Param<int32_t> i16("i16");
-    Param<uint64_t> u64("u64");
-    Param<uint32_t> u32("u32");
-    Param<uint16_t> u16("u16");
-    Param<uint8_t> u8("u8");
-
+TEST(BitsKnownTest, ProvableTrue) {
     // A list of Exprs we should be able to prove true by analyzing the bitwise op we do
     Expr exprs[] = {
         // Manipulate or isolate the low bits
@@ -66,9 +67,14 @@ int main(int argc, char **argv) {
 
         // If we knew the trailing bits before, we still know them after
         (~(i32 * 16)) % 16 == 15,
-
     };
 
+    for (auto e : exprs) {
+        EXPECT_TRUE(can_prove(e)) << "Failed to prove: " << e;
+    }
+}
+
+TEST(BitsKnownTest, UnprovableUnknown) {
     // Check we're not inferring *too* much, with variants of the above that
     // shouldn't be provable one way or the other.
     Expr negative_exprs[] = {
@@ -99,20 +105,8 @@ int main(int argc, char **argv) {
         (~clamp(u8, 3, 5)) >= 255 - 4,
     };
 
-    for (auto e : exprs) {
-        if (!can_prove(e)) {
-            std::cerr << "Failed to prove: " << e << "\n";
-            return -1;
-        }
-    }
-
     for (auto e : negative_exprs) {
-        if (is_const(simplify(e))) {
-            std::cerr << "Should not have been able to prove or disprove: " << e << "\n";
-            return -1;
-        }
+        EXPECT_FALSE(is_const(simplify(e)))
+            << "Should not have been able to prove or disprove: " << e;
     }
-
-    printf("Success!\n");
-    return 0;
 }

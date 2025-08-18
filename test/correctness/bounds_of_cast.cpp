@@ -1,7 +1,12 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
+
+namespace {
+
+ImageParam input(Int(32), 1);
+Var x;
 
 void check(Func f, ImageParam in, int min, int extent) {
     Buffer<int> output(12345);
@@ -11,27 +16,28 @@ void check(Func f, ImageParam in, int min, int extent) {
     f.infer_input_bounds(output);
     Buffer<int> im = in.get();
 
-    if (im.extent(0) != extent || im.min(0) != min) {
-        printf("Inferred size was [%d, %d] instead of [%d, %d]\n",
-               im.min(0), im.extent(0), min, extent);
-        exit(1);
-    }
+    EXPECT_EQ(im.min(0), min);
+    EXPECT_EQ(im.extent(0), extent);
+}
+}  // namespace
+
+TEST(BoundsTest, CastToUInt8) {
+    // input should only be required from 0 to 256
+    Func func = lambda(x, input(cast<uint8_t>(x)));
+    check(func, input, 0, 256);
 }
 
-int main(int argc, char **argv) {
-    ImageParam input(Int(32), 1);
-    Var x;
-    Func f1 = lambda(x, input(cast<uint8_t>(x)));
-    Func f2 = lambda(x, input(cast<int8_t>(x)));
-    Func f3 = lambda(x, input(cast<uint16_t>(x)));
-    Func f4 = lambda(x, input(cast<int16_t>(x)));
+TEST(BoundsTest, CastToInt8) {
+    Func func = lambda(x, input(cast<int8_t>(x)));
+    check(func, input, -128, 256);
+}
 
-    // input should only be required from 0 to 256
-    check(f1, input, 0, 256);
-    check(f2, input, -128, 256);
-    check(f3, input, 0, 65536);
-    check(f4, input, -32768, 65536);
+TEST(BoundsTest, CastToUInt16) {
+    Func func = lambda(x, input(cast<uint16_t>(x)));
+    check(func, input, 0, 65536);
+}
 
-    printf("Success!\n");
-    return 0;
+TEST(BoundsTest, CastToInt16) {
+    Func func = lambda(x, input(cast<int16_t>(x)));
+    check(func, input, -32768, 65536);
 }

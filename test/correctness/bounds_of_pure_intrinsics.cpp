@@ -1,14 +1,13 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-int main(int argc, char **argv) {
-
-    // There were scalability problems with taking bounds of nested pure
-    // intrinsics. This test hangs if those problems still exist, using the
-    // strict float intrinsics. https://github.com/halide/Halide/issues/8686
-
+// There were scalability problems with taking bounds of nested pure
+// intrinsics. This test hangs if those problems still exist, using the
+// strict float intrinsics. https://github.com/halide/Halide/issues/8686
+TEST(BoundsTest, ScalabilityIssue8686) {
     Param<float> p1, p2, p2_min, p2_max;
     Scope<Interval> scope;
     scope.push(p2.name(), Interval{p2_min, p2_max});
@@ -24,8 +23,4 @@ int main(int argc, char **argv) {
         e = strictify_float(e);
         bounds_of_expr_in_scope(e, scope);
     }
-
-    printf("Success!\n");
-
-    return 0;
 }

@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(BoundsInferenceTest, Chunk) {
     Func f, g, h;
     Var x, y;
 
@@ -21,13 +20,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {
-            if (out(x, y) != x + y) {
-                printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
-                return 1;
-            }
+            ASSERT_EQ(out(x, y), x + y);
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }
