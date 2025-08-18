@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ManyUpdatesTest, Basic) {
     const int N = 20;
 
     Func f;
@@ -16,7 +16,4 @@ int main(int argc, char **argv) {
     f.compute_root();
 
     Buffer<int> im = f.realize({N, N});
-
-    printf("Success!\n");
-    return 0;
 }

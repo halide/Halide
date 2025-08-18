@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <iostream>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(NonVectorAlignedEmbededBufferTest, Basic) {
     char storage[5 * sizeof(int32_t)]{0};
     char *ptr = storage;
     ptr += sizeof(int32_t);
@@ -16,7 +16,4 @@ int main(int argc, char **argv) {
     f.vectorize(x, 4);
     f.output_buffer().dim(0).set_min(0);
     auto result = f.realize({4});
-
-    printf("Success!\n");
-    return 0;
 }

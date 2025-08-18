@@ -56,7 +56,7 @@ target_sources(
     #    cast_handle.cpp
     #    chunk.cpp
     #    chunk_sharing.cpp
-    #    circular_reference_leak.cpp
+    circular_reference_leak.cpp
     #    code_explosion.cpp
     #    compare_vars.cpp
     #    compile_to.cpp
@@ -68,7 +68,7 @@ target_sources(
     #    compute_inside_guard.cpp
     #    compute_with_in.cpp
     #    compute_with_inlined.cpp
-    #    computed_index.cpp
+    computed_index.cpp
     #    concat.cpp
     #    constant_expr.cpp
     #    constant_interval.cpp
@@ -106,7 +106,7 @@ target_sources(
     #    embed_bitcode.cpp
     #    erf.cpp
     #    exception.cpp
-    #    explicit_inline_reductions.cpp
+    explicit_inline_reductions.cpp
     #    extern_bounds_inference.cpp
     #    extern_consumer.cpp
     #    extern_error.cpp
@@ -226,7 +226,7 @@ target_sources(
     #    make_struct.cpp
     #    many_dimensions.cpp
     #    many_small_extern_stages.cpp
-    #    many_updates.cpp
+    many_updates.cpp
     #    math.cpp
     #    median3x3.cpp
     #    memoize_cloned.cpp
@@ -244,7 +244,7 @@ target_sources(
     #    nested_tail_strategies.cpp
     #    newtons_method.cpp
     #    non_nesting_extern_bounds_query.cpp
-    #    non_vector_aligned_embeded_buffer.cpp
+    non_vector_aligned_embeded_buffer.cpp
     #    obscure_image_references.cpp
     #    out_constraint.cpp
     #    out_of_memory.cpp
@@ -313,7 +313,7 @@ target_sources(
     #    specialize_trim_condition.cpp
     #    split_by_non_factor.cpp
     #    split_fuse_rvar.cpp
-    #    split_reuse_inner_name_bug.cpp
+    split_reuse_inner_name_bug.cpp
     #    split_store_compute.cpp
     #    stable_realization_order.cpp
     #    stack_allocations.cpp
@@ -332,14 +332,14 @@ target_sources(
     #    tracing_bounds.cpp
     #    tracing_broadcast.cpp
     #    tracing_stack.cpp
-    #    transitive_bounds.cpp
+    transitive_bounds.cpp
     #    trim_no_ops.cpp
     #    tuple_partial_update.cpp
     #    tuple_reduction.cpp
     #    tuple_select.cpp
     #    tuple_undef.cpp
     #    tuple_update_ops.cpp
-    #    two_vector_args.cpp
+    two_vector_args.cpp
     #    typed_func.cpp
     #    undef.cpp
     #    uninitialized_read.cpp
@@ -350,12 +350,12 @@ target_sources(
     #    unsafe_dedup_lets.cpp
     #    unsafe_promises.cpp
     #    unused_func.cpp
-    #    update_chunk.cpp
+    update_chunk.cpp
     #    vector_bounds_inference.cpp
     #    vector_cast.cpp
     #    vector_extern.cpp
     #    vector_math.cpp
-    #    vector_print_bug.cpp
+    vector_print_bug.cpp
     #    vector_reductions.cpp
     #    vector_shuffle.cpp
     #    vector_tile.cpp
@@ -418,3 +418,5 @@ target_sources(
     #    tuple_vector_reduce.cpp
     #    unroll_huge_mux.cpp
 )
+
+gtest_discover_tests(correctness_tests)

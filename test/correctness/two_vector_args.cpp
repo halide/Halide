@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(TwoVectorArgsTest, Basic) {
     Func f, g;
     Var x, y;
 
@@ -15,8 +14,4 @@ int main(int argc, char **argv) {
     f.vectorize(x, 4);
 
     Buffer<int> out = f.realize({4, 4});
-
-    printf("Success!\n");
-
-    return 0;
 }
