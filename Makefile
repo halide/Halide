@@ -372,6 +372,8 @@ TEST_CXX_FLAGS += -I/usr/local/cuda/include
 endif
 
 # Compiling the tutorials requires libpng
+LIBPNG_FOUND := $(shell pkg-config --exists libpng && echo yes || echo no)
+ifeq ($(LIBPNG_FOUND),yes)
 LIBPNG_LIBS_DEFAULT = $(shell pkg-config libpng --libs)
 LIBPNG_CXX_FLAGS ?= $(shell pkg-config libpng --cflags)
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
@@ -381,6 +383,10 @@ LIBPNG_LIBS ?= -lpng
 endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
+else
+LIBPNG_CXX_FLAGS ?= -DHALIDE_NO_PNG
+LIBPNG_LIBS ?= 
+endif
 
 LIBJPEG_CXXFLAGS ?= $(shell pkg-config libjpeg --cflags)
 LIBJPEG_LIBS ?= $(shell pkg-config libjpeg --libs)
