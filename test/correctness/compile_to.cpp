@@ -1,10 +1,10 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
-
-#include <cstdio>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 void testCompileToOutput(Func j) {
     std::string fn_object = Internal::get_test_tmp_dir() + "compile_to_native.o";
     printf("fn_object is %s\n", fn_object.c_str());
@@ -30,8 +30,9 @@ void testCompileToOutputAndAssembly(Func j) {
     Internal::assert_file_exists(fn_object);
     Internal::assert_file_exists(fn_assembly);
 }
+}
 
-int main(int argc, char **argv) {
+TEST(CompileToTest, Basic) {
     Func f, g, h, j;
     Var x, y;
     f(x, y) = x + y;
@@ -46,7 +47,4 @@ int main(int argc, char **argv) {
     testCompileToOutput(j);
 
     testCompileToOutputAndAssembly(j);
-
-    printf("Success!\n");
-    return 0;
 }

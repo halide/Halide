@@ -1,14 +1,9 @@
 #include "Halide.h"
-#include <iostream>
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
 namespace {
-
-void check(int r) {
-    assert(r == 0);
-}
 
 bool custom_malloc_called = false;
 bool custom_free_called = false;
@@ -27,15 +22,15 @@ void my_free(JITUserContext *user_context, void *ptr) {
 }
 
 int call_counter = 0;
-extern "C" HALIDE_EXPORT_SYMBOL float my_extern_func(int x, float y) {
+extern "C" HALIDE_EXPORT_SYMBOL float my_extern_func_gen(int x, float y) {
     call_counter++;
     return x * y;
 }
-HalideExtern_2(float, my_extern_func, int, float);
+HalideExtern_2(float, my_extern_func_gen, int, float);
 
 }  // namespace
 
-int main(int argc, char **argv) {
+TEST(CallableGeneratorTest, BasicGenerator) {
     const Target t = get_jit_target_from_environment();
     const GeneratorContext context(t);
 
@@ -68,23 +63,23 @@ int main(int argc, char **argv) {
         Callable c = gen->compile_to_callable();
 
         Buffer<uint8_t> out1(10, 10);
-        check(c(in1, 42, 1.0f, out1));
+        EXPECT_EQ(c(in1, 42, 1.0f, out1), 0);
 
         Buffer<uint8_t> out2(10, 10);
-        check(c(in2, 22, 2.0f, out2));
+        EXPECT_EQ(c(in2, 22, 2.0f, out2), 0);
 
         Buffer<uint8_t> out3(10, 10);
-        check(c(in1, 12, 1.0f, out3));
+        EXPECT_EQ(c(in1, 12, 1.0f, out3), 0);
 
         Buffer<uint8_t> out4(10, 10);
-        check(c(in2, 16, 1.0f, out4));
+        EXPECT_EQ(c(in2, 16, 1.0f, out4), 0);
 
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 10; j++) {
-                assert(out1(i, j) == i + j * 10 + 42);
-                assert(out2(i, j) == i * 10 + j + 11);
-                assert(out3(i, j) == i + j * 10 + 12);
-                assert(out4(i, j) == i * 10 + j + 16);
+                EXPECT_EQ(out1(i, j), i + j * 10 + 42);
+                EXPECT_EQ(out2(i, j), i * 10 + j + 11);
+                EXPECT_EQ(out3(i, j), i + j * 10 + 12);
+                EXPECT_EQ(out4(i, j), i * 10 + j + 16);
             }
         }
 
@@ -92,13 +87,13 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> in_bounds(nullptr, 1, 1);
         Buffer<uint8_t> out_bounds(nullptr, 20, 20);
 
-        check(c(in_bounds, 42, 1.0f, out_bounds));
+        EXPECT_EQ(c(in_bounds, 42, 1.0f, out_bounds), 0);
 
-        assert(in_bounds.defined());
-        assert(in_bounds.dim(0).extent() == 20);
-        assert(in_bounds.dim(1).extent() == 20);
-        assert(in1.dim(0).extent() == 10);
-        assert(in1.dim(1).extent() == 10);
+        EXPECT_TRUE(in_bounds.defined());
+        EXPECT_EQ(in_bounds.dim(0).extent(), 20);
+        EXPECT_EQ(in_bounds.dim(1).extent(), 20);
+        EXPECT_EQ(in1.dim(0).extent(), 10);
+        EXPECT_EQ(in1.dim(1).extent(), 10);
     }
 
     // Override Halide's malloc and free (except under wasm),
@@ -131,10 +126,10 @@ int main(int argc, char **argv) {
         Callable c = gen->compile_to_callable(&my_jit_handlers);
 
         Buffer<int> im(100000);
-        check(c(im));
+        EXPECT_EQ(c(im), 0);
 
-        assert(custom_malloc_called);
-        assert(custom_free_called);
+        EXPECT_TRUE(custom_malloc_called);
+        EXPECT_TRUE(custom_free_called);
     }
 
     // Check that Param<void*> works with Callables
@@ -171,28 +166,16 @@ int main(int argc, char **argv) {
         // Create a dummy JITUserContext here just to test that
         // passing one explicitly works correctly.
         JITUserContext empty;
-        check(c1(&empty, &foo, out1));
+        EXPECT_EQ(c1(&empty, &foo, out1), 0);
 
         Buffer<uint64_t> out2(4);
-        check(c2(&foo, out2));
+        EXPECT_EQ(c2(&foo, out2), 0);
 
         uint64_t correct = (uint64_t)((uintptr_t)(&foo));
 
         for (int x = 0; x < out1.width(); x++) {
-            if (out1(x) != correct) {
-                printf("out1(%d) = %llu instead of %llu\n",
-                       x,
-                       (long long unsigned)out1(x),
-                       (long long unsigned)correct);
-                exit(1);
-            }
-            if (out2(x) != correct) {
-                printf("out2(%d) = %llu instead of %llu\n",
-                       x,
-                       (long long unsigned)out2(x),
-                       (long long unsigned)correct);
-                exit(1);
-            }
+            EXPECT_EQ(out1(x), correct) << "out1(" << x << ") = " << out1(x) << " instead of " << correct;
+            EXPECT_EQ(out2(x), correct) << "out2(" << x << ") = " << out2(x) << " instead of " << correct;
         }
     }
 
@@ -215,7 +198,7 @@ int main(int argc, char **argv) {
 
         Var x, y;
         Func monitor;
-        monitor(x, y) = my_extern_func(x, cast<float>(y));
+        monitor(x, y) = my_extern_func_gen(x, cast<float>(y));
         const std::map<std::string, JITExtern> my_jit_externs = {
             {"extern_func", JITExtern{monitor}}};
 
@@ -223,25 +206,16 @@ int main(int argc, char **argv) {
         Callable c = gen->compile_to_callable(nullptr, &my_jit_externs);
 
         Buffer<float> imf(32, 32);
-        check(c(imf));
+        EXPECT_EQ(c(imf), 0);
 
         // Check the result was what we expected
         for (int i = 0; i < 32; i++) {
             for (int j = 0; j < 32; j++) {
                 float correct = (float)(i * j);
-                float delta = imf(i, j) - correct;
-                if (delta < -0.001 || delta > 0.001) {
-                    printf("imf[%d, %d] = %f instead of %f\n", i, j, imf(i, j), correct);
-                    exit(1);
-                }
+                EXPECT_NEAR(imf(i, j), correct, 0.001f) << "imf[" << i << ", " << j << "] = " << imf(i, j) << " instead of " << correct;
             }
         }
 
-        if (call_counter != 32 * 32) {
-            printf("In pipeline_set_jit_externs_func, my_func was called %d times instead of %d\n", call_counter, 32 * 32);
-            exit(1);
-        }
+        EXPECT_EQ(call_counter, 32 * 32) << "In pipeline_set_jit_externs_func, my_func was called " << call_counter << " times instead of " << 32 * 32;
     }
-
-    printf("Success!\n");
 }

@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(CompareVarsTest, Basic) {
     Func f;
     Var x, y;
     f(x, y) = select(x == y, 1, 0);
@@ -13,14 +13,8 @@ int main(int argc, char **argv) {
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
             int correct = (x == y) ? 1 : 0;
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(x, y), correct) << "im(" << x << ", " << y << ") = " << im(x, y) << " instead of " << correct;
         }
     }
 
-    printf("Success!\n");
-    return 0;
 }

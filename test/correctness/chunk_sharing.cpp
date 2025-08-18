@@ -1,13 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ChunkSharingTest, Basic) {
     Var x("x"), y("y"), i("i"), j("j");
     Func a("a"), b("b"), c("c"), d("d");
-
-    printf("Defining function...\n");
 
     a(i, j) = i + j;
     b(i, j) = a(i, j) + 1;
@@ -18,8 +16,6 @@ int main(int argc, char **argv) {
     b.compute_at(d, y);
     a.compute_at(d, y);
 
-    printf("Realizing function...\n");
-
     Buffer<int> im = d.realize({32, 32});
 
     for (int y = 0; y < 32; y++) {
@@ -28,12 +24,7 @@ int main(int argc, char **argv) {
             int b = a + 1;
             int c = a * 2;
             int d = b + c;
-            if (im(x, y) != d) {
-                printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), d);
-                return 1;
-            }
+            ASSERT_EQ(im(x, y), d) << "im(" << x << ", " << y << ") = " << im(x, y) << " instead of " << d;
         }
     }
-    printf("Success!\n");
-    return 0;
 }

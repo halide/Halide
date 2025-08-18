@@ -54,20 +54,20 @@ target_sources(
     bounds_query.cpp
     bounds_query_respects_specialize_fail.cpp
     buffer_t.cpp
-    #    c_function.cpp
-    #    callable.cpp
-    #    callable_errors.cpp
-    #    callable_generator.cpp
-    #    callable_typed.cpp
-    #    cascaded_filters.cpp
-    #    cast.cpp
-    #    cast_handle.cpp
-    #    chunk.cpp
-    #    chunk_sharing.cpp
+    c_function.cpp
+    callable.cpp
+    callable_errors.cpp
+    callable_generator.cpp
+    callable_typed.cpp
+    cascaded_filters.cpp
+    cast.cpp
+    cast_handle.cpp
+    chunk.cpp
+    chunk_sharing.cpp
     circular_reference_leak.cpp
-    #    code_explosion.cpp
-    #    compare_vars.cpp
-    #    compile_to.cpp
+    code_explosion.cpp
+    compare_vars.cpp
+    compile_to.cpp
     #    compile_to_bitcode.cpp
     #    compile_to_lowered_stmt.cpp
     #    compile_to_multitarget.cpp

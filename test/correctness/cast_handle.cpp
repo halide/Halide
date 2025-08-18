@@ -1,12 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(CastHandleTest, Basic) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support Param<> for pointer types.\n");
-        return 0;
+        GTEST_SKIP() << "WebAssembly JIT does not support Param<> for pointer types.";
     }
 
     Func f, g;
@@ -28,22 +27,7 @@ int main(int argc, char **argv) {
     uint64_t correct = (uint64_t)((uintptr_t)(&foo));
 
     for (int x = 0; x < out1.width(); x++) {
-        if (out1(x) != correct) {
-            printf("out1(%d) = %llu instead of %llu\n",
-                   x,
-                   (long long unsigned)out1(x),
-                   (long long unsigned)correct);
-            return 1;
-        }
-        if (out2(x) != correct) {
-            printf("out2(%d) = %llu instead of %llu\n",
-                   x,
-                   (long long unsigned)out2(x),
-                   (long long unsigned)correct);
-            return 1;
-        }
+        EXPECT_EQ(out1(x), correct) << "out1(" << x << ") = " << out1(x) << " instead of " << correct;
+        EXPECT_EQ(out2(x), correct) << "out2(" << x << ") = " << out2(x) << " instead of " << correct;
     }
-
-    printf("Success!\n");
-    return 0;
 }
