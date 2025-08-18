@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(SimplifiedAwayEmbeddedImageTest, Basic) {
     // What happens if an emedded image gets simplified away?
     Buffer<float> input(32, 32);
 
@@ -16,8 +15,4 @@ int main(int argc, char **argv) {
     Buffer<float> output(32, 32);
 
     foo.realize(output);
-
-    // Any non-error is a success.
-    printf("Success!\n");
-    return 0;
 }

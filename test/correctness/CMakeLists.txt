@@ -21,11 +21,11 @@ target_sources(
     async_order.cpp
     async_storage_folding.cpp
     autodiff.cpp
-    #    bad_likely.cpp
+    bad_likely.cpp
     #    bit_counting.cpp
     #    bits_known.cpp
     #    bitwise_ops.cpp
-    #    bool_compute_root_vectorize.cpp
+    bool_compute_root_vectorize.cpp
     #    bool_predicate_cast.cpp
     #    bound.cpp
     #    bound_small_allocations.cpp
@@ -39,7 +39,7 @@ target_sources(
     #    bounds_of_abs.cpp
     #    bounds_of_cast.cpp
     #    bounds_of_func.cpp
-    #    bounds_of_monotonic_math.cpp
+    bounds_of_monotonic_math.cpp
     #    bounds_of_multiply.cpp
     #    bounds_of_pure_intrinsics.cpp
     #    bounds_of_split.cpp
@@ -66,7 +66,7 @@ target_sources(
     #    compute_at_reordered_update_stage.cpp
     #    compute_at_split_rvar.cpp
     #    compute_inside_guard.cpp
-    #    compute_with_in.cpp
+    compute_with_in.cpp
     #    compute_with_inlined.cpp
     computed_index.cpp
     #    concat.cpp
@@ -101,7 +101,7 @@ target_sources(
     #    div_round_to_zero.cpp
     #    ring_buffer.cpp
     #    dynamic_allocation_in_gpu_kernel.cpp
-    #    dynamic_reduction_bounds.cpp
+    dynamic_reduction_bounds.cpp
     #    early_out.cpp
     #    embed_bitcode.cpp
     #    erf.cpp
@@ -143,7 +143,7 @@ target_sources(
     #    gpu_arg_types.cpp
     #    gpu_assertion_in_kernel.cpp
     #    gpu_bounds_inference_failure.cpp
-    #    gpu_condition_lifting.cpp
+    gpu_condition_lifting.cpp
     #    gpu_cpu_simultaneous_read.cpp
     #    gpu_data_flows.cpp
     #    gpu_different_blocks_threads_dimensions.cpp
@@ -280,14 +280,14 @@ target_sources(
     #    reorder_storage.cpp
     #    require.cpp
     #    reschedule.cpp
-    #    respect_input_constraint_in_bounds_inference.cpp
+    respect_input_constraint_in_bounds_inference.cpp
     #    reuse_stack_alloc.cpp
     #    round.cpp
     #    saturating_casts.cpp
     #    scatter.cpp
     #    set_custom_trace.cpp
     #    shadowed_bound.cpp
-    #    shared_self_references.cpp
+    shared_self_references.cpp
     #    shift_by_unsigned_negated.cpp
     #    shifted_image.cpp
     #    side_effects.cpp
@@ -298,7 +298,7 @@ target_sources(
     #    simd_op_check_sve2.cpp
     #    simd_op_check_wasm.cpp
     #    simd_op_check_x86.cpp
-    #    simplified_away_embedded_image.cpp
+    simplified_away_embedded_image.cpp
     #    simplify.cpp
     #    skip_stages.cpp
     #    skip_stages_external_array_functions.cpp

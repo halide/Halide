@@ -1,12 +1,13 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
+
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(GpuConditionLiftingTest, Basic) {
     // See https://github.com/halide/Halide/issues/4297
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled.";
     }
     Var x, y, z;
     Func f;
@@ -19,7 +20,4 @@ int main(int argc, char **argv) {
         .gpu_blocks(z);
 
     Buffer<int> imf = f.realize({10, 10, 10}, target);
-
-    printf("Success!\n");
-    return 0;
 }

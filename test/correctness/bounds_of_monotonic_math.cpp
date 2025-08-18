@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(BoundsOfMonotonicMathTest, Basic) {
     Func f;
     Var x;
 
@@ -16,11 +16,5 @@ int main(int argc, char **argv) {
     Buffer<float> in = input.get();
 
     int correct = 26;
-    if (in.width() != correct) {
-        printf("Width is %d instead of %d\n", in.width(), correct);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(in.width(), correct) << "Width is " << in.width() << " instead of " << correct;
 }

@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(SharedSelfReferencesTest, Basic) {
     // Check that recursive references get tracked properly
     {
         Func f;
@@ -18,7 +18,4 @@ int main(int argc, char **argv) {
 
     // f should have been cleaned up. valgrind will complain if it
     // hasn't been.
-
-    printf("Success!\n");
-    return 0;
 }

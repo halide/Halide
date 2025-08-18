@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ComputeWithInTest, Basic) {
     Var x("x"), y("y");
     Func one("one"), two("two"), three("three"), output("output");
 
@@ -18,7 +18,4 @@ int main(int argc, char **argv) {
     one.compute_at(two, Var::outermost());
 
     output.realize({64, 64});
-
-    printf("Success!\n");
-    return 0;
 }

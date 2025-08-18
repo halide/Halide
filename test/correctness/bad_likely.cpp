@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(BadLikelyTest, Basic) {
     Func f;
     Var x;
     // Use a likely intrinsic to tag a disjoint range.
@@ -12,12 +12,6 @@ int main(int argc, char **argv) {
     Buffer<int> im = f.realize({30});
     for (int x = 0; x < 30; x++) {
         int correct = (x < 10 || x > 20) ? 1 : 2;
-        if (im(x) != correct) {
-            printf("im(%d) = %d instead of %d\n", x, im(x), correct);
-            return 1;
-        }
+        EXPECT_EQ(im(x), correct) << "im(" << x << ") = " << im(x) << " instead of " << correct;
     }
-
-    printf("Success!\n");
-    return 0;
 }

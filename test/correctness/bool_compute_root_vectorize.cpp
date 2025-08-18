@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(BoolComputeRootVectorizeTest, Basic) {
     Var x, y;
 
     Func pred("pred");
@@ -19,8 +19,5 @@ int main(int argc, char **argv) {
     RDom range(0, 100, 0, 100);
     int32_t result = evaluate_may_gpu<int32_t>(sum(selector(range.x, range.y)));
 
-    assert(result == 4950);
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(result, 4950);
 }

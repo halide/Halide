@@ -1,10 +1,9 @@
 #include "Halide.h"
-
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(DynamicReductionBoundsTest, Basic) {
     ImageParam input(Float(32), 2);
 
     Var x, y, z;
@@ -19,7 +18,4 @@ int main(int argc, char **argv) {
     input.set(im);
 
     f.realize({100, 100, 16});
-
-    printf("Success!\n");
-    return 0;
 }

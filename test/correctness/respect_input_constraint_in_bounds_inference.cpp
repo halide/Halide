@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(RespectInputConstraintInBoundsInferenceTest, Basic) {
     ImageParam im(Float(32), 1);
     Func f, g;
     Var x;
@@ -17,7 +18,4 @@ int main(int argc, char **argv) {
     f.compute_root().store_in(MemoryType::Register);
 
     g.compile_jit();
-
-    printf("Success!\n");
-    return 0;
 }
