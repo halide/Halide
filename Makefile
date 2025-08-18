@@ -388,8 +388,22 @@ LIBPNG_CXX_FLAGS ?= -DHALIDE_NO_PNG
 LIBPNG_LIBS ?= 
 endif
 
-LIBJPEG_CXXFLAGS ?= $(shell pkg-config libjpeg --cflags)
-LIBJPEG_LIBS ?= $(shell pkg-config libjpeg --libs)
+# Check for libjpeg via pkg-config, including Homebrew's keg-only path
+ifneq (,$(shell command -v brew))
+BREW_JPEG_PKGDIR := $(shell brew --prefix libjpeg)/lib/pkgconfig
+ifneq (,$(wildcard $(BREW_JPEG_PKGDIR)))
+export PKG_CONFIG_HINTS := PKG_CONFIG_PATH=$(if $(PKG_CONFIG_PATH),$(PKG_CONFIG_PATH):)$(BREW_JPEG_PKGDIR)
+endif
+endif
+
+LIBJPEG_FOUND := $(shell $(PKG_CONFIG_HINTS) pkg-config --exists libjpeg && echo yes || echo no)
+ifeq ($(LIBJPEG_FOUND),yes)
+LIBJPEG_CXX_FLAGS ?= $(shell $(PKG_CONFIG_HINTS) pkg-config libjpeg --cflags)
+LIBJPEG_LIBS ?= $(shell $(PKG_CONFIG_HINTS) pkg-config libjpeg --libs)
+else
+LIBJPEG_CXX_FLAGS ?= -DHALIDE_NO_JPEG
+LIBJPEG_LIBS ?=
+endif
 
 IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
