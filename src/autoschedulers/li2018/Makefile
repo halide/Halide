@@ -22,5 +22,5 @@ endif
 # to ensure that (eg) Halide.h is built before this.
 $(BIN)/libautoschedule_li2018.$(PLUGIN_EXT): $(SRC)/GradientAutoscheduler.cpp | $(LIB_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_RPATH_FOR_LIB)
 

@@ -72,7 +72,7 @@ LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir | sed -e 's/\\/\//g' -e 's/\([a-zA
 LLVM_SYSTEM_LIBS = $(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
 ifeq ($(UNAME), Darwin)
 # homebrew LLVM on macos likes to depend on things in /opt/homebrew/lib without explicitly adding that linker flag
-LLVM_SYSTEM_LIBS += $(shell echo -L/opt/homebrew/lib | sed -e 's/[\/&]/\\&/g')
+LLVM_SYSTEM_LIBS += -L$(shell brew --prefix | sed -e 's/[\/&]/\\&/g')\/lib
 endif
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
@@ -370,6 +370,10 @@ ifneq ($(TEST_CUDA), )
 TEST_CXX_FLAGS += -DTEST_CUDA
 TEST_CXX_FLAGS += -I/usr/local/cuda/include
 endif
+
+# Find libjpeg and libpng. The code to set IMAGE_IO_LIBS is duplicated
+# in apps/support/Makefile.inc and any changes here should be repeated
+# there.
 
 ifneq (,$(shell command -v brew))
 # Get png and jpeg paths from brew
