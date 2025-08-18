@@ -1,14 +1,22 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
+#include <gtest/gtest.h>
 
 #include <cstdio>
+#include <cstring>
+#include <map>
 
 using namespace Halide;
+
+namespace {
 
 // Given a path like /path/to/some/file.ext, return file.ext
 // If the path contains no separators (/ or \), just return it as-is
 std::string leaf_name(const std::string &path) {
-    size_t sep = std::min(path.rfind('/'), path.rfind('\\'));
+    size_t sep = path.rfind('/');
+    if (sep == std::string::npos) {
+        sep = path.rfind('\\');
+    }
     return path.substr(sep == std::string::npos ? 0 : sep + 1);
 }
 
@@ -16,7 +24,27 @@ std::string get_output_path_prefix(const std::string &base) {
     return Internal::get_test_tmp_dir() + "halide_test_correctness_compile_to_multitarget_" + base;
 }
 
-void test_compile_to_static_library(Func j) {
+}  // namespace
+
+class CompileToMultiTargetTest : public ::testing::Test {
+protected:
+    Param<float> factor{"factor"};
+    Func f, g, h, j;
+    Var x{"x"}, y{"y"};
+
+    void SetUp() override {
+        f(x, y) = x + y;
+        g(x, y) = cast<float>(f(x, y) + f(x + 1, y));
+        h(x, y) = f(x, y) + g(x, y);
+        j(x, y) = h(x, y) * 2 * factor;
+
+        f.compute_root();
+        g.compute_root();
+        h.compute_root();
+    }
+};
+
+TEST_F(CompileToMultiTargetTest, StaticLibrary) {
     std::string filename_prefix = get_output_path_prefix("c1");
     const char *a = get_host_target().os == Target::Windows ? ".lib" : ".a";
 
@@ -29,21 +57,21 @@ void test_compile_to_static_library(Func j) {
     files.push_back(filename_prefix + ".h");
     files.push_back(filename_prefix + a);
 
-    for (auto f : files) {
+    for (const auto &f : files) {
         Internal::ensure_no_file_exists(f);
     }
 
     j.compile_to_multitarget_static_library(filename_prefix, j.infer_arguments(), targets);
 
-    for (auto f : files) {
+    for (const auto &f : files) {
         Internal::assert_file_exists(f);
     }
 
     // TODO: would be nice to examine the contents of the library and verify the
-    // sub-objects have the filenames we expect.
+    //   sub-objects have the filenames we expect.
 }
 
-void test_compile_to_object_files(Func j) {
+TEST_F(CompileToMultiTargetTest, ObjectFiles) {
     std::string filename_prefix = get_output_path_prefix("c2");
     const char *o = get_host_target().os == Target::Windows ? ".obj" : ".o";
 
@@ -53,7 +81,7 @@ void test_compile_to_object_files(Func j) {
     };
 
     std::vector<Target> targets;
-    for (auto s : target_strings) {
+    for (const auto &s : target_strings) {
         targets.emplace_back(s);
     }
 
@@ -61,22 +89,22 @@ void test_compile_to_object_files(Func j) {
     files.push_back(filename_prefix + ".h");
     files.push_back(filename_prefix + "_runtime" + o);
     files.push_back(filename_prefix + "_wrapper" + o);
-    for (auto s : target_strings) {
+    for (const auto &s : target_strings) {
         files.push_back(filename_prefix + "-" + s + o);
     }
 
-    for (auto f : files) {
+    for (const auto &f : files) {
         Internal::ensure_no_file_exists(f);
     }
 
     j.compile_to_multitarget_object_files(filename_prefix, j.infer_arguments(), targets, target_strings);
 
-    for (auto f : files) {
+    for (const auto &f : files) {
         Internal::assert_file_exists(f);
     }
 }
 
-void test_compile_to_object_files_no_runtime(Func j) {
+TEST_F(CompileToMultiTargetTest, ObjectFilesNoRuntime) {
     std::string filename_prefix = get_output_path_prefix("c3");
     const char *o = get_host_target().os == Target::Windows ? ".obj" : ".o";
 
@@ -86,29 +114,29 @@ void test_compile_to_object_files_no_runtime(Func j) {
     };
 
     std::vector<Target> targets;
-    for (auto s : target_strings) {
+    for (const auto &s : target_strings) {
         targets.emplace_back(s);
     }
 
     std::vector<std::string> files;
     files.push_back(filename_prefix + ".h");
     files.push_back(filename_prefix + "_wrapper" + o);
-    for (auto s : target_strings) {
+    for (const auto &s : target_strings) {
         files.push_back(filename_prefix + "-" + s + o);
     }
 
-    for (auto f : files) {
+    for (const auto &f : files) {
         Internal::ensure_no_file_exists(f);
     }
 
     j.compile_to_multitarget_object_files(filename_prefix, j.infer_arguments(), targets, target_strings);
 
-    for (auto f : files) {
+    for (const auto &f : files) {
         Internal::assert_file_exists(f);
     }
 }
 
-void test_compile_to_object_files_single_target(Func j) {
+TEST_F(CompileToMultiTargetTest, ObjectFilesSingleTarget) {
     std::string filename_prefix = get_output_path_prefix("c4");
     const char *o = get_host_target().os == Target::Windows ? ".obj" : ".o";
 
@@ -117,7 +145,7 @@ void test_compile_to_object_files_single_target(Func j) {
     };
 
     std::vector<Target> targets;
-    for (auto s : target_strings) {
+    for (const auto &s : target_strings) {
         targets.emplace_back(s);
     }
 
@@ -125,17 +153,18 @@ void test_compile_to_object_files_single_target(Func j) {
     files.push_back(filename_prefix + ".h");
     files.push_back(filename_prefix + o);
 
-    for (auto f : files) {
+    for (const auto &f : files) {
         Internal::ensure_no_file_exists(f);
     }
 
     j.compile_to_multitarget_object_files(filename_prefix, j.infer_arguments(), targets, target_strings);
 
-    for (auto f : files) {
+    for (const auto &f : files) {
         Internal::assert_file_exists(f);
     }
 }
 
+namespace {
 void test_compile_to_everything(Func j, bool do_object) {
     std::string filename_prefix = get_output_path_prefix(do_object ? "c5" : "c6");
     const char *a = get_host_target().os == Target::Windows ? ".lib" : ".a";
@@ -147,7 +176,7 @@ void test_compile_to_everything(Func j, bool do_object) {
     };
 
     std::vector<Target> targets;
-    for (auto s : target_strings) {
+    for (const auto &s : target_strings) {
         targets.emplace_back(s);
     }
 
@@ -171,7 +200,7 @@ void test_compile_to_everything(Func j, bool do_object) {
         }
     }
 
-    for (auto f : files) {
+    for (const auto &f : files) {
         Internal::ensure_no_file_exists(f);
     }
 
@@ -220,31 +249,16 @@ void test_compile_to_everything(Func j, bool do_object) {
     std::string function_name = leaf_name(filename_prefix);
     compile_multitarget(function_name, outputs, targets, target_strings, module_producer, compiler_logger_factory);
 
-    for (auto f : files) {
+    for (const auto &f : files) {
         Internal::assert_file_exists(f);
     }
 }
+}  // namespace
 
-int main(int argc, char **argv) {
-    Param<float> factor("factor");
-    Func f, g, h, j;
-    Var x, y;
-    f(x, y) = x + y;
-    g(x, y) = cast<float>(f(x, y) + f(x + 1, y));
-    h(x, y) = f(x, y) + g(x, y);
-    j(x, y) = h(x, y) * 2 * factor;
-
-    f.compute_root();
-    g.compute_root();
-    h.compute_root();
-
-    test_compile_to_static_library(j);
-    test_compile_to_object_files(j);
-    test_compile_to_object_files_no_runtime(j);
-    test_compile_to_object_files_single_target(j);
+TEST_F(CompileToMultiTargetTest, EverythingAsObject) {
     test_compile_to_everything(j, /*do_object*/ true);
-    test_compile_to_everything(j, /*do_object*/ false);
+}
 
-    printf("Success!\n");
-    return 0;
+TEST_F(CompileToMultiTargetTest, EverythingAsStaticLibrary) {
+    test_compile_to_everything(j, /*do_object*/ false);
 }

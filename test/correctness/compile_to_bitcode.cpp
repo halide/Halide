@@ -1,11 +1,10 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
-
-#include <cstdio>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(CompileToTest, Bitcode) {
     Func f, g, h, j;
     Var x, y;
     f(x, y) = x + y;
@@ -25,7 +24,4 @@ int main(int argc, char **argv) {
     j.compile_to_bitcode(result_file, empty_args);
 
     Internal::assert_file_exists(result_file);
-
-    printf("Success!\n");
-    return 0;
 }

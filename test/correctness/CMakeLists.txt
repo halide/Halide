@@ -68,9 +68,9 @@ target_sources(
     code_explosion.cpp
     compare_vars.cpp
     compile_to.cpp
-    #    compile_to_bitcode.cpp
-    #    compile_to_lowered_stmt.cpp
-    #    compile_to_multitarget.cpp
+    compile_to_bitcode.cpp
+    compile_to_lowered_stmt.cpp
+    compile_to_multitarget.cpp
     #    compute_at_reordered_update_stage.cpp
     #    compute_at_split_rvar.cpp
     #    compute_inside_guard.cpp
