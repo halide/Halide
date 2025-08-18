@@ -371,11 +371,20 @@ TEST_CXX_FLAGS += -DTEST_CUDA
 TEST_CXX_FLAGS += -I/usr/local/cuda/include
 endif
 
-# Compiling the tutorials requires libpng
-LIBPNG_FOUND := $(shell pkg-config --exists libpng && echo yes || echo no)
-ifeq ($(LIBPNG_FOUND),yes)
+ifneq (,$(shell command -v brew))
+# Get png and jpeg paths from brew
+LIBPNG_LIBS_DEFAULT = -L $(shell brew --prefix libpng)/lib -lpng
+LIBPNG_CXX_FLAGS ?= -I $(shell brew --prefix libpng)/include
+LIBJPEG_LIBS ?= -L $(shell brew --prefix libjpeg)/lib -ljpeg
+LIBJPEG_CXX_FLAGS ?= -I $(shell brew --prefix libjpeg)/include
+else
+# Get png and jpeg paths from pkg-config
 LIBPNG_LIBS_DEFAULT = $(shell pkg-config libpng --libs)
 LIBPNG_CXX_FLAGS ?= $(shell pkg-config libpng --cflags)
+LIBJPEG_LIBS ?= $(shell pkg-config libjpeg --libs)
+LIBJPEG_CXX_FLAGS ?= $(shell pkg-config libjpeg --cflags)
+endif
+
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
 ifneq (,$(findstring -m32,$(CXX)))
 ifneq (,$(findstring x86_64,$(LIBPNG_LIBS_DEFAULT)))
@@ -383,27 +392,6 @@ LIBPNG_LIBS ?= -lpng
 endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
-else
-LIBPNG_CXX_FLAGS ?= -DHALIDE_NO_PNG
-LIBPNG_LIBS ?= 
-endif
-
-# Check for libjpeg via pkg-config, including Homebrew's keg-only path
-ifneq (,$(shell command -v brew))
-BREW_JPEG_PKGDIR := $(shell brew --prefix libjpeg)/lib/pkgconfig
-ifneq (,$(wildcard $(BREW_JPEG_PKGDIR)))
-export PKG_CONFIG_HINTS := PKG_CONFIG_PATH=$(if $(PKG_CONFIG_PATH),$(PKG_CONFIG_PATH):)$(BREW_JPEG_PKGDIR)
-endif
-endif
-
-LIBJPEG_FOUND := $(shell $(PKG_CONFIG_HINTS) pkg-config --exists libjpeg && echo yes || echo no)
-ifeq ($(LIBJPEG_FOUND),yes)
-LIBJPEG_CXX_FLAGS ?= $(shell $(PKG_CONFIG_HINTS) pkg-config libjpeg --cflags)
-LIBJPEG_LIBS ?= $(shell $(PKG_CONFIG_HINTS) pkg-config libjpeg --libs)
-else
-LIBJPEG_CXX_FLAGS ?= -DHALIDE_NO_JPEG
-LIBJPEG_LIBS ?=
-endif
 
 IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
