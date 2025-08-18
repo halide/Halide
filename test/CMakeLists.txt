@@ -11,7 +11,7 @@ if (Halide_CCACHE_BUILD)
     if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         target_compile_options(
             _test_internal PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>"
-        )
+            )
     endif ()
 endif ()
 
@@ -64,8 +64,6 @@ Halide_feature(WITH_TEST_RUNTIME "Build runtime tests" AUTO
 if (WITH_TEST_RUNTIME)
     add_subdirectory(runtime)
 endif ()
-
-# FIXME: failing_with_issue is dead code :)
 
 # Ensure that basic sanitizer flags are supported;
 # - Address sanitizer is often used in conjunction with fuzzing as it will detect

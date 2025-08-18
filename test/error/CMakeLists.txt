@@ -1,8 +1,10 @@
 find_package(GTest REQUIRED)
 
-add_executable(error_tests
+add_executable(
+    error_tests
     ambiguous_inline_reductions.cpp
     async_require_fail.cpp
+    async_specialize.cpp
     atomics_gpu_8_bit.cpp
     atomics_gpu_mutex.cpp
     atomics_self_reference.cpp
@@ -136,7 +138,8 @@ add_executable(error_tests
     wrong_type.cpp
 )
 
-target_link_libraries(error_tests
+target_link_libraries(
+    error_tests
     PRIVATE
     Halide::Test
     GTest::gtest_main

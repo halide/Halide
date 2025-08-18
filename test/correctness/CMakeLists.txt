@@ -9,6 +9,7 @@ tests(GROUPS correctness
       argmax.cpp
       async_device_copy.cpp
       async_order.cpp
+      async_storage_folding.cpp
       autodiff.cpp
       bad_likely.cpp
       bit_counting.cpp
@@ -351,6 +352,7 @@ tests(GROUPS correctness
       vectorize_guard_with_if.cpp
       vectorize_mixed_widths.cpp
       vectorize_nested.cpp
+      vectorize_predicated.cpp
       vectorize_varying_allocation_size.cpp
       vectorized_assert.cpp
       vectorized_gpu_allocation.cpp

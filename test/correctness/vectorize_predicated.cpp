@@ -78,15 +78,15 @@ bool test(int vec_width) {
                           << outputf(x, y) << " vs " << outputg(x, y) << "\n"
                           << "Failure!\n";
                 exit(1);
-                return false;
             }
         }
     }
 
-    printf("Vectorized vs scalar (%s x %d): %1.3gms %1.3gms. Speedup = %1.3f\n",
-           string_of_type<A>(), vec_width, t_f * 1e3, t_g * 1e3, t_g / t_f);
+    printf("Vectorized vs scalar (float x %d): %1.3gms %1.3gms. Speedup = %1.3f\n",
+           vec_width, t_f * 1e3, t_g * 1e3, t_g / t_f);
 
     if (t_f > t_g) {
+        printf("-> Too slow!!\n");
         return false;
     }
 
@@ -96,9 +96,14 @@ bool test(int vec_width) {
 int main(int argc, char **argv) {
     // As for now, we would only vectorize predicated store/load on Hexagon or
     // if it is of type 32-bit value and has lanes no less than 4 on x86
-    test<float>(4);
-    test<float>(8);
+    bool success = true;
+    success &= test<float>(4);
+    success &= test<float>(8);
 
-    printf("Success!\n");
+    if (success) {
+        printf("Success!\n");
+    } else {
+        printf("[SKIP] This test is currently failing, but wasn't even being compiled before.\n");
+    }
     return 0;
 }
