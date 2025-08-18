@@ -32,7 +32,7 @@ void TestAtomicsGPUMutex() {
 }  // namespace
 
 TEST(ErrorTests, AtomicsGPUMutex) {
-    if (!get_target_from_environment().has_gpu_feature()) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
         GTEST_SKIP() << "No GPU target enabled.";
     }
     EXPECT_COMPILE_ERROR(
