@@ -21,7 +21,7 @@ build: $(BIN)/$(HL_TARGET)/bench_fft
 
 $(BIN)/%/bench_fft: main.cpp fft.cpp fft.h complex.h funct.h $(LIB_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 bench_8x8: $(BIN)/$(HL_TARGET)/bench_fft
 	$< 8 8 $(<D)
@@ -67,7 +67,7 @@ $(BIN)/%/fft_inverse_c2c.a: $(GENERATOR_BIN)/fft.generator
 
 $(BIN)/%/fft_aot_test: fft_aot_test.cpp $(BIN)/%/fft_forward_r2c.a $(BIN)/%/fft_inverse_c2r.a $(BIN)/%/fft_forward_c2c.a $(BIN)/%/fft_inverse_c2c.a
 	@mkdir -p $(@D)
-	$(CXX) -I$(BIN)/$* -I$(HALIDE_DISTRIB_PATH)/include/ -std=c++17 $^ -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -I$(BIN)/$* -I$(HALIDE_DISTRIB_PATH)/include/ -std=c++17 $^ -o $@ $(LDFLAGS)
 
 clean:
 	rm -rf $(BIN)

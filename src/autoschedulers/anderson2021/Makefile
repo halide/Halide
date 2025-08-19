@@ -23,7 +23,7 @@ HALIDE_RPATH_FOR_LIB = '-Wl,-rpath,$$ORIGIN'
 endif
 
 CXXFLAGS += -I$(COMMON_DIR)
-	
+
 ENABLE_DEBUG_OUTPUT ?= false
 
 AUTOSCHED_SAMPLES_OUT ?= $(SRC)/samples
@@ -95,7 +95,7 @@ $(BIN)/libautoschedule_anderson2021.$(PLUGIN_EXT): $(SRC)/AutoSchedule.cpp \
 										$(GENERATOR_DEPS) \
 										$(BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/anderson2021_cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) -I .
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/anderson2021_cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ -I .
 
 $(BIN)/anderson2021_retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 									$(COMMON_DIR)/ASLog.cpp \
@@ -130,7 +130,7 @@ $(BIN)/%/anderson2021_demo.a: $(GENERATOR_BIN)/anderson2021_demo.generator $(BIN
 
 $(BIN)/%/anderson2021_demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/anderson2021_demo.registration.cpp $(BIN)/%/anderson2021_demo.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS)
 
 # demonstrates single-shot use of the autoscheduler
 anderson2021_demo: $(BIN)/$(HL_TARGET)/anderson2021_demo.rungen $(BIN)/libautoschedule_anderson2021.$(PLUGIN_EXT)
@@ -154,12 +154,12 @@ autotune: $(GENERATOR_BIN)/anderson2021_demo.generator $(BIN)/featurization_to_s
 
 $(BIN)/anderson2021_test_function_dag: test_function_dag.cpp FunctionDAG.h FunctionDAG.cpp $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 # Simple jit-based test
 $(BIN)/$(HL_TARGET)/test: $(HALIDE_TEST_DIR)/test.cpp $(BIN)/libautoschedule_anderson2021.$(PLUGIN_EXT)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $^ -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $^ -o $@ $(LIBHALIDE_LDFLAGS)
 
 anderson2021_test_function_dag: $(BIN)/anderson2021_test_function_dag
 	$^
@@ -192,42 +192,42 @@ TEST_DIR=$(SRC)/test
 
 $(BIN)/test_bounds: $(TEST_DIR)/bounds.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) -I$(SRC)
 
 test_bounds: $(BIN)/test_bounds
 	$^
 
 $(BIN)/test_tiling: $(TEST_DIR)/tiling.cpp Tiling.h Tiling.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) -I$(SRC)
 
 test_tiling: $(BIN)/test_tiling
 	$^
 
 $(BIN)/test_storage_strides: $(TEST_DIR)/storage_strides.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) -I$(SRC)
 
 test_storage_strides: $(BIN)/test_storage_strides
 	$^
 
 $(BIN)/test_parser: $(TEST_DIR)/parser.cpp LoopNestParser.h $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) -I$(SRC)
 
 test_parser: $(BIN)/test_parser
 	$^
 
 $(BIN)/test_state: $(TEST_DIR)/state.cpp State.h State.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) -I$(SRC)
 
 test_state: $(BIN)/test_state
 	$^
 
 $(BIN)/test_thread_info: $(TEST_DIR)/thread_info.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) -I$(SRC)
 
 test_thread_info: $(BIN)/test_thread_info
 	$^
@@ -246,7 +246,7 @@ clean:
 
 $(GENERATOR_BIN)/included_schedule_file_none.generator: $(HALIDE_TEST_DIR)/included_schedule_file_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -DGENERATING_SCHEDULE -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -DGENERATING_SCHEDULE -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 # This is the target you build to (re)generate the schedule file.
 # (Note that we only need the schedule output, so we pass `-e schedule` to
@@ -264,7 +264,7 @@ $(BIN)/%/included_schedule_file.schedule.h: $(GENERATOR_BIN)/included_schedule_f
 #
 $(GENERATOR_BIN)/included_schedule_file.generator: $(HALIDE_TEST_DIR)/included_schedule_file_generator.cpp $(HALIDE_TEST_DIR)/included_schedule_file.schedule.h $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 # Note that this does not depend on libauto_schedule nor does it call
 # the autoscheduler at build time; it includes the generated schedule (included_schedule_file.schedule.h),
@@ -275,7 +275,7 @@ $(BIN)/%/included_schedule_file.a: $(GENERATOR_BIN)/included_schedule_file.gener
 
 $(BIN)/%/included_schedule_file.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/included_schedule_file.registration.cpp $(BIN)/%/included_schedule_file.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS)
 
 included_schedule_file: $(BIN)/$(HL_TARGET)/included_schedule_file.rungen
 	$^ --benchmarks=all --benchmark_min_time=1 --estimate_all
