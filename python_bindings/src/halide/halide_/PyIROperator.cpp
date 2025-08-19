@@ -128,7 +128,9 @@ void define_operators(py::module &m) {
         return py::cast(false_expr_value);
     });
 
-    m.def("mux", (Expr(*)(const Expr &, const std::vector<Expr> &))&mux);
+    m.def("mux", static_cast<Expr (*)(const Expr &, const std::vector<Expr> &)>(&mux));
+    m.def("mux", static_cast<Expr (*)(const Expr &, const Tuple &)>(&mux));
+    m.def("mux", static_cast<Tuple (*)(const Expr &, const std::vector<Tuple> &)>(&mux));
 
     m.def("sin", &sin);
     m.def("asin", &asin);
