@@ -193,12 +193,12 @@ void define_operators(py::module &m) {
     m.def("count_trailing_zeros", &count_trailing_zeros);
     m.def("div_round_to_zero", &div_round_to_zero);
     m.def("mod_round_to_zero", &mod_round_to_zero);
-    m.def("random_float", (Expr(*)())&random_float);
-    m.def("random_uint", (Expr(*)())&random_uint);
-    m.def("random_int", (Expr(*)())&random_int);
-    m.def("random_float", (Expr(*)(Expr))&random_float, py::arg("seed"));
-    m.def("random_uint", (Expr(*)(Expr))&random_uint, py::arg("seed"));
-    m.def("random_int", (Expr(*)(Expr))&random_int, py::arg("seed"));
+    m.def("random_float", [] { return random_float(); });
+    m.def("random_float", &random_float, py::arg("seed"));
+    m.def("random_uint", [] { return random_uint(); });
+    m.def("random_uint", &random_uint, py::arg("seed"));
+    m.def("random_int", [] { return random_int(); });
+    m.def("random_int", &random_int, py::arg("seed"));
     m.def("undef", static_cast<Expr (*)(Type)>(&undef));
 
     m.def(
