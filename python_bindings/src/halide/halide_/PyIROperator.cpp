@@ -211,6 +211,8 @@ void define_operators(py::module &m) {
     m.def("likely_if_innermost", &likely_if_innermost);
     m.def("saturating_cast", static_cast<Expr (*)(Type, Expr)>(&saturating_cast));
     m.def("strict_float", &strict_float);
+    m.def("scatter", static_cast<Expr (*)(const std::vector<Expr> &)>(&scatter));
+    m.def("gather", static_cast<Expr (*)(const std::vector<Expr> &)>(&gather));
     m.def("target_arch_is", &target_arch_is);
     m.def("target_bits", &target_bits);
     m.def("target_has_feature", &target_has_feature);
