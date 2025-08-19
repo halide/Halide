@@ -215,6 +215,16 @@ void define_operators(py::module &m) {
     m.def("gather", static_cast<Expr (*)(const std::vector<Expr> &)>(&gather));
     m.def("extract_bits", static_cast<Expr (*)(Type, const Expr &, const Expr &)>(&extract_bits));
     m.def("concat_bits", &concat_bits);
+    m.def("widen_right_add", &widen_right_add);
+    m.def("widen_right_mul", &widen_right_mul);
+    m.def("widen_right_sub", &widen_right_sub);
+    m.def("widening_add", &widening_add);
+    m.def("widening_mul", &widening_mul);
+    m.def("widening_sub", &widening_sub);
+    m.def("widening_shift_left", static_cast<Expr (*)(Expr, int)>(&widening_shift_left));
+    m.def("widening_shift_left", static_cast<Expr (*)(Expr, Expr)>(&widening_shift_left));
+    m.def("widening_shift_right", static_cast<Expr (*)(Expr, int)>(&widening_shift_right));
+    m.def("widening_shift_right", static_cast<Expr (*)(Expr, Expr)>(&widening_shift_right));
     m.def("target_arch_is", &target_arch_is);
     m.def("target_bits", &target_bits);
     m.def("target_has_feature", &target_has_feature);
