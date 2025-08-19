@@ -31,7 +31,11 @@ function(add_wasm_executable TARGET)
     #     target_link_libraries(${TARGET} PRIVATE ${args_DEPS})
     # endif ()
 
-    find_program(EMCC emcc REQUIRED HINTS "$ENV{EMSDK}/upstream/emscripten")
+    find_program(
+        EMCC emcc REQUIRED
+        PATH_SUFFIXES upstream/emscripten
+        HINTS ENV EMSDK
+    )
 
     # TODO: this is currently hardcoded to settings that are sensible for most of Halide's
     # internal purposes. Consider adding ways to customize this as appropriate.
