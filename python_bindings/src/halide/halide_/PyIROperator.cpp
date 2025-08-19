@@ -166,16 +166,19 @@ void define_operators(py::module &m) {
     m.def("is_nan", &is_nan);
     m.def("is_inf", &is_inf);
     m.def("is_finite", &is_finite);
-    m.def("reinterpret", (Expr(*)(Type, Expr))&reinterpret);
-    m.def("cast", (Expr(*)(Type, Expr))&cast);
+    m.def("reinterpret", static_cast<Expr (*)(Type, Expr)>(&reinterpret));
+    m.def("cast", static_cast<Expr (*)(Type, Expr)>(&cast));
+
     m.def("print", [](const py::args &args) -> Expr {
         return print(collect_print_args(args));
     });
+
     m.def(
         "print_when", [](const Expr &condition, const py::args &args) -> Expr {
             return print_when(condition, collect_print_args(args));
         },
         py::arg("condition"));
+
     m.def(
         "require", [](const Expr &condition, const Expr &value, const py::args &args) -> Expr {
             auto v = args_to_vector<Expr>(args);
@@ -183,6 +186,7 @@ void define_operators(py::module &m) {
             return require(condition, v);
         },
         py::arg("condition"), py::arg("value"));
+
     m.def("lerp", &lerp);
     m.def("popcount", &popcount);
     m.def("count_leading_zeros", &count_leading_zeros);
@@ -195,26 +199,24 @@ void define_operators(py::module &m) {
     m.def("random_float", (Expr(*)(Expr))&random_float, py::arg("seed"));
     m.def("random_uint", (Expr(*)(Expr))&random_uint, py::arg("seed"));
     m.def("random_int", (Expr(*)(Expr))&random_int, py::arg("seed"));
-    m.def("undef", (Expr(*)(Type))&undef);
+    m.def("undef", static_cast<Expr (*)(Type)>(&undef));
+
     m.def(
         "memoize_tag", [](const Expr &result, const py::args &cache_key_values) -> Expr {
             return Internal::memoize_tag_helper(result, args_to_vector<Expr>(cache_key_values));
         },
         py::arg("result"));
+
     m.def("likely", &likely);
     m.def("likely_if_innermost", &likely_if_innermost);
-    m.def("saturating_cast", (Expr(*)(Type, Expr))&saturating_cast);
+    m.def("saturating_cast", static_cast<Expr (*)(Type, Expr)>(&saturating_cast));
     m.def("strict_float", &strict_float);
     m.def("target_arch_is", &target_arch_is);
     m.def("target_bits", &target_bits);
     m.def("target_has_feature", &target_has_feature);
-    m.def("target_natural_vector_size", [](const Type &t) -> Expr {
-        return target_natural_vector_size(t);
-    });
+    m.def("target_natural_vector_size", static_cast<Expr (*)(Type)>(&target_natural_vector_size));
     m.def("target_os_is", &target_os_is);
-    m.def("logical_not", [](const Expr &expr) -> Expr {
-        return !expr;
-    });
+    m.def("logical_not", [](const Expr &expr) -> Expr { return !expr; });
 }
 
 }  // namespace PythonBindings
