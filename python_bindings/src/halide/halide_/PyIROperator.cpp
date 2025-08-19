@@ -138,7 +138,6 @@ void define_operators(py::module &m) {
     m.def("acos", &acos);
     m.def("tan", &tan);
     m.def("atan", &atan);
-    m.def("atan", &atan2);
     m.def("atan2", &atan2);
     m.def("sinh", &sinh);
     m.def("asinh", &asinh);
