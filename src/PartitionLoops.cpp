@@ -547,32 +547,23 @@ class PartitionLoops : public IRMutator {
             (op->partition_policy == Partition::Auto && in_tail)) {
             return IRMutator::visit(op);
         }
+        const auto &[loop, mutated] = visit_for(op);
+        user_assert(op->partition_policy != Partition::Always || mutated)
+            << "Loop Partition Policy is set to " << op->partition_policy
+            << " for " << op->name << ", but no loop partitioning was performed.";
+        return loop;
+    }
 
+    std::tuple<Stmt, bool> visit_for(const For *op) {
+        bool mutated = false;
         Stmt body = op->body;
-
-        // A struct that upon destruction will check if the current For was partitioned
-        // and error out if it wasn't when the schedule demanded it.
-        struct ErrorIfNotMutated {
-            const For *op;
-            bool must_mutate;
-            bool mutated{false};
-            ErrorIfNotMutated(const For *op, bool must_mutate)
-                : op(op), must_mutate(must_mutate) {
-            }
-            ~ErrorIfNotMutated() noexcept(false) {
-                if (must_mutate && !mutated) {
-                    user_error << "Loop Partition Policy is set to " << op->partition_policy
-                               << " for " << op->name << ", but no loop partitioning was performed.";
-                }
-            }
-        } mutation_checker{op, op->partition_policy == Partition::Always};
 
         ScopedValue<bool> old_in_gpu_loop(in_gpu_loop, in_gpu_loop || is_gpu(op->for_type));
 
         // If we're inside GPU kernel, and the body contains thread
         // barriers or warp shuffles, it's not safe to partition loops.
         if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
-            return IRMutator::visit(op);
+            return {IRMutator::visit(op), mutated};
         }
 
         // Find simplifications in this loop body
@@ -580,7 +571,7 @@ class PartitionLoops : public IRMutator {
         body.accept(&finder);
 
         if (finder.simplifications.empty()) {
-            return IRMutator::visit(op);
+            return {IRMutator::visit(op), mutated};
         }
 
         debug(3) << "\n\n**** Partitioning loop over " << op->name << "\n";
@@ -776,13 +767,13 @@ class PartitionLoops : public IRMutator {
                 prologue = For::make(op->name, op->min, min_steady - op->min,
                                      op->for_type, op->partition_policy, op->device_api, prologue);
                 stmt = Block::make(prologue, stmt);
-                mutation_checker.mutated = true;
+                mutated = true;
             }
             if (make_epilogue) {
                 epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
                                      op->for_type, op->partition_policy, op->device_api, epilogue);
                 stmt = Block::make(stmt, epilogue);
-                mutation_checker.mutated = true;
+                mutated = true;
             }
         } else {
             // For parallel for loops we could use a Fork node here,
@@ -801,15 +792,15 @@ class PartitionLoops : public IRMutator {
             stmt = simpler_body;
             if (make_epilogue && make_prologue && equal(prologue, epilogue)) {
                 stmt = IfThenElse::make(min_steady <= loop_var && loop_var < max_steady, stmt, prologue);
-                mutation_checker.mutated = true;
+                mutated = true;
             } else {
                 if (make_epilogue) {
                     stmt = IfThenElse::make(loop_var < max_steady, stmt, epilogue);
-                    mutation_checker.mutated = true;
+                    mutated = true;
                 }
                 if (make_prologue) {
                     stmt = IfThenElse::make(loop_var < min_steady, prologue, stmt);
-                    mutation_checker.mutated = true;
+                    mutated = true;
                 }
             }
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, stmt);
@@ -833,14 +824,14 @@ class PartitionLoops : public IRMutator {
         if (can_prove(epilogue_val <= prologue_val)) {
             // The steady state is empty. I've made a huge
             // mistake. Try to partition a loop further in.
-            return IRMutator::visit(op);
+            return {IRMutator::visit(op), mutated};
         }
 
         debug(3) << "Partition loop.\n"
                  << "Old: " << Stmt(op) << "\n"
                  << "New: " << stmt << "\n";
 
-        return stmt;
+        return {stmt, mutated};
     }
 };
 
