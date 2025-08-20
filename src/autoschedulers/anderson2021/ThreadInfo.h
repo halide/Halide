@@ -10,8 +10,8 @@
 
 #include <vector>
 
-#include "Errors.h"
 #include "FunctionDAG.h"
+#include "HalidePlugin.h"
 
 namespace Halide {
 namespace Internal {
