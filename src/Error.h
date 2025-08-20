@@ -177,18 +177,6 @@ struct WarningReport : ReportBase<WarningReport> {
     }
 };
 
-// This uses operator precedence as a trick to avoid argument evaluation if
-// an assertion is true: it is intended to be used as part of the
-// _halide_internal_assertion macro, to coerce the result of the stream
-// expression to void (to match the condition-is-false case).
-struct Voidifier {
-    // This has to be an operator with a precedence lower than << but
-    // higher than ?:
-    template<typename T>
-    HALIDE_ALWAYS_INLINE void operator&(T &) {
-    }
-};
-
 /**
  * _halide_internal_assertion is used to implement our assertion macros
  * in such a way that the messages output for the assertion are only
