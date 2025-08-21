@@ -204,7 +204,7 @@ class GeneratorParam:
         else:
             return self._value
 
-    def _get_types_and_dimensions(self) -> (list[Type], int):
+    def _get_types_and_dimensions(self) -> tuple[list[Type], int]:
         # Use dummy type-and-dimensions here so that the ctor won't fail due to undefined status
         return [Int(32)], 0
 
@@ -216,10 +216,10 @@ class InputBuffer(ImageParam):
             dimensions = -1
         super().__init__(type, dimensions, _unique_name())
 
-    def _get_types_and_dimensions(self) -> (list[Type], int):
+    def _get_types_and_dimensions(self) -> tuple[list[Type], int]:
         return _normalize_type_list(self.type()), self.dimensions()
 
-    def _get_direction_and_kind(self) -> (ArgInfoDirection, ArgInfoKind):
+    def _get_direction_and_kind(self) -> tuple[ArgInfoDirection, ArgInfoKind]:
         return ArgInfoDirection.Input, ArgInfoKind.Buffer
 
     def _make_replacement(self, value: Any, r: Requirement) -> ImageParam:
@@ -248,10 +248,10 @@ class InputScalar(Param):
         type = _sanitize_type(type)
         super().__init__(type, _unique_name())
 
-    def _get_types_and_dimensions(self) -> (list[Type], int):
+    def _get_types_and_dimensions(self) -> tuple[list[Type], int]:
         return _normalize_type_list(self.type()), 0
 
-    def _get_direction_and_kind(self) -> (ArgInfoDirection, ArgInfoKind):
+    def _get_direction_and_kind(self) -> tuple[ArgInfoDirection, ArgInfoKind]:
         return ArgInfoDirection.Input, ArgInfoKind.Scalar
 
     def _make_replacement(self, value: Any, r: Requirement) -> Param:
@@ -285,10 +285,10 @@ class OutputBuffer(Func):
         self._types = types
         self._dimensions = dimensions
 
-    def _get_types_and_dimensions(self) -> (list[Type], int):
+    def _get_types_and_dimensions(self) -> tuple[list[Type], int]:
         return self._types, self._dimensions
 
-    def _get_direction_and_kind(self) -> (ArgInfoDirection, ArgInfoKind):
+    def _get_direction_and_kind(self) -> tuple[ArgInfoDirection, ArgInfoKind]:
         return ArgInfoDirection.Output, ArgInfoKind.Buffer
 
     def _make_replacement(self, value: Any, r: Requirement) -> Func:
@@ -640,7 +640,7 @@ class Generator(ABC):
 
     def _set_io_types_and_dimensions_from_gp(
         self, name: str, current_types: list[Type], current_dimensions: int
-    ) -> (list[Type], int):
+    ) -> tuple[list[Type], int]:
         new_types = current_types
         new_dimensions = current_dimensions
 
@@ -888,11 +888,11 @@ def generator(name: str = ""):
     return generator_impl
 
 
-def funcs(names: str) -> tuple(Func):
+def funcs(names: str) -> tuple[Func, ...]:
     """Given a space-delimited string, create a Func for each substring and return as a tuple."""
-    return (Func(n) for n in names.split(" "))
+    return tuple(Func(n) for n in names.split(" "))
 
 
-def vars(names: str) -> tuple(Var):
+def vars(names: str) -> tuple[Var, ...]:
     """Given a space-delimited string, create a Var for each substring and return as a tuple."""
-    return (Var(n) for n in names.split(" "))
+    return tuple(Var(n) for n in names.split(" "))
