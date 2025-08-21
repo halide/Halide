@@ -51,7 +51,7 @@ bool debug_is_active_impl(int verbosity, const char *file, const char *function,
 // clang-format off
 #define debug(n)                                     \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    for (int _ran = 0; !_ran && debug_is_active((n)); ++_ran) std::cerr
+    if (debug_is_active((n))) std::cerr
 // clang-format on
 
 /** Allow easily printing the contents of containers, or std::vector-like containers,
