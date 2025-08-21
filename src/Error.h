@@ -123,15 +123,6 @@ void issue_warning(const char *warning);
 
 template<typename T>
 struct ReportBase {
-    ReportBase(const char *file, const char *function, int line, const char *condition_string, const char *prefix) {
-        if (debug_is_active_impl(1, file, function, line)) {
-            msg << prefix << " at " << file << ":" << line << ' ';
-            if (condition_string) {
-                msg << "Condition failed: " << condition_string << ' ';
-            }
-        }
-    }
-
     template<typename S>
     HALIDE_ALWAYS_INLINE T &operator<<(const S &x) {
         msg << x;
@@ -145,6 +136,7 @@ struct ReportBase {
 protected:
     std::ostringstream msg{};
     bool issued{false};
+
     std::string finalize_message() {
         if (!msg.str().empty() && msg.str().back() != '\n') {
             msg << "\n";
@@ -152,26 +144,34 @@ protected:
         issued = true;
         return msg.str();
     }
+
+    T &init(const char *file, const char *function, const int line, const char *condition_string, const char *prefix) {
+        if (debug_is_active_impl(1, file, function, line)) {
+            msg << prefix << " at " << file << ":" << line << ' ';
+            if (condition_string) {
+                msg << "Condition failed: " << condition_string << ' ';
+            }
+        }
+        return *static_cast<T *>(this);
+    }
 };
 
 template<typename Exception>
 struct ErrorReport : ReportBase<ErrorReport<Exception>> {
-    using Base = ReportBase<ErrorReport>;
-
-    ErrorReport(const char *file, const char *function, int line, const char *condition_string)
-        : Base(file, function, line, condition_string, Exception::error_name) {
-        this->msg << "Error: ";
+    ErrorReport &init(const char *file, const char *function, const int line, const char *condition_string) {
+        return ReportBase<ErrorReport>::init(file, function, line, condition_string, Exception::error_name) << "Error: ";
     }
+
     [[noreturn]] void issue() noexcept(false) {
         throw_error(Exception(this->finalize_message()));
     }
 };
 
 struct WarningReport : ReportBase<WarningReport> {
-    WarningReport(const char *file, const char *function, int line, const char *condition_string)
-        : ReportBase(file, function, line, condition_string, "Warning") {
-        this->msg << "Warning: ";
+    WarningReport &init(const char *file, const char *function, const int line, const char *condition_string) {
+        return ReportBase::init(file, function, line, condition_string, "Warning") << "Warning: ";
     }
+
     void issue() {
         issue_warning(this->finalize_message().c_str());
     }
@@ -194,7 +194,7 @@ struct WarningReport : ReportBase<WarningReport> {
 // clang-format off
 #define _halide_internal_diagnostic(condition, type, condition_string)  \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    if (!(condition)) for (type _err(__FILE__, __FUNCTION__, __LINE__, condition_string); _err; _err.issue()) _err
+    if (!(condition)) for (type _err; _err; _err.issue()) _err.init(__FILE__, __FUNCTION__, __LINE__, condition_string)
 // clang-format on
 
 #define _halide_internal_error(type) \
