@@ -149,6 +149,7 @@ public:
                  Target::SSE41,
                  Target::SVE,
                  Target::SVE2,
+                 Target::SME2,
                  Target::VSX,
              }) {
             if (target.has_feature(f) != host_target.has_feature(f)) {
@@ -324,6 +325,7 @@ public:
         f(x, y) = e;
         f.bound(x, 0, W).vectorize(x, vector_width);
         f.compute_root();
+        apply_additional_schedule(f);
 
         // Include a scalar version
         Halide::Func f_scalar("scalar_" + name);
@@ -342,12 +344,13 @@ public:
             // Do the reduction separately in f_scalar
             g.clone_in(f_scalar);
 
-            g.compute_at(f, x)
-                .update()
-                .split(x, xo, xi, vector_width)
-                .atomic(true)
-                .vectorize(g.rvars()[0])
-                .vectorize(xi);
+            auto stage = g.compute_at(f, x)
+                             .update()
+                             .split(x, xo, xi, vector_width)
+                             .atomic(true)
+                             .vectorize(g.rvars()[0])
+                             .vectorize(xi);
+            apply_additional_schedule(stage);
         }
 
         compile_and_check(f, op, name, vector_width, arg_types, error_msg);
@@ -484,6 +487,14 @@ public:
             return std::atoi(t.c_str());
         }
         return Halide::Tools::ThreadPool<void>::num_processors_online();
+    }
+
+    virtual void apply_additional_schedule(Stage &stage) const {
+        return;
+    }
+
+    virtual void apply_additional_schedule(Func &f) const {
+        return;
     }
 
     virtual bool test_all() {

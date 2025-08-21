@@ -660,6 +660,11 @@ struct Call : public ExprNode<Call> {
         // Extracts a single element from a mask vector
         extract_mask_element,
 
+        // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
+        get_runtime_vscale,
+
+        // Returns the runtime value of ARM SME streaming vscale (the vector length multiplier in streaming mode)
+        get_runtime_streaming_vscale,
         get_user_context,
         gpu_thread_barrier,
         halving_add,
@@ -817,9 +822,6 @@ struct Call : public ExprNode<Call> {
         widening_shift_left,
         widening_shift_right,
         widening_sub,
-
-        // Returns the runtime value of ARM SVE vscale (the vector length multiplier)
-        get_runtime_vscale,
 
         IntrinsicOpCount  // Sentinel: keep last.
     };

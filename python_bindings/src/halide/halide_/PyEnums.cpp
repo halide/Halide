@@ -26,7 +26,8 @@ void define_enums(py::module &m) {
         .value("Vulkan", DeviceAPI::Vulkan)
         .value("OpenCL", DeviceAPI::OpenCL)
         .value("Metal", DeviceAPI::Metal)
-        .value("Hexagon", DeviceAPI::Hexagon);
+        .value("Hexagon", DeviceAPI::Hexagon)
+        .value("Host_SMEStreaming", DeviceAPI::Host_SMEStreaming);
 
     py::enum_<LinkageType>(m, "LinkageType")
         .value("External", LinkageType::External)
@@ -186,6 +187,7 @@ void define_enums(py::module &m) {
         .value("WebGPU", Target::Feature::WebGPU)
         .value("SVE", Target::Feature::SVE)
         .value("SVE2", Target::Feature::SVE2)
+        .value("SME2", Target::Feature::SME2)
         .value("ARMDotProd", Target::Feature::ARMDotProd)
         .value("ARMFp16", Target::Feature::ARMFp16)
         .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)

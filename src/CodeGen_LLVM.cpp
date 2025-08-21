@@ -199,7 +199,7 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
 
 void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
     this->context = &context;
-    effective_vscale = target_vscale();
+    set_effective_vscale(target_vscale());
 }
 
 std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target, llvm::LLVMContext &context) {

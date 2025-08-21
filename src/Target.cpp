@@ -48,6 +48,18 @@
 #ifndef HWCAP2_SVE2
 #define HWCAP2_SVE2 0
 #endif
+#ifndef HWCAP2_SME2
+#define HWCAP2_SME2 0
+#endif
+#endif
+
+/* Detect SME target attribute support */
+#if defined(__aarch64__) && !defined(__arm__) &&                       \
+    ((defined(__GNUC__) && !defined(__clang__) && (__GNUC__ >= 14)) || \
+     (defined(__clang__) && (__clang_major__ >= 17)))
+#define HAS_ATTR_TARGET_SME 1
+#else
+#define HAS_ATTR_TARGET_SME 0
 #endif
 
 namespace Halide {
@@ -63,7 +75,20 @@ __attribute__((target("+sve"))) int get_sve_vector_length() {
     __asm__("cntb %x0, all, mul #8" : "=r"(result));
     return result;
 }
+
+#if HAS_ATTR_TARGET_SME
+__attribute__((target("+sme"))) int get_sme_streaming_vector_length() {
+    register int result asm("w0");
+    __asm__("rdsvl %x0, #8" : "=r"(result));
+    return result;
+}
+#else
+int get_sme_streaming_vector_length() {
+    user_error << "Trying to get streaming_vector_length where SME is supposed to be unsupported\n";
+    return 0;
+}
 #endif
+#endif  // defined(__aarch64__)
 
 struct cpuid_result {
     int eax, ebx, ecx, edx;
@@ -249,6 +274,7 @@ Target calculate_host_target() {
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
     int vector_bits = 0;
+    int streaming_vector_bits = 0;
     Target::Processor processor = Target::Processor::ProcessorGeneric;
     std::vector<Target::Feature> initial_features;
 
@@ -259,6 +285,7 @@ Target calculate_host_target() {
     Target::Arch arch = Target::ARM;
 #if !defined(__arm__)
     bool has_scalable_vector = false;
+    bool has_streaming_scalable_vector = false;
 #endif
 
 #ifdef __APPLE__
@@ -273,7 +300,13 @@ Target calculate_host_target() {
     if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
         initial_features.push_back(Target::ARMFp16);
     }
+#if HAS_ATTR_TARGET_SME
+    if (sysctl_is_set("hw.optional.arm.FEAT_SME2")) {
+        initial_features.push_back(Target::SME2);
+        has_streaming_scalable_vector = true;
+    }
 #endif
+#endif  // __APPLE__
 
 #ifdef __linux__
     unsigned long hwcaps = getauxval(AT_HWCAP);
@@ -299,6 +332,14 @@ Target calculate_host_target() {
         has_scalable_vector = true;
 #endif
     }
+
+#if HAS_ATTR_TARGET_SME
+    if (hwcaps2 & HWCAP2_SME2) {
+        initial_features.push_back(Target::SME2);
+        has_streaming_scalable_vector = true;
+    }
+#endif
+
 #endif
 
 #ifdef _MSC_VER
@@ -306,6 +347,7 @@ Target calculate_host_target() {
     // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent
 #define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
 #define PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE (47)
+#define PF_ARM_SME2_INSTRUCTIONS_AVAILABLE (71)
 
     // This is the strategy used by Google's cpuinfo library for
     // detecting fp16 arithmetic support on Windows.
@@ -331,11 +373,20 @@ Target calculate_host_target() {
 #endif
     }
 
+#if HAS_ATTR_TARGET_SME
+    if (IsProcessorFeaturePresent(PF_ARM_SME2_INSTRUCTIONS_AVAILABLE)) {
+        initial_features.push_back(Target::SME2);
+        has_streaming_scalable_vector = true;
+    }
+#endif
 #endif
 
 #if !defined(__arm__)
     if (has_scalable_vector) {
         vector_bits = get_sve_vector_length();
+    }
+    if (has_streaming_scalable_vector) {
+        streaming_vector_bits = get_sme_streaming_vector_length();
     }
 #endif
 
@@ -410,7 +461,7 @@ Target calculate_host_target() {
         processor = get_amd_processor(family, model, have_sse3);
 
         if (processor == Target::Processor::ZnVer4) {
-            Target t{os, arch, bits, processor, initial_features, vector_bits};
+            Target t{os, arch, bits, processor, initial_features, vector_bits, streaming_vector_bits};
             t.set_feature(Target::SSE41);
             if (os_avx) {
                 t.set_features({Target::AVX, Target::F16C, Target::FMA, Target::AVX2});
@@ -421,7 +472,7 @@ Target calculate_host_target() {
             }
             return t;
         } else if (processor == Target::Processor::ZnVer5) {
-            Target t{os, arch, bits, processor, initial_features, vector_bits};
+            Target t{os, arch, bits, processor, initial_features, vector_bits, streaming_vector_bits};
             t.set_feature(Target::SSE41);
             if (os_avx) {
                 t.set_features({Target::AVX, Target::F16C, Target::FMA,
@@ -538,7 +589,7 @@ Target calculate_host_target() {
 #endif
 #endif
 
-    return {os, arch, bits, processor, initial_features, vector_bits};
+    return {os, arch, bits, processor, initial_features, vector_bits, streaming_vector_bits};
 }
 
 bool is_using_hexagon(const Target &t) {
@@ -790,6 +841,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"webgpu", Target::WebGPU},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
+    {"sme2", Target::SME2},
     {"arm_dot_prod", Target::ARMDotProd},
     {"arm_fp16", Target::ARMFp16},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
@@ -832,9 +884,9 @@ bool lookup_feature(const std::string &tok, Target::Feature &result) {
     return false;
 }
 
-int parse_vector_bits(const std::string &tok) {
-    if (tok.find("vector_bits_") == 0) {
-        std::string num = tok.substr(sizeof("vector_bits_") - 1, std::string::npos);
+int parse_vector_bits(const std::string &tok, const std::string &prefix) {
+    if (tok.find(prefix) == 0) {
+        std::string num = tok.substr(prefix.size(), std::string::npos);
         size_t end_index;
         int parsed = std::stoi(num, &end_index);
         if (end_index == num.size()) {
@@ -911,7 +963,6 @@ bool merge_string(Target &t, const std::string &target) {
     for (size_t i = 0; i < tokens.size(); i++) {
         const string &tok = tokens[i];
         Target::Feature feature;
-        int vector_bits;
 
         if (tok == "host") {
             if (i > 0) {
@@ -947,8 +998,10 @@ bool merge_string(Target &t, const std::string &target) {
         } else if (tok == "trace_all") {
             t.set_features({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations});
             features_specified = true;
-        } else if ((vector_bits = parse_vector_bits(tok)) >= 0) {
-            t.vector_bits = vector_bits;
+        } else if (auto vb = parse_vector_bits(tok, "vector_bits_"); vb >= 0) {
+            t.vector_bits = vb;
+        } else if (auto svb = parse_vector_bits(tok, "streaming_vector_bits_"); svb >= 0) {
+            t.streaming_vector_bits = svb;
         } else {
             return false;
         }
@@ -1069,6 +1122,7 @@ void Target::validate_features() const {
                                 NoNEON,
                                 POWER_ARCH_2_07,
                                 RVV,
+                                SME2,
                                 SVE,
                                 SVE2,
                                 VSX,
@@ -1130,6 +1184,7 @@ void Target::validate_features() const {
                                 POWER_ARCH_2_07,
                                 RVV,
                                 SSE41,
+                                SME2,
                                 SVE,
                                 SVE2,
                                 VSX,
@@ -1213,6 +1268,9 @@ std::string Target::to_string() const {
     }
     if (vector_bits != 0) {
         result += "-vector_bits_" + std::to_string(vector_bits);
+    }
+    if (streaming_vector_bits != 0) {
+        result += "-streaming_vector_bits_" + std::to_string(streaming_vector_bits);
     }
 
     return result;
@@ -1539,6 +1597,10 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
 }
 
 int Target::natural_vector_size(const Halide::Type &t) const {
+    return natural_vector_size(t, false);
+}
+
+int Target::natural_vector_size(const Halide::Type &t, bool is_sme_streaming) const {
     user_assert(!has_unknowns())
         << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
@@ -1546,9 +1608,13 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     const int data_size = t.bytes();
 
     if (arch == Target::ARM) {
-        if (vector_bits != 0 &&
-            (has_feature(Halide::Target::SVE2) ||
-             (t.is_float() && has_feature(Halide::Target::SVE)))) {
+        if (is_sme_streaming &&
+            streaming_vector_bits != 0 &&
+            has_feature(Halide::Target::SME2)) {
+            return streaming_vector_bits / (data_size * 8);
+        } else if (vector_bits != 0 &&
+                   (has_feature(Halide::Target::SVE2) ||
+                    (t.is_float() && has_feature(Halide::Target::SVE)))) {
             return vector_bits / (data_size * 8);
         } else {
             return 16 / data_size;
@@ -1891,11 +1957,22 @@ void target_test() {
         }
     }
 
+    // Tests for vector_bits
     internal_assert(Target().vector_bits == 0) << "Default Target vector_bits not 0.\n";
     internal_assert(Target("arm-64-linux-sve2-vector_bits_512").vector_bits == 512) << "Vector bits not parsed correctly.\n";
-    Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE}, 512);
+    Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE2}, 512);
     internal_assert(with_vector_bits.vector_bits == 512) << "Vector bits not populated in constructor.\n";
     internal_assert(Target(with_vector_bits.to_string()).vector_bits == 512) << "Vector bits not round tripped properly.\n";
+    internal_assert(with_vector_bits.natural_vector_size(Int(32)) == 16) << "Wrong natural_vector_size.\n";
+
+    // Tests for streaming_vector_bits
+    internal_assert(Target().streaming_vector_bits == 0) << "Default Target streaming_vector_bits not 0.\n";
+    internal_assert(Target("arm-64-linux-sme2-vector_bits_512-streaming_vector_bits_1024").streaming_vector_bits == 1024) << "Streaming vector bits not parsed correctly.\n";
+    Target with_streaming_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE2, Target::SME2}, 512, 1024);
+    internal_assert(with_streaming_vector_bits.streaming_vector_bits == 1024) << "Streaming vector bits not populated in constructor.\n";
+    internal_assert(Target(with_streaming_vector_bits.to_string()).streaming_vector_bits == 1024) << "Streaming vector bits not round tripped properly.\n";
+    internal_assert(with_streaming_vector_bits.natural_vector_size(Int(32), true) == 32) << "Wrong natural_vector_size with SME streaming.\n";
+    internal_assert(with_streaming_vector_bits.natural_vector_size(Int(32), false) == 16) << "Wrong natural_vector_size without SME streaming.\n";
 
     std::cout << "Target test passed\n";
 }

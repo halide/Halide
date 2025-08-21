@@ -1354,7 +1354,7 @@ extern int halide_error_storage_bound_too_small(void *user_context, const char *
                                                 int provided_size, int required_size);
 extern int halide_error_device_crop_failed(void *user_context);
 extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
-extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+extern int halide_error_vscale_invalid(void *user_context, const char *func_name, const char *prefix, int runtime_vscale, int compiletime_vscale);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1447,6 +1447,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_webgpu,                 ///< Enable the WebGPU runtime.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
+    halide_target_feature_sme2,                   ///< Enable ARM Scalable Matrix Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.
     halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
     halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing

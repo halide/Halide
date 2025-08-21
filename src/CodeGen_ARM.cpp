@@ -89,6 +89,7 @@ Target complete_arm_target(Target t) {
     static const Target::Feature features_with_fp16[] = {
         Target::SVE,
         Target::SVE2,
+        Target::SME2,
     };
 
     for (const auto &f : features_with_fp16) {
@@ -97,6 +98,7 @@ Target complete_arm_target(Target t) {
 
     static const Target::Feature features_with_dotprod[] = {
         Target::SVE2,
+        Target::SME2,
     };
 
     for (const auto &f : features_with_dotprod) {
@@ -202,7 +204,10 @@ protected:
 
     /** Determine feasible vscale (vector_bits/128 or 0) by checking vector lanes used in the function.
      * Raise user_warning in case of not feasible */
-    int check_feasible_vscale(int vector_bits, const std::set<int> &lanes_used, const std::string &simple_name);
+    int check_feasible_vscale(int vector_bits,
+                              const std::set<int> &lanes_used,
+                              const std::string &streaming_or_none,
+                              const std::string &simple_name);
 
     /** Nodes for which we want to emit specific ARM vector intrinsics */
     // @{
@@ -297,7 +302,9 @@ protected:
     int feasible_vscale = 0;
     IntrinsicsMap intrinsics_neon;
     IntrinsicsMap intrinsics_sve2;
+    IntrinsicsMap intrinsics_streaming;
     IntrinsicsMap *effective_intrinsics;
+    bool in_streaming = false;
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
@@ -1042,6 +1049,9 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
     // Always inline these wrappers.
     wrapper->addFnAttr(llvm::Attribute::AlwaysInline);
 
+    // Available regardless of SME streaming mode
+    wrapper->addFnAttr("aarch64_pstate_sm_compatible");
+
     builder->restoreIP(here);
 
     llvm::verifyFunction(*wrapper);
@@ -1059,10 +1069,15 @@ void CodeGen_ARM::init_module() {
     } else if (target.has_feature(Target::SVE)) {
         user_warning << "Halide does not support SVE for now. Use SVE2 if your target device supports it.\n";
     }
+    if (target.has_feature(Target::SME2)) {
+        user_assert(target.streaming_vector_bits != 0) << "For SME2 support, Target::streaming_vector_bits must be set. For generator target strings, add \"streaming_vector_bits_<bits>\".\n";
+        user_assert((target.streaming_vector_bits % 128) == 0) << "For SME2 support, Target::streaming_vector_bits must be a multiple of 128.\n";
+    }
 
     const bool has_neon = !target.has_feature(Target::NoNEON);
     const bool has_sve = target.has_feature(Target::SVE2);
-    if (!(has_neon || has_sve)) {
+    const bool has_sme = target.has_feature(Target::SME2);
+    if (!(has_neon || has_sve || has_sme)) {
         return;
     }
 
@@ -1070,6 +1085,7 @@ void CodeGen_ARM::init_module() {
         NeonWidthX1,
         NeonWidthX2,
         SVE,
+        Streaming,
     };
 
     std::vector<SIMDFlavors> flavors;
@@ -1079,6 +1095,9 @@ void CodeGen_ARM::init_module() {
     }
     if (has_sve) {
         flavors.push_back(SIMDFlavors::SVE);
+    }
+    if (has_sme) {
+        flavors.push_back(SIMDFlavors::Streaming);
     }
 
     for (const ArmIntrinsic &intrin : intrinsic_defs) {
@@ -1104,7 +1123,11 @@ void CodeGen_ARM::init_module() {
         // scaled, and one of two opcodes may be selected by different
         // iterations of this loop.
         for (const auto flavor : flavors) {
-            const bool is_sve = flavor == SIMDFlavors::SVE;
+            // Assuming intrinsics in Streaming can be handled in the same way as SVE
+            // except for the vscale value.
+            // This could change when we add a SME specific intrin or a SVE intrin which is
+            // unavailable in streaming mode.
+            const bool is_sve_or_streaming = (flavor == SIMDFlavors::SVE || flavor == SIMDFlavors::Streaming);
 
             int vscale = 0;
             IntrinsicsMap *intrinsics_map = nullptr;
@@ -1117,13 +1140,17 @@ void CodeGen_ARM::init_module() {
                 vscale = target.vector_bits / 128;
                 intrinsics_map = &intrinsics_sve2;
                 break;
+            case SIMDFlavors::Streaming:
+                vscale = target.streaming_vector_bits / 128;
+                intrinsics_map = &intrinsics_streaming;
+                break;
             default:
                 internal_error << "unreachable\n";
                 break;
             }
 
             // Skip intrinsics that are NEON or SVE only depending on whether compiling for SVE.
-            if (is_sve) {
+            if (is_sve_or_streaming) {
                 if (intrin.flags & ArmIntrinsic::SveUnavailable) {
                     continue;
                 }
@@ -1134,7 +1161,7 @@ void CodeGen_ARM::init_module() {
             }
             if ((target.bits == 64) &&
                 (intrin.flags & ArmIntrinsic::Neon64Unavailable) &&
-                !is_sve) {
+                !is_sve_or_streaming) {
                 continue;
             }
             // Already declared in the x1 pass.
@@ -1147,9 +1174,9 @@ void CodeGen_ARM::init_module() {
                 const bool is_vanilla_intrinsic = starts_with(intrin_name, "llvm.");
                 if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
                     const char *prefix =
-                        target.bits == 32 ? "llvm.arm.neon." :
-                        is_sve            ? "llvm.aarch64.sve." :
-                                            "llvm.aarch64.neon.";
+                        target.bits == 32   ? "llvm.arm.neon." :
+                        is_sve_or_streaming ? "llvm.aarch64.sve." :
+                                              "llvm.aarch64.neon.";
                     return concat_strings(prefix, intrin_name);
                 }
                 return intrin_name;
@@ -1165,6 +1192,7 @@ void CodeGen_ARM::init_module() {
                     width_factor = 2;
                     break;
                 case SIMDFlavors::SVE:
+                case SIMDFlavors::Streaming:
                     width_factor = (intrin.flags & ArmIntrinsic::HalfWidth) ? 2 : 1;
                     width_factor *= vscale;
                     break;
@@ -1196,7 +1224,7 @@ void CodeGen_ARM::init_module() {
             if (starts_with(full_name, "llvm.") && (intrin.flags & ArmIntrinsic::NoMangle) == 0) {
                 // Append LLVM name mangling for either the return type or the arguments, or both.
                 vector<Type> types;
-                if (intrin.flags & ArmIntrinsic::MangleArgs && !is_sve) {
+                if (intrin.flags & ArmIntrinsic::MangleArgs && !is_sve_or_streaming) {
                     types = arg_types;
                 } else if (intrin.flags & ArmIntrinsic::MangleRetArgs) {
                     types = {ret_type};
@@ -1205,8 +1233,8 @@ void CodeGen_ARM::init_module() {
                     types = {ret_type};
                 }
                 for (const Type &t : types) {
-                    std::string llvm_vector_prefix = is_sve ? ".nxv" : ".v";
-                    int mangle_lanes = t.lanes() / (is_sve ? vscale : 1);
+                    std::string llvm_vector_prefix = is_sve_or_streaming ? ".nxv" : ".v";
+                    int mangle_lanes = t.lanes() / (is_sve_or_streaming ? vscale : 1);
                     mangled_name_builder << llvm_vector_prefix << mangle_lanes;
                     if (t.is_int() || t.is_uint()) {
                         mangled_name_builder << "i";
@@ -1220,7 +1248,7 @@ void CodeGen_ARM::init_module() {
 
             llvm::Function *intrin_impl = define_intrin_wrapper(
                 intrin.name, ret_type, mangled_name, arg_types,
-                intrin.flags, is_sve, vscale);
+                intrin.flags, is_sve_or_streaming, vscale);
 
             function_does_not_access_memory(intrin_impl);
             intrin_impl->addFnAttr(llvm::Attribute::NoUnwind);
@@ -1240,6 +1268,9 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
                                const string &extern_name) {
 
     LoweredFunc func = f;
+    llvm::Function *llvm_func = module->getFunction(extern_name);
+    internal_assert(llvm_func);
+    bool is_streaming_task = (f.attributes & LoweredFunc::Attribute::SME_STREAMING_TASK) && target.has_feature(Target::SME2);
 
     if (target.os != Target::IOS && target.os != Target::OSX) {
         // Substitute in strided loads to get vld2/3/4 emission. We don't do it
@@ -1254,7 +1285,8 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     // Inspect vector lanes used in this function to determine feasible vscale.
     // TODO: Target::SVE not supported https://github.com/halide/Halide/issues/8872
     feasible_vscale = 0;
-    if (target.features_any_of({Target::SVE2})) {
+    in_streaming = false;
+    if (target.features_any_of({Target::SVE2, Target::SME2})) {
         std::set<int> lanes_used;
 
         mutate_with(func.body, [&](auto *self, const Expr &e) {
@@ -1262,7 +1294,23 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
             return self->mutate_base(e);
         });
 
-        feasible_vscale = check_feasible_vscale(target.vector_bits, lanes_used, simple_name);
+        if (is_streaming_task) {
+            feasible_vscale = check_feasible_vscale(target.streaming_vector_bits,  // SVL
+                                                    lanes_used, "streaming_", simple_name);
+        }
+        in_streaming = (feasible_vscale > 0) && is_streaming_task;
+
+        if (!in_streaming && target.has_feature(Target::SVE2)) {
+            feasible_vscale = check_feasible_vscale(target.vector_bits,  // VL
+                                                    lanes_used, "", simple_name);
+        }
+    }
+
+    if (in_streaming) {
+        llvm_func->addFnAttr("aarch64_pstate_sm_body");
+        llvm_func->addFnAttr(llvm::Attribute::NoInline);
+    } else if (f.attributes & LoweredFunc::Attribute::SME_NONSTREAMING_TASK) {
+        llvm_func->addFnAttr(llvm::Attribute::NoInline);
     }
 
     if (feasible_vscale > 0) {
@@ -1274,20 +1322,31 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     }
 
     // Select intrinsics map for neon or sve2, depending on vscale
-    effective_intrinsics = feasible_vscale > 0 ? &intrinsics_sve2 : &intrinsics_neon;
+    effective_intrinsics = in_streaming ? &intrinsics_streaming : feasible_vscale > 0 ? &intrinsics_sve2 :
+                                                                                        &intrinsics_neon;
 
-    CodeGen_CPU::set_effective_vscale(feasible_vscale);
+    set_effective_vscale(feasible_vscale);
 
     // Make sure run-time vscale is equal to compile-time vscale.
     // Avoiding the assert on inner functions is both an efficiency and a correctness issue
     // as the assertion code may not compile in all contexts.
-    if (f.linkage != LinkageType::Internal) {
+    if (f.linkage != LinkageType::Internal && !target.has_feature(Target::NoAsserts)) {
         int effective_vscale = target_vscale();
-        if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
+        if (effective_vscale != 0) {
+            internal_assert(!in_streaming) << "Streaming mode in non-internal linkage func is unexpected\n";
             Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_vscale, {}, Call::PureIntrinsic);
             Expr compiletime_vscale = Expr(effective_vscale);
-            Expr error = Call::make(Int(32), "halide_error_vscale_invalid",
-                                    {simple_name, runtime_vscale, compiletime_vscale}, Call::Extern);
+            std::vector<Expr> args{simple_name, std::string(""), runtime_vscale, compiletime_vscale};
+            Expr error = Call::make(Int(32), "halide_error_vscale_invalid", args, Call::Extern);
+            func.body = Block::make(AssertStmt::make(runtime_vscale == compiletime_vscale, error), func.body);
+        }
+        if (target.has_feature(Target::SME2)) {
+            // We check regardless of streaming mode enabled or not
+            // because streaming task is basically internal linkage.
+            Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_streaming_vscale, {}, Call::PureIntrinsic);
+            Expr compiletime_vscale = Expr(target.streaming_vector_bits / 128);
+            std::vector<Expr> args{simple_name, std::string("streaming"), runtime_vscale, compiletime_vscale};
+            Expr error = Call::make(Int(32), "halide_error_vscale_invalid", args, Call::Extern);
             func.body = Block::make(AssertStmt::make(runtime_vscale == compiletime_vscale, error), func.body);
         }
     }
@@ -1295,7 +1354,10 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     CodeGen_CPU::compile_func(func, simple_name, extern_name);
 }
 
-int CodeGen_ARM::check_feasible_vscale(int vector_bits, const std::set<int> &lanes_used, const std::string &simple_name) {
+int CodeGen_ARM::check_feasible_vscale(int vector_bits,
+                                       const std::set<int> &lanes_used,
+                                       const std::string &streaming_or_none,
+                                       const std::string &simple_name) {
     internal_assert(vector_bits != 0 && (vector_bits % 128) == 0);
     int vscale = vector_bits / 128;
     bool feasible = true;
@@ -1318,8 +1380,9 @@ int CodeGen_ARM::check_feasible_vscale(int vector_bits, const std::set<int> &lan
     if (!feasible) {
         user_warning << "In " << simple_name
                      << ", Vectorization factor is not suitable of scalable vector with "
+                     << streaming_or_none
                      << "vector_bits=" << vector_bits
-                     << ". Disabling SVE\n";
+                     << ". Disabling " << streaming_or_none << "SVE\n";
         return 0;
     }
 
@@ -1815,6 +1878,13 @@ void CodeGen_ARM::visit(const Store *op) {
             }
         } else if (op->index.type().is_vector()) {
             // Scatter
+            if (in_streaming) {
+                user_warning << "Scatter store is not vectorized in streaming mode."
+                             << " It will result in slow performance due to scalarization.\n";
+                CodeGen_CPU::visit(op);
+                return;
+            }
+
             Type elt = op->value.type().element_of();
 
             // Rewrite float16 case into reinterpret and Store in uint16, as it is unsupported in LLVM
@@ -1991,6 +2061,12 @@ void CodeGen_ARM::visit(const Load *op) {
             }
         } else if (op->index.type().is_vector()) {
             // General Gather Load
+            if (in_streaming) {
+                user_warning << "Gather load is not vectorized in streaming mode."
+                             << " It will result in slow performance due to scalarization.\n";
+                CodeGen_CPU::visit(op);
+                return;
+            }
 
             // Rewrite float16 case into load in uint16 and reinterpret, as it is unsupported in LLVM
             if (is_float16_and_has_feature(op->type)) {
@@ -2619,6 +2695,38 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     }
 
+    if (op->is_intrinsic(Call::get_runtime_streaming_vscale)) {
+        // This intrin function must be defined independently.
+        // Otherwise, vscale_range(n, n) attribute is added and llvm compiler optimize away the runtime call,
+        // which makes runtime assertion of vscale useless.
+        llvm::Function *fn = module->getFunction(op->name);
+        if (!fn) {
+            FunctionType *func_t = FunctionType::get(i32_t, {}, false);
+            fn = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, op->name, module.get());
+
+            llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", fn);
+            IRBuilderBase::InsertPoint here = builder->saveIP();
+            builder->SetInsertPoint(block);
+
+            // Body
+            FunctionType *intrin_fn_type = FunctionType::get(i64_t, {}, false);
+            FunctionCallee intrin_fn = module->getOrInsertFunction("llvm.aarch64.sme.cntsd", intrin_fn_type);
+            CallInst *intrin_call = builder->CreateCall(intrin_fn, {});
+            Value *i32_cntsd = builder->CreateIntCast(intrin_call, i32_t, false);
+            // Divide by 2, as cnts"d" returns the number of lanes for 64bit type, while vscale=1 means 128bit.
+            Value *ret = builder->CreateLShr(i32_cntsd, ConstantInt::get(i32_t, 1));
+            builder->CreateRet(ret);
+
+            // To avoid vscale_range(n,n) added in CodeGen_Internal
+            fn->addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(*context, 1, 16));
+            fn->addFnAttr(llvm::Attribute::NoInline);
+            internal_assert(!verifyFunction(*fn, &llvm::errs()));
+            builder->restoreIP(here);
+        }
+        value = builder->CreateCall(fn, {});
+        return;
+    }
+
     CodeGen_CPU::visit(op);
 }
 
@@ -2715,7 +2823,8 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
         if (op->op != p.reduce_op || factor % p.factor != 0) {
             continue;
         }
-        if (!target.has_feature(p.required_feature)) {
+        if (!target.has_feature(p.required_feature) &&
+            !(in_streaming && p.required_feature == Target::SVE2)) {
             continue;
         }
         if (expr_match(p.pattern, op->value, matches)) {
@@ -3016,6 +3125,9 @@ string CodeGen_ARM::mattrs() const {
         } else if (target.has_feature(Target::SVE)) {
             // TODO: https://github.com/halide/Halide/issues/8872
             // attrs.emplace_back("+sve");
+        }
+        if (target.has_feature(Target::SME2)) {
+            attrs.emplace_back("+sme2");
         }
         if (target.os == Target::IOS || target.os == Target::OSX) {
             attrs.emplace_back("+reserve-x18");

@@ -15,7 +15,8 @@ std::string target_repr(const Target &t) {
 
 void define_target(py::module &m) {
     // Disambiguate some ambiguous methods
-    int (Target::*natural_vector_size_method)(const Type &t) const = &Target::natural_vector_size;
+    int (Target::*natural_vector_size1_method)(const Type &t) const = &Target::natural_vector_size;
+    int (Target::*natural_vector_size2_method)(const Type &t, bool is_sme_streaming) const = &Target::natural_vector_size;
     bool (Target::*supports_type1_method)(const Type &t) const = &Target::supports_type;
     bool (Target::*supports_type2_method)(const Type &t, DeviceAPI device) const = &Target::supports_type;
 
@@ -52,7 +53,8 @@ void define_target(py::module &m) {
             .def("supports_type", supports_type1_method, py::arg("type"))
             .def("supports_type", supports_type2_method, py::arg("type"), py::arg("device"))
             .def("supports_device_api", &Target::supports_device_api, py::arg("device"))
-            .def("natural_vector_size", natural_vector_size_method, py::arg("type"))
+            .def("natural_vector_size", natural_vector_size1_method, py::arg("type"))
+            .def("natural_vector_size", natural_vector_size2_method, py::arg("type"), py::arg("is_sme_streaming"))
             .def("has_large_buffers", &Target::has_large_buffers)
             .def("maximum_buffer_size", &Target::maximum_buffer_size)
             .def("supported", &Target::supported)

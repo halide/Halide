@@ -629,6 +629,8 @@ const char *const intrinsic_op_names[] = {
     "dynamic_shuffle",
     "extract_bits",
     "extract_mask_element",
+    "get_runtime_vscale",
+    "get_runtime_streaming_vscale",
     "get_user_context",
     "gpu_thread_barrier",
     "halving_add",
@@ -704,7 +706,6 @@ const char *const intrinsic_op_names[] = {
     "widening_shift_left",
     "widening_shift_right",
     "widening_sub",
-    "get_runtime_vscale",
 };
 
 static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,

@@ -18,6 +18,7 @@ extern "C" unsigned long getauxval(unsigned long type);
 #define HWCAP_ASIMDDP (1 << 20)
 #define HWCAP_SVE (1 << 22)
 #define HWCAP2_SVE2 (1 << 1)
+#define HWCAP2_SME2 (1ULL << 37)
 
 namespace {
 
@@ -39,6 +40,10 @@ void set_platform_features(CpuFeatures *features) {
 
     if (hwcaps2 & HWCAP2_SVE2) {
         halide_set_available_cpu_feature(features, halide_target_feature_sve2);
+    }
+
+    if (hwcaps2 & HWCAP2_SME2) {
+        halide_set_available_cpu_feature(features, halide_target_feature_sme2);
     }
 }
 
@@ -64,6 +69,10 @@ void set_platform_features(CpuFeatures *features) {
     if (sysctl_is_set("hw.optional.arm.FEAT_FP16")) {
         halide_set_available_cpu_feature(features, halide_target_feature_arm_fp16);
     }
+
+    if (sysctl_is_set("hw.optional.arm.FEAT_SME2")) {
+        halide_set_available_cpu_feature(features, halide_target_feature_sme2);
+    }
 }
 
 }  // namespace
@@ -82,6 +91,7 @@ extern "C" BOOL IsProcessorFeaturePresent(DWORD feature);
 // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocessorfeaturepresent
 #define PF_ARM_SVE_INSTRUCTIONS_AVAILABLE (46)
 #define PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE (47)
+#define PF_ARM_SME2_INSTRUCTIONS_AVAILABLE (71)
 
 namespace {
 
@@ -103,6 +113,10 @@ void set_platform_features(CpuFeatures *features) {
 
     if (IsProcessorFeaturePresent(PF_ARM_SVE2_INSTRUCTIONS_AVAILABLE)) {
         halide_set_available_cpu_feature(features, halide_target_feature_sve2);
+    }
+
+    if (IsProcessorFeaturePresent(PF_ARM_SME2_INSTRUCTIONS_AVAILABLE)) {
+        halide_set_available_cpu_feature(features, halide_target_feature_sme2);
     }
 }
 
@@ -126,6 +140,7 @@ extern "C" WEAK int halide_get_cpu_features(CpuFeatures *features) {
     halide_set_known_cpu_feature(features, halide_target_feature_no_neon);
     halide_set_known_cpu_feature(features, halide_target_feature_sve);
     halide_set_known_cpu_feature(features, halide_target_feature_sve2);
+    halide_set_known_cpu_feature(features, halide_target_feature_sme2);
 
     // All ARM architectures support "No Neon".
     halide_set_available_cpu_feature(features, halide_target_feature_no_neon);
