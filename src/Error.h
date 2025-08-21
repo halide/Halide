@@ -130,18 +130,22 @@ struct ReportBase {
     }
 
     HALIDE_ALWAYS_INLINE operator bool() const {
-        return !issued;
+        return !finalized;
     }
 
 protected:
     std::ostringstream msg{};
-    bool issued{false};
+    bool finalized{false};
 
+    // This function is called as part of issue() below. We can't use a
+    // virtual function because issue() needs to be marked [[noreturn]]
+    // for errors and be left alone for warnings (i.e., they have
+    // different signatures).
     std::string finalize_message() {
         if (!msg.str().empty() && msg.str().back() != '\n') {
             msg << "\n";
         }
-        issued = true;
+        finalized = true;
         return msg.str();
     }
 
@@ -157,7 +161,7 @@ protected:
 };
 
 template<typename Exception>
-struct ErrorReport : ReportBase<ErrorReport<Exception>> {
+struct ErrorReport final : ReportBase<ErrorReport<Exception>> {
     ErrorReport &init(const char *file, const char *function, const int line, const char *condition_string) {
         return ReportBase<ErrorReport>::init(file, function, line, condition_string, Exception::error_name) << "Error: ";
     }
@@ -167,7 +171,7 @@ struct ErrorReport : ReportBase<ErrorReport<Exception>> {
     }
 };
 
-struct WarningReport : ReportBase<WarningReport> {
+struct WarningReport final : ReportBase<WarningReport> {
     WarningReport &init(const char *file, const char *function, const int line, const char *condition_string) {
         return ReportBase::init(file, function, line, condition_string, "Warning") << "Warning: ";
     }
@@ -178,7 +182,7 @@ struct WarningReport : ReportBase<WarningReport> {
 };
 
 /**
- * _halide_internal_assertion is used to implement our assertion macros
+ * _halide_internal_diagnostic is used to implement our assertion macros
  * in such a way that the messages output for the assertion are only
  * evaluated if the assertion's value is false.
  *
@@ -187,9 +191,9 @@ struct WarningReport : ReportBase<WarningReport> {
  * when the assertion is true.
  *
  * The macro works by deferring the call to issue() until after the stream
- * has been evaluated. This used to use a trick where ErrorReport would throw
- * in the destructor, but throwing destructors are UB in a lot of scenarios,
- * and it was easy to break things by mistake.
+ * has been evaluated. This previously used a trick where ErrorReport would
+ * throw in the destructor, but throwing in a destructor is UB in a lot of
+ * scenarios, and it was easy to break things by mistake.
  */
 // clang-format off
 #define _halide_internal_diagnostic(condition, type, condition_string)  \
