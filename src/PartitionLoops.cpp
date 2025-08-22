@@ -547,7 +547,7 @@ class PartitionLoops : public IRMutator {
             (op->partition_policy == Partition::Auto && in_tail)) {
             return IRMutator::visit(op);
         }
-        const auto &[loop, mutated] = visit_for(op);
+        const auto [loop, mutated] = visit_for(op);
         user_assert(op->partition_policy != Partition::Always || mutated)
             << "Loop Partition Policy is set to " << op->partition_policy
             << " for " << op->name << ", but no loop partitioning was performed.";
