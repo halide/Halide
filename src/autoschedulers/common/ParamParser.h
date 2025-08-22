@@ -1,7 +1,7 @@
 #ifndef PARSE_H
 #define PARSE_H
 
-#include "Errors.h"
+#include "HalidePlugin.h"
 #include <sstream>
 #include <type_traits>
 
