@@ -13,7 +13,9 @@ int main(int argc, char **argv) {
     Scope<Interval> scope;
     scope.push(p2.name(), Interval{p2_min, p2_max});
 
-    for (int limit = 1; limit < 500; limit++) {
+    // This test uses a lot of stack space, especially on ASAN, where we don't
+    // do any stack switching (see Util.cpp). Don't push this number too far.
+    for (int limit = 1; limit < 100; limit++) {
         Expr e1 = p1, e2 = p2;
         for (int i = 0; i < limit; i++) {
             e1 = e1 * p1 + (i + 1);
