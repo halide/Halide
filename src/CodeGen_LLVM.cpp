@@ -4283,6 +4283,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
     if (output_lanes == 1) {
         const int input_lanes = val.type().lanes();
         const int input_bytes = input_lanes * val.type().bytes();
+        const int vscale = std::max(effective_vscale, 1);
         const bool llvm_has_intrinsic =
             // Must be one of these ops
             ((op->op == VectorReduce::Add ||
@@ -4291,20 +4292,15 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
               op->op == VectorReduce::Max) &&
              (use_llvm_vp_intrinsics ||
               // Must be a power of two lanes
-              ((input_lanes >= 2) &&
+              ((input_lanes >= 2 * vscale) &&
                ((input_lanes & (input_lanes - 1)) == 0) &&
                // int versions exist up to 1024 bits
                ((!op->type.is_float() && input_bytes <= 1024) ||
                 // float versions exist up to 16 lanes
-                input_lanes <= 16) &&
-               // As of the release of llvm 10, the 64-bit experimental total
-               // reductions don't seem to be done yet on arm.
-               (val.type().bits() != 64 ||
-                target.arch != Target::ARM))));
+                input_lanes <= 16 * vscale))));
 
         if (llvm_has_intrinsic) {
             const char *name = "<err>";
-            const int bits = op->type.bits();
             bool takes_initial_value = use_llvm_vp_intrinsics;
             Expr initial_value = init;
             if (op->type.is_float()) {
@@ -4384,7 +4380,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
                 std::stringstream build_name;
                 build_name << "llvm.vector.reduce.";
                 build_name << name;
-                build_name << ".v" << val.type().lanes() << (op->type.is_float() ? 'f' : 'i') << bits;
+                build_name << mangle_llvm_type(get_vector_type(llvm_type_of(elt), val.type().lanes()));
 
                 string intrin_name = build_name.str();
 
