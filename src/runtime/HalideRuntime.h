@@ -380,6 +380,9 @@ extern int halide_default_semaphore_release(struct halide_semaphore_t *, int n);
 extern bool halide_default_semaphore_try_acquire(struct halide_semaphore_t *, int n);
 // @}
 
+/** Obtain the number of logical cores on the system. */
+extern int halide_host_cpu_count();
+
 struct halide_thread;
 
 /** Spawn a thread. Returns a handle to the thread for the purposes of
