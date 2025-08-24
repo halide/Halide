@@ -66,6 +66,12 @@ int vk_destroy_context(
     VkPhysicalDevice physical_device,
     VkQueue queue);
 
+int vk_release_memory_allocator(
+    void *user_context,
+    VulkanMemoryAllocator *allocator,
+    VkInstance instance,
+    VkDebugUtilsMessengerEXT messenger);
+
 int vk_find_compute_capability(void *user_context, int *major, int *minor);
 
 int vk_create_instance(void *user_context, const StringTable &requested_layers, VkInstance *instance, const VkAllocationCallbacks *alloc_callbacks);
