@@ -188,7 +188,7 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
 
     results.instance = wgpuCreateInstance(nullptr);
 
-    auto request_adapter_callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, char const *message, void *userdata) {
+    auto request_adapter_callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView, void *userdata, void *) {
         auto *results = (Results *)userdata;
 
         if (status != WGPURequestAdapterStatus_Success) {
@@ -198,49 +198,53 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
         results->adapter = adapter;
 
         // Use the defaults for most limits.
-        WGPURequiredLimits requestedLimits{};
-        requestedLimits.nextInChain = nullptr;
-        memset(&requestedLimits.limits, 0xFF, sizeof(WGPULimits));
+        WGPULimits requestedLimits = WGPU_LIMITS_INIT;
 
         // TODO: Enable for Emscripten when wgpuAdapterGetLimits is supported.
         // See https://github.com/halide/Halide/issues/7248
 #ifdef WITH_DAWN_NATIVE
-        WGPUSupportedLimits supportedLimits{};
-        supportedLimits.nextInChain = nullptr;
-        if (!wgpuAdapterGetLimits(adapter, &supportedLimits)) {
+        WGPULimits supportedLimits = WGPU_LIMITS_INIT;
+        if (wgpuAdapterGetLimits(adapter, &supportedLimits) != WGPUStatus_Success) {
             results->success = false;
             return;
-        } else {
-            // Raise the limits on buffer size and workgroup storage size.
-            requestedLimits.limits.maxBufferSize = supportedLimits.limits.maxBufferSize;
-            requestedLimits.limits.maxStorageBufferBindingSize = supportedLimits.limits.maxStorageBufferBindingSize;
-            requestedLimits.limits.maxComputeWorkgroupStorageSize = supportedLimits.limits.maxComputeWorkgroupStorageSize;
         }
+
+        // Raise the limits on buffer size and workgroup storage size.
+        requestedLimits.maxBufferSize = supportedLimits.maxBufferSize;
+        requestedLimits.maxStorageBufferBindingSize = supportedLimits.maxStorageBufferBindingSize;
+        requestedLimits.maxComputeWorkgroupStorageSize = supportedLimits.maxComputeWorkgroupStorageSize;
 #endif
 
-        auto device_lost_callback = [](WGPUDeviceLostReason reason,
-                                       char const *message,
-                                       void *userdata) {
+        WGPUDeviceLostCallbackInfo device_lost_cb = WGPU_DEVICE_LOST_CALLBACK_INFO_INIT;
+        device_lost_cb.nextInChain = nullptr;
+        device_lost_cb.mode = WGPUCallbackMode_AllowSpontaneous;
+        device_lost_cb.callback = [](WGPUDevice const *, WGPUDeviceLostReason reason, WGPUStringView message, void *, void *) {
             // Apparently this should not be treated as a fatal error
             if (reason == WGPUDeviceLostReason_Destroyed) {
                 return;
             }
-            fprintf(stderr, "WGPU Device Lost: %d %s", (int)reason, message);
+            fprintf(stderr, "WGPU Device Lost: %d %.*s", (int)reason, (int)message.length, message.data);
             abort();
         };
+        device_lost_cb.userdata1 = nullptr;
+        device_lost_cb.userdata2 = nullptr;
 
-        WGPUDeviceDescriptor desc{};
+        WGPUDeviceDescriptor desc = WGPU_DEVICE_DESCRIPTOR_INIT;
         desc.nextInChain = nullptr;
-        desc.label = nullptr;
+        desc.label = WGPU_STRING_VIEW_INIT;
         desc.requiredFeatureCount = 0;
         desc.requiredFeatures = nullptr;
         desc.requiredLimits = &requestedLimits;
-        desc.deviceLostCallback = device_lost_callback;
+        desc.deviceLostCallbackInfo = device_lost_cb;
 
-        auto request_device_callback = [](WGPURequestDeviceStatus status,
-                                          WGPUDevice device,
-                                          char const *message,
-                                          void *userdata) {
+        WGPURequestDeviceCallbackInfo request_device_cb = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
+        request_device_cb.nextInChain = nullptr;
+        request_device_cb.mode = WGPUCallbackMode_AllowSpontaneous;
+        request_device_cb.callback = [](WGPURequestDeviceStatus status,
+                                        WGPUDevice device,
+                                        WGPUStringView,
+                                        void *userdata,
+                                        void *) {
             auto *results = (Results *)userdata;
             if (status != WGPURequestDeviceStatus_Success) {
                 results->success = false;
@@ -250,23 +254,31 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
 
             // Create a staging buffer for transfers.
             constexpr int kStagingBufferSize = 4 * 1024 * 1024;
-            WGPUBufferDescriptor desc{};
+            WGPUBufferDescriptor desc = WGPU_BUFFER_DESCRIPTOR_INIT;
             desc.nextInChain = nullptr;
-            desc.label = nullptr;
+            desc.label = WGPU_STRING_VIEW_INIT;
             desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
             desc.size = kStagingBufferSize;
             desc.mappedAtCreation = false;
+
             results->staging_buffer = wgpuDeviceCreateBuffer(device, &desc);
             if (results->staging_buffer == nullptr) {
                 results->success = false;
-                return;
             }
         };
+        request_device_cb.userdata1 = userdata;
+        request_device_cb.userdata2 = nullptr;
 
-        wgpuAdapterRequestDevice(adapter, &desc, request_device_callback, userdata);
+        wgpuAdapterRequestDevice(adapter, &desc, request_device_cb);
     };
 
-    wgpuInstanceRequestAdapter(results.instance, nullptr, request_adapter_callback, &results);
+    WGPURequestAdapterCallbackInfo instance_req_cb = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
+    instance_req_cb.nextInChain = nullptr;
+    instance_req_cb.mode = WGPUCallbackMode_AllowSpontaneous;
+    instance_req_cb.callback = request_adapter_callback;
+    instance_req_cb.userdata1 = &results;
+    instance_req_cb.userdata2 = nullptr;
+    wgpuInstanceRequestAdapter(results.instance, nullptr, instance_req_cb);
 
     // Wait for device initialization to complete.
     while (!results.device && results.success) {
