@@ -404,12 +404,12 @@ void define_func(py::module &m) {
                  },
                  py::arg("dst"), py::arg("target") = Target())
 
-            .def("in_", (Func(Func::*)(const Func &))&Func::in, py::arg("f"))
-            .def("in_", (Func(Func::*)(const std::vector<Func> &fs))&Func::in, py::arg("fs"))
-            .def("in_", (Func(Func::*)())&Func::in)
+            .def("in_", static_cast<Func (Func::*)(const Func &)>(&Func::in), py::arg("f"))
+            .def("in_", static_cast<Func (Func::*)(const std::vector<Func> &fs)>(&Func::in), py::arg("fs"))
+            .def("in_", static_cast<Func (Func::*)()>(&Func::in))
 
-            .def("clone_in", (Func(Func::*)(const Func &))&Func::clone_in, py::arg("f"))
-            .def("clone_in", (Func(Func::*)(const std::vector<Func> &fs))&Func::clone_in, py::arg("fs"))
+            .def("clone_in", static_cast<Func (Func::*)(const Func &)>(&Func::clone_in), py::arg("f"))
+            .def("clone_in", static_cast<Func (Func::*)(const std::vector<Func> &fs)>(&Func::clone_in), py::arg("fs"))
 
             .def("copy_to_device", &Func::copy_to_device, py::arg("device_api") = DeviceAPI::Default_GPU)
             .def("copy_to_host", &Func::copy_to_host)
