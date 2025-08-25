@@ -12,9 +12,8 @@
 #include <utility>
 #include <vector>
 
-#include "Errors.h"
 #include "Featurization.h"
-#include "Halide.h"
+#include "HalidePlugin.h"
 #include "PerfectHashMap.h"
 
 namespace Halide {

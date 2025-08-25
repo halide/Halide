@@ -123,113 +123,95 @@ void issue_warning(const char *warning);
 
 template<typename T>
 struct ReportBase {
-    std::ostringstream msg;
-
-    ReportBase(const char *file, const char *function, int line, const char *condition_string, const char *prefix) {
-        if (debug_is_active_impl(1, file, function, line)) {
-            msg << prefix << " at " << file << ":" << line << ' ';
-            if (condition_string) {
-                msg << "Condition failed: " << condition_string << ' ';
-            }
-        }
-    }
-
-    // Just a trick used to convert RValue into LValue
-    HALIDE_ALWAYS_INLINE T &ref() {
-        return *static_cast<T *>(this);
-    }
-
     template<typename S>
     HALIDE_ALWAYS_INLINE T &operator<<(const S &x) {
         msg << x;
         return *static_cast<T *>(this);
     }
 
+    HALIDE_ALWAYS_INLINE operator bool() const {
+        return !finalized;
+    }
+
 protected:
+    std::ostringstream msg{};
+    bool finalized{false};
+
+    // This function is called as part of issue() below. We can't use a
+    // virtual function because issue() needs to be marked [[noreturn]]
+    // for errors and be left alone for warnings (i.e., they have
+    // different signatures).
     std::string finalize_message() {
         if (!msg.str().empty() && msg.str().back() != '\n') {
             msg << "\n";
         }
+        finalized = true;
         return msg.str();
+    }
+
+    T &init(const char *file, const char *function, const int line, const char *condition_string, const char *prefix) {
+        if (debug_is_active_impl(1, file, function, line)) {
+            msg << prefix << " at " << file << ":" << line << ' ';
+            if (condition_string) {
+                msg << "Condition failed: " << condition_string << ' ';
+            }
+        }
+        return *static_cast<T *>(this);
     }
 };
 
 template<typename Exception>
-struct ErrorReport : ReportBase<ErrorReport<Exception>> {
-    using Base = ReportBase<ErrorReport>;
-
-    ErrorReport(const char *file, const char *function, int line, const char *condition_string)
-        : Base(file, function, line, condition_string, Exception::error_name) {
-        this->msg << "Error: ";
+struct ErrorReport final : ReportBase<ErrorReport<Exception>> {
+    ErrorReport &init(const char *file, const char *function, const int line, const char *condition_string) {
+        return ReportBase<ErrorReport>::init(file, function, line, condition_string, Exception::error_name) << "Error: ";
     }
 
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable : 4722)
-#endif
-    /** When you're done using << on the object, and let it fall out of
-     * scope, this throws an exception (or aborts if exceptions are disabled).
-     * This is a little dangerous because the destructor will also be
-     * called if there's an exception in flight due to an error in one
-     * of the arguments passed to operator<<. We handle this by rethrowing
-     * the current exception, if it exists.
-     */
-    [[noreturn]] ~ErrorReport() noexcept(false) {
+    [[noreturn]] void issue() noexcept(false) {
         throw_error(Exception(this->finalize_message()));
     }
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 };
 
-struct WarningReport : ReportBase<WarningReport> {
-    WarningReport(const char *file, const char *function, int line, const char *condition_string)
-        : ReportBase(file, function, line, condition_string, "Warning") {
-        this->msg << "Warning: ";
+struct WarningReport final : ReportBase<WarningReport> {
+    WarningReport &init(const char *file, const char *function, const int line, const char *condition_string) {
+        return ReportBase::init(file, function, line, condition_string, "Warning") << "Warning: ";
     }
 
-    /** When you're done using << on the object, and let it fall out of
-     * scope, this prints the computed warning message.
-     */
-    ~WarningReport() {
+    void issue() {
         issue_warning(this->finalize_message().c_str());
     }
 };
 
-// This uses operator precedence as a trick to avoid argument evaluation if
-// an assertion is true: it is intended to be used as part of the
-// _halide_internal_assertion macro, to coerce the result of the stream
-// expression to void (to match the condition-is-false case).
-struct Voidifier {
-    // This has to be an operator with a precedence lower than << but
-    // higher than ?:
-    template<typename T>
-    HALIDE_ALWAYS_INLINE void operator&(T &) {
-    }
-};
-
 /**
- * _halide_internal_assertion is used to implement our assertion macros
+ * _halide_internal_diagnostic is used to implement our assertion macros
  * in such a way that the messages output for the assertion are only
  * evaluated if the assertion's value is false.
- *
- * Note that this macro intentionally has no parens internally; in actual
- * use, the implicit grouping will end up being
- *
- *   condition ? (void) : (Voidifier() & (ErrorReport << arg1 << arg2 ... << argN))
  *
  * This (regrettably) requires a macro to work, but has the highly desirable
  * effect that all assertion parameters are totally skipped (not ever evaluated)
  * when the assertion is true.
+ *
+ * The macro works by deferring the call to issue() until after the stream
+ * has been evaluated. This previously used a trick where ErrorReport would
+ * throw in the destructor, but throwing in a destructor is UB in a lot of
+ * scenarios, and it was easy to break things by mistake.
  */
-#define _halide_internal_assertion(condition, type)  \
+// clang-format off
+#define _halide_internal_diagnostic(condition, type, condition_string)  \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    (condition) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::ErrorReport<type>(__FILE__, __FUNCTION__, __LINE__, #condition).ref()
+    if (!(condition)) for (type _err; _err; _err.issue()) _err.init(__FILE__, __FUNCTION__, __LINE__, condition_string)
+// clang-format on
 
-#define internal_error Halide::Internal::ErrorReport<Halide::InternalError>(__FILE__, __FUNCTION__, __LINE__, nullptr)
-#define user_error Halide::Internal::ErrorReport<Halide::CompileError>(__FILE__, __FUNCTION__, __LINE__, nullptr)
-#define user_warning Halide::Internal::WarningReport(__FILE__, __FUNCTION__, __LINE__, nullptr)
-#define halide_runtime_error Halide::Internal::ErrorReport<Halide::RuntimeError>(__FILE__, __FUNCTION__, __LINE__, nullptr)
+#define _halide_internal_error(type) \
+    _halide_internal_diagnostic(0, Halide::Internal::ErrorReport<type>, nullptr)
+
+#define _halide_internal_assertion(condition, type) \
+    _halide_internal_diagnostic(condition, Halide::Internal::ErrorReport<type>, #condition)
+
+#define user_error _halide_internal_error(Halide::CompileError)
+#define internal_error _halide_internal_error(Halide::InternalError)
+#define halide_runtime_error _halide_internal_error(Halide::RuntimeError)
+
+#define user_warning _halide_internal_diagnostic(0, Halide::Internal::WarningReport, nullptr)
 
 #define internal_assert(c) _halide_internal_assertion(c, Halide::InternalError)
 #define user_assert(c) _halide_internal_assertion(c, Halide::CompileError)

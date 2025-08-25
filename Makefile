@@ -371,23 +371,36 @@ TEST_CXX_FLAGS += -DTEST_CUDA
 TEST_CXX_FLAGS += -I/usr/local/cuda/include
 endif
 
+ifeq (,$(shell pkg-config --exists libpng && echo yes))
+ifeq ($(UNAME), Darwin)
+$(error libpng not found. Please install with: brew install libpng)
+else
+$(error libpng not found. Please install with: sudo apt install libpng-dev)
+endif
+endif
+
+ifeq (,$(shell pkg-config --exists libjpeg && echo yes))
+ifeq ($(UNAME), Darwin)
+# Thanks to a schism between libjpeg and libjpeg-turbo, Homebrew
+# and many other distributions (Ubuntu, Debian, Fedora, Firefox,
+# Chrome, etc.) refuse to use the IJG's libjpeg. Instead, the
+# open-source world appears to have adopted libjpeg-turbo.
+# Users can override the search by setting PKG_CONFIG_PATH.
+# See: https://libjpeg-turbo.org/About/Jpeg-9
+$(error libjpeg not found. Please install with: brew install jpeg-turbo)
+else
+$(error libjpeg not found. Please install with: sudo apt install libjpeg-turbo8-dev)
+endif
+endif
+
 # Find libjpeg and libpng. The code to set IMAGE_IO_LIBS is duplicated
 # in apps/support/Makefile.inc and any changes here should be repeated
 # there.
 
-ifneq (,$(shell command -v brew))
-# Get png and jpeg paths from brew
-LIBPNG_LIBS_DEFAULT = -L $(shell brew --prefix libpng)/lib -lpng
-LIBPNG_CXX_FLAGS ?= -I $(shell brew --prefix libpng)/include
-LIBJPEG_LIBS ?= -L $(shell brew --prefix libjpeg)/lib -ljpeg
-LIBJPEG_CXX_FLAGS ?= -I $(shell brew --prefix libjpeg)/include
-else
-# Get png and jpeg paths from pkg-config
 LIBPNG_LIBS_DEFAULT = $(shell pkg-config libpng --libs)
 LIBPNG_CXX_FLAGS ?= $(shell pkg-config libpng --cflags)
 LIBJPEG_LIBS ?= $(shell pkg-config libjpeg --libs)
 LIBJPEG_CXX_FLAGS ?= $(shell pkg-config libjpeg --cflags)
-endif
 
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
 ifneq (,$(findstring -m32,$(CXX)))

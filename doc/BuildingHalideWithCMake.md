@@ -244,15 +244,17 @@ from the root of the repository.
 On macOS, it is possible to install all dependencies via [Homebrew][homebrew]:
 
 ```shell
-$ brew install llvm flatbuffers wabt python pybind11 doxygen eigen libpng libjpeg openblas
+$ brew install llvm flatbuffers wabt python pybind11 doxygen eigen libpng libjpeg-turbo openblas
 ```
 
 The `llvm` package includes `clang`, `clang-format`, and `lld`, too. To ensure
-CMake can find the keg-only dependencies, set the following:
+CMake can find LLVM, set the following cache variable:
 
 ```shell
-$ export CMAKE_PREFIX_PATH="/opt/homebrew:/opt/homebrew/opt/llvm:/opt/homebrew/opt/jpeg"
+$ cmake ... -DHalide_ROOT=/opt/homebrew/opt/llvm
 ```
+
+Or use the `macOS` CMake preset, which does this for you.
 
 ### Ubuntu / Debian
 
@@ -520,7 +522,7 @@ Python and C++ `find_package` workflows.
 Because Python's build infrastructure creates temporary CMake build directories,
 simply setting `CMAKE_CXX_COMPILER_LAUNCHER` to `ccache` is insufficient to
 produce a well-cached build. The following settings should serve as a starting
-point to configure your environment (assuming `$PWD` is the repository root) 
+point to configure your environment (assuming `$PWD` is the repository root)
 for using `ccache` with `pip install .`.
 
 ```shell
@@ -545,7 +547,7 @@ export TMPDIR=$PWD/build/tmp
 export UV_NO_BUILD_ISOLATION=1
 ```
 
-See the CCache documentation on [compiling in different directories] and on 
+See the CCache documentation on [compiling in different directories] and on
 using [precompiled headers] for more information about these settings. To check
 that ccache is working, run,
 
@@ -578,7 +580,7 @@ Local storage:
   Misses:             0 / 1079 ( 0.00%)
 ```
 
-On this test system (an M3 MacBook Pro), the build is three times faster, 
+On this test system (an M3 MacBook Pro), the build is three times faster,
 with a 100% cache hit rate!
 
 [ATLAS]: http://math-atlas.sourceforge.net/

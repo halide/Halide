@@ -1555,7 +1555,7 @@ f(scatter(3, 5)) = f(select(p, gather(5, 3), gather(3, 5)));
 f(select(p, scatter(3, 5, 5), scatter(1, 2, 3))) = f(select(p, gather(5, 3, 3), gather(2, 3, 1)));
 \endcode
 *
-* Note that in the p == true case, we redudantly load from 3 and write
+* Note that in the p == true case, we redundantly load from 3 and write
 * to 5 twice.
 */
 //@{
