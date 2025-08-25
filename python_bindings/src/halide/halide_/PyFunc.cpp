@@ -215,7 +215,7 @@ void define_func(py::module &m) {
             .def("async_", &Func::async)
             .def("ring_buffer", &Func::ring_buffer)
             .def("bound_storage", &Func::bound_storage)
-            .def("memoize", &Func::memoize)
+            .def("memoize", &Func::memoize, py::arg("eviction_key") = EvictionKey())
             .def("compute_inline", &Func::compute_inline)
             .def("compute_root", &Func::compute_root)
             .def("store_root", &Func::store_root)
