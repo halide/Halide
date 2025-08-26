@@ -268,7 +268,7 @@ public:
             p.dim(0).set_min((p.dim(0).min() / alignment) * alignment);
         }
 
-        const std::vector<Argument> arg_types(image_params.begin(), image_params.end());
+        std::vector<Argument> arg_types(image_params.begin(), image_params.end());
 
         class HookUpImageParams : public Internal::IRMutator {
             using Internal::IRMutator::visit;
@@ -343,8 +343,15 @@ public:
                 .vectorize(xi);
         }
 
+        // We'll check over H rows, but we won't let the pipeline know H
+        // statically, as that can trigger some simplifications that change
+        // instruction selection.
+        Param<int> rows;
+        rows.set(H);
+        arg_types.push_back(rows);
+
         // The output to the pipeline is the maximum absolute difference as a double.
-        RDom r_check(0, W, 0, H);
+        RDom r_check(0, W, 0, rows);
         Halide::Func error("error_" + name);
         error() = Halide::cast<double>(maximum(absd(f(r_check.x, r_check.y), f_scalar(r_check.x, r_check.y))));
 
