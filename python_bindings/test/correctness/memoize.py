@@ -1,4 +1,4 @@
-from halide import EvictionKey, Func, Var
+from halide import Func, Var
 
 
 def test_memoize():
