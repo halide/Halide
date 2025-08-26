@@ -499,7 +499,11 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     for (const Function &f : contents->outputs) {
         user_assert(f.has_pure_definition() || f.has_extern_definition())
-            << "Can't compile Pipeline with undefined output Func: " << f.name() << ".\n";
+            << "Can't compile Pipeline with undefined output Func: " << f.name() << ".";
+        user_assert(!f.schedule().memoized())
+            << "Can't compile Pipeline with memoized output Func: " << f.name() << ". "
+            << "Memoization is valid only on intermediate Funcs because it takes "
+            << "control of buffer allocation.";
     }
 
     string new_fn_name(fn_name);
