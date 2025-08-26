@@ -6,8 +6,8 @@ def test_memoize():
 
     f = Func("f")
     f[x] = 0.0
-    f[x] = f[x] + 1
-    f.memoize()
+    f[x] += 1
+    f.compute_root().memoize()
 
     output = Func("output")
     output[x] = f[x]

@@ -24,10 +24,9 @@ public:
     ~FindParameterDependencies() override = default;
 
     void visit_function(const Function &function) {
-        if (visited_functions.count(function)) {
+        if (const auto [_, inserted] = visited_functions.insert(function); !inserted) {
             return;
         }
-        visited_functions.insert(function);
         function.accept(this);
 
         if (function.has_extern_definition()) {
