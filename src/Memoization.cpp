@@ -28,6 +28,7 @@ public:
             return;
         }
         visited_functions.insert(function);
+        function.accept(this);
 
         if (function.has_extern_definition()) {
             const std::vector<ExternFuncArgument> &extern_args =
