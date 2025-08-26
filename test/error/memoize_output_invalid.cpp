@@ -9,4 +9,6 @@ int main(int argc, char **argv) {
     f.memoize();
 
     f.realize({3});
+
+    printf("Success!\n");
 }
