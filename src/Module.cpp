@@ -224,10 +224,10 @@ static Registerer registerer;
             }
             std::string nsreg = "halide_nsreg_" + replace_all(f.name, "::", "_");
             std::string s = replace_all(registration_template, "$NAMESPACEOPEN$", nsopen);
-            s = replace_all(s, "$SHORTNAME$", simple_name);
-            s = replace_all(s, "$NAMESPACECLOSE$", nsclose);
-            s = replace_all(s, "$FULLNAME$", f.name);
-            s = replace_all(s, "$NREGS$", nsreg);
+            s = replace_all(std::move(s), "$SHORTNAME$", simple_name);
+            s = replace_all(std::move(s), "$NAMESPACECLOSE$", nsclose);
+            s = replace_all(std::move(s), "$FULLNAME$", f.name);
+            s = replace_all(std::move(s), "$NREGS$", nsreg);
             stream << s;
         }
     }
@@ -306,15 +306,15 @@ $NAMESPACECLOSE$
         target_string += t.to_string();
     }
     std::string body_text = indent_string(body, "    ");
-    s = replace_all(s, "$SCHEDULER$", scheduler_name);
-    s = replace_all(s, "$NAMESPACEOPEN$", nsopen);
-    s = replace_all(s, "$SHORTNAME$", simple_name);
-    s = replace_all(s, "$CLEANNAME$", clean_name);
-    s = replace_all(s, "$NAMESPACECLOSE$", nsclose);
-    s = replace_all(s, "$TARGET$", target_string);
-    s = replace_all(s, "$BODY$", body_text);
-    s = replace_all(s, "$MPNAME$", "autoscheduler_params");
-    s = replace_all(s, "$MACHINEPARAMS$", autoscheduler_params_string);
+    s = replace_all(std::move(s), "$SCHEDULER$", scheduler_name);
+    s = replace_all(std::move(s), "$NAMESPACEOPEN$", nsopen);
+    s = replace_all(std::move(s), "$SHORTNAME$", simple_name);
+    s = replace_all(std::move(s), "$CLEANNAME$", clean_name);
+    s = replace_all(std::move(s), "$NAMESPACECLOSE$", nsclose);
+    s = replace_all(std::move(s), "$TARGET$", target_string);
+    s = replace_all(std::move(s), "$BODY$", body_text);
+    s = replace_all(std::move(s), "$MPNAME$", "autoscheduler_params");
+    s = replace_all(std::move(s), "$MACHINEPARAMS$", autoscheduler_params_string);
     stream << s;
 }
 
@@ -693,12 +693,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         debug(1) << "Module.compile(): device_code " << output_files.at(OutputFileType::device_code) << "\n";
         Buffer<> buf = get_device_code_buffer();
         if (buf.defined()) {
-            int length = buf.size_in_bytes();
-            while (length > 0 && ((const char *)buf.data())[length - 1] == '\0') {
-                length--;
-            }
-            std::string str((const char *)buf.data(), length);
-            std::string device_code = std::string((const char *)buf.data(), buf.size_in_bytes());
+            std::string_view device_code((const char *)buf.data(), buf.size_in_bytes());
             while (!device_code.empty() && device_code.back() == '\0') {
                 device_code = device_code.substr(0, device_code.length() - 1);
             }
@@ -1067,6 +1062,7 @@ void compile_multitarget(const std::string &fn_name,
                                     .without_feature(Target::NoAsserts);
 
         Module wrapper_module(fn_name, wrapper_target, metadata_name_map);
+        wrapper_module.set_any_strict_float(base_target.has_feature(Target::StrictFloat));
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
         std::string wrapper_path = contains(output_files, OutputFileType::static_library) ?

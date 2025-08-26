@@ -1,8 +1,7 @@
 import halide as hl
-import numpy as np
 
 from simplepy_generator import SimplePy
-import simplecpp_pystub  # Needed for create_callable_from_generator("simplecpp") to work
+import simplecpp_pystub  # noqa: F401 - needed for create_callable_from_generator("simplecpp") to work
 
 
 def test_callable():
@@ -60,7 +59,6 @@ def test_callable():
 
 
 def test_simple(callable_factory):
-    x, y = hl.Var(), hl.Var()
     target = hl.get_jit_target_from_environment()
 
     b_in = hl.Buffer(hl.UInt(8), [2, 2])

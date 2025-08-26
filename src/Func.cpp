@@ -85,6 +85,8 @@ Func::Func(const Expr &e)
 
 Func::Func(Function f)
     : func(std::move(f)) {
+    internal_assert(func.get_contents().defined())
+        << "Can't construct Func from undefined Function";
 }
 
 const string &Func::name() const {
@@ -3332,6 +3334,21 @@ FuncTupleElementRef FuncRef::operator[](int i) const {
 
 size_t FuncRef::size() const {
     return func.outputs();
+}
+
+bool FuncRef::equivalent_to(const FuncRef &other) const {
+    if (!func.same_as(other.func) ||
+        implicit_placeholder_pos != other.implicit_placeholder_pos ||
+        implicit_count != other.implicit_count ||
+        args.size() != other.args.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < args.size(); i++) {
+        if (!equal(args[i], other.args[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 FuncTupleElementRef::FuncTupleElementRef(

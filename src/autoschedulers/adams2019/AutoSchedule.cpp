@@ -58,7 +58,6 @@
 #include "Cache.h"
 #include "CostModel.h"
 #include "DefaultCostModel.h"
-#include "Errors.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
 #include "Halide.h"

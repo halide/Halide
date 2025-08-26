@@ -1,7 +1,8 @@
 [build-system]
 requires = [
-    "scikit-build-core==0.10.5",
-    "pybind11==2.11.1",
+    "pybind11>=2.11.1",
+    "scikit-build-core~=0.11.0",
+    "setuptools-scm>=8.3.1",
 ]
 build-backend = "scikit_build_core.build"
 
@@ -12,10 +13,10 @@ maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Halide is a programming language designed to make it easier to write high-performance image and array processing code."
 license = { file = "LICENSE.txt" }
 readme = "./packaging/pip/README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
-    "numpy",
-    "imageio",
+    "imageio>=2",
+    "numpy>=1.26",
 ]
 dynamic = ['version']
 keywords = [
@@ -45,7 +46,6 @@ classifiers = [
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -61,6 +61,23 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 
+[dependency-groups]
+dev = [
+    "pybind11>=2.11.1",
+    "scikit-build-core~=0.11.0",
+    "setuptools-scm>=8.3.1",
+]
+apps = [
+    "onnx>=1.18.0", # for apps/onnx
+    "pytest", # unspecified onnx dependency
+]
+tools = [
+    "cmake>=3.28",
+    "ninja>=1.11",
+    "ruff>=0.12",
+    "tbump>=6.11",
+]
+
 [project.urls]
 Homepage = "https://halide-lang.org"
 Documentation = "https://github.com/halide/Halide/blob/main/doc/Python.md"
@@ -72,7 +89,7 @@ Repository = "https://github.com/halide/Halide.git"
 cmake.version = ">=3.28"
 wheel.install-dir = "halide"
 sdist.include = ["dependencies/"]
-sdist.exclude = [".github/", "apps/", "test/", "tutorial/"]
+sdist.exclude = [".github/", "apps/", "test/", "tutorial/", "dependencies/update-*.sh"]
 metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 
 [tool.scikit-build.cmake.define]
@@ -98,6 +115,27 @@ Halide_SOVERSION_OVERRIDE = ""
 if.platform-system = "^win32"
 inherit.cmake.define = "append"
 cmake.define.Halide_WASM_BACKEND = "OFF"
+
+[tool.setuptools_scm]
+# Needs to exist for scikit-build-core to use setuptools_scm
+
+[tool.ruff.lint]
+# docs: https://docs.astral.sh/ruff/rules/
+select = [
+    "E4", # pycodestyle / import statements
+    "E7", # pycodestyle / superfluous or misused syntax
+    "E9", # pycodestyle / internal error (odd this can be disabled)
+    "F", # pyflakes
+    "FURB", # refurb / rules for upgrading old Python usage
+    "PERF", # perflint / rules for performance pitfalls
+    "RUF", # Ruff-specific rules
+    "SIM", # flake8 / simplify
+    "UP" # pyupgrade / detect uses of old Python features
+]
+ignore = [
+    "UP045", # Don't replace Optional[T] with T | None
+    "SIM108", # Don't replace an if statement with ternary
+]
 
 [tool.tbump]
 github_url = "https://github.com/halide/Halide/"
@@ -135,7 +173,3 @@ search = "#define HALIDE_VERSION_MINOR {current_version}"
 src = "src/runtime/HalideRuntime.h"
 version_template = "{patch}"
 search = "#define HALIDE_VERSION_PATCH {current_version}"
-
-# Must be last table in file since pip.yml appends to it
-# See: https://github.com/pypa/setuptools-scm/issues/455
-[tool.setuptools_scm]

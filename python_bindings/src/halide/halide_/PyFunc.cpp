@@ -27,26 +27,26 @@ void define_get(py::class_<Func> &func_class) {
 }
 
 template<typename LHS, typename RHS>
+void setitem_impl(Func &func, const LHS &lhs, const RHS &rhs) {
+    if constexpr (std::is_same_v<RHS, UnevaluatedFuncRefExpr>) {
+        static_cast<UnevaluatedFuncRefExpr>(rhs).define_update(func(lhs));
+    } else {
+        func(lhs) = rhs;
+    }
+}
+
+template<typename LHS, typename RHS>
 void define_set(py::class_<Func> &func_class) {
     func_class
-        .def("__setitem__",
-             [](Func &func, const LHS &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
-             })
-        .def("__setitem__",
-             [](Func &func, const std::vector<LHS> &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
-             });
+        .def("__setitem__", setitem_impl<LHS, RHS>)
+        .def("__setitem__", setitem_impl<std::vector<LHS>, RHS>);
 }
 
 // See the usages below this function to see why we are specializing this function.
 template<typename RHS>
 void define_set_func_ref(py::class_<Func> &func_class) {
     func_class
-        .def("__setitem__",
-             [](Func &func, const FuncRef &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
-             });
+        .def("__setitem__", setitem_impl<FuncRef, RHS>);
 }
 
 // Special case: there is no implicit conversion of double in C++ Halide
@@ -55,7 +55,7 @@ template<>
 void define_set_func_ref<double>(py::class_<Func> &func_class) {
     func_class
         .def("__setitem__",
-             [](Func &func, const FuncRef &lhs, const double &rhs) -> Stage {
+             [](Func &func, const FuncRef &lhs, const double &rhs) {
                  // Implicitly convert rhs to single precision. Issue warnings if
                  // we detect loss of precision.
                  float f = rhs;
@@ -67,7 +67,7 @@ void define_set_func_ref<double>(py::class_<Func> &func_class) {
                      std::string msg = os.str();
                      PyErr_WarnEx(nullptr, msg.c_str(), 1);
                  }
-                 return func(lhs) = Expr(f);
+                 func(lhs) = Expr(f);
              });
 }
 
@@ -464,17 +464,20 @@ void define_func(py::module &m) {
     define_set_func_ref<Tuple>(func_class);
     define_set_func_ref<int>(func_class);
     define_set_func_ref<double>(func_class);
+    define_set_func_ref<UnevaluatedFuncRefExpr>(func_class);
 
     // LHS(Var, ...Var) is LHS of an ordinary Func definition.
     define_set<Var, FuncRef>(func_class);
     define_set<Var, Expr>(func_class);
     define_set<Var, Tuple>(func_class);
+    define_set<Var, UnevaluatedFuncRefExpr>(func_class);
     // define_set<Var, std::vector<Var>>(func_class);
 
     // LHS(Expr, ...Expr) can only be LHS of an update definition.
     define_set<Expr, FuncRef>(func_class);
     define_set<Expr, Expr>(func_class);
     define_set<Expr, Tuple>(func_class);
+    define_set<Expr, UnevaluatedFuncRefExpr>(func_class);
 
     add_schedule_methods(func_class);
 

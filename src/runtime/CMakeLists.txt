@@ -280,14 +280,14 @@ foreach (i IN LISTS RUNTIME_CPP)
             else()
                 add_custom_command(OUTPUT "${LL}"
                                    COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
-                                   DEPENDS "${SOURCE}"
+                                   DEPENDS $<TARGET_NAME:clang> "${SOURCE}"
                                    DEPFILE "${basename}.d"
                                    VERBATIM)
             endif()
 
             add_custom_command(OUTPUT "${BC}"
                                COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL}" -o "${BC}"
-                               DEPENDS "${LL}"
+                               DEPENDS $<TARGET_NAME:llvm-as> "${LL}"
                                VERBATIM)
 
             add_custom_command(OUTPUT "${INITMOD}"
@@ -314,7 +314,7 @@ foreach (i IN LISTS RUNTIME_LL)
 
     add_custom_command(OUTPUT "${BC}"
                        COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL_TRANSFORMED}" -o "${BC}"
-                       DEPENDS "${LL_TRANSFORMED}"
+                       DEPENDS $<TARGET_NAME:llvm-as> "${LL_TRANSFORMED}"
                        VERBATIM)
     add_custom_command(OUTPUT "${INITMOD}"
                        COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"

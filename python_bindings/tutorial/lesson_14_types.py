@@ -13,7 +13,6 @@ import halide as hl
 
 
 def main():
-
     # All Exprs have a scalar type, and all Funcs evaluate to one or
     # more scalar types. The scalar types in Halide are unsigned
     # integers of various bit widths, signed integers of the same set
@@ -22,9 +21,18 @@ def main():
     # following array contains all the legal types.
 
     valid_halide_types = [
-        hl.UInt(8), hl.UInt(16), hl.UInt(32), hl.UInt(64),
-        hl.Int(8), hl.Int(16), hl.Int(32), hl.Int(64),
-        hl.Float(32), hl.Float(64), hl.Handle()]
+        hl.UInt(8),
+        hl.UInt(16),
+        hl.UInt(32),
+        hl.UInt(64),
+        hl.Int(8),
+        hl.Int(16),
+        hl.Int(32),
+        hl.Int(64),
+        hl.Float(32),
+        hl.Float(64),
+        hl.Handle(),
+    ]
 
     # Constructing and inspecting types.
     if True:
@@ -119,7 +127,7 @@ def main():
 
         # 5) If one of the expressions is an integer constant, then it is
         # coerced to the type of the other expression.
-        assert (u32 + 3).type() == hl.UInt(32)
+        assert (u64 + 3).type() == hl.UInt(64)
         assert (3 + s16).type() == hl.Int(16)
 
         # If this rule would cause the integer to overflow, then Halide
@@ -143,25 +151,24 @@ def main():
         # case where the bit widths are the same.
         assert (u32 + s32).type() == hl.Int(32)
 
-        if False:  # evaluate<X> not yet exposed to python
-            # When an unsigned hl.Expr is converted to a wider signed type in
-            # this way, it is first widened to a wider unsigned type
-            # (zero-extended), and then reinterpreted as a signed
-            # integer. I.e. casting the hl.UInt(8) value 255 to an hl.Int(32)
-            # produces 255, not -1.
-            # int32_t result32 =
-            # evaluate<int>(hl.cast<int32_t>(hl.cast<uint8_t>(255)))
-            assert result32 == 255
+    ## TODO: evaluate<X> not yet exposed to python
 
-            # When a signed type is explicitly converted to a wider unsigned
-            # type with the hl.cast operator (the type promotion rules will
-            # never do this automatically), it is first converted to the
-            # wider signed type (sign-extended), and then reinterpreted as
-            # an unsigned integer. I.e. casting the hl.Int(8) value -1 to a
-            # hl.UInt(16) produces 65535, not 255.
-            # uint16_t result16 =
-            # evaluate<uint16_t>(hl.cast<uint16_t>(hl.cast<int8_t>(-1)))
-            assert result16 == 65535
+    # When an unsigned hl.Expr is converted to a wider signed type in
+    # this way, it is first widened to a wider unsigned type
+    # (zero-extended), and then reinterpreted as a signed
+    # integer. I.e. casting the hl.UInt(8) value 255 to an hl.Int(32)
+    # produces 255, not -1.
+    # int32_t result32 = evaluate<int>(hl.cast<int32_t>(hl.cast<uint8_t>(255)))
+    # assert result32 == 255
+
+    # When a signed type is explicitly converted to a wider unsigned
+    # type with the hl.cast operator (the type promotion rules will
+    # never do this automatically), it is first converted to the
+    # wider signed type (sign-extended), and then reinterpreted as
+    # an unsigned integer. I.e. casting the hl.Int(8) value -1 to a
+    # hl.UInt(16) produces 65535, not 255.
+    # uint16_t result16 = evaluate<uint16_t>(hl.cast<uint16_t>(hl.cast<int8_t>(-1)))
+    # assert result16 == 65535
 
     # The type hl.Handle().
     if True:
@@ -186,7 +193,9 @@ def main():
         x = hl.Var("x")
         assert average(hl.cast(hl.Float(32), x), 3.0).type() == hl.Float(32)
         assert average(x, 3).type() == hl.Int(32)
-        assert average(hl.cast(hl.UInt(8), x), hl.cast(hl.UInt(8), 3)).type() == hl.UInt(8)
+        assert average(
+            hl.cast(hl.UInt(8), x), hl.cast(hl.UInt(8), 3)
+        ).type() == hl.UInt(8)
 
     print("Success!")
 
@@ -194,7 +203,6 @@ def main():
 
 
 def average(a, b):
-
     if type(a) is not hl.Expr:
         a = hl.Expr(a)
 
@@ -206,7 +214,7 @@ def average(a, b):
     assert a.type() == b.type()
 
     # For floating point types:
-    if (a.type().is_float()):
+    if a.type().is_float():
         # The '2' will be promoted to the floating point type due to
         # rule 3 above.
         return (a + b) / 2

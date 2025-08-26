@@ -31,7 +31,7 @@
   * [License](#license)
 <!-- TOC -->
 
-Halide provides Python bindings for most of its public API. Python 3.8 (or
+Halide provides Python bindings for most of its public API. Python 3.9 (or
 higher) is required. The Python bindings are supported on 64-bit Linux, OSX, and
 Windows systems.
 
@@ -85,12 +85,17 @@ $ python3 -m pip install -U pip "setuptools[core]" wheel
 $ python3 -m pip install -r requirements.txt
 ```
 
+Or, if using `uv` the following command is equivalent:
+
+```shell
+uv venv --python 3.12  # for example
+uv pip install -r requirements.txt
+```
+
 Then build and install Halide:
 
 ```shell
-$ cmake -G Ninja -S . -B build \
-        -DCMAKE_BUILD_TYPE=Release \ 
-        -DWITH_PYTHON_BINDINGS=ON
+$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
 $ cmake --build build
 $ cmake --install build --prefix .local
 ```
@@ -125,6 +130,16 @@ Then it should be as simple as:
 ```shell
 $ pip install .
 ```
+
+When using `uv`, this entire workflow can be run via
+
+```shell
+$ uv sync
+```
+
+If you need a different Python version, you can add `--python 3.xy` to this 
+command. If you wish to install compatible build tools into the venv (e.g. 
+CMake, ninja), rather than use your system tools, pass `--group tools` here.
 
 ## Documentation and Examples
 

@@ -52,7 +52,7 @@ $(BIN)/%/filters.h:
 
 $(BIN)/driver-%: driver.cpp $(BIN)/%/filters.h
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) -I ../../include $(OPTIMIZE) -I $(BIN)/$* driver.cpp $(BIN)/$*/test_*.o $(BIN)/$*/simd_op_check_runtime.o -o $@ $(LDFLAGS-$*) $(HALIDE_SYSTEM_LIBS)
+	$(CXX-$*) $(CXXFLAGS-$*) -I ../../include $(OPTIMIZE) -I $(BIN)/$* driver.cpp $(BIN)/$*/test_*.o $(BIN)/$*/simd_op_check_runtime.o -o $@ $(LDFLAGS-$)
 
 $(BIN)/driver-xtensa: driver.cpp $(BIN)/xtensa/filters.h
 	@mkdir -p $(@D)

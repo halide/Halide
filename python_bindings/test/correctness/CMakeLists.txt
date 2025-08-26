@@ -25,6 +25,7 @@ set(tests
     pystub.py
     rdom.py
     realize_warnings.py
+    serialization.py
     target.py
     tuple_select.py
     type.py

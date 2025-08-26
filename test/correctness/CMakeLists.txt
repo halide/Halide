@@ -11,6 +11,7 @@ tests(GROUPS correctness
       async_order.cpp
       autodiff.cpp
       bad_likely.cpp
+      bad_partition_always_throws.cpp
       bit_counting.cpp
       bits_known.cpp
       bitwise_ops.cpp
@@ -30,6 +31,7 @@ tests(GROUPS correctness
       bounds_of_func.cpp
       bounds_of_monotonic_math.cpp
       bounds_of_multiply.cpp
+      bounds_of_pure_intrinsics.cpp
       bounds_of_split.cpp
       bounds_query.cpp
       bounds_query_respects_specialize_fail.cpp
@@ -192,6 +194,7 @@ tests(GROUPS correctness
       intrinsics.cpp
       invalid_gpu_loop_nests.cpp
       inverse.cpp
+      irprinter.cpp
       isnan.cpp
       issue_3926.cpp
       iterate_over_circle.cpp

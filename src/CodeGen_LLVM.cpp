@@ -401,6 +401,9 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
     module->setModuleIdentifier(name);
 
     // Add some target specific info to the module as metadata.
+    bool enable_bt = target.has_feature(Target::Feature::EnableBacktraces) ||
+                     target.has_feature(Target::Feature::Debug);
+    module->addModuleFlag(llvm::Module::Warning, "halide_enable_backtraces", enable_bt ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", MDString::get(*context, mcpu_target()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", MDString::get(*context, mcpu_tune()));

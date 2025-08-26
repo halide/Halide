@@ -1,4 +1,3 @@
-import array
 from user_context import user_context
 
 

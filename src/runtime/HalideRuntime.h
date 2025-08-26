@@ -1351,14 +1351,19 @@ extern int halide_error_vscale_invalid(void *user_context, const char *func_name
 // @}
 
 /** Optional features a compilation Target can have.
- * Be sure to keep this in sync with the Feature enum in Target.h and the implementation of
- * get_runtime_compatible_target in Target.cpp if you add a new feature.
+ *
+ * Be sure to keep this in sync with:
+ *  1. the Feature enum in Target.h,
+ *  2. the implementation of get_runtime_compatible_target in Target.cpp,
+ *  3. PyEnums.cpp,
+ * if you add a new feature.
  */
 typedef enum halide_target_feature_t {
-    halide_target_feature_jit = 0,          ///< Generate code that will run immediately inside the calling process.
-    halide_target_feature_debug,            ///< Turn on debug info and output for runtime code.
-    halide_target_feature_no_asserts,       ///< Disable all runtime checks, for slightly tighter code.
-    halide_target_feature_no_bounds_query,  ///< Disable the bounds querying functionality.
+    halide_target_feature_jit = 0,            ///< Generate code that will run immediately inside the calling process.
+    halide_target_feature_debug,              ///< Turn on debug info and output for runtime code.
+    halide_target_feature_enable_backtraces,  ///< Preserve frame pointers and include unwind tables to support accurate backtraces for debugging and profiling.
+    halide_target_feature_no_asserts,         ///< Disable all runtime checks, for slightly tighter code.
+    halide_target_feature_no_bounds_query,    ///< Disable the bounds querying functionality.
 
     halide_target_feature_sse41,    ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
     halide_target_feature_avx,      ///< Use AVX 1 instructions. Only relevant on x86.
@@ -1542,8 +1547,19 @@ typedef struct halide_dimension_t {
 }  // extern "C"
 #endif
 
-typedef enum { halide_buffer_flag_host_dirty = 1,
-               halide_buffer_flag_device_dirty = 2 } halide_buffer_flags;
+#if __cplusplus > 201100L || _MSVC_LANG > 201100L || __STDC_VERSION__ > 202300L
+// In C++, an underlying type is required to let the user define their own flag
+// values, without those values being undefined behavior when passed around as
+// this enum typedef.
+#define BUFFER_FLAGS_UNDERLYING_TYPE : uint64_t
+#else
+#define BUFFER_FLAGS_UNDERLYING_TYPE
+#endif
+typedef enum BUFFER_FLAGS_UNDERLYING_TYPE {
+    halide_buffer_flag_host_dirty = 1,
+    halide_buffer_flag_device_dirty = 2
+} halide_buffer_flags;
+#undef BUFFER_FLAGS_UNDERLYING_TYPE
 
 /**
  * The raw representation of an image passed around by generated

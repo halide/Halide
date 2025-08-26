@@ -50,11 +50,11 @@ clean:
 
 # Simple unit test
 $(BIN)/%/onnx_converter_test: onnx_converter_test.cc $(BIN)/%/oclib.a
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LIBHALIDE_LDFLAGS) 
 
 $(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(GENERATOR_BIN)/oclib.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(GENERATOR_BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -I$(GENERATOR_BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 # Convolution with autopad=SAME_UPPER isn't supported yet (Also deprecated). TODO Enable this.
 #$(BIN)/%/onnx_model_zoo/mnist/model.onnx:
