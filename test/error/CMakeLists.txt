@@ -75,6 +75,7 @@ tests(GROUPS error
       lerp_mismatch.cpp
       lerp_signed_weight.cpp
       memoize_different_compute_store.cpp
+      memoize_output_invalid.cpp
       memoize_redefine_eviction_key.cpp
       metal_threads_too_large.cpp
       metal_vector_too_large.cpp
