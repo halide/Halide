@@ -2,10 +2,12 @@
 #define SIMD_OP_CHECK_H
 
 #include "Halide.h"
+#include "halide_benchmark.h"
 #include "halide_test_dirs.h"
 #include "halide_thread_pool.h"
 #include "test_sharding.h"
 
+#include <chrono>
 #include <fstream>
 #include <iostream>
 
@@ -69,7 +71,7 @@ struct Task {
     Expr expr;
 };
 
-auto starting_time = std::chrono::high_resolution_clock::now();
+auto starting_time = Halide::Tools::benchmark_now();
 
 class SimdOpCheckTest {
 public:
@@ -491,8 +493,8 @@ public:
 
         for (auto &f : futures) {
             auto result = f.get();
-            auto current_time = std::chrono::high_resolution_clock::now();
-            double dt = std::chrono::duration_cast<std::chrono::microseconds>(current_time - starting_time).count() / 1e6;
+            auto current_time = Halide::Tools::benchmark_now();
+            double dt = Halide::Tools::benchmark_duration_seconds(starting_time, current_time);
             constexpr int tabstop = 32;
             const int spaces = std::max(1, tabstop - (int)result.op.size());
             std::cout << result.op << std::string(spaces, ' ')
