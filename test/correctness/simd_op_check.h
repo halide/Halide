@@ -69,6 +69,8 @@ struct Task {
     Expr expr;
 };
 
+auto starting_time = std::chrono::high_resolution_clock::now();
+
 class SimdOpCheckTest {
 public:
     static constexpr int max_i8 = 127;
@@ -489,9 +491,14 @@ public:
 
         for (auto &f : futures) {
             auto result = f.get();
+            auto current_time = std::chrono::high_resolution_clock::now();
+            double dt = std::chrono::duration_cast<std::chrono::microseconds>(current_time - starting_time).count() / 1e6;
             constexpr int tabstop = 32;
             const int spaces = std::max(1, tabstop - (int)result.op.size());
-            std::cout << result.op << std::string(spaces, ' ') << "(" << run_target_str << ")\n";
+            std::cout << result.op << std::string(spaces, ' ')
+                      << "(" << run_target_str << ") "
+                      << dt << "s \n";
+
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
                 // The thread-pool destructor will block until in-progress tasks
