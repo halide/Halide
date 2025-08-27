@@ -514,13 +514,16 @@ void define_buffer(py::module &m) {
                  },
                  py::arg("delta"))
 
-            // Present in Runtime::Buffer but not Buffer
-            // .def("translated", [](Buffer<> &b, int d, int dx) -> Buffer<> {
-            //     return b.translated(d, dx);
-            // }, py::arg("dimension"), py::arg("dx"))
-            // .def("translated", [](Buffer<> &b, const std::vector<int> &delta) -> Buffer<> {
-            //     return b.translated(delta);
-            // }, py::arg("delta"))
+            .def("translated",  //
+                 [](Buffer<> &b, int d, int dx) -> Buffer<> {
+                     return b.translated(d, dx);  //
+                 },
+                 py::arg("dimension"), py::arg("dx"))
+            .def("translated",  //
+                 [](Buffer<> &b, const std::vector<int> &delta) -> Buffer<> {
+                     return b.translated(delta);  //
+                 },
+                 py::arg("delta"))
 
             .def("transpose",  //
                  [](Buffer<> &b, int d1, int d2) -> void {
