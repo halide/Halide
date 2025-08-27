@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include "halide_benchmark.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
-using namespace Halide::Tools;
 
+namespace {
 Func inlined(Func in) {
     Var x("x"), y("y");
 
@@ -14,8 +14,9 @@ Func inlined(Func in) {
     g(x, y) = f(x, y) >> 2;
     return g;
 }
+}  // anonymous namespace
 
-int main(int argc, char **argv) {
+TEST(ComputeWithInlinedTest, Basic) {
     Func one("one"), three("three");
     Var x("x"), y("y");
 
@@ -45,7 +46,4 @@ int main(int argc, char **argv) {
     three.compute_root();
 
     three.realize({1024, 1024});
-
-    printf("Success!\n");
-    return 0;
 }

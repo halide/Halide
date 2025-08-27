@@ -1,22 +1,25 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 int count[2];
-extern "C" HALIDE_EXPORT_SYMBOL int call_counter(int slot, int val) {
+extern "C" HALIDE_EXPORT_SYMBOL int call_counter_two_slot(int slot, int val) {
     count[slot]++;
     return val;
 }
-HalideExtern_2(int, call_counter, int, int);
+HalideExtern_2(int, call_counter_two_slot, int, int);
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(ConcatTest, BoundsAndCounts) {
     count[0] = count[1] = 0;
 
     Func f, g, h;
     Var x;
 
-    f(x) = call_counter(0, x + 1);
-    g(x) = call_counter(1, x + 2);
+    f(x) = call_counter_two_slot(0, x + 1);
+    g(x) = call_counter_two_slot(1, x + 2);
     h(x) = select(x < 100, f(x), g(x));
 
     // While f and g are loaded over the entire range of h, f only
@@ -30,19 +33,11 @@ int main(int argc, char **argv) {
 
     Buffer<int> buf = h.realize({200});
 
+    EXPECT_EQ(count[0], 100) << "Incorrect count[0]: " << count[0];
+    EXPECT_EQ(count[1], 100) << "Incorrect count[1]: " << count[1];
+
     for (int i = 0; i < 200; i++) {
         int correct = i < 100 ? i + 1 : i + 2;
-        if (buf(i) != correct) {
-            printf("buf(%d) = %d instead of %d\n", i, buf(i), correct);
-            return 1;
-        }
+        ASSERT_EQ(buf(i), correct) << "buf(" << i << ") = " << buf(i) << " instead of " << correct;
     }
-
-    if (count[0] != 100 || count[1] != 100) {
-        printf("Incorrect counts: %d %d\n", count[0], count[1]);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
 }

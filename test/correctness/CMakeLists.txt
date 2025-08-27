@@ -68,10 +68,10 @@ target_sources(
     compute_at_split_rvar.cpp
     compute_inside_guard.cpp
     compute_with_in.cpp
-    #    compute_with_inlined.cpp
+    compute_with_inlined.cpp
     computed_index.cpp
-    #    concat.cpp
-    #    constant_expr.cpp
+    concat.cpp
+    constant_expr.cpp
     #    constant_interval.cpp
     #    constant_type.cpp
     #    constraints.cpp
