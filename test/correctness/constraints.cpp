@@ -3,16 +3,29 @@
 
 #include <cstdio>
 #include <fstream>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 bool error_occurred = false;
 void my_error_handler(JITUserContext *user_context, const char *msg) {
     // printf("%s\n", msg);
     error_occurred = true;
 }
 
-int basic_constraints() {
+std::string load_file_to_string(const std::string &filename) {
+    std::stringstream contents;
+    std::ifstream file(filename);
+    std::string line;
+    while (std::getline(file, line)) {
+        contents << line << "\n";
+    }
+    return contents.str();
+}
+}  // namespace
+
+TEST(ConstraintsTest, BasicConstraints) {
     Func f, g;
     Var x, y;
     ImageParam param(Int(32), 2);
@@ -29,20 +42,13 @@ int basic_constraints() {
     param.set(image1);
     error_occurred = false;
     f.realize({20, 20});
+    EXPECT_FALSE(error_occurred) << "Error incorrectly raised";
 
-    if (error_occurred) {
-        printf("Error incorrectly raised\n");
-        return 1;
-    }
     // This should be an error, because dimension 0 of image 2 is not from 0 to 128 like we promised
     param.set(image2);
     error_occurred = false;
     f.realize({20, 20});
-
-    if (!error_occurred) {
-        printf("Error incorrectly not raised\n");
-        return 1;
-    }
+    EXPECT_TRUE(error_occurred) << "Error incorrectly not raised";
 
     // Now try constraining the output buffer of a function
     g(x, y) = x * y;
@@ -50,10 +56,7 @@ int basic_constraints() {
     g.output_buffer().dim(0).set_stride(2);
     error_occurred = false;
     g.realize(image1);
-    if (!error_occurred) {
-        printf("Error incorrectly not raised when constraining output buffer\n");
-        return 1;
-    }
+    EXPECT_TRUE(error_occurred) << "Error incorrectly not raised when constraining output buffer";
 
     Func h;
     h(x, y) = x * y;
@@ -72,28 +75,11 @@ int basic_constraints() {
 
     // Also check it compiles ok without an inferred argument list
     h.compile_to_assembly(assembly_file, {image1}, "h");
-    if (error_occurred) {
-        printf("Error incorrectly raised when constraining output buffer\n");
-        return 1;
-    }
-
-    Internal::assert_file_exists(assembly_file);
-
-    return 0;
+    EXPECT_FALSE(error_occurred) << "Error incorrectly raised when constraining output buffer";
+    EXPECT_TRUE(Internal::file_exists(assembly_file)) << "Assembly file was not created: " << assembly_file;
 }
 
-std::string load_file_to_string(const std::string &filename) {
-    std::stringstream contents;
-    std::ifstream file(filename);
-    std::string line;
-    while (std::getline(file, line)) {
-        contents << line << "\n";
-    }
-
-    return contents.str();
-}
-
-int alignment_constraints() {
+TEST(ConstraintsTest, AlignmentConstraints) {
     Var x, y;
     ImageParam p_aligned(Float(32), 2);
     ImageParam p_unaligned(Float(32), 2);
@@ -121,24 +107,16 @@ int alignment_constraints() {
     Internal::ensure_no_file_exists(unaligned_ll_file);
     unaligned.compile_to_llvm_assembly(unaligned_ll_file, {p_unaligned}, "unaligned", target);
     std::string unaligned_code = load_file_to_string(unaligned_ll_file);
-    if (unaligned_code.find("align 16") != std::string::npos) {
-        printf("Found aligned load from unaligned buffer!\n");
-        return 1;
-    }
+    EXPECT_EQ(unaligned_code.find("align 16"), std::string::npos) << "Found aligned load from unaligned buffer!";
 
     std::string aligned_ll_file = Internal::get_test_tmp_dir() + "aligned.ll";
     Internal::ensure_no_file_exists(aligned_ll_file);
     aligned.compile_to_llvm_assembly(aligned_ll_file, {p_aligned}, "aligned", target);
     std::string aligned_code = load_file_to_string(aligned_ll_file);
-    if (aligned_code.find("align 16") == std::string::npos) {
-        printf("Did not find aligned load from aligned buffer!\n");
-        return 1;
-    }
-
-    return 0;
+    EXPECT_NE(aligned_code.find("align 16"), std::string::npos) << "Did not find aligned load from aligned buffer!";
 }
 
-int unstructured_constraints() {
+TEST(ConstraintsTest, UnstructuredConstraints) {
     Func f, g;
     Var x, y;
     ImageParam param(Int(32), 2);
@@ -161,20 +139,13 @@ int unstructured_constraints() {
     param.set(image1);
     error_occurred = false;
     pf.realize({20, 20});
+    EXPECT_FALSE(error_occurred) << "Error incorrectly raised";
 
-    if (error_occurred) {
-        printf("Error incorrectly raised\n");
-        return 1;
-    }
     // This should be an error, because dimension 0 of image 2 is not from 0 to 128 like we promised
     param.set(image2);
     error_occurred = false;
     pf.realize({20, 20});
-
-    if (!error_occurred) {
-        printf("Error incorrectly not raised\n");
-        return 1;
-    }
+    EXPECT_TRUE(error_occurred) << "Error incorrectly not raised";
 
     // Now try constraining the output buffer of a function
     g(x, y) = x * y;
@@ -188,10 +159,7 @@ int unstructured_constraints() {
 
     error_occurred = false;
     pg.realize(image1);
-    if (!error_occurred) {
-        printf("Error incorrectly not raised when constraining output buffer\n");
-        return 1;
-    }
+    EXPECT_TRUE(error_occurred) << "Error incorrectly not raised when constraining output buffer";
 
     Func h;
     h(x, y) = x * y;
@@ -207,27 +175,5 @@ int unstructured_constraints() {
 
     error_occurred = false;
     h.realize(image1);
-
-    if (error_occurred) {
-        printf("Error incorrectly raised when constraining output buffer\n");
-        return 1;
-    }
-
-    return 0;
-}
-
-int main(int argc, char **argv) {
-    int result;
-
-    result = basic_constraints();
-    if (result != 0) return result;
-
-    result = alignment_constraints();
-    if (result != 0) return result;
-
-    result = unstructured_constraints();
-    if (result != 0) return result;
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_FALSE(error_occurred) << "Error incorrectly raised when constraining output buffer";
 }

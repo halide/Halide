@@ -72,13 +72,13 @@ target_sources(
     computed_index.cpp
     concat.cpp
     constant_expr.cpp
-    #    constant_interval.cpp
-    #    constant_type.cpp
-    #    constraints.cpp
-    #    convolution_multiple_kernels.cpp
-    #    cross_compilation.cpp
-    #    cse_name_collision.cpp
-    #    cse_nan.cpp
+    constant_interval.cpp
+    constant_type.cpp
+    constraints.cpp
+    convolution_multiple_kernels.cpp
+    cross_compilation.cpp
+    cse_name_collision.cpp
+    cse_nan.cpp
     #    cuda_8_bit_dot_product.cpp
     #    custom_allocator.cpp
     #    custom_auto_scheduler.cpp

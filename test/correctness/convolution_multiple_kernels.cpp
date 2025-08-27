@@ -1,11 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
-    // int W = 64*3, H = 64*3;
+TEST(ConvolutionMultipleKernelsTest, BoxBlurCorrectness) {
     const int W = 64, H = 16;
 
     Buffer<uint16_t> in(W, H);
@@ -54,14 +52,7 @@ int main(int argc, char **argv) {
                                 in(x - 1, y) + in(x, y) + in(x + 1, y) +
                                 in(x - 1, y + 1) + in(x, y + 1) + in(x + 1, y + 1)) *
                                3;
-
-            if (out(x, y) != correct) {
-                printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), correct);
-                return 1;
-            }
+            ASSERT_EQ(out(x, y), correct) << "out(" << x << ", " << y << ") = " << out(x, y) << " instead of " << correct;
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

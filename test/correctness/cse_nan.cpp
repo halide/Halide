@@ -1,10 +1,11 @@
 #include <cmath>
 #include <cstdio>
+#include <gtest/gtest.h>
 
 #include "Halide.h"
 using namespace Halide;
 
-int main() {
+TEST(CseNanTest, NanVsOne) {
     ImageParam xyz{Float(32), 3, "xyz"};
     Target t = get_jit_target_from_environment().with_feature(Target::StrictFloat);
 
@@ -26,13 +27,6 @@ int main() {
 
     xyz.set(false_buf);
     nan_or_one.realize({false_result}, t);
-
-    if (std::isnan(true_result(0, 0)) && false_result(0, 0) == 1.0f) {
-        printf("Success!\n");
-        return 0;
-    } else {
-        fprintf(stderr, "ERROR: T = %f ; TR = %f ; F = %f ; FR = %f\n",
-                true_buf(0, 0, 0), true_result(0, 0), false_buf(0, 0, 0), false_result(0, 0));
-        return 1;
-    }
+    EXPECT_TRUE(std::isnan(true_result(0, 0))) << "Expected NaN for true_result, got " << true_result(0, 0);
+    EXPECT_EQ(false_result(0, 0), 1.0f) << "Expected 1.0f for false_result, got " << false_result(0, 0);
 }

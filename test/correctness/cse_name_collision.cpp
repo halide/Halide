@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(CseNameCollisionTest, NameCollisionCorrectness) {
     Var t0("t0"), t1("t1"), t2("t2");
 
     // Construct a Func RHS that uses Vars with names that collide with those
@@ -36,15 +37,10 @@ int main(int argc, char **argv) {
                 correct *= correct;
                 correct *= correct;
                 correct += i + j;
-                if (buf(i, j, k) != correct) {
-                    printf("buf(%d, %d, %d) = %d instead of %d\n",
-                           i, j, k, buf(i, j, k), correct);
-                    return 1;
-                }
+                ASSERT_EQ(buf(i, j, k), correct)
+                    << "buf(" << i << ", " << j << ", " << k << ") = " << buf(i, j, k)
+                    << " instead of " << correct;
             }
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

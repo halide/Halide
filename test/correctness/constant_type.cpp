@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <stdio.h>
 
 using namespace Halide;
 
+namespace {
 template<typename T>
 bool test_type() {
     Type t = type_of<T>();
@@ -38,23 +40,15 @@ bool test_type() {
 
     return true;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
-    bool ok = true;
-
-    ok = ok && test_type<uint8_t>();
-    ok = ok && test_type<uint16_t>();
-    ok = ok && test_type<uint32_t>();
-    ok = ok && test_type<int8_t>();
-    ok = ok && test_type<int16_t>();
-    ok = ok && test_type<int32_t>();
-    ok = ok && test_type<float>();
-    ok = ok && test_type<double>();
-
-    if (ok) {
-        printf("Success!\n");
-        return 0;
-    } else {
-        return 1;
-    }
+TEST(ConstantTypeTest, TypePreservation) {
+    EXPECT_TRUE(test_type<uint8_t>()) << "Type check failed for uint8_t";
+    EXPECT_TRUE(test_type<uint16_t>()) << "Type check failed for uint16_t";
+    EXPECT_TRUE(test_type<uint32_t>()) << "Type check failed for uint32_t";
+    EXPECT_TRUE(test_type<int8_t>()) << "Type check failed for int8_t";
+    EXPECT_TRUE(test_type<int16_t>()) << "Type check failed for int16_t";
+    EXPECT_TRUE(test_type<int32_t>()) << "Type check failed for int32_t";
+    EXPECT_TRUE(test_type<float>()) << "Type check failed for float";
+    EXPECT_TRUE(test_type<double>()) << "Type check failed for double";
 }

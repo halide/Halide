@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
+namespace {
 std::mt19937 rng;
 
 int64_t sample(const ConstantInterval &i) {
@@ -25,8 +27,9 @@ ConstantInterval random_interval() {
     }
     return result;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(ConstantIntervalTest, Fuzz) {
     for (int i = 0; i < 1000; i++) {
         std::vector<std::pair<ConstantInterval, int64_t>> values;
         for (int j = 0; j < 10; j++) {
@@ -40,23 +43,19 @@ int main(int argc, char **argv) {
             decltype(a) c;
 
             auto check = [&](const char *op) {
-                if (!c.first.contains(c.second)) {
-                    std::cout << "Error for operator " << op << ":\n"
-                              << "a: " << a.second << " in " << a.first << "\n"
-                              << "b: " << b.second << " in " << b.first << "\n"
-                              << "c: " << c.second << " not in " << c.first << "\n";
-                    exit(1);
-                }
+                EXPECT_TRUE(c.first.contains(c.second))
+                    << "Error for operator " << op << ":\n"
+                    << "a: " << a.second << " in " << a.first << "\n"
+                    << "b: " << b.second << " in " << b.first << "\n"
+                    << "c: " << c.second << " not in " << c.first << "\n";
             };
 
             auto check_scalar = [&](const char *op) {
-                if (!c.first.contains(c.second)) {
-                    std::cout << "Error for operator " << op << ":\n"
-                              << "a: " << a.second << " in " << a.first << "\n"
-                              << "b: " << b.second << "\n"
-                              << "c: " << c.second << " not in " << c.first << "\n";
-                    exit(1);
-                }
+                EXPECT_TRUE(c.first.contains(c.second))
+                    << "Error for operator " << op << ":\n"
+                    << "a: " << a.second << " in " << a.first << "\n"
+                    << "b: " << b.second << "\n"
+                    << "c: " << c.second << " not in " << c.first << "\n";
             };
 
             // Arithmetic
@@ -143,45 +142,42 @@ int main(int argc, char **argv) {
             check("cast to uint8");
 
             // Comparison
-            _halide_user_assert(!(a.first < b.first) || a.second < b.second)
+            EXPECT_TRUE(!(a.first < b.first) || a.second < b.second)
                 << a.first << " " << a.second << " " << b.first << " " << b.second;
 
-            _halide_user_assert(!(a.first <= b.first) || a.second <= b.second)
+            EXPECT_TRUE(!(a.first <= b.first) || a.second <= b.second)
                 << a.first << " " << a.second << " " << b.first << " " << b.second;
 
-            _halide_user_assert(!(a.first > b.first) || a.second > b.second)
+            EXPECT_TRUE(!(a.first > b.first) || a.second > b.second)
                 << a.first << " " << a.second << " " << b.first << " " << b.second;
 
-            _halide_user_assert(!(a.first >= b.first) || a.second >= b.second)
+            EXPECT_TRUE(!(a.first >= b.first) || a.second >= b.second)
                 << a.first << " " << a.second << " " << b.first << " " << b.second;
 
             // Comparison against constants
-            _halide_user_assert(!(a.first < b.second) || a.second < b.second)
+            EXPECT_TRUE(!(a.first < b.second) || a.second < b.second)
                 << a.first << " " << a.second << " " << b.second;
 
-            _halide_user_assert(!(a.first <= b.second) || a.second <= b.second)
+            EXPECT_TRUE(!(a.first <= b.second) || a.second <= b.second)
                 << a.first << " " << a.second << " " << b.second;
 
-            _halide_user_assert(!(a.first > b.second) || a.second > b.second)
+            EXPECT_TRUE(!(a.first > b.second) || a.second > b.second)
                 << a.first << " " << a.second << " " << b.second;
 
-            _halide_user_assert(!(a.first >= b.second) || a.second >= b.second)
+            EXPECT_TRUE(!(a.first >= b.second) || a.second >= b.second)
                 << a.first << " " << a.second << " " << b.second;
 
-            _halide_user_assert(!(a.second < b.first) || a.second < b.second)
+            EXPECT_TRUE(!(a.second < b.first) || a.second < b.second)
                 << a.second << " " << b.first << " " << b.second;
 
-            _halide_user_assert(!(a.second <= b.first) || a.second <= b.second)
+            EXPECT_TRUE(!(a.second <= b.first) || a.second <= b.second)
                 << a.second << " " << b.first << " " << b.second;
 
-            _halide_user_assert(!(a.second > b.first) || a.second > b.second)
+            EXPECT_TRUE(!(a.second > b.first) || a.second > b.second)
                 << a.second << " " << b.first << " " << b.second;
 
-            _halide_user_assert(!(a.second >= b.first) || a.second >= b.second)
+            EXPECT_TRUE(!(a.second >= b.first) || a.second >= b.second)
                 << a.second << " " << b.first << " " << b.second;
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }
