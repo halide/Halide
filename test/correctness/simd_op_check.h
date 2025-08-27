@@ -2,12 +2,10 @@
 #define SIMD_OP_CHECK_H
 
 #include "Halide.h"
-#include "halide_benchmark.h"
 #include "halide_test_dirs.h"
 #include "halide_thread_pool.h"
 #include "test_sharding.h"
 
-#include <chrono>
 #include <fstream>
 #include <iostream>
 
@@ -70,8 +68,6 @@ struct Task {
     int vector_width;
     Expr expr;
 };
-
-auto starting_time = Halide::Tools::benchmark_now();
 
 class SimdOpCheckTest {
 public:
@@ -493,14 +489,9 @@ public:
 
         for (auto &f : futures) {
             auto result = f.get();
-            auto current_time = Halide::Tools::benchmark_now();
-            double dt = Halide::Tools::benchmark_duration_seconds(starting_time, current_time);
             constexpr int tabstop = 32;
             const int spaces = std::max(1, tabstop - (int)result.op.size());
-            std::cout << result.op << std::string(spaces, ' ')
-                      << "(" << run_target_str << ") "
-                      << dt << "s \n";
-
+            std::cout << result.op << std::string(spaces, ' ') << "(" << run_target_str << ")\n";
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
                 // The thread-pool destructor will block until in-progress tasks
