@@ -448,13 +448,16 @@ void define_buffer(py::module &m) {
                  },
                  py::arg("rect"))
 
-            // Present in Runtime::Buffer but not Buffer
-            // .def("cropped", [](Buffer<> &b, int d, int min, int extent) -> Buffer<> {
-            //     return b.cropped(d, min, extent);
-            // }, py::arg("dimension"), py::arg("min"), py::arg("extent"))
-            // .def("cropped", [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> Buffer<> {
-            //     return b.cropped(rect);
-            // }, py::arg("rect"))
+            .def("cropped",  //
+                 [](Buffer<> &b, int d, int min, int extent) -> Buffer<> {
+                     return b.cropped(d, min, extent);  //
+                 },
+                 py::arg("dimension"), py::arg("min"), py::arg("extent"))
+            .def("cropped",  //
+                 [](Buffer<> &b, const std::vector<std::pair<int, int>> &rect) -> Buffer<> {
+                     return b.cropped(rect);  //
+                 },
+                 py::arg("rect"))
 
             .def("embed",  //
                  [](Buffer<> &b, int d, int pos) -> void {

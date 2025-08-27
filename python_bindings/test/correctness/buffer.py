@@ -382,6 +382,74 @@ def test_oob():
         assert "index 6 is out of bounds for axis 1 with min=0, extent=6" in str(e)
 
 
+def test_cropped_buffer():
+    """
+    Test that Buffer.cropped
+    - share an allocation as the original buffer
+    - can have an independent name set
+    - both overloads of `cropped` are available
+    """
+    orig_min = 0
+    ori_extent = 10
+    data = np.arange(orig_min, ori_extent * ori_extent, dtype=np.int32).reshape(
+        (ori_extent, ori_extent)
+    )
+
+    new_min = 5
+    new_extent = ori_extent - new_min
+    subaxis = (new_min, new_extent)
+    # upper right block
+    subrect = [subaxis, subaxis]
+
+    orig_name = "buf"
+    new_name = "bc"
+    buf = hl.Buffer(data, orig_name)
+    bc0 = buf.cropped(subrect)
+
+    assert bc0.dim(0).min() == new_min, bc0.dim(0).min()
+    assert bc0.dim(0).extent() == new_extent, bc0.dim(0).extent()
+    assert bc0.dim(1).min() == new_min, bc0.dim(1).min()
+    assert bc0.dim(1).extent() == new_extent, bc0.dim(1).extent()
+
+    bc0.set_name(new_name)
+    assert buf.name() == orig_name
+
+    for row in range(bc0.dim(1).min(), bc0.dim(1).extent()):
+        for col in range(bc0.dim(0).min(), bc0.dim(0).extent()):
+            bc0[col, row] = -1
+
+    for row in range(new_min, new_extent):
+        for col in range(new_min, new_extent):
+            assert data[row, col] == -1, data[row, col]
+
+    # bottom left block
+    new_min = 0
+    new_extent = 5
+    new_val = -2
+    bc1 = buf.cropped(0, new_min, new_extent).cropped(1, new_min, new_extent)
+    assert bc1.dim(0).min() == new_min, bc1.dim(0).min()
+    assert bc1.dim(0).extent() == new_extent, bc1.dim(0).extent()
+    assert bc1.dim(1).min() == new_min, bc1.dim(1).min()
+    assert bc1.dim(1).extent() == new_extent, bc1.dim(1).extent()
+
+    for row in range(bc1.dim(1).min(), bc1.dim(1).extent()):
+        for col in range(bc1.dim(0).min(), bc1.dim(0).extent()):
+            bc1[col, row] = new_val
+
+    for row in range(new_min, new_extent):
+        for col in range(new_min, new_extent):
+            assert data[row, col] == new_val, data[row, col]
+
+    x, y = hl.vars("x y")
+    f = hl.Func("f")
+    f[x, y] = bc1[x, y] * 2
+
+    realized = f.realize([new_extent, new_extent])
+    for row in range(new_min, new_extent):
+        for col in range(new_min, new_extent):
+            assert realized[row, col] == new_val * 2
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -401,3 +469,4 @@ if __name__ == "__main__":
     test_buffer_to_str()
     test_scalar_buffers()
     test_oob()
+    test_cropped_buffer()
