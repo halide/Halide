@@ -364,11 +364,13 @@ public:
             // Make some unallocated input buffers
             std::vector<Runtime::Buffer<>> inputs(image_params.size());
 
-            std::vector<Argument> args(image_params.size());
-            for (size_t i = 0; i < args.size(); i++) {
+            std::vector<Argument> args(image_params.size() + 1);
+            for (size_t i = 0; i < image_params.size(); i++) {
                 args[i] = image_params[i];
                 inputs[i] = Runtime::Buffer<>(args[i].type, nullptr, 0);
             }
+            args.back() = rows;
+
             auto callable = error.compile_to_callable(args, run_target);
 
             Runtime::Buffer<double> output = Runtime::Buffer<double>::make_scalar();
@@ -379,7 +381,7 @@ public:
             (void)callable(inputs[0], inputs[1], inputs[2], inputs[3],
                            inputs[4], inputs[5], inputs[6], inputs[7],
                            inputs[8], inputs[9], inputs[10], inputs[11],
-                           output);
+                           H, output);
 
             std::mt19937 rng;
             rng.seed(rng_seed);
@@ -416,7 +418,7 @@ public:
             (void)callable(inputs[0], inputs[1], inputs[2], inputs[3],
                            inputs[4], inputs[5], inputs[6], inputs[7],
                            inputs[8], inputs[9], inputs[10], inputs[11],
-                           output);
+                           H, output);
 
             double e = output(0);
             // Use a very loose tolerance for floating point tests. The
