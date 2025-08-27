@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     // As 8/26/2025 llvm 21.1.0 includes some bugs w.r.t float32x2 vectors.
     // See https://github.com/llvm/llvm-project/pull/126337#issuecomment-3192412599
-    bool bad_llvm_version = Halide::Internal::get_llvm_version() == 211;
+    const bool bad_llvm_version = Halide::Internal::get_llvm_version() == 211;
 
     {
         // Shuffle test to do a small convolution
