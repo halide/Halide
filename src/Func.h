@@ -2259,6 +2259,11 @@ public:
      * to remove memoized entries using this eviction key from the
      * cache. Memoized computations that do not provide an eviction
      * key will never be evicted by this mechanism.
+     *
+     * It is invalid to memoize the output of a Pipeline; attempting
+     * to do so will issue an error. To cache an entire pipeline,
+     * either implement a caching mechanism outside of Halide or
+     * explicitly copy out of the cache with another output Func.
      */
     Func &memoize(const EvictionKey &eviction_key = EvictionKey());
 
