@@ -33,16 +33,16 @@ target_sources(
     bad_const_cast.cpp
     bad_device_api.cpp
     bad_dimensions.cpp
-    bad_ring_buffer.cpp
     bad_extern_split.cpp
     bad_fold.cpp
     bad_func_object.cpp
-    bad_host_alignment.cpp
     bad_hoist_storage.cpp
+    bad_host_alignment.cpp
     bad_partition_always.cpp
     bad_prefetch.cpp
     bad_reorder.cpp
     bad_reorder_storage.cpp
+    bad_ring_buffer.cpp
     bad_rvar_order.cpp
     bad_schedule.cpp
     bad_store_at.cpp
@@ -88,6 +88,7 @@ target_sources(
     lerp_mismatch.cpp
     lerp_signed_weight.cpp
     memoize_different_compute_store.cpp
+    memoize_output_invalid.cpp
     memoize_redefine_eviction_key.cpp
     metal_threads_too_large.cpp
     metal_vector_too_large.cpp
@@ -97,8 +98,8 @@ target_sources(
     null_host_field.cpp
     overflow_during_constant_folding.cpp
     pointer_arithmetic.cpp
-    race_condition.cpp
     predicate_loads_used_in_inner_splits.cpp
+    race_condition.cpp
     rdom_undefined.cpp
     rdom_where_races.cpp
     realization_with_too_many_outputs.cpp
