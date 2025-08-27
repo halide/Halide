@@ -17,11 +17,16 @@ namespace Internal {
 namespace {
 
 class FindParameterDependencies : public IRGraphVisitor {
+    std::set<Function, Function::Compare> visited_functions;
+
 public:
     FindParameterDependencies() = default;
     ~FindParameterDependencies() override = default;
 
     void visit_function(const Function &function) {
+        if (const auto [_, inserted] = visited_functions.insert(function); !inserted) {
+            return;
+        }
         function.accept(this);
 
         if (function.has_extern_definition()) {

@@ -192,19 +192,10 @@ endif
 # Find libjpeg and libpng. The code to set IMAGE_IO_LIBS is duplicated
 # in the root Makefile and any changes here should be repeated there.
 
-ifneq (,$(shell command -v brew))
-# Get png and jpeg paths from brew
-LIBPNG_LIBS_DEFAULT = -L $(shell brew --prefix libpng)/lib -lpng
-LIBPNG_CXX_FLAGS ?= -I $(shell brew --prefix libpng)/include
-LIBJPEG_LIBS ?= -L $(shell brew --prefix libjpeg)/lib -ljpeg
-LIBJPEG_CXX_FLAGS ?= -I $(shell brew --prefix libjpeg)/include
-else
-# Get png and jpeg paths from pkg-config
 LIBPNG_LIBS_DEFAULT = $(shell pkg-config libpng --libs)
 LIBPNG_CXX_FLAGS ?= $(shell pkg-config libpng --cflags)
 LIBJPEG_LIBS ?= $(shell pkg-config libjpeg --libs)
 LIBJPEG_CXX_FLAGS ?= $(shell pkg-config libjpeg --cflags)
-endif
 
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
 ifneq (,$(findstring -m32,$(CXX)))
@@ -264,4 +255,3 @@ $(BIN)/%.run: $(BIN)/%.rungen
 .PHONY: %.benchmark
 %.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
 	@$^ --benchmarks=all --estimate_all --parsable_output
-
