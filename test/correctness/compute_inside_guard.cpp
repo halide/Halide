@@ -1,12 +1,9 @@
-
 #include "Halide.h"
-#include "halide_benchmark.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(ComputeInsideGuardTest, RegisterClassStorageAndBounds) {
     ImageParam input{UInt(8), 1, "input"};
 
     Var x;
@@ -43,6 +40,8 @@ int main(int argc, char **argv) {
     input.set(ibuf);
     output.realize(obuf);
 
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(obuf.width(), 123);
+    for (int i = 0; i < obuf.width(); i++) {
+        ASSERT_EQ(obuf(i), ibuf(i)) << "obuf(" << i << ") = " << obuf(i) << " instead of " << ibuf(i);
+    }
 }
