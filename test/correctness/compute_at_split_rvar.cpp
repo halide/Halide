@@ -3,13 +3,13 @@
 
 using namespace Halide;
 
+namespace {
 int call_counter = 0;
 extern "C" HALIDE_EXPORT_SYMBOL int count(int x) {
     return call_counter++;
 }
 HalideExtern_1(int, count, int);
 
-namespace {
 class ComputeAtSplitRVarTest : public ::testing::Test {
 protected:
     void SetUp() override {
