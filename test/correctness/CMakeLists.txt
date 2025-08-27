@@ -13,13 +13,6 @@ gtest_discover_tests(
 set_target_properties(correctness_tests PROPERTIES ENABLE_EXPORTS TRUE)
 target_link_libraries(correctness_tests PRIVATE Halide::ImageIO Halide::ThreadPool)
 
-# correctness_multi_gpu
-target_sources(
-    correctness_tests
-    PRIVATE
-    gpu_multi_device.cpp
-)
-
 target_sources(
     correctness_tests
     PRIVATE
@@ -165,6 +158,7 @@ target_sources(
     #    gpu_metal_completion_handler_error_check.cpp
     #    gpu_mixed_dimensionality.cpp
     #    gpu_mixed_shared_mem_types.cpp
+    gpu_multi_device.cpp
     #    gpu_multi_kernel.cpp
     #    gpu_non_contiguous_copy.cpp
     #    gpu_non_monotonic_shared_mem_size.cpp
