@@ -1251,17 +1251,15 @@ TEST_F(AtomicsTest, Int16CPUVectorize) {
 }
 
 TEST_F(AtomicsTest, Float16CPU) {
-    const Target target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::F16C)) {
-        GTEST_SKIP() << "Target does not support F16C.";
+    if (!target.features_any_of({Target::F16C, Target::ARMFp16})) {
+        GTEST_SKIP() << "Target does not support float16_t.";
     }
     test_all<float16_t>(Backend::CPU);
 }
 
 TEST_F(AtomicsTest, Float16CPUVectorize) {
-    const Target target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::F16C)) {
-        GTEST_SKIP() << "Target does not support F16C.";
+    if (!target.features_any_of({Target::F16C, Target::ARMFp16})) {
+        GTEST_SKIP() << "Target does not support float16_t.";
     }
     test_all<float16_t>(Backend::CPUVectorize);
 }
