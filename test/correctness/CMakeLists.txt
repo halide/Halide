@@ -1,7 +1,7 @@
 find_package(GTest REQUIRED)
 
 add_executable(correctness_tests)
-target_link_libraries(correctness_tests PRIVATE Halide::Test GTest::gtest_main)
+target_link_libraries(correctness_tests PRIVATE Halide::Test GTest::gtest_main GTest::gmock)
 
 gtest_discover_tests(
     correctness_tests
@@ -94,19 +94,18 @@ target_sources(
     deinterleave4.cpp
     #    device_buffer_copies_with_profile.cpp
     #    device_buffer_copy.cpp
-    #    device_copy_at_inner_loop.cpp
-    #    device_crop.cpp
-    #    device_slice.cpp
-    #    dilate3x3.cpp
-    #    div_by_zero.cpp
-    #    div_round_to_zero.cpp
-    #    ring_buffer.cpp
+    device_copy_at_inner_loop.cpp
+    device_crop.cpp
+    device_slice.cpp
+    dilate3x3.cpp
+    div_by_zero.cpp
+    div_round_to_zero.cpp
     #    dynamic_allocation_in_gpu_kernel.cpp
     dynamic_reduction_bounds.cpp
-    #    early_out.cpp
+    early_out.cpp
     embed_bitcode.cpp
-    #    erf.cpp
-    #    exception.cpp
+    erf.cpp
+    exception.cpp
     explicit_inline_reductions.cpp
     #    extern_bounds_inference.cpp
     #    extern_consumer.cpp
@@ -284,6 +283,7 @@ target_sources(
     #    reschedule.cpp
     respect_input_constraint_in_bounds_inference.cpp
     #    reuse_stack_alloc.cpp
+    ring_buffer.cpp
     #    round.cpp
     #    saturating_casts.cpp
     #    scatter.cpp

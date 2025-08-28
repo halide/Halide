@@ -1,10 +1,21 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-template<typename T>
-void test() {
+namespace {
+
+template<typename>
+class DivByZeroTest : public ::testing::Test {};
+
+using IntTypes = ::testing::Types<int8_t, int16_t, int32_t, uint8_t, uint16_t, uint32_t>;
+TYPED_TEST_SUITE(DivByZeroTest, IntTypes);
+
+}  // namespace
+
+TYPED_TEST(DivByZeroTest, SimplifierAndCodegen) {
+    using T = TypeParam;
     // Division by zero in Halide is defined to return zero, and
     // division by the most negative integer by -1 returns the most
     // negative integer. To preserve the Euclidean identity, this
@@ -16,18 +27,17 @@ void test() {
     Expr zero = cast<T>(0);
     Expr x = Variable::make(t, unique_name('t'));
 
-    Expr test = simplify(x / zero == zero);
-    _halide_user_assert(is_const_one(test)) << test << "\n";
-    test = simplify(x % zero == zero);
-    _halide_user_assert(is_const_one(test)) << test << "\n";
+    Expr e = simplify(x / zero == zero);
+    ASSERT_TRUE(is_const_one(e)) << e;
+
+    e = simplify(x % zero == zero);
+    ASSERT_TRUE(is_const_one(e)) << e;
 
     if (t.is_int() && t.bits() < 32) {
-        test = simplify(t.min() / cast<T>(-1) == t.min());
-        _halide_user_assert(is_const_one(test)) << simplify(t.min() / cast<T>(-1)) << " vs " << t.min() << "\n";
-        // Given the above decision, the following is required for
-        // the Euclidean identity to hold:
-        test = simplify(t.min() % cast<T>(-1) == zero);
-        _halide_user_assert(is_const_one(test)) << test << "\n";
+        e = simplify(t.min() / cast<T>(-1) == t.min());
+        ASSERT_TRUE(is_const_one(e)) << simplify(t.min() / cast<T>(-1)) << " vs " << t.min();
+        e = simplify(t.min() % cast<T>(-1) == zero);
+        ASSERT_TRUE(is_const_one(e)) << e;
     }
 
     // Now check that codegen does the right thing:
@@ -35,9 +45,9 @@ void test() {
     a.set(T{5});
     b.set(T{0});
     T result = evaluate<T>(a / b);
-    _halide_user_assert(result == T{0}) << result << "\n";
+    EXPECT_EQ(result, T{0});
     result = evaluate<T>(a % b);
-    _halide_user_assert(result == T{0}) << result << "\n";
+    EXPECT_EQ(result, T{0});
     if (t.is_int() && t.bits() < 32) {
         uint64_t bits = 1;
         bits <<= (t.bits() - 1);
@@ -46,30 +56,20 @@ void test() {
         a.set(min_val);
         b.set(T(-1));
         result = evaluate<T>(a / b);
-        _halide_user_assert(result == min_val) << result << "\n";
+        EXPECT_EQ(result, min_val);
         result = evaluate<T>(a % b);
-        _halide_user_assert(result == T{0}) << result << "\n";
+        EXPECT_EQ(result, T{0});
     }
 }
 
-int main(int argc, char **argv) {
-    test<uint8_t>();
-    test<int8_t>();
-    test<uint16_t>();
-    test<int16_t>();
-    test<uint32_t>();
-    test<int32_t>();
-
+TEST(DivByZeroTest, ShiftInwardsOverCompute) {
     // Here's a case that illustrates why it's important to have
     // defined behavior for division by zero:
 
     Func f;
     Var x;
     f(x) = 256 / (x + 1);
-    Var xo, xi;
     f.vectorize(x, 8, TailStrategy::ShiftInwards);
-
-    f.realize({5});
 
     // Ignoring scheduling, we're only realizing f over positive
     // values of x, so this shouldn't fault. However scheduling can
@@ -78,6 +78,5 @@ int main(int argc, char **argv) {
     // would fault at runtime if we didn't have defined behavior for
     // division by zero.
 
-    printf("Success!\n");
-    return 0;
+    EXPECT_NO_THROW(f.realize({5}));
 }

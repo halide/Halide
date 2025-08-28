@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(EarlyOutTest, Compiles) {
     // This is a test case that performs an or reduction using a where clause to
     // get early-out behavior on the reduction loop. It triggered two bugs.
     //
@@ -41,9 +42,5 @@ int main(int argc, char **argv) {
         .specialize(height > slice_size)
         .parallel(y, slice_size, TailStrategy::ShiftInwards);
 
-    output.compile_jit();
-
-    printf("Success!\n");
-
-    return 0;
+    EXPECT_NO_THROW(output.compile_jit());
 }

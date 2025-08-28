@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <iostream>
+#include <gtest/gtest.h>
+#include <algorithm>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(Dilate3x3Test, Basic) {
     // Generate random input image.
     const int W = 128, H = 48;
     Buffer<uint8_t> in(W, H);
@@ -39,19 +40,12 @@ int main(int argc, char **argv) {
     // Run the pipeline and verify the results are correct.
     Buffer<uint8_t> out = dilate3x3.realize({W, H}, target);
 
-    for (int y = 1; y < H - 1; y++) {
-        for (int x = 1; x < W - 1; x++) {
-            uint16_t correct = std::max({std::max({in(x - 1, y - 1), in(x, y - 1), in(x + 1, y - 1)}),
-                                         std::max({in(x - 1, y), in(x, y), in(x + 1, y)}),
-                                         std::max({in(x - 1, y + 1), in(x, y + 1), in(x + 1, y + 1)})});
-
-            if (out(x, y) != correct) {
-                std::cout << "out(" << x << ", " << y << ") = " << out(x, y) << " instead of " << correct << "\n";
-                return 1;
-            }
+    for (int yy = 1; yy < H - 1; yy++) {
+        for (int xx = 1; xx < W - 1; xx++) {
+            uint16_t correct = std::max({std::max({in(xx - 1, yy - 1), in(xx, yy - 1), in(xx + 1, yy - 1)}),
+                                         std::max({in(xx - 1, yy), in(xx, yy), in(xx + 1, yy)}),
+                                         std::max({in(xx - 1, yy + 1), in(xx, yy + 1), in(xx + 1, yy + 1)})});
+            EXPECT_EQ(out(xx, yy), correct) << "out(" << xx << ", " << yy << ")";
         }
     }
-
-    std::cout << "Success!\n";
-    return 0;
 }

@@ -1,13 +1,12 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(DeviceCopyAtInnerLoopTest, SlidingWindowGpuToCpu) {
     Target t = get_jit_target_from_environment();
     if (!t.has_gpu_feature()) {
-        printf("[SKIP] no gpu feature enabled\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled.";
     }
 
     // Sliding window with the producer on the GPU and the consumer on
@@ -31,17 +30,10 @@ int main(int argc, char **argv) {
 
     Buffer<int> out = g.realize({100, 100});
 
-    for (int y = 0; y < 100; y++) {
-        for (int x = 0; x < 100; x++) {
-            int correct = 2 * (x + y) + 1;
-            if (out(x, y) != correct) {
-                printf("out(%d, %d) = %d instead of %d\n",
-                       x, y, out(x, y), correct);
-                return 1;
-            }
+    for (int yy = 0; yy < 100; yy++) {
+        for (int xx = 0; xx < 100; xx++) {
+            int correct = 2 * (xx + yy) + 1;
+            EXPECT_EQ(out(xx, yy), correct) << "out(" << xx << ", " << yy << ")";
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }
