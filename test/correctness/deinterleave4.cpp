@@ -1,8 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 Var x;
 
 Func upsample(Func f) {
@@ -20,8 +21,9 @@ Func build() {
 
     return up;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(Deinterleave4Test, Basic) {
     Func f1 = build();
     Func f2 = build();
     f2.bound(x, 0, 64).vectorize(x);
@@ -29,13 +31,7 @@ int main(int argc, char **argv) {
     Buffer<int> o1 = f1.realize({64});
     Buffer<int> o2 = f2.realize({64});
 
-    for (int x = 0; x < o2.width(); x++) {
-        if (o1(x) != o2(x)) {
-            printf("o1(%d) = %d but o2(%d) = %d\n", x, o1(x), x, o2(x));
-            return 1;
-        }
+    for (int i = 0; i < o2.width(); i++) {
+        EXPECT_EQ(o1(i), o2(i)) << "Mismatch at x=" << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }

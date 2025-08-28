@@ -1,9 +1,15 @@
 #include "Halide.h"
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 using namespace Halide;
 using namespace Halide::Internal;
+using testing::StartsWith;
 
-class CheckLoopLevels : public IRVisitor {
+namespace {
+
+class CheckLoopLevels final : public IRVisitor {
 public:
     CheckLoopLevels(const std::string &inner_loop_level,
                     const std::string &outer_loop_level)
@@ -26,108 +32,86 @@ private:
     void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->name == "sin_f32") {
-            _halide_user_assert(starts_with(inside_for_loop, inner_loop_level));
+            ASSERT_THAT(inside_for_loop, StartsWith(inner_loop_level));
         } else if (op->name == "cos_f32") {
-            _halide_user_assert(starts_with(inside_for_loop, outer_loop_level));
+            ASSERT_THAT(inside_for_loop, StartsWith(outer_loop_level));
         }
     }
 
     void visit(const Store *op) override {
         IRVisitor::visit(op);
         if (op->name.substr(0, 5) == "inner") {
-            _halide_user_assert(starts_with(inside_for_loop, inner_loop_level));
+            ASSERT_THAT(inside_for_loop, StartsWith(inner_loop_level));
         } else if (op->name.substr(0, 5) == "outer") {
-            _halide_user_assert(starts_with(inside_for_loop, outer_loop_level));
+            ASSERT_THAT(inside_for_loop, StartsWith(outer_loop_level));
         } else {
-            _halide_user_assert(0);
+            FAIL() << "Unexpected store name prefix for '" << op->name << "'";
         }
     }
 };
 
 Var x("x"), y("y"), c("c");
 
-struct Test {
-    Func inner, outer;
+class DeferredLoopLevelTest : public ::testing::Test {
+protected:
+    Func inner{"inner"}, outer{"outer"};
     LoopLevel inner_compute_at, inner_store_at;
 
-    explicit Test(int i) {
-        // We use specific calls as proxies for verifying that compute_at
-        // happens where we expect: sin() for the inner function, cos()
-        // for the outer one; these are chosen mainly because they won't
-        // ever get generated incidentally by the lowering code as part of
-        // general code structure.
-        inner = Func("inner" + std::to_string(i));
+    std::string inner_s0_x{inner.name() + ".s0.x"};
+    std::string outer_s0_x{outer.name() + ".s0.x"};
+
+    void SetUp() override {
         inner(x, y, c) = sin(cast<float>(x + y + c));
 
         inner.compute_at(inner_compute_at).store_at(inner_store_at);
 
-        outer = Func("outer" + std::to_string(i));
         outer(x, y, c) = cos(cast<float>(inner(x, y, c)));
     }
 
     void check(const std::string &inner_loop_level,
                const std::string &outer_loop_level) {
-        Buffer<float> result = outer.realize({1, 1, 1});
+        EXPECT_NO_THROW(outer.realize({1, 1, 1}));
 
         Module m = outer.compile_to_module({outer.infer_arguments()});
-        CheckLoopLevels c(inner_loop_level, outer_loop_level);
-        m.functions().front().body.accept(&c);
+        CheckLoopLevels checker(inner_loop_level, outer_loop_level);
+        m.functions().front().body.accept(&checker);
     }
 };
 
-int main(int argc, char **argv) {
+}  // namespace
 
+TEST_F(DeferredLoopLevelTest, ComputeAndStoreAtSameOuterX) {
     // Test that LoopLevels set after being specified still take effect.
-    {
-        Test t(1);
+    inner_compute_at.set(LoopLevel(outer, x));
+    inner_store_at.set(LoopLevel(outer, x));
+    check(outer_s0_x, outer_s0_x);
+}
 
-        t.inner_compute_at.set(LoopLevel(t.outer, x));
-        t.inner_store_at.set(LoopLevel(t.outer, x));
-
-        t.check("outer1.s0.x", "outer1.s0.x");
-    }
-
+TEST_F(DeferredLoopLevelTest, InlinedBoth) {
     // Same as before, but using inlined() for both inner LoopLevels.
-    {
-        Test t(2);
+    inner_compute_at.set(LoopLevel::inlined());
+    inner_store_at.set(LoopLevel::inlined());
+    check(outer_s0_x, outer_s0_x);
+}
 
-        t.inner_compute_at.set(LoopLevel::inlined());
-        t.inner_store_at.set(LoopLevel::inlined());
-
-        t.check("outer2.s0.x", "outer2.s0.x");
-    }
-
+TEST_F(DeferredLoopLevelTest, RootBoth) {
     // Same as before, but using root() for both inner LoopLevels.
-    {
-        Test t(3);
+    inner_compute_at.set(LoopLevel::root());
+    inner_store_at.set(LoopLevel::root());
+    check(inner_s0_x, outer_s0_x);
+}
 
-        t.inner_compute_at.set(LoopLevel::root());
-        t.inner_store_at.set(LoopLevel::root());
-
-        t.check("inner3.s0.x", "outer3.s0.x");
-    }
-
+TEST_F(DeferredLoopLevelTest, StoreAtRootComputeAtOuterY) {
     // Same as before, but using different store_at and compute_at()
-    {
-        Test t(4);
+    inner_compute_at.set(LoopLevel(outer, y));
+    inner_store_at.set(LoopLevel::root());
+    check(inner_s0_x, outer_s0_x);
+}
 
-        t.inner_compute_at.set(LoopLevel(t.outer, y));
-        t.inner_store_at.set(LoopLevel::root());
-
-        t.check("inner4.s0.x", "outer4.s0.x");
-    }
-
+TEST_F(DeferredLoopLevelTest, StoreInlinedComputeAtOuterY) {
     // Same as before, but using inlined for store_at() [equivalent to omitting
     // the store_at() call entirely] and non-inlined for compute_at
-    {
-        Test t(5);
-
-        t.inner_compute_at.set(LoopLevel(t.outer, y));
-        t.inner_store_at.set(LoopLevel::inlined());
-
-        t.check("inner5.s0.x", "outer5.s0.x");
-    }
-
-    printf("Success!\n");
-    return 0;
+    inner_compute_at.set(LoopLevel(outer, y));
+    inner_store_at.set(LoopLevel::inlined());
+    check(inner_s0_x, outer_s0_x);
 }
