@@ -1,19 +1,19 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-void check(Interval result, Interval expected, int line) {
-    if (!(equal(result.min, expected.min) &&
-          equal(result.max, expected.max))) {
-        std::cerr << "Interval test on line " << line << " failed\n"
-                  << "  Expected [" << expected.min << ", " << expected.max << "]\n"
-                  << "  Got      [" << result.min << ", " << result.max << "]\n";
-        exit(1);
-    }
+namespace {
+void check(const Interval &result, const Interval &expected, int line) {
+    EXPECT_TRUE(equal(result.min, expected.min) && equal(result.max, expected.max))
+        << "Interval test on line " << line << " failed\n"
+        << "  Expected [" << expected.min << ", " << expected.max << "]\n"
+        << "  Got      [" << result.min << ", " << result.max << "]";
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(IntervalTest, BasicsAndOperations) {
     Interval e = Interval::everything();
     Interval n = Interval::nothing();
     Expr pos_inf = Interval::pos_inf();
@@ -23,40 +23,40 @@ int main(int argc, char **argv) {
     Interval xn{neg_inf, x};
     Interval xx{x, x};
 
-    assert(e.is_everything());
-    assert(!e.has_upper_bound());
-    assert(!e.has_lower_bound());
-    assert(!e.is_empty());
-    assert(!e.is_bounded());
-    assert(!e.is_single_point());
+    EXPECT_TRUE(e.is_everything());
+    EXPECT_FALSE(e.has_upper_bound());
+    EXPECT_FALSE(e.has_lower_bound());
+    EXPECT_FALSE(e.is_empty());
+    EXPECT_FALSE(e.is_bounded());
+    EXPECT_FALSE(e.is_single_point());
 
-    assert(!n.is_everything());
-    assert(!n.has_upper_bound());
-    assert(!n.has_lower_bound());
-    assert(n.is_empty());
-    assert(!n.is_bounded());
-    assert(!n.is_single_point());
+    EXPECT_FALSE(n.is_everything());
+    EXPECT_FALSE(n.has_upper_bound());
+    EXPECT_FALSE(n.has_lower_bound());
+    EXPECT_TRUE(n.is_empty());
+    EXPECT_FALSE(n.is_bounded());
+    EXPECT_FALSE(n.is_single_point());
 
-    assert(!xp.is_everything());
-    assert(!xp.has_upper_bound());
-    assert(xp.has_lower_bound());
-    assert(!xp.is_empty());
-    assert(!xp.is_bounded());
-    assert(!xp.is_single_point());
+    EXPECT_FALSE(xp.is_everything());
+    EXPECT_FALSE(xp.has_upper_bound());
+    EXPECT_TRUE(xp.has_lower_bound());
+    EXPECT_FALSE(xp.is_empty());
+    EXPECT_FALSE(xp.is_bounded());
+    EXPECT_FALSE(xp.is_single_point());
 
-    assert(!xn.is_everything());
-    assert(xn.has_upper_bound());
-    assert(!xn.has_lower_bound());
-    assert(!xn.is_empty());
-    assert(!xn.is_bounded());
-    assert(!xn.is_single_point());
+    EXPECT_FALSE(xn.is_everything());
+    EXPECT_TRUE(xn.has_upper_bound());
+    EXPECT_FALSE(xn.has_lower_bound());
+    EXPECT_FALSE(xn.is_empty());
+    EXPECT_FALSE(xn.is_bounded());
+    EXPECT_FALSE(xn.is_single_point());
 
-    assert(!xx.is_everything());
-    assert(xx.has_upper_bound());
-    assert(xx.has_lower_bound());
-    assert(!xx.is_empty());
-    assert(xx.is_bounded());
-    assert(xx.is_single_point());
+    EXPECT_FALSE(xx.is_everything());
+    EXPECT_TRUE(xx.has_upper_bound());
+    EXPECT_TRUE(xx.has_lower_bound());
+    EXPECT_FALSE(xx.is_empty());
+    EXPECT_TRUE(xx.is_bounded());
+    EXPECT_TRUE(xx.is_single_point());
 
     check(Interval::make_union(xp, xn), e, __LINE__);
     check(Interval::make_union(e, xn), e, __LINE__);
@@ -83,7 +83,4 @@ int main(int argc, char **argv) {
 
     check(Interval::make_union({3, 9}, {4, 10}), {3, 10}, __LINE__);
     check(Interval::make_intersection({3, 9}, {4, 10}), {4, 9}, __LINE__);
-
-    printf("Success!\n");
-    return 0;
 }

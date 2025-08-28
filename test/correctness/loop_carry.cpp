@@ -1,25 +1,27 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
+namespace {
 // Wrapper class to call loop_carry on a given statement.
-class LoopCarryWrapper : public IRMutator {
+class LoopCarryWrapper final : public IRMutator {
     using IRMutator::visit;
 
-    int register_count_;
+    int register_count;
     Stmt mutate(const Stmt &stmt) override {
-        return simplify(loop_carry(stmt, register_count_));
+        return simplify(loop_carry(stmt, register_count));
     }
 
 public:
-    LoopCarryWrapper(int register_count)
-        : register_count_(register_count) {
+    explicit LoopCarryWrapper(int register_count)
+        : register_count(register_count) {
     }
 };
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(LoopCarryTest, LargeRegisterCount) {
     Func input;
     Func g;
     Func h;
@@ -57,8 +59,5 @@ int main(int argc, char **argv) {
 
     input.compute_root();
 
-    f.realize({size, size});
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_NO_THROW(f.realize({size, size}));
 }

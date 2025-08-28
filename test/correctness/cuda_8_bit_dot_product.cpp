@@ -1,11 +1,47 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 #include <regex>
 
 using namespace Halide;
 
-template<typename Out, typename A, typename B>
-void test(Target t) {
+namespace {
+template<typename Out_, typename A_, typename B_>
+struct DotProductTypes {
+    using Out = Out_;
+    using A = A_;
+    using B = B_;
+};
+
+template<typename>
+class Cuda8BitDotProductTest : public ::testing::Test {};
+
+using ConstantTypes = ::testing::Types<
+    DotProductTypes<int32_t, int8_t, int8_t>,
+    DotProductTypes<int32_t, int8_t, uint8_t>,
+    DotProductTypes<int32_t, uint8_t, int8_t>,
+    DotProductTypes<uint32_t, uint8_t, uint8_t>,
+    DotProductTypes<int32_t, int16_t, int8_t>,
+    DotProductTypes<int32_t, int16_t, uint8_t>,
+    DotProductTypes<int32_t, uint16_t, int8_t>,
+    DotProductTypes<uint32_t, uint16_t, uint8_t>,
+    DotProductTypes<int32_t, int8_t, int16_t>,
+    DotProductTypes<int32_t, int8_t, uint16_t>,
+    DotProductTypes<int32_t, uint8_t, int16_t>,
+    DotProductTypes<uint32_t, uint16_t, uint8_t>>;
+TYPED_TEST_SUITE(Cuda8BitDotProductTest, ConstantTypes);
+}  // namespace
+
+TYPED_TEST(Cuda8BitDotProductTest, CompileAndRun) {
+    using Out = typename TypeParam::Out;
+    using A = typename TypeParam::A;
+    using B = typename TypeParam::B;
+
+    Target t = get_jit_target_from_environment();
+    if (!t.has_feature(Target::CUDACapability61)) {
+        GTEST_SKIP() << "Cuda (with compute capability 6.1) is not enabled in target: " << t.to_string();
+    }
+
     for (int factor : {4, 16}) {
         for (int vec : {1, 4}) {
             std::cout
@@ -45,10 +81,7 @@ void test(Target t) {
                         B in_b_r_y = (B)(r * 3 + y * 7);
                         correct += ((Out)(in_a_r_x)) * in_b_r_y;
                     }
-                    if (out(x, y) != correct) {
-                        printf("out(%d, %d) = %d instead of %d\n", x, y, (int)(out(x, y)), (int)(correct));
-                        exit(1);
-                    }
+                    EXPECT_EQ(out(x, y), correct) << "x = " << x << ", y = " << y;
                 }
             }
 
@@ -56,35 +89,8 @@ void test(Target t) {
             // compiled code (the PTX source is an embedded string).
             Buffer<uint8_t> buf = h.compile_to_module(std::vector<Argument>(), "h", t).compile_to_buffer();
             std::basic_regex<char> regex("dp[24]a[.lo]*[us]32[.][us]32");
-            if (!std::regex_search((const char *)buf.begin(), (const char *)buf.end(), regex)) {
-                printf("Did not find use of dp2a or dp4a in compiled code. Rerun test with HL_DEBUG_CODEGEN=1 to debug\n");
-                exit(1);
-            }
+            EXPECT_TRUE(std::regex_search((const char *)buf.begin(), (const char *)buf.end(), regex))
+                << "Did not find use of dp2a or dp4a in compiled code. Rerun test with HL_DEBUG_CODEGEN=1 to debug";
         }
     }
-}
-
-int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-    if (!t.has_feature(Target::CUDACapability61)) {
-        printf("[SKIP] Cuda (with compute capability 6.1) is not enabled in target: %s\n",
-               t.to_string().c_str());
-        return 0;
-    }
-
-    test<int32_t, int8_t, int8_t>(t);
-    test<int32_t, int8_t, uint8_t>(t);
-    test<int32_t, uint8_t, int8_t>(t);
-    test<uint32_t, uint8_t, uint8_t>(t);
-    test<int32_t, int16_t, int8_t>(t);
-    test<int32_t, int16_t, uint8_t>(t);
-    test<int32_t, uint16_t, int8_t>(t);
-    test<uint32_t, uint16_t, uint8_t>(t);
-    test<int32_t, int8_t, int16_t>(t);
-    test<int32_t, int8_t, uint16_t>(t);
-    test<int32_t, uint8_t, int16_t>(t);
-    test<uint32_t, uint16_t, uint8_t>(t);
-
-    printf("Success!\n");
-    return 0;
 }

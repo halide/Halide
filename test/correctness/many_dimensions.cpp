@@ -1,10 +1,10 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <stdio.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(ManyDimensionsTest, RealizeAtTwoSites) {
     // Funcs inside a pipeline can have lots of dimensions.
     std::vector<Var> vars(20);
     Func f;
@@ -46,9 +46,5 @@ int main(int argc, char **argv) {
     g(x, y) = f(site1) + f(site2);
 
     f.compute_at(g, x);
-    g.realize({10, 10});
-
-    printf("Success!\n");
-
-    return 0;
+    EXPECT_NO_THROW(g.realize({10, 10}));
 }

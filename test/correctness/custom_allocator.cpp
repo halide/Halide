@@ -1,8 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 // Override Halide's malloc and free
 
 bool custom_malloc_called = false;
@@ -20,11 +21,11 @@ void my_free(JITUserContext *user_context, void *ptr) {
     custom_free_called = true;
     free(((void **)ptr)[-1]);
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(CustomAllocatorTest, AllocatorIsCalled) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
-        return 0;
+        GTEST_SKIP() << "WebAssembly JIT does not support custom allocators.";
     }
 
     Func f, g;
@@ -38,10 +39,6 @@ int main(int argc, char **argv) {
     g.jit_handlers().custom_free = my_free;
 
     Buffer<int> im = g.realize({100000});
-
-    assert(custom_malloc_called);
-    assert(custom_free_called);
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_TRUE(custom_malloc_called) << "Custom malloc was not called.";
+    EXPECT_TRUE(custom_free_called) << "Custom free was not called.";
 }

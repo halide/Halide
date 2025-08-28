@@ -1,5 +1,5 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 // This file demonstrates two example custom lowering passes. The
 // first just makes sure the IR passes some test, and doesn't modify
@@ -43,7 +43,7 @@ class CountMultiplies : public IRMutator {
     }
 };
 
-int main(int argc, char **argv) {
+TEST(CustomLoweringPassTest, CountsFloatMultiplies) {
     Func f;
     Var x;
 
@@ -54,12 +54,6 @@ int main(int argc, char **argv) {
     const int size = 10;
     f.realize({size});
 
-    if (multiply_count != size * 2) {
-        printf("The multiplies weren't all counted. Got %d instead of %d\n",
-               multiply_count, size);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(multiply_count, size * 2) << "The multiplies weren't all counted. Got "
+                                        << multiply_count << " instead of " << (size * 2);
 }

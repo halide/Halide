@@ -1,11 +1,10 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
-
-#include <cstdio>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(EmbedBitcodeTest, CompileToObjectWithEmbedBitcode) {
     Func f, g, h, j;
     Var x, y;
     f(x, y) = x + y;
@@ -25,8 +24,5 @@ int main(int argc, char **argv) {
     std::vector<Argument> empty_args;
     j.compile_to_object(result_file, empty_args, "j", target);
 
-    Internal::assert_file_exists(result_file);
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_TRUE(Internal::file_exists(result_file));
 }

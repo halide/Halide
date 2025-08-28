@@ -4,20 +4,20 @@
 #define HALIDE_NO_PNG
 #include "halide_image_io.h"
 #include "halide_test_dirs.h"
+#include <gtest/gtest.h>
 
 #include <cstdio>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(DebugToFileTest, SaveAndLoadVariousFormats) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support debug_to_file() yet.\n");
-        return 0;
+        GTEST_SKIP() << "WebAssembly JIT does not support debug_to_file() yet.";
     }
 
     std::vector<std::string> formats = {"npy", "mat"};
     for (const auto &format : formats) {
-        std::cout << "Testing format " << format << "...\n";
+        SCOPED_TRACE("format=" + format);
 
         std::string f_path = Internal::get_test_tmp_dir() + "f." + format;
         std::string g_path = Internal::get_test_tmp_dir() + "g." + format;
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
                 h.compute_root().debug_to_file(h_path);
             }
 
-            Buffer<int32_t> im = h.realize({10, 10}, target);
+            EXPECT_NO_THROW(h.realize({10, 10}, target));
         }
 
         {
@@ -55,58 +55,46 @@ int main(int argc, char **argv) {
             Internal::assert_file_exists(h_path);
 
             Buffer<int32_t> f = Tools::load_image(f_path);
-            assert(f.dimensions() == 3 &&
-                   f.dim(0).extent() == 11 &&
-                   f.dim(1).extent() == 10 &&
-                   f.dim(2).extent() == 3);
+            EXPECT_EQ(f.dimensions(), 3);
+            EXPECT_EQ(f.dim(0).extent(), 11);
+            EXPECT_EQ(f.dim(1).extent(), 10);
+            EXPECT_EQ(f.dim(2).extent(), 3);
 
             for (int z = 0; z < 3; z++) {
                 for (int y = 0; y < 10; y++) {
                     for (int x = 0; x < 11; x++) {
                         int32_t val = f(x, y, z);
                         // The min coord gets lost on debug_to_file, so f should be shifted up by one.
-                        if (val != x + y + z - 1) {
-                            printf("f(%d, %d, %d) = %d instead of %d\n", x, y, z, val, x + y);
-                            return 1;
-                        }
+                        EXPECT_EQ(val, x + y + z - 1) << "f(" << x << ", " << y << ", " << z << ")";
                     }
                 }
             }
 
             Buffer<float> g = Tools::load_image(g_path);
-            assert(g.dimensions() == 2 &&
-                   g.dim(0).extent() == 10 &&
-                   g.dim(1).extent() == 10);
+            EXPECT_EQ(g.dimensions(), 2);
+            EXPECT_EQ(g.dim(0).extent(), 10);
+            EXPECT_EQ(g.dim(1).extent(), 10);
 
             for (int y = 0; y < 10; y++) {
                 for (int x = 0; x < 10; x++) {
                     float val = g(x, y);
                     float correct = (float)(f(x, y, 1) + f(x + 1, y, 2));
-                    if (val != correct) {
-                        printf("g(%d, %d) = %f instead of %f\n", x, y, val, correct);
-                        return 1;
-                    }
+                    EXPECT_EQ(val, correct) << "g(" << x << ", " << y << ")";
                 }
             }
 
             Buffer<int32_t> h = Tools::load_image(h_path);
-            assert(h.dimensions() == 2 &&
-                   h.dim(0).extent() == 10 &&
-                   h.dim(1).extent() == 10);
+            EXPECT_EQ(h.dimensions(), 2);
+            EXPECT_EQ(h.dim(0).extent(), 10);
+            EXPECT_EQ(h.dim(1).extent(), 10);
 
             for (int y = 0; y < 10; y++) {
                 for (int x = 0; x < 10; x++) {
                     int32_t val = h(x, y);
                     int32_t correct = f(x, y, 0) + g(x, y);
-                    if (val != correct) {
-                        printf("h(%d, %d) = %d instead of %d\n", x, y, val, correct);
-                        return 1;
-                    }
+                    EXPECT_EQ(val, correct) << "h(" << x << ", " << y << ")";
                 }
             }
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

@@ -1,11 +1,9 @@
-
 #include "Halide.h"
-#include "halide_benchmark.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(DeadRealizationInSpecializationTest, Compiles) {
     Var x, y;
     Func f, g;
     Param<bool> p;
@@ -26,9 +24,5 @@ int main(int argc, char **argv) {
     // still gets a Realize node.  Compile this to make sure
     // allocation bounds inference doesn't get confused trying to
     // come up with a bound for it.
-
-    output.compile_jit();
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_NO_THROW(output.compile_jit());
 }

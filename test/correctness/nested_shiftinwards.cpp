@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(NestedShiftInwardsTest, NoBoundsError) {
     int W = 1024;
     int H = 1024;
 
@@ -39,8 +40,5 @@ int main(int argc, char **argv) {
     // size below.
 
     // Just check it doesn't fail a bounds assertion.
-    Buffer<uint16_t> out = g.realize({input.width() - 2, input.height() - 2, 3});
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_NO_THROW(g.realize({input.width() - 2, input.height() - 2, 3}));
 }

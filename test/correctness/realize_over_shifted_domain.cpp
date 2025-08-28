@@ -1,9 +1,10 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <stdio.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(RealizeOverShiftedDomainTest, Basic) {
     Buffer<int> input(100, 50);
 
     // This image represents the range [100, 199]*[50, 99]
@@ -22,16 +23,8 @@ int main(int argc, char **argv) {
     Buffer<int> result(50, 100);
     result.set_min(50, 100);
 
-    f.realize(result);
+    ASSERT_NO_THROW(f.realize(result));
 
-    if (result(50, 100) != 123 || result(99, 199) != 234) {
-        fprintf(stderr, "Err: f(50, 100) = %d (supposed to be 123)\n"
-                        "f(99, 199) = %d (supposed to be 234)\n",
-                result(50, 100), result(99, 199));
-        return 1;
-    }
-
-    printf("Success!\n");
-
-    return 0;
+    EXPECT_EQ(result(50, 100), 123);
+    EXPECT_EQ(result(99, 199), 234);
 }

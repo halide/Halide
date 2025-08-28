@@ -79,15 +79,15 @@ target_sources(
     cross_compilation.cpp
     cse_name_collision.cpp
     cse_nan.cpp
-    #    cuda_8_bit_dot_product.cpp
-    #    custom_allocator.cpp
+    cuda_8_bit_dot_product.cpp
+    custom_allocator.cpp
     #    custom_auto_scheduler.cpp
     #    custom_cuda_context.cpp
     #    custom_error_reporter.cpp
     #    custom_jit_context.cpp
-    #    custom_lowering_pass.cpp
-    #    dead_realization_in_specialization.cpp
-    #    debug_to_file.cpp
+    custom_lowering_pass.cpp
+    dead_realization_in_specialization.cpp
+    debug_to_file.cpp
     #    debug_to_file_multiple_outputs.cpp
     #    debug_to_file_reorder.cpp
     #    deferred_loop_level.cpp
@@ -104,7 +104,7 @@ target_sources(
     #    dynamic_allocation_in_gpu_kernel.cpp
     dynamic_reduction_bounds.cpp
     #    early_out.cpp
-    #    embed_bitcode.cpp
+    embed_bitcode.cpp
     #    erf.cpp
     #    exception.cpp
     explicit_inline_reductions.cpp
@@ -202,7 +202,7 @@ target_sources(
     #    interleave.cpp
     #    interleave_rgb.cpp
     #    interleave_x.cpp
-    #    interval.cpp
+    interval.cpp
     #    intrinsics.cpp
     #    invalid_gpu_loop_nests.cpp
     #    inverse.cpp
@@ -219,14 +219,14 @@ target_sources(
     #    likely.cpp
     #    load_library.cpp
     #    logical.cpp
-    #    loop_carry.cpp
+    loop_carry.cpp
     #    loop_invariant_extern_calls.cpp
     #    loop_level_generator_param.cpp
     #    lossless_cast.cpp
     #    lots_of_loop_invariants.cpp
     #    low_bit_depth_noise.cpp
-    #    make_struct.cpp
-    #    many_dimensions.cpp
+    make_struct.cpp
+    many_dimensions.cpp
     #    many_small_extern_stages.cpp
     many_updates.cpp
     #    math.cpp
@@ -272,7 +272,7 @@ target_sources(
     #    pytorch.cpp
     #    realize_condition_depends_on_tuple.cpp
     #    realize_larger_than_two_gigs.cpp
-    #    realize_over_shifted_domain.cpp
+    realize_over_shifted_domain.cpp
     #    recursive_box_filters.cpp
     #    reduction_chain.cpp
     #    reduction_predicate_racing.cpp
@@ -314,7 +314,7 @@ target_sources(
     #    specialize_to_gpu.cpp
     #    specialize_trim_condition.cpp
     #    split_by_non_factor.cpp
-    #    split_fuse_rvar.cpp
+    split_fuse_rvar.cpp
     split_reuse_inner_name_bug.cpp
     #    split_store_compute.cpp
     #    stable_realization_order.cpp
@@ -401,7 +401,7 @@ target_sources(
     #    multiple_outputs_extern.cpp
     #    multiple_scatter.cpp
     #    named_updates.cpp
-    #    nested_shiftinwards.cpp
+    nested_shiftinwards.cpp
     #    oddly_sized_output.cpp
     #    parallel.cpp
     #    parallel_alloc.cpp

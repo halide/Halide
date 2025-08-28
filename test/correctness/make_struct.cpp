@@ -1,5 +1,5 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -12,22 +12,18 @@ struct struct_t {
 };
 
 extern "C" HALIDE_EXPORT_SYMBOL int check_struct(struct_t *s) {
-    if (s->a != 3.0 ||
-        s->b != 1234567 ||
-        s->c != 1234 ||
-        strcmp(s->d, "Test global string\n")) {
-        printf("Unexpected struct values: %f %d %d %s\n", s->a, s->b, s->c, s->d);
-        exit(1);
-    }
+    EXPECT_EQ(s->a, 3.0);
+    EXPECT_EQ(s->b, 1234567);
+    EXPECT_EQ(s->c, 1234);
+    EXPECT_STREQ(s->d, "Test global string\n");
     return 0;
 }
 
 HalideExtern_1(int, check_struct, struct_t *);
 
-int main(int argc, char **argv) {
+TEST(MakeStructTest, Basic) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] Skipping test for WebAssembly as the wasm JIT cannot support passing arbitrary pointers to/from HalideExtern code.\n");
-        return 0;
+        GTEST_SKIP() << "Skipping for WebAssembly: wasm JIT cannot support passing arbitrary pointers to/from HalideExtern code.";
     }
 
     // Check make_struct is working. make_struct is not intended to be
@@ -49,9 +45,5 @@ int main(int argc, char **argv) {
     Func g;
     g() = check_struct(s);
 
-    g.realize();
-
-    printf("Success!\n");
-
-    return 0;
+    EXPECT_NO_THROW(g.realize());
 }
