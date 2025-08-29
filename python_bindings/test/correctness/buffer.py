@@ -390,13 +390,13 @@ def test_cropped_buffer():
     - both overloads of `cropped` are available
     """
     orig_min = 0
-    ori_extent = 10
-    data = np.arange(orig_min, ori_extent * ori_extent, dtype=np.int32).reshape(
-        (ori_extent, ori_extent)
+    orig_extent = 10
+    data = np.arange(orig_min, orig_extent * orig_extent, dtype=np.int32).reshape(
+        (orig_extent, orig_extent)
     )
 
     new_min = 5
-    new_extent = ori_extent - new_min
+    new_extent = orig_extent - new_min
     subaxis = (new_min, new_extent)
     # upper right block
     subrect = [subaxis, subaxis]
@@ -414,8 +414,10 @@ def test_cropped_buffer():
     bc0.set_name(new_name)
     assert buf.name() == orig_name
 
-    for row in range(bc0.dim(1).min(), bc0.dim(1).extent()):
-        for col in range(bc0.dim(0).min(), bc0.dim(0).extent()):
+    stop_d1 = bc0.dim(1).min() + bc0.dim(1).extent()
+    stop_d0 = bc0.dim(0).min() + bc0.dim(0).extent()
+    for row in range(bc0.dim(1).min(), stop_d1):
+        for col in range(bc0.dim(0).min(), stop_d0):
             bc0[col, row] = -1
 
     for row in range(new_min, new_extent):
@@ -432,12 +434,14 @@ def test_cropped_buffer():
     assert bc1.dim(1).min() == new_min, bc1.dim(1).min()
     assert bc1.dim(1).extent() == new_extent, bc1.dim(1).extent()
 
+    stop_d1 = bc1.dim(1).min() + bc1.dim(1).extent()
+    stop_d0 = bc1.dim(0).min() + bc1.dim(0).extent()
     for row in range(bc1.dim(1).min(), bc1.dim(1).extent()):
         for col in range(bc1.dim(0).min(), bc1.dim(0).extent()):
             bc1[col, row] = new_val
 
-    for row in range(new_min, new_extent):
-        for col in range(new_min, new_extent):
+    for row in range(new_min, new_min + new_extent):
+        for col in range(new_min, new_min + new_extent):
             assert data[row, col] == new_val, data[row, col]
 
     x, y = hl.vars("x y")
@@ -448,6 +452,91 @@ def test_cropped_buffer():
     for row in range(new_min, new_extent):
         for col in range(new_min, new_extent):
             assert realized[row, col] == new_val * 2
+
+
+def test_translated_buffer():
+    """
+    Test that Buffer.translated
+    - shares an allocation as the original buffer
+    - can have name independant from the original buffer
+    - both overloads of `translated` are available
+    """
+    orig_name = "buf"
+    orig_min = 0
+    orig_extent = 10
+
+    def make_orig_buf():
+        return np.arange(orig_min, orig_extent * orig_extent, dtype=np.int32).reshape(
+            (orig_extent, orig_extent)
+        )
+
+    data = make_orig_buf()
+    buf = hl.Buffer(data, orig_name)
+
+    tag = -1
+
+    # the tranlation offset
+    dxs = [-3, 3]
+    for dx in dxs:
+        new_name = "bt0"
+        new_min = orig_min + dx
+        new_extent = orig_extent
+
+        # apply treatment
+        bt0 = buf.translated(0, dx).translated(1, dx)
+
+        bt0.set_name(new_name)
+        assert bt0.name() == new_name
+        assert buf.name() == orig_name
+
+        assert bt0.dim(0).min() == new_min, bt0.dim(0).min()
+        assert bt0.dim(0).extent() == new_extent, bt0.dim(0).extent()
+        assert bt0.dim(1).min() == new_min, bt0.dim(1).min()
+        assert bt0.dim(1).extent() == new_extent, bt0.dim(1).extent()
+
+        # shared buffer test
+        stop_d1 = bt0.dim(1).min() + bt0.dim(1).extent()
+        stop_d0 = bt0.dim(0).min() + bt0.dim(0).extent()
+        for row in range(bt0.dim(1).min(), stop_d1):
+            for col in range(bt0.dim(0).min(), stop_d0):
+                bt0[col, row] = tag
+
+        for row in range(orig_min, orig_extent):
+            for col in range(orig_min, orig_extent):
+                assert data[row, col] == tag, data[row, col]
+
+    # reset data
+    data = make_orig_buf()
+    buf = hl.Buffer(data, orig_name)
+
+    bt1 = buf.translated(dxs)
+    assert bt1.dim(0).min() == orig_min + dxs[0], bt1.dim(0).min()
+    assert bt1.dim(0).extent() == orig_extent, bt1.dim(0).extent()
+    assert bt1.dim(1).min() == orig_min + dxs[1], bt1.dim(1).min()
+    assert bt1.dim(1).extent() == orig_extent, bt1.dim(1).extent()
+
+    start_d1 = bt1.dim(1).min()
+    extent_d1 = bt1.dim(1).extent()
+    stop_d1 = start_d1 + extent_d1
+    start_d0 = bt1.dim(0).min()
+    extent_d0 = bt1.dim(0).extent()
+    stop_d0 = start_d0 + extent_d0
+    for row in range(start_d1, stop_d1):
+        for col in range(start_d0, stop_d0):
+            bt1[col, row] = tag
+
+    for row in range(orig_min, orig_extent):
+        for col in range(orig_min, orig_extent):
+            assert data[row, col] == tag, data[row, col]
+
+    x, y = hl.vars("x y")
+    f = hl.Func("f")
+    f[x, y] = bt1[x + dxs[0], y + dxs[1]] * 2
+
+    realized = f.realize([(extent_d0), (extent_d1)])
+    for row in range(0, extent_d1):
+        for col in range(0, extent_d0):
+            assert realized[row, col] == tag * 2
 
 
 if __name__ == "__main__":
@@ -470,3 +559,4 @@ if __name__ == "__main__":
     test_scalar_buffers()
     test_oob()
     test_cropped_buffer()
+    test_translated_buffer()
