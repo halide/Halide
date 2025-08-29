@@ -1518,7 +1518,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         for (size_t i = 0; i < indices.size(); i++) {
             for (int j = 0; j < replicate; j++) {
                 if (indices[i] == -1) {
-                    i8_indices[i * replicate + j] = -1; // Replicate the don't-care.
+                    i8_indices[i * replicate + j] = -1;  // Replicate the don't-care.
                 } else {
                     i8_indices[i * replicate + j] = indices[i] * replicate + j;
                 }
