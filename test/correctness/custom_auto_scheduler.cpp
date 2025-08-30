@@ -1,7 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 int call_count = 0;
 
 void inline_everything(const Pipeline &,
@@ -11,10 +13,10 @@ void inline_everything(const Pipeline &,
     call_count++;
     // Inlining everything is really easy.
 }
+}  // namespace
 
-int main(int argc, char **argv) {
-
-    const char *kSchedulerName = "inline_everything";
+TEST(CustomAutoSchedulerTest, InlineEverything) {
+    constexpr const char *kSchedulerName = "inline_everything";
 
     // Add a very simple 'autoscheduler'
     Pipeline::add_autoscheduler(kSchedulerName, inline_everything);
@@ -32,11 +34,5 @@ int main(int argc, char **argv) {
     Pipeline(f).apply_autoscheduler(t, autoscheduler_params);
     Pipeline(g).apply_autoscheduler(t, autoscheduler_params);
 
-    if (call_count != 2) {
-        printf("Should have called the custom autoscheduler twice. Instead called it %d times\n", call_count);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(call_count, 2) << "Should have called the custom autoscheduler twice.";
 }
