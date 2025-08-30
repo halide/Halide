@@ -1,67 +1,65 @@
 #include "Halide.h"
-#include <cstdio>
-#include <cstdlib>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int evaluated = 0;
+namespace {
+volatile bool always_true = true;
 
-int should_be_evaluated() {
-    printf("Should be evaluated\n");
-    evaluated += 1;
-    return 0;
-}
-
-int should_never_be_evaluated() {
-    printf("Should never be evaluated\n");
-    exit(1);
-    return 0;
-}
+struct my_custom_error final : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 struct MyCustomErrorReporter final : CompileTimeErrorReporter {
     int errors_occurred{0};
     int warnings_occurred{0};
+    int evaluated{0};
 
     void warning(const char *msg) override {
-        const auto msg_safe = Internal::replace_all(msg, ":", "(colon)");
-        printf("Custom warn: %s\n", msg_safe.c_str());
+        printf("Custom warn: %s\n", msg);
         warnings_occurred++;
     }
 
     [[noreturn]] void error(const char *msg) override {
-        // Emitting "error.*:" to stdout or stderr will cause CMake to report the
-        // test as a failure on Windows, regardless of the error code returned.
-        // The error text we get from ErrorReport probably contains some variant
-        // of this, so let's make sure it doesn't match that pattern.
-        const auto msg_safe = Internal::replace_all(msg, ":", "(colon)");
-        printf("Custom err: %s\n", msg_safe.c_str());
+        printf("Custom err: %s\n", msg);
         errors_occurred++;
-
-        if (warnings_occurred != 1 || errors_occurred != 1 || evaluated != 1) {
-            printf("There should have been 1 warning and 1 error and 1 evaluated assertion argument\n");
-            exit(1);
-        }
-
-        // CompileTimeErrorReporter::error() must not return.
-        printf("Success!\n");
-        exit(0);
+        throw my_custom_error(msg);
     }
 };
 
-int main(int argc, char **argv) {
+int should_be_evaluated(MyCustomErrorReporter *reporter) {
+    printf("Should be evaluated\n");
+    reporter->evaluated++;
+    return 421337;
+}
 
-    // Use argc here so that the compiler cannot optimize it away:
-    // we know argc > 0 always, but the compiler (probably) doesn't.
-    _halide_user_assert(argc > 0) << should_never_be_evaluated();
-
+class CustomErrorReporterTest : public ::testing::Test {
+protected:
     MyCustomErrorReporter reporter;
-    set_custom_compile_time_error_reporter(&reporter);
+    void SetUp() override {
+        set_custom_compile_time_error_reporter(&reporter);
+    }
+    void TearDown() override {
+        set_custom_compile_time_error_reporter(nullptr);
+    }
+};
+}  // namespace
+
+TEST_F(CustomErrorReporterTest, WarningAndError) {
+    testing::internal::CaptureStdout();
 
     user_warning << "Here is a warning.";
 
-    // This call should not return.
-    user_assert(argc == 0) << should_be_evaluated();
+    EXPECT_THAT([&] { user_assert(!always_true) << should_be_evaluated(&reporter); },
+                testing::ThrowsMessage<my_custom_error>(testing::HasSubstr("421337")));
 
-    printf("CompileTimeErrorReporter::error() must not return.\n");
-    return 1;
+    EXPECT_THAT(
+        testing::internal::GetCapturedStdout(),
+        testing::AllOf(testing::HasSubstr("Here is a warning"),
+                       testing::HasSubstr("Should be evaluated")));
+
+    EXPECT_EQ(reporter.warnings_occurred, 1) << "Expected one warning to be issued";
+    EXPECT_EQ(reporter.errors_occurred, 1) << "Expected one error to be issued";
+    EXPECT_EQ(reporter.evaluated, 1) << "Expected `should_be_evaluated` to be evaluated";
 }

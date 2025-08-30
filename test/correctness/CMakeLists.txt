@@ -83,7 +83,7 @@ target_sources(
     custom_allocator.cpp
     #    custom_auto_scheduler.cpp
     #    custom_cuda_context.cpp
-    #    custom_error_reporter.cpp
+    custom_error_reporter.cpp
     #    custom_jit_context.cpp
     custom_lowering_pass.cpp
     dead_realization_in_specialization.cpp
