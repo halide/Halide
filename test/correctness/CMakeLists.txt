@@ -228,7 +228,7 @@ target_sources(
     many_dimensions.cpp
     #    many_small_extern_stages.cpp
     many_updates.cpp
-    #    math.cpp
+    math.cpp
     #    median3x3.cpp
     #    memoize_cloned.cpp
     #    min_extent.cpp
