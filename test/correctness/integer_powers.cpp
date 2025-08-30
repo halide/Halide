@@ -1,8 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 float inverse_factorial(int x) {
     double y = 1;
     for (int i = 2; i <= x; i++) {
@@ -10,8 +11,9 @@ float inverse_factorial(int x) {
     }
     return (float)y;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(IntegerPowersTest, TaylorSeriesAccuracy) {
     Func f;
     Var x;
 
@@ -61,10 +63,8 @@ int main(int argc, char **argv) {
         Buffer<float> error_1 = rms_1.realize();
         Buffer<float> error_2 = rms_2.realize();
 
-        if (error_1(0) > 0.0001 || error_2(0) > 0.0001) {
-            printf("Approximate sin errors too large: %1.20f %1.20f\n", error_1(0), error_2(0));
-            return 1;
-        }
+        EXPECT_LE(error_1(0), 0.0001f) << "approx_sin_1 RMS error too large: " << error_1(0);
+        EXPECT_LE(error_2(0), 0.0001f) << "approx_sin_2 RMS error too large: " << error_2(0);
     }
 
     {
@@ -103,12 +103,7 @@ int main(int argc, char **argv) {
         Buffer<float> error_1 = rms_1.realize();
         Buffer<float> error_2 = rms_2.realize();
 
-        if (error_1(0) > 0.0001 || error_2(0) > 0.0001) {
-            printf("Approximate exp errors too large: %1.20f %1.20f\n", error_1(0), error_2(0));
-            return 1;
-        }
+        EXPECT_LE(error_1(0), 0.0001f) << "approx_exp_1 RMS error too large: " << error_1(0);
+        EXPECT_LE(error_2(0), 0.0001f) << "approx_exp_2 RMS error too large: " << error_2(0);
     }
-
-    printf("Success!\n");
-    return 0;
 }

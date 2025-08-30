@@ -1,4 +1,6 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
+#include <algorithm>
 #include <iostream>
 
 using namespace Halide;
@@ -12,10 +14,9 @@ Expr mid3(Expr a, Expr b, Expr c) {
     return max(min(max(a, b), c), min(a, b));
 }
 
-int main(int arch, char **argv) {
+TEST(Median3x3Test, Basic) {
     const int W = 256, H = 256;
     Buffer<uint8_t> in(W, H);
-    // Set up the input.
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = rand() & 0xff;
@@ -24,11 +25,9 @@ int main(int arch, char **argv) {
 
     Var x("x"), y("y");
 
-    // Boundary condition.
     Func input = BoundaryConditions::constant_exterior(in, 0);
     input.compute_root();
 
-    // Algorithm.
     Func max_x("max_x"), min_x("min_x"), mid_x("mid_x");
     max_x(x, y) = max(input(x - 1, y), input(x, y), input(x + 1, y));
     min_x(x, y) = min(input(x - 1, y), input(x, y), input(x + 1, y));
@@ -42,7 +41,6 @@ int main(int arch, char **argv) {
     Func median3x3("median3x3");
     median3x3(x, y) = mid3(min_max(x, y), max_min(x, y), mid_mid(x, y));
 
-    // Schedule.
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
@@ -53,22 +51,16 @@ int main(int arch, char **argv) {
         median3x3.vectorize(x, target.natural_vector_size<uint8_t>());
     }
 
-    // Run the pipeline and verify the results are correct.
     Buffer<uint8_t> out = median3x3.realize({W, H}, target);
 
-    for (int y = 1; y < H - 1; y++) {
-        for (int x = 1; x < W - 1; x++) {
-            uint8_t inp[9] = {in(x - 1, y - 1), in(x, y - 1), in(x + 1, y - 1),
-                              in(x - 1, y), in(x, y), in(x + 1, y),
-                              in(x - 1, y + 1), in(x, y + 1), in(x + 1, y + 1)};
+    for (int yy = 1; yy < H - 1; yy++) {
+        for (int xx = 1; xx < W - 1; xx++) {
+            uint8_t inp[9] = {in(xx - 1, yy - 1), in(xx, yy - 1), in(xx + 1, yy - 1),
+                              in(xx - 1, yy), in(xx, yy), in(xx + 1, yy),
+                              in(xx - 1, yy + 1), in(xx, yy + 1), in(xx + 1, yy + 1)};
             std::nth_element(&inp[0], &inp[4], &inp[9]);
             uint8_t correct = inp[4];
-            if (correct != out(x, y)) {
-                std::cout << "out(" << x << ", " << y << ") = " << out(x, y) << " instead of " << correct << "\n";
-                return 1;
-            }
+            EXPECT_EQ(out(xx, yy), correct) << "out(" << xx << ", " << yy << ")";
         }
     }
-    std::cout << "Success!\n";
-    return 0;
 }

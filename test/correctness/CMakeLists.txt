@@ -119,7 +119,7 @@ target_sources(
     #    extract_concat_bits.cpp
     #    failed_unroll.cpp
     #    fast_trigonometric.cpp
-    #    fibonacci.cpp
+    fibonacci.cpp
     #    fit_function.cpp
     #    float16_t.cpp
     #    float16_t_comparison.cpp
@@ -197,7 +197,7 @@ target_sources(
     #    inlined_generator.cpp
     #    input_image_bounds_check.cpp
     #    input_larger_than_two_gigs.cpp
-    #    integer_powers.cpp
+    integer_powers.cpp
     #    interleave.cpp
     #    interleave_rgb.cpp
     #    interleave_x.cpp
@@ -229,7 +229,7 @@ target_sources(
     #    many_small_extern_stages.cpp
     many_updates.cpp
     math.cpp
-    #    median3x3.cpp
+    median3x3.cpp
     #    memoize_cloned.cpp
     #    min_extent.cpp
     #    mod.cpp

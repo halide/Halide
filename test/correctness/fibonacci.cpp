@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(FibonacciTest, Basic) {
     Func fib, g;
     Var x;
     RDom r(2, 18);
@@ -22,14 +21,7 @@ int main(int argc, char **argv) {
     for (int i = 2; i < 20; i++) {
         fib_ref[i] = fib_ref[i - 1] + fib_ref[i - 2];
         if (i >= 10) {
-            if (fib_ref[i] != out(i - 10)) {
-                printf("out(%d) = %d instead of %d\n", i - 10, out(i - 10), fib_ref[i]);
-                return 1;
-            }
+            EXPECT_EQ(out(i - 10), fib_ref[i]) << "out(" << (i - 10) << ")";
         }
     }
-
-    printf("Success!\n");
-
-    return 0;
 }
