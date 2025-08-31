@@ -100,7 +100,7 @@ target_sources(
     dilate3x3.cpp
     div_by_zero.cpp
     div_round_to_zero.cpp
-    #    dynamic_allocation_in_gpu_kernel.cpp
+    dynamic_allocation_in_gpu_kernel.cpp
     dynamic_reduction_bounds.cpp
     early_out.cpp
     embed_bitcode.cpp

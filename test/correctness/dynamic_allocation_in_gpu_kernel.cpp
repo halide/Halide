@@ -1,12 +1,11 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-    Target t(get_jit_target_from_environment());
-    if (!t.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+TEST(DynamicAllocationInGPUKernelTest, Basic) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        GTEST_SKIP() << "No GPU target enabled";
     }
 
     Func f1, f2, f3, f4, f5, f6, g;
@@ -43,19 +42,12 @@ int main(int argc, char **argv) {
         p.set(i);
         Buffer<float> result = g.realize({W, H});
         result.copy_to_host();
-        for (int y = 0; y < H; y++) {
-            for (int x = 0; x < W; x++) {
-                float correct = 64 * x + 64 * y + 64 * i + 320;
-                float actual = result(x, y);
-                if (correct != actual) {
-                    printf("result[%d](%d, %d) = %f instead of %f\n",
-                           i, x, y, actual, correct);
-                    return 1;
-                }
+        for (int yy = 0; yy < H; yy++) {
+            for (int xx = 0; xx < W; xx++) {
+                float correct = 64 * xx + 64 * yy + 64 * i + 320;
+                EXPECT_EQ(result(xx, yy), correct)
+                    << "i = " << i << " x = " << xx << " y = " << yy;
             }
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }
