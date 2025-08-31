@@ -16,7 +16,7 @@ using namespace Halide;
 #endif
 
 namespace {
-MATCHER_P2(RelativelyNear, expected, threshold, "") {
+MATCHER_P2(RelativelyNear, expected, tolerance, "") {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (std::is_floating_point_v<T>) {
         if ((std::isnan(expected) && std::isnan(arg)) || arg == expected) {
@@ -29,9 +29,9 @@ MATCHER_P2(RelativelyNear, expected, threshold, "") {
         const double denominator = std::max(std::abs(da), std::abs(db));
         const double relative_error = denominator == 0.0 ? 0.0 : std::abs(da - db) / denominator;
 
-        if (relative_error > threshold) {
+        if (relative_error > tolerance) {
             *result_listener << "relative error " << relative_error
-                             << " exceeds threshold " << threshold
+                             << " exceeds tolerance " << tolerance
                              << " (actual=" << da << ", expected=" << db << ")";
             return false;
         }
