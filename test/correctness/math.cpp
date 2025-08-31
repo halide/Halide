@@ -11,6 +11,10 @@
 
 using namespace Halide;
 
+#ifndef M_PI
+#define M_PI 3.14159265358979310000
+#endif
+
 namespace {
 MATCHER_P2(RelativelyNear, expected, threshold, "") {
     using T = std::decay_t<decltype(arg)>;
