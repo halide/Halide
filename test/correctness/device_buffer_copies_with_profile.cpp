@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int run_test(Target t) {
+namespace {
+void run_test(const Target &target) {
     // Sliding window with the producer on the GPU and the consumer on
     // the CPU. This requires a copy inside the loop over which we are
     // sliding. Currently this copies the entire buffer back and
@@ -26,46 +28,38 @@ int run_test(Target t) {
     f2.compute_root();
 
     // Make the buffer a little bigger so we actually can see the copy time.
-    Buffer<int> out = f2.realize({2000, 2000}, t);
+    Buffer<int> out = f2.realize({2000, 2000}, target);
     // Let's only verify a part of it...
-    for (int y = 0; y < 100; y++) {
-        for (int x = 0; x < 100; x++) {
-            int correct = 4 * (x + y) + 2;
-            if (out(x, y) != correct) {
-                printf("out(%d, %d) = %d instead of %d\n",
-                       x, y, out(x, y), correct);
-                return 1;
-            }
+    for (int yy = 0; yy < 100; yy++) {
+        for (int xx = 0; xx < 100; xx++) {
+            int correct = 4 * (xx + yy) + 2;
+            EXPECT_EQ(out(xx, yy), correct) << "out(" << xx << ", " << yy << ")";
         }
     }
-    return 0;
 }
 
-int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-    if (!t.has_gpu_feature()) {
-        printf("[SKIP] no gpu feature enabled\n");
-        return 0;
-    }
-    printf("Testing without profiler.\n");
-    int result = run_test(t);
-    if (result != 0) {
-        return 1;
-    }
-
-    printf("Testing thread based profiler.\n");
-    result = run_test(t.with_feature(Target::Profile));
-    if (result != 0) {
-        return 1;
-    }
-    if (t.os == Target::Linux) {
-        printf("Testing timer based profiler.\n");
-        result = run_test(t.with_feature(Target::ProfileByTimer));
-        if (result != 0) {
-            return 1;
+class DeviceBufferCopiesWithProfileTest : public ::testing::Test {
+protected:
+    Target target{get_jit_target_from_environment()};
+    void SetUp() override {
+        if (!target.has_gpu_feature()) {
+            GTEST_SKIP() << "No GPU target enabled.";
         }
     }
+};
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST_F(DeviceBufferCopiesWithProfileTest, NoProfiler) {
+    run_test(target);
+}
+
+TEST_F(DeviceBufferCopiesWithProfileTest, ThreadBasedProfiler) {
+    run_test(target.with_feature(Target::Profile));
+}
+
+TEST_F(DeviceBufferCopiesWithProfileTest, TimerBasedProfiler) {
+    if (target.os != Target::Linux) {
+        GTEST_SKIP() << "Timer profiler test only runs on Linux.";
+    }
+    run_test(target.with_feature(Target::ProfileByTimer));
 }
