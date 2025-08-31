@@ -1,39 +1,37 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-bool extern_error_called = false;
-extern "C" HALIDE_EXPORT_SYMBOL int extern_error(JITUserContext *user_context, halide_buffer_t *out) {
-    extern_error_called = true;
+namespace {
+struct ExternErrorContext : JITUserContext {
+    bool extern_error_called{false};
+    bool error_occurred{false};
+};
+
+extern "C" HALIDE_EXPORT_SYMBOL int extern_error(JITUserContext *ctx, halide_buffer_t *) {
+    static_cast<ExternErrorContext *>(ctx)->extern_error_called = true;
     return halide_error_code_generic_error;
 }
 
-bool error_occurred = false;
-extern "C" HALIDE_EXPORT_SYMBOL void my_halide_error(JITUserContext *user_context, const char *msg) {
-    printf("Expected: %s\n", msg);
-    error_occurred = true;
+extern "C" HALIDE_EXPORT_SYMBOL void my_halide_error(JITUserContext *ctx, const char *msg) {
+    static_cast<ExternErrorContext *>(ctx)->error_occurred = true;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(ExternErrorTest, Basic) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support passing arbitrary pointers to/from HalideExtern code.\n");
-        return 0;
+        GTEST_SKIP() << "WebAssembly JIT does not support passing arbitrary pointers to/from HalideExtern code.";
     }
-
-    std::vector<ExternFuncArgument> args;
-    args.push_back(user_context_value());
 
     Func f;
-    f.define_extern("extern_error", args, Float(32), 1);
+    f.define_extern("extern_error", {user_context_value()}, Float(32), 1);
     f.jit_handlers().custom_error = my_halide_error;
-    f.realize({100});
 
-    if (!error_occurred || !extern_error_called) {
-        printf("There was supposed to be an error\n");
-        return 1;
-    }
+    ExternErrorContext ctx;
+    f.realize(&ctx, {100});
 
-    printf("Success!\n");
-    return 0;
+    EXPECT_TRUE(ctx.extern_error_called) << "extern_error was not called";
+    EXPECT_TRUE(ctx.error_occurred) << "There was supposed to be an error";
 }

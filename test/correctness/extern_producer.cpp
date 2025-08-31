@@ -1,8 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 // Some helper functions for rounding
 int round_down(int, int);
 int round_up(int x, int m) {
@@ -50,9 +51,6 @@ extern "C" HALIDE_EXPORT_SYMBOL int make_data(halide_buffer_t *out) {
     assert(out->dim[1].stride == (out->dim[1].stride) / 32 * 32);
     // Check that the row extent is not changed due to alignment.
     assert(out->dim[0].extent == desired_row_extent);
-    printf("Generating data over [%d %d] x [%d %d]\n",
-           out->dim[0].min, out->dim[0].min + out->dim[0].extent,
-           out->dim[1].min, out->dim[1].min + out->dim[1].extent);
     for (int y = 0; y < out->dim[1].extent; y++) {
         int *dst = (int *)out->host + y * out->dim[1].stride;
         for (int x = 0; x < out->dim[0].extent; x++) {
@@ -78,9 +76,6 @@ extern "C" HALIDE_EXPORT_SYMBOL int make_data_multi(halide_buffer_t *out1, halid
            out1->dim[1].min == out2->dim[1].min &&
            out1->dim[0].extent == out2->dim[0].extent &&
            out1->dim[1].extent == out2->dim[1].extent);
-    printf("Generating data over [%d %d] x [%d %d]\n",
-           out1->dim[0].min, out1->dim[0].min + out1->dim[0].extent,
-           out1->dim[1].min, out1->dim[1].min + out1->dim[1].extent);
     for (int y = 0; y < out1->dim[1].extent; y++) {
         int *dst1 = (int *)out1->host + y * out1->dim[1].stride;
         int *dst2 = (int *)out2->host + y * out2->dim[1].stride;
@@ -93,64 +88,52 @@ extern "C" HALIDE_EXPORT_SYMBOL int make_data_multi(halide_buffer_t *out1, halid
     }
     return 0;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(ExternProducerTest, Basic) {
     Var x, y;
     Var xi, yi;
-    {
-        Func source;
-        source.define_extern("make_data",
-                             std::vector<ExternFuncArgument>(),
-                             Int(32), {x, y});
-        // Row stride should be 128B/32-element aligned.
-        source.align_storage(x, 32);
-        Func sink;
-        sink(x, y) = source(x, y) - (x + y) % 61;
+    Func source;
+    source.define_extern("make_data", {}, Int(32), {x, y});
+    // Row stride should be 128B/32-element aligned.
+    source.align_storage(x, 32);
+    Func sink;
+    sink(x, y) = source(x, y) - (x + y) % 61;
 
-        sink.tile(x, y, xi, yi, 32, 32);
+    sink.tile(x, y, xi, yi, 32, 32);
 
-        // Compute the source per tile of sink
-        source.compute_at(sink, x);
+    // Compute the source per tile of sink
+    source.compute_at(sink, x);
 
-        Buffer<int> output = sink.realize({100, 100});
-
-        // Should be all zeros.
-        RDom r(output);
-        unsigned int error = evaluate_may_gpu<unsigned int>(sum(abs(output(r.x, r.y))));
-        if (error != 0) {
-            printf("Something went wrong\n");
-            return 1;
+    Buffer<int> output = sink.realize({100, 100});
+    for (int xx = 0; xx < output.width(); xx++) {
+        for (int yy = 0; yy < output.height(); yy++) {
+            ASSERT_EQ(output(xx, yy), 0) << "xx = " << xx << " yy = " << yy;
         }
     }
+}
 
-    {
-        Func multi;
-        std::vector<Type> types;
-        types.push_back(Int(32));
-        types.push_back(Int(32));
-        multi.define_extern("make_data_multi",
-                            std::vector<ExternFuncArgument>(),
-                            types, {x, y});
-        Func sink_multi;
-        sink_multi(x, y) = multi(x, y)[0] - (x + y) % 61 +
-                           multi(x, y)[1] - (x + y + 15) % 61;
+TEST(ExternProducerTest, Tuple) {
+    Var x, y;
+    Var xi, yi;
+    Func multi;
+    std::vector<Type> types;
+    types.push_back(Int(32));
+    types.push_back(Int(32));
+    multi.define_extern("make_data_multi", {}, types, {x, y});
+    Func sink_multi;
+    sink_multi(x, y) = multi(x, y)[0] - (x + y) % 61 +
+                       multi(x, y)[1] - (x + y + 15) % 61;
 
-        sink_multi.tile(x, y, xi, yi, 32, 32);
+    sink_multi.tile(x, y, xi, yi, 32, 32);
 
-        // Compute the source per tile of sink
-        multi.compute_at(sink_multi, x);
+    // Compute the source per tile of sink
+    multi.compute_at(sink_multi, x);
 
-        Buffer<int> output_multi = sink_multi.realize({100, 100});
-
-        // Should be all zeros.
-        RDom r(output_multi);
-        unsigned int error_multi = evaluate<unsigned int>(sum(abs(output_multi(r.x, r.y))));
-        if (error_multi != 0) {
-            printf("Something went wrong in multi case\n");
-            return 1;
+    Buffer<int> output_multi = sink_multi.realize({100, 100});
+    for (int xx = 0; xx < output_multi.width(); xx++) {
+        for (int yy = 0; yy < output_multi.height(); yy++) {
+            ASSERT_EQ(output_multi(xx, yy), 0) << "xx = " << xx << " yy = " << yy;
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

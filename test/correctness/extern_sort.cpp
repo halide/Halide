@@ -1,9 +1,11 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
+
 #include <algorithm>
-#include <stdio.h>
 
 using namespace Halide;
 
+namespace {
 // Use an extern stage to do a sort
 extern "C" HALIDE_EXPORT_SYMBOL int sort_buffer(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
@@ -18,31 +20,24 @@ extern "C" HALIDE_EXPORT_SYMBOL int sort_buffer(halide_buffer_t *in, halide_buff
     }
     return 0;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
-    Func data;
+TEST(ExternSortTest, Basic) {
     Var x;
+
+    Func data;
     data(x) = sin(x);
     data.compute_root();
 
     Func sorted;
-    std::vector<ExternFuncArgument> args;
-    args.push_back(data);
-    sorted.define_extern("sort_buffer", args, Float(32), 1);
+    sorted.define_extern("sort_buffer", {data}, Float(32), 1);
+
     Buffer<float> output = sorted.realize({100});
 
-    // Check the output
     Buffer<float> reference = lambda(x, sin(x)).realize({100});
     std::sort(&reference(0), &reference(100));
 
-    RDom r(reference);
-    float error = evaluate_may_gpu<float>(sum(abs(reference(r) - output(r))));
-
-    if (error != 0) {
-        printf("Output incorrect\n");
-        return 1;
+    for (int i = 0; i < output.width(); i++) {
+        EXPECT_EQ(output(i), reference(i));
     }
-
-    printf("Success!\n");
-    return 0;
 }

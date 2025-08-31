@@ -107,15 +107,15 @@ target_sources(
     erf.cpp
     exception.cpp
     explicit_inline_reductions.cpp
-    #    extern_bounds_inference.cpp
-    #    extern_consumer.cpp
-    #    extern_error.cpp
-    #    extern_output_expansion.cpp
-    #    extern_partial.cpp
-    #    extern_producer.cpp
-    #    extern_reorder_storage.cpp
-    #    extern_sort.cpp
-    #    extern_stage_on_device.cpp
+    extern_bounds_inference.cpp
+    extern_consumer.cpp
+    extern_error.cpp
+    extern_output_expansion.cpp
+    extern_partial.cpp
+    extern_producer.cpp
+    extern_reorder_storage.cpp
+    extern_sort.cpp
+    extern_stage_on_device.cpp
     #    extract_concat_bits.cpp
     #    failed_unroll.cpp
     #    fast_trigonometric.cpp
