@@ -93,7 +93,7 @@ target_sources(
     deferred_loop_level.cpp
     deinterleave4.cpp
     device_buffer_copies_with_profile.cpp
-    #    device_buffer_copy.cpp
+    device_buffer_copy.cpp
     device_copy_at_inner_loop.cpp
     device_crop.cpp
     device_slice.cpp
