@@ -1,12 +1,14 @@
 #include "Halide.h"
 
+#include <gtest/gtest.h>
+
 #ifndef M_PI
 #define M_PI (3.14159265358979323846)
 #endif
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(FitFunctionTest, FitSin) {
     // Fit an odd polynomial to sin from 0 to pi/2 using Halide's derivative support
     ImageParam coeffs(Float(64), 1);
     Param<double> learning_rate;
@@ -83,7 +85,7 @@ int main(int argc, char **argv) {
 
     // Gradient descent loop
     // Let's use eight terms and a thousand samples
-    const int terms = 8;
+    constexpr int terms = 8;
     Buffer<double> c(terms);
     order.set(terms);
     samples.set(1000);
@@ -91,49 +93,28 @@ int main(int argc, char **argv) {
     coeffs.set(c);
     Pipeline p({average_err, new_coeffs});
     c.fill(0);
-    // Initialize to the Taylor series for sin about zero
+
+    // This gradient descent is not particularly well-conditioned,
+    // because the standard polynomial basis is nowhere near
+    // orthogonal over [0, pi/2]. This should probably use a Chebyshev
+    // basis instead. We just jump to the solution by initializing
+    // to the Taylor series for sin about zero.
     c(0) = 1;
     for (int i = 1; i < terms; i++) {
         c(i) = -c(i - 1) / (i * 2 * (i * 2 + 1));
     }
 
-    // This gradient descent is not particularly well-conditioned,
-    // because the standard polynomial basis is nowhere near
-    // orthogonal over [0, pi/2]. This should probably use a Cheychev
-    // basis instead. We'll use a very slow learning rate and lots of
-    // steps.
     learning_rate.set(0.00001);
-    const int steps = 10000;
+    constexpr int steps = 10;
     double initial_error = 0.0;
     for (int i = 0; i <= steps; i++) {
-        bool should_print = (i == 0 || i == steps / 2 || i == steps);
-        if (should_print) {
-            printf("Iteration %d\n"
-                   "Coefficients: ",
-                   i);
-            for (int j = 0; j < terms; j++) {
-                printf("%g ", c(j));
-            }
-            printf("\n");
-        }
-
         p.realize({e, c});
-
-        if (should_print) {
-            printf("Err: %g\n", e());
-        }
-
         if (i == 0) {
             initial_error = e();
         }
     }
 
     double final_error = e();
-    if (final_error <= 1e-10 && final_error < initial_error) {
-        printf("[fit_function] Success!\n");
-        return 0;
-    } else {
-        printf("Did not converge\n");
-        return 1;
-    }
+    EXPECT_NEAR(final_error, 0.0, 1e-10) << "Error too large";
+    EXPECT_LT(final_error, initial_error) << "Did not converge";
 }

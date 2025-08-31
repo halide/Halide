@@ -117,10 +117,10 @@ target_sources(
     extern_sort.cpp
     extern_stage_on_device.cpp
     extract_concat_bits.cpp
-    #    failed_unroll.cpp
-    #    fast_trigonometric.cpp
+    failed_unroll.cpp
+    fast_trigonometric.cpp
     fibonacci.cpp
-    #    fit_function.cpp
+    fit_function.cpp
     #    float16_t.cpp
     #    float16_t_comparison.cpp
     #    float16_t_constants.cpp

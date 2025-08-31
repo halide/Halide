@@ -1,12 +1,13 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
+
+using namespace Halide;
 
 #ifndef M_PI
 #define M_PI 3.14159265358979310000
 #endif
 
-using namespace Halide;
-
-int main(int argc, char **argv) {
+TEST(FastTrigonometricTest, Basic) {
     Func sin_f, cos_f;
     Var x;
     Expr t = x / 1000.f;
@@ -21,20 +22,8 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 1000; ++i) {
         const float alpha = i / 1000.f;
-        const float x = -two_pi * alpha + (1 - alpha) * two_pi;
-        const float sin_x = sin_result(i);
-        const float cos_x = cos_result(i);
-        const float sin_x_ref = sin(x);
-        const float cos_x_ref = cos(x);
-        if (std::abs(sin_x_ref - sin_x) > 1e-5) {
-            fprintf(stderr, "fast_sin(%.6f) = %.20f not equal to %.20f\n", x, sin_x, sin_x_ref);
-            exit(1);
-        }
-        if (std::abs(cos_x_ref - cos_x) > 1e-5) {
-            fprintf(stderr, "fast_cos(%.6f) = %.20f not equal to %.20f\n", x, cos_x, cos_x_ref);
-            exit(1);
-        }
+        const float xx = -two_pi * alpha + (1 - alpha) * two_pi;
+        EXPECT_NEAR(sin_result(i), sin(xx), 1e-5);
+        EXPECT_NEAR(cos_result(i), cos(xx), 1e-5);
     }
-    printf("Success!\n");
-    return 0;
 }
