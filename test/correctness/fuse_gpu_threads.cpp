@@ -1,33 +1,20 @@
 #include "Halide.h"
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-class CheckThreadExtent : public IRVisitor {
-    using IRVisitor::visit;
-    void visit(const For *op) override {
-        if (op->for_type == ForType::GPUThread) {
-            // Assert the min and extent to be 0 and 16 for this particular test case
-            auto min = as_const_int(op->min);
-            auto extent = as_const_int(op->extent);
-            assert(min && (*min == 0));
-            assert(extent && (*extent == 16));
-        }
-        IRVisitor::visit(op);
+TEST(FuseGpuThreads, Basic) {
+    Target target = get_jit_target_from_environment();
+    if (!target.has_gpu_feature()) {
+        GTEST_SKIP() << "No GPU target enabled.";
     }
-};
 
-int main(int argc, char **argv) {
     // Canonical GPU for loop names are uniqued to make sure they don't collide
     // with user-provided names. We'll test that works by trying for a collision:
     unique_name("thread_id_x");
     unique_name("block_id_x");
-
-    Target target = get_jit_target_from_environment();
-    if (!target.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
-    }
 
     Var x("x"), y("y"), bx("bx"), by("by"), tx("tx"), ty("ty");
 
@@ -56,10 +43,21 @@ int main(int argc, char **argv) {
         .gpu_threads(x, y);
 
     // Lower it and inspect the IR to verify the min/extent of GPU thread loops
-    Module m = consumer.compile_to_module({consumer.infer_arguments()}, "fuse_gpu_threads", target);
-    CheckThreadExtent c;
-    m.functions().front().body.accept(&c);
-
-    printf("Success!\n");
-    return 0;
+    struct : IRMutator {
+        using IRMutator::visit;
+        std::vector<const For *> loops;
+        Stmt visit(const For *op) override {
+            if (op->for_type == ForType::GPUThread) {
+                loops.emplace_back(op);
+            }
+            return IRMutator::visit(op);
+        }
+    } m;
+    consumer.add_custom_lowering_pass(&m, nullptr);
+    consumer.compile_jit();
+    EXPECT_GT(m.loops.size(), 0) << "No loops found!";
+    for (const For *loop : m.loops) {
+        EXPECT_THAT(as_const_int(loop->min), testing::Optional(0));
+        EXPECT_THAT(as_const_int(loop->extent), testing::Optional(16));
+    }
 }
