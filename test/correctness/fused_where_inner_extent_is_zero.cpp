@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(FuseWhereInnerExtentIsZeroTest, Basic) {
     Func f;
     Var x, y;
     f(x, y) = x + y;
@@ -22,12 +23,7 @@ int main(int argc, char **argv) {
         for (int o = 0; o < 2; o++) {
             inner_extent.set(i);
             outer_extent.set(o);
-            g.realize({10, 10});
+            EXPECT_NO_THROW(g.realize({10, 10})) << "i = " << i << ", o = " << o;
         }
     }
-
-    g.realize({10, 10});
-
-    printf("Success!\n");
-    return 0;
 }
