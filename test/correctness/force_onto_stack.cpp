@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_test_error.h"
 #include <gtest/gtest.h>
 
 #include <cstdlib>
@@ -65,9 +66,9 @@ TEST_F(ForceOntoStackTest, Basic) {
     p.set(10);
     g.realize(&ctx, {20});
 
-    EXPECT_STREQ(
-        ctx.error_msg.c_str(),
-        "Bounds given for f in x (from 0 to 7) do not cover required region (from 0 to 9)");
+    EXPECT_THAT(
+        ctx.error_msg,
+        MatchesPattern(R"(Bounds given for f(\$\d+)? in x \(from 0 to 7\) do not cover required region \(from 0 to 9\))"));
 }
 
 TEST_F(ForceOntoStackTest, TailStrategies) {
