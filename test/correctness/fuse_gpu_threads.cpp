@@ -44,10 +44,10 @@ int main(int argc, char **argv) {
     // Lower it and inspect the IR to verify the min/extent of GPU thread loops
     struct : IRMutator {
         using IRMutator::visit;
-        std::vector<const For *> loops;
+        std::vector<Stmt> loops;
         Stmt visit(const For *op) override {
             if (op->for_type == ForType::GPUThread) {
-                loops.push_back(op);
+                loops.emplace_back(op);
             }
             return IRMutator::visit(op);
         }
@@ -57,8 +57,9 @@ int main(int argc, char **argv) {
     consumer.compile_jit();
 
     assert(!c.loops.empty());
-    for (const For *op : c.loops) {
+    for (Stmt loop : c.loops) {
         // Assert the min and extent to be 0 and 16 for this particular test case
+        const For *op = loop.as<For>();
         auto min = as_const_int(op->min);
         auto extent = as_const_int(op->extent);
         assert(min && *min == 0);
