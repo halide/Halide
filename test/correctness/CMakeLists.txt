@@ -138,11 +138,11 @@ target_sources(
     #    fuzz_simplify.cpp  # TODO: move this to fuzz tests?
     gameoflife.cpp
     gather.cpp
-    #    gpu_allocation_cache.cpp
-    #    gpu_alloc_group_profiling.cpp
-    #    gpu_arg_types.cpp
-    #    gpu_assertion_in_kernel.cpp
-    #    gpu_bounds_inference_failure.cpp
+    gpu_allocation_cache.cpp
+    #        gpu_alloc_group_profiling.cpp
+    #        gpu_arg_types.cpp
+    #        gpu_assertion_in_kernel.cpp
+    #        gpu_bounds_inference_failure.cpp
     gpu_condition_lifting.cpp
     #    gpu_cpu_simultaneous_read.cpp
     #    gpu_data_flows.cpp
