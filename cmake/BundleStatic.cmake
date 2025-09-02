@@ -22,10 +22,15 @@ function(_bundle_static_check_output VAR)
     set("${VAR}" "${${VAR}}" PARENT_SCOPE)
 endfunction()
 
-function(_bundle_static_is_apple_libtool result_var item)
-    _bundle_static_check_output(version_info "${item}" -V)
-    if (NOT version_info MATCHES "Apple,? Inc\\.")
-        set(${result_var} 0 PARENT_SCOPE)
+
+function(_bundle_static_is_apple_ld result_var ld_tool)
+    execute_process(COMMAND "${ld_tool}" -v 
+        OUTPUT_VARIABLE captured_output
+        ERROR_VARIABLE captured_error
+        RESULT_VARIABLE return_code
+    )
+    if (captured_error MATCHES "Apple")
+        set(${result_var} 1 PARENT_SCOPE)
     endif ()
 endfunction()
 
@@ -85,12 +90,13 @@ function(bundle_static TARGET)
         )
         return()
     endif ()
-
-    find_program(LIBTOOL libtool VALIDATOR _bundle_static_is_apple_libtool)
-    if (APPLE AND LIBTOOL)
+    
+    find_program(LD_LINKER ld HINTS "${CMAKE_LD}")
+    _bundle_static_is_apple_ld(is_apple_ld "${LD_LINKER}")
+    if (APPLE AND is_apple_ld)
         add_custom_command(
             TARGET "${TARGET}" POST_BUILD
-            COMMAND "${LIBTOOL}" -static -o "$<TARGET_FILE:${TARGET}>" "$<TARGET_FILE:${TARGET}>.tmp" "${cmd}"
+            COMMAND "${CMAKE_SOURCE_DIR}/tools/bundle_static.sh" "--ar" "${CMAKE_AR}" "--ld" "${LD_LINKER}" "-o" "$<TARGET_FILE:${TARGET}>" "$<TARGET_FILE:${TARGET}>.tmp" "${cmd}"
             COMMAND_EXPAND_LISTS
             VERBATIM
         )
@@ -99,22 +105,10 @@ function(bundle_static TARGET)
 
     _bundle_static_check_output(version_info "${CMAKE_AR}" V)
     if (version_info MATCHES "GNU")
-        string(CONFIGURE [[
-            create $<TARGET_FILE:@TARGET@>
-            addlib $<TARGET_FILE:@TARGET@>.tmp
-            $<LIST:JOIN,$<LIST:TRANSFORM,@cmd@,PREPEND,addlib >,
-            >
-            save
-            end
-        ]] mri_script)
-        string(REGEX REPLACE "(^|\n) +" "\\1" mri_script "${mri_script}")
-
-        file(GENERATE OUTPUT "fuse-${TARGET}.mri"
-             CONTENT "${mri_script}" TARGET "${TARGET}")
-
         add_custom_command(
             TARGET "${TARGET}" POST_BUILD
-            COMMAND "${CMAKE_AR}" -M < "${CMAKE_CURRENT_BINARY_DIR}/fuse-${TARGET}.mri"
+            COMMAND "${CMAKE_SOURCE_DIR}/tools/bundle_static.sh" "--ar" "${CMAKE_AR}" "--ld" "${LD_LINKER}" "-o" "$<TARGET_FILE:${TARGET}>" "$<TARGET_FILE:${TARGET}>.tmp" "${cmd}"
+            COMMAND_EXPAND_LISTS
             VERBATIM
         )
         return()
