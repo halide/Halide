@@ -1,27 +1,25 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(GPUDynamicShared, Basic) {
     Target t = get_jit_target_from_environment();
     if (!t.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled.";
     }
 
     if (t.has_feature(Target::Vulkan)) {
         const auto *interface = get_device_interface_for_device_api(DeviceAPI::Vulkan);
-        assert(interface->compute_capability != nullptr);
-        int major, minor;
+        ASSERT_NE(interface, nullptr);
+        ASSERT_NE(interface->compute_capability, nullptr);
+        int major = 0, minor = 0;
         int err = interface->compute_capability(nullptr, &major, &minor);
         if (err != 0 || (major == 1 && minor < 3)) {
-            printf("[SKIP] Vulkan %d.%d is less than required 1.3.\n", major, minor);
-            return 0;
+            GTEST_SKIP() << "Vulkan " << major << "." << minor << " is less than required 1.3.";
         }
         if ((t.os == Target::IOS) || (t.os == Target::OSX)) {
-            printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK doesn't support dynamic LocalSizeId yet)!\n");
-            return 0;
+            GTEST_SKIP() << "Skipping test for Vulkan on iOS/OSX (MoltenVK doesn't support dynamic LocalSizeId yet)!";
         }
     }
 
@@ -46,17 +44,10 @@ int main(int argc, char **argv) {
 
             // The amount of shared/heap memory required varies with x
             Buffer<int> out = g.realize({100});
-            for (int x = 0; x < 100; x++) {
-                int correct = 3 * x;
-                if (out(x) != correct) {
-                    printf("out[%d|%d](%d) = %d instead of %d\n",
-                           per_thread, (int)memory_type, x, out(x), correct);
-                    return 1;
-                }
+            for (int ix = 0; ix < 100; ix++) {
+                int correct = 3 * ix;
+                ASSERT_EQ(out(ix), correct) << "out[" << per_thread << "|" << (int)memory_type << "](" << ix << ")";
             }
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

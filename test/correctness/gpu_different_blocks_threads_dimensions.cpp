@@ -1,11 +1,11 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(GPUDifferentBlocksThreadsDimensions, Basic) {
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled.";
     }
 
     Func f, g;
@@ -26,9 +26,5 @@ int main(int argc, char **argv) {
         .store_in(MemoryType::Heap)
         .gpu_threads(x, y);
 
-    g.compile_jit();
-
-    printf("Success!\n");
-
-    return 0;
+    EXPECT_NO_THROW(g.compile_jit());
 }

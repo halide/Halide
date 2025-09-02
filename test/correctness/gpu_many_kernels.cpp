@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <algorithm>
+#include <gtest/gtest.h>
 
 #include "halide_benchmark.h"
 
@@ -12,7 +13,7 @@ using namespace Halide;
 
 constexpr size_t kNumKernels = 70;
 
-int main(int argc, char **argv) {
+TEST(GPUManyKernels, Basic) {
     Var x, y, xi, yi;
     Func adders[kNumKernels];
     ImageParam input(Int(32), 2);
@@ -29,7 +30,7 @@ int main(int argc, char **argv) {
         i += 1;
     }
 
-    auto start = Halide::Tools::benchmark_now();
+    auto start = Tools::benchmark_now();
 
     Buffer<int32_t> buf_a_store(32, 32);
     Buffer<int32_t> buf_b_store(32, 32);
@@ -43,12 +44,12 @@ int main(int argc, char **argv) {
     }
     buf_in->copy_to_host();
 
-    auto end = Halide::Tools::benchmark_now();
-    double initial_runtime = Halide::Tools::benchmark_duration_seconds(start, end);
+    auto end = Tools::benchmark_now();
+    RecordProperty("initial_runtime_seconds", Tools::benchmark_duration_seconds(start, end));
 
-    buf_in->for_each_value([](int32_t x) { assert(x == (kNumKernels * (kNumKernels + 1)) / 2); });
+    buf_in->for_each_value([](int32_t x) { ASSERT_EQ(x, (kNumKernels * (kNumKernels + 1)) / 2); });
 
-    start = Halide::Tools::benchmark_now();
+    start = Tools::benchmark_now();
 
     buf_in->fill(0);
     for (Func &f : adders) {
@@ -58,10 +59,10 @@ int main(int argc, char **argv) {
     }
     buf_in->copy_to_host();
 
-    end = Halide::Tools::benchmark_now();
-    double precompiled_runtime = Halide::Tools::benchmark_duration_seconds(start, end);
+    end = Tools::benchmark_now();
+    RecordProperty("precompiled_runtime_seconds", Tools::benchmark_duration_seconds(start, end));
 
-    buf_in->for_each_value([](int32_t x) { assert(x == (kNumKernels * (kNumKernels + 1)) / 2); });
+    buf_in->for_each_value([](int32_t x) { ASSERT_EQ(x, (kNumKernels * (kNumKernels + 1)) / 2); });
 
     buf_a_store.device_free();
     buf_b_store.device_free();
@@ -70,7 +71,7 @@ int main(int argc, char **argv) {
         device->device_release(nullptr, device);
     }
 
-    start = Halide::Tools::benchmark_now();
+    start = Tools::benchmark_now();
 
     buf_in->fill(0);
     for (Func &f : adders) {
@@ -80,13 +81,8 @@ int main(int argc, char **argv) {
     }
     buf_in->copy_to_host();
 
-    end = Halide::Tools::benchmark_now();
-    double second_runtime = Halide::Tools::benchmark_duration_seconds(start, end);
+    end = Tools::benchmark_now();
+    RecordProperty("second_runtime_seconds", Tools::benchmark_duration_seconds(start, end));
 
-    buf_in->for_each_value([](int32_t x) { assert(x == (kNumKernels * (kNumKernels + 1)) / 2); });
-
-    printf("Initial runtime %f, precompiled runtime %f, second runtime %f.\n", initial_runtime, precompiled_runtime, second_runtime);
-
-    printf("Success!\n");
-    return 0;
+    buf_in->for_each_value([](int32_t x) { ASSERT_EQ(x, (kNumKernels * (kNumKernels + 1)) / 2); });
 }

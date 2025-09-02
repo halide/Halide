@@ -1,13 +1,12 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(GPUMixedDimensionality, Basic) {
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled.";
     }
 
     Func f("f"), g("g"), h("h"), out("out");
@@ -37,19 +36,12 @@ int main(int argc, char **argv) {
 
     Buffer<int> o = out.realize({64, 64, 64});
 
-    for (int z = 0; z < 64; z++) {
-        for (int y = 0; y < 64; y++) {
-            for (int x = 0; x < 64; x++) {
-                int correct = x + y + z + 4;
-                if (o(x, y, z) != correct) {
-                    printf("out(%d, %d, %d) = %d instead of %d\n",
-                           x, y, z, o(x, y, z), correct);
-                    return 1;
-                }
+    for (int zz = 0; zz < 64; zz++) {
+        for (int yy = 0; yy < 64; yy++) {
+            for (int xx = 0; xx < 64; xx++) {
+                int correct = xx + yy + zz + 4;
+                ASSERT_EQ(o(xx, yy, zz), correct) << "out(" << xx << ", " << yy << ", " << zz << ")";
             }
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

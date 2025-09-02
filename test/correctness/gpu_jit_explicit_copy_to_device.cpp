@@ -1,38 +1,40 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(GPUJITExplicitCopyToDevice, Basic) {
     Target target = get_jit_target_from_environment();
 
     if (!target.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled.";
     }
 
     // We'll have two input buffers. For one we'll copy to the device
     // explicitly. For the other we'll do a device malloc and set
     // host_dirty.
     for (DeviceAPI d : {DeviceAPI::Default_GPU, DeviceAPI::CUDA, DeviceAPI::OpenCL}) {
-        if (!get_device_interface_for_device_api(d)) continue;
+        if (!get_device_interface_for_device_api(d)) {
+            continue;
+        }
 
         Buffer<float> a(100, 100), b(100, 100);
 
-        assert(!a.host_dirty());
+        EXPECT_FALSE(a.host_dirty());
         a.fill(2.0f);
-        assert(!a.has_device_allocation());
-        assert(a.host_dirty());
+        EXPECT_FALSE(a.has_device_allocation());
+        EXPECT_TRUE(a.host_dirty());
         a.copy_to_device(d);
-        assert(a.has_device_allocation());
-        assert(!a.host_dirty());
+        EXPECT_TRUE(a.has_device_allocation());
+        EXPECT_FALSE(a.host_dirty());
 
-        assert(!b.host_dirty());
+        EXPECT_FALSE(b.host_dirty());
         b.fill(3.0f);
-        assert(!b.has_device_allocation());
-        assert(b.host_dirty());
+        EXPECT_FALSE(b.has_device_allocation());
+        EXPECT_TRUE(b.host_dirty());
         b.device_malloc(d);
-        assert(b.has_device_allocation());
-        assert(b.host_dirty());
+        EXPECT_TRUE(b.has_device_allocation());
+        EXPECT_TRUE(b.host_dirty());
 
         Func f;
         Var x, y, tx, ty;
@@ -41,14 +43,10 @@ int main(int argc, char **argv) {
 
         Buffer<float> out = f.realize({100, 100});
 
-        out.for_each_value([&](float f) {
-            if (f != 7.0f) {
-                printf("%f != 4.0f\n", f);
-                abort();
+        for (int yy = 0; yy < out.height(); yy++) {
+            for (int xx = 0; xx < out.width(); xx++) {
+                ASSERT_EQ(out(xx, yy), 7.0f) << "at (" << xx << "," << yy << ") for DeviceAPI=" << (int)d;
             }
-        });
+        }
     }
-
-    printf("Success!\n");
-    return 0;
 }

@@ -144,19 +144,19 @@ target_sources(
     #        gpu_assertion_in_kernel.cpp
     #        gpu_bounds_inference_failure.cpp
     gpu_condition_lifting.cpp
-    #    gpu_cpu_simultaneous_read.cpp
-    #    gpu_data_flows.cpp
-    #    gpu_different_blocks_threads_dimensions.cpp
-    #    gpu_dynamic_shared.cpp
-    #    gpu_f16_intrinsics.cpp
-    #    gpu_free_sync.cpp
-    #    gpu_give_input_buffers_device_allocations.cpp
-    #    gpu_jit_explicit_copy_to_device.cpp
-    #    gpu_large_alloc.cpp
-    #    gpu_many_kernels.cpp
-    #    gpu_metal_completion_handler_error_check.cpp
-    #    gpu_mixed_dimensionality.cpp
-    #    gpu_mixed_shared_mem_types.cpp
+    gpu_cpu_simultaneous_read.cpp
+    gpu_data_flows.cpp
+    gpu_different_blocks_threads_dimensions.cpp
+    gpu_dynamic_shared.cpp
+    gpu_f16_intrinsics.cpp
+    gpu_free_sync.cpp
+    gpu_give_input_buffers_device_allocations.cpp
+    gpu_jit_explicit_copy_to_device.cpp
+    gpu_large_alloc.cpp
+    gpu_many_kernels.cpp
+    gpu_metal_completion_handler_error_check.cpp
+    gpu_mixed_dimensionality.cpp
+    gpu_mixed_shared_mem_types.cpp
     gpu_multi_device.cpp
     #    gpu_multi_kernel.cpp
     #    gpu_non_contiguous_copy.cpp

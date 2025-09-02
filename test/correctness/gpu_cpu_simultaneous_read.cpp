@@ -1,13 +1,12 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main() {
-
+TEST(GPUCPUSimultaneousRead, Basic) {
     Target target = get_jit_target_from_environment();
     if (!target.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled.";
     }
 
     Var x, y, xi, yi;
@@ -36,23 +35,12 @@ int main() {
     table.set(t);
     Buffer<int32_t> result2 = h.realize({20, 20});
 
-    for (int y = 0; y < 20; y++) {
-        for (int x = 0; x < 20; x++) {
-            int c1 = x * 2 + y + (x == 0 ? 0 : 17);
-            int c2 = x + y * 2 + (y == 0 ? 1 : 17);
-            if (result1(x, y) != c1) {
-                printf("result1(%d, %d) = %d instead of %d\n",
-                       x, y, result1(x, y), c1);
-                return 1;
-            }
-            if (result2(x, y) != c2) {
-                printf("result2(%d, %d) = %d instead of %d\n",
-                       x, y, result2(x, y), c2);
-                return 1;
-            }
+    for (int yy = 0; yy < 20; yy++) {
+        for (int xx = 0; xx < 20; xx++) {
+            int c1 = xx * 2 + yy + (xx == 0 ? 0 : 17);
+            int c2 = xx + yy * 2 + (yy == 0 ? 1 : 17);
+            ASSERT_EQ(result1(xx, yy), c1) << "result1(" << xx << ", " << yy << ")";
+            ASSERT_EQ(result2(xx, yy), c2) << "result2(" << xx << ", " << yy << ")";
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }
