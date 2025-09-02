@@ -3,20 +3,6 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
-class CheckThreadExtent : public IRVisitor {
-    using IRVisitor::visit;
-    void visit(const For *op) override {
-        if (op->for_type == ForType::GPUThread) {
-            // Assert the min and extent to be 0 and 16 for this particular test case
-            auto min = as_const_int(op->min);
-            auto extent = as_const_int(op->extent);
-            assert(min && (*min == 0));
-            assert(extent && (*extent == 16));
-        }
-        IRVisitor::visit(op);
-    }
-};
-
 int main(int argc, char **argv) {
     // Canonical GPU for loop names are uniqued to make sure they don't collide
     // with user-provided names. We'll test that works by trying for a collision:
@@ -56,9 +42,28 @@ int main(int argc, char **argv) {
         .gpu_threads(x, y);
 
     // Lower it and inspect the IR to verify the min/extent of GPU thread loops
-    Module m = consumer.compile_to_module({consumer.infer_arguments()}, "fuse_gpu_threads", target);
-    CheckThreadExtent c;
-    m.functions().front().body.accept(&c);
+    struct : IRMutator {
+        using IRMutator::visit;
+        std::vector<const For *> loops;
+        Stmt visit(const For *op) override {
+            if (op->for_type == ForType::GPUThread) {
+                loops.push_back(op);
+            }
+            return IRMutator::visit(op);
+        }
+    } c;
+
+    consumer.add_custom_lowering_pass(&c, nullptr);
+    consumer.compile_jit();
+
+    assert(!c.loops.empty());
+    for (const For *op : c.loops) {
+        // Assert the min and extent to be 0 and 16 for this particular test case
+        auto min = as_const_int(op->min);
+        auto extent = as_const_int(op->extent);
+        assert(min && *min == 0);
+        assert(extent && *extent == 16);
+    }
 
     printf("Success!\n");
     return 0;
