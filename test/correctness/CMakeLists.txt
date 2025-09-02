@@ -138,7 +138,6 @@ target_sources(
     #    fuzz_simplify.cpp  # TODO: move this to fuzz tests?
     gameoflife.cpp
     gather.cpp
-    gpu_allocation_cache.cpp
     gpu_alloc_group_profiling.cpp
     gpu_arg_types.cpp
     gpu_assertion_in_kernel.cpp
@@ -392,6 +391,7 @@ target_sources(
     #    extern_stage.cpp
     #    func_clone.cpp
     #    func_wrapper.cpp
+    gpu_allocation_cache.cpp
     #    image_wrapper.cpp
     #    interpreter.cpp
     #    legal_race_condition.cpp
