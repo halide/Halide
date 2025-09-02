@@ -137,7 +137,7 @@ target_sources(
     fuzz_schedule.cpp
     #    fuzz_simplify.cpp  # TODO: move this to fuzz tests?
     gameoflife.cpp
-    #    gather.cpp
+    gather.cpp
     #    gpu_allocation_cache.cpp
     #    gpu_alloc_group_profiling.cpp
     #    gpu_arg_types.cpp
