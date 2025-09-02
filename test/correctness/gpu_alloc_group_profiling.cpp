@@ -1,13 +1,12 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char *argv[]) {
-
+TEST(GPUAllocGroupProfiling, Basic) {
     Target t = get_jit_target_from_environment();
     if (!t.has_gpu_feature()) {
-        printf("[SKIP] GPU not enabled\n");
-        return 0;
+        GTEST_SKIP() << "GPU not enabled";
     }
 
     // There was a bug that causes the inject profiling logic to try to
@@ -43,10 +42,6 @@ int main(int argc, char *argv[]) {
     result.print_loop_nest();
 
     t.set_feature(Target::Profile);  // Make sure profiling is enabled!
-    result.compile_jit(t);
-    result.realize({64, 64}, t);
-    // result.compile_to_conceptual_stmt("gpu_alloc_group_profiling.stmt.html", {}, Halide::HTML, t);
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(result.compile_jit(t));
+    EXPECT_NO_THROW(result.realize({64, 64}, t));
 }

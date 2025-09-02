@@ -1,16 +1,10 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-// from issue #3221
-int main(int argc, char *argv[]) {
-
-    Target t = get_jit_target_from_environment();
-    if (!t.has_feature(Target::CUDA)) {
-        printf("[SKIP] CUDA not enabled\n");
-        return 0;
-    }
-
+// From: https://github.com/halide/Halide/issues/3221
+TEST(GPUBoundsInferenceFailure, Basic) {
     Var x, y, p, d;
 
     Func f1, f2;
@@ -36,8 +30,5 @@ int main(int argc, char *argv[]) {
     d2.compute_root().gpu_blocks(p);
 
     // this used to cause an assertion error
-    result.compile_jit(Target("host-cuda"));
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(result.compile_jit(Target("host-cuda")));
 }

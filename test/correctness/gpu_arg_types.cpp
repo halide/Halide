@@ -1,11 +1,11 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
-int main(int argc, char *argv[]) {
 
+TEST(GPUArgTypes, Basic) {
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled";
     }
 
     Func f, g;
@@ -24,13 +24,6 @@ int main(int argc, char *argv[]) {
     out.copy_to_host();
 
     for (int i = 0; i < 256; i++) {
-        if (out(i) != out2(i)) {
-            printf("Incorrect result at %d: %d != %d\n", i, out(i), out2(i));
-            printf("Failed\n");
-            return 1;
-        }
+        ASSERT_EQ(out(i), out2(i)) << "Incorrect result at " << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }
