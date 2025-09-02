@@ -20,7 +20,7 @@ target_sources(
     argmax.cpp
     async_device_copy.cpp
     async_order.cpp
-    async_storage_folding.cpp
+    async_storage_folding.cpp  # TODO: Disabled. This test deadlocks. See #3293
     autodiff.cpp
     bad_likely.cpp
     bit_counting.cpp
@@ -154,7 +154,7 @@ target_sources(
     gpu_jit_explicit_copy_to_device.cpp
     gpu_large_alloc.cpp
     gpu_many_kernels.cpp
-    gpu_metal_completion_handler_error_check.cpp
+    gpu_metal_completion_handler_error_check.cpp  # TODO: Disabled. Broken on M3 Max.
     gpu_mixed_dimensionality.cpp
     gpu_mixed_shared_mem_types.cpp
     gpu_multi_device.cpp
