@@ -4,7 +4,7 @@ Halide is a programming language designed to make it easier to write
 high-performance image and array processing code on modern machines. Halide
 currently targets:
 
-- CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V
+- CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V, WebAssembly
 - Operating systems: Linux, Windows, macOS, Android, iOS, Qualcomm QuRT
 - GPU Compute APIs: CUDA, OpenCL, Apple Metal, Microsoft Direct X 12, Vulkan
 
@@ -86,7 +86,7 @@ need to adjust compiler options accordingly if you're using an older XCode which
 does not default to libc++.
 
 We use a recent Ubuntu LTS to build the Linux releases; if your distribution is
-too old, it might not have the requisite glibc. 
+too old, it might not have the requisite glibc.
 
 Nightly builds of Halide and the LLVM versions we use in CI are also available
 at https://buildbot.halide-lang.org/
@@ -384,7 +384,7 @@ Now you should be able to just run `make` in the root directory of the Halide
 source tree. `make run_tests` will run the JIT test suite, and `make test_apps`
 will make sure all the apps compile and run (but won't check their output).
 
-When building the tests, you can set the AOT compilation target with the 
+When building the tests, you can set the AOT compilation target with the
 `HL_TARGET` environment variable.
 
 ### Building Halide out-of-tree with make
