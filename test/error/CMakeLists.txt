@@ -52,6 +52,7 @@ tests(GROUPS error
       device_target_mismatch.cpp
       dupe_param_name.cpp
       expanding_reduction.cpp
+      extern_device_function_with_no_target_support.cpp
       extern_func_self_argument.cpp
       five_d_gpu_buffer.cpp
       float_arg.cpp
