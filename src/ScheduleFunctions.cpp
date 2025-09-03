@@ -2213,6 +2213,17 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
+    if (f.has_extern_definition()) {
+        const auto api = f.extern_function_device_api();
+        if (!target.supports_device_api(api)) {
+            user_error << "Func " << f.name() << " has an extern definition that "
+                       << "may leave the output with a dirty " << api << " device allocation,"
+                       << " but no compatible target feature is enabled in target "
+                       << target.to_string() << ", so the pipeline would not be able to "
+                       << "copy back the result.";
+        }
+    }
+
     int racy_shift_inwards_count = 0;
     int allow_race_conditions_count = 0;
     for (const Definition &def : definitions) {
