@@ -3,7 +3,26 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
+const int N = 1024 * 1024 * 3;
+
+void paint_stack() {
+    char *ptr = (char *)__builtin_alloca(N * 2);
+    memset(ptr, 0x42, N * 2);
+}
+
+void check_stack() {
+    char *ptr = (char *)__builtin_alloca(N);
+    asm volatile("" : : "r"(ptr) : "memory");
+    int i = 0;
+    while (ptr[i] == 0x42) {
+        i++;
+    }
+    printf("Peak stack usage = %d kb\n", (N - i) / 1024);
+}
+
 int main(int argc, char **argv) {
+
+    paint_stack();
 
     // There were scalability problems with taking bounds of nested pure
     // intrinsics. This test hangs if those problems still exist, using the
@@ -27,7 +46,9 @@ int main(int argc, char **argv) {
         bounds_of_expr_in_scope(e, scope);
     }
 
-    printf("Success!\n");
+    // printf("Success!\n");
 
-    return 0;
+    check_stack();
+
+    return -1;
 }
