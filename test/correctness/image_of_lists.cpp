@@ -1,9 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 #include <list>
 
 using namespace Halide;
+
+namespace {
 
 extern "C" HALIDE_EXPORT_SYMBOL std::list<int> *list_create(int) {
     return new std::list<int>();
@@ -18,10 +20,11 @@ extern "C" HALIDE_EXPORT_SYMBOL std::list<int> *list_maybe_insert(std::list<int>
 }
 HalideExtern_3(std::list<int> *, list_maybe_insert, std::list<int> *, bool, int);
 
-int main(int argc, char **argv) {
+}  // namespace
+
+TEST(ImageOfListsTest, Basic) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support passing arbitrary pointers to/from HalideExtern code.\n");
-        return 0;
+        GTEST_SKIP() << "WebAssembly JIT does not support passing arbitrary pointers to/from HalideExtern code.";
     }
 
     // Compute the list of factors of all numbers < 100
@@ -44,19 +47,9 @@ int main(int argc, char **argv) {
     // Inspect the results for correctness
     for (int i = 0; i < 100; i++) {
         std::list<int> *list = result(i);
-        // printf("Factors of %d: ", i);
-        for (std::list<int>::iterator iter = list->begin(); iter != list->end(); iter++) {
-            int factor = *iter;
-            if (i % factor) {
-                printf("Error: %d is not a factor of %d\n", factor, i);
-                return 1;
-            }
-            // printf("%d ", factor);
+        for (int factor : *list) {
+            EXPECT_EQ(i % factor, 0) << "Error: " << factor << " is not a factor of " << i;
         }
-        // printf("\n");
         delete list;
     }
-
-    printf("Success!\n");
-    return 0;
 }

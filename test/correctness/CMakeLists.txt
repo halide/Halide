@@ -186,16 +186,16 @@ target_sources(
     hoist_storage.cpp
     #    host_alignment.cpp
     #    image_io.cpp
-    #    image_of_lists.cpp
-    #    implicit_args.cpp
-    #    implicit_args_tests.cpp
-    #    in_place.cpp
-    #    indexing_access_undef.cpp
-    #    infer_arguments.cpp
-    #    inline_reduction.cpp
-    #    inlined_generator.cpp
-    #    input_image_bounds_check.cpp
-    #    input_larger_than_two_gigs.cpp
+    image_of_lists.cpp
+    implicit_args.cpp
+    implicit_args_tests.cpp
+    in_place.cpp
+    indexing_access_undef.cpp
+    infer_arguments.cpp
+    inline_reduction.cpp
+    inlined_generator.cpp
+    input_image_bounds_check.cpp
+    input_larger_than_two_gigs.cpp
     integer_powers.cpp
     #    interleave.cpp
     #    interleave_rgb.cpp

@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(InPlaceTest, SumScan) {
     Func f;
     Var x;
 
@@ -30,11 +30,10 @@ int main(int argc, char **argv) {
 
     float err = evaluate_may_gpu<float>(sum(abs(data(r) - reference_out(r))));
 
-    if (err > 0.0001f) {
-        printf("Failed\n");
-        return 1;
-    }
+    EXPECT_LE(err, 0.0001f);
+}
 
+TEST(InPlaceTest, ConditionalStoreWithUndef) {
     // Undef on one side of a select doesn't destroy the entire
     // select. Instead, it makes the containing store conditionally
     // not occur using an if statement. You probably shouldn't use
@@ -50,10 +49,12 @@ int main(int argc, char **argv) {
     // page in the middle of your halide_buffer_t is memprotected as read
     // only and you can't store to it safely, or if you have some
     // weird memory mapping or race condition for which loading then
-    // storing the same value has undesireable side-effects.
+    // storing the same value has undesirable side-effects.
 
-    // This sets the even numbered entires to 1.
-    data = lambda(x, sin(x)).realize({100});
+    Var x;
+
+    // This sets the even-numbered entries to 1.
+    Buffer<float> data = lambda(x, sin(x)).realize({100});
     Func h;
     h(x) = select(x % 2 == 0, 1.0f, undef<float>());
     h.vectorize(x, 4);
@@ -63,12 +64,6 @@ int main(int argc, char **argv) {
         if (x % 2 == 0) {
             correct = 1.0;
         }
-        if (fabs(data(x) - correct) > 0.001) {
-            printf("data(%d) = %f instead of %f\n", x, data(x), correct);
-            return 1;
-        }
+        EXPECT_NEAR(data(x), correct, 0.001) << "data(" << x << ") = " << data(x) << " instead of " << correct;
     }
-
-    printf("Success!\n");
-    return 0;
 }

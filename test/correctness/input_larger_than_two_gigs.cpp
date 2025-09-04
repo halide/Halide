@@ -1,16 +1,19 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <memory>
-#include <stdio.h>
 
 using namespace Halide;
 
+namespace {
+
 int error_occurred = false;
 void halide_error(JITUserContext *ctx, const char *msg) {
-    printf("Expected: %s\n", msg);
     error_occurred = true;
 }
 
-int main(int argc, char **argv) {
+}  // namespace
+
+TEST(InputLargerThanTwoGigsTest, LargeBufferHandling) {
     uint8_t c[4096];
     memset(c, 42, sizeof(c));
 
@@ -32,14 +35,12 @@ int main(int argc, char **argv) {
     Buffer<uint64_t> result;
     if (t.bits != 32) {
         grand_total.compile_jit(t.with_feature(Target::LargeBuffers));
-        result = grand_total.realize();
-        assert(!error_occurred);
-        assert(result(0) == (uint64_t)84);
+        ASSERT_NO_THROW(result = grand_total.realize());
+        EXPECT_FALSE(error_occurred);
+        EXPECT_EQ(result(0), 84);
     }
 
-    grand_total.compile_jit(t);
-    result = grand_total.realize();
-    assert(error_occurred);
-
-    printf("Success!\n");
+    ASSERT_NO_THROW(grand_total.compile_jit(t));
+    ASSERT_NO_THROW(grand_total.realize(result));
+    EXPECT_TRUE(error_occurred);
 }

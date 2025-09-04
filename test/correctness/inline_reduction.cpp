@@ -1,10 +1,10 @@
 #include "Halide.h"
 #include <algorithm>
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(InlineReductionTest, LocalVariance) {
     // Compute the variance of a 3x3 patch about each pixel
     RDom r(-1, 3, -1, 3);
 
@@ -35,10 +35,7 @@ int main(int argc, char **argv) {
             float correct = local_variance / 81.0f - local_mean * local_mean;
             float r = result(x, y);
             float delta = correct - r;
-            if (delta < -0.001 || delta > 0.001) {
-                printf("result(%d, %d) was %f instead of %f\n", x, y, r, correct);
-                return 1;
-            }
+            EXPECT_NEAR(r, correct, 0.001) << "result(" << x << ", " << y << ") was " << r << " instead of " << correct;
         }
     }
 
@@ -85,30 +82,19 @@ int main(int argc, char **argv) {
                 }
             }
 
-            float delta;
-            delta = (correct_prod + 10) / (prod_im(x, y) + 10);
-            if (delta < 0.99 || delta > 1.01) {
-                printf("prod_im(%d, %d) = %f instead of %f\n", x, y, prod_im(x, y), correct_prod);
-                return 1;
-            }
+            // TODO: use RelativelyNear here.
+            float delta = (correct_prod + 10) / (prod_im(x, y) + 10);
+            EXPECT_GE(delta, 0.99) << "prod_im(" << x << ", " << y << ") = " << prod_im(x, y) << " instead of " << correct_prod;
+            EXPECT_LE(delta, 1.01) << "prod_im(" << x << ", " << y << ") = " << prod_im(x, y) << " instead of " << correct_prod;
 
-            delta = correct_min - min_im(x, y);
-            if (delta < -0.001 || delta > 0.001) {
-                printf("min_im(%d, %d) = %f instead of %f\n", x, y, min_im(x, y), correct_min);
-                return 1;
-            }
+            EXPECT_NEAR(min_im(x, y), correct_min, 0.001)
+                << "min_im(" << x << ", " << y << ")";
 
-            delta = correct_min - min_im_separable(x, y);
-            if (delta < -0.001 || delta > 0.001) {
-                printf("min_im(%d, %d) = %f instead of %f\n", x, y, min_im_separable(x, y), correct_min);
-                return 1;
-            }
+            EXPECT_NEAR(min_im_separable(x, y), correct_min, 0.001)
+                << "min_im_separable(" << x << ", " << y << ")";
 
-            delta = correct_max - max_im(x, y);
-            if (delta < -0.001 || delta > 0.001) {
-                printf("max_im(%d, %d) = %f instead of %f\n", x, y, max_im(x, y), correct_max);
-                return 1;
-            }
+            EXPECT_NEAR(max_im(x, y), correct_max, 0.001)
+                << "max_im(" << x << ", " << y << ")";
         }
     }
 
@@ -122,12 +108,9 @@ int main(int argc, char **argv) {
 
     // The inner Func ends with with _0, _1, etc as its free vars.
     auto args = sum_implicit_inner.args();
-    if (args.size() != 2 ||
-        args[0].name() != Var(_0).name() ||
-        args[1].name() != Var(_1).name()) {
-        printf("sum_implicit_inner has the wrong args\n");
-        return 1;
-    }
+    EXPECT_EQ(args.size(), 2) << "sum_implicit_inner has the wrong args";
+    EXPECT_EQ(args[0].name(), Var(_0).name()) << "sum_implicit_inner has the wrong args";
+    EXPECT_EQ(args[1].name(), Var(_1).name()) << "sum_implicit_inner has the wrong args";
 
     Func product_implicit;
     product_implicit(_) = product(input_3d(_, all_z));
@@ -153,16 +136,10 @@ int main(int argc, char **argv) {
     // (this used to be buggy due to the minimum float being the
     // smallest positive float instead of the smallest float).
     float result_f32 = evaluate<float>(minimum(RDom(0, 11) * -0.5f));
-    if (result_f32 != -5.0f) {
-        printf("minimum is %f instead of -5.0f\n", result_f32);
-        return 1;
-    }
+    EXPECT_EQ(result_f32, -5.0f) << "minimum is " << result_f32 << " instead of -5.0f";
 
     double result_f64 = evaluate<double>(minimum(RDom(0, 11) * cast<double>(-0.5f)));
-    if (result_f64 != -5.0) {
-        printf("minimum is %f instead of -5.0\n", result_f64);
-        return 1;
-    }
+    EXPECT_EQ(result_f64, -5.0) << "minimum is " << result_f64 << " instead of -5.0";
 
     // Check that min of a bunch of infinities is infinity.
     // Be sure to use strict_float() so that LLVM doesn't optimize away
@@ -170,26 +147,11 @@ int main(int argc, char **argv) {
     const float inf_f32 = std::numeric_limits<float>::infinity();
     const double inf_f64 = std::numeric_limits<double>::infinity();
     result_f32 = evaluate<float>(minimum(strict_float(RDom(1, 10) * inf_f32)));
-    if (result_f32 != inf_f32) {
-        printf("minimum is %f instead of infinity\n", result_f32);
-        return 1;
-    }
+    EXPECT_EQ(result_f32, inf_f32) << "minimum is " << result_f32 << " instead of infinity";
     result_f64 = evaluate<double>(minimum(strict_float(RDom(1, 10) * Expr(inf_f64))));
-    if (result_f64 != inf_f64) {
-        printf("minimum is %f instead of infinity\n", result_f64);
-        return 1;
-    }
+    EXPECT_EQ(result_f64, inf_f64) << "minimum is " << result_f64 << " instead of infinity";
     result_f32 = evaluate<float>(maximum(strict_float(RDom(1, 10) * -inf_f32)));
-    if (result_f32 != -inf_f32) {
-        printf("maximum is %f instead of -infinity\n", result_f32);
-        return 1;
-    }
+    EXPECT_EQ(result_f32, -inf_f32) << "maximum is " << result_f32 << " instead of -infinity";
     result_f64 = evaluate<double>(maximum(strict_float(RDom(1, 10) * Expr(-inf_f64))));
-    if (result_f64 != -inf_f64) {
-        printf("maximum is %f instead of -infinity\n", result_f64);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(result_f64, -inf_f64) << "maximum is " << result_f64 << " instead of -infinity";
 }
