@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(InterleaveXTest, Basic) {
     Var x("x"), y("y");
 
     Func interleaved("interleaved");
@@ -25,14 +24,7 @@ int main(int argc, char **argv) {
     for (int y = 0; y < out.height(); y++) {
         for (int x = 0; x < out.width(); x++) {
             uint16_t correct = x % 2 == 0 ? 3 : 7;
-            if (out(x, y) != correct) {
-                printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), correct);
-                return 1;
-            }
+            ASSERT_EQ(out(x, y), correct) << "out(" << x << ", " << y << ")";
         }
     }
-
-    printf("Success!\n");
-
-    return 0;
 }

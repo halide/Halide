@@ -1,11 +1,13 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
+
 #include <math.h>
-#include <stdio.h>
 
 using std::vector;
 using namespace Halide;
 using namespace Halide::Internal;
 
+namespace {
 class CountInterleaves : public IRVisitor {
 public:
     int result;
@@ -35,15 +37,6 @@ int count_interleaves(Func f) {
     return i.result;
 }
 
-void check_interleave_count(Func f, int correct) {
-    int c = count_interleaves(f);
-    if (c < correct) {
-        printf("Func %s should have interleaved >= %d times but interleaved %d times instead.\n",
-               f.name().c_str(), correct, c);
-        exit(1);
-    }
-}
-
 void define(FuncRef f, std::vector<Expr> values) {
     if (values.size() == 1) {
         f = values[0];
@@ -68,26 +61,28 @@ Expr element(FuncRef f, int i) {
         return f[i];
     }
 }
+}  // namespace
 
 // Make sure the interleave pattern generates good vector code
 
-int main(int argc, char **argv) {
+class InterleaveTest : public ::testing::Test {
+protected:
     Var x, y, c;
-
-    // TODO: Is this still true?
-    // As of May 26 2016, this test causes a segfault due to
-    // permissions failure on ARM-32 trying to execute a
-    // non-executable page when jitting. Started happening between
-    // llvm commits 270148 and 270159, but there's no obvious
-    // culprit. Just disabling it for now.
-    {
+    void SetUp() override {
+        // TODO: Is this still true?
+        // As of May 26 2016, this test causes a segfault due to
+        // permissions failure on ARM-32 trying to execute a
+        // non-executable page when jitting. Started happening between
+        // llvm commits 270148 and 270159, but there's no obvious
+        // culprit. Just disabling it for now.
         Target t = get_host_target();
         if (t.arch == Target::ARM && t.bits == 32) {
-            printf("[SKIP] Test is known to segfault on ARM-32 (see the source for more detail) .\n");
-            return 0;
+            GTEST_SKIP() << "Test is known to segfault on ARM-32 (see the source for more detail)";
         }
     }
+};
 
+TEST_F(InterleaveTest, BasicVectorCodeGeneration) {
     for (int elements = 1; elements <= 5; elements++) {
         Func f, g, h;
         std::vector<Expr> f_def, g_def;
@@ -108,186 +103,166 @@ int main(int argc, char **argv) {
         g.compute_root();
         h.vectorize(x, 8);
 
-        check_interleave_count(h, 1);
+        EXPECT_GE(count_interleaves(h), 1);
 
         Realization results = h.realize({16});
         for (int i = 0; i < elements; i++) {
             Buffer<float> result = results[i];
             for (int x = 0; x < 16; x++) {
                 float correct = ((x % 2) == 0) ? ((sinf(x / 2 + i))) : (cosf(x / 2 + i) * 17.0f);
-                float delta = result(x) - correct;
-                if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, result(x), correct);
-                    return 1;
-                }
+                EXPECT_NEAR(result(x), correct, 0.01) << "result(" << x << ") = " << result(x) << " instead of " << correct;
             }
         }
     }
+}
 
-    {
-        // Test interleave 3 vectors:
-        Func planar, interleaved;
-        planar(x, y) = Halide::cast<float>(3 * x + y);
-        interleaved(x, y) = planar(x, y);
+TEST_F(InterleaveTest, InterleaveThreeVectors) {
+    Func planar, interleaved;
+    planar(x, y) = Halide::cast<float>(3 * x + y);
+    interleaved(x, y) = planar(x, y);
 
-        Var xy("xy");
-        planar
-            .compute_at(interleaved, xy)
-            .vectorize(x, 4);
+    Var xy("xy");
+    planar
+        .compute_at(interleaved, xy)
+        .vectorize(x, 4);
 
-        interleaved
-            .reorder(y, x)
-            .bound(y, 0, 3)
-            .bound(x, 0, 16)
-            .fuse(y, x, xy)
-            .vectorize(xy, 12);
+    interleaved
+        .reorder(y, x)
+        .bound(y, 0, 3)
+        .bound(x, 0, 16)
+        .fuse(y, x, xy)
+        .vectorize(xy, 12);
 
-        interleaved
-            .output_buffer()
-            .dim(0)
-            .set_stride(3)
-            .dim(1)
-            .set_min(0)
-            .set_stride(1)
-            .set_extent(3);
+    interleaved
+        .output_buffer()
+        .dim(0)
+        .set_stride(3)
+        .dim(1)
+        .set_min(0)
+        .set_stride(1)
+        .set_extent(3);
 
-        Buffer<float> buff3(3, 16);
-        buff3.transpose(0, 1);
+    Buffer<float> buff3(3, 16);
+    buff3.transpose(0, 1);
 
-        interleaved.realize(buff3);
+    interleaved.realize(buff3);
 
-        check_interleave_count(interleaved, 1);
+    EXPECT_GE(count_interleaves(interleaved), 1);
 
-        for (int x = 0; x < 16; x++) {
-            for (int y = 0; y < 3; y++) {
-                float correct = 3 * x + y;
-                float delta = buff3(x, y) - correct;
-                if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, buff3(x, y), correct);
-                    return 1;
-                }
-            }
+    for (int x = 0; x < 16; x++) {
+        for (int y = 0; y < 3; y++) {
+            float correct = 3 * x + y;
+            EXPECT_NEAR(buff3(x, y), correct, 0.01) << "result(" << x << ") = " << buff3(x, y) << " instead of " << correct;
         }
     }
+}
 
-    {
-        // Test interleave 4 vectors:
-        Func f1, f2, f3, f4, f5;
-        f1(x) = sin(x);
-        f2(x) = sin(2 * x);
-        f3(x) = sin(3 * x);
-        f4(x) = sin(4 * x);
-        f5(x) = sin(5 * x);
+TEST_F(InterleaveTest, InterleaveFourVectors) {
+    Func f1, f2, f3, f4, f5;
+    f1(x) = sin(x);
+    f2(x) = sin(2 * x);
+    f3(x) = sin(3 * x);
+    f4(x) = sin(4 * x);
+    f5(x) = sin(5 * x);
 
-        Func output4;
-        output4(x, y) = select(y == 0, f1(x),
-                               y == 1, f2(x),
-                               y == 2, f3(x),
-                               f4(x));
+    Func output4;
+    output4(x, y) = select(y == 0, f1(x),
+                           y == 1, f2(x),
+                           y == 2, f3(x),
+                           f4(x));
 
-        output4
-            .reorder(y, x)
-            .bound(y, 0, 4)
-            .unroll(y)
-            .vectorize(x, 4);
+    output4
+        .reorder(y, x)
+        .bound(y, 0, 4)
+        .unroll(y)
+        .vectorize(x, 4);
 
-        output4.output_buffer()
-            .dim(0)
-            .set_stride(4)
-            .dim(1)
-            .set_min(0)
-            .set_stride(1)
-            .set_extent(4);
+    output4.output_buffer()
+        .dim(0)
+        .set_stride(4)
+        .dim(1)
+        .set_min(0)
+        .set_stride(1)
+        .set_extent(4);
 
-        check_interleave_count(output4, 1);
+    EXPECT_GE(count_interleaves(output4), 1);
 
-        Buffer<float> buff4(4, 16);
-        buff4.transpose(0, 1);
+    Buffer<float> buff4(4, 16);
+    buff4.transpose(0, 1);
 
-        output4.realize(buff4);
+    output4.realize(buff4);
 
-        for (int x = 0; x < 16; x++) {
-            for (int y = 0; y < 4; y++) {
-                float correct = sin((y + 1) * x);
-                float delta = buff4(x, y) - correct;
-                if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, buff4(x, y), correct);
-                    return 1;
-                }
-            }
-        }
-
-        // Test interleave 5 vectors:
-        Func output5;
-        output5(x, y) = select(y == 0, f1(x),
-                               y == 1, f2(x),
-                               y == 2, f3(x),
-                               y == 3, f4(x),
-                               f5(x));
-
-        output5
-            .reorder(y, x)
-            .bound(y, 0, 5)
-            .unroll(y)
-            .vectorize(x, 4);
-
-        output5.output_buffer()
-            .dim(0)
-            .set_stride(5)
-            .dim(1)
-            .set_min(0)
-            .set_stride(1)
-            .set_extent(5);
-
-        check_interleave_count(output5, 1);
-
-        Buffer<float> buff5(5, 16);
-        buff5.transpose(0, 1);
-
-        output5.realize(buff5);
-
-        for (int x = 0; x < 16; x++) {
-            for (int y = 0; y < 5; y++) {
-                float correct = sin((y + 1) * x);
-                float delta = buff5(x, y) - correct;
-                if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, buff5(x, y), correct);
-                    return 1;
-                }
-            }
+    for (int x = 0; x < 16; x++) {
+        for (int y = 0; y < 4; y++) {
+            float correct = sin((y + 1) * x);
+            EXPECT_NEAR(buff4(x, y), correct, 0.01) << "result(" << x << ") = " << buff4(x, y) << " instead of " << correct;
         }
     }
+}
+TEST_F(InterleaveTest, InterleaveFiveVectors) {
+    Func f1, f2, f3, f4, f5;
+    f1(x) = sin(x);
+    f2(x) = sin(2 * x);
+    f3(x) = sin(3 * x);
+    f4(x) = sin(4 * x);
+    f5(x) = sin(5 * x);
 
-    {
-        // Test interleaving inside of nested blocks
-        Func f1, f2, f3, f4, f5;
-        f1(x) = sin(x);
-        f1.compute_root();
+    Func output5;
+    output5(x, y) = select(y == 0, f1(x),
+                           y == 1, f2(x),
+                           y == 2, f3(x),
+                           y == 3, f4(x),
+                           f5(x));
 
-        f2(x) = sin(2 * x);
-        f2.compute_root();
+    output5
+        .reorder(y, x)
+        .bound(y, 0, 5)
+        .unroll(y)
+        .vectorize(x, 4);
 
-        Func unrolled;
-        unrolled(x, y) = select(x % 2 == 0, f1(x), f2(x)) + y;
+    output5.output_buffer()
+        .dim(0)
+        .set_stride(5)
+        .dim(1)
+        .set_min(0)
+        .set_stride(1)
+        .set_extent(5);
 
-        Var xi, yi;
-        unrolled.tile(x, y, xi, yi, 16, 2).unroll(xi, 2).vectorize(xi, 4).unroll(xi).unroll(yi);
+    EXPECT_GE(count_interleaves(output5), 1);
 
-        check_interleave_count(unrolled, 4);
+    Buffer<float> buff5(5, 16);
+    buff5.transpose(0, 1);
+
+    output5.realize(buff5);
+
+    for (int x = 0; x < 16; x++) {
+        for (int y = 0; y < 5; y++) {
+            float correct = sin((y + 1) * x);
+            EXPECT_NEAR(buff5(x, y), correct, 0.01) << "result(" << x << ") = " << buff5(x, y) << " instead of " << correct;
+        }
     }
+}
 
+TEST_F(InterleaveTest, InterleaveInNestedBlocks) {
+    // Test interleaving inside of nested blocks
+    Func f1, f2, f3, f4, f5;
+    f1(x) = sin(x);
+    f1.compute_root();
+
+    f2(x) = sin(2 * x);
+    f2.compute_root();
+
+    Func unrolled;
+    unrolled(x, y) = select(x % 2 == 0, f1(x), f2(x)) + y;
+
+    Var xi, yi;
+    unrolled.tile(x, y, xi, yi, 16, 2).unroll(xi, 2).vectorize(xi, 4).unroll(xi).unroll(yi);
+
+    EXPECT_GE(count_interleaves(unrolled), 4);
+}
+
+TEST_F(InterleaveTest, SafeReorderingUpdates) {
     for (int elements = 1; elements <= 5; elements++) {
-        const Target t = get_jit_target_from_environment();
-        if (t.arch == Target::WebAssembly &&
-            t.has_feature(Target::WasmSimd128) &&
-            elements == 5) {
-            // TODO: this bug is still active in v7.5; when it is fixed,
-            // find a way to re-enable this test iff we are using the appropriate
-            // version of v8.
-            printf("Skipping part of correctness_interleave test for WebAssembly+WasmSimd128 due to https://bugs.chromium.org/p/v8/issues/detail?id=9083.\n");
-            continue;
-        }
-
         // Make sure we don't interleave when the reordering would change the meaning.
         Realization *refs = nullptr;
         for (int i = 0; i < 2; i++) {
@@ -331,7 +306,7 @@ int main(int argc, char **argv) {
                     output6.update(j).vectorize(r);
                 }
 
-                check_interleave_count(output6, 2 * elements);
+                EXPECT_GE(count_interleaves(output6), 2 * elements);
 
                 Realization outs = output6.realize({50, 4});
                 for (int e = 0; e < elements; e++) {
@@ -339,11 +314,7 @@ int main(int argc, char **argv) {
                     Buffer<uint8_t> out = outs[e];
                     for (int y = 0; y < ref.height(); y++) {
                         for (int x = 0; x < ref.width(); x++) {
-                            if (out(x, y) != ref(x, y)) {
-                                printf("result(%d, %d) = %d instead of %d\n",
-                                       x, y, out(x, y), ref(x, y));
-                                return 1;
-                            }
+                            EXPECT_EQ(out(x, y), ref(x, y)) << "result(" << x << ", " << y << ") = " << (int)out(x, y) << " instead of " << (int)ref(x, y);
                         }
                     }
                 }
@@ -351,7 +322,9 @@ int main(int argc, char **argv) {
         }
         delete refs;
     }
+}
 
+TEST_F(InterleaveTest, MatrixTransposition) {
     for (int sz : {8, 27, 256}) {
         // Test transposition at a reasonable size (8), at a weird
         // size (27), and at a totally unreasonable size (256) to make sure
@@ -391,19 +364,13 @@ int main(int argc, char **argv) {
             for (int x = 0; x < sz; x++) {
                 for (int y = 0; y < sz; y++) {
                     int correct = 5 * y + x;
-                    if (result7(x, y) != correct) {
-                        printf("result(%d) = %d instead of %d\n", x, result7(x, y), correct);
-                        return 1;
-                    }
+                    EXPECT_EQ(result7(x, y), correct) << "result(" << x << ") = " << result7(x, y) << " instead of " << correct;
                 }
             }
-            check_interleave_count(trans, 1);
+            EXPECT_GE(count_interleaves(trans), 1);
         } else {
             // We don't expect an interleave at 256 x 256
-            check_interleave_count(trans, 0);
+            EXPECT_EQ(count_interleaves(trans), 0);
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

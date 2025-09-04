@@ -1,10 +1,12 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
+
 template<typename T>
-bool test_interleave(int x_stride) {
+void test_interleave(int x_stride) {
     Var x("x"), y("y"), c("c");
 
     Func input("input");
@@ -47,18 +49,14 @@ bool test_interleave(int x_stride) {
         for (int x = 0; x < buff.width(); x++) {
             for (int c = 0; c < x_stride; c++) {
                 T correct = c < 3 ? x * 3 + y * 5 + c : 7;
-                if (buff(x, y, c) != correct) {
-                    printf("out(%d, %d, %d) = %d instead of %d\n", x, y, c, buff(x, y, c), correct);
-                    return false;
-                }
+                EXPECT_EQ(buff(x, y, c), correct) << "buff(" << x << ", " << y << ", " << c << ")";
             }
         }
     }
-    return true;
 }
 
 template<typename T>
-bool test_deinterleave(int x_stride) {
+void test_deinterleave(int x_stride) {
     Var x("x"), y("y"), c("c");
 
     ImageParam input(halide_type_of<T>(), 3);
@@ -92,26 +90,31 @@ bool test_deinterleave(int x_stride) {
         for (int x = 0; x < buff.width(); x++) {
             for (int c = 0; c < 3; c++) {
                 T correct = input_buf(x, y, c);
-                if (buff(x, y, c) != correct) {
-                    printf("out(%d, %d, %d) = %d instead of %d\n", x, y, c, buff(x, y, c), correct);
-                    return false;
-                }
+                EXPECT_EQ(buff(x, y, c), correct) << "buff(" << x << ", " << y << ", " << c << ")";
             }
         }
     }
-    return true;
 }
 
-int main(int argc, char **argv) {
-    for (int x_stride : {3, 4}) {
-        if (!test_interleave<uint8_t>(x_stride)) return 1;
-        if (!test_interleave<uint16_t>(x_stride)) return 1;
-        if (!test_interleave<uint32_t>(x_stride)) return 1;
+}  // namespace
 
-        if (!test_deinterleave<uint8_t>(x_stride)) return 1;
-        if (!test_deinterleave<uint16_t>(x_stride)) return 1;
-        if (!test_deinterleave<uint32_t>(x_stride)) return 1;
-    }
-    printf("Success!\n");
-    return 0;
+template<typename T>
+class InterleaveRgbTest : public ::testing::Test {};
+using InterleaveRgbTypes = ::testing::Types<uint8_t, uint16_t, uint32_t>;
+TYPED_TEST_SUITE(InterleaveRgbTest, InterleaveRgbTypes);
+
+TYPED_TEST(InterleaveRgbTest, InterleaveStride3) {
+    test_interleave<TypeParam>(3);
+}
+
+TYPED_TEST(InterleaveRgbTest, InterleaveStride4) {
+    test_interleave<TypeParam>(4);
+}
+
+TYPED_TEST(InterleaveRgbTest, DeinterleaveStride3) {
+    test_deinterleave<TypeParam>(3);
+}
+
+TYPED_TEST(InterleaveRgbTest, DeinterleaveStride4) {
+    test_deinterleave<TypeParam>(4);
 }

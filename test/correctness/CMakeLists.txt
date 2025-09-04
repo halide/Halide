@@ -197,9 +197,9 @@ target_sources(
     input_image_bounds_check.cpp
     input_larger_than_two_gigs.cpp
     integer_powers.cpp
-    #    interleave.cpp
-    #    interleave_rgb.cpp
-    #    interleave_x.cpp
+    interleave.cpp
+    interleave_rgb.cpp
+    interleave_x.cpp
     interval.cpp
     #    intrinsics.cpp
     #    invalid_gpu_loop_nests.cpp
