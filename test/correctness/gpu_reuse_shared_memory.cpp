@@ -1,8 +1,22 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int multi_thread_type_test(MemoryType memory_type) {
+namespace {
+class GPUReuseSharedMemoryTest : public ::testing::TestWithParam<MemoryType> {
+protected:
+    void SetUp() override {
+        Target t = get_jit_target_from_environment();
+        if (!t.has_gpu_feature()) {
+            GTEST_SKIP() << "No GPU target enabled";
+        }
+    }
+};
+}  // namespace
+
+TEST_P(GPUReuseSharedMemoryTest, MultiThreadType) {
+    auto memory_type = GetParam();
     Func f1("f1"), f2("f2"), f3("f3"), f4("f4"), f5("f5"), f6("f6");
     Var x, y, z;
 
@@ -31,20 +45,13 @@ int multi_thread_type_test(MemoryType memory_type) {
     for (int z = 0; z < size_z; z++) {
         for (int y = 0; y < size_y; y++) {
             for (int x = 0; x < size_x; x++) {
-                if (out(x, y, z) != correct) {
-                    printf("out(%d, %d, %d) = %d instead of %d\n",
-                           x, y, z, out(x, y, z), correct);
-                    return 1;
-                }
+                EXPECT_EQ(out(x, y, z), correct) << "memory_type=" << (int)memory_type << " at (" << x << ", " << y << ", " << z << ")";
             }
         }
     }
-
-    printf("OK\n");
-    return 0;
 }
-
-int pyramid_test(MemoryType memory_type) {
+TEST_P(GPUReuseSharedMemoryTest, Pyramid) {
+    auto memory_type = GetParam();
     const int levels = 10;
     const int size_x = 100;
     const int size_y = 100;
@@ -74,19 +81,13 @@ int pyramid_test(MemoryType memory_type) {
     int correct = 1;
     for (int y = 0; y < size_y; y++) {
         for (int x = 0; x < size_x; x++) {
-            if (out(x, y) != correct) {
-                printf("out(%d, %d) = %d instead of %d\n",
-                       x, y, out(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(out(x, y), correct) << "memory_type=" << (int)memory_type << " at (" << x << ", " << y << ")";
         }
     }
-
-    printf("OK\n");
-    return 0;
 }
 
-int inverted_pyramid_test(MemoryType memory_type) {
+TEST_P(GPUReuseSharedMemoryTest, InvertedPyramid) {
+    auto memory_type = GetParam();
     const int levels = 6;
     const int size_x = 8 * 16 * 4;
     const int size_y = 8 * 16 * 4;
@@ -123,19 +124,18 @@ int inverted_pyramid_test(MemoryType memory_type) {
     int correct = 1;
     for (int y = 0; y < size_y; y++) {
         for (int x = 0; x < size_x; x++) {
-            if (out(x, y) != correct) {
-                printf("out(%d, %d) = %d instead of %d\n",
-                       x, y, out(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(out(x, y), correct) << "memory_type=" << (int)memory_type << " at (" << x << ", " << y << ")";
         }
     }
-
-    printf("OK\n");
-    return 0;
 }
 
-int dynamic_shared_test(MemoryType memory_type) {
+TEST_P(GPUReuseSharedMemoryTest, DynamicShared) {
+    Target t = get_jit_target_from_environment();
+    if (t.has_feature(Target::Vulkan) && ((t.os == Target::IOS) || t.os == Target::OSX)) {
+        GTEST_SKIP() << "Skipping test for Vulkan on iOS/OSX (MoltenVK doesn't support dynamic sizes for shared memory)";
+    }
+
+    auto memory_type = GetParam();
     Func f1, f2, f3, f4;
     Var x, xo, xi, thread_xo;
 
@@ -154,50 +154,11 @@ int dynamic_shared_test(MemoryType memory_type) {
     Buffer<int> out = f4.realize({500});
     for (int x = 0; x < out.width(); x++) {
         int correct = 27 * x;
-        if (out(x) != correct) {
-            printf("out(%d) = %d instead of %d\n",
-                   x, out(x), correct);
-            return 1;
-        }
+        EXPECT_EQ(out(x), correct) << "memory_type=" << (int)memory_type << " at " << x;
     }
-
-    printf("OK\n");
-    return 0;
 }
 
-int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-    if (!t.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
-    }
-
-    for (auto memory_type : {MemoryType::GPUShared, MemoryType::Heap}) {
-        printf("Running multi thread type test\n");
-        if (multi_thread_type_test(memory_type) != 0) {
-            return 1;
-        }
-
-        printf("Running pyramid test\n");
-        if (pyramid_test(memory_type) != 0) {
-            return 1;
-        }
-
-        printf("Running inverted pyramid test\n");
-        if (inverted_pyramid_test(memory_type) != 0) {
-            return 1;
-        }
-
-        printf("Running dynamic shared test\n");
-        if (t.has_feature(Target::Vulkan) && ((t.os == Target::IOS) || t.os == Target::OSX)) {
-            printf("Skipping test for Vulkan on iOS/OSX (MoltenVK doesn't support dynamic sizes for shared memory)!\n");
-        } else {
-            if (dynamic_shared_test(memory_type) != 0) {
-                return 1;
-            }
-        }
-    }
-
-    printf("Success!\n");
-    return 0;
-}
+INSTANTIATE_TEST_SUITE_P(
+    MemoryTypes,
+    GPUReuseSharedMemoryTest,
+    ::testing::Values(MemoryType::GPUShared, MemoryType::Heap));

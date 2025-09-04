@@ -157,22 +157,22 @@ target_sources(
     gpu_mixed_dimensionality.cpp
     gpu_mixed_shared_mem_types.cpp
     gpu_multi_device.cpp
-    #    gpu_multi_kernel.cpp
-    #    gpu_non_contiguous_copy.cpp
-    #    gpu_non_monotonic_shared_mem_size.cpp
-    #    gpu_object_lifetime_1.cpp
-    #    gpu_object_lifetime_2.cpp
-    #    gpu_object_lifetime_3.cpp
-    #    gpu_param_allocation.cpp
-    #    gpu_reuse_shared_memory.cpp
-    #    gpu_specialize.cpp
-    #    gpu_store_in_register_with_no_lanes_loop.cpp
-    #    gpu_sum_scan.cpp
-    #    gpu_texture.cpp
-    #    gpu_thread_barrier.cpp
-    #    gpu_transpose.cpp
-    #    gpu_vectorize.cpp
-    #    gpu_vectorized_shared_memory.cpp
+    gpu_multi_kernel.cpp
+    gpu_non_contiguous_copy.cpp
+    gpu_non_monotonic_shared_mem_size.cpp
+    gpu_object_lifetime_1.cpp
+    gpu_object_lifetime_2.cpp
+    gpu_object_lifetime_3.cpp
+    gpu_param_allocation.cpp
+    gpu_reuse_shared_memory.cpp
+    gpu_specialize.cpp
+    gpu_store_in_register_with_no_lanes_loop.cpp
+    gpu_sum_scan.cpp
+    gpu_texture.cpp
+    gpu_thread_barrier.cpp
+    gpu_transpose.cpp
+    gpu_vectorize.cpp
+    gpu_vectorized_shared_memory.cpp
     #    growing_stack.cpp
     #    half_native_interleave.cpp
     #    halide_buffer.cpp

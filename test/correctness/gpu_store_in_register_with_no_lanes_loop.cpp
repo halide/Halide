@@ -1,12 +1,12 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(GPUStoreInRegisterWithNoLanesLoop, Basic) {
     Target t(get_jit_target_from_environment());
     if (!t.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled";
     }
 
     Func f, g;
@@ -43,14 +43,7 @@ int main(int argc, char **argv) {
     for (int y = 0; y < result.height(); y++) {
         for (int x = 0; x < result.width(); x++) {
             int correct = x + y;
-            if (result(x, y) != correct) {
-                printf("result(%d, %d) = %d instead of %d\n",
-                       x, y, result(x, y), correct);
-                return 1;
-            }
+            ASSERT_EQ(result(x, y), correct) << "at (" << x << ", " << y << ")";
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

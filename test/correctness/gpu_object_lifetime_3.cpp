@@ -1,9 +1,12 @@
 #include "Halide.h"
 #include "gpu_object_lifetime_tracker.h"
+#include <gtest/gtest.h>
 
 #include <iostream>
 
 using namespace Halide;
+
+namespace {
 
 Internal::GpuObjectLifetimeTracker tracker;
 
@@ -13,7 +16,9 @@ void halide_print(JITUserContext *user_context, const char *str) {
     tracker.record_gpu_debug(str);
 }
 
-int main(int argc, char *argv[]) {
+}  // namespace
+
+TEST(GPUObjectLifetime3, Basic) {
     Var x, xi;
 
     Target target = get_jit_target_from_environment();
@@ -51,17 +56,11 @@ int main(int argc, char *argv[]) {
 
         Func output = f[stage_count - 1];
 
-        output.realize({256}, target);
+        ASSERT_NO_THROW(output.realize({256}, target));
     }
 
     Internal::JITSharedRuntime::release_all();
 
     int ret = tracker.validate_gpu_object_lifetime(true /* allow_globals */, true /* allow_none */, 1 /* max_globals */);
-    if (ret != 0) {
-        fprintf(stderr, "validate_gpu_object_lifetime() failed\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(ret, 0) << "validate_gpu_object_lifetime() failed";
 }

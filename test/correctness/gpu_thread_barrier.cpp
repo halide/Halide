@@ -1,5 +1,5 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -36,19 +36,15 @@ public:
         CountBarriers c;
         s.accept(&c);
 
-        if (c.count != correct) {
-            printf("There were %d barriers. There were supposed to be %d\n", c.count, correct);
-            exit(1);
-        }
+        EXPECT_EQ(c.count, correct) << "Expected " << correct << " barriers, found " << c.count;
 
         return s;
     }
 };
 
-int main(int argc, char **argv) {
+TEST(GPUThreadBarrier, Basic) {
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled";
     }
 
     {
@@ -90,11 +86,7 @@ int main(int argc, char **argv) {
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 int correct = 7 * 100 + 9;
-                if (out(x, y) != correct) {
-                    printf("out(%d, %d) = %d instead of %d\n",
-                           x, y, out(x, y), correct);
-                    return 1;
-                }
+                ASSERT_EQ(out(x, y), correct) << "at (" << x << ", " << y << ")";
             }
         }
     }
@@ -136,7 +128,4 @@ int main(int argc, char **argv) {
 
         Buffer<int> out = g.realize({100, 100});
     }
-
-    printf("Success!\n");
-    return 0;
 }

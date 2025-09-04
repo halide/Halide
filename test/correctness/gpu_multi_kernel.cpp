@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <iostream>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char *argv[]) {
+TEST(GPUMultiKernel, Basic) {
     Var x, xi;
 
     Func kernel1;
@@ -31,9 +31,6 @@ int main(int argc, char *argv[]) {
         float a = floor((i + 0.5f) / 3.0f);
         float b = sqrt(4 * i * i) + a;
         int c = (int32_t)(round(i + b));
-        assert(result(i) == c);
+        EXPECT_EQ(result(i), c);
     }
-
-    printf("Success!\n");
-    return 0;
 }

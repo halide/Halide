@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(GPUNonContiguousCopy, Basic) {
     Target target = get_jit_target_from_environment();
 
     Var x, y, z, w;
@@ -72,15 +72,9 @@ int main(int argc, char **argv) {
                     } else {
                         correct = 4 * x + 3 * y + 2 * z + w;
                     }
-                    if (full(x, y, z, w) != correct) {
-                        printf("Error! Incorrect value %i != %i at %i, %i, %i, %i\n", full(x, y, z, w), correct, x, y, z, w);
-                        return 1;
-                    }
+                    ASSERT_EQ(full(x, y, z, w), correct) << "at (" << x << ", " << y << ", " << z << ", " << w << ")";
                 }
             }
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

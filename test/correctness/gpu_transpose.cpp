@@ -1,12 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(GPUTranspose, Basic) {
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled";
     }
 
     ImageParam in(UInt(8), 2);
@@ -44,14 +43,7 @@ int main(int argc, char **argv) {
     for (int y = 0; y < 256; y++) {
         for (int x = 0; x < 256; x++) {
             uint8_t correct = y * 17 + x;
-            if (output(x, y) != correct) {
-                printf("output(%d, %d) = %d instead of %d\n",
-                       x, y, output(x, y), correct);
-                return 1;
-            }
+            ASSERT_EQ(output(x, y), correct) << "at (" << x << ", " << y << ")";
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

@@ -1,13 +1,12 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-int main(int argc, char **argv) {
+TEST(GPUParamAllocation, Basic) {
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled";
     }
 
     Func f("f"), g("g");
@@ -25,8 +24,5 @@ int main(int argc, char **argv) {
     f.compute_at(g, xi);
 
     slices.set(32);
-    g.realize({1024, 1024});
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(g.realize({1024, 1024}));
 }

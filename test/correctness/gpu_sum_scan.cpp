@@ -1,12 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(GPUSumScan, Basic) {
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled";
     }
 
     Func f;
@@ -54,13 +53,6 @@ int main(int argc, char **argv) {
     int correct = 0;
     for (int i = 0; i < N; i++) {
         correct += input(i);
-        if (output(i) != correct) {
-            printf("output(%d) = %d instead of %d\n",
-                   i, output(i), correct);
-            return 1;
-        }
+        EXPECT_EQ(output(i), correct) << "at " << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }
