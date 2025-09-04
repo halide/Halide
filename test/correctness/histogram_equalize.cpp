@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(HistogramEqualize, BiasedHistogramEqualization) {
     int W = 1000, H = 1000;
 
     // Compute a random 8-bit image with a very biased histogram
@@ -55,13 +54,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 16; i++) {
         // There should be roughly 1000*1000/16 pixels per bucket = 62500
         int correct = (in.width() * in.height()) / 16;
-        if (out_hist[i] < correct / 2 || out_hist[i] > 2 * correct) {
-            printf("Expected histogram entries of ~ %d\n", correct);
-            return 1;
-        }
+        EXPECT_GE(out_hist[i], correct / 2) << "bucket " << i << " too few pixels";
+        EXPECT_LE(out_hist[i], 2 * correct) << "bucket " << i << " too many pixels";
     }
-
-    printf("Success!\n");
-
-    return 0;
 }

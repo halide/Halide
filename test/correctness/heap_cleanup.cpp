@@ -1,11 +1,11 @@
 #include "Halide.h"
 #include <atomic>
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 // Check that assertion failures free allocations appropriately
-
 std::atomic<int> malloc_count{0};
 std::atomic<int> free_count{0};
 
@@ -27,17 +27,23 @@ void my_error_handler(JITUserContext *user_context, const char *) {
     error_occurred = true;
 }
 
-int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
-        return 0;
-    }
+class HeapCleanupTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+            GTEST_SKIP() << "WebAssembly JIT does not support custom allocators.";
+        }
 
+        malloc_count = 0;
+        free_count = 0;
+        error_occurred = false;
+    }
+};
+}  // namespace
+
+TEST_F(HeapCleanupTest, AssertionFailureFreesAllocations) {
     Func f, g, h;
     Var x;
-
-    malloc_count = 0;
-    free_count = 0;
 
     f(x) = x;
     f.compute_root();
@@ -55,10 +61,6 @@ int main(int argc, char **argv) {
 
     Buffer<int> im = h.realize({g_size + 100});
 
-    printf("%d %d\n", (int)malloc_count, (int)free_count);
-
-    assert(error_occurred && (int)malloc_count == (int)free_count);
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_TRUE(error_occurred) << "Expected an error to occur during realization";
+    ASSERT_EQ(malloc_count, free_count) << "malloc_count=" << malloc_count << " free_count=" << free_count;
 }

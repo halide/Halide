@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(GrowingStack, StackToHeapFallback) {
     Func f, g;
     Var x;
 
@@ -19,8 +20,5 @@ int main(int argc, char **argv) {
 
     // The following would use 200 mb of stack if we just kept
     // reallocating:
-    g.realize({10240});
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(g.realize({10240}));
 }

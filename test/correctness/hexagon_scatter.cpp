@@ -1,17 +1,33 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 void swap(Buffer<uint8_t> &buf, int idx1, int idx2) {
     uint8_t tmp = buf(idx1);
     buf(idx1) = buf(idx2);
     buf(idx2) = tmp;
 }
 
+template<typename T>
+class HexagonScatterTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        if (!get_jit_target_from_environment().has_feature(Target::HVX)) {
+            GTEST_SKIP() << "hexagon_scatter is only useful when targeting HVX.";
+        }
+    }
+};
+
+using ScatterTypes = ::testing::Types<uint16_t, int16_t, uint32_t, int32_t>;
+TYPED_TEST_SUITE(HexagonScatterTest, ScatterTypes);
+}  // namespace
+
 // Implements a simple scatter pipeline to make use of VTCM available on v65+
 // Hexagon DSP.
-template<typename DTYPE>
-int test() {
+TYPED_TEST(HexagonScatterTest, ScatterPipeline) {
+    using DTYPE = TypeParam;
     const int W = 128;
     const int H = 64;
 
@@ -86,27 +102,7 @@ int test() {
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            if (buf(x, y) != ref_out[y][x]) {
-                printf("output(%d, %d) = %d instead of %d\n", x, y, buf(x, y),
-                       ref_out[x][y]);
-                return false;
-            }
+            EXPECT_EQ(buf(x, y), ref_out[y][x]) << "output(" << x << ", " << y << ")";
         }
     }
-
-    return true;
-}
-
-int main() {
-    if (!get_jit_target_from_environment().has_feature(Target::HVX)) {
-        printf("[SKIP] hexagon_scatter is only useful when targeting HVX.\n");
-        return 0;
-    }
-
-    if (!test<uint16_t>() ||
-        !test<int16_t>() ||
-        !test<uint32_t>() ||
-        !test<int32_t>()) return 1;
-    printf("Success!\n");
-    return 0;
 }

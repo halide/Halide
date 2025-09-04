@@ -173,17 +173,17 @@ target_sources(
     gpu_transpose.cpp
     gpu_vectorize.cpp
     gpu_vectorized_shared_memory.cpp
-    #    growing_stack.cpp
-    #    half_native_interleave.cpp
-    #    halide_buffer.cpp
-    #    handle.cpp
-    #    heap_cleanup.cpp
-    #    hello_gpu.cpp
-    #    hexagon_scatter.cpp
-    #    histogram.cpp
-    #    histogram_equalize.cpp
-    #    hoist_loop_invariant_if_statements.cpp
-    #    hoist_storage.cpp
+    growing_stack.cpp
+    half_native_interleave.cpp
+    halide_buffer.cpp
+    handle.cpp
+    heap_cleanup.cpp
+    hello_gpu.cpp
+    hexagon_scatter.cpp
+    histogram.cpp
+    histogram_equalize.cpp
+    hoist_loop_invariant_if_statements.cpp
+    hoist_storage.cpp
     #    host_alignment.cpp
     #    image_io.cpp
     #    image_of_lists.cpp

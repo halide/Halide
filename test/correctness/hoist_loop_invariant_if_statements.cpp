@@ -1,9 +1,10 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-int main(int argc, char **argv) {
+TEST(HoistLoopInvariantIfStatements, IfStatementHoisting) {
     Func f, g;
     Var x, y;
     Param<bool> p;
@@ -22,8 +23,9 @@ int main(int argc, char **argv) {
     // supposed to lift the if statement out of the loops to the top
     // level. Let's check if it worked.
 
-    class Checker : public IRMutator {
+    struct : IRMutator {
         bool in_loop = false;
+        bool if_in_loop = false;
         Stmt visit(const For *op) override {
             ScopedValue<bool> old(in_loop, true);
             return IRMutator::visit(op);
@@ -32,21 +34,11 @@ int main(int argc, char **argv) {
             if_in_loop |= in_loop;
             return IRMutator::visit(op);
         }
-
-    public:
-        bool if_in_loop = false;
     } checker;
-
-    g.add_custom_lowering_pass(&checker, []() {});
+    g.add_custom_lowering_pass(&checker, nullptr);
 
     p.set(true);
     g.realize({1024, 1024});
 
-    if (checker.if_in_loop) {
-        printf("Found an if statement inside a loop. This was not supposed to happen\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_FALSE(checker.if_in_loop) << "Found an if statement inside a loop. This was not supposed to happen";
 }

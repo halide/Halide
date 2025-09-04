@@ -1,10 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 template<typename ITYPE, typename HTYPE>
-bool test() {
+void test_histogram() {
     int W = 128, H = 128;
 
     // Compute a random image and its true histogram
@@ -66,27 +67,24 @@ bool test() {
     Buffer<HTYPE> histogram = g.realize({128});  // buckets 10-137
 
     for (int i = 10; i < 138; i++) {
-        if (histogram(i - 10) != reference_hist[i]) {
-            printf("Error: bucket %d is %d instead of %d\n", i, histogram(i - 10), reference_hist[i]);
-            return false;
-        }
+        EXPECT_EQ(histogram(i - 10), reference_hist[i]) << "bucket " << i;
     }
+}
+}  // namespace
 
-    return true;
+TEST(HistogramTest, HVX) {
+    if (!get_jit_target_from_environment().has_feature(Target::HVX)) {
+        GTEST_SKIP() << "HVX not available";
+    }
+    test_histogram<uint8_t, int16_t>();
+    test_histogram<uint16_t, uint16_t>();
+    test_histogram<uint8_t, int32_t>();
+    test_histogram<uint32_t, uint32_t>();
 }
 
-int main(int argc, char **argv) {
-    Target target = get_jit_target_from_environment();
-
-    if (target.has_feature(Target::HVX)) {
-        if (!test<uint8_t, int16_t>() ||
-            !test<uint16_t, uint16_t>() ||
-            !test<uint8_t, int32_t>() ||
-            !test<uint32_t, uint32_t>()) return 1;
-    } else {
-        if (!test<float, int>()) return 1;
+TEST(HistogramTest, Generic) {
+    if (get_jit_target_from_environment().has_feature(Target::HVX)) {
+        GTEST_SKIP() << "Skipping generic test when HVX is available";
     }
-
-    printf("Success!\n");
-    return 0;
+    test_histogram<float, int>();
 }
