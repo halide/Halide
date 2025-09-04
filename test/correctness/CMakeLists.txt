@@ -95,7 +95,7 @@ target_sources(
     device_buffer_copies_with_profile.cpp
     device_buffer_copy.cpp
     device_copy_at_inner_loop.cpp
-    device_crop.cpp
+    device_crop.cpp  # TODO: one test case failing on macOS-opencl
     device_slice.cpp
     dilate3x3.cpp
     div_by_zero.cpp
