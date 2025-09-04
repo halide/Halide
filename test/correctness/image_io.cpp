@@ -1,4 +1,6 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
+
 #include "halide_image_io.h"
 #include "halide_test_dirs.h"
 
@@ -6,8 +8,17 @@
 
 using namespace Halide;
 
+// TODO: hack - https://github.com/google/googletest/issues/4369
+namespace testing::internal {
+template<>
+std::string GetTypeName<_Float16>() {
+    return "_Float16";
+}
+}  // namespace testing::internal
+
+namespace {
 template<typename T>
-void test_round_trip(Buffer<T> buf, std::string format) {
+void test_round_trip(Buffer<T> buf, const std::string &format) {
     // Save it
     std::ostringstream o;
     o << Internal::get_test_tmp_dir() << "test_" << halide_type_of<T>() << "x" << buf.channels() << "." << format;
@@ -15,7 +26,9 @@ void test_round_trip(Buffer<T> buf, std::string format) {
     Tools::save_image(buf, filename);
 
     // TIFF is write-only for now.
-    if (format == "tiff") return;
+    if (format == "tiff") {
+        return;
+    }
 
     // Reload it
     Buffer<T> reloaded = Tools::load_image(filename);
@@ -31,21 +44,14 @@ void test_round_trip(Buffer<T> buf, std::string format) {
     Tools::save_image(reloaded, filename);
 
     // Check they're not too different.
-    RDom r(reloaded);
-    std::vector<Expr> args;
-    for (int i = 0; i < r.dimensions(); ++i) {
-        args.push_back(r[i]);
-    }
-    double diff = evaluate<double>(maximum(abs(cast<double>(buf(args)) - cast<double>(reloaded(args)))));
-
-    double max_diff = 0.00001;
-    if (format == "jpg") {
-        max_diff = 32;
-    }
-    if (diff > max_diff) {
-        printf("test_round_trip: Difference of %f when saved and loaded as %s\n", diff, format.c_str());
-        exit(1);
-    }
+    double tolerance = format == "jpg" ? 32 : 1e-5;
+    reloaded.for_each_element([&](const int *coord) {
+        T reloaded_val = reloaded(coord);
+        T buf_val = buf(coord);
+        if (!std::isnan(reloaded_val) || !std::isnan(buf_val)) {
+            EXPECT_NEAR(reloaded(coord), buf(coord), tolerance);
+        }
+    });
 }
 
 // static -> static conversion test
@@ -60,13 +66,9 @@ void test_convert_image_s2s(Buffer<T> buf) {
     Buffer<T> buf2 = Tools::ImageTypeConversion::convert_image<T>(buf_float);
 
     // Check that they match (this conversion should be exact).
-    RDom r(buf2);
-    std::vector<Expr> args = {r.x, r.y, r.z};
-    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
-    if (diff > 0) {
-        printf("test_convert_image_s2s: Difference of %d when converted\n", diff);
-        exit(1);
-    }
+    buf2.for_each_element([&](int x, int y, int z) {
+        EXPECT_EQ(buf2(x, y, z), buf(x, y, z));
+    });
 }
 
 // dynamic -> static conversion test
@@ -83,13 +85,9 @@ void test_convert_image_d2s(Buffer<T> buf) {
     Buffer<T> buf2 = Tools::ImageTypeConversion::convert_image<T>(buf_float_d);
 
     // Check that they match (this conversion should be exact).
-    RDom r(buf2);
-    std::vector<Expr> args = {r.x, r.y, r.z};
-    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
-    if (diff > 0) {
-        printf("test_convert_image_d2s: Difference of %d when converted\n", diff);
-        exit(1);
-    }
+    buf2.for_each_element([&](int x, int y, int z) {
+        EXPECT_EQ(buf2(x, y, z), buf(x, y, z));
+    });
 }
 
 // static -> dynamic conversion test
@@ -108,18 +106,14 @@ void test_convert_image_s2d(Buffer<T> buf) {
     Buffer<T> buf2(buf2_d);
 
     // Check that they match (this conversion should be exact).
-    RDom r(buf2);
-    std::vector<Expr> args = {r.x, r.y, r.z};
-    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
-    if (diff > 0) {
-        printf("test_convert_image_s2d: Difference of %d when converted\n", diff);
-        exit(1);
-    }
+    buf2.for_each_element([&](int x, int y, int z) {
+        EXPECT_EQ(buf2(x, y, z), buf(x, y, z));
+    });
 }
 
 // dynamic -> dynamic conversion test
 template<typename T>
-void test_convert_image_d2d(Buffer<> buf_d) {
+void test_convert_image_d2d(const Buffer<>& buf_d) {
     std::cout << "Testing dynamic -> dynamic image conversion for " << halide_type_of<T>() << "\n";
 
     // convert to float
@@ -133,13 +127,9 @@ void test_convert_image_d2d(Buffer<> buf_d) {
     Buffer<T> buf2(buf2_d);
 
     // Check that they match (this conversion should be exact).
-    RDom r(buf2);
-    std::vector<Expr> args = {r.x, r.y, r.z};
-    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
-    if (diff > 0) {
-        printf("test_convert_image_d2d: Difference of %d when converted\n", diff);
-        exit(1);
-    }
+    buf2.for_each_element([&](int x, int y, int z) {
+        EXPECT_EQ(buf2(x, y, z), buf(x, y, z));
+    });
 }
 
 Func make_noise(int depth) {
@@ -160,9 +150,26 @@ Func make_noise(int depth) {
     f.compute_root();
     return f;
 }
+}  // namespace
 
 template<typename T>
-void do_test() {
+class ImageIOTest : public ::testing::Test {};
+
+using ImageIOTypes = ::testing::Types<
+    int8_t, int16_t, int32_t, int64_t,
+    uint8_t, uint16_t, uint32_t, uint64_t,
+    float, double
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    ,
+    _Float16
+#endif
+    >;
+
+TYPED_TEST_SUITE(ImageIOTest, ImageIOTypes);
+
+TYPED_TEST(ImageIOTest, RoundTrip) {
+    using T = TypeParam;
+
     const int width = 160;
     const int height = 120;
 
@@ -193,12 +200,12 @@ void do_test() {
 
     std::vector<std::string> formats = {"npy", "ppm", "pgm", "tmp", "mat", "tiff"};
 #ifndef HALIDE_NO_JPEG
-    formats.push_back("jpg");
+    formats.emplace_back("jpg");
 #endif
 #ifndef HALIDE_NO_PNG
-    formats.push_back("png");
+    formats.emplace_back("png");
 #endif
-    for (std::string format : formats) {
+    for (const std::string &format : formats) {
         // .npy is the only format here that supports float16
         if (halide_type_of<T>() == halide_type_t(halide_type_float, 16) && format != "npy") {
             continue;
@@ -240,49 +247,22 @@ void do_test() {
     }
 }
 
-void test_mat_header() {
+TEST(ImageIOTest, MatHeader) {
     // Test if the .mat file header writes the correct file size
-    std::ostringstream o;
+    const std::string filename = Internal::get_test_tmp_dir() + "test_mat_header.mat";
     Buffer<uint8_t> buf(15, 15);
     buf.fill(42);
-    o << Internal::get_test_tmp_dir() << "test_mat_header.mat";
-    std::string filename = o.str();
     Tools::save_image(buf, filename);
     std::ifstream fs(filename.c_str(), std::ifstream::binary);
-    if (!fs) {
-        std::cout << "Cannot read " << filename << "\n";
-        exit(1);
-    }
-    fs.seekg(0, fs.end);
+    ASSERT_TRUE(fs) << "Cannot read " << filename;
+    fs.seekg(0, std::ifstream::end);
     // .mat file begins with a 128 bytes header and a 8 bytes
     // matrix tag, the second byte of the matrix describe
     // the size of the rest of the file
     uint32_t file_size = uint32_t((int)fs.tellg() - 128 - 8);
-    fs.seekg(128 + 4, fs.beg);
+    fs.seekg(128 + 4, std::ifstream::beg);
     uint32_t stored_file_size = 0;
     fs.read((char *)&stored_file_size, 4);
     fs.close();
-    if (file_size != stored_file_size) {
-        std::cout << "Wrong file size written for " << filename << ". Expected " << file_size << ", got" << stored_file_size << "\n";
-        exit(1);
-    }
-}
-
-int main(int argc, char **argv) {
-    do_test<int8_t>();
-    do_test<int16_t>();
-    do_test<int32_t>();
-    do_test<int64_t>();
-    do_test<uint8_t>();
-    do_test<uint16_t>();
-    do_test<uint32_t>();
-    do_test<uint64_t>();
-    do_test<float>();
-#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
-    do_test<_Float16>();
-#endif
-    do_test<double>();
-    test_mat_header();
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(file_size, stored_file_size) << "Wrong file size written for " << filename;
 }
