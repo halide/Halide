@@ -202,7 +202,7 @@ target_sources(
     interleave_x.cpp
     interval.cpp
     #    intrinsics.cpp
-    #    invalid_gpu_loop_nests.cpp
+    invalid_gpu_loop_nests.cpp  # // TODO: move to error/
     inverse.cpp
     irprinter.cpp
     isnan.cpp
