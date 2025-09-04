@@ -14,7 +14,6 @@
 #include "clock.h"
 #include "halide_blas.h"
 #include "macros.h"
-#include <iomanip>
 #include <iostream>
 #include <random>
 #include <string>
@@ -82,6 +81,9 @@ struct BenchmarksBase {
             bench_gemm_transB(size);
         } else if (benchmark == "gemm_transAB") {
             bench_gemm_transAB(size);
+        } else {
+            std::cout << "subroutine: <" << benchmark << "> not known\n";
+            return;
         }
     }
 
