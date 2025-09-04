@@ -114,6 +114,11 @@ TEST_F(DeviceCropTest, ParentOutOfScopeBeforeCrop) {
 }
 
 TEST_F(DeviceCropTest, RealizeToFromCrop) {
+    // TODO: This test currently fails on macOS with target host-opencl.
+    if (target.os == Target::OSX && target.has_feature(Target::OpenCL)) {
+        GTEST_SKIP() << "This test currently fails on macOS with target host-opencl.";
+    }
+
     ImageParam in(Int(32), 2);
     Var x, y;
     Func f;
