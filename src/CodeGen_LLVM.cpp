@@ -1966,18 +1966,6 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     if (promote_indices() && d.getPointerSize() == 8) {
         index = promote_64(index);
     }
-
-    // Peel off a constant offset as a second GEP. This helps LLVM's
-    // aliasing analysis, especially for backends that do address
-    // computation in 32 bits but use 64-bit pointers.
-    if (const Add *add = index.as<Add>()) {
-        if (auto offset = as_const_int(add->b)) {
-            Value *base = codegen_buffer_pointer(base_address, type, add->a);
-            Value *off = codegen(make_const(Int(8 * d.getPointerSize()), *offset));
-            return CreateInBoundsGEP(builder.get(), llvm_type_of(type), base, off);
-        }
-    }
-
     return codegen_buffer_pointer(base_address, type, codegen(index));
 }
 

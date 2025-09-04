@@ -16,7 +16,12 @@ public:
     void generate() {
         make_a_root(x) = input(x);
         ExternFuncArgument arg = make_a_root;
-        gpu_input.define_extern("gpu_input", {arg}, Halide::type_of<int32_t>(), 1, NameMangling::Default, Halide::DeviceAPI::OpenCL);
+
+        if (get_target().supports_device_api(Halide::DeviceAPI::OpenCL)) {
+            gpu_input.define_extern("gpu_input", {arg}, Halide::type_of<int32_t>(), 1, NameMangling::Default, Halide::DeviceAPI::OpenCL);
+        } else {
+            gpu_input(x) = input(x);
+        }
 
         output(x) = gpu_input(x) - 41;
     }

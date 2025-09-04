@@ -1699,10 +1699,9 @@ private:
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else if (!const_bound &&
-                   op->call_type == Call::PureIntrinsic) {
+                   op->call_type == Call::PureIntrinsic && handle_const_arg_call()) {
             // It was some other pure intrinsic that we don't lower. If the args
             // are const we can just preserve it.
-            handle_const_arg_call();
         } else {
             // Just use the bounds of the type
             bounds_of_type(t);
