@@ -4,22 +4,28 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 #if defined(_MSC_VER)
+#include <intrin.h>
 #include <malloc.h>
 #define ALLOCA(size) _alloca(size)
 #else
 #define ALLOCA(size) __builtin_alloca(size)
 #endif
 
-const int N = 1024 * 1024 * 3;
+const int N = 1024 * 1024 * 6;
 
 void paint_stack() {
-    char *ptr = (char *)ALLOCA(N * 2);
-    memset(ptr, 0x42, N * 2);
+    constexpr int padding = 1024 * 1024;
+    char *ptr = (char *)ALLOCA(N + padding);
+    memset(ptr, 0x42, N + padding);
 }
 
 void check_stack() {
     char *ptr = (char *)ALLOCA(N);
+#if defined(_MSC_VER)
+    _ReadBarrier();
+#else
     asm volatile("" : : "r"(ptr) : "memory");
+#endif
     int i = 0;
     while (ptr[i] == 0x42) {
         i++;
