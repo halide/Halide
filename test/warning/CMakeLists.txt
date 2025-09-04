@@ -6,7 +6,7 @@ target_link_libraries(warning_tests PRIVATE Halide::Test GTest::gtest_main)
 gtest_discover_tests(
     warning_tests
     PROPERTIES
-    ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+    ENVIRONMENT "HL_TARGET=${Halide_TARGET}\\;HL_JIT_TARGET=${Halide_TARGET}"
     LABELS "warning"
 )
 

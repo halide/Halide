@@ -6,7 +6,7 @@ target_link_libraries(correctness_tests PRIVATE Halide::Test GTest::gtest_main G
 gtest_discover_tests(
     correctness_tests
     PROPERTIES
-    ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+    ENVIRONMENT "HL_TARGET=${Halide_TARGET}\\;HL_JIT_TARGET=${Halide_TARGET}"
     LABELS "correctness"
 )
 
