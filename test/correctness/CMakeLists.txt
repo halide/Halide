@@ -184,7 +184,7 @@ target_sources(
     histogram_equalize.cpp
     hoist_loop_invariant_if_statements.cpp
     hoist_storage.cpp
-    #    host_alignment.cpp
+    host_alignment.cpp  # TODO: fails when multiple GPU targets are enabled
     #    image_io.cpp
     image_of_lists.cpp
     implicit_args.cpp
