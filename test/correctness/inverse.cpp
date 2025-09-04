@@ -1,108 +1,76 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int bits_diff(float fa, float fb) {
-    uint32_t a = Halide::Internal::reinterpret_bits<uint32_t>(fa);
-    uint32_t b = Halide::Internal::reinterpret_bits<uint32_t>(fb);
-    uint32_t a_exp = a >> 23;
-    uint32_t b_exp = b >> 23;
-    if (a_exp != b_exp) return -100;
-    uint32_t diff = a > b ? a - b : b - a;
-    int count = 0;
-    while (diff) {
-        count++;
-        diff /= 2;
+namespace {
+uint32_t absd(uint32_t a, uint32_t b) {
+    return a > b ? a - b : b - a;
+}
+
+uint32_t ulp_distance(float fa, float fb) {
+    if (fa == fb) {
+        return 0;  // signed zero
     }
-    return count;
+    uint32_t ua = Halide::Internal::reinterpret_bits<uint32_t>(fa);
+    uint32_t ub = Halide::Internal::reinterpret_bits<uint32_t>(fb);
+    auto to_ordered = [](uint32_t u) -> uint32_t {
+        return u & 0x80000000u ? 0x80000000u - u : u + 0x80000000u;
+    };
+    return absd(to_ordered(ua), to_ordered(ub));
 }
 
 // Check the mantissas match except for the last few bits.
-void check(Buffer<float> a, Buffer<float> b) {
-    for (int i = 0; i < a.width(); i++) {
-        int err = bits_diff(a(i), b(i));
-        if (err > 13) {
-            printf("Mismatch in mantissa at %d: %10.10f %10.10f. Differs by %d bits.\n", i, a(i), b(i), err);
-            // exit(1);
-        }
+void check(Buffer<float> approx, Buffer<float> exact) {
+    for (int i = 0; i < approx.width(); i++) {
+        ASSERT_LE(ulp_distance(approx(i), exact(i)), 1u << 8)
+            << "Mismatch in mantissa at i = " << i << ": " << approx(i) << " != " << exact(i);
     }
 }
 
-int main(int argc, char **argv) {
+class InverseTest : public ::testing::Test {
+protected:
+    Target target{get_jit_target_from_environment()};
 
-    Func f1, f2, f3, f4, f5;
-    Func g1, g2, g3, g4, g5;
+    Var x;
+    Expr v{x * 1.34f + 1.0142f};
 
-    Var x, xi;
-    Expr v = x * 1.34f + 1.0142f;
+    // Prevent any optimizations by hiding 1.0 in a param.
+    Param<float> const_one{1.0f};
 
-    Param<float> p;
-    p.set(1.0f);
+    void test_approximation(const Expr &exact, const Expr &approximate) {
+        // On ARM, widths 2 and 4 trigger optimizations. On x86, 4 and 8 do.
 
-    // Test accuracy of reciprocals.
+        Func f1, f2, f3, f4;
+        f1(x) = exact;
+        f2(x) = approximate;
+        f3(x) = approximate;
+        f4(x) = approximate;
 
-    // First prevent any optimizations by hiding 1.0 in a param.
-    f1(x) = p / v;
+        f2.vectorize(x, 2);
+        f3.vectorize(x, 4);
+        f4.vectorize(x, 8);
 
-    // Now test various vectorization widths with an explicit 1.0. On
-    // arm 2 and 4 trigger optimizations. On x86 4 and 8 do.
-    f2(x) = fast_inverse(v);
-    f2.vectorize(x, 2);
+        Buffer<float> expected = f1.realize({10000});
+        check(f2.realize({10000}), expected);
+        check(f3.realize({10000}), expected);
+        check(f4.realize({10000}), expected);
 
-    f3(x) = fast_inverse(v);
-    f3.vectorize(x, 4);
-
-    f4(x) = fast_inverse(v);
-    f4.vectorize(x, 8);
-
-    // Same thing for reciprocal square root.
-    g1(x) = p / sqrt(v);
-
-    g2(x) = fast_inverse_sqrt(v);
-    g2.vectorize(x, 2);
-
-    g3(x) = fast_inverse_sqrt(v);
-    g3.vectorize(x, 4);
-
-    g4(x) = fast_inverse_sqrt(v);
-    g4.vectorize(x, 8);
-
-    // Also test both on the GPU.
-    f5(x) = fast_inverse(v);
-    g5(x) = fast_inverse_sqrt(v);
-
-    Target t = get_jit_target_from_environment();
-    if (t.has_gpu_feature()) {
-        f5.gpu_tile(x, xi, 16);
-        g5.gpu_tile(x, xi, 16);
+        if (target.has_gpu_feature()) {
+            Var xi;
+            Func f_gpu;
+            f_gpu(x) = approximate;
+            f_gpu.gpu_tile(x, xi, 16);
+            check(f_gpu.realize({10000}), expected);
+        }
     }
+};
+}  // namespace
 
-    Buffer<float> imf1 = f1.realize({10000});
-    Buffer<float> imf2 = f2.realize({10000});
-    Buffer<float> imf3 = f3.realize({10000});
-    Buffer<float> imf4 = f4.realize({10000});
-    Buffer<float> imf5 = f5.realize({10000});
+TEST_F(InverseTest, FastReciprocalAccuracy) {
+    test_approximation(const_one / v, fast_inverse(v));
+}
 
-    Buffer<float> img1 = g1.realize({10000});
-    Buffer<float> img2 = g2.realize({10000});
-    Buffer<float> img3 = g3.realize({10000});
-    Buffer<float> img4 = g4.realize({10000});
-    Buffer<float> img5 = g5.realize({10000});
-
-    printf("Testing accuracy of inverse\n");
-    check(imf1, imf2);
-    check(imf1, imf3);
-    check(imf1, imf4);
-    check(imf1, imf5);
-    printf("Pass.\n");
-    printf("Testing accuracy of inverse sqrt\n");
-    check(img1, img2);
-    check(img1, img3);
-    check(img1, img4);
-    check(img1, img5);
-    printf("Pass.\n");
-
-    printf("Success!\n");
-    return 0;
+TEST_F(InverseTest, FastInverseSqrtAccuracy) {
+    test_approximation(const_one / sqrt(v), fast_inverse_sqrt(v));
 }

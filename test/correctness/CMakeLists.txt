@@ -203,20 +203,20 @@ target_sources(
     interval.cpp
     #    intrinsics.cpp
     #    invalid_gpu_loop_nests.cpp
-    #    inverse.cpp
-    #    irprinter.cpp
-    #    isnan.cpp
-    #    issue_3926.cpp
-    #    iterate_over_circle.cpp
-    #    lambda.cpp
-    #    lazy_convolution.cpp
-    #    leak_device_memory.cpp
-    #    left_shift_negative.cpp
-    #    lerp.cpp
-    #    let_in_rdom_bound.cpp
-    #    likely.cpp
+    inverse.cpp
+    irprinter.cpp
+    isnan.cpp
+    issue_3926.cpp
+    iterate_over_circle.cpp
+    lambda.cpp
+    lazy_convolution.cpp
+    leak_device_memory.cpp
+    left_shift_negative.cpp
+    lerp.cpp
+    let_in_rdom_bound.cpp
+    likely.cpp
     #    load_library.cpp
-    #    logical.cpp
+    logical.cpp
     loop_carry.cpp
     #    loop_invariant_extern_calls.cpp
     #    loop_level_generator_param.cpp

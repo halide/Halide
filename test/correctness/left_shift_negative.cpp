@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(LeftShiftNegativeTest, ShiftEqualsMultiply) {
     Func f, g;
     Var x;
     f(x) = cast<int16_t>(-x);
@@ -30,13 +31,6 @@ int main(int argc, char **argv) {
     Buffer<int16_t> im2 = h2.realize({1024});
 
     for (int i = 0; i < im1.width(); i++) {
-        if (im1(i) != im2(i)) {
-            printf("im1(%d) = %d, im2(%d) = %d\n",
-                   i, im1(i), i, im2(i));
-            return 1;
-        }
+        EXPECT_EQ(im1(i), im2(i)) << "i = " << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }

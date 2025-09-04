@@ -1,6 +1,6 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <limits>
-#include <stdio.h>
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4800)  // forcing value to bool 'true' or 'false'
@@ -8,22 +8,23 @@
 
 using namespace Halide;
 
+namespace {
 Var zero_val, one_val, weight;
 
 template<typename weight_t>
 double weight_type_scale() {
-    if (std::numeric_limits<weight_t>::is_integer)
+    if (std::numeric_limits<weight_t>::is_integer) {
         return std::numeric_limits<weight_t>::max();
-    else
-        return static_cast<weight_t>(1.0);
+    }
+    return static_cast<weight_t>(1.0);
 }
 
 template<typename value_t>
 double conversion_rounding() {
-    if (std::numeric_limits<value_t>::is_integer)
+    if (std::numeric_limits<value_t>::is_integer) {
         return 0.5;
-    else
-        return 0.0;
+    }
+    return 0.0;
 }
 
 template<typename value_t>
@@ -36,39 +37,28 @@ bool convert_to_value<bool>(double interpolated) {
     return interpolated >= 1;  // Already has rounding added in
 }
 
-// Prevent iostream from printing 8-bit numbers as character constants.
-template<typename t>
-struct promote_if_char {
-    typedef t promoted;
-};
-template<>
-struct promote_if_char<signed char> {
-    typedef int32_t promoted;
-};
-template<>
-struct promote_if_char<unsigned char> {
-    typedef int32_t promoted;
-};
-
+// TODO: Use the RelativelyEqual matcher from math.cpp
 template<typename value_t>
 bool relatively_equal(value_t a, value_t b) {
     if (a == b) {
         return true;
     } else if (!std::numeric_limits<value_t>::is_integer) {
-        double da = (double)a, db = (double)b;
-        double relative_error;
-
         // This test seems a bit high.
-        if (fabs(db - da) < .0001)
+        double da = (double)a, db = (double)b;
+        if (fabs(db - da) < .0001) {
             return true;
+        }
 
-        if (fabs(da) > fabs(db))
+        double relative_error;
+        if (fabs(da) > fabs(db)) {
             relative_error = fabs((db - da) / da);
-        else
+        } else {
             relative_error = fabs((db - da) / db);
+        }
 
-        if (relative_error < .0000002)
+        if (relative_error < .0000002) {
             return true;
+        }
         std::cerr << "relatively_equal failed for (" << a << ", " << b << ") "
                   << "with relative error " << relative_error << "\n";
     }
@@ -78,8 +68,7 @@ bool relatively_equal(value_t a, value_t b) {
 template<typename value_t, typename weight_t>
 void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, value_t zero_scale,
                  int32_t one_min, int32_t one_extent, value_t one_offset, value_t one_scale,
-                 int32_t weight_min, int32_t weight_extent, weight_t weight_offset, weight_t weight_scale,
-                 const char *name) {
+                 int32_t weight_min, int32_t weight_extent, weight_t weight_offset, weight_t weight_scale) {
     // Stuff everything in Params as these can represent uint32_t where
     // that fails in converting to Expr is we just use the raw C++ variables.
     Param<value_t> zero_scale_p, zero_offset_p;
@@ -110,139 +99,154 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
                 double actual_weight = weight_verify / weight_type_scale<weight_t>();
 
                 double verify_val_full = zero_verify * (1.0 - actual_weight) + one_verify * actual_weight;
-                if (verify_val_full < 0)
+                if (verify_val_full < 0) {
                     verify_val_full -= conversion_rounding<value_t>();
-                else
+                } else {
                     verify_val_full += conversion_rounding<value_t>();
+                }
 
                 value_t verify_val = convert_to_value<value_t>(verify_val_full);
                 value_t computed_val = result(i, j, k);
 
-                if (!relatively_equal(verify_val, computed_val)) {
-                    std::cerr << "Expected "
-                              << (typename promote_if_char<value_t>::promoted)(verify_val)
-                              << " got " << (typename promote_if_char<value_t>::promoted)(computed_val)
-                              << " for lerp(" << (typename promote_if_char<value_t>::promoted)(zero_verify)
-                              << ", " << (typename promote_if_char<value_t>::promoted)(one_verify)
-                              << ", " << (typename promote_if_char<weight_t>::promoted)(weight_verify)
-                              << ") " << actual_weight << ". " << name << "\n";
-                    assert(false);
-                }
+                EXPECT_TRUE(relatively_equal(verify_val, computed_val))
+                    << "Expected " << verify_val
+                    << " got " << computed_val
+                    << " for lerp(" << zero_verify
+                    << ", " << one_verify
+                    << ", " << weight_verify
+                    << ") " << actual_weight << ". ";
             }
         }
     }
 }
+}  // namespace
 
-int main(int argc, char **argv) {
-    // Test bool
+TEST(LerpTest, BoolUint8Exhaustive) {
     check_range<bool, uint8_t>(0, 2, 0, 1,
                                0, 2, 0, 1,
-                               0, 256, 0, 1,
-                               "<bool, uint8_t> exhaustive");
+                               0, 256, 0, 1);
+}
 
-    // Exhaustively test 8-bit cases
+TEST(LerpTest, Uint8Uint8Exhaustive) {
     check_range<uint8_t, uint8_t>(0, 256, 0, 1,
                                   0, 256, 0, 1,
-                                  0, 256, 0, 1,
-                                  "<uint8_t, uint8_t> exhaustive");
+                                  0, 256, 0, 1);
+}
+
+TEST(LerpTest, Int8Uint8Exhaustive) {
     check_range<int8_t, uint8_t>(0, 256, -128, 1,
                                  0, 256, -128, 1,
-                                 0, 256, 0, 1,
-                                 "<int8_t, uint8_t> exhaustive");
+                                 0, 256, 0, 1);
+}
+
+TEST(LerpTest, Uint8FloatExhaustive) {
     check_range<uint8_t, float>(0, 256, 0, 1,
                                 0, 256, 0, 1,
-                                0, 256, 0, 1 / 255.0f,
-                                "<uint8_t, float> exhaustive");
+                                0, 256, 0, 1 / 255.0f);
+}
+
+TEST(LerpTest, Int8FloatExhaustive) {
     check_range<int8_t, float>(0, 256, -128, 1,
                                0, 256, -128, 1,
-                               0, 256, 0, 1 / 255.0f,
-                               "<int8_t, float> exhaustive");
+                               0, 256, 0, 1 / 255.0f);
+}
 
-    // Check all delta values for 16-bit, verify swapping arguments doesn't break
+TEST(LerpTest, Uint16AllZeroStarts) {
     check_range<uint16_t, uint16_t>(0, 65536, 0, 1,
                                     65535, 1, 0, 1,
-                                    0, 257, 255, 1,
-                                    "<uint16_t, uint16_t> all zero starts");
+                                    0, 257, 255, 1);
+}
+
+TEST(LerpTest, Uint16AllOneStarts) {
     check_range<uint16_t, uint16_t>(65535, 1, 0, 1,
                                     0, 65536, 0, 1,
-                                    0, 257, 255, 1,
-                                    "<uint16_t, uint16_t> all one starts");
+                                    0, 257, 255, 1);
+}
 
-    // Verify different bit sizes for value and weight types
+TEST(LerpTest, Uint16Uint8WeightTest) {
     check_range<uint16_t, uint8_t>(0, 1, 0, 1,
                                    65535, 1, 0, 1,
-                                   0, 255, 1, 1,
-                                   "<uint16_t, uint8_t> zero, one uint8_t weight test");
+                                   0, 255, 1, 1);
+}
+
+TEST(LerpTest, Uint16Uint32WeightTest) {
     check_range<uint16_t, uint32_t>(0, 1, 0, 1,
                                     65535, 1, 0, 1,
-                                    std::numeric_limits<int32_t>::min(), 257, 255 * 65535, 1,
-                                    "<uint16_t, uint8_t> zero, one uint32_t weight test");
+                                    std::numeric_limits<int32_t>::min(), 257, 255 * 65535, 1);
+}
+
+TEST(LerpTest, Uint32Uint8WeightTest) {
     check_range<uint32_t, uint8_t>(0, 1, 0, 1,
                                    0x80000000, 1, 0, 1,
-                                   0, 255, 0, 1,
-                                   "<uint32_t, uint8_t> weight test");
+                                   0, 255, 0, 1);
+}
+
+TEST(LerpTest, Uint32Uint16WeightTest) {
     check_range<uint32_t, uint16_t>(0, 1, 0, 1,
                                     0x80000000, 1, 0, 1,
-                                    0, 65535, 0, 1,
-                                    "<uint32_t, uint16_t> weight test");
+                                    0, 65535, 0, 1);
+}
 
-    // Verify float weights with integer values
+TEST(LerpTest, Uint16FloatWeightTest) {
     check_range<uint16_t, float>(0, 1, 0, 1,
                                  65535, 1, 0, 1,
-                                 0, 257, 0, 255.0f / 65535.0f,
-                                 "<uint16_t, float> zero, one float weight test");
+                                 0, 257, 0, 255.0f / 65535.0f);
+}
 
+TEST(LerpTest, Int16AllZeroStarts) {
     check_range<int16_t, uint16_t>(0, 65536, -32768, 1,
                                    0, 1, 0, 1,
-                                   0, 257, 0, 255,
-                                   "<int16_t, uint16_t> all zero starts");
+                                   0, 257, 0, 255);
+}
 
-#if 0  // takes too long, difficult to test with uint32_t
-    // Check all delta values for 32-bit, do it in signed arithmetic
+// takes too long, difficult to test with uint32_t
+// Check all delta values for 32-bit, do it in signed arithmetic
+TEST(LerpTest, DISABLED_Unt32AllZeroStarts) {
     check_range<int32_t, uint32_t>(std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max(), 0, 1,
                                    0x80000000, 1, 0, 1,
-                                   0, 1, 0x80000000, 1,
-                                    "<uint32_t, uint32_t> all zero starts");
-#endif
+                                   0, 1, 0x80000000, 1);
+}
 
+TEST(LerpTest, FloatFloatSmallRange) {
     check_range<float, float>(0, 100, 0, .01f,
                               0, 100, 0, .01f,
-                              0, 100, 0, .01f,
-                              "<float, float> float values 0 to 1 by 1/100ths");
+                              0, 100, 0, .01f);
+}
 
+TEST(LerpTest, FloatFloatNegativeRange) {
     check_range<float, float>(0, 100, -5, .1f,
                               0, 100, 0, .1f,
-                              0, 100, 0, .1f,
-                              "<float, float> float values -5 to 5 by 1/100ths");
+                              0, 100, 0, .1f);
+}
 
-    // Verify float values with integer weights
+TEST(LerpTest, FloatUint8WeightTest) {
     check_range<float, uint8_t>(0, 100, -5, .1f,
                                 0, 100, 0, .1f,
-                                0, 255, 0, 1,
-                                "<float, uint8_t> float values -5 to 5 by 1/100ths");
+                                0, 255, 0, 1);
+}
+
+TEST(LerpTest, FloatUint16WeightTest) {
     check_range<float, uint16_t>(0, 100, -5, .1f,
                                  0, 100, 0, .1f,
-                                 0, 255, 0, 257,
-                                 "<float, uint16_t> float values -5 to 5 by 1/100ths");
+                                 0, 255, 0, 257);
+}
+
+TEST(LerpTest, FloatUint32WeightTest) {
     check_range<float, uint32_t>(0, 100, -5, .1f,
                                  0, 100, 0, .1f,
-                                 std::numeric_limits<int32_t>::min(), 257, 255 * 65535, 1,
-                                 "<float, uint32_t> float values -5 to 5 by 1/100ths");
+                                 std::numeric_limits<int32_t>::min(), 257, 255 * 65535, 1);
+}
 
-    // Check constant and constant case:
+TEST(LerpTest, ConstantCase) {
     Func lerp_constants("lerp_constants");
     lerp_constants() = lerp(0, cast<uint32_t>(1023), .5f);
     Buffer<uint32_t> result = lerp_constants.realize();
 
     uint32_t expected = evaluate<uint32_t>(cast<uint32_t>(lerp(0, cast<uint16_t>(1023), .5f)));
-    if (result(0) != expected) {
-        std::cerr << "Expected " << expected << " got " << result(0) << "\n";
-    }
-    assert(result(0) == expected);
+    EXPECT_EQ(result(0), expected);
+}
 
-    // Add a little more coverage for uint32_t as this was failing
-    // without being detected for a long time.
-
+TEST(LerpTest, Uint32CoverageWithCasts) {
     Buffer<uint8_t> input_a_img(16, 16);
     Buffer<uint8_t> input_b_img(16, 16);
 
@@ -272,10 +276,8 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 16; i++) {
         for (int j = 0; j < 16; j++) {
-            assert(input_a_img(i, j) == result_should_be_a(i, j));
-            assert(input_b_img(i, j) == result_should_be_b(i, j));
+            EXPECT_EQ(input_a_img(i, j), result_should_be_a(i, j));
+            EXPECT_EQ(input_b_img(i, j), result_should_be_b(i, j));
         }
     }
-
-    std::cout << "Success!\n";
 }

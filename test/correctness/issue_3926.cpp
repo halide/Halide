@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char *argv[]) {
+TEST(Issue3926Test, SpecializationTiling) {
     Func f("f"), g("g");
     Var x("x"), y("y");
     Var tx("tx"), ty("ty");
@@ -19,8 +20,5 @@ int main(int argc, char *argv[]) {
 
     Buffer<int> out(34, 34);
     param.set(false);
-    g.realize(out);
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(g.realize(out));
 }

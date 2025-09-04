@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(LetInRdomBoundTest, LetExpressionInRDomBound) {
     // RDoms sanitize the input expressions to ensure there are no
     // free variables in them. Check that this doesn't apply to
     // internal variables created by lets.
@@ -21,12 +22,6 @@ int main(int argc, char **argv) {
     int correct = (rdom_bound * (rdom_bound - 1)) / 2;
 
     for (int i = 0; i < 10; i++) {
-        if (buf(i) != correct) {
-            printf("buf(%d) = %d instead of %d\n", i, buf(i), correct);
-            return 1;
-        }
+        EXPECT_EQ(buf(i), correct) << "i = " << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }

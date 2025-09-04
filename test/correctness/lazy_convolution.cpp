@@ -1,18 +1,18 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 int call_count;
 extern "C" HALIDE_EXPORT_SYMBOL float call_counter(float x) {
     call_count++;
     return x;
 }
-
 HalidePureExtern_1(float, call_counter, float);
+}  // namespace
 
-int main(int argc, char **argv) {
-
+TEST(LazyConvolutionTest, ConditionalConvolution) {
     Func f;
     Var x, y;
     f(x, y) = call_counter(sin(x * 3 + y));
@@ -30,11 +30,5 @@ int main(int argc, char **argv) {
     // If we computed the convolution everywhere, call_count would be
     // 100*100*20*20. Because we only compute it in half of the
     // places, it should be smaller; roughly 100*100*20*20*0.5.
-    if (call_count > 2100000) {
-        printf("Expected call_count ~= 2000000. Instead it's %d\n", call_count);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_LT(call_count, 2100000) << "Expected call_count ~= 2000000";
 }
