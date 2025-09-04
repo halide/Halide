@@ -1,9 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include "halide_test_error.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+void TestExternDeviceFunctionWithNoTargetSupport() {
     Func f{"f"};
 
     // Can't have a device extern stage if the target doesn't support it.
@@ -11,7 +12,13 @@ int main(int argc, char **argv) {
                     NameMangling::Default,
                     Halide::DeviceAPI::OpenCL);
     f.compile_jit(Target{"host"});
+}
+}  // namespace
 
-    printf("Success!\n");
-    return 0;
+TEST(ErrorTests, ExternDeviceFunctionWithNoTargetSupport) {
+    EXPECT_COMPILE_ERROR(
+        TestExternDeviceFunctionWithNoTargetSupport,
+        HasSubstr("extern definition that may leave the output with a dirty "
+                  "<OpenCL> device allocation, but no compatible target "
+                  "feature is enabled in target"));
 }
