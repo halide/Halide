@@ -1,11 +1,10 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
-
-#include <cstdio>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(PythonExtensionGenTest, PythonExtensionGen) {
     ImageParam buffer_u8(UInt(8), 2, "buffer_u8");
     ImageParam buffer_u16(UInt(16), 2, "buffer_u16");
     ImageParam buffer_u32(UInt(32), 2, "buffer_u32");
@@ -41,16 +40,13 @@ int main(int argc, char **argv) {
     std::string c_filename = Internal::get_test_tmp_dir() + "halide_python.cc";
     std::string function_name = "org::halide::halide_python::f";
 
-    f.compile_to(
+    ASSERT_NO_THROW(f.compile_to(
         {{OutputFileType::c_source, c_filename},
          {OutputFileType::python_extension, pyext_filename}},
         params,
         function_name,
-        target);
+        target));
 
     Internal::assert_file_exists(c_filename);
     Internal::assert_file_exists(pyext_filename);
-
-    printf("Success!\n");
-    return 0;
 }

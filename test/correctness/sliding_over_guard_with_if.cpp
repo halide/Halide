@@ -1,19 +1,22 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include <cstdio>
-#include <memory>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Tools;
 
+namespace {
 int call_count = 0;
 extern "C" HALIDE_EXPORT_SYMBOL int call_counter(int x, int y) {
     call_count++;
     return x;
 }
 HalideExtern_2(int, call_counter, int, int);
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(SlidingOverGuardWithIfTest, SlidingOverGuardWithIf) {
+    call_count = 0;
+
     Var x, y;
 
     // A test case that requires sliding window to be able to slide
@@ -34,18 +37,14 @@ int main(int argc, char **argv) {
         .store_at(dst, yo)
         .fold_storage(y, 4);
 
-    Buffer<int> out = dst.realize({100, 100});
+    Buffer<int> out;
+    ASSERT_NO_THROW(out = dst.realize({100, 100}));
 
     // The number of calls to 'expensive' should be the size of the
     // output, plus some margin from the stencil, plus a little
     // redundant recompute at the split boundary.
     int correct = (out.height() + 2 + 2) * out.width();
-    if (call_count != correct) {
-        printf("number of calls to producer was %d instead of %d\n",
-               call_count, correct);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(call_count, correct)
+        << "number of calls to producer was " << call_count
+        << " instead of " << correct;
 }

@@ -1,10 +1,10 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
-
-#include <cstdio>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 extern "C" HALIDE_EXPORT_SYMBOL int copy_plus_xcoord(halide_buffer_t *input, int tile_extent_x, int tile_extent_y, halide_buffer_t *output) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
@@ -30,8 +30,9 @@ extern "C" HALIDE_EXPORT_SYMBOL int copy_plus_xcoord(halide_buffer_t *input, int
 
     return 0;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(ExternConsumerTiledTest, ExternConsumerTiled) {
     Func input;
     Var x, y;
     input(x, y) = x * y;
@@ -50,14 +51,12 @@ int main(int argc, char **argv) {
 
     input.compute_at(output, xo);
 
-    Buffer<int32_t> buf = output.realize({75, 35});  // Use uneven splits.
+    Buffer<int32_t> buf;
+    ASSERT_NO_THROW(buf = output.realize({75, 35}));  // Use uneven splits.
 
     for (int y = 0; y < buf.height(); y++) {
         for (int x = 0; x < buf.width(); x++) {
-            assert(buf(x, y) == x * y + x);
+            EXPECT_EQ(buf(x, y), x * y + x) << "buf(" << x << ", " << y << ")";
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

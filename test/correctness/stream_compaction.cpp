@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(StreamCompactionTest, StreamCompaction) {
     // A zero-one function:
     Func f;
     Var x;
@@ -34,20 +33,17 @@ int main(int argc, char **argv) {
     // for Halide to prove:
     ones.update().allow_race_conditions().parallel(r, 50);
 
-    Buffer<int> result = ones.realize({1001});
+    Buffer<int> result;
+    ASSERT_NO_THROW(result = ones.realize({1001}));
+    
     int next = 0;
     for (int i = 0; i < result.width(); i++) {
-        if (result(i) != next) {
-            printf("result(%d) = %d instead of %d\n", i, result(i), next);
-            return 1;
-        } else {
+        EXPECT_EQ(result(i), next) << "i = " << i;
+        if (result(i) == next) {
             do {
                 next++;
             } while ((next % 5) && (next % 7));
         }
         if (next >= 1000) break;
     }
-
-    printf("Success!\n");
-    return 0;
 }

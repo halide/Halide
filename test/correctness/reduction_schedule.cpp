@@ -1,10 +1,10 @@
 #include "Halide.h"
 #include <algorithm>
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ReductionScheduleTest, ReductionSchedule) {
     Var x, y;
 
     const int size = 32;
@@ -30,7 +30,9 @@ int main(int argc, char **argv) {
                                              energy(r.x, r.y - 1),
                                              energy(xp, r.y - 1));
 
-    Buffer<float> im_energy = energy.realize({size, size});
+    Buffer<float> im_energy;
+    ASSERT_NO_THROW(im_energy = energy.realize({size, size}));
+    
     Buffer<float> ref_energy(size, size);
     for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {
@@ -44,13 +46,9 @@ int main(int argc, char **argv) {
             ref_energy(x, y) = noise(x, y) + incr;
 
             float delta = ref_energy(x, y) - im_energy(x, y);
-            if (fabs(delta) > 1e-5) {
-                printf("energy(%d,%d) was %f instead of %f\n", x, y, im_energy(x, y), ref_energy(x, y));
-                return 1;
-            }
+            EXPECT_LE(std::abs(delta), 1e-5f) 
+                << "energy(" << x << "," << y << ") was " << im_energy(x, y) 
+                << " instead of " << ref_energy(x, y);
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

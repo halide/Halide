@@ -1,11 +1,11 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-    // Compute a two-tap and a four-tap box filter at the same time,
-    // recursively.
-
+// Compute a two-tap and a four-tap box filter at the same time,
+// recursively.
+TEST(RecursiveBoxFiltersTest, RecursiveBoxFilters) {
     Var x;
     Func f;
     f(x) = x;
@@ -32,22 +32,12 @@ int main(int argc, char **argv) {
 
     Buffer<int> r0(size);
     Buffer<int> r1(size);
-    h.realize({r0, r1});
+    ASSERT_NO_THROW(h.realize({r0, r1}));
 
     for (int i = 3; i < size; i++) {
         int correct2 = i + (i - 1);
         int correct4 = i + (i - 1) + (i - 2) + (i - 3);
-        if (r0(i) != correct2) {
-            printf("r0[%d] = %d instead of %d\n", i, r0(i), correct2);
-            return 1;
-        }
-        if (r1(i) != correct4) {
-            printf("r1[%d] = %d instead of %d\n", i, r1(i), correct4);
-            return 1;
-        }
+        EXPECT_EQ(r0(i), correct2) << "r0[" << i << "]";
+        EXPECT_EQ(r1(i), correct4) << "r1[" << i << "]";
     }
-
-    printf("Success!\n");
-
-    return 0;
 }

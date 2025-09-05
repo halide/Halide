@@ -1,9 +1,9 @@
 #include "Halide.h"
-
-#include <iostream>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 Buffer<double> test(bool with_vectorize) {
     ImageParam input(Float(64), 2);
 
@@ -41,23 +41,15 @@ Buffer<double> test(bool with_vectorize) {
 
     return result;
 }
+}  // namespace
 
-int main(int argc, char const *argv[]) {
+TEST(PartitionLoopsBugTest, PartitionLoopsBug) {
     Buffer<double> im1 = test(true);
     Buffer<double> im2 = test(false);
 
     for (int y = 0; y < im1.height(); y++) {
         for (int x = 0; x < im1.width(); x++) {
-            if (im1(x, y) != im2(x, y)) {
-                printf("im1(%d, %d) = %f, im2(%d, %d) = %f\n",
-                       x, y, im1(x, y),
-                       x, y, im2(x, y));
-                return 1;
-            }
+            EXPECT_EQ(im1(x, y), im2(x, y)) << "im1(" << x << ", " << y << ") = " << im1(x, y) << ", im2(" << x << ", " << y << ") = " << im2(x, y);
         }
     }
-
-    printf("Success!\n");
-
-    return 0;
 }

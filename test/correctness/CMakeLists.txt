@@ -231,7 +231,7 @@ target_sources(
     median3x3.cpp
     memoize_cloned.cpp
     min_extent.cpp
-    #    mod.cpp
+    mod.cpp
     #    mul_div_mod.cpp
     multi_output_pipeline_with_bad_sizes.cpp  # TODO: move to error tests
     multi_splits_with_diff_tail_strategies.cpp
@@ -239,7 +239,7 @@ target_sources(
     multipass_constraints.cpp
     #    multiple_outputs.cpp
     mux.cpp
-    #    narrow_predicates.cpp
+    narrow_predicates.cpp
     negative_split_factors.cpp  # TODO: convert to error test
     #    nested_tail_strategies.cpp
     #    newtons_method.cpp
@@ -254,10 +254,10 @@ target_sources(
     #    parameter_constraints.cpp
     partial_application.cpp
     #    partial_realization.cpp
-    #    partition_loops.cpp
-    #    partition_loops_bug.cpp
+    partition_loops.cpp
+    partition_loops_bug.cpp
     #    partition_max_filter.cpp
-    #    pipeline_set_jit_externs_func.cpp
+    pipeline_set_jit_externs_func.cpp
     #    plain_c_includes.c
     #    popc_clz_ctz_bounds.cpp
     #    predicated_store_load.cpp
@@ -266,16 +266,16 @@ target_sources(
     print_loop_nest.cpp
     #    process_some_tiles.cpp
     #    pseudostack_shares_slots.cpp
-    #    python_extension_gen.cpp
+    python_extension_gen.cpp
     #    pytorch.cpp
     realize_condition_depends_on_tuple.cpp
     realize_larger_than_two_gigs.cpp  # TODO: convert to error test
     realize_over_shifted_domain.cpp
-    #    recursive_box_filters.cpp
+    recursive_box_filters.cpp
     reduction_chain.cpp
     reduction_predicate_racing.cpp
     #    reduction_non_rectangular.cpp
-    #    reduction_schedule.cpp
+    reduction_schedule.cpp
     #    register_shuffle.cpp
     #    reorder_storage.cpp
     #    require.cpp
@@ -305,12 +305,12 @@ target_sources(
     #    skip_stages_external_array_functions.cpp
     #    skip_stages_memoize.cpp
     sliding_backwards.cpp
-    #    sliding_over_guard_with_if.cpp
+    sliding_over_guard_with_if.cpp
     #    sliding_reduction.cpp
     #    sliding_window.cpp
     #    sort_exprs.cpp
     #    specialize.cpp
-    #    specialize_to_gpu.cpp
+    specialize_to_gpu.cpp
     #    specialize_trim_condition.cpp
     #    split_by_non_factor.cpp
     split_fuse_rvar.cpp
@@ -335,7 +335,7 @@ target_sources(
     #    tracing_stack.cpp
     transitive_bounds.cpp
     #    trim_no_ops.cpp
-    #    tuple_partial_update.cpp
+    tuple_partial_update.cpp
     #    tuple_reduction.cpp
     #    tuple_select.cpp
     #    tuple_undef.cpp
@@ -346,9 +346,9 @@ target_sources(
     uninitialized_read.cpp
     unique_func_image.cpp
     unroll_dynamic_loop.cpp
-    #    unroll_loop_with_implied_constant_bounds.cpp
+    unroll_loop_with_implied_constant_bounds.cpp
     unrolled_reduction.cpp
-    #    unsafe_dedup_lets.cpp
+    unsafe_dedup_lets.cpp
     #    unsafe_promises.cpp
     unused_func.cpp
     update_chunk.cpp
@@ -358,15 +358,15 @@ target_sources(
     #    vector_math.cpp
     vector_print_bug.cpp
     #    vector_reductions.cpp
-    #    vector_shuffle.cpp
-    #    vector_tile.cpp
+    vector_shuffle.cpp
+    vector_tile.cpp
     #    vectorize_guard_with_if.cpp
     vectorize_mixed_widths.cpp
     #    vectorize_nested.cpp
     #    vectorize_predicated.cpp
     vectorize_varying_allocation_size.cpp
     vectorized_assert.cpp
-    #    vectorized_gpu_allocation.cpp
+    vectorized_gpu_allocation.cpp
     vectorized_guard_with_if_tail.cpp
     vectorized_initialization.cpp
     vectorized_load_from_vectorized_allocation.cpp
@@ -384,10 +384,10 @@ target_sources(
     async_copy_chain.cpp
     atomic_tuples.cpp
     atomics.cpp
-    #    compute_outermost.cpp
+    compute_outermost.cpp
     #    compute_with.cpp
     #    convolution.cpp
-    #    extern_consumer_tiled.cpp
+    extern_consumer_tiled.cpp
     #    extern_stage.cpp
     #    func_clone.cpp
     #    func_wrapper.cpp
@@ -410,11 +410,11 @@ target_sources(
     parallel_nested_1.cpp
     #    parallel_reductions.cpp
     parallel_rvar.cpp
-    #    parallel_scatter.cpp
+    parallel_scatter.cpp
     #    random.cpp
     #    reorder_rvars.cpp
     #    rfactor.cpp
-    #    stream_compaction.cpp
+    stream_compaction.cpp
     thread_safety.cpp  # TODO: move this to a new sanitizer-specific section
     #    truncated_pyramid.cpp
     #    tuple_vector_reduce.cpp

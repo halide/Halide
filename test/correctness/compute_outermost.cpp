@@ -1,8 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 Func blur(Func in) {
     Func blurx, blury;
     Var x, y;
@@ -16,8 +17,9 @@ Func blur(Func in) {
 
     return blury;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(ComputeOutermostTest, ComputeOutermost) {
     Func fn1, fn2;
     Var x, y;
 
@@ -35,18 +37,14 @@ int main(int argc, char **argv) {
     blur_fn1.compute_at(out, t);
     blur_fn2.compute_at(out, t);
 
-    Buffer<int> result = out.realize({256, 256});
+    Buffer<int> result;
+    ASSERT_NO_THROW(result = out.realize({256, 256}));
+
     for (int y = 0; y < 256; y++) {
         for (int x = 0; x < 256; x++) {
             int correct = 3 * x + 4 * y;
-            if (result(x, y) != correct) {
-                printf("result(%d, %d) = %d instead of %d\n",
-                       x, y, result(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(result(x, y), correct)
+                << "result(" << x << ", " << y << ")";
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

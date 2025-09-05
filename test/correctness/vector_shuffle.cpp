@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(VectorShuffleTest, VectorShuffle) {
     Target target = get_jit_target_from_environment();
 
     Var x{"x"}, y{"y"};
@@ -41,7 +41,8 @@ int main(int argc, char **argv) {
         g.gpu_tile(x, xo, xi, 8).never_partition_all();
     }
 
-    Buffer<int> im = g.realize({32}, target);
+    Buffer<int> im;
+    ASSERT_NO_THROW(im = g.realize({32}, target));
     im.copy_to_host();
     for (int x = 0; x < 32; x++) {
         int exp = 0;
@@ -50,11 +51,6 @@ int main(int argc, char **argv) {
             int v1 = x * (indices1[i] + (indices1[i] >= 4 ? 3 : 1));
             exp += v0 * v1;
         }
-        if (im(x) != exp) {
-            printf("im[%d] = %d (expected %d)\n", x, im(x), exp);
-            return 1;
-        }
+        EXPECT_EQ(im(x), exp) << "im[" << x << "] = " << im(x) << " (expected " << exp << ")";
     }
-    printf("Success!\n");
-    return 0;
 }

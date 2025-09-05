@@ -1,7 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 Var x;
 
 template<typename T>
@@ -18,16 +20,19 @@ void check(const Expr &e) {
     g2.realize(b2);
 
     for (int i = 0; i < b1.width(); i++) {
-        if (b1(i) != b2(i)) {
-            printf("b1(%d) = %d instead of %d\n",
-                   i, b1(i), b2(i));
-            exit(-1);
-        }
+        EXPECT_EQ(b1(i), b2(i)) << "i = " << i;
     }
 }
+}  // namespace
 
 template<typename T>
-void check_all() {
+class NarrowPredicatesTest : public ::testing::Test {};
+
+using TestTypes = ::testing::Types<uint8_t, uint16_t>;
+TYPED_TEST_SUITE(NarrowPredicatesTest, TestTypes);
+
+TYPED_TEST(NarrowPredicatesTest, BoundaryConditions) {
+    using T = TypeParam;
     Func f;
     f(x) = cast<T>(x);
     f.compute_root();
@@ -46,12 +51,4 @@ void check_all() {
     check<T>(BoundaryConditions::constant_exterior(f, cast<T>(17), {{10, 100}})(x));
     check<T>(BoundaryConditions::mirror_image(f, {{10, 100}})(x));
     check<T>(BoundaryConditions::mirror_interior(f, {{10, 100}})(x));
-}
-
-int main(int argc, char **argv) {
-    check_all<uint8_t>();
-    check_all<uint16_t>();
-
-    printf("Success!\n");
-    return 0;
 }

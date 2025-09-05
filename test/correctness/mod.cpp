@@ -1,10 +1,17 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
 template<typename T>
-bool test() {
+class ModTest : public ::testing::Test {};
+
+using TestTypes = ::testing::Types<float, double, int32_t, uint32_t, int16_t, uint16_t, int8_t, uint8_t>;
+TYPED_TEST_SUITE(ModTest, TestTypes);
+
+TYPED_TEST(ModTest, ModOperations) {
+    using T = TypeParam;
+
     Var x;
     Func f;
     f(x) = cast<T>(x) % 2;
@@ -12,10 +19,7 @@ bool test() {
     Buffer<T> im = f.realize({16});
 
     for (int i = 0; i < 16; i++) {
-        if (im(i) != (T)(i % 2)) {
-            printf("Mod error for %d %% 2 == %f\n", i, (double)(im(i)));
-            return false;
-        }
+        EXPECT_EQ(im(i), (T)(i % 2));
     }
 
     // Test for negative mod case. Modulous of a negative number by a
@@ -30,29 +34,6 @@ bool test() {
     Buffer<T> nim = nf.realize({16});
 
     for (int i = 1; i < 16; i++) {
-        if (nim(i) != (T)((4 - (i % 4)) % 4)) {
-            printf("Mod error for %d %% 4 == %f\n", -i, (double)(nim(i)));
-            return false;
-        }
+        EXPECT_EQ(nim(i), (T)((4 - (i % 4)) % 4));
     }
-
-    return true;
-}
-
-int main(int argc, char **argv) {
-
-    if (test<float>() &&
-        test<double>() &&
-        test<int32_t>() &&
-        test<uint32_t>() &&
-        test<int16_t>() &&
-        test<uint16_t>() &&
-        test<int8_t>() &&
-        test<uint8_t>()) {
-        printf("Success!\n");
-        return 0;
-    }
-
-    printf("Failure!\n");
-    return 1;
 }

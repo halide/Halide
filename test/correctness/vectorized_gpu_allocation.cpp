@@ -1,14 +1,14 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
 // See https://github.com/halide/Halide/issues/3061
 
-int main(int argc, char **argv) {
+TEST(VectorizedGpuAllocationTest, VectorizedGpuAllocation) {
     Target t = get_jit_target_from_environment();
     if (!t.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled.";
     }
 
     // Fill input buffer.
@@ -39,19 +39,13 @@ int main(int argc, char **argv) {
         .reorder(xi, yi, ci, xo, yo, co)
         .vectorize(ci);
 
-    func.realize(output);
+    ASSERT_NO_THROW(func.realize(output));
 
     // Print output.
     output.copy_to_host();
 
     float *output_data = output.data();
     for (int i = 0; i < 12; ++i) {
-        if (input_data[i] != output_data[i]) {
-            printf("output(%d) = %f instead of %f\n", i, output_data[i], input_data[i]);
-            return 1;
-        }
+        EXPECT_EQ(input_data[i], output_data[i]) << "i = " << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }

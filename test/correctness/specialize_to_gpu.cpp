@@ -1,17 +1,15 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(SpecializeToGpuTest, SpecializeToGpu) {
 #ifdef WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
-    printf("[SKIP] Serialization won't preserve GPU buffers, skipping.\n");
-    return 0;
+    GTEST_SKIP() << "Serialization won't preserve GPU buffers, skipping.";
 #endif
 
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled.";
     }
 
     // A sequence of stages which may or may not run on the gpu.
@@ -31,29 +29,23 @@ int main(int argc, char **argv) {
 
     Buffer<int> out(128), reference(128), input(256);
 
-    lambda(x, x * 17 + 43 + x * x).realize(input);
+    ASSERT_NO_THROW(lambda(x, x * 17 + 43 + x * x).realize(input));
     in.set(input);
 
     gpu_f.set(false);
     gpu_g.set(false);
     gpu_h.set(false);
-    h.realize(reference);
+    ASSERT_NO_THROW(h.realize(reference));
 
     for (int i = 1; i < 8; i++) {
         gpu_f.set((i & 1) != 0);
         gpu_g.set((i & 2) != 0);
         gpu_h.set((i & 4) != 0);
 
-        h.realize(out);
+        ASSERT_NO_THROW(h.realize(out));
 
         RDom r(out);
         uint32_t err = evaluate<uint32_t>(sum(abs(out(r) - reference(r))));
-        if (err) {
-            printf("Incorrect results for test %d\n", i);
-            return 1;
-        }
+        EXPECT_EQ(err, 0) << "Incorrect results for test " << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }

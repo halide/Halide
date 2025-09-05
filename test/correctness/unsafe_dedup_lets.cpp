@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(UnsafeDedupLetsTest, UnsafeDedupLets) {
     Func f;
     Var x;
 
@@ -42,11 +43,5 @@ int main(int argc, char **argv) {
 
     int result = evaluate<int>(f()[0]);
     int correct = 131;
-    if (result != correct) {
-        printf("Bad GCD: %d != %d\n", result, correct);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(result, correct);
 }
