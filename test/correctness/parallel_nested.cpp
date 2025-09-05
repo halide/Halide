@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ParallelNestedTest, Basic) {
     Var x, y, z;
     Func f;
 
@@ -21,14 +21,8 @@ int main(int argc, char **argv) {
     for (int x = 0; x < 64; x++) {
         for (int y = 0; y < 64; y++) {
             for (int z = 0; z < 64; z++) {
-                if (im(x, y, z) != x * y + z * 3 + 1) {
-                    printf("im(%d, %d, %d) = %d\n", x, y, z, im(x, y, z));
-                    return 1;
-                }
+                EXPECT_EQ(im(x, y, z), x * y + z * 3 + 1) << "im(" << x << ", " << y << ", " << z << ") = " << im(x, y, z);
             }
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

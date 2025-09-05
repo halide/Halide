@@ -1,15 +1,18 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+// TODO: move to error tests
+
+namespace {
 bool error_occurred;
 void halide_error(JITUserContext *user_context, const char *msg) {
-    printf("%s\n", msg);
     error_occurred = true;
 }
+}
 
-int main(int argc, char **argv) {
+TEST(MultiOutputPipelineWithBadSizesTest, Basic) {
     Func f;
     Var x;
     f(x) = Tuple(x, sin(x));
@@ -24,11 +27,5 @@ int main(int argc, char **argv) {
     Realization r({x_out, sin_x_out});
     f.realize(r);
 
-    if (!error_occurred) {
-        printf("There should have been an error\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_TRUE(error_occurred) << "There should have been an error";
 }

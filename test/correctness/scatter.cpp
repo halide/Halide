@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ScatterTest, Basic) {
     Func f, g;
     Var x, y;
 
@@ -26,12 +26,6 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 10; i++) {
         int correct = i < 5 ? (1617 + i * 100) : 17;
-        if (result(i, 0) != correct) {
-            printf("Value at %d should have been %d but was instead %d\n", i, correct, result(i, 0));
-            return 1;
-        }
+        EXPECT_EQ(result(i, 0), correct) << "Value at " << i << " should have been " << correct << " but was instead " << result(i, 0);
     }
-
-    printf("Success!\n");
-    return 0;
 }

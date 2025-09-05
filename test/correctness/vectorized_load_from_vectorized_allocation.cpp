@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(VectorizedLoadFromVectorizedAllocationTest, Basic) {
     // Vectorized Load from a vectorized allocation
     const int size = 80;
 
@@ -27,14 +27,8 @@ int main(int argc, char **argv) {
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 int correct = 100 + 2 * x * z;
-                if (im(x, y, z) != correct) {
-                    printf("im(%d, %d, %d) = %d instead of %d\n",
-                           x, y, z, im(x, y, z), correct);
-                    return 1;
-                }
+                EXPECT_EQ(im(x, y, z), correct) << "im(" << x << ", " << y << ", " << z << ")";
             }
         }
     }
-    printf("Success!\n");
-    return 0;
 }

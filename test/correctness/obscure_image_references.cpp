@@ -1,16 +1,16 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ObscureImageReferencesTest, Basic) {
     ImageParam im1(UInt(8), 1);
     Buffer<uint8_t> im2(10), im3(20);
     Param<int> j;
 
-    assert(im1.dimensions() == 1);
-    assert(im2.dimensions() == 1);
-    assert(im3.dimensions() == 1);
+    ASSERT_EQ(im1.dimensions(), 1);
+    ASSERT_EQ(im2.dimensions(), 1);
+    ASSERT_EQ(im3.dimensions(), 1);
 
     Func f;
     Var x;
@@ -26,12 +26,6 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 100; i++) {
         int correct = i < im2(3) ? 37 : (i + 20);
-        if (result(i) != correct) {
-            printf("result(%d) = %d instead of %d\n", i, result(i), correct);
-            return 1;
-        }
+        EXPECT_EQ(result(i), correct) << "result(" << i << ") = " << result(i) << " instead of " << correct;
     }
-
-    printf("Success!\n");
-    return 0;
 }

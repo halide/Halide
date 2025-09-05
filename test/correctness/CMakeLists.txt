@@ -233,26 +233,26 @@ target_sources(
     #    min_extent.cpp
     #    mod.cpp
     #    mul_div_mod.cpp
-    #    multi_output_pipeline_with_bad_sizes.cpp
+    multi_output_pipeline_with_bad_sizes.cpp  # TODO: move to error tests
     multi_splits_with_diff_tail_strategies.cpp
     #    multi_way_select.cpp
     #    multipass_constraints.cpp
     #    multiple_outputs.cpp
-    #    mux.cpp
+    mux.cpp
     #    narrow_predicates.cpp
-    #    negative_split_factors.cpp
+    negative_split_factors.cpp  # TODO: convert to error test
     #    nested_tail_strategies.cpp
     #    newtons_method.cpp
     #    non_nesting_extern_bounds_query.cpp
     non_vector_aligned_embeded_buffer.cpp
-    #    obscure_image_references.cpp
+    obscure_image_references.cpp
     #    out_constraint.cpp
     #    out_of_memory.cpp
     #    output_larger_than_two_gigs.cpp
     #    parallel_gpu_nested.cpp
     #    param.cpp
     #    parameter_constraints.cpp
-    #    partial_application.cpp
+    partial_application.cpp
     #    partial_realization.cpp
     #    partition_loops.cpp
     #    partition_loops_bug.cpp
@@ -269,10 +269,10 @@ target_sources(
     #    python_extension_gen.cpp
     #    pytorch.cpp
     realize_condition_depends_on_tuple.cpp
-    #    realize_larger_than_two_gigs.cpp
+    realize_larger_than_two_gigs.cpp  # TODO: convert to error test
     realize_over_shifted_domain.cpp
     #    recursive_box_filters.cpp
-    #    reduction_chain.cpp
+    reduction_chain.cpp
     #    reduction_predicate_racing.cpp
     #    reduction_non_rectangular.cpp
     #    reduction_schedule.cpp
@@ -281,13 +281,13 @@ target_sources(
     #    require.cpp
     #    reschedule.cpp
     respect_input_constraint_in_bounds_inference.cpp
-    #    reuse_stack_alloc.cpp
+    reuse_stack_alloc.cpp
     ring_buffer.cpp
     #    round.cpp
     #    saturating_casts.cpp
-    #    scatter.cpp
+    scatter.cpp
     #    set_custom_trace.cpp
-    #    shadowed_bound.cpp
+    shadowed_bound.cpp
     shared_self_references.cpp
     #    shift_by_unsigned_negated.cpp
     shifted_image.cpp
@@ -316,7 +316,7 @@ target_sources(
     split_fuse_rvar.cpp
     split_reuse_inner_name_bug.cpp
     #    split_store_compute.cpp
-    #    stable_realization_order.cpp
+    stable_realization_order.cpp
     #    stack_allocations.cpp
     #    stage_strided_loads.cpp
     #    stencil_chain_in_update_definitions.cpp
@@ -331,7 +331,7 @@ target_sources(
     #    tiled_matmul.cpp
     #    tracing.cpp
     tracing_bounds.cpp
-    #    tracing_broadcast.cpp
+    tracing_broadcast.cpp
     #    tracing_stack.cpp
     transitive_bounds.cpp
     #    trim_no_ops.cpp
@@ -343,7 +343,7 @@ target_sources(
     two_vector_args.cpp
     #    typed_func.cpp
     #    undef.cpp
-    #    uninitialized_read.cpp
+    uninitialized_read.cpp
     #    unique_func_image.cpp
     unroll_dynamic_loop.cpp
     #    unroll_loop_with_implied_constant_bounds.cpp
@@ -367,9 +367,9 @@ target_sources(
     vectorize_varying_allocation_size.cpp
     #    vectorized_assert.cpp
     #    vectorized_gpu_allocation.cpp
-    #    vectorized_guard_with_if_tail.cpp
-    #    vectorized_initialization.cpp
-    #    vectorized_load_from_vectorized_allocation.cpp
+    vectorized_guard_with_if_tail.cpp
+    vectorized_initialization.cpp
+    vectorized_load_from_vectorized_allocation.cpp
     #    vectorized_reduction_bug.cpp
     #    widening_lerp.cpp
     #    widening_reduction.cpp
@@ -404,9 +404,9 @@ target_sources(
     nested_shiftinwards.cpp
     oddly_sized_output.cpp
     parallel.cpp
-    #    parallel_alloc.cpp
+    parallel_alloc.cpp
     #    parallel_fork.cpp
-    #    parallel_nested.cpp
+    parallel_nested.cpp
     #    parallel_nested_1.cpp
     #    parallel_reductions.cpp
     #    parallel_rvar.cpp
@@ -415,7 +415,7 @@ target_sources(
     #    reorder_rvars.cpp
     #    rfactor.cpp
     #    stream_compaction.cpp
-    #    thread_safety.cpp
+    thread_safety.cpp  # TODO: move this to a new sanitizer-specific section
     #    truncated_pyramid.cpp
     #    tuple_vector_reduce.cpp
     unroll_huge_mux.cpp

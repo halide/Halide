@@ -1,9 +1,10 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-int main(int argc, char **argv) {
+TEST(StableRealizationOrderTest, Basic) {
     // Verify that the realization order is invariant to anything to do with
     // unique_name counters.
 
@@ -27,15 +28,9 @@ int main(int argc, char **argv) {
         // alphabetical prefix of the Func name followed by time of
         // definition. All the Funcs in this test have the same name, so it
         // should just depend on time of definition.
-        assert(r.size() == funcs.size());
+        ASSERT_EQ(r.size(), funcs.size());
         for (size_t i = 0; i < funcs.size(); i++) {
-            if (funcs[i].name() != r[i]) {
-                debug(0) << "Unexpected realization order: "
-                         << funcs[i].name() << " != " << r[i] << "\n";
-            }
+            EXPECT_EQ(funcs[i].name(), r[i]) << "Unexpected realization order: " << funcs[i].name() << " != " << r[i];
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

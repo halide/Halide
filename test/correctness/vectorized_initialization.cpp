@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(VectorizedInitializationTest, Basic) {
     // By default, the bounds computed in the initialization step of a
     // reduction cover all uses of the Func by later stages. During
     // lowering, we expand them to cover the bounds read by the update
@@ -26,12 +26,8 @@ int main(int argc, char **argv) {
 
     // The sequence generated should be:
     // -1, (-1 + 1) = 0, 0 + 2 = 2, 2 + 3 = 5, 5 + 4 = 9
-    if (result(0) != 0 || result(1) != 2 || result(2) != 5 || result(3) != 9) {
-        printf("Resulting sequence was: %d %d %d %d instead of 0 2 5 9\n",
-               result(0), result(1), result(2), result(3));
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(result(0), 0);
+    EXPECT_EQ(result(1), 2);
+    EXPECT_EQ(result(2), 5);
+    EXPECT_EQ(result(3), 9);
 }

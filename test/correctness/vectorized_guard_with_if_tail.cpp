@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(VectorizedGuardWithIfTailTest, Basic) {
     Var x;
 
     for (int i = 0; i < 2; i++) {
@@ -29,14 +30,7 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < buf.width(); i++) {
             int correct = i * 2;
-            if (buf(i) != correct) {
-                printf("buf(%d) = %d instead of %d\n",
-                       i, buf(i), correct);
-                return 1;
-            }
+            EXPECT_EQ(buf(i), correct) << "buf(" << i << ") = " << buf(i) << " instead of " << correct;
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

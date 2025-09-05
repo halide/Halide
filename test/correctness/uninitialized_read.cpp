@@ -1,20 +1,21 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
-
     if (e->event == 2) {  // begin realization
         if (e->coordinates[1] != 4) {
-            printf("Realization of f was supposed to be 4-wide\n");
-            exit(1);
+            ADD_FAILURE() << "Realization of f was supposed to be 4-wide";
+            return 1;
         }
     }
     return 0;
 }
+}
 
-int main(int argc, char **argv) {
+TEST(UninitializedReadTest, Basic) {
     Func f("f"), g("g"), h("h");
     Var x;
 
@@ -34,8 +35,5 @@ int main(int argc, char **argv) {
 
     f.trace_realizations();
     h.jit_handlers().custom_trace = &my_trace;
-    h.realize({1});
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(h.realize({1}));
 }

@@ -1,43 +1,35 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
+namespace {
 void check(const Buffer<int> &result) {
     for (int x = 0; x < result.width(); x++) {
         int correct[] = {x, 456, 789, 789};
         for (int c = 0; c < 4; c++) {
-            if (result(x, c) != correct[c]) {
-                printf("result(%d, 0) = %d instead of %d\n",
-                       x, result(x, c), correct[c]);
-                abort();
-            }
+            EXPECT_EQ(result(x, c), correct[c]) << "result(" << x << ", " << c << ")";
         }
     }
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(MuxTest, DirectMux) {
     Var x("x"), c("c");
-    {
-        Func f("f");
+    Func f("f");
 
-        f(x, c) = mux(c, {x, 456, 789});
+    f(x, c) = mux(c, {x, 456, 789});
 
-        Buffer<int> result = f.realize({100, 4});
-        check(result);
-    }
+    check(f.realize({100, 4}));
+}
 
-    {
-        Func f;
-        f(x) = {x, 456, 789};
-        Func g;
-        g(x, c) = mux(c, f(x));
+TEST(MuxTest, MuxFromTuple) {
+    Var x("x"), c("c");
+    Func f{"f"}, g{"g"};
 
-        Buffer<int> result = g.realize({100, 4});
-        check(result);
-    }
+    f(x) = {x, 456, 789};
+    g(x, c) = mux(c, f(x));
 
-    printf("Success!\n");
-    return 0;
+    check(g.realize({100, 4}));
 }

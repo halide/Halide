@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 #include <thread>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ThreadSafetyTest, Basic) {
     // Wasm JIT is substantially slower than others,
     // so do fewer iterations to avoid timing out.
     const bool is_wasm = get_jit_target_from_environment().arch == Target::WebAssembly;
@@ -34,8 +34,4 @@ int main(int argc, char **argv) {
     for (auto &t : threads) {
         t.join();
     }
-
-    printf("Success!\n");
-
-    return 0;
 }

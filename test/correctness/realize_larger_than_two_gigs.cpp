@@ -1,16 +1,17 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <memory>
-#include <stdio.h>
 
 using namespace Halide;
 
+namespace {
 int error_occurred = false;
 void halide_error(JITUserContext *ctx, const char *msg) {
-    printf("Expected: %s\n", msg);
     error_occurred = true;
 }
+}
 
-int main(int argc, char **argv) {
+TEST(RealizeLargerThanTwoGigsTest, Basic) {
     Param<int> extent;
     Var x, y, z, w;
     RDom r(0, extent, 0, extent, 0, extent, 0, extent / 2 + 1);
@@ -28,14 +29,14 @@ int main(int argc, char **argv) {
 
     // On large-buffer targets try an internal allocation of size just larger than 2^63
     extent.set(1 << 16);
+    error_occurred = false;
     Buffer<uint8_t> result = grand_total.realize();
-    assert(error_occurred);
+    EXPECT_TRUE(error_occurred);
 
     // On small-buffer targets try an internal allocation of size just larger than 2^31
     extent.set(1 << 8);
     grand_total.compile_jit(t.without_feature(Target::LargeBuffers));
+    error_occurred = false;
     result = grand_total.realize();
-    assert(error_occurred);
-
-    printf("Success!\n");
+    EXPECT_TRUE(error_occurred);
 }

@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(ReductionChainTest, Basic) {
     Func f0, f1, f2, g("g"), out("out");
     Var x("x"), y("y");
 
@@ -23,11 +22,6 @@ int main(int argc, char **argv) {
     f1.store_at(out, x).compute_at(g, y);
     f2.store_at(out, x).compute_at(g, x);
 
-    out.realize({10, 10});
-
     // We just want this to not segfault.
-
-    printf("Success!\n");
-
-    return 0;
+    ASSERT_NO_THROW(out.realize({10, 10}));
 }

@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ReuseStackAllocTest, Basic) {
     Func f, g, h, k;
     Var x;
 
@@ -28,12 +28,6 @@ int main(int argc, char **argv) {
 
     Buffer<int> result = k.realize({16});
     for (int i = 0; i < result.width(); i++) {
-        if (result(i) != 2 * i) {
-            printf("Error! Allocation did not get reused at %d (%d != %d)\n", i, result(i), 2 * i);
-            return 1;
-        }
+        EXPECT_EQ(result(i), 2 * i) << "Error! Allocation did not get reused at " << i << " (" << result(i) << " != " << (2 * i) << ")";
     }
-
-    printf("Success!\n");
-    return 0;
 }

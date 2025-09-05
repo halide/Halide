@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ShadowedBoundTest, Basic) {
     Func f("f"), g("g");
     Var x, y, c("c");
 
@@ -13,8 +14,6 @@ int main(int argc, char **argv) {
     Var xi, yi, ci;
     g.compute_root().tile(x, y, xi, yi, 32, 32);
     f.compute_at(g, x).bound(c, 0, 4).unroll(c);
-
-    g.realize({1024, 1024, 4});
 
     // f's loop over channels has two bounds. The first outer one
     // comes from its relationship with g - it needs to satisfy
@@ -29,6 +28,5 @@ int main(int argc, char **argv) {
     // the outer bound to cancel the c.
 
     // It's sufficient to check that we compiled.
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(g.realize({1024, 1024, 4}));
 }
