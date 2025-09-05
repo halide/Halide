@@ -1,44 +1,39 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
+
+#include <atomic>
 
 using namespace Halide;
 
-// NB: You must compile with -rdynamic for llvm to be able to find the appropriate symbols
-
-int call_counter[] = {0, 0, 0, 0, 0, 0};
-extern "C" HALIDE_EXPORT_SYMBOL int my_func(int counter, int x) {
-    call_counter[counter]++;
+namespace {
+// TODO: in C++20, use std::atomic_ref. Cleaner.
+extern "C" HALIDE_EXPORT_SYMBOL int liec_func(std::atomic<int> *counter, int x) {
+    ++*counter;
     return x;
 }
-HalidePureExtern_2(int, my_func, int, int);
+HalidePureExtern_2(int, liec_func, std::atomic<int> *, int);
 
-extern "C" HALIDE_EXPORT_SYMBOL int my_impure_func(int counter, int x) {
-    call_counter[counter]++;
+extern "C" HALIDE_EXPORT_SYMBOL int liec_impure(std::atomic<int> *counter, int x) {
+    ++*counter;
     return x;
 }
-HalideExtern_2(int, my_impure_func, int, int);
+HalideExtern_2(int, liec_impure, std::atomic<int> *, int);
+}  // namespace
 
-// A parallel for loop runner that isn't actually parallel
-int not_really_parallel_for(JITUserContext *ctx, int (*f)(JITUserContext *, int, uint8_t *), int min, int extent, uint8_t *closure) {
-    for (int i = min; i < min + extent; i++) {
-        f(ctx, i, closure);
-    }
-    return 0;
-}
-
-int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] Skipping test for WebAssembly as the wasm JIT cannot support custom parallel runtimes\n");
-        return 0;
-    }
-
+TEST(LoopInvariantExternCalls, PureLoops) {
     Var x, y;
-    Func f;
 
-    f(x, y) = my_func(0, Expr(0)) + my_func(1, y) + my_func(2, x * 32 + y);
+    std::atomic invariant{0}, only_y{0}, both_xy{0};
+    Param<std::atomic<int> *> invariant_counter{"invariant_counter", &invariant};
+    Param<std::atomic<int> *> only_y_counter{"only_y", &only_y};
+    Param<std::atomic<int> *> both_xy_counter{"both_xy", &both_xy};
+
+    Func f;
+    f(x, y) = liec_func(invariant_counter, Expr(0)) + liec_func(only_y_counter, y) +
+              liec_func(both_xy_counter, x * 32 + y);
 
     // llvm rightly refuses to lift loop invariants out of loops that
-    // might have an extent of zero. It's possible wasted work.
+    // might have an extent of zero. It's possibly wasted work.
     f.bound(x, 0, 32).bound(y, 0, 32);
 
     Buffer<int> im = f.realize({32, 32});
@@ -47,53 +42,50 @@ int main(int argc, char **argv) {
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {
             int correct = y + 32 * x + y;
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(x, y), correct) << "x = " << x << ", y = " << y;
         }
     }
 
     // Check the call counters
-    if (call_counter[0] != 1 || call_counter[1] != 32 || call_counter[2] != 32 * 32) {
-        printf("Call counters were %d %d %d instead of %d %d %d\n",
-               call_counter[0], call_counter[1], call_counter[2],
-               1, 32, 32 * 32);
-        return 1;
-    }
+    EXPECT_EQ(invariant, 1);
+    EXPECT_EQ(only_y, 32);
+    EXPECT_EQ(both_xy, 32 * 32);
+}
 
-    // Note that pure things get lifted out of loops (even parallel ones), but impure things do not.
+// Note that pure things get lifted out of loops (even parallel ones), but impure things do not.
+TEST(LoopInvariantExternCalls, LiftPureNotImpure) {
+    Var x, y;
+
+    std::atomic pure_call_counter{0}, impure_call_counter{0};
+    Param<std::atomic<int> *> pure_counter{"pure_counter", &pure_call_counter};
+    Param<std::atomic<int> *> impure_counter{"impure_counter", &impure_call_counter};
+
     Func g;
-    g(x, y) = my_func(3, Expr(0)) + my_impure_func(4, Expr(0));
+    g(x, y) = liec_func(pure_counter, Expr(0)) + liec_impure(impure_counter, Expr(0));
     g.parallel(y);
-    // Avoid the race condition by not actually being parallel
-    g.jit_handlers().custom_do_par_for = not_really_parallel_for;
     g.realize({32, 32});
 
-    if (call_counter[3] != 1 || call_counter[4] != 32 * 32) {
-        printf("Call counter for parallel call was %d, %d instead of %d, %d\n",
-               call_counter[3], call_counter[4], 1, 32 * 32);
-        return 1;
-    }
+    EXPECT_EQ(pure_call_counter, 1);
+    EXPECT_EQ(impure_call_counter, 32 * 32);
+}
 
+TEST(LoopInvariantExternCalls, GPU) {
     // Check that something we can't compute on the GPU gets lifted
     // out of the GPU loop. This code would fail to link if we didn't
     // do loop invariant code motion.
-    if (get_jit_target_from_environment().has_gpu_feature()) {
-        Func h;
-        h(x, y) = my_func(5, Expr(0));
-
-        Var xi, yi;
-        h.gpu_tile(x, y, xi, yi, 8, 8);
-        h.realize({32, 32});
-
-        if (call_counter[5] != 1) {
-            printf("Call counter for GPU call was %d instead of %d\n",
-                   call_counter[5], 1);
-            return 1;
-        }
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        GTEST_SKIP() << "No GPU target available";
     }
+    std::atomic call_counter{0};
+    Param<std::atomic<int> *> counter{"counter", &call_counter};
 
-    printf("Success!\n");
-    return 0;
+    Var x, y;
+    Func h;
+    h(x, y) = liec_func(counter, Expr(0));
+
+    Var xi, yi;
+    h.gpu_tile(x, y, xi, yi, 8, 8);
+    h.realize({32, 32});
+
+    EXPECT_EQ(call_counter, 1);
 }
