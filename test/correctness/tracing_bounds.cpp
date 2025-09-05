@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(TracingBoundsTest, Basic) {
     // Turning on tracing wraps certain Exprs. This shouldn't effect
     // bounds inference.
 
@@ -19,9 +19,5 @@ int main(int argc, char **argv) {
     g.trace_stores();
 
     // Shouldn't throw an error about unbounded access.
-    g.compile_jit();
-
-    printf("Success!\n");
-
-    return 0;
+    ASSERT_NO_THROW(g.compile_jit());
 }

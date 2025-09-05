@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(LotsOfLoopInvariantsTest, Basic) {
     // Stress-test LICM by hoisting lots of loop invariants
     Var x, y, c;
 
@@ -23,8 +24,5 @@ int main(int argc, char **argv) {
         f.gpu_tile(x, y, xi, yi, 8, 8);
     }
 
-    f.realize({1024, 1024, 3});
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(f.realize({1024, 1024, 3}));
 }

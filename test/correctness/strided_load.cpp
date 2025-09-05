@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(StridedLoadTest, Basic) {
     Buffer<int8_t> im(1697);
 
     // A strided load with stride two loads a pair of vectors and
@@ -23,10 +23,5 @@ int main(int argc, char **argv) {
     g(x) = f(2 * x);
     g.compute_root().vectorize(x, 16).bound(x, 0, 425);  // 24 * 2 = 48 < 49
 
-    // g.compile_to_assembly("/dev/stdout", std::vector<Argument>(), "g");
-
-    g.realize({425});
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(g.realize({425}));
 }

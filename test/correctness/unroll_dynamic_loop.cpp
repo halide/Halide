@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(UnrollDynamicLoopTest, Basic) {
     Func f, g;
     Var x;
 
@@ -19,12 +20,6 @@ int main(int argc, char **argv) {
     Buffer<float> result = g.realize({23});
     for (int i = 0; i < 23; i++) {
         float correct = i * 2 * 3 * 2;
-        if (result(i) != correct) {
-            printf("result(%d) = %f instead of %f\n", i, result(i), correct);
-            return 1;
-        }
+        EXPECT_EQ(result(i), correct) << "result(" << i << ") = " << result(i) << " instead of " << correct;
     }
-
-    printf("Success!\n");
-    return 0;
 }

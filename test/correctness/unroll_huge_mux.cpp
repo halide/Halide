@@ -1,11 +1,11 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(UnrollHugeMuxTest, Basic) {
 #ifdef HALIDE_INTERNAL_USING_ASAN
-    printf("[SKIP] unroll_huge_mux requires set_compiler_stack_size() to work properly, which is disabled under ASAN.\n");
-    return 0;
+    GTEST_SKIP() << "unroll_huge_mux requires set_compiler_stack_size() to work properly, which is disabled under ASAN.";
 #endif
 
     Func f;
@@ -21,8 +21,5 @@ int main(int argc, char **argv) {
     f.bound(x, 0, (int)exprs.size());
     f.unroll(x);
 
-    f.compile_jit();
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(f.compile_jit());
 }

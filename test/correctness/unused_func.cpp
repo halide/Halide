@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(UnusedFuncTest, Basic) {
     Var x, y, xi, yi;
 
     ImageParam input(Float(32), 2);
@@ -20,8 +21,5 @@ int main(int argc, char **argv) {
     // The bounds required on the input depend on filtered, but
     // filtered is not going to be computed because it simplified away
     // entirely. This test ensures things compile anyway.
-    result.compile_jit();
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(result.compile_jit());
 }

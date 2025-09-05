@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(VectorizeMixedWidthsTest, Basic) {
     Var x("x");
     Func f("f"), g("g");
 
@@ -17,12 +16,6 @@ int main(int argc, char **argv) {
 
     Buffer<int> r = g.realize({16});
     for (int i = 0; i < 16; i++) {
-        if (r(i) != i) {
-            std::cout << "Error at " << i << ": " << r(i) << std::endl;
-            return 1;
-        }
+        EXPECT_EQ(r(i), i) << "Error at " << i << ": " << r(i);
     }
-
-    printf("Success!\n");
-    return 0;
 }

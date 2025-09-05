@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ParallelTest, Basic) {
     Var x;
     Func f;
 
@@ -17,12 +17,6 @@ int main(int argc, char **argv) {
     Buffer<int> im = f.realize({16});
 
     for (int i = 0; i < 16; i++) {
-        if (im(i) != i * 3) {
-            printf("im(%d) = %d\n", i, im(i));
-            return 1;
-        }
+        EXPECT_EQ(im(i), i * 3) << "im(" << i << ") = " << im(i);
     }
-
-    printf("Success!\n");
-    return 0;
 }

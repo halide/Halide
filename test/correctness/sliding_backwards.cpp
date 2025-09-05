@@ -1,20 +1,24 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int call_counter = 0;
-extern "C" HALIDE_EXPORT_SYMBOL int count(int arg) {
-    call_counter++;
+namespace {
+extern "C" HALIDE_EXPORT_SYMBOL int sliding_backwards_count(int *counter, int arg) {
+    ++*counter;
     return arg;
 }
-HalideExtern_1(int, count, int);
+HalideExtern_2(int, sliding_backwards_count, int *, int);
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(SlidingBackwardsTest, Basic) {
+    int call_counter = 0;
+
     Func f, g;
     Var x;
+    Param<int *> counter{"counter", &call_counter};
 
-    g(x) = count(x);
+    g(x) = sliding_backwards_count(counter, x);
     f(x) = g(100 - x) + g(100 - x + 1);
 
     g.compute_at(f, x);
@@ -22,11 +26,5 @@ int main(int argc, char **argv) {
 
     f.realize({10});
 
-    if (call_counter != 11) {
-        printf("g was called %d times instead of %d\n", call_counter, 11);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(call_counter, 11) << "g was called " << call_counter << " times instead of 11";
 }

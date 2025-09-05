@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(VectorBoundsInferenceTest, Basic) {
     Func f("f"), g("g"), h("h");
     Var x, y;
 
@@ -19,13 +18,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < 2; y++) {
         for (int x = 0; x < 36; x++) {
-            if (out(x, y) != x * 4 + y) {
-                printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x * 4 + y);
-                return 1;
-            }
+            EXPECT_EQ(out(x, y), x * 4 + y) << "out(" << x << ", " << y << ") = " << out(x, y) << " instead of " << (x * 4 + y);
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

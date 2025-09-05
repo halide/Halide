@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(OddlySizedOutputTest, Basic) {
     Buffer<int> input(87, 93);
     input.fill(0);
 
@@ -19,14 +19,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < out.height(); y++) {
         for (int x = 0; x < out.width(); x++) {
-            if (out(x, y) != input(x, y) * 2) {
-                printf("out(%d, %d) = %d instead of %d\n",
-                       x, y, out(x, y), input(x, y) * 2);
-                return 1;
-            }
+            EXPECT_EQ(out(x, y), input(x, y) * 2) << "out(" << x << ", " << y << ") = " << out(x, y) << " instead of " << (input(x, y) * 2);
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

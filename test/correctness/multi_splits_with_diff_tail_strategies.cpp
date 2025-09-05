@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include "check_call_graphs.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(MultiSplitsWithDiffTailStrategiesTest, Basic) {
     // ApplySplit should respect the order of the application of substitutions/
     // predicates/lets; otherwise, this combination of tail strategies will
     // cause an access out of bound error.
@@ -24,10 +25,6 @@ int main(int argc, char **argv) {
         auto func = [](int x, int y, int c) {
             return x + y + c;
         };
-        if (check_image(im, func)) {
-            return 1;
-        }
+        EXPECT_EQ(check_image(im, func), 0);
     }
-    printf("Success!\n");
-    return 0;
 }

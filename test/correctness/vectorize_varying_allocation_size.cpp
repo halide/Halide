@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(VectorizeVaryingAllocationSizeTest, Basic) {
     Func f, g;
     Var x, xo, xi;
 
@@ -19,13 +20,6 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 4; i++) {
         int correct = i + i * i - 20;
-        if (out(i) != correct) {
-            printf("out(%d) = %d instead of %d\n",
-                   i, out(i), correct);
-            return 1;
-        }
+        EXPECT_EQ(out(i), correct) << "out(" << i << ") = " << out(i) << " instead of " << correct;
     }
-
-    printf("Success!\n");
-    return 0;
 }

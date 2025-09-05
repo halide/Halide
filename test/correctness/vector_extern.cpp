@@ -1,14 +1,12 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <math.h>
-#include <stdio.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(VectorExternTest, Basic) {
     Var x, y;
     Func f, g;
-
-    printf("Defining function...\n");
 
     f(x) = sqrt(cast<float>(x));
 
@@ -17,12 +15,6 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 32; i++) {
         float correct = sqrtf((float)i);
-        if (fabs(im(i) - correct) > 0.001) {
-            printf("im(%d) = %f instead of %f\n", i, im(i), correct);
-            return 1;
-        }
+        EXPECT_NEAR(im(i), correct, 0.001f) << "im(" << i << ") = " << im(i) << " instead of " << correct;
     }
-
-    printf("Success!\n");
-    return 0;
 }

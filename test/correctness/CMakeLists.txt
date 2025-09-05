@@ -221,7 +221,7 @@ target_sources(
     loop_invariant_extern_calls.cpp
     #    loop_level_generator_param.cpp
     #    lossless_cast.cpp
-    #    lots_of_loop_invariants.cpp
+    lots_of_loop_invariants.cpp
     #    low_bit_depth_noise.cpp
     make_struct.cpp
     many_dimensions.cpp
@@ -234,7 +234,7 @@ target_sources(
     #    mod.cpp
     #    mul_div_mod.cpp
     #    multi_output_pipeline_with_bad_sizes.cpp
-    #    multi_splits_with_diff_tail_strategies.cpp
+    multi_splits_with_diff_tail_strategies.cpp
     #    multi_way_select.cpp
     #    multipass_constraints.cpp
     #    multiple_outputs.cpp
@@ -263,12 +263,12 @@ target_sources(
     #    predicated_store_load.cpp
     #    prefetch.cpp
     #    print.cpp
-    #    print_loop_nest.cpp
+    print_loop_nest.cpp
     #    process_some_tiles.cpp
     #    pseudostack_shares_slots.cpp
     #    python_extension_gen.cpp
     #    pytorch.cpp
-    #    realize_condition_depends_on_tuple.cpp
+    realize_condition_depends_on_tuple.cpp
     #    realize_larger_than_two_gigs.cpp
     realize_over_shifted_domain.cpp
     #    recursive_box_filters.cpp
@@ -290,7 +290,7 @@ target_sources(
     #    shadowed_bound.cpp
     shared_self_references.cpp
     #    shift_by_unsigned_negated.cpp
-    #    shifted_image.cpp
+    shifted_image.cpp
     #    side_effects.cpp
     #    simd_op_check_arm.cpp
     #    simd_op_check_hvx.cpp
@@ -304,7 +304,7 @@ target_sources(
     #    skip_stages.cpp
     #    skip_stages_external_array_functions.cpp
     #    skip_stages_memoize.cpp
-    #    sliding_backwards.cpp
+    sliding_backwards.cpp
     #    sliding_over_guard_with_if.cpp
     #    sliding_reduction.cpp
     #    sliding_window.cpp
@@ -324,13 +324,13 @@ target_sources(
     #    storage_folding.cpp
     #    store_in.cpp
     #    strict_float.cpp
-    #    strict_float_bounds.cpp
-    #    strided_load.cpp
+    strict_float_bounds.cpp
+    strided_load.cpp
     #    target.cpp
     #    target_query.cpp
     #    tiled_matmul.cpp
     #    tracing.cpp
-    #    tracing_bounds.cpp
+    tracing_bounds.cpp
     #    tracing_broadcast.cpp
     #    tracing_stack.cpp
     transitive_bounds.cpp
@@ -345,26 +345,26 @@ target_sources(
     #    undef.cpp
     #    uninitialized_read.cpp
     #    unique_func_image.cpp
-    #    unroll_dynamic_loop.cpp
+    unroll_dynamic_loop.cpp
     #    unroll_loop_with_implied_constant_bounds.cpp
-    #    unrolled_reduction.cpp
+    unrolled_reduction.cpp
     #    unsafe_dedup_lets.cpp
     #    unsafe_promises.cpp
-    #    unused_func.cpp
+    unused_func.cpp
     update_chunk.cpp
-    #    vector_bounds_inference.cpp
+    vector_bounds_inference.cpp
     #    vector_cast.cpp
-    #    vector_extern.cpp
+    vector_extern.cpp
     #    vector_math.cpp
     vector_print_bug.cpp
     #    vector_reductions.cpp
     #    vector_shuffle.cpp
     #    vector_tile.cpp
     #    vectorize_guard_with_if.cpp
-    #    vectorize_mixed_widths.cpp
+    vectorize_mixed_widths.cpp
     #    vectorize_nested.cpp
     #    vectorize_predicated.cpp
-    #    vectorize_varying_allocation_size.cpp
+    vectorize_varying_allocation_size.cpp
     #    vectorized_assert.cpp
     #    vectorized_gpu_allocation.cpp
     #    vectorized_guard_with_if_tail.cpp
@@ -402,8 +402,8 @@ target_sources(
     #    multiple_scatter.cpp
     #    named_updates.cpp
     nested_shiftinwards.cpp
-    #    oddly_sized_output.cpp
-    #    parallel.cpp
+    oddly_sized_output.cpp
+    parallel.cpp
     #    parallel_alloc.cpp
     #    parallel_fork.cpp
     #    parallel_nested.cpp
@@ -418,5 +418,5 @@ target_sources(
     #    thread_safety.cpp
     #    truncated_pyramid.cpp
     #    tuple_vector_reduce.cpp
-    #    unroll_huge_mux.cpp
+    unroll_huge_mux.cpp
 )

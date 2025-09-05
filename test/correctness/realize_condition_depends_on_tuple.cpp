@@ -1,11 +1,12 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
 // This is a test for a bug where the condition on a realize node didn't have
 // tuple-valued calls resolved if the realization was itself tuple-valued.
 
-int main(int argc, char **argv) {
+TEST(RealizeConditionDependsOnTupleTest, Basic) {
     Func f;
     Param<int> p;
     f() = {p, p};
@@ -24,8 +25,5 @@ int main(int argc, char **argv) {
     f.compute_root();
     g.compute_root();
     h.compute_root();
-    out.compile_jit();
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(out.compile_jit());
 }

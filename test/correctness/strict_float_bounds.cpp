@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(StrictFloatBoundsTest, Basic) {
     Target t = get_jit_target_from_environment().with_feature(Target::StrictFloat);
 
     Var x;
@@ -20,9 +21,5 @@ int main(int argc, char **argv) {
     // This test verifies that this realize() doesn't explode in bounds infererence
     // with "unbounded access of input"
     Buffer<float> result = output.realize({1}, t);
-    assert(result(0) == 2.5f);
-
-    printf("Success!\n");
-
-    return 0;
+    EXPECT_EQ(result(0), 2.5f);
 }

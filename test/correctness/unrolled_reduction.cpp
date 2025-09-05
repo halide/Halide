@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(UnrolledReductionTest, Basic) {
     Var x("x"), y("y"), z("z");
 
     Buffer<float> noise(32);
@@ -24,8 +24,5 @@ int main(int argc, char **argv) {
     g.compute_at(f, y).update().split(r.x, rxo, rxi, 2).unroll(rxi);
     f.unroll(z, 2);
 
-    Buffer<float> im = f.realize({64, 64, 4});
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(f.realize({64, 64, 4}));
 }
