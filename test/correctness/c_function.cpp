@@ -9,20 +9,20 @@ namespace {
 
 // On windows, you need to use declspec to do the same.
 int call_counter = 0;
-extern "C" HALIDE_EXPORT_SYMBOL float my_func(int x, float y) {
+extern "C" HALIDE_EXPORT_SYMBOL float c_function_my_func(int x, float y) {
     call_counter++;
     return x * y;
 }
-HalideExtern_2(float, my_func, int, float);
+HalideExtern_2(float, c_function_my_func, int, float);
 
 int call_counter2 = 0;
-extern "C" HALIDE_EXPORT_SYMBOL float my_func2(int x, float y) {
+extern "C" HALIDE_EXPORT_SYMBOL float c_function_my_func2(int x, float y) {
     call_counter2++;
     return x * y;
 }
 
 int call_counter3 = 0;
-extern "C" HALIDE_EXPORT_SYMBOL float my_func3(int x, float y) {
+extern "C" HALIDE_EXPORT_SYMBOL float c_function_my_func3(int x, float y) {
     call_counter3++;
     return x * y;
 }
@@ -32,7 +32,7 @@ TEST(CFunctionTest, Basic) {
     Var x, y;
     Func f;
 
-    f(x, y) = my_func(x, cast<float>(y));
+    f(x, y) = c_function_my_func(x, cast<float>(y));
 
     Buffer<float> imf = f.realize({32, 32});
 
@@ -51,10 +51,10 @@ TEST(CFunctionTest, SwitchJITExtern) {
     Var x, y;
     Func g;
 
-    g(x, y) = my_func(x, cast<float>(y));
+    g(x, y) = c_function_my_func(x, cast<float>(y));
 
     Pipeline p(g);
-    p.set_jit_externs({{"my_func", JITExtern{my_func2}}});
+    p.set_jit_externs({{"c_function_my_func", JITExtern{c_function_my_func2}}});
     Buffer<float> imf2 = p.realize({32, 32});
 
     // Check the result was what we expected
@@ -65,10 +65,10 @@ TEST(CFunctionTest, SwitchJITExtern) {
     }
 
     EXPECT_EQ(call_counter2, 32 * 32)
-        << "C function my_func2 was called " << call_counter2 << " times instead of " << 32 * 32;
+        << "c_function_my_func2 was called " << call_counter2 << " times instead of " << 32 * 32;
 
     // Switch from my_func2 to my_func and verify a recompile happens.
-    p.set_jit_externs({{"my_func", JITExtern{my_func3}}});
+    p.set_jit_externs({{"c_function_my_func", JITExtern{c_function_my_func3}}});
     Buffer<float> imf3 = p.realize({32, 32});
 
     // Check the result was what we expected
@@ -79,5 +79,5 @@ TEST(CFunctionTest, SwitchJITExtern) {
     }
 
     EXPECT_EQ(call_counter3, 32 * 32)
-        << "C function my_func3 was called " << call_counter3 << " times instead of " << 32 * 32;
+        << "c_function_my_func3 was called " << call_counter3 << " times instead of " << 32 * 32;
 }
