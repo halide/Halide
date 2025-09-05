@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(ParallelRvarTest, ParallelRvar) {
     Func f[2];
     Var x, y;
     RDom r(0, 12, 0, 10);
@@ -35,11 +34,5 @@ int main(int argc, char **argv) {
     RDom r_check(0, 20, 0, 20);
     int error = evaluate<int>(sum(f[0](r_check.x, r_check.y) - f[1](r_check.x, r_check.y)));
 
-    if (error != 0) {
-        printf("Serial version did not match parallel version\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(error, 0) << "Serial version did not match parallel version";
 }

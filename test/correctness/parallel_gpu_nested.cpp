@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(ParallelGpuNestedTest, ParallelGpuNested) {
     Var x, y, z;
     Func f;
 
@@ -20,24 +19,19 @@ int main(int argc, char **argv) {
     } else if (t.has_feature(Target::HVX)) {
         f.hexagon(y);
     } else {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
+        GTEST_SKIP() << "No GPU target enabled.";
     }
     f.parallel(z);
 
-    Buffer<int> im = f.realize({64, 64, 64});
+    Buffer<int> im;
+    ASSERT_NO_THROW(im = f.realize({64, 64, 64}));
 
     for (int x = 0; x < 64; x++) {
         for (int y = 0; y < 64; y++) {
             for (int z = 0; z < 64; z++) {
-                if (im(x, y, z) != x * y + z * 3 + 1) {
-                    printf("im(%d, %d, %d) = %d\n", x, y, z, im(x, y, z));
-                    return 1;
-                }
+                EXPECT_EQ(im(x, y, z), x * y + z * 3 + 1) 
+                    << "im(" << x << ", " << y << ", " << z << ")";
             }
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

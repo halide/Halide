@@ -1,7 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 template<typename T>
 bool test(Func f, T f_expected, int width) {
     Buffer<uint32_t> actual = f.realize({width});
@@ -14,33 +16,34 @@ bool test(Func f, T f_expected, int width) {
     }
     return true;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(ShiftByUnsignedNegatedTest, LeftShift) {
     Buffer<uint32_t> step(31);
     for (int i = 0; i < step.width(); i++) {
         step(i) = -i;
     }
 
-    bool success = true;
     Var x;
+    Func f;
+    f(x) = Expr(-1U) << -step(x);
+    auto f_expected = [&](int x) {
+        return -1U << x;
+    };
+    EXPECT_TRUE(test(f, f_expected, step.width()));
+}
 
-    {
-        Func f;
-        f(x) = Expr(-1U) << -step(x);
-        auto f_expected = [&](int x) {
-            return -1U << x;
-        };
-        success &= test(f, f_expected, step.width());
-    }
-    {
-        Func f;
-        f(x) = Expr(-1U) >> -step(x);
-        auto f_expected = [&](int x) {
-            return -1U >> x;
-        };
-        success &= test(f, f_expected, step.width());
+TEST(ShiftByUnsignedNegatedTest, RightShift) {
+    Buffer<uint32_t> step(31);
+    for (int i = 0; i < step.width(); i++) {
+        step(i) = -i;
     }
 
-    if (success) printf("Success!\n");
-    return success ? 0 : -1;
+    Var x;
+    Func f;
+    f(x) = Expr(-1U) >> -step(x);
+    auto f_expected = [&](int x) {
+        return -1U >> x;
+    };
+    EXPECT_TRUE(test(f, f_expected, step.width()));
 }

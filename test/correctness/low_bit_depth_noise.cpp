@@ -1,8 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(LowBitDepthNoiseTest, LowBitDepthNoise) {
     // Halide only provides 32-bit noise functions, which are overkill for
     // generating low bit-depth noise (e.g. for dithering). This test shows how
     // to generate 8-bit noise by slicing out bytes from 32-bit noise.
@@ -24,10 +25,10 @@ int main(int argc, char **argv) {
     dithered.compute_root().vectorize(x, 16, TailStrategy::RoundUp);
     noise8.compute_at(dithered, x).vectorize(x);
 
-    // To keep things aligned:
     dithered.output_buffer().dim(0).set_min(0);
 
-    Buffer<uint8_t> out = dithered.realize({1 << 15});
+    Buffer<uint8_t> out;
+    ASSERT_NO_THROW(out = dithered.realize({1 << 15}));
 
     uint32_t sum = 0, correct_sum = 0;
     for (int i = 0; i < out.width(); i++) {
@@ -36,11 +37,8 @@ int main(int argc, char **argv) {
     }
     correct_sum = (correct_sum + 128) >> 8;
 
-    if (std::abs((double)sum - correct_sum) / correct_sum > 1e-4) {
-        printf("Suspiciously large relative difference between the sum of the dithered values and the full-precision sum: %d vs %d\n", sum, correct_sum);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    double relative_error = std::abs((double)sum - correct_sum) / correct_sum;
+    EXPECT_LE(relative_error, 1e-4)
+        << "Suspiciously large relative difference between the sum of the dithered values and the full-precision sum: "
+        << sum << " vs " << correct_sum;
 }

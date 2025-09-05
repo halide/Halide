@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ParallelNested1Test, ParallelNested1) {
     Var x, y, z;
     Func f, g;
 
@@ -26,21 +26,18 @@ int main(int argc, char **argv) {
     }
     printf("Using Target = %s\n", target.to_string().c_str());
 
-    Buffer<int> im = g.realize({64, 64, 64}, target);
+    Buffer<int> im;
+    ASSERT_NO_THROW(im = g.realize({64, 64, 64}, target));
 
     for (int x = 0; x < 64; x++) {
         for (int y = 0; y < 64; y++) {
             for (int z = 0; z < 64; z++) {
                 const int expected = x * y + z * 3 + 3;
                 const int actual = im(x, y, z);
-                if (actual != expected) {
-                    fprintf(stderr, "im(%d, %d, %d) = %d, expected %d\n", x, y, z, actual, expected);
-                    return 1;
-                }
+                EXPECT_EQ(actual, expected) 
+                    << "im(" << x << ", " << y << ", " << z << ") = " << actual 
+                    << ", expected " << expected;
             }
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

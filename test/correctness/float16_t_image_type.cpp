@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include <cmath>
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 template<typename T>
 bool test() {
     Halide::Buffer<T> im(10, 3);
@@ -35,12 +36,12 @@ bool test() {
 
     return true;
 }
+}
 
-int main() {
-    if (test<float16_t>() && test<bfloat16_t>()) {
-        printf("Success!\n");
-        return 0;
-    } else {
-        return 1;
-    }
+TEST(Float16tImageTypeTest, Float16t) {
+    EXPECT_TRUE(test<float16_t>());
+}
+
+TEST(Float16tImageTypeTest, Bfloat16t) {
+    EXPECT_TRUE(test<bfloat16_t>());
 }

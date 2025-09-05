@@ -1,11 +1,11 @@
 // Test whether min[] and extent[] of an ImageParam are correctly passed into
 // the filter.
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(MinExtentTest, MinExtent) {
     Var x("x");
     Func f("f");
     ImageParam in(Int(32), 1, "in");
@@ -33,17 +33,12 @@ int main(int argc, char **argv) {
     input.set_min(INOFF);
     out.set_min(OUTOFF);
     in.set(input);
-    f.realize(out);
+    
+    ASSERT_NO_THROW(f.realize(out));
 
-    // Check correctness of result
     int expected[] = {-10, -20, -30, 4, 5, 6, 7, 8, 90, 100};
     for (int i = 0; i < out.width(); i++) {
-        if (out(i + OUTOFF) != expected[i]) {
-            printf("Unexpected output: %d != %d\n", out(i + OUTOFF), expected[i]);
-            return 1;
-        }
+        EXPECT_EQ(out(i + OUTOFF), expected[i])
+            << "Unexpected output at index " << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }

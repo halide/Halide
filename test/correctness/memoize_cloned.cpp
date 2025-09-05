@@ -1,15 +1,18 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int call_count;
-extern "C" HALIDE_EXPORT_SYMBOL int call_counter(int x) {
+namespace {
+int call_count = 0;
+extern "C" HALIDE_EXPORT_SYMBOL int memoize_cloned_counter(int x) {
     call_count++;
     return x;
 }
-HalideExtern_1(int, call_counter, int);
+HalideExtern_1(int, memoize_cloned_counter, int);
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(MemoizeClonedTest, MemoizeCloned) {
     Func f, g, h;
     Var x, y;
 
@@ -22,7 +25,7 @@ int main(int argc, char **argv) {
     // Setting cache size gives you a trade-off between peak memory
     // usage and recompute.
 
-    f(x, y) = call_counter(x);
+    f(x, y) = memoize_cloned_counter(x);
     g(x, y) = f(x, y) * 2;
     h(x, y) = f(x, y) + g(x, y);
 
@@ -33,15 +36,9 @@ int main(int argc, char **argv) {
 
     h.bound(x, 0, 1024).bound(y, 0, 32);
 
-    call_count = 0;
-    h.realize({1024, 32});
-    if (call_count != 1024 * 32) {
-        printf("call_count was supposed to be 1024 * 32: %d\n", call_count);
-        return 1;
-    }
+    ASSERT_NO_THROW(h.realize({1024, 32}));
+    EXPECT_EQ(call_count, 1024 * 32)
+        << "call_count was supposed to be 1024 * 32: " << call_count;
 
     Internal::JITSharedRuntime::release_all();
-
-    printf("Success!\n");
-    return 0;
 }

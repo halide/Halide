@@ -1,14 +1,12 @@
 #include "Halide.h"
 #include <algorithm>
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(SplitStoreComputeTest, SplitStoreCompute) {
     Var x("x"), y("y");
     Func f("f"), g("g"), h("h");
-
-    printf("Defining function...\n");
 
     f(x, y) = max(x, y);
     g(x, y) = 17 * f(x, y);
@@ -18,11 +16,9 @@ int main(int argc, char **argv) {
     g.compute_at(h, y);
     f.compute_root();
 
-    Buffer<int> imh = h.realize({32, 32});
+    Buffer<int> imh;
+    ASSERT_NO_THROW(imh = h.realize({32, 32}));
 
-    bool success = true;
-
-    // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
             int v1 = std::max(i - 1, j);
@@ -33,16 +29,9 @@ int main(int argc, char **argv) {
             int correct = 17 * (v1 + v2 + v3 + v4 + v5);
 
             int val = imh(i, j, 0);
-            if (val != correct) {
-                printf("imh(%d, %d) = %d instead of %d\n",
-                       i, j, val, correct);
-                success = false;
-            }
+            EXPECT_EQ(val, correct) 
+                << "imh(" << i << ", " << j << ") = " << val 
+                << " instead of " << correct;
         }
     }
-
-    if (!success) return 1;
-
-    printf("Success!\n");
-    return 0;
 }

@@ -4,18 +4,20 @@
 using namespace Halide;
 
 namespace {
-int call_count;
-extern "C" HALIDE_EXPORT_SYMBOL float call_counter(float x) {
-    call_count++;
+extern "C" HALIDE_EXPORT_SYMBOL float lazy_convolution_counter(int *call_count, float x) {
+    ++*call_count;
     return x;
 }
-HalidePureExtern_1(float, call_counter, float);
+HalidePureExtern_2(float, lazy_convolution_counter, int *, float);
 }  // namespace
 
 TEST(LazyConvolutionTest, ConditionalConvolution) {
+    int call_count = 0;
+    Param<int *> counter{"counter", &call_count};
+
     Func f;
     Var x, y;
-    f(x, y) = call_counter(sin(x * 3 + y));
+    f(x, y) = lazy_convolution_counter(counter, sin(x * 3 + y));
 
     // f contains values in [-1, 1]. Now compute a convolution over f
     // only where f is positive. If f is negative, we'll skip the work
@@ -24,7 +26,6 @@ TEST(LazyConvolutionTest, ConditionalConvolution) {
     RDom r(-10, 20, -10, 20);
     blur(x, y) = select(f(x, y) > 0, sum(f(x + r.x, y + r.y)), 0);
 
-    call_count = 0;
     blur.realize({100, 100});
 
     // If we computed the convolution everywhere, call_count would be

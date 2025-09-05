@@ -1,16 +1,19 @@
 #include "Halide.h"
-#include <memory>
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int error_occurred = false;
+namespace {
+bool error_occurred = false;
 void halide_error(JITUserContext *ctx, const char *msg) {
     printf("Expected: %s\n", msg);
     error_occurred = true;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(OutputLargerThanTwoGigsTest, OutputLargerThanTwoGigs) {
+    error_occurred = false;
+
     Var x, y, z;
     Func identity_uint8;
     identity_uint8(x, y, z) = cast<uint8_t>(42);
@@ -28,17 +31,15 @@ int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
     if (t.bits != 32) {
-        identity_uint8.compile_jit(t.with_feature(Target::LargeBuffers));
-        identity_uint8.realize(output);
-        assert(!error_occurred);
+        EXPECT_NO_THROW(identity_uint8.compile_jit(t.with_feature(Target::LargeBuffers)));
+        EXPECT_NO_THROW(identity_uint8.realize(output));
+        EXPECT_FALSE(error_occurred);
 
-        assert(output(0, 0, 0) == 42);
-        assert(output(output.extent(0) - 1, output.extent(1) - 1, output.extent(2) - 1) == 42);
+        EXPECT_EQ(output(0, 0, 0), 42);
+        EXPECT_EQ(output(output.extent(0) - 1, output.extent(1) - 1, output.extent(2) - 1), 42);
     }
 
-    identity_uint8.compile_jit(t);
-    identity_uint8.realize(output);
-    assert(error_occurred);
-
-    printf("Success!\n");
+    EXPECT_NO_THROW(identity_uint8.compile_jit(t));
+    EXPECT_NO_THROW(identity_uint8.realize(output));
+    EXPECT_TRUE(error_occurred);
 }

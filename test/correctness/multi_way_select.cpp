@@ -1,13 +1,12 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(MultiWaySelectTest, MultiWaySelect) {
 #if defined(__APPLE__) && defined(__x86_64__)
     if (get_jit_target_from_environment().has_feature(Target::WebGPU)) {
-        printf("[SKIP] This fails on x86 Macs (pre-Ventura) due to a bug in Apple's Metal Shading Language compiler. See https://github.com/halide/Halide/issues/7389.\n");
-        return 0;
+        GTEST_SKIP() << "This fails on x86 Macs (pre-Ventura) due to a bug in Apple's Metal Shading Language compiler. See https://github.com/halide/Halide/issues/7389.";
     }
 #endif
 
@@ -34,11 +33,5 @@ int main(int argc, char **argv) {
     RDom r(0, 8);
     uint32_t err = evaluate_may_gpu<uint32_t>(sum(abs(g(r) - f(r))));
 
-    if (err != 0) {
-        printf("Multi-way select didn't equal equivalent reduction!\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(err, 0) << "Multi-way select didn't equal equivalent reduction!";
 }

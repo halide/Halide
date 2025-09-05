@@ -1,13 +1,14 @@
 #include "Halide.h"
 #include "halide_test_dirs.h"
-
-#include <cstdio>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main() {
-    Var x, y;
+namespace {
+Var x, y;
+}
 
+TEST(StmtToHtmlTest, GradientFast) {
     // The gradient function and schedule from tutorial lesson 5.
     Func gradient_fast("gradient_fast");
     gradient_fast(x, y) = x + y;
@@ -24,26 +25,28 @@ int main() {
         .vectorize(x_vectors)
         .unroll(y_pairs);
 
-    std::string result_file_1 = Internal::get_test_tmp_dir() + "stmt_to_html_dump_1.html";
-    Internal::ensure_no_file_exists(result_file_1);
-    gradient_fast.compile_to_lowered_stmt(result_file_1, {}, Halide::HTML);
-    Internal::assert_file_exists(result_file_1);
+    std::string result_file = Internal::get_test_tmp_dir() + "stmt_to_html_dump_1.html";
+    Internal::ensure_no_file_exists(result_file);
+    ASSERT_NO_THROW(gradient_fast.compile_to_lowered_stmt(result_file, {}, Halide::HTML));
+    Internal::assert_file_exists(result_file);
+}
 
-    // Also check using an image.
-    std::string result_file_2 = Internal::get_test_tmp_dir() + "stmt_to_html_dump_2.html";
-    Internal::ensure_no_file_exists(result_file_2);
+TEST(StmtToHtmlTest, WithImage) {
+    Func gradient_fast("gradient_fast");
+    gradient_fast(x, y) = x + y;
+
+    std::string result_file = Internal::get_test_tmp_dir() + "stmt_to_html_dump_2.html";
+    Internal::ensure_no_file_exists(result_file);
     Buffer<int> im(800, 600);
-    gradient_fast.compile_to_lowered_stmt(result_file_2, {im}, Halide::HTML);
-    Internal::assert_file_exists(result_file_2);
+    ASSERT_NO_THROW(gradient_fast.compile_to_lowered_stmt(result_file, {im}, Halide::HTML));
+    Internal::assert_file_exists(result_file);
+}
 
-    // Check a multi-output pipeline.
-    std::string result_file_3 = Internal::get_test_tmp_dir() + "stmt_to_html_dump_3.html";
-    Internal::ensure_no_file_exists(result_file_3);
+TEST(StmtToHtmlTest, MultiOutput) {
+    std::string result_file = Internal::get_test_tmp_dir() + "stmt_to_html_dump_3.html";
+    Internal::ensure_no_file_exists(result_file);
     Func tuple_func;
     tuple_func(x, y) = Tuple(x, y);
-    tuple_func.compile_to_lowered_stmt(result_file_3, {}, Halide::HTML);
-    Internal::assert_file_exists(result_file_3);
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(tuple_func.compile_to_lowered_stmt(result_file, {}, Halide::HTML));
+    Internal::assert_file_exists(result_file);
 }

@@ -1,13 +1,18 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 int error_count = 0;
-void my_error(JITUserContext *ucon, const char *msg) {
+void my_error(JITUserContext *, const char *) {
     error_count++;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(VectorizedAssertTest, VectorizedAssert) {
+    error_count = 0;
+
     Func f("f"), g("g");
     Var x("x");
     Param<int> p;
@@ -23,24 +28,13 @@ int main(int argc, char **argv) {
 
     g.jit_handlers().custom_error = my_error;
 
-    g.compile_jit();
+    ASSERT_NO_THROW(g.compile_jit());
 
-    // Will trigger the assert
     p.set(256);
-    g.realize({128});
-    if (error_count != 1) {
-        printf("There should have been an error\n");
-        return 1;
-    }
+    ASSERT_NO_THROW(g.realize({128}));
+    EXPECT_EQ(error_count, 1) << "There should have been an error";
 
-    // Will not trigger the assert
     p.set(0);
-    g.realize({8});
-    if (error_count != 1) {
-        printf("There should not have been an error\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(g.realize({8}));
+    EXPECT_EQ(error_count, 1) << "There should not have been another error";
 }

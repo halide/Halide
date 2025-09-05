@@ -1,14 +1,14 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(TargetQueryTest, TargetQuery) {
     // For simplicity, only run this test on hosts that we can predict.
+    // TODO: why??
     Target t = get_host_target();
     if (t.arch != Target::X86 || t.bits != 64 || t.os != Target::OSX) {
-        printf("[SKIP] This test only runs on x86-64-osx.\n");
-        return 0;
+        GTEST_SKIP() << "This test only runs on x86-64-osx.";
     }
 
     t = t.with_feature(Target::Debug);
@@ -39,10 +39,7 @@ int main(int argc, char **argv) {
            select(has_cuda, 128, 0) +
            select(has_vulkan, 256, 0);
 
-    Buffer<int> result = f.realize({1}, t1);
-
-    assert(result(0) == 2 + 4 + 16 + 64 + 128);
-
-    printf("Success!\n");
-    return 0;
+    Buffer<int> result;
+    ASSERT_NO_THROW(result = f.realize({1}, t1));
+    EXPECT_EQ(result(0), 2 + 4 + 16 + 64 + 128);
 }
