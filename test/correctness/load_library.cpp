@@ -31,14 +31,16 @@ struct LoadLibraryUserContext : JITUserContext {
     }
 };
 
+// TODO: Get the JITUserContext into these.
 void *my_get_symbol_impl(const char *name) {
-    FAIL() << "Saw unexpected call: get_symbol(" << name << ")", nullptr;
+    ADD_FAILURE() << "Saw unexpected call: get_symbol(" << name << ")";
+    return nullptr;
 }
 
 void *my_load_library_impl(const char *name) {
     load_library_calls++;
     if (!strstr(name, "OpenCL") && !strstr(name, "opencl")) {
-        FAIL() << "Saw unexpected call: load_library(" << name << ")", nullptr;
+        ADD_FAILURE() << "Saw unexpected call: load_library(" << name << ")";
     }
     return nullptr;
 }
@@ -46,7 +48,7 @@ void *my_load_library_impl(const char *name) {
 void *my_get_library_symbol_impl(void *lib, const char *name) {
     get_library_symbol_calls++;
     if (lib != nullptr || strcmp(name, "clGetPlatformIDs") != 0) {
-        FAIL() << "Saw unexpected call: get_library_symbol(" << lib << ", " << name << ")", nullptr;
+        ADD_FAILURE() << "Saw unexpected call: get_library_symbol(" << lib << ", " << name << ")";
     }
     return nullptr;
 }
@@ -61,6 +63,14 @@ protected:
         }
         load_library_calls = 0;
         get_library_symbol_calls = 0;
+        Internal::JITSharedRuntime::set_default_handlers({
+            .custom_get_symbol = my_get_symbol_impl,
+            .custom_load_library = my_load_library_impl,
+            .custom_get_library_symbol = my_get_library_symbol_impl,
+        });
+    }
+    void TearDown() override {
+        Internal::JITSharedRuntime::set_default_handlers({});
     }
 };
 }  // namespace
@@ -70,12 +80,6 @@ TEST_F(LoadLibraryTest, OpenCL) {
     Func f;
     f(x, y) = cast<int32_t>(x + y);
     f.gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenCL);
-
-    JITHandlers handlers;
-    handlers.custom_get_symbol = my_get_symbol_impl;
-    handlers.custom_load_library = my_load_library_impl;
-    handlers.custom_get_library_symbol = my_get_library_symbol_impl;
-    Internal::JITSharedRuntime::set_default_handlers(handlers);
 
     Buffer<int32_t> out = f.realize(&user_context, {64, 64}, target);
     EXPECT_GE(load_library_calls, 1);
