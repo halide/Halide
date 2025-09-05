@@ -201,7 +201,7 @@ target_sources(
     interleave_rgb.cpp
     interleave_x.cpp
     interval.cpp
-    #    intrinsics.cpp
+    intrinsics.cpp
     invalid_gpu_loop_nests.cpp  # // TODO: move to error/
     inverse.cpp
     irprinter.cpp
@@ -215,7 +215,7 @@ target_sources(
     lerp.cpp
     let_in_rdom_bound.cpp
     likely.cpp
-    #    load_library.cpp
+    load_library.cpp
     logical.cpp
     loop_carry.cpp
     #    loop_invariant_extern_calls.cpp

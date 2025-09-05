@@ -1,12 +1,13 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 using namespace Halide::Internal;
 
+namespace {
 Expr narrow(Expr a) {
-    Type result_type = a.type().narrow();
-    return Cast::make(result_type, std::move(a));
+    return Cast::make(a.type().narrow(), std::move(a));
 }
 
 void check(Expr test, Expr expected, Type required_type) {
@@ -24,103 +25,17 @@ void check(Expr test, Expr expected, Type required_type) {
     }
 
     Expr result = substitute_in_all_lets(find_intrinsics(test));
-    if (!equal(result, expected) || required_type != expected.type()) {
-        std::cerr << "failure!\n";
-        std::cerr << "test: " << test << "\n";
-        std::cerr << "result: " << result << "\n";
-        std::cerr << "expected: " << expected << "\n";
-        abort();
-    }
+    EXPECT_TRUE(equal(result, expected)) << "result = " << result << "\nexpected = " << expected;
+    EXPECT_EQ(required_type, expected.type());
 }
 
 void check(Expr test, Expr expected) {
-    return check(test, expected, expected.type());
+    check(test, expected, expected.type());
 }
 
-template<typename T>
-int64_t mul_shift_right(int64_t a, int64_t b, int q) {
-    constexpr int64_t min_t = std::numeric_limits<T>::min();
-    constexpr int64_t max_t = std::numeric_limits<T>::max();
-    using W = std::conditional_t<min_t == 0, uint64_t, int64_t>;
-    return std::min<int64_t>(std::max<int64_t>((W(a) * W(b)) >> q, min_t), max_t);
-}
-
-template<typename T>
-int64_t rounding_mul_shift_right(int64_t a, int64_t b, int q) {
-    const int64_t min_t = std::numeric_limits<T>::min();
-    const int64_t max_t = std::numeric_limits<T>::max();
-    using W = std::conditional_t<min_t == 0, uint64_t, int64_t>;
-    return std::min<int64_t>(std::max<int64_t>((W(a) * W(b) + (W(1) << (q - 1))) >> q, min_t), max_t);
-}
-
-template<typename T>
-void check_intrinsics_over_range() {
-    const int64_t min_t = std::numeric_limits<T>::min();
-    const int64_t max_t = std::numeric_limits<T>::max();
-    const int N = 64;
-    Type halide_t = type_of<T>();
-
-    const int t_bits = halide_t.bits();
-
-    for (int i = 0; i < N; i++) {
-        int64_t a = min_t + ((max_t - min_t) * i) / N;
-        for (int j = 0; j < N; j++) {
-            int64_t b = min_t + ((max_t - min_t) * j) / N;
-            Expr a_expr = make_const(halide_t, a);
-            Expr b_expr = make_const(halide_t, b);
-            std::pair<Expr, int64_t> intrinsics_with_reference_answer[] = {
-                {saturating_add(a_expr, b_expr), std::min(std::max(a + b, min_t), max_t)},
-                {saturating_sub(a_expr, b_expr), std::min(std::max(a - b, min_t), max_t)},
-                {halving_add(a_expr, b_expr), (a + b) >> 1},
-                {rounding_halving_add(a_expr, b_expr), (a + b + 1) >> 1},
-                {halving_sub(a_expr, b_expr), (a - b) >> 1},
-            };
-            for (const auto &p : intrinsics_with_reference_answer) {
-                Expr test = lower_intrinsics(p.first);
-                Expr result = simplify(test);
-                if (!can_prove(result == make_const(halide_t, p.second))) {
-                    std::cerr << "failure!\n";
-                    std::cerr << "test: " << p.first << "\n";
-                    std::cerr << "result: " << result << "\n";
-                    std::cerr << "expected: " << p.second << "\n";
-                    abort();
-                }
-            }
-
-            std::pair<Expr, int64_t> multiply_intrinsics_with_reference_answer[] = {
-                {mul_shift_right(a_expr, b_expr, t_bits - 1), mul_shift_right<T>(a, b, t_bits - 1)},
-                {mul_shift_right(a_expr, b_expr, t_bits), mul_shift_right<T>(a, b, t_bits)},
-                {rounding_mul_shift_right(a_expr, b_expr, t_bits - 1), rounding_mul_shift_right<T>(a, b, t_bits - 1)},
-                {rounding_mul_shift_right(a_expr, b_expr, t_bits), rounding_mul_shift_right<T>(a, b, t_bits)},
-            };
-            for (const auto &p : multiply_intrinsics_with_reference_answer) {
-                if (a < std::numeric_limits<int>::min() || a > std::numeric_limits<int>::max() ||
-                    b < std::numeric_limits<int>::min() || b > std::numeric_limits<int>::max()) {
-                    // Skip tests that would overflow the reference code.
-                    continue;
-                }
-                Expr test = lower_intrinsics(p.first);
-                Expr result = simplify(test);
-                if (!can_prove(result == make_const(halide_t, p.second))) {
-                    std::cerr << "failure!\n";
-                    std::cerr << "test: " << p.first << "\n";
-                    std::cerr << "result: " << result << "\n";
-                    std::cerr << "expected: " << p.second << "\n";
-                    abort();
-                }
-            }
-        }
-    }
-}
-
-Var x;
-Expr make_leaf(Type t, const char *name) {
-    return Load::make(t, name, Ramp::make(x, 1, t.lanes()),
-                      Buffer<>{}, Parameter{},
-                      const_true(t.lanes()), ModulusRemainder{});
-}
-
-int main(int argc, char **argv) {
+class IntrinsicsTest : public ::testing::Test {
+protected:
+    Var x{"x"};
     Expr i1x = make_leaf(Int(1, 4), "i1x");
     Expr i1y = make_leaf(Int(1, 4), "i1y");
     Expr i8x = make_leaf(Int(8, 4), "i8x");
@@ -141,39 +56,57 @@ int main(int argc, char **argv) {
     Expr f32x = make_leaf(Float(32, 4), "f32x");
     Expr f32y = make_leaf(Float(32, 4), "f32y");
 
-    // Check powers of two multiply/divide rewritten to shifts.
+    Expr make_leaf(Type t, const char *name) const {
+        return Load::make(t, name, Ramp::make(x, 1, t.lanes()),
+                          Buffer<>{}, Parameter{},
+                          const_true(t.lanes()), ModulusRemainder{});
+    }
+};
+}  // namespace
+
+TEST_F(IntrinsicsTest, MulDivPowerOfTwoStrengthReduction) {
     check(i8x * 2, i8x << 1);
     check(u8x * 4, u8x << 2);
     check(i8x / 8, i8x >> 3);
     check(u8x / 4, u8x >> 2);
+}
 
+TEST_F(IntrinsicsTest, WideningShift) {
     check(i16(i8x) * 4096, widening_shift_left(i8x, 12));
     check(u16(u8x) * 128, widening_shift_left(u8x, 7));
     // check(u32(u8x) * 256, u32(widening_shift_left(u8x, u8(8))));
+}
 
-    // Check widening arithmetic
+TEST_F(IntrinsicsTest, WideningAdd) {
     check(i8(i1x) + i1y, widening_add(i1x, i1y));
     check(i16(i8x) + i8y, widening_add(i8x, i8y));
     check(u16(u8x) + u8y, widening_add(u8x, u8y));
     check(i16(u8x) + u8y, i16(widening_add(u8x, u8y)));
     check(f32(f16x) + f32(f16y), widening_add(f16x, f16y));
+}
 
+TEST_F(IntrinsicsTest, WideningSub) {
     check(i8(i1x) - i1y, widening_sub(i1x, i1y));
     check(i16(i8x) - i8y, widening_sub(i8x, i8y));
     check(i16(u8x) - u8y, widening_sub(u8x, u8y));
     check(f32(f16x) - f32(f16y), widening_sub(f16x, f16y));
+}
 
+TEST_F(IntrinsicsTest, WideningMul) {
     check(i8(i1x) * i1y, widening_mul(i1x, i1y));
     check(i16(i8x) * i8y, widening_mul(i8x, i8y));
     check(u16(u8x) * u8y, widening_mul(u8x, u8y));
     check(i32(i8x) * i8y, i32(widening_mul(i8x, i8y)));
     check(u32(u8x) * u8y, u32(widening_mul(u8x, u8y)));
     check(f32(f16x) * f32(f16y), widening_mul(f16x, f16y));
+}
 
-    // Widening mul allows mixed signs
+TEST_F(IntrinsicsTest, WideningMulAllowsMixedSigns) {
     check(i16(i8x) * u8y, widening_mul(i8x, u8y), Int(16, 4));
     check(i32(i8x) * u8y, i32(widening_mul(i8x, u8y)));
+}
 
+TEST_F(IntrinsicsTest, HoistWidening) {
     // Excessive widening should be moved outside the arithmetic.
     check(widening_mul(i16(i8x), i16(i8y)), i32(widening_mul(i8x, i8y)));
     check(widening_mul(u16(u8x), u16(u8y)), u32(widening_mul(u8x, u8y)));
@@ -194,41 +127,51 @@ int main(int argc, char **argv) {
     check(widening_add(i32(i8x), i32(i8y)), i64(widening_add(i8x, i8y)));
     check(widening_add(u32(u8x), u32(u8y)), u64(widening_add(u8x, u8y)));
     check(widening_add(i32(u8x), i32(u8y)), i64(widening_add(u8x, u8y)));
+}
 
-    // Tricky case.
+TEST_F(IntrinsicsTest, TrickyHoistWidening) {
     check(i32(u8x) + 1, i32(widening_add(u8x, u8(1))));
+}
 
-    // Check saturating arithmetic
+TEST_F(IntrinsicsTest, SaturatingAdd) {
     check(i8_sat(i16(i8x) + i8y), saturating_add(i8x, i8y));
     check(u8_sat(u16(u8x) + u8y), saturating_add(u8x, u8y));
     check(u8(min(u16(u8x) + u16(u8y), 255)), saturating_add(u8x, u8y));
     check(u8(min(i16(u8x) + i16(u8y), 255)), saturating_add(u8x, u8y));
+}
 
+TEST_F(IntrinsicsTest, SaturatingSub) {
     check(i8_sat(i16(i8x) - i8y), saturating_sub(i8x, i8y));
     check(u8(max(i16(u8x) - i16(u8y), 0)), saturating_sub(u8x, u8y));
+}
 
-    // Check halving arithmetic
+TEST_F(IntrinsicsTest, HalvingAdd) {
     check(i8((i16(i8x) + i8y) / 2), halving_add(i8x, i8y));
     check(u8((u16(u8x) + u8y) / 2), halving_add(u8x, u8y));
     check(i8(widening_add(i8x, i8y) / 2), halving_add(i8x, i8y));
     check(u8(widening_add(u8x, u8y) / 2), halving_add(u8x, u8y));
     check((i32x + i32y) / 2, halving_add(i32x, i32y));
     check((f32x + f32y) / 2, (f32x + f32y) * 0.5f);
+}
 
+TEST_F(IntrinsicsTest, HalvingSub) {
     check(i8((i16(i8x) - i8y) / 2), halving_sub(i8x, i8y));
     check(u8((u16(u8x) - u8y) / 2), halving_sub(u8x, u8y));
     check(i8(widening_sub(i8x, i8y) / 2), halving_sub(i8x, i8y));
     check(u8(widening_sub(u8x, u8y) / 2), halving_sub(u8x, u8y));
     check((i32x - i32y) / 2, halving_sub(i32x, i32y));
     check((f32x - f32y) / 2, (f32x - f32y) * 0.5f);
+}
 
+TEST_F(IntrinsicsTest, RoundingHalvingAdd) {
     check(i8((i16(i8x) + i8y + 1) / 2), rounding_halving_add(i8x, i8y));
     check(u8((u16(u8x) + u8y + 1) / 2), rounding_halving_add(u8x, u8y));
     check(i8((widening_add(i8x, i8y) + 1) / 2), rounding_halving_add(i8x, i8y));
     check(u8((widening_add(u8x, u8y) + 1) / 2), rounding_halving_add(u8x, u8y));
     check((i32x + i32y + 1) / 2, rounding_halving_add(i32x, i32y));
+}
 
-    // Check absd
+TEST_F(IntrinsicsTest, Absd) {
     check(abs(i16(i8x) - i16(i8y)), u16(absd(i8x, i8y)));
     check(abs(i16(u8x) - i16(u8y)), u16(absd(u8x, u8y)));
     check(abs(f16x - f16y), absd(f16x, f16y));
@@ -236,27 +179,32 @@ int main(int argc, char **argv) {
     check(abs(widening_sub(i8x, i8y)), u16(absd(i8x, i8y)));
     check(abs(widening_sub(u8x, u8y)), u16(absd(u8x, u8y)));
     check(abs(widening_sub(f16x, f16y)), f32(abs(f16x - f16y)));
+}
 
-    // Check rounding shifts
-    // With constants
+TEST_F(IntrinsicsTest, RoundingRightShiftWithConstants) {
     check(narrow((i16(i8x) + 8) / 16), rounding_shift_right(i8x, 4));
     check(narrow(widening_add(i8x, i8(4)) / 8), rounding_shift_right(i8x, 3));
     check(i8(widening_add(i8x, i8(32)) / 64), rounding_shift_right(i8x, 6));
     check((i8x + i8(32)) / 64, (i8x + i8(32)) >> 6);  // Not a rounding_shift_right due to overflow.
     check((i32x + 16) / 32, rounding_shift_right(i32x, 5));
+}
 
+TEST_F(IntrinsicsTest, RoundingRightShiftStrengthReduction) {
     // rounding_right_shift of a widening add can be strength-reduced
     check(narrow((u16(u8x) + 15) >> 4), rounding_halving_add(u8x, u8(14)) >> u8(3));
     check(narrow((u32(u16x) + 15) >> 4), rounding_halving_add(u16x, u16(14)) >> u16(3));
+}
 
+TEST_F(IntrinsicsTest, RoundingRightShiftConstantTooWide) {
     // But not if the constant can't fit in the narrower type
-    check(narrow((u16(u8x) + 500) >> 4), narrow((widen_right_add(cast<uint16_t>(500), u8x)) >> 4));
+    check(narrow((u16(u8x) + 500) >> 4), narrow(widen_right_add(cast<uint16_t>(500), u8x) >> 4));
 
     check((u64(u32x) + 8) / 16, u64(rounding_shift_right(u32x, 4)));
     check(u16(min((u64(u32x) + 8) / 16, 65535)), u16_sat(rounding_shift_right(u32x, 4)));
+}
 
-    // And with variable shifts. These won't match unless Halide can statically
-    // prove it's not an out-of-range shift.
+TEST_F(IntrinsicsTest, RoundingShiftVariableSize) {
+    // These won't match unless Halide can statically prove it's not an out-of-range shift.
     Expr u8yc = Min::make(u8y, make_const(u8y.type(), 7));
     Expr i8yc = Max::make(Min::make(i8y, make_const(i8y.type(), 7)), make_const(i8y.type(), -7));
     check(i8(widening_add(i8x, (i8(1) << u8yc) / 2) >> u8yc), rounding_shift_right(i8x, u8yc));
@@ -268,17 +216,20 @@ int main(int argc, char **argv) {
     check(i8(widening_add(i8x, (i8(1) << -min(i8yc, 0)) / 2) << i8yc), rounding_shift_left(i8x, i8yc));
     check((i32x + (i32(1) << -min(i32y, 0)) / 2) << i32y, rounding_shift_left(i32x, i32y));
     check((i32x + (i32(1) << max(-i32y, 0)) / 2) << i32y, rounding_shift_left(i32x, i32y));
+}
 
-    // Test combinations of multiplies and adds with widening
-    // Same sign:
+TEST_F(IntrinsicsTest, WideningMulsAndAddsSameSign) {
     check(i16(i8x) * i8y + i16(i8z) * i8w, widening_mul(i8x, i8y) + widening_mul(i8z, i8w));
     check(u16(u8x) * u8y + u16(u8z) * u8w, widening_mul(u8x, u8y) + widening_mul(u8z, u8w));
     check(i32(i8x) * i8y + i32(i8z) * i8w, widening_add(widening_mul(i8x, i8y), widening_mul(i8z, i8w)));
     check(u32(u8x) * u8y + u32(u8z) * u8w, widening_add(widening_mul(u8x, u8y), widening_mul(u8z, u8w)), UInt(32, 4));
+}
 
-    // Mixed signs:
+TEST_F(IntrinsicsTest, WideningMulsAndAddsMixedSigns) {
     check(i16(u8x) * i8y + i16(u8z) * i8w, widening_mul(u8x, i8y) + widening_mul(u8z, i8w), Int(16, 4));
+}
 
+TEST_F(IntrinsicsTest, WideningMulsAndAddsWithConstantsStrengthReduction) {
     // Widening multiply-adds involving constants should be rewritten to adds whenever possible:
     check(i16(i8x) * 3 + i16(i8y) * 5, widening_mul(i8x, i8(3)) + widening_mul(i8y, i8(5)));
     check(i16(i8x) * 5 - i16(i8y) * 127, widening_mul(i8x, i8(5)) + widening_mul(i8y, i8(-127)));
@@ -299,19 +250,22 @@ int main(int argc, char **argv) {
     // TODO: Should these be rewritten to widening muls with mixed signs?
     check((u16(u8x) * 4 - u16(u8y)) * 3, widening_mul(u8x, u8(12)) - widening_mul(u8y, u8(3)));
     check((u16(u8x) - u16(u8y) * 7) * 5, widening_mul(u8x, u8(5)) - widening_mul(u8y, u8(35)));
+}
 
-    // Quantized multiplication.
+TEST_F(IntrinsicsTest, QuantizedMultiplication) {
     check(i8_sat(i16(i8x) * i16(i8y) >> 7), mul_shift_right(i8x, i8y, 7));
     check(i8(min(i16(i8x) * i16(i8y) >> 7, 127)), mul_shift_right(i8x, i8y, 7));
     check(i8_sat(i16(i8x) * i16(i8y) >> 8), mul_shift_right(i8x, i8y, 8));
     check(u8_sat(u16(u8x) * u16(u8y) >> 8), mul_shift_right(u8x, u8y, 8));
     check(i8(i16(i8x) * i16(i8y) >> 8), mul_shift_right(i8x, i8y, 8));
     check(u8(u16(u8x) * u16(u8y) >> 8), mul_shift_right(u8x, u8y, 8));
+}
 
-    // Multiplication of mixed-width integers
+TEST_F(IntrinsicsTest, MultiplicationOfMixedWidthIntegers) {
     check(u16(u32(u16x) * u32(u8y) >> 8), mul_shift_right(u16x, u16(u8y), 8));
+}
 
-    // Multiplication of mixed-sign integers shouldn't use mul_shift_right
+TEST_F(IntrinsicsTest, MixedSignMulAvoidsMulShiftRight) {
     check(i32(i64(u32x) * i64(i32y) >> 32), i32(widening_mul(u32x, i32y) >> 32));
 
     check(i8_sat(rounding_shift_right(i16(i8x) * i16(i8y), 7)), rounding_mul_shift_right(i8x, i8y, 7));
@@ -320,63 +274,127 @@ int main(int argc, char **argv) {
     check(u8_sat(rounding_shift_right(u16(u8x) * u16(u8y), 8)), rounding_mul_shift_right(u8x, u8y, 8));
     check(i8(rounding_shift_right(i16(i8x) * i16(i8y), 8)), rounding_mul_shift_right(i8x, i8y, 8));
     check(u8(rounding_shift_right(u16(u8x) * u16(u8y), 8)), rounding_mul_shift_right(u8x, u8y, 8));
+}
 
-    check_intrinsics_over_range<int8_t>();
-    check_intrinsics_over_range<uint8_t>();
-    check_intrinsics_over_range<int16_t>();
-    check_intrinsics_over_range<uint16_t>();
-    check_intrinsics_over_range<int32_t>();
-    check_intrinsics_over_range<uint32_t>();
+template<typename>
+class CheckIntrinsicsOverRangeTest : public IntrinsicsTest {};
+using CheckIntrinsicsTypes = ::testing::Types<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t>;
+TYPED_TEST_SUITE(CheckIntrinsicsOverRangeTest, CheckIntrinsicsTypes);
+TYPED_TEST(CheckIntrinsicsOverRangeTest, Check) {
+    using T = TypeParam;
 
+    const int64_t min_t = std::numeric_limits<T>::min();
+    const int64_t max_t = std::numeric_limits<T>::max();
+    const int N = 64;
+    Type halide_t = type_of<T>();
+
+    const int t_bits = halide_t.bits();
+
+    for (int i = 0; i < N; i++) {
+        int64_t a = min_t + (max_t - min_t) * i / N;
+        for (int j = 0; j < N; j++) {
+            int64_t b = min_t + (max_t - min_t) * j / N;
+            Expr a_expr = make_const(halide_t, a);
+            Expr b_expr = make_const(halide_t, b);
+            std::pair<Expr, int64_t> intrinsics_with_reference_answer[] = {
+                {saturating_add(a_expr, b_expr), std::min(std::max(a + b, min_t), max_t)},
+                {saturating_sub(a_expr, b_expr), std::min(std::max(a - b, min_t), max_t)},
+                {halving_add(a_expr, b_expr), (a + b) >> 1},
+                {rounding_halving_add(a_expr, b_expr), (a + b + 1) >> 1},
+                {halving_sub(a_expr, b_expr), (a - b) >> 1},
+            };
+            for (const auto &p : intrinsics_with_reference_answer) {
+                Expr test = lower_intrinsics(p.first);
+                Expr result = simplify(test);
+                EXPECT_TRUE(can_prove(result == make_const(halide_t, p.second)))
+                    << "test: " << p.first << "\n"
+                    << "result: " << result << "\n"
+                    << "expected: " << p.second << "\n";
+            }
+
+            auto mul_shift_right_ref = [](int64_t a, int64_t b, int q) {
+                constexpr int64_t min_t = std::numeric_limits<T>::min();
+                constexpr int64_t max_t = std::numeric_limits<T>::max();
+                using W = std::conditional_t<min_t == 0, uint64_t, int64_t>;
+                return std::min<int64_t>(std::max<int64_t>((W(a) * W(b)) >> q, min_t), max_t);
+            };
+
+            auto rounding_mul_shift_right_ref = [](int64_t a, int64_t b, int q) {
+                const int64_t min_t = std::numeric_limits<T>::min();
+                const int64_t max_t = std::numeric_limits<T>::max();
+                using W = std::conditional_t<min_t == 0, uint64_t, int64_t>;
+                return std::min<int64_t>(std::max<int64_t>((W(a) * W(b) + (W(1) << (q - 1))) >> q, min_t), max_t);
+            };
+
+            std::pair<Expr, int64_t>
+                multiply_intrinsics_with_reference_answer[] = {
+                    {mul_shift_right(a_expr, b_expr, t_bits - 1), mul_shift_right_ref(a, b, t_bits - 1)},
+                    {mul_shift_right(a_expr, b_expr, t_bits), mul_shift_right_ref(a, b, t_bits)},
+                    {rounding_mul_shift_right(a_expr, b_expr, t_bits - 1), rounding_mul_shift_right_ref(a, b, t_bits - 1)},
+                    {rounding_mul_shift_right(a_expr, b_expr, t_bits), rounding_mul_shift_right_ref(a, b, t_bits)},
+                };
+            for (const auto &p : multiply_intrinsics_with_reference_answer) {
+                if (a < std::numeric_limits<int>::min() || a > std::numeric_limits<int>::max() ||
+                    b < std::numeric_limits<int>::min() || b > std::numeric_limits<int>::max()) {
+                    // Skip tests that would overflow the reference code.
+                    continue;
+                }
+                Expr test = lower_intrinsics(p.first);
+                Expr result = simplify(test);
+                EXPECT_TRUE(can_prove(result == make_const(halide_t, p.second)))
+                    << "test: " << p.first << "\n"
+                    << "result: " << result << "\n"
+                    << "expected: " << p.second << "\n";
+            }
+        }
+    }
+}
+
+TEST_F(IntrinsicsTest, SafelySubstitutesWideningLets) {
     // The intrinsics-matching pass substitutes in widening lets. At
     // one point this caused a missing symbol bug for the code below
     // due to a subexpression not getting mutated.
-    {
-        Func f, g;
-        Var x;
-        Param<uint8_t> d;
 
-        f(x) = cast<uint8_t>(x);
-        f.compute_root();
+    Func f, g;
+    Var x;
+    Param<uint8_t> d;
 
-        // We want a widening let that uses a load that uses a widening let
+    f(x) = cast<uint8_t>(x);
+    f.compute_root();
 
-        // Widen it, but in a way that won't result in the cast being
-        // substituted in by the simplifier. We want it to only be
-        // substituted when we reach the intrinsics-matching pass.
-        Expr widened = absd(cast<uint16_t>(f(x)), cast<uint16_t>(d));
+    // We want a widening let that uses a load that uses a widening let
 
-        // Now use it in a load, twice, so that CSE pulls it out as a let.
-        Expr lut = f(cast<int32_t>(widened * widened));
+    // Widen it, but in a way that won't result in the cast being
+    // substituted in by the simplifier. We want it to only be
+    // substituted when we reach the intrinsics-matching pass.
+    Expr widened = absd(cast<uint16_t>(f(x)), cast<uint16_t>(d));
 
-        // Now use that in another widening op...
-        Expr widened2 = absd(cast<uint16_t>(lut), cast<uint16_t>(d));
+    // Now use it in a load, twice, so that CSE pulls it out as a let.
+    Expr lut = f(cast<int32_t>(widened * widened));
 
-        // ...which we will use twice so that CSE makes it another let.
-        g(x) = widened2 * widened2;
+    // Now use that in another widening op...
+    Expr widened2 = absd(cast<uint16_t>(lut), cast<uint16_t>(d));
 
-        g.vectorize(x, 8);
+    // ...which we will use twice so that CSE makes it another let.
+    g(x) = widened2 * widened2;
 
-        // This used to crash with a missing symbol error
-        g.compile_jit();
-    }
+    g.vectorize(x, 8);
 
+    // This used to crash with a missing symbol error
+    ASSERT_NO_THROW(g.compile_jit());
+}
+
+TEST_F(IntrinsicsTest, RoundingShiftsNoOverflow) {
     // Rounding shifts by extreme values, when lowered, used to have the
     // potential to overflow and turn into out-of-range shifts. The simplifier
     // detected this and injected a signed_integer_overflow intrinsic, which
     // then threw an error in codegen, even though the rounding shift calls are
     // well-defined.
-    {
-        Func f, g;
+    Func f, g;
 
-        f(x) = cast<uint8_t>(x);
-        f.compute_root();
+    f(x) = cast<uint8_t>(x);
+    f.compute_root();
 
-        g(x) = rounding_shift_right(f(x), 0) + u8(rounding_shift_left(u16(f(x)), 11));
-
-        g.compile_jit();
-    }
-
-    printf("Success!\n");
-    return 0;
+    g(x) = rounding_shift_right(f(x), 0) + u8(rounding_shift_left(u16(f(x)), 11));
+    ASSERT_NO_THROW(g.compile_jit());
 }
