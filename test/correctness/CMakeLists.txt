@@ -225,7 +225,7 @@ target_sources(
     #    low_bit_depth_noise.cpp
     make_struct.cpp
     many_dimensions.cpp
-    #    many_small_extern_stages.cpp
+    many_small_extern_stages.cpp
     many_updates.cpp
     math.cpp
     median3x3.cpp
