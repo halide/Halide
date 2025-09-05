@@ -11,7 +11,7 @@ using namespace Halide::Internal;
 #define ALLOCA(size) __builtin_alloca(size)
 #endif
 
-const int N = 1024 * 1024 * 6;
+const int N = 1024 * 1024 * 4;
 
 void paint_stack() {
     constexpr int padding = 1024 * 1024;
