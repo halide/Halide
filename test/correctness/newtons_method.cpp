@@ -1,11 +1,13 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979310000
 #endif
 
 using namespace Halide;
+
+namespace {
 
 template<typename T>
 int find_pi() {
@@ -75,24 +77,17 @@ int find_pi() {
     return 0;
 }
 
-int main(int argc, char **argv) {
+}  // namespace
+
+TEST(NewtonsMethod, FindPi) {
     int result;
 
     // Test in float.
     result = find_pi<float>();
-    if (result != 0) {
-        printf("Failed (float): returned %d\n", result);
-        return result;
-    }
+    ASSERT_EQ(result, 0) << "Failed (float): returned " << result;
 
     if (get_jit_target_from_environment().supports_type(type_of<double>())) {
         result = find_pi<double>();
-        if (result != 0) {
-            printf("Failed (double): returned %d\n", result);
-            return result;
-        }
+        ASSERT_EQ(result, 0) << "Failed (double): returned " << result;
     }
-
-    printf("Success!\n");
-    return 0;
 }

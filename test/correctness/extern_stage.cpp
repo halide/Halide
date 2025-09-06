@@ -1,5 +1,5 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 extern "C" HALIDE_EXPORT_SYMBOL int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {
     int min = out->dim[0].min;
@@ -60,7 +60,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int flip_x(halide_buffer_t *in1, halide_buffer_t
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(ExternStage, Basic) {
     Func f, g, h;
     Var x;
 
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     input.set_min(-99);
     lambda(x, cast<uint8_t>(x * x)).realize(input);
 
-    assert(input(-99) == (uint8_t)(-99 * -99));
+    ASSERT_EQ(input(-99), (uint8_t)(-99 * -99));
 
     f(x) = x * x;
 
@@ -89,12 +89,6 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 100; i++) {
         uint8_t correct = 4 * i * i;
-        if (result(i) != correct) {
-            printf("result(%d) = %d instead of %d\n", i, result(i), correct);
-            return 1;
-        }
+        ASSERT_EQ(result(i), correct) << "i = " << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }

@@ -242,11 +242,11 @@ target_sources(
     narrow_predicates.cpp
     negative_split_factors.cpp  # TODO: convert to error test
     #    nested_tail_strategies.cpp
-    #    newtons_method.cpp
+    newtons_method.cpp
     non_nesting_extern_bounds_query.cpp
     non_vector_aligned_embeded_buffer.cpp
     obscure_image_references.cpp
-    #    out_constraint.cpp
+    out_constraint.cpp
     out_of_memory.cpp
     output_larger_than_two_gigs.cpp
     parallel_gpu_nested.cpp
@@ -264,8 +264,8 @@ target_sources(
     #    prefetch.cpp
     #    print.cpp
     print_loop_nest.cpp
-    #    process_some_tiles.cpp
-    #    pseudostack_shares_slots.cpp
+    process_some_tiles.cpp
+    pseudostack_shares_slots.cpp
     python_extension_gen.cpp
     #    pytorch.cpp
     realize_condition_depends_on_tuple.cpp
@@ -278,7 +278,7 @@ target_sources(
     reduction_schedule.cpp
     #    register_shuffle.cpp
     reorder_storage.cpp
-    #    require.cpp
+    require.cpp
     reschedule.cpp
     respect_input_constraint_in_bounds_inference.cpp
     reuse_stack_alloc.cpp
@@ -291,7 +291,7 @@ target_sources(
     shared_self_references.cpp
     shift_by_unsigned_negated.cpp
     shifted_image.cpp
-    #    side_effects.cpp
+    side_effects.cpp
     #    simd_op_check_arm.cpp
     #    simd_op_check_hvx.cpp
     #    simd_op_check_powerpc.cpp
@@ -306,13 +306,13 @@ target_sources(
     #    skip_stages_memoize.cpp
     sliding_backwards.cpp
     sliding_over_guard_with_if.cpp
-    #    sliding_reduction.cpp
+    sliding_reduction.cpp
     #    sliding_window.cpp
-    #    sort_exprs.cpp
+    sort_exprs.cpp
     #    specialize.cpp
     specialize_to_gpu.cpp
     specialize_trim_condition.cpp
-    #    split_by_non_factor.cpp
+    split_by_non_factor.cpp
     split_fuse_rvar.cpp
     split_reuse_inner_name_bug.cpp
     split_store_compute.cpp
@@ -332,17 +332,17 @@ target_sources(
     #    tracing.cpp
     tracing_bounds.cpp
     tracing_broadcast.cpp
-    #    tracing_stack.cpp
+    tracing_stack.cpp
     transitive_bounds.cpp
     #    trim_no_ops.cpp
     tuple_partial_update.cpp
     #    tuple_reduction.cpp
-    #    tuple_select.cpp
+    tuple_select.cpp
     #    tuple_undef.cpp
     #    tuple_update_ops.cpp
     two_vector_args.cpp
     #    typed_func.cpp
-    #    undef.cpp
+    undef.cpp
     uninitialized_read.cpp
     unique_func_image.cpp
     unroll_dynamic_loop.cpp
@@ -360,10 +360,10 @@ target_sources(
     #    vector_reductions.cpp
     vector_shuffle.cpp
     vector_tile.cpp
-    #    vectorize_guard_with_if.cpp
+    vectorize_guard_with_if.cpp
     vectorize_mixed_widths.cpp
     #    vectorize_nested.cpp
-    #    vectorize_predicated.cpp
+    vectorize_predicated.cpp
     vectorize_varying_allocation_size.cpp
     vectorized_assert.cpp
     vectorized_gpu_allocation.cpp
@@ -386,26 +386,26 @@ target_sources(
     atomics.cpp
     compute_outermost.cpp
     #    compute_with.cpp
-    #    convolution.cpp
+    convolution.cpp
     extern_consumer_tiled.cpp
-    #    extern_stage.cpp
+    extern_stage.cpp
     #    func_clone.cpp
     #    func_wrapper.cpp
     gpu_allocation_cache.cpp
     #    image_wrapper.cpp
     #    interpreter.cpp
     legal_race_condition.cpp
-    #    lots_of_dimensions.cpp
+    lots_of_dimensions.cpp
     #    memoize.cpp
     #    multi_pass_reduction.cpp
-    #    multiple_outputs_extern.cpp
+    multiple_outputs_extern.cpp
     #    multiple_scatter.cpp
     named_updates.cpp
     nested_shiftinwards.cpp
     oddly_sized_output.cpp
     parallel.cpp
     parallel_alloc.cpp
-    #    parallel_fork.cpp
+    parallel_fork.cpp
     parallel_nested.cpp
     parallel_nested_1.cpp
     parallel_reductions.cpp
@@ -417,6 +417,6 @@ target_sources(
     stream_compaction.cpp
     thread_safety.cpp  # TODO: move this to a new sanitizer-specific section
     truncated_pyramid.cpp
-    #    tuple_vector_reduce.cpp
+    tuple_vector_reduce.cpp
     unroll_huge_mux.cpp
 )

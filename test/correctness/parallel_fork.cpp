@@ -1,18 +1,20 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
+#include <gtest/gtest.h>
 
 #include <atomic>
 #include <chrono>
-#include <stdio.h>
 #include <thread>
 
 using namespace Halide;
 using namespace Halide::Tools;
 
+namespace {
+
 std::atomic<int32_t> call_count{0};
 
 extern "C" HALIDE_EXPORT_SYMBOL int five_ms(int arg) {
-    call_count++;
+    ++call_count;
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
     return arg;
 }
@@ -28,10 +30,23 @@ enum Schedule {
     AsyncComputeAt,
 };
 
-Func make(Schedule schedule) {
+}  // namespace
+
+class ParallelForkTest : public ::testing::TestWithParam<Schedule> {
+protected:
+    void SetUp() override {
+        if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+            GTEST_SKIP() << "Skipping test for WebAssembly as it does not support async() yet.";
+        }
+    }
+};
+
+TEST_P(ParallelForkTest, ScheduleTest) {
+    Schedule schedule = GetParam();
+
+    call_count = 0;
     Var x("x"), y("y"), z("z");
-    std::string suffix = "_" + std::to_string((int)schedule);
-    Func both("both" + suffix), f("f" + suffix), g("g" + suffix);
+    Func both("both"), f("f"), g("g");
 
     f(x, y) = halide_externs::five_ms(x + y);
     g(x, y) = halide_externs::five_ms(x - y);
@@ -39,6 +54,8 @@ Func make(Schedule schedule) {
     both(x, y, z) = select(z == 0, f(x, y), g(x, y));
 
     both.compute_root().bound(z, 0, 2);
+
+    std::string schedule_name = std::to_string(schedule);
     switch (schedule) {
     case Serial:
         f.compute_root();
@@ -60,60 +77,21 @@ Func make(Schedule schedule) {
         break;
     }
 
-    return both;
+    Buffer<int32_t> im = both.realize({10, 10, 2});
+
+    double time = benchmark([&] {
+        both.realize(im);
+    });
+
+    RecordProperty("schedule", schedule_name);
+    RecordProperty("runtime_ms", time * 1000.0);
+    RecordProperty("call_count", call_count);
+
+    printf("%s time %f for %d calls.\n", schedule_name.c_str(), time, call_count.load());
+    fflush(stdout);
 }
 
-int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] Skipping test for WebAssembly as it does not support async() yet.\n");
-        return 0;
-    }
-
-    Func both;
-    Buffer<int32_t> im;
-    int count;
-    double time;
-
-    call_count = 0;
-    both = make(Serial);
-    im = both.realize({10, 10, 2});
-    count = call_count;
-    time = benchmark([&]() {
-        both.realize(im);
-    });
-    printf("Serial time %f for %d calls.\n", time, count);
-    fflush(stdout);
-
-    call_count = 0;
-    both = make(Parallel);
-    im = both.realize({10, 10, 2});
-    count = call_count;
-    time = benchmark([&]() {
-        both.realize(im);
-    });
-    printf("Parallel time %f for %d calls.\n", time, count);
-    fflush(stdout);
-
-    both = make(AsyncRoot);
-    call_count = 0;
-    im = both.realize({10, 10, 2});
-    count = call_count;
-    time = benchmark([&]() {
-        both.realize(im);
-    });
-    printf("Async root time %f for %d calls.\n", time, count);
-    fflush(stdout);
-
-    both = make(AsyncComputeAt);
-    call_count = 0;
-    im = both.realize({10, 10, 2});
-    count = call_count;
-    time = benchmark([&]() {
-        both.realize(im);
-    });
-    printf("AsyncComputeAt time %f for %d calls.\n", time, count);
-    fflush(stdout);
-
-    printf("Success!\n");
-    return 0;
-}
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ParallelForkTest,
+    ::testing::Values(Serial, Parallel, AsyncRoot, AsyncComputeAt));

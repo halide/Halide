@@ -1,6 +1,8 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 using namespace Halide;
 
+namespace {
 // Order a pair of Exprs, treating undefined Exprs as infinity
 void sort2(Expr &a, Expr &b) {
     if (!a.defined()) {
@@ -64,13 +66,9 @@ std::vector<Expr> bitonic_sort(std::vector<Expr> v) {
     }
     return v;
 }
+}  // namespace
 
-Expr median(std::vector<Expr> v) {
-    v = bitonic_sort(v);
-    return v[v.size() / 2];
-}
-
-int main(int argc, char **argv) {
+TEST(SortExprs, Basic) {
     Func f;
     Var x;
     f(x) = sin(x);
@@ -105,12 +103,6 @@ int main(int argc, char **argv) {
     printf("\n");
 
     for (int i = 0; i < N - 1; i++) {
-        if (result(i) >= result(i + 1)) {
-            printf("Results were not in order\n");
-            return 1;
-        }
+        ASSERT_LT(result(i), result(i + 1)) << "Results were not in order at index " << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }

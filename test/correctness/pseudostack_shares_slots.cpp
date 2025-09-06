@@ -1,6 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
+
+namespace {
 
 const int tolerance = 3 * sizeof(int);
 std::vector<int> mallocs;
@@ -17,10 +20,11 @@ void my_free(JITUserContext *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
-int main(int argc, char **argv) {
+}  // namespace
+
+TEST(PseudostackSharesSlots, Basic) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
-        return 0;
+        GTEST_SKIP() << "WebAssembly JIT does not support custom allocators.";
     }
 
     // Make a long producer-consumer chain with intermediates
@@ -57,13 +61,9 @@ int main(int argc, char **argv) {
             chain.back().realize({sz * 4});
             int sz1 = sz + 2 * 20 - 1;
             int sz2 = sz1 - 2;
-            if (mallocs.size() != 2 ||
-                std::abs(mallocs[0] - sz1) > tolerance ||
-                std::abs(mallocs[1] - sz2) > tolerance) {
-                printf("Incorrect allocations: %d %d %d\n", (int)mallocs.size(), (int)mallocs[0], (int)mallocs[1]);
-                printf("Expected: 2 %d %d\n", (int)sz1, (int)sz2);
-                return 1;
-            }
+            ASSERT_EQ(mallocs.size(), 2) << "Expected 2 allocations, got " << mallocs.size();
+            ASSERT_LT(std::abs(mallocs[0] - sz1), tolerance) << "First allocation size " << mallocs[0] << " too far from expected " << sz1;
+            ASSERT_LT(std::abs(mallocs[1] - sz2), tolerance) << "Second allocation size " << mallocs[1] << " too far from expected " << sz2;
         }
     }
 
@@ -103,20 +103,11 @@ int main(int argc, char **argv) {
             int sz2 = sz1 - 2;
             int sz3 = sz + 19;
             int sz4 = sz3 - 2;
-            if (mallocs.size() != 4 ||
-                std::abs(mallocs[0] - sz1) > tolerance ||
-                std::abs(mallocs[1] - sz2) > tolerance ||
-                std::abs(mallocs[2] - sz3) > tolerance ||
-                std::abs(mallocs[3] - sz4) > tolerance) {
-                printf("Incorrect allocations: %d %d %d %d %d\n", (int)mallocs.size(),
-                       mallocs[0], mallocs[1], mallocs[2], mallocs[3]);
-                printf("Expected: 4 %d %d %d %d\n", sz1, sz2, sz3, sz4);
-                return 1;
-            }
+            ASSERT_EQ(mallocs.size(), 4) << "Expected 4 allocations, got " << mallocs.size();
+            ASSERT_LT(std::abs(mallocs[0] - sz1), tolerance) << "First allocation size " << mallocs[0] << " too far from expected " << sz1;
+            ASSERT_LT(std::abs(mallocs[1] - sz2), tolerance) << "Second allocation size " << mallocs[1] << " too far from expected " << sz2;
+            ASSERT_LT(std::abs(mallocs[2] - sz3), tolerance) << "Third allocation size " << mallocs[2] << " too far from expected " << sz3;
+            ASSERT_LT(std::abs(mallocs[3] - sz4), tolerance) << "Fourth allocation size " << mallocs[3] << " too far from expected " << sz4;
         }
     }
-
-    printf("Success!\n");
-
-    return 0;
 }

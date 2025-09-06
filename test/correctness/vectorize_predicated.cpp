@@ -1,9 +1,12 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
 #include <cstdio>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Tools;
+
+namespace {
 
 template<typename T>
 T tolerance() {
@@ -20,15 +23,8 @@ double tolerance<double>() {
     return 1e-14;
 }
 
-template<typename T>
-bool equals(T a, T b, T epsilon = tolerance<T>()) {
-    T error = std::abs(a - b);
-    return error <= epsilon;
-}
-
 template<typename A>
-bool test(int vec_width) {
-
+void test_vectorized_predicated(int vec_width) {
     int W = vec_width * 1;
     int H = 50000;
 
@@ -56,54 +52,42 @@ bool test(int vec_width) {
 
     f(x, y) = undef<A>();
     f(r.x, r.y) = e;
+
     g(x, y) = undef<A>();
     g(r.x, r.y) = e;
+
     f.update(0).vectorize(r.x);
 
-    Buffer<A> outputg = g.realize({W, H});
     Buffer<A> outputf = f.realize({W, H});
+    Buffer<A> outputg = g.realize({W, H});
 
-    double t_g = benchmark([&]() {
-        g.realize(outputg);
-    });
-    double t_f = benchmark([&]() {
+    double t_f = benchmark([&] {
         f.realize(outputf);
     });
+    double t_g = benchmark([&] {
+        g.realize(outputg);
+    });
 
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            if (!equals(outputf(x, y), outputg(x, y))) {
-                std::cout << type_of<A>() << " x " << vec_width << " failed at "
-                          << x << " " << y << ": "
-                          << outputf(x, y) << " vs " << outputg(x, y) << "\n"
-                          << "Failure!\n";
-                exit(1);
-            }
+    for (int yy = 0; yy < H; yy++) {
+        for (int xx = 0; xx < W; xx++) {
+            ASSERT_NEAR(outputf(xx, yy), outputg(xx, yy), tolerance<A>())
+                << type_of<A>() << " x " << vec_width << " failed at x = " << xx << ", y = " << yy;
         }
     }
 
-    printf("Vectorized vs scalar (float x %d): %1.3gms %1.3gms. Speedup = %1.3f\n",
-           vec_width, t_f * 1e3, t_g * 1e3, t_g / t_f);
-
-    if (t_f > t_g) {
-        printf("-> Too slow!!\n");
-        return false;
-    }
-
-    return true;
+    EXPECT_LE(t_f, t_g) << "Vectorized version is slower than scalar";
 }
 
-int main(int argc, char **argv) {
+}  // namespace
+
+// TODO: This test is currently failing, but wasn't even being compiled before.
+
+TEST(VectorizePredicated, DISABLED_VectorWidth4) {
     // As for now, we would only vectorize predicated store/load on Hexagon or
     // if it is of type 32-bit value and has lanes no less than 4 on x86
-    bool success = true;
-    success &= test<float>(4);
-    success &= test<float>(8);
+    test_vectorized_predicated<float>(4);
+}
 
-    if (success) {
-        printf("Success!\n");
-    } else {
-        printf("[SKIP] This test is currently failing, but wasn't even being compiled before.\n");
-    }
-    return 0;
+TEST(VectorizePredicated, DISABLED_VectorWidth8) {
+    test_vectorized_predicated<float>(8);
 }

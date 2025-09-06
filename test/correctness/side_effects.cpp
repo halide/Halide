@@ -1,8 +1,10 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <math.h>
-#include <stdio.h>
 
 using namespace Halide;
+
+namespace {
 
 // NB: You must compile with -rdynamic for llvm to be able to find the
 // appropriate symbols
@@ -84,7 +86,9 @@ Expr magnitude(Complex a) {
     return (a * conjugate(a)).real();
 }
 
-int main(int argc, char **argv) {
+}  // namespace
+
+TEST(SideEffects, Basic) {
     Var x, y;
 
     Func mandelbrot;
@@ -114,11 +118,5 @@ int main(int argc, char **argv) {
     printf("\n");
 
     // Check draw_pixel was called the right number of times.
-    if (call_count != 71 * 21) {
-        printf("Something went wrong\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_EQ(call_count, 71 * 21) << "Something went wrong";
 }

@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 // This test demonstrates using tracing to give you something like a
 // stack trace in case of a crash (due to a compiler bug, or a bug in
@@ -9,7 +10,6 @@
 
 #include <signal.h>
 #include <stack>
-#include <stdio.h>
 #include <string>
 
 using namespace Halide;
@@ -51,61 +51,57 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
 }
 
 void signal_handler(int signum) {
-    printf("Correctly triggered a segfault. Here is the stack trace:\n");
+    std::cerr << "Correctly triggered a segfault (signal " << signum << ").\n";
+    std::cerr << "Stack trace:\n";
     while (!stack_trace.empty()) {
-        printf("%s\n", stack_trace.top().c_str());
+        std::cerr << stack_trace.top() << "\n";
         stack_trace.pop();
     }
-
-    printf("Success!\n");
+    std::cerr << "Success!\n";
     exit(0);
 }
 
 }  // namespace
 
-int main(int argc, char **argv) {
+TEST(TracingStackDeathTest, SegfaultWithTrace) {
 #ifdef HALIDE_INTERNAL_USING_ASAN
     // ASAN also needs to intercept the SIGSEGV signal handler;
     // we could probably make these work together, but it's
     // also probably not worth the effort.
-    printf("[SKIP] tracing_stack does not run under ASAN.\n");
-    return 0;
+    GTEST_SKIP() << "tracing_stack does not run under ASAN.";
 #endif
 
-    signal(SIGSEGV, signal_handler);
-    signal(SIGBUS, signal_handler);
+    auto test_case = [] {
+        signal(SIGSEGV, signal_handler);
+        signal(SIGBUS, signal_handler);
 
-    // Loads from this image will barf, because we've messed up the host pointer
-    Buffer<int> input(100, 100);
-    halide_buffer_t *buf = input.raw_buffer();
-    buf->host = (uint8_t *)17;
+        // Loads from this image will barf, because we've messed up the host pointer
+        Buffer<int> input(100, 100);
+        halide_buffer_t *buf = input.raw_buffer();
+        buf->host = (uint8_t *)17;
 
-    Func f("f"), g("g"), h("h");
-    Var x("x"), y("y");
+        Func f("f"), g("g"), h("h");
+        Var x("x"), y("y");
 
-    f(x, y) = x + y;
-    f.compute_root().trace_realizations();
+        f(x, y) = x + y;
+        f.compute_root().trace_realizations();
 
-    g(x, y) = f(x, y) + 37;
-    g.compute_root().trace_realizations();
+        g(x, y) = f(x, y) + 37;
+        g.compute_root().trace_realizations();
 
-    h(x, y) = g(x, y) + input(x, y);
-    h.trace_realizations();
+        h(x, y) = g(x, y) + input(x, y);
+        h.trace_realizations();
 
-    h.jit_handlers().custom_trace = &my_trace;
-    h.realize({100, 100});
-
-    printf("The code should not have reached this print statement.\n");
-    return 1;
+        h.jit_handlers().custom_trace = &my_trace;
+        h.realize({100, 100});
+    };
+    EXPECT_EXIT(test_case(), ::testing::ExitedWithCode(0), "Success!");
 }
 
 #else
 
-#include <stdio.h>
-
-int main(int argc, char **argv) {
-    printf("[SKIP] Test requires UNIX signal handling\n");
-    return 0;
+TEST(TracingStack, SegfaultWithTrace) {
+    GTEST_SKIP() << "Test requires UNIX signal handling";
 }
 
 #endif

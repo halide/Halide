@@ -1,9 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+TEST(Convolution, Basic) {
 
     // int W = 64*3, H = 64*3;
     const int W = 128, H = 48;
@@ -104,18 +104,8 @@ int main(int argc, char **argv) {
             uint16_t correct = (1 * in(x - 1, y - 1) + 2 * in(x, y - 1) + 1 * in(x + 1, y - 1) +
                                 2 * in(x - 1, y) + 4 * in(x, y) + 2 * in(x + 1, y) +
                                 1 * in(x - 1, y + 1) + 2 * in(x, y + 1) + 1 * in(x + 1, y + 1));
-            if (out1(x, y) != correct) {
-                printf("out1(%d, %d) = %d instead of %d\n", x, y, out1(x, y), correct);
-                return 1;
-            }
-            if (out2(x, y) != correct) {
-                printf("out2(%d, %d) = %d instead of %d\n", x, y, out2(x, y), correct);
-                return 1;
-            }
+            ASSERT_EQ(out1(x, y), correct) << "out1(" << x << ", " << y << ")";
+            ASSERT_EQ(out2(x, y), correct) << "out2(" << x << ", " << y << ")";
         }
     }
-
-    printf("Success!\n");
-
-    return 0;
 }

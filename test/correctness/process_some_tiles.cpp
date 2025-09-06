@@ -1,20 +1,20 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <math.h>
-#include <stdio.h>
 
 using namespace Halide;
 
+namespace {
 // A version of pow that tracks usage so we can check how many times it was called.
 int call_count = 0;
 extern "C" HALIDE_EXPORT_SYMBOL float my_powf(float x, float y) {
-    call_count++;
-    // We have to read from call_count, or for some reason apple clang removes it entirely.
-    assert(call_count != -1);
+    ++call_count;
     return powf(x, y);
 }
 HalideExtern_2(float, my_powf, float, float);
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(ProcessSomeTiles, Basic) {
     // Brighten some tiles of an image, where that region is given by
     // a lower-res bitmap.
 
@@ -77,24 +77,14 @@ int main(int argc, char **argv) {
     call_count--;
 
     // Check the right number of calls to powf occurred
-    if (call_count != tile_size * tile_size) {
-        printf("call_count = %d instead of %d\n", call_count, tile_size * tile_size);
-        return 1;
-    }
+    ASSERT_EQ(call_count, tile_size * tile_size) << "call_count = " << call_count << " instead of " << tile_size * tile_size;
 
     // Check the output is correct
     for (int y = 0; y < result.height(); y++) {
         for (int x = 0; x < result.width(); x++) {
             bool active = bitmap_buf(x / tile_size, y / tile_size);
             float correct = active ? my_powf(image_buf(x, y), 0.8f) : image_buf(x, y);
-            if (fabs(correct - result(x, y)) > 0.001f) {
-                printf("result(%d, %d) = %f instead of %f\n",
-                       x, y, result(x, y), correct);
-                return 1;
-            }
+            ASSERT_NEAR(result(x, y), correct, 0.001f) << "x = " << x << ", y = " << y;
         }
     }
-
-    printf("Success!\n");
-    return 0;
 }

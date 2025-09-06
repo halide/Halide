@@ -1,20 +1,26 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <memory>
-#include <stdio.h>
 
 using namespace Halide;
 
+namespace {
+
+// TODO: convert to error test
+
 int error_occurred = false;
 void halide_error(JITUserContext *ctx, const char *msg) {
-    // Emitting "error.*:" to stdout or stderr will cause CMake to report the
-    // test as a failure on Windows, regardless of error code returned,
-    // hence the abbreviation to "err".
-    printf("Saw (Expected) Halide Err: %s\n", msg);
     error_occurred = true;
 }
 
-static void test(int vector_width) {
+}  // namespace
+
+class RequireTest : public ::testing::TestWithParam<int> {
+};
+
+TEST_P(RequireTest, VectorWidth) {
     Target target = get_jit_target_from_environment();
+    int vector_width = GetParam();
 
     const int32_t kPrime1 = 7829;
     const int32_t kPrime2 = 7919;
@@ -43,26 +49,17 @@ static void test(int vector_width) {
     p2.set(2);
     error_occurred = false;
     result = f.realize({realize_width});
-    if (!error_occurred) {
-        printf("There should have been a requirement error (vector_width = %d)\n", vector_width);
-        exit(1);
-    }
+    ASSERT_TRUE(error_occurred) << "There should have been a requirement error (vector_width = " << vector_width << ")";
 
     p1.set(1);
     p2.set(kPrime1 - 1);
     error_occurred = false;
     result = f.realize({realize_width});
-    if (error_occurred) {
-        printf("There should not have been a requirement error (vector_width = %d)\n", vector_width);
-        exit(1);
-    }
+    ASSERT_FALSE(error_occurred) << "There should not have been a requirement error (vector_width = " << vector_width << ")";
     for (int i = 0; i < realize_width; ++i) {
         const int32_t expected = (kPrime1 * kPrime2) + i;
         const int32_t actual = result(i);
-        if (actual != expected) {
-            printf("Unexpected value at %d: actual=%d, expected=%d (vector_width = %d)\n", i, actual, expected, vector_width);
-            exit(1);
-        }
+        ASSERT_EQ(actual, expected) << "Unexpected value at " << i << ": actual=" << actual << ", expected=" << expected << " (vector_width = " << vector_width << ")";
     }
 
     ImageParam input(Int(32), 2);
@@ -78,27 +75,17 @@ static void test(int vector_width) {
 
     error_occurred = false;
     result = clamped.realize({64, 3});
-    if (!error_occurred) {
-        printf("There should have been a requirement error (vector_width = %d)\n", vector_width);
-        exit(1);
-    }
+    ASSERT_TRUE(error_occurred) << "There should have been a requirement error (vector_width = " << vector_width << ")";
 
     p1.set(16);
     p2.set(16);
 
     error_occurred = false;
     result = clamped.realize({64, 3});
-    if (error_occurred) {
-        printf("There should NOT have been a requirement error (vector_width = %d)\n", vector_width);
-        exit(1);
-    }
+    ASSERT_FALSE(error_occurred) << "There should NOT have been a requirement error (vector_width = " << vector_width << ")";
 }
 
-int main(int argc, char **argv) {
-    test(0);
-    test(4);
-    test(32);
-
-    printf("Success!\n");
-    return 0;
-}
+INSTANTIATE_TEST_SUITE_P(
+    VectorWidths,
+    RequireTest,
+    ::testing::Values(0, 4, 32));
