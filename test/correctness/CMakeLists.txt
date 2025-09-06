@@ -413,7 +413,7 @@ target_sources(
     parallel_scatter.cpp
     #    random.cpp
     reorder_rvars.cpp
-    #    rfactor.cpp
+    rfactor.cpp
     stream_compaction.cpp
     thread_safety.cpp  # TODO: move this to a new sanitizer-specific section
     truncated_pyramid.cpp
