@@ -1,23 +1,22 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
+namespace {
 // Make sure that "f" is computed at "g"
-class CheckCompute : public IRVisitor {
-protected:
-    using IRVisitor::visit;
-
+struct CheckCompute final : IRVisitor {
     std::string producer;
     std::string consumer;
+    bool f_computed_at_g = true;
 
+    using IRVisitor::visit;
     void visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             if (op->name == "f") {
                 if (producer != "g") {
-                    printf("Produce \"f\" should be inside of produce \"g\"\n");
-                    exit(1);
+                    f_computed_at_g = false;
                 }
             }
             std::string old_producer = producer;
@@ -27,8 +26,7 @@ protected:
         } else {
             if (op->name == "f") {
                 if (producer != "g") {
-                    printf("Consume \"f\" should be inside of produce \"g\"\n");
-                    exit(1);
+                    f_computed_at_g = false;
                 }
             }
             std::string old_consumer = consumer;
@@ -42,8 +40,9 @@ protected:
 int allocation_bound_test_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     return 0;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(SetCustomTraceTest, SetCustomTrace) {
     // Setting custom trace on "f" should not have nuked its compute_at schedule.
 
     Var x("x");
@@ -59,6 +58,5 @@ int main(int argc, char **argv) {
     CheckCompute checker;
     m.functions().front().body.accept(&checker);
 
-    printf("Success!\n");
-    return 0;
+    EXPECT_TRUE(checker.f_computed_at_g) << "Produce/consume 'f' should be inside of produce 'g'";
 }

@@ -1,10 +1,9 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
-
+TEST(NamedUpdatesTest, NamedUpdates) {
     // Test various possible pieces of syntax for tracking the various
     // definitions of a Func. Mostly we just want to make sure they
     // compile.
@@ -15,7 +14,6 @@ int main(int argc, char **argv) {
     Func ref;
 
     {
-
         Stage pure =
             f(x) = x;
 
@@ -57,18 +55,13 @@ int main(int argc, char **argv) {
         ref(5 * r) = 2;
     }
 
-    Buffer<int> result = f.realize({128});
-    Buffer<int> result_ref = ref.realize({128});
+    Buffer<int> result, result_ref;
+    ASSERT_NO_THROW(result = f.realize({128}));
+    ASSERT_NO_THROW(result_ref = ref.realize({128}));
 
     RDom check(result);
     uint32_t error = evaluate<uint32_t>(
         maximum(abs(result(check) - result_ref(check))));
 
-    if (error) {
-        printf("There was a difference between using named updates and not.\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(error, 0) << "There was a difference between using named updates and not.";
 }

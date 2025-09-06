@@ -1,7 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 int num_stores = 0;
 
 int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
@@ -10,13 +12,17 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     }
     return 0;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(StencilChainInUpdateDefinitionsTest, StencilChainInUpdateDefinitions) {
     // An iterated stencil in a single Func without using RDoms. Not a
     // useful way to do stencils, but it demonstrates that the region
     // computed of a Func can grow as a trapezoid as you walk back
     // through the update definitions. I.e. each update definition has
     // a distinct value for the bounds of the pure vars.
+
+    // Reset counter
+    num_stores = 0;
 
     Var x, y;
 
@@ -70,16 +76,8 @@ int main(int argc, char **argv) {
 
     g.trace_stores();
     h.jit_handlers().custom_trace = &my_trace;
-    h.realize({output_extent});
+    Buffer<float> result;
+    ASSERT_NO_THROW(result = h.realize({output_extent}));
 
-    if (num_stores != expected) {
-        printf("Did not store to g the right numbers of times\n"
-               " Expected: %d\n"
-               " Actual: %d\n",
-               expected, num_stores);
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(num_stores, expected) << "Did not store to g the right numbers of times. Expected: " << expected << ", Actual: " << num_stores;
 }

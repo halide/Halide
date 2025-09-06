@@ -1,9 +1,11 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-class CountForLoops : public IRMutator {
+namespace {
+struct CountForLoops final : IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
@@ -11,11 +13,11 @@ class CountForLoops : public IRMutator {
         return IRMutator::visit(op);
     }
 
-public:
     int count = 0;
 };
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(PartitionMaxFilterTest, PartitionMaxFilter) {
     // See https://github.com/halide/Halide/issues/5353
 
     const int width = 1280, height = 1024;
@@ -36,7 +38,8 @@ int main(int argc, char **argv) {
     CountForLoops counter;
     max_y.add_custom_lowering_pass(&counter, nullptr);
 
-    Buffer<uint8_t> out = max_y.realize({width, height});
+    Buffer<uint8_t> out;
+    ASSERT_NO_THROW(out = max_y.realize({width, height}));
 
     // We expect a loop structure like:
     // Top of the image
@@ -55,12 +58,6 @@ int main(int argc, char **argv) {
     //  for x:
 
     const int expected_loops = 8;
-
-    if (counter.count != expected_loops) {
-        printf("Loop was not partitioned into the expected number of cases\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_EQ(counter.count, expected_loops)
+        << "Loop was not partitioned into the expected number of cases";
 }

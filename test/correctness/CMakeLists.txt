@@ -122,7 +122,7 @@ target_sources(
     fibonacci.cpp
     fit_function.cpp
     #    float16_t.cpp
-    #    float16_t_comparison.cpp
+    float16_t_comparison.cpp
     #    float16_t_constants.cpp
     float16_t_image_type.cpp
     #    float16_t_neon_op_check.cpp
@@ -243,23 +243,23 @@ target_sources(
     negative_split_factors.cpp  # TODO: convert to error test
     #    nested_tail_strategies.cpp
     #    newtons_method.cpp
-    #    non_nesting_extern_bounds_query.cpp
+    non_nesting_extern_bounds_query.cpp
     non_vector_aligned_embeded_buffer.cpp
     obscure_image_references.cpp
     #    out_constraint.cpp
-    #    out_of_memory.cpp
+    out_of_memory.cpp
     output_larger_than_two_gigs.cpp
     parallel_gpu_nested.cpp
     #    param.cpp
-    #    parameter_constraints.cpp
+    parameter_constraints.cpp
     partial_application.cpp
-    #    partial_realization.cpp
+    partial_realization.cpp
     partition_loops.cpp
     partition_loops_bug.cpp
-    #    partition_max_filter.cpp
+    partition_max_filter.cpp
     pipeline_set_jit_externs_func.cpp
     #    plain_c_includes.c
-    #    popc_clz_ctz_bounds.cpp
+    popc_clz_ctz_bounds.cpp
     #    predicated_store_load.cpp
     #    prefetch.cpp
     #    print.cpp
@@ -277,7 +277,7 @@ target_sources(
     #    reduction_non_rectangular.cpp
     reduction_schedule.cpp
     #    register_shuffle.cpp
-    #    reorder_storage.cpp
+    reorder_storage.cpp
     #    require.cpp
     reschedule.cpp
     respect_input_constraint_in_bounds_inference.cpp
@@ -286,7 +286,7 @@ target_sources(
     #    round.cpp
     #    saturating_casts.cpp
     scatter.cpp
-    #    set_custom_trace.cpp
+    set_custom_trace.cpp
     shadowed_bound.cpp
     shared_self_references.cpp
     shift_by_unsigned_negated.cpp
@@ -311,7 +311,7 @@ target_sources(
     #    sort_exprs.cpp
     #    specialize.cpp
     specialize_to_gpu.cpp
-    #    specialize_trim_condition.cpp
+    specialize_trim_condition.cpp
     #    split_by_non_factor.cpp
     split_fuse_rvar.cpp
     split_reuse_inner_name_bug.cpp
@@ -319,10 +319,10 @@ target_sources(
     stable_realization_order.cpp
     stack_allocations.cpp
     #    stage_strided_loads.cpp
-    #    stencil_chain_in_update_definitions.cpp
+    stencil_chain_in_update_definitions.cpp
     stmt_to_html.cpp
     #    storage_folding.cpp
-    #    store_in.cpp
+    store_in.cpp
     #    strict_float.cpp
     strict_float_bounds.cpp
     strided_load.cpp
@@ -349,7 +349,7 @@ target_sources(
     unroll_loop_with_implied_constant_bounds.cpp
     unrolled_reduction.cpp
     unsafe_dedup_lets.cpp
-    #    unsafe_promises.cpp
+    unsafe_promises.cpp
     unused_func.cpp
     update_chunk.cpp
     vector_bounds_inference.cpp
@@ -370,8 +370,8 @@ target_sources(
     vectorized_guard_with_if_tail.cpp
     vectorized_initialization.cpp
     vectorized_load_from_vectorized_allocation.cpp
-    #    vectorized_reduction_bug.cpp
-    #    widening_lerp.cpp
+    vectorized_reduction_bug.cpp
+    widening_lerp.cpp
     #    widening_reduction.cpp
 )
 
@@ -394,13 +394,13 @@ target_sources(
     gpu_allocation_cache.cpp
     #    image_wrapper.cpp
     #    interpreter.cpp
-    #    legal_race_condition.cpp
+    legal_race_condition.cpp
     #    lots_of_dimensions.cpp
     #    memoize.cpp
     #    multi_pass_reduction.cpp
     #    multiple_outputs_extern.cpp
     #    multiple_scatter.cpp
-    #    named_updates.cpp
+    named_updates.cpp
     nested_shiftinwards.cpp
     oddly_sized_output.cpp
     parallel.cpp
@@ -408,15 +408,15 @@ target_sources(
     #    parallel_fork.cpp
     parallel_nested.cpp
     parallel_nested_1.cpp
-    #    parallel_reductions.cpp
+    parallel_reductions.cpp
     parallel_rvar.cpp
     parallel_scatter.cpp
     #    random.cpp
-    #    reorder_rvars.cpp
+    reorder_rvars.cpp
     #    rfactor.cpp
     stream_compaction.cpp
     thread_safety.cpp  # TODO: move this to a new sanitizer-specific section
-    #    truncated_pyramid.cpp
+    truncated_pyramid.cpp
     #    tuple_vector_reduce.cpp
     unroll_huge_mux.cpp
 )

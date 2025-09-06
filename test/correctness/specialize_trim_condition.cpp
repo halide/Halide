@@ -1,23 +1,22 @@
 #include "Halide.h"
 #include "HalideRuntime.h"
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 int load_count = 0;
 
 // A trace that records the number of loads
 int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
-
     if (ev->event == halide_trace_load) {
         load_count++;
     }
     return 0;
 }
+}  // namespace
 
-int main(int argc, char **argv) {
+TEST(SpecializeTrimConditionTest, SpecializeTrimCondition) {
     Param<float> scale_factor_x, scale_factor_y;
     ImageParam input(UInt(8), 2);
 
@@ -51,8 +50,9 @@ int main(int argc, char **argv) {
         load_count = 0;
         scale_factor_x.set(2.0f);
         scale_factor_y.set(2.0f);
-        Buffer<uint8_t> out = f.realize({8, 8});
-        assert(load_count == 64);
+        Buffer<uint8_t> out;
+        ASSERT_NO_THROW(out = f.realize({8, 8}));
+        EXPECT_EQ(load_count, 64) << "Expected 64 loads for upsampling case";
     }
     {
         // In this specialization, no select can be trimmed,
@@ -60,8 +60,9 @@ int main(int argc, char **argv) {
         load_count = 0;
         scale_factor_x.set(0.5f);
         scale_factor_y.set(2.0f);
-        Buffer<uint8_t> out = f.realize({8, 8});
-        assert(load_count == 128);
+        Buffer<uint8_t> out;
+        ASSERT_NO_THROW(out = f.realize({8, 8}));
+        EXPECT_EQ(load_count, 128) << "Expected 128 loads for mixed case";
     }
     {
         // In this specialization, one of the select branches should be trimmed,
@@ -69,10 +70,8 @@ int main(int argc, char **argv) {
         load_count = 0;
         scale_factor_x.set(0.5f);
         scale_factor_y.set(0.5f);
-        Buffer<uint8_t> out = f.realize({8, 8});
-        assert(load_count == 64);
+        Buffer<uint8_t> out;
+        ASSERT_NO_THROW(out = f.realize({8, 8}));
+        EXPECT_EQ(load_count, 64) << "Expected 64 loads for downsampling case";
     }
-
-    printf("Success!\n");
-    return 0;
 }

@@ -1,7 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 int mallocs = 0;
 
 void *my_malloc(JITUserContext *, size_t sz) {
@@ -13,7 +15,16 @@ void my_free(JITUserContext *, void *ptr) {
     free(ptr);
 }
 
-void check(MemoryType t1, MemoryType t2, MemoryType t3) {
+class StoreInTest : public ::testing::TestWithParam<std::tuple<MemoryType, MemoryType, MemoryType>> {
+};
+}  // namespace
+
+TEST_P(StoreInTest, CheckMemoryTypes) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        GTEST_SKIP() << "WebAssembly JIT does not support custom allocators.";
+    }
+
+    const auto [t1, t2, t3] = GetParam();
     Var x;
 
     // By default, small constant-sized allocations, or
@@ -41,30 +52,11 @@ void check(MemoryType t1, MemoryType t2, MemoryType t3) {
     mallocs = 0;
     f.jit_handlers().custom_malloc = my_malloc;
     f.jit_handlers().custom_free = my_free;
-    f.realize({1024});
-    if (mallocs != expected_mallocs) {
-        std::cerr << "Wrong number of mallocs for " << t1 << ", " << t2 << ", " << t3 << "\n"
-                  << "Expected " << expected_mallocs << " got " << mallocs << "\n";
-        exit(1);
-    }
+    ASSERT_NO_THROW(f.realize({1024}));
+    EXPECT_EQ(mallocs, expected_mallocs) << "Wrong number of mallocs for " << t1 << ", " << t2 << ", " << t3;
 }
 
-int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
-        return 0;
-    }
-
-    MemoryType types[] = {MemoryType::Auto, MemoryType::Stack, MemoryType::Heap};
-
-    for (MemoryType t1 : types) {
-        for (MemoryType t2 : types) {
-            for (MemoryType t3 : types) {
-                check(t1, t2, t3);
-            }
-        }
-    }
-
-    printf("Success!\n");
-    return 0;
-}
+static auto memory_types =
+    ::testing::Values(MemoryType::Auto, MemoryType::Stack, MemoryType::Heap);
+INSTANTIATE_TEST_SUITE_P(
+    MemoryTypes, StoreInTest, ::testing::Combine(memory_types, memory_types, memory_types));

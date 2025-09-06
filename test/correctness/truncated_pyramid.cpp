@@ -1,11 +1,11 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
-
 using std::pair;
 using std::vector;
 
-int main(int argc, char **argv) {
+TEST(TruncatedPyramidTest, TruncatedPyramid) {
     Func input;
     Var x, y;
     input(x, y) = random_float();
@@ -71,8 +71,5 @@ int main(int argc, char **argv) {
     // age of the universe if anything combinatorial is going on.
     width.set(1000);
     height.set(1000);
-    pyr_up[0].realize({1000, 1000});
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(pyr_up[0].realize({1000, 1000}));
 }

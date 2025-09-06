@@ -1,7 +1,9 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
+namespace {
 // Extern stages are supposed to obey the following nesting property
 // on bounds queries: If some region of the output O requires some
 // region of the input I, then requesting any subset of O should only
@@ -14,7 +16,7 @@ using namespace Halide;
 // scanline query it will claim to need a much wider input. The result
 // is that the bounds query is not entirely respected. The actual input
 // received in non-bounds-query-mode is the intersection of what it
-// asked for for a single scanline and what it asked for for the whole
+// requested for a single scanline and what it requested for the whole
 // image.
 extern "C" HALIDE_EXPORT_SYMBOL int misbehaving_extern_stage(halide_buffer_t *in, int variant, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
@@ -40,8 +42,8 @@ extern "C" HALIDE_EXPORT_SYMBOL int misbehaving_extern_stage(halide_buffer_t *in
     } else {
         // The inner bounds query was fine in the y dimension, which
         // correctly nested.
-        assert(in->dim[1].min == out->dim[1].min);
-        assert(in->dim[1].extent == 1);
+        EXPECT_EQ(in->dim[1].min, out->dim[1].min);
+        EXPECT_EQ(in->dim[1].extent, 1);
 
         // But the inner (bad) bounds query should not have been
         // respected in the x dimension.
@@ -51,40 +53,45 @@ extern "C" HALIDE_EXPORT_SYMBOL int misbehaving_extern_stage(halide_buffer_t *in
             // Check the left edge
             // was indeed shifted inwards, as requested by the
             // per-scanline bounds query.
-            assert(in->dim[0].min == out->dim[0].min + 50);
+            EXPECT_EQ(in->dim[0].min, out->dim[0].min + 50);
 
             // Check the right edge wasn't shifted over, but was instead
             // clamped to lie within the outer bounds query.
-            assert(in->dim[0].extent == out->dim[0].extent - 50);
+            EXPECT_EQ(in->dim[0].extent, out->dim[0].extent - 50);
         } else if (variant == 1) {
             // For non-overlapping bounds, you just get squashed to
             // the nearest edge.
             int right_edge = out->dim[0].min + out->dim[0].extent - 1;
-            assert(in->dim[0].min == right_edge);
-            assert(in->dim[0].extent == 1);
+            EXPECT_EQ(in->dim[0].min, right_edge);
+            EXPECT_EQ(in->dim[0].extent, 1);
         } else {
             abort();
         }
     }
     return 0;
 }
-
-int main(int argc, char **argv) {
+class NonNestingExternBoundsQueryTest : public testing::Test {
+protected:
     Func f, g, h;
     Var x, y;
     Param<int> variant;
-    f(x, y) = x + y;
-    g.define_extern("misbehaving_extern_stage", {f, variant}, Int(32), 2);
-    h(x, y) = g(x, y);
+    void SetUp() override {
+        f(x, y) = x + y;
+        g.define_extern("misbehaving_extern_stage", {f, variant}, Int(32), 2);
+        h(x, y) = g(x, y);
 
-    g.compute_at(h, y);
-    f.compute_at(h, y);
+        g.compute_at(h, y);
+        f.compute_at(h, y);
+    }
+};
+}  // namespace
 
+TEST_F(NonNestingExternBoundsQueryTest, Overlapping) {
     variant.set(0);
-    h.realize({200, 200});
+    ASSERT_NO_THROW(h.realize({200, 200}));
+}
 
+TEST_F(NonNestingExternBoundsQueryTest, NonOverlapping) {
     variant.set(1);
-    h.realize({200, 200});
-
-    printf("Success!\n");
+    ASSERT_NO_THROW(h.realize({200, 200}));
 }
