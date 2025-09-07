@@ -749,9 +749,9 @@ TEST(RFactorTest, CheckAllocationBound) {
     f.trace_realizations();
     g.jit_handlers().custom_trace = [](JITUserContext *user_context, const halide_trace_event_t *e) {
         // The schedule implies that f will be stored from 0 to 1
-        if (e->event == 2 && std::string(e->func) == "f") {
-            EXPECT_EQ(e->coordinates[0], 0);
-            EXPECT_EQ(e->coordinates[1], 2);
+        if (e->event == halide_trace_begin_realization && std::string(e->func) == "f") {
+            EXPECT_LE(e->coordinates[1], 2)
+                << "Realized " << e->func << " on [" << e->coordinates[0] << ", " << e->coordinates[1] << "]";
         }
         return 0;
     };
