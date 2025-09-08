@@ -1594,7 +1594,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-     constexpr std::array<Feature, 14> intersection_features = {{
+     constexpr std::array<Feature, 16> intersection_features = {{
         ARMv7s,
         AVX,
         AVX2,
@@ -1615,7 +1615,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-     constexpr std::array<Feature, 10> matching_features = {{
+     constexpr std::array<Feature, 11> matching_features = {{
         ASAN,
         Debug,
         EnableBacktraces,
