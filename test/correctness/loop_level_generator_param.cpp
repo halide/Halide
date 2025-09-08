@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -94,78 +95,79 @@ public:
 
 }  // namespace
 
-int main(int argc, char **argv) {
+TEST(LoopLevelGeneratorParam, SetBeforeGenerate) {
+    // Call GeneratorParam<LoopLevel>::set() with 'root' *before* generate(), then never modify again.
     GeneratorContext context(get_jit_target_from_environment());
 
-    {
-        // Call GeneratorParam<LoopLevel>::set() with 'root' *before* generate(), then never modify again.
-        auto gen = context.create<Example>();
-        gen->inner_compute_at.set(LoopLevel::root());
-        gen->apply();
+    auto gen = context.create<Example>();
+    gen->inner_compute_at.set(LoopLevel::root());
+    gen->apply();
 
-        Func outer("outer");
-        outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
+    Func outer("outer");
+    outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
 
-        CheckLoopLevels::lower_and_check(outer,
-                                         /* inner loop level */ "inner.s0.x",
-                                         /* outer loop level */ "outer.s0.x");
-    }
+    CheckLoopLevels::lower_and_check(outer,
+                                     /* inner loop level */ "inner.s0.x",
+                                     /* outer loop level */ "outer.s0.x");
+}
 
-    {
-        // Call GeneratorParam<LoopLevel>::set() *before* generate() with undefined Looplevel;
-        // then modify that LoopLevel after generate() but before lowering
-        LoopLevel inner_compute_at;  // undefined: must set before lowering
-        auto gen = context.create<Example>();
-        gen->inner_compute_at.set(inner_compute_at);
-        gen->apply();
+TEST(LoopLevelGeneratorParam, SetUndefinedThenModify) {
+    // Call GeneratorParam<LoopLevel>::set() *before* generate() with undefined Looplevel;
+    // then modify that LoopLevel after generate() but before lowering
+    GeneratorContext context(get_jit_target_from_environment());
+    
+    LoopLevel inner_compute_at;  // undefined: must set before lowering
+    auto gen = context.create<Example>();
+    gen->inner_compute_at.set(inner_compute_at);
+    gen->apply();
 
-        Func outer("outer");
-        outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
+    Func outer("outer");
+    outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
 
-        inner_compute_at.set({outer, x});
+    inner_compute_at.set({outer, x});
 
-        CheckLoopLevels::lower_and_check(outer,
-                                         /* inner loop level */ "outer.s0.x",
-                                         /* outer loop level */ "outer.s0.x");
-    }
+    CheckLoopLevels::lower_and_check(outer,
+                                     /* inner loop level */ "outer.s0.x",
+                                     /* outer loop level */ "outer.s0.x");
+}
 
-    {
-        // Call GeneratorParam<LoopLevel>::set() *after* generate()
-        auto gen = context.create<Example>();
-        gen->apply();
+TEST(LoopLevelGeneratorParam, SetAfterGenerate) {
+    // Call GeneratorParam<LoopLevel>::set() *after* generate()
+    GeneratorContext context(get_jit_target_from_environment());
+    
+    auto gen = context.create<Example>();
+    gen->apply();
 
-        Func outer("outer");
-        outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
+    Func outer("outer");
+    outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
 
-        gen->inner_compute_at.set({outer, x});
+    gen->inner_compute_at.set({outer, x});
 
-        CheckLoopLevels::lower_and_check(outer,
-                                         /* inner loop level */ "outer.s0.x",
-                                         /* outer loop level */ "outer.s0.x");
-    }
+    CheckLoopLevels::lower_and_check(outer,
+                                     /* inner loop level */ "outer.s0.x",
+                                     /* outer loop level */ "outer.s0.x");
+}
 
-    {
-        // And now, a case that doesn't work:
-        // - Call GeneratorParam<LoopLevel>::set() *after* generate()
-        // - Then call set(), again, on the local LoopLevel passed previously
-        // As expected, the second set() will have no effect.
-        auto gen = context.create<Example>();
-        gen->apply();
+TEST(LoopLevelGeneratorParam, SetAfterGenerateNoEffect) {
+    // And now, a case that doesn't work:
+    // - Call GeneratorParam<LoopLevel>::set() *after* generate()
+    // - Then call set(), again, on the local LoopLevel passed previously
+    // As expected, the second set() will have no effect.
+    GeneratorContext context(get_jit_target_from_environment());
+    
+    auto gen = context.create<Example>();
+    gen->apply();
 
-        Func outer("outer");
-        outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
+    Func outer("outer");
+    outer(x) = gen->inner(x) + trunc(cos(x) * 1000.0f);
 
-        LoopLevel inner_compute_at(LoopLevel::root());
-        gen->inner_compute_at.set(inner_compute_at);
+    LoopLevel inner_compute_at(LoopLevel::root());
+    gen->inner_compute_at.set(inner_compute_at);
 
-        // This has no effect. (If it did, the inner loop level below would be outer.s0.x)
-        inner_compute_at.set({outer, x});
+    // This has no effect. (If it did, the inner loop level below would be outer.s0.x)
+    inner_compute_at.set({outer, x});
 
-        CheckLoopLevels::lower_and_check(outer,
-                                         /* inner loop level */ "inner.s0.x",
-                                         /* outer loop level */ "outer.s0.x");
-    }
-
-    printf("Success!\n");
-    return 0;
+    CheckLoopLevels::lower_and_check(outer,
+                                     /* inner loop level */ "inner.s0.x",
+                                     /* outer loop level */ "outer.s0.x");
 }

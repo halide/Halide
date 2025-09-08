@@ -8,6 +8,7 @@ gtest_discover_tests(
     PROPERTIES
     ENVIRONMENT "HL_TARGET=${Halide_TARGET}\\;HL_JIT_TARGET=${Halide_TARGET}"
     LABELS "correctness"
+    EXTRA_ARGS --gtest_brief=1
 )
 
 set_target_properties(correctness_tests PROPERTIES ENABLE_EXPORTS TRUE)
@@ -123,7 +124,7 @@ target_sources(
     fit_function.cpp
     #    float16_t.cpp
     float16_t_comparison.cpp
-    #    float16_t_constants.cpp
+    float16_t_constants.cpp
     float16_t_image_type.cpp
     #    float16_t_neon_op_check.cpp
     for_each_element.cpp
@@ -219,7 +220,7 @@ target_sources(
     logical.cpp
     loop_carry.cpp
     loop_invariant_extern_calls.cpp
-    #    loop_level_generator_param.cpp
+    loop_level_generator_param.cpp
     #    lossless_cast.cpp
     lots_of_loop_invariants.cpp
     low_bit_depth_noise.cpp
@@ -237,11 +238,11 @@ target_sources(
     multi_splits_with_diff_tail_strategies.cpp
     multi_way_select.cpp
     multipass_constraints.cpp
-    #    multiple_outputs.cpp
+    multiple_outputs.cpp
     mux.cpp
     narrow_predicates.cpp
     negative_split_factors.cpp  # TODO: convert to error test
-    #    nested_tail_strategies.cpp
+    nested_tail_strategies.cpp
     newtons_method.cpp
     non_nesting_extern_bounds_query.cpp
     non_vector_aligned_embeded_buffer.cpp
@@ -250,7 +251,7 @@ target_sources(
     out_of_memory.cpp
     output_larger_than_two_gigs.cpp
     parallel_gpu_nested.cpp
-    #    param.cpp
+    param.cpp
     parameter_constraints.cpp
     partial_application.cpp
     partial_realization.cpp
@@ -283,7 +284,7 @@ target_sources(
     respect_input_constraint_in_bounds_inference.cpp
     reuse_stack_alloc.cpp
     ring_buffer.cpp
-    #    round.cpp
+    round.cpp
     #    saturating_casts.cpp
     scatter.cpp
     set_custom_trace.cpp
@@ -326,7 +327,7 @@ target_sources(
     #    strict_float.cpp
     strict_float_bounds.cpp
     strided_load.cpp
-    #    target.cpp
+    target.cpp
     target_query.cpp
     #    tiled_matmul.cpp
     #    tracing.cpp
@@ -336,12 +337,12 @@ target_sources(
     transitive_bounds.cpp
     #    trim_no_ops.cpp
     tuple_partial_update.cpp
-    #    tuple_reduction.cpp
+    tuple_reduction.cpp
     tuple_select.cpp
-    #    tuple_undef.cpp
-    #    tuple_update_ops.cpp
+    tuple_undef.cpp
+    tuple_update_ops.cpp
     two_vector_args.cpp
-    #    typed_func.cpp
+    typed_func.cpp
     undef.cpp
     uninitialized_read.cpp
     unique_func_image.cpp
@@ -353,7 +354,7 @@ target_sources(
     unused_func.cpp
     update_chunk.cpp
     vector_bounds_inference.cpp
-    #    vector_cast.cpp
+    vector_cast.cpp
     vector_extern.cpp
     #    vector_math.cpp
     vector_print_bug.cpp
@@ -372,7 +373,7 @@ target_sources(
     vectorized_load_from_vectorized_allocation.cpp
     vectorized_reduction_bug.cpp
     widening_lerp.cpp
-    #    widening_reduction.cpp
+    widening_reduction.cpp
 )
 
 # multithreaded
@@ -393,11 +394,11 @@ target_sources(
     #    func_wrapper.cpp
     gpu_allocation_cache.cpp
     #    image_wrapper.cpp
-    #    interpreter.cpp
+    interpreter.cpp
     legal_race_condition.cpp
     lots_of_dimensions.cpp
     #    memoize.cpp
-    #    multi_pass_reduction.cpp
+    multi_pass_reduction.cpp
     multiple_outputs_extern.cpp
     #    multiple_scatter.cpp
     named_updates.cpp
@@ -411,7 +412,7 @@ target_sources(
     parallel_reductions.cpp
     parallel_rvar.cpp
     parallel_scatter.cpp
-    #    random.cpp
+    random.cpp
     reorder_rvars.cpp
     rfactor.cpp
     stream_compaction.cpp
