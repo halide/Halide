@@ -596,6 +596,11 @@ llvm::Triple get_triple_for_target(const Target &target) {
         // Return default-constructed triple. Must be set later.
     }
 
+    if (target.has_feature(Target::Simulator)) {
+        user_assert(target.os == Target::IOS) << "Simulator only supported for iOS\n";
+        triple.setEnvironment(llvm::Triple::Simulator);
+    }
+
     // Setting a minimum OS version here enables LLVM to include platform
     // metadata in the MachO object file. Without this, Xcode 15's ld
     // issues warnings about missing the "platform load command".

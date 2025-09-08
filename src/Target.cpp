@@ -745,6 +745,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"semihosting", Target::Semihosting},
     {"avx10_1", Target::AVX10_1},
     {"x86apx", Target::X86APX},
+    {"simulator", Target::Simulator},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -1625,6 +1626,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         TSAN,
         WasmThreads,
         SanitizerCoverage,
+        Simulator,
     }};
     // clang-format on
 
