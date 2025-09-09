@@ -1,87 +1,102 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-// A trace that checks for vector and scalar stores
-int buffer_index = 0;
-bool run_tracer = false;
-int niters_expected = 0;
-int niters = 0;
+namespace {
+struct TestContextBase : JITUserContext {
+    std::string buffer_name;
+    bool run_tracer = false;
+    int niters = 0;
 
-int intermediate_bound_depend_on_output_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
-    std::string buffer_name = "g_" + std::to_string(buffer_index);
-    if (std::string(e->func) == buffer_name) {
-        if (e->event == halide_trace_produce) {
-            run_tracer = true;
-        } else if (e->event == halide_trace_consume) {
-            run_tracer = false;
-        }
-
-        if (run_tracer && (e->event == halide_trace_store)) {
-            if (!((e->coordinates[0] < e->coordinates[1]) && (e->coordinates[0] >= 0) &&
-                  (e->coordinates[0] <= 199) && (e->coordinates[1] >= 0) &&
-                  (e->coordinates[1] <= 199))) {
-                printf("Bounds on store of g were supposed to be x < y and x=[0, 99] and y=[0, 99]\n"
-                       "Instead they are: %d %d\n",
-                       e->coordinates[0], e->coordinates[1]);
-                exit(1);
-            }
-            niters++;
-        }
+    explicit TestContextBase(const std::string &buffer_name)
+        : buffer_name(buffer_name) {
     }
-    return 0;
-}
+};
 
-int func_call_bound_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
-    std::string buffer_name = "g_" + std::to_string(buffer_index);
-    if (std::string(e->func) == buffer_name) {
-        if (e->event == halide_trace_produce) {
-            run_tracer = true;
-        } else if (e->event == halide_trace_consume) {
-            run_tracer = false;
-        }
-
-        if (run_tracer && (e->event == halide_trace_store)) {
-            if (!((e->coordinates[0] >= 10) && (e->coordinates[0] <= 109))) {
-                printf("Bounds on store of g were supposed to be x=[10, 109]\n"
-                       "Instead it is: %d\n",
-                       e->coordinates[0]);
-                exit(1);
-            }
-            niters++;
-        }
+struct IntermediateBoundDependOnOutputContext : TestContextBase {
+    IntermediateBoundDependOnOutputContext(const std::string &buffer_name)
+        : TestContextBase(buffer_name) {
+        handlers.custom_trace = custom_trace;
     }
-    return 0;
-}
 
-int box_bound_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
-    std::string buffer_name = "g_" + std::to_string(buffer_index);
-    if (std::string(e->func) == buffer_name) {
-        if (e->event == halide_trace_produce) {
-            run_tracer = true;
-        } else if (e->event == halide_trace_consume) {
-            run_tracer = false;
-        }
-
-        if (run_tracer && (e->event == halide_trace_store)) {
-            if (!((e->coordinates[0] >= 0) && (e->coordinates[0] <= 99) &&
-                  (e->coordinates[1] >= 0) && (e->coordinates[1] <= 99))) {
-                printf("Bounds on store of g were supposed to be x < y and x=[0, 99] and y=[0, 99]\n"
-                       "Instead they are: %d %d\n",
-                       e->coordinates[0], e->coordinates[1]);
-                exit(1);
+    static int custom_trace(JITUserContext *ctx, const halide_trace_event_t *e) {
+        auto *self = static_cast<IntermediateBoundDependOnOutputContext *>(ctx);
+        if (std::string(e->func) == self->buffer_name) {
+            if (e->event == halide_trace_produce) {
+                self->run_tracer = true;
+            } else if (e->event == halide_trace_consume) {
+                self->run_tracer = false;
             }
-            niters++;
+
+            if (self->run_tracer && e->event == halide_trace_store) {
+                EXPECT_LT(e->coordinates[0], e->coordinates[1]);
+                EXPECT_GE(e->coordinates[0], 0);
+                EXPECT_LE(e->coordinates[0], 199);
+                EXPECT_GE(e->coordinates[1], 0);
+                EXPECT_LE(e->coordinates[1], 199);
+                self->niters++;
+            }
         }
+        return 0;
     }
-    return 0;
-}
+};
 
-int equality_inequality_bound_test(int index) {
-    buffer_index = index;
+struct FuncCallBound : TestContextBase {
+    FuncCallBound(const std::string &buffer_name)
+        : TestContextBase(buffer_name) {
+        handlers.custom_trace = custom_trace;
+    }
 
-    Func f("f_" + std::to_string(index));
+    static int custom_trace(JITUserContext *ctx, const halide_trace_event_t *e) {
+        auto *self = static_cast<FuncCallBound *>(ctx);
+        if (std::string(e->func) == self->buffer_name) {
+            if (e->event == halide_trace_produce) {
+                self->run_tracer = true;
+            } else if (e->event == halide_trace_consume) {
+                self->run_tracer = false;
+            }
+
+            if (self->run_tracer && e->event == halide_trace_store) {
+                EXPECT_GE(e->coordinates[0], 10);
+                EXPECT_LE(e->coordinates[0], 109);
+                self->niters++;
+            }
+        }
+        return 0;
+    }
+};
+
+struct BoxBound : TestContextBase {
+    BoxBound(const std::string &buffer_name)
+        : TestContextBase(buffer_name) {
+        handlers.custom_trace = custom_trace;
+    }
+
+    static int custom_trace(JITUserContext *ctx, const halide_trace_event_t *e) {
+        auto *self = static_cast<BoxBound *>(ctx);
+        if (std::string(e->func) == self->buffer_name) {
+            if (e->event == halide_trace_produce) {
+                self->run_tracer = true;
+            } else if (e->event == halide_trace_consume) {
+                self->run_tracer = false;
+            }
+
+            if (self->run_tracer && e->event == halide_trace_store) {
+                EXPECT_GE(e->coordinates[0], 0);
+                EXPECT_LE(e->coordinates[0], 99);
+                EXPECT_GE(e->coordinates[1], 0);
+                EXPECT_LE(e->coordinates[1], 99);
+                self->niters++;
+            }
+        }
+        return 0;
+    }
+};
+}  // namespace
+
+TEST(ReductionNonRectangularTest, EqualityInequalityBound) {
+    Func f;
     Var x("x"), y("y");
     f(x, y) = x + y;
 
@@ -91,26 +106,19 @@ int equality_inequality_bound_test(int index) {
     f(r.x, r.y) += 1;
 
     Buffer<int> im = f.realize({200, 200});
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((x == 10) && (0 <= y && y <= 99)) {
-                correct += (x < y) ? 1 : 0;
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
+            int correct = xx + yy;
+            if (xx == 10 && 0 <= yy && yy <= 99) {
+                correct += xx < yy ? 1 : 0;
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    return 0;
 }
 
-int split_fuse_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, SplitFuse) {
+    Func f;
     Var x("x"), y("y");
     f(x, y) = x + y;
 
@@ -124,26 +132,19 @@ int split_fuse_test(int index) {
     f.update().fuse(rx_inner, r.y, r_fused);
 
     Buffer<int> im = f.realize({200, 200});
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
-                correct += (x < y) ? 1 : 0;
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
+            int correct = xx + yy;
+            if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
+                correct += xx < yy ? 1 : 0;
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    return 0;
 }
 
-int free_variable_bound_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, FreeVariableBound) {
+    Func f;
     Var x("x"), y("y"), z("z");
     f(x, y, z) = x + y + z;
 
@@ -152,28 +153,22 @@ int free_variable_bound_test(int index) {
     f(r.x, r.y, z) += 1;
 
     Buffer<int> im = f.realize({200, 200, 200});
-    for (int z = 0; z < im.channels(); z++) {
-        for (int y = 0; y < im.height(); y++) {
-            for (int x = 0; x < im.width(); x++) {
-                int correct = x + y + z;
-                if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
-                    correct += (x < y + z) ? 1 : 0;
+    for (int zz = 0; zz < im.channels(); zz++) {
+        for (int yy = 0; yy < im.height(); yy++) {
+            for (int xx = 0; xx < im.width(); xx++) {
+                int correct = xx + yy + zz;
+                if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
+                    correct += xx < yy + zz ? 1 : 0;
                 }
-                if (im(x, y, z) != correct) {
-                    printf("im(%d, %d, %d) = %d instead of %d\n",
-                           x, y, z, im(x, y, z), correct);
-                    return 1;
-                }
+                EXPECT_EQ(im(xx, yy, zz), correct)
+                    << "x = " << xx << ", y = " << yy << ", z = " << zz;
             }
         }
     }
-    return 0;
 }
 
-int func_call_inside_bound_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, FuncCallInsideBound) {
+    Func f, g;
     Var x("x"), y("y");
 
     g(x) = x;
@@ -186,42 +181,27 @@ int func_call_inside_bound_test(int index) {
 
     // Expect g to be computed over x=[10, 109].
     g.compute_root();
-
-    f.jit_handlers().custom_trace = &func_call_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
-    run_tracer = false;
-    niters_expected = 100;
-    niters = 0;
-    Buffer<int> im = f.realize({200, 200});
+    FuncCallBound ctx(g.name());
+    Buffer<int> im = f.realize(&ctx, {200, 200});
 
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
-                correct += (x < y + 10) ? 1 : 0;
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
+            int correct = xx + yy;
+            if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
+                correct += xx < yy + 10 ? 1 : 0;
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    if (niters_expected != niters) {
-        printf("func_call_inside_bound_test : Expect niters on g to be %d but got %d instead\n",
-               niters_expected, niters);
-        return 1;
-    }
-    return 0;
+
+    EXPECT_EQ(ctx.niters, 100);
 }
 
-int func_call_inside_bound_inline_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
-    Func h("h_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, FuncCallInsideBoundInline) {
+    Func f, g, h;
     Var x("x"), y("y");
 
     g(x) = x;
@@ -235,26 +215,19 @@ int func_call_inside_bound_inline_test(int index) {
 
     Buffer<int> im = f.realize({200, 200});
 
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
-                correct += (x < y + 2 * x) ? 1 : 0;
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
+            int correct = xx + yy;
+            if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
+                correct += xx < yy + 2 * xx ? 1 : 0;
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    return 0;
 }
 
-int two_linear_bounds_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, TwoLinearBounds) {
+    Func f, g;
     Var x("x"), y("y");
 
     g(x, y) = x + y;
@@ -267,12 +240,9 @@ int two_linear_bounds_test(int index) {
 
     // Expect g to be computed over x=[0,99] and y=[1,99].
     g.compute_root();
-
-    f.jit_handlers().custom_trace = &box_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
-    run_tracer = false;
     // The first condition means r.x. can be at most 34 (2*34 + 30 =
     // 98 < 99).  The second condition means r.x must be at least 1,
     // so there are 34 legal values for r.x.  The second condition
@@ -280,34 +250,23 @@ int two_linear_bounds_test(int index) {
     // there are also 34 legal values of it. We only actually iterate
     // over a triangle within this box, but Halide takes bounding
     // boxes for bounds relationships.
-    niters_expected = 34 * 34;
-    niters = 0;
-    Buffer<int> im = f.realize({200, 200});
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
-                correct = ((2 * x + 30 < y) && (y >= 100 - x)) ? 3 * correct : correct;
+    BoxBound ctx(g.name());
+    Buffer<int> im = f.realize(&ctx, {200, 200});
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
+            int correct = xx + yy;
+            if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
+                correct = 2 * xx + 30 < yy && yy >= 100 - xx ? 3 * correct : correct;
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    if (niters_expected != niters) {
-        printf("two_linear_bounds_test : Expect niters on g to be %d but got %d instead\n",
-               niters_expected, niters);
-        return 1;
-    }
-    return 0;
+
+    EXPECT_EQ(ctx.niters, 34 * 34);
 }
 
-int circle_bound_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, CircleBound) {
+    Func f, g;
     Var x("x"), y("y");
     g(x, y) = x;
     f(x, y) = x + y;
@@ -321,35 +280,26 @@ int circle_bound_test(int index) {
     // guard for the non-linear term will be left as is in the inner loop of f,
     // i.e. f loop will still iterate over x=[0,99] and y=[0,99].
     g.compute_at(f, r.y);
-
-    f.jit_handlers().custom_trace = &box_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
-    run_tracer = false;
-    niters_expected = 100 * 100;
-    niters = 0;
-    Buffer<int> im = f.realize({200, 200});
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
-                correct += (x * x + y * y <= 100) ? x : 0;
+    BoxBound ctx(g.name());
+    Buffer<int> im = f.realize(&ctx, {200, 200});
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
+            int correct = xx + yy;
+            if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
+                correct += xx * xx + yy * yy <= 100 ? xx : 0;
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    return 0;
+
+    EXPECT_EQ(ctx.niters, 100 * 100);
 }
 
-int intermediate_computed_if_param_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, IntermediateComputedIfParam) {
+    Func f, g;
     Var x("x"), y("y");
     Param<int> p;
 
@@ -363,68 +313,43 @@ int intermediate_computed_if_param_test(int index) {
     // Expect g to be only computed over x=[0,99] and y=[0,99] if param is bigger
     // than 3.
     g.compute_root();
-
-    f.jit_handlers().custom_trace = &box_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
     {
-        printf("....Set p to 5, expect g to be computed\n");
+        SCOPED_TRACE("Set p to 5, expect g to be computed");
         p.set(5);
-        run_tracer = false;
-        niters_expected = 100 * 100;
-        niters = 0;
-        Buffer<int> im = f.realize({200, 200});
-        for (int y = 0; y < im.height(); y++) {
-            for (int x = 0; x < im.width(); x++) {
-                int correct = x + y;
-                if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
+        BoxBound ctx(g.name());
+        Buffer<int> im = f.realize(&ctx, {200, 200});
+        for (int yy = 0; yy < im.height(); yy++) {
+            for (int xx = 0; xx < im.width(); xx++) {
+                int correct = xx + yy;
+                if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
                     correct = 3 * correct;
                 }
-                if (im(x, y) != correct) {
-                    printf("im(%d, %d) = %d instead of %d\n",
-                           x, y, im(x, y), correct);
-                    return 1;
-                }
+                EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
             }
         }
-        if (niters_expected != niters) {
-            printf("intermediate_computed_if_param_test : Expect niters on g to be %d but got %d instead\n",
-                   niters_expected, niters);
-            return 1;
-        }
+        EXPECT_EQ(ctx.niters, 100 * 100);
     }
 
     {
-        printf("....Set p to 0, expect g to be not computed\n");
+        SCOPED_TRACE("Set p to 0, expect g to be not computed");
         p.set(0);
-        run_tracer = false;
-        niters_expected = 0;
-        niters = 0;
-        Buffer<int> im = f.realize({200, 200});
-        for (int y = 0; y < im.height(); y++) {
-            for (int x = 0; x < im.width(); x++) {
-                int correct = x + y;
-                if (im(x, y) != correct) {
-                    printf("im(%d, %d) = %d instead of %d\n",
-                           x, y, im(x, y), correct);
-                    return 1;
-                }
+        BoxBound ctx(g.name());
+        Buffer<int> im = f.realize(&ctx, {200, 200});
+        for (int yy = 0; yy < im.height(); yy++) {
+            for (int xx = 0; xx < im.width(); xx++) {
+                int correct = xx + yy;
+                EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
             }
         }
-        if (niters_expected != niters) {
-            printf("intermediate_computed_if_param_test : Expect niters on g to be %d but got %d instead\n",
-                   niters_expected, niters);
-            return 1;
-        }
+        EXPECT_EQ(ctx.niters, 0);
     }
-    return 0;
 }
 
-int intermediate_bound_depend_on_output_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, IntermediateBoundDependOnOutput) {
+    Func f, g;
     Var x("x"), y("y");
 
     g(x, y) = x;
@@ -437,43 +362,29 @@ int intermediate_bound_depend_on_output_test(int index) {
     // Expect bound of g on r.x to be directly dependent on the simplified
     // bound of f on r.x, which should have been r.x = [0, r.y) in this case
     g.compute_at(f, r.y);
-
-    f.jit_handlers().custom_trace = &intermediate_bound_depend_on_output_trace;
     g.trace_stores();
     g.trace_realizations();
 
-    run_tracer = false;
-    niters_expected = 200 * 199 / 2;
-    niters = 0;
-    Buffer<int> im = f.realize({200, 200});
+    IntermediateBoundDependOnOutputContext ctx(g.name());
+    Buffer<int> im = f.realize(&ctx, {200, 200});
 
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((0 <= x && x <= 199) && (0 <= y && y <= 199)) {
-                if (x < y) {
-                    correct = x;
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
+            int correct = xx + yy;
+            if (0 <= xx && xx <= 199 && 0 <= yy && yy <= 199) {
+                if (xx < yy) {
+                    correct = xx;
                 }
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    if (niters_expected != niters) {
-        printf("intermediate_bound_depend_on_output_test: Expect niters on g to be %d but got %d instead\n",
-               niters_expected, niters);
-        return 1;
-    }
-    return 0;
+
+    EXPECT_EQ(ctx.niters, 200 * 199 / 2);
 }
 
-int tile_intermediate_bound_depend_on_output_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, TileIntermediateBoundDependOnOutput) {
+    Func f, g;
     Var x("x"), y("y");
 
     g(x, y) = x;
@@ -491,42 +402,27 @@ int tile_intermediate_bound_depend_on_output_test(int index) {
     // Expect bound of g on r.x to be directly dependent on the simplified
     // bound of f on r.x, which should have been r.x = [0, r.y) in this case
     g.compute_at(f, ryi);
-
-    f.jit_handlers().custom_trace = &intermediate_bound_depend_on_output_trace;
     g.trace_stores();
     g.trace_realizations();
 
-    run_tracer = false;
-    niters_expected = 200 * 199 / 2;
-    niters = 0;
-    Buffer<int> im = f.realize({200, 200});
+    IntermediateBoundDependOnOutputContext ctx(g.name());
+    Buffer<int> im = f.realize(&ctx, {200, 200});
 
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((0 <= x && x <= 199) && (0 <= y && y <= 199)) {
-                correct += (x < y) ? x : 0;
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
+            int correct = xx + yy;
+            if (0 <= xx && xx <= 199 && 0 <= yy && yy <= 199) {
+                correct += xx < yy ? xx : 0;
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
 
-    if (niters_expected != niters) {
-        printf("intermediate_bound_depend_on_output_test: Expect niters on g to be %d but got %d instead\n",
-               niters_expected, niters);
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(ctx.niters, 200 * 199 / 2);
 }
 
-int self_reference_bound_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, SelfReferenceBound) {
+    Func f, g;
     Var x("x"), y("y");
     f(x, y) = x + y;
     g(x, y) = 10;
@@ -542,41 +438,30 @@ int self_reference_bound_test(int index) {
     g(r2.x, r2.y) += f(r2.x, r2.y);
 
     Buffer<int> im1 = f.realize({200, 200});
-    for (int y = 0; y < im1.height(); y++) {
-        for (int x = 0; x < im1.width(); x++) {
-            int correct = x + y;
-            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
-                correct += ((correct >= 40) && (correct != 50)) ? 1 : 0;
+    for (int yy = 0; yy < im1.height(); yy++) {
+        for (int xx = 0; xx < im1.width(); xx++) {
+            int correct = xx + yy;
+            if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
+                correct += correct >= 40 && correct != 50 ? 1 : 0;
             }
-            if (im1(x, y) != correct) {
-                printf("im1(%d, %d) = %d instead of %d\n",
-                       x, y, im1(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im1(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
 
     Buffer<int> im2 = g.realize({200, 200});
-    for (int y = 0; y < im2.height(); y++) {
-        for (int x = 0; x < im2.width(); x++) {
+    for (int yy = 0; yy < im2.height(); yy++) {
+        for (int xx = 0; xx < im2.width(); xx++) {
             int correct = 10;
-            if ((0 <= x && x <= 49) && (0 <= y && y <= 49)) {
-                correct += (im1(x, y) < 30) ? im1(x, y) : 0;
+            if (0 <= xx && xx <= 49 && 0 <= yy && yy <= 49) {
+                correct += im1(xx, yy) < 30 ? im1(xx, yy) : 0;
             }
-            if (im2(x, y) != correct) {
-                printf("im2(%d, %d) = %d instead of %d\n",
-                       x, y, im2(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im2(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    return 0;
 }
 
-int random_float_bound_test(int index) {
-    buffer_index = index;
-
-    Func f("f_" + std::to_string(index));
+TEST(ReductionNonRectangularTest, RandomFloatBound) {
+    Func f;
     Var x("x"), y("y");
 
     Expr e1 = random_float() < 0.5f;
@@ -587,39 +472,32 @@ int random_float_bound_test(int index) {
     f(r.x, r.y) = Tuple(f(r.x, r.y)[0], f(r.x, r.y)[1] + 10);
 
     Realization res = f.realize({200, 200});
-    assert(res.size() == 2);
+    ASSERT_EQ(res.size(), 2);
     Buffer<bool> im0 = res[0];
     Buffer<int> im1 = res[1];
 
     int n_true = 0;
-    for (int y = 0; y < im1.height(); y++) {
-        for (int x = 0; x < im1.width(); x++) {
-            n_true += im0(x, y);
-            int correct = x + y;
-            if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
-                correct += im0(x, y) ? 10 : 0;
+    for (int yy = 0; yy < im1.height(); yy++) {
+        for (int xx = 0; xx < im1.width(); xx++) {
+            n_true += im0(xx, yy);
+            int correct = xx + yy;
+            if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
+                correct += im0(xx, yy) ? 10 : 0;
             }
-            if (im1(x, y) != correct) {
-                printf("im1(%d, %d) = %d instead of %d\n",
-                       x, y, im1(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im1(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    if (!(19000 <= n_true && n_true <= 21000)) {
-        printf("Expected n_true to be between 19000 and 21000; got %d instead\n", n_true);
-        return 1;
-    }
-    return 0;
+    EXPECT_GE(n_true, 19000);
+    EXPECT_LE(n_true, 21000);
 }
 
-int newton_method_test() {
+TEST(ReductionNonRectangularTest, NewtonMethod) {
     Func inverse;
     Var x;
     // Negating the bits of a float is a piecewise linear approximation to inverting it
-    inverse(x) = {-0.25f * reinterpret<float>(~(reinterpret<uint32_t>(cast<float>(x + 1)))), 0};
-    const int max_iters = 10;
-    RDom r(0, max_iters);
+    inverse(x) = {-0.25f * reinterpret<float>(~reinterpret<uint32_t>(cast<float>(x + 1))), 0};
+    constexpr int kMaxIters = 10;
+    RDom r(0, kMaxIters);
     Expr not_converged = abs(inverse(x)[0] * (x + 1) - 1) > 0.001f;
     r.where(not_converged);
 
@@ -627,33 +505,26 @@ int newton_method_test() {
     // number of iterations required to reach convergence
     inverse(x) = {inverse(x)[0] * (2 - (x + 1) * inverse(x)[0]),
                   r + 1};
-    {
-        Realization r = inverse.realize({128});
-        Buffer<float> r0 = r[0];
-        Buffer<int> r1 = r[1];
-        for (int i = 0; i < r0.width(); i++) {
-            float x = (i + 1);
-            float prod = x * r0(i);
-            int num_iters = r1(i);
-            if (num_iters == max_iters) {
-                printf("Newton's method didn't converge!\n");
-                return 1;
-            }
-            if (std::abs(prod - 1) > 0.001) {
-                printf("Newton's method converged without producing the correct inverse:\n"
-                       "%f * %f = %f (%d iterations)\n",
-                       x, r0(i), prod, r1(i));
-                return 1;
-            }
-        }
+
+    Realization result = inverse.realize({128});
+    Buffer<float> r0 = result[0];
+    Buffer<int> r1 = result[1];
+    for (int i = 0; i < r0.width(); i++) {
+        float xx = i + 1;
+        int num_iters = r1(i);
+        EXPECT_NE(num_iters, kMaxIters) << "Failed to converge!";
+        EXPECT_NEAR(xx * r0(i), 1.0f, 0.001)
+            << "x = " << xx << ", r0(i) = " << r0(i)
+            << ", num_iters = " << num_iters << ", i = " << i;
     }
-    return 0;
 }
 
-int init_on_gpu_update_on_cpu_test(int index) {
-    buffer_index = index;
+TEST(ReductionNonRectangularTest, InitOnGpuUpdateOnCpu) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        GTEST_SKIP() << "No GPU target enabled";
+    }
 
-    Func f("f_" + std::to_string(index));
+    Func f;
     Var x("x"), y("y");
     f(x, y) = x + y;
 
@@ -666,26 +537,23 @@ int init_on_gpu_update_on_cpu_test(int index) {
     f.gpu_tile(x, y, xi, yi, 4, 4);
 
     Buffer<int> im = f.realize({200, 200});
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((x == 10) && (0 <= y && y <= 99)) {
-                correct += (x < y) ? 3 : 0;
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
+            int correct = xx + yy;
+            if (xx == 10 && 0 <= yy && yy <= 99) {
+                correct += xx < yy ? 3 : 0;
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    return 0;
 }
 
-int init_on_cpu_update_on_gpu_test(int index) {
-    buffer_index = index;
+TEST(ReductionNonRectangularTest, InitOnCpuUpdateOnGpu) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        GTEST_SKIP() << "No GPU target enabled";
+    }
 
-    Func f("f_" + std::to_string(index));
+    Func f;
     Var x("x"), y("y");
     f(x, y) = x + y;
 
@@ -698,26 +566,23 @@ int init_on_cpu_update_on_gpu_test(int index) {
     f.update(0).gpu_tile(r.x, r.y, r.x, r.y, rxi, ryi, 4, 4);
 
     Buffer<int> im = f.realize({200, 200});
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
-            int correct = x + y;
-            if ((x == 10) && (0 <= y && y <= 99)) {
-                correct += (x < y) ? 3 : 0;
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
+            int correct = xx + yy;
+            if (xx == 10 && 0 <= yy && yy <= 99) {
+                correct += xx < yy ? 3 : 0;
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    return 0;
 }
 
-int gpu_intermediate_computed_if_param_test(int index) {
-    buffer_index = index;
+TEST(ReductionNonRectangularTest, GpuIntermediateComputedIfParam) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        GTEST_SKIP() << "No GPU target enabled";
+    }
 
-    Func f("f_" + std::to_string(index)), g("g_" + std::to_string(index)), h("h_" + std::to_string(index));
+    Func f, g, h;
     Var x("x"), y("y");
     Param<int> p;
 
@@ -741,58 +606,43 @@ int gpu_intermediate_computed_if_param_test(int index) {
     h.gpu_tile(x, y, xi, yi, 8, 8);
 
     {
-        printf("....Set p to 5, expect g to be computed\n");
+        SCOPED_TRACE("Set p to 5, expect g to be computed");
         p.set(5);
-        run_tracer = false;
-        niters_expected = 100 * 100;
-        niters = 0;
         Buffer<int> im = f.realize({200, 200});
-        for (int y = 0; y < im.height(); y++) {
-            for (int x = 0; x < im.width(); x++) {
-                int correct = x + y;
-                if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
+        for (int yy = 0; yy < im.height(); yy++) {
+            for (int xx = 0; xx < im.width(); xx++) {
+                int correct = xx + yy;
+                if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
                     correct = 3 * correct;
                 }
-                if (im(x, y) != correct) {
-                    printf("im(%d, %d) = %d instead of %d\n",
-                           x, y, im(x, y), correct);
-                    return 1;
-                }
+                EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
             }
         }
     }
 
     {
-        printf("....Set p to 0, expect g to be not computed\n");
+        SCOPED_TRACE("Set p to 0, expect g to be not computed");
         p.set(0);
-        run_tracer = false;
-        niters_expected = 0;
-        niters = 0;
         Buffer<int> im = f.realize({200, 200});
-        for (int y = 0; y < im.height(); y++) {
-            for (int x = 0; x < im.width(); x++) {
-                int correct = x + y;
-                if ((0 <= x && x <= 99) && (0 <= y && y <= 99)) {
+        for (int yy = 0; yy < im.height(); yy++) {
+            for (int xx = 0; xx < im.width(); xx++) {
+                int correct = xx + yy;
+                if (0 <= xx && xx <= 99 && 0 <= yy && yy <= 99) {
                     correct += 10 + correct;
                 }
-                if (im(x, y) != correct) {
-                    printf("im(%d, %d) = %d instead of %d\n",
-                           x, y, im(x, y), correct);
-                    return 1;
-                }
+                EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
             }
         }
     }
-    return 0;
 }
 
-int vectorize_predicated_rvar_test() {
+TEST(ReductionNonRectangularTest, VectorizePredicatedRvar) {
     Func f("f");
     Var x("x"), y("y");
     f(x, y) = 0;
 
-    Expr w = (f.output_buffer().width() / 2) * 2;
-    Expr h = (f.output_buffer().height() / 2) * 2;
+    Expr w = f.output_buffer().width() / 2 * 2;
+    Expr h = f.output_buffer().height() / 2 * 2;
 
     RDom r(1, w - 2, 1, h - 2);
     r.where((r.x + r.y) % 2 == 0);
@@ -802,118 +652,14 @@ int vectorize_predicated_rvar_test() {
     f.update(0).unroll(r.x, 2).allow_race_conditions().vectorize(r.x, 8);
 
     Buffer<int> im = f.realize({200, 200});
-    for (int y = 0; y < im.height(); y++) {
-        for (int x = 0; x < im.width(); x++) {
+    for (int yy = 0; yy < im.height(); yy++) {
+        for (int xx = 0; xx < im.width(); xx++) {
             int correct = 0;
-            if ((1 <= x && x < im.width() - 1) && (1 <= y && y < im.height() - 1) &&
-                ((x + y) % 2 == 0)) {
+            if (1 <= xx && xx < im.width() - 1 && 1 <= yy && yy < im.height() - 1 &&
+                (xx + yy) % 2 == 0) {
                 correct += 10;
             }
-            if (im(x, y) != correct) {
-                printf("im(%d, %d) = %d instead of %d\n",
-                       x, y, im(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(im(xx, yy), correct) << "x = " << xx << ", y = " << yy;
         }
     }
-    return 0;
-}
-
-int main(int argc, char **argv) {
-    printf("Running equality inequality bound test\n");
-    if (equality_inequality_bound_test(0) != 0) {
-        return 1;
-    }
-
-    printf("Running split fuse test\n");
-    if (split_fuse_test(1) != 0) {
-        return 1;
-    }
-
-    printf("Running bound depend on free variable test\n");
-    if (free_variable_bound_test(2) != 0) {
-        return 1;
-    }
-
-    printf("Running function call inside bound test\n");
-    if (func_call_inside_bound_test(3) != 0) {
-        return 1;
-    }
-
-    printf("Running function call inside bound inline test\n");
-    if (func_call_inside_bound_inline_test(4) != 0) {
-        return 1;
-    }
-
-    printf("Running two linear bounds test\n");
-    if (two_linear_bounds_test(5) != 0) {
-        return 1;
-    }
-
-    printf("Running circular bound test\n");
-    if (circle_bound_test(6) != 0) {
-        return 1;
-    }
-
-    printf("Running intermediate only computed if param is bigger than certain value test\n");
-    if (intermediate_computed_if_param_test(7) != 0) {
-        return 1;
-    }
-
-    printf("Running tile intermediate stage depend on output bound test\n");
-    if (tile_intermediate_bound_depend_on_output_test(8) != 0) {
-        return 1;
-    }
-
-    printf("Running intermediate stage depend on output bound\n");
-    if (intermediate_bound_depend_on_output_test(9) != 0) {
-        return 1;
-    }
-
-    printf("Running self reference bound test\n");
-    if (self_reference_bound_test(10) != 0) {
-        return 1;
-    }
-
-    printf("Running random float bound test\n");
-    if (random_float_bound_test(11) != 0) {
-        return 1;
-    }
-
-    printf("Running newton's method test\n");
-    if (newton_method_test() != 0) {
-        return 1;
-    }
-
-    printf("Running vectorize predicated rvar test\n");
-    if (vectorize_predicated_rvar_test() != 0) {
-        return 1;
-    }
-
-    // Run GPU tests now if there is support for GPU.
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
-        // TODO: split this test apart so that the relevant piece can be skipped appropriately
-        // printf("[SKIP] No GPU target enabled.\n");
-        printf("Success!\n");
-        return 0;
-    }
-
-    printf("Running initialization on gpu and update on cpu test\n");
-    if (init_on_gpu_update_on_cpu_test(12) != 0) {
-        return 1;
-    }
-
-    printf("Running initialization on cpu and update on gpu test\n");
-    if (init_on_cpu_update_on_gpu_test(13) != 0) {
-        return 1;
-    }
-
-    printf("Running gpu intermediate only computed if param is bigger than certain value test\n");
-    if (gpu_intermediate_computed_if_param_test(14) != 0) {
-        return 1;
-    }
-
-    printf("Success!\n");
-
-    return 0;
 }
