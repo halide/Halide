@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 
 #include <map>
 #include <stdio.h>
@@ -10,13 +11,17 @@ using std::vector;
 using namespace Halide;
 using namespace Halide::Internal;
 
+class PrefetchTest : public testing::Test {
+protected:
+    Target target{get_jit_target_from_environment()};
+};
+
 template<typename T>
 Expr wild() {
     return Variable::make(halide_type_of<T>(), "*");
 }
 
 class CollectPrefetches : public IRVisitor {
-private:
     using IRVisitor::visit;
 
     void visit(const Call *op) override {
@@ -29,29 +34,19 @@ public:
     vector<vector<Expr>> prefetches;
 };
 
-bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
-    if (result.size() != expected.size()) {
-        std::cout << "Expect " << expected.size() << " prefetches instead of "
-                  << result.size() << "\n";
-        return false;
-    }
+void check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
+    EXPECT_EQ(result.size(), expected.size()) << "wrong number of prefetches";
     for (size_t i = 0; i < expected.size(); ++i) {
-        if (expected[i].size() != result[i].size()) {
-            std::cout << "Expect prefetch args of size " << expected[i].size()
-                      << ", got " << result[i].size() << " instead\n";
-            return false;
-        }
+        EXPECT_EQ(expected[i].size(), result[i].size()) << "wrong number of prefetch args";
         for (size_t j = 0; j < expected[i].size(); ++j) {
             const Variable *var = expected[i][j].as<Variable>();
-            bool is_wild = var && var->name == "*";
-            if (!is_wild && !equal(expected[i][j], result[i][j])) {
-                std::cout << "Expect \"" << expected[i][j] << "\" at arg index "
-                          << j << ", got \"" << result[i][j] << "\" instead\n";
-                return false;
+            if (bool is_wild = var && var->name == "*"; !is_wild) {
+                EXPECT_TRUE(equal(expected[i][j], result[i][j]))
+                    << "Expected \"" << expected[i][j] << "\" at arg index "
+                    << j << ", got \"" << result[i][j] << "\" instead";
             }
         }
     }
-    return true;
 }
 
 Expr get_max_byte_size(const Target &t) {
@@ -72,7 +67,9 @@ Expr get_stride(const Target &t, const Expr &elem_byte_size) {
     return max_byte_size.defined() ? simplify(max_byte_size / elem_byte_size) : 1;
 }
 
-int test1(const Target &t) {
+}  // namespace
+
+TEST_F(PrefetchTest, BasicPrefetch) {
     Func f("f"), g("g");
     Var x("x");
 
@@ -82,18 +79,15 @@ int test1(const Target &t) {
     f.compute_root();
     g.prefetch(f, x, x, 8);
 
-    Module m = g.compile_to_module({}, "", t);
+    Module m = g.compile_to_module({}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(target, 4)}};
+    check(expected, collect.prefetches);
 }
 
-int test2(const Target &t) {
+TEST_F(PrefetchTest, SpecializePrefetch) {
     Param<bool> p;
 
     Func f("f"), g("g");
@@ -106,18 +100,15 @@ int test2(const Target &t) {
     g.specialize(p).prefetch(f, x, x, 8);
     g.specialize_fail("No prefetch");
 
-    Module m = g.compile_to_module({p}, "", t);
+    Module m = g.compile_to_module({p}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(target, 4)}};
+    check(expected, collect.prefetches);
 }
 
-int test3(const Target &t) {
+TEST_F(PrefetchTest, ComputeAtPrefetch) {
     Func f("f"), g("g"), h("h");
     Var x("x"), xo("xo");
 
@@ -130,18 +121,15 @@ int test3(const Target &t) {
     h.compute_at(g, xo);
     g.prefetch(f, xo, xo, 1);
 
-    Module m = g.compile_to_module({}, "", t);
+    Module m = g.compile_to_module({}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(target, 4)}};
+    check(expected, collect.prefetches);
 }
 
-int test4(const Target &t) {
+TEST_F(PrefetchTest, NoCallWithinLoopNest) {
     Func f("f"), g("g"), h("h");
     Var x("x");
 
@@ -153,20 +141,18 @@ int test4(const Target &t) {
     h.compute_root();
     g.prefetch(f, x, x, 1);
 
-    Module m = g.compile_to_module({}, "", t);
+    Module m = g.compile_to_module({}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
     // There shouldn't be any prefetches since there is no call to 'f'
     // within the loop nest of 'g'
     vector<vector<Expr>> expected = {};
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    check(expected, collect.prefetches);
 }
 
-int test5(const Target &t) {
+// TODO: Warning: Removing prefetch of f$3 at loop nest of g$3.s0.x from location g$3.s0.x + offset 1) since the prefetched area will always be empty.
+TEST_F(PrefetchTest, TwoDimensionalBasic) {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
@@ -176,18 +162,15 @@ int test5(const Target &t) {
     f.compute_root();
     g.prefetch(f, x, y, 8);
 
-    Module m = g.compile_to_module({}, "", t);
+    Module m = g.compile_to_module({}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(target, 4)}};
+    check(expected, collect.prefetches);
 }
 
-int test6(const Target &t) {
+TEST_F(PrefetchTest, TwoDimensionalSpecialize) {
     Param<bool> p;
 
     Func f("f"), g("g");
@@ -200,18 +183,15 @@ int test6(const Target &t) {
     g.specialize(p).prefetch(f, x, y, 8);
     g.specialize_fail("No prefetch");
 
-    Module m = g.compile_to_module({p}, "", t);
+    Module m = g.compile_to_module({p}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(target, 4)}};
+    check(expected, collect.prefetches);
 }
 
-int test7(const Target &t) {
+TEST_F(PrefetchTest, TwoDimensionalComputeAt) {
     Func f("f"), g("g"), h("h");
     Var x("x"), xo("xo"), y("y");
 
@@ -224,18 +204,15 @@ int test7(const Target &t) {
     h.compute_at(g, xo);
     g.prefetch(f, xo, y, 1);
 
-    Module m = g.compile_to_module({}, "", t);
+    Module m = g.compile_to_module({}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(target, 4)}};
+    check(expected, collect.prefetches);
 }
 
-int test8(const Target &t) {
+TEST_F(PrefetchTest, TwoDimensionalNoCallWithinLoopNest) {
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
@@ -247,20 +224,18 @@ int test8(const Target &t) {
     h.compute_root();
     g.prefetch(f, x, y, 1);
 
-    Module m = g.compile_to_module({}, "", t);
+    Module m = g.compile_to_module({}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
     // There shouldn't be any prefetches since there is no call to 'f'
     // within the loop nest of 'g'
     vector<vector<Expr>> expected = {};
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    check(expected, collect.prefetches);
 }
 
-int test9(const Target &t) {
+// TODO: Warning: Removing prefetch of f$7 at loop nest of g$7.s0.x from location g$7.s0.y + offset 1) since the prefetched area will always be empty.
+TEST_F(PrefetchTest, TiledVectorizedUnrolled) {
     Func f("f"), g("g");
     Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
@@ -278,7 +253,7 @@ int test9(const Target &t) {
         .unroll(y)
         .prefetch(f, x, y, 123, PrefetchBoundStrategy::NonFaulting);
 
-    Module m = g.compile_to_module({}, "", t);
+    Module m = g.compile_to_module({}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -288,8 +263,8 @@ int test9(const Target &t) {
         // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
         Expr offset = wild<int>();
         Expr extent0 = 1;
-        Expr stride0 = get_stride(t, 4);
-        if (t.has_feature(Target::HVX)) {
+        Expr stride0 = get_stride(target, 4);
+        if (target.has_feature(Target::HVX)) {
             Expr extent1 = 1;
             Expr stride1 = wild<int>();
             expected.push_back({base, offset, extent0, stride0, extent1, stride1});
@@ -297,13 +272,10 @@ int test9(const Target &t) {
             expected.push_back({base, offset, extent0, stride0});
         }
     }
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    check(expected, collect.prefetches);
 }
 
-int test10(const Target &t) {
+TEST_F(PrefetchTest, SplitVectorizedUnrolledReordered) {
     Func f("f"), g("g");
     Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
@@ -326,7 +298,7 @@ int test10(const Target &t) {
         // Because this is the xo loop, the correct amount is 123/4.
         .prefetch(f, y, xo, 123 / 4, PrefetchBoundStrategy::NonFaulting);
 
-    Module m = g.compile_to_module({}, "", t);
+    Module m = g.compile_to_module({}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -335,25 +307,22 @@ int test10(const Target &t) {
         Expr base = Variable::make(Handle(), f.name());
         // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
         Expr offset = wild<int>();
-        if (t.has_feature(Target::HVX)) {
+        if (target.has_feature(Target::HVX)) {
             Expr extent0 = 4;
-            Expr stride0 = get_stride(t, 4);
+            Expr stride0 = get_stride(target, 4);
             Expr extent1 = 1;
             Expr stride1 = wild<int>();
             expected.push_back({base, offset, extent0, stride0, extent1, stride1});
         } else {
             Expr extent0 = 1;
-            Expr stride0 = get_stride(t, 4);
+            Expr stride0 = get_stride(target, 4);
             expected.push_back({base, offset, extent0, stride0});
         }
     }
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    check(expected, collect.prefetches);
 }
 
-int test11(const Target &t) {
+TEST_F(PrefetchTest, SplitRoundUpVectorizedUnrolled) {
     Func f("f"), g("g");
     Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
 
@@ -376,7 +345,7 @@ int test11(const Target &t) {
         // Because this is the xo loop, the correct amount is 123/4.
         .prefetch(f, xo, xo, 123 / 4, PrefetchBoundStrategy::NonFaulting);
 
-    Module m = g.compile_to_module({}, "", t);
+    Module m = g.compile_to_module({}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -385,25 +354,22 @@ int test11(const Target &t) {
         Expr base = Variable::make(Handle(), f.name());
         // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
         Expr offset = wild<int>();
-        if (t.has_feature(Target::HVX)) {
+        if (target.has_feature(Target::HVX)) {
             Expr extent0 = 4;
-            Expr stride0 = get_stride(t, 4);
+            Expr stride0 = get_stride(target, 4);
             Expr extent1 = 1;
             Expr stride1 = wild<int>();
             expected.push_back({base, offset, extent0, stride0, extent1, stride1});
         } else {
             Expr extent0 = 1;
-            Expr stride0 = get_stride(t, 4);
+            Expr stride0 = get_stride(target, 4);
             expected.push_back({base, offset, extent0, stride0});
         }
     }
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
+    check(expected, collect.prefetches);
 }
 
-int test12(const Target &t) {
+TEST_F(PrefetchTest, ComplexScheduleWithHoistPrefetches) {
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y"), c("c"), b("b");
     Var ci("ci"), co("co"), xo("xo");
@@ -442,7 +408,7 @@ int test12(const Target &t) {
         .reorder(x, c, co, xo, y, b)
         .vectorize(c);
 
-    Module m = h.compile_to_module({}, "", t);
+    Module m = h.compile_to_module({}, "", target);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -451,42 +417,17 @@ int test12(const Target &t) {
         Expr base = Variable::make(Handle(), f.name());
         // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
         Expr offset = wild<int>();
-        if (t.has_feature(Target::HVX)) {
+        if (target.has_feature(Target::HVX)) {
             Expr extent0 = 16;
-            Expr stride0 = get_stride(t, 4);
+            Expr stride0 = get_stride(target, 4);
             Expr extent1 = 1;
             Expr stride1 = wild<int>();
             expected.push_back({base, offset, extent0, stride0, extent1, stride1});
         } else {
             Expr extent0 = 1;
-            Expr stride0 = get_stride(t, 4);
+            Expr stride0 = get_stride(target, 4);
             expected.push_back({base, offset, extent0, stride0});
         }
     }
-    if (!check(expected, collect.prefetches)) {
-        return 1;
-    }
-    return 0;
-}
-
-}  // anonymous namespace
-
-int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-    std::cout << "Testing target: " << t << "\n";
-
-    using Fn = int (*)(const Target &t);
-    std::vector<Fn> tests = {test1, test2, test3, test4, test5, test6, test7, test8, test9, test10, test11, test12};
-
-    for (size_t i = 0; i < tests.size(); i++) {
-        printf("Running prefetch test %d\n", (int)i + 1);
-        int result = tests[i](t);
-        if (result != 0) {
-            printf("   prefetch test %d failed!\n", (int)i + 1);
-            return result;
-        }
-    }
-
-    printf("Success!\n");
-    return 0;
+    check(expected, collect.prefetches);
 }
