@@ -263,7 +263,7 @@ target_sources(
     popc_clz_ctz_bounds.cpp
     predicated_store_load.cpp
     prefetch.cpp
-    #    print.cpp
+    print.cpp
     print_loop_nest.cpp
     process_some_tiles.cpp
     pseudostack_shares_slots.cpp
