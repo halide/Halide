@@ -233,7 +233,7 @@ target_sources(
     memoize_cloned.cpp
     min_extent.cpp
     mod.cpp
-    #    mul_div_mod.cpp
+    mul_div_mod.cpp
     multi_output_pipeline_with_bad_sizes.cpp  # TODO: move to error tests
     multi_splits_with_diff_tail_strategies.cpp
     multi_way_select.cpp

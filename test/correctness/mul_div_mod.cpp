@@ -1,10 +1,8 @@
 #include "Halide.h"
-#include "halide_thread_pool.h"
-#include "test_sharding.h"
+#include <gtest/gtest.h>
 
 #include <algorithm>
-#include <math.h>
-#include <stdio.h>
+#include <cstdio>
 
 #ifdef _MSC_VER
 // Silence a warning that is obscure, harmless, and painful to work around
@@ -13,6 +11,8 @@
 
 using namespace Halide;
 using Halide::Internal::Call;
+
+namespace {
 
 // Test program to check basic arithmetic.
 // Pseudo-random numbers are generated and arithmetic operations performed on them.
@@ -33,24 +33,24 @@ using Halide::Internal::Call;
 // Generate poor quality pseudo random numbers.
 // For reproducibility, the array indices are used as the seed for each
 // number generated.  The algorithm simply multiplies the seeds by large
-// primes and combines them together, then multiplies by additional large primes.
+// primes and combines them, then multiplies by additional large primes.
 // We don't want to use primes that are close to powers of 2 because they dont
 // randomise the bits.
 //
 // unique: Use different values to get unique data in each array.
 // i, j: Coordinates for which the value is being generated.
 uint64_t ubits(int unique, int i, int j) {
-    uint64_t bits, mi, mj, mk, ml, mu;
-    mi = 982451653;  // 50 M'th prime
-    mj = 776531491;  // 40 M'th prime
-    mk = 573259391;  // 30 M'th prime
-    ml = 373587883;  // 20 M'th prime
-    mu = 275604541;  // 15 M'th prime
+    uint64_t mi = 982451653;  // 50 M'th prime
+    uint64_t mj = 776531491;  // 40 M'th prime
+    uint64_t mk = 573259391;  // 30 M'th prime
+    uint64_t ml = 373587883;  // 20 M'th prime
+    uint64_t mu = 275604541;  // 15 M'th prime
     // Each of the above primes is at least 10^8 i.e. at least 24 bits
     // so we are assured that the initial value computed below occupies 64 bits
     // and then the subsequent operations help ensure that every bit is affected by
     // all three inputs.
 
+    uint64_t bits;
     bits = ((unique * mu + i) * mi + j) * mj;  // All multipliers are prime
     bits = (bits ^ (bits >> 32)) * mk;
     bits = (bits ^ (bits >> 32)) * ml;
@@ -62,62 +62,20 @@ uint64_t ubits(int unique, int i, int j) {
 // Template to avoid autological comparison errors when comparing unsigned values for < 0
 template<typename T>
 bool less_than_zero(T val) {
-    return (val < 0);
-}
-
-template<>
-bool less_than_zero<unsigned long long>(unsigned long long val) {
-    return false;
-}
-
-template<>
-bool less_than_zero<unsigned long>(unsigned long val) {
-    return false;
-}
-
-template<>
-bool less_than_zero<unsigned int>(unsigned int val) {
-    return false;
-}
-
-template<>
-bool less_than_zero<unsigned short>(unsigned short val) {
-    return false;
-}
-
-template<>
-bool less_than_zero<unsigned char>(unsigned char val) {
-    return false;
+    if constexpr (std::is_signed_v<T>) {
+        return val < 0;
+    } else {
+        return false;
+    }
 }
 
 template<typename T>
 bool is_negative_one(T val) {
-    return (val == -1);
-}
-
-template<>
-bool is_negative_one(unsigned long long val) {
-    return false;
-}
-
-template<>
-bool is_negative_one(unsigned long val) {
-    return false;
-}
-
-template<>
-bool is_negative_one(unsigned int val) {
-    return false;
-}
-
-template<>
-bool is_negative_one(unsigned short val) {
-    return false;
-}
-
-template<>
-bool is_negative_one(unsigned char val) {
-    return false;
+    if constexpr (std::is_signed_v<T>) {
+        return val == -1;
+    } else {
+        return false;
+    }
 }
 
 template<typename T, typename BIG>
@@ -128,16 +86,15 @@ BIG maximum() {
         return (BIG)1.0;
     }
     if (t.is_uint()) {
-        uint64_t max;
-        max = 0;
+        uint64_t max = 0;
         max = ~max;
-        if (t.bits() < 64)
+        if (t.bits() < 64) {
             max = (((uint64_t)1) << t.bits()) - 1;
+        }
         return (BIG)max;
     }
     if (t.is_int()) {
-        uint64_t umax;
-        umax = (((uint64_t)1) << (t.bits() - 1)) - 1;
+        uint64_t umax = (((uint64_t)1) << (t.bits() - 1)) - 1;
         return (BIG)umax;
     }
     assert(0);
@@ -155,10 +112,8 @@ BIG minimum() {
         return (BIG)0;
     }
     if (t.is_int()) {
-        uint64_t umax;
-        BIG min;
-        umax = (((uint64_t)1) << (t.bits() - 1)) - 1;
-        min = umax;
+        uint64_t umax = (((uint64_t)1) << (t.bits() - 1)) - 1;
+        BIG min = umax;
         min = -min - 1;
         return min;
     }
@@ -174,27 +129,32 @@ BIG minimum() {
 // The left pattern occurs when unique is odd; the right pattern when unique is even.
 
 template<typename T, typename BIG>
-Buffer<T> init(Type t, int unique, int width, int height) {
-    if (width < 2) width = 2;
-    if (height < 2) height = 2;
+Buffer<T> init(int unique, int width, int height) {
+    const Type t = type_of<T>();
+    if (width < 2) {
+        width = 2;
+    }
+    if (height < 2) {
+        height = 2;
+    }
 
     Buffer<T> result(width, height);
 
     if (t.is_int()) {
         // Signed integer type with specified number of bits.
-        int64_t max, min, neg, v, vsalt;
-        max = maximum<T, int64_t>();
-        min = minimum<T, int64_t>();
-        neg = (~((int64_t)0)) ^ max;  // The bits that should all be 1 for negative numbers.
+        int64_t max = maximum<T, int64_t>();
+        int64_t min = minimum<T, int64_t>();
+        int64_t neg = (~((int64_t)0)) ^ max;  // The bits that should all be 1 for negative numbers.
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
-                v = (int64_t)(ubits(unique, i, j));
-                if (v < 0)
+                int64_t v = (int64_t)(ubits(unique, i, j));
+                if (v < 0) {
                     v |= neg;  // Make all the high bits one
-                else
+                } else {
                     v &= max;
+                }
                 // Salting with extreme values
-                vsalt = (int64_t)(ubits(unique | 0x100, i, j));
+                int64_t vsalt = (int64_t)(ubits(unique | 0x100, i, j));
                 if (vsalt % SALTRATE == 0) {
                     if (vsalt & 0x1000000) {
                         v = max;
@@ -210,13 +170,12 @@ Buffer<T> init(Type t, int unique, int width, int height) {
         result(0, 1) = (T)((unique & 1) ? min : max);
         result(1, 1) = (T)((unique & 1) ? max : min);
     } else if (t.is_uint()) {
-        uint64_t max, v, vsalt;
-        max = maximum<T, BIG>();
+        uint64_t max = maximum<T, BIG>();
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
-                v = ubits(unique, i, j) & max;
+                uint64_t v = ubits(unique, i, j) & max;
                 // Salting with extreme values
-                vsalt = (int64_t)(ubits(unique | 0x100, i, j));
+                uint64_t vsalt = (int64_t)(ubits(unique | 0x100, i, j));
                 if (vsalt % SALTRATE == 0) {
                     if (vsalt & 0x1000000) {
                         v = max;
@@ -232,15 +191,13 @@ Buffer<T> init(Type t, int unique, int width, int height) {
         result(0, 1) = (T)((unique & 1) ? 0 : max);
         result(1, 1) = (T)((unique & 1) ? max : 0);
     } else if (t.is_float()) {
-        uint64_t uv, vsalt;
         uint64_t max = (uint64_t)(-1);
-        double v;
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
-                uv = ubits(unique, i, j);
-                v = (((double)uv) / ((double)(max))) * 2.0 - 1.0;
+                uint64_t uv = ubits(unique, i, j);
+                double v = (((double)uv) / ((double)(max))) * 2.0 - 1.0;
                 // Salting with extreme values
-                vsalt = (int64_t)(ubits(unique | 0x100, i, j));
+                uint64_t vsalt = (int64_t)(ubits(unique | 0x100, i, j));
                 if (vsalt % SALTRATE == 0) {
                     if (vsalt & 0x1000000) {
                         v = 1.0;
@@ -268,23 +225,27 @@ enum ScheduleVariant {
     Hexagon
 };
 
+std::string schedule_variant_to_string(ScheduleVariant variant) {
+    switch (variant) {
+    case CPU:
+        return "CPU";
+    case TiledGPU:
+        return "TiledGPU";
+    case Hexagon:
+        return "Hexagon";
+    }
+    assert(0);
+}
+
 // Test multiplication of T1 x T2 -> RT
 template<typename T1, typename T2, typename RT, typename BIG>
-bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
-    // std::cout << "Test multiplication of "
-    //           << type_of<T1>() << "x" << vector_width << "*"
-    //           << type_of<T2>() << "x" << vector_width << "->"
-    //           << type_of<RT>() << "x" << vector_width << "\n";
-
-    int i, j;
-    Type t1 = type_of<T1>();
-    Type t2 = type_of<T2>();
+void mul(std::tuple<int, ScheduleVariant> param, const Target &target) {
+    const auto &[vector_width, scheduling] = param;
     Type rt = type_of<RT>();
-    bool success = true;
 
     // The parameter bits can be used to control the maximum data value.
-    Buffer<T1> a = init<T1, BIG>(t1, 1, WIDTH, HEIGHT);
-    Buffer<T2> b = init<T2, BIG>(t2, 2, WIDTH, HEIGHT);
+    Buffer<T1> a = init<T1, BIG>(1, WIDTH, HEIGHT);
+    Buffer<T2> b = init<T2, BIG>(2, WIDTH, HEIGHT);
 
     // Compute the multiplication, check that the results match.
     Func f;
@@ -302,60 +263,47 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
     case Hexagon:
         f.compute_root().hexagon();
         break;
-    };
+    }
 
     Buffer<RT> r = f.realize({WIDTH, HEIGHT}, target);
 
-    int ecount = 0;
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
+    for (int i = 0; i < WIDTH; i++) {
+        for (int j = 0; j < HEIGHT; j++) {
             T1 ai = a(i, j);
             T2 bi = b(i, j);
             RT ri = r(i, j);
             RT correct = BIG(ai) * BIG(bi);
-            if (correct != ri && (ecount++) < 10) {
-                std::cerr << (int64_t)ai << "*" << (int64_t)bi << " -> " << (int64_t)ri << " != " << (int64_t)correct << "\n";
-                success = false;
-            }
+            EXPECT_EQ(correct, ri)
+                << (int64_t)ai << "*" << (int64_t)bi << " -> " << (int64_t)ri << " != " << (int64_t)correct;
 
             if (i < SWIDTH && j < SHEIGHT) {
                 Expr ae = cast<RT>(Expr(ai));
                 Expr be = cast<RT>(Expr(bi));
                 Expr re = simplify(ae * be);
 
-                if (Call::as_intrinsic(re, {Call::signed_integer_overflow})) {
-                    // Don't check correctness of signed integer overflow.
-                } else {
-                    if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
-                        std::cerr << "Compiled a*b != simplified a*b: " << (int64_t)ai
-                                  << "*" << (int64_t)bi
-                                  << " = " << (int64_t)ri
-                                  << " != " << re << "\n";
-                        success = false;
-                    }
+                // Don't check correctness of signed integer overflow.
+                if (!Call::as_intrinsic(re, {Call::signed_integer_overflow})) {
+                    ASSERT_TRUE(Internal::equal(re, Expr(ri)))
+                        << "Compiled a*b != simplified a*b: " << (int64_t)ai << "*" << (int64_t)bi;
                 }
             }
         }
     }
-
-    return success;
 }
 
 // division tests division and mod operations.
 // BIG should be uint64_t, int64_t or double as appropriate.
 // T should be a type known to Halide.
 template<typename T, typename BIG>
-bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target) {
-    // std::cout << "Test division of " << type_of<T>() << "x" << vector_width << "\n";
-
+void div_mod(std::tuple<int, ScheduleVariant> param, const Target &target) {
+    const auto &[vector_width, scheduling] = param;
     int i, j;
     Type t = type_of<T>();
     BIG minval = minimum<T, BIG>();
-    bool success = true;
 
     // The parameter bits can be used to control the maximum data value.
-    Buffer<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
-    Buffer<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
+    Buffer<T> a = init<T, BIG>(1, WIDTH, HEIGHT);
+    Buffer<T> b = init<T, BIG>(2, WIDTH, HEIGHT);
 
     // Filter the input values for the operation to be tested.
     // Cannot divide by zero, so remove zeros from b.
@@ -393,7 +341,6 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
     Buffer<T> q(R[0]);
     Buffer<T> r(R[1]);
 
-    int ecount = 0;
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
             T ai = a(i, j);
@@ -401,65 +348,51 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             T qi = q(i, j);
             T ri = r(i, j);
 
-            if (BIG(qi) * BIG(bi) + ri != ai && (ecount++) < 10) {
-                std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
-                std::cerr << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
-                          << ", " << (int64_t)bi
-                          << "; q, r = " << (int64_t)qi
-                          << ", " << (int64_t)ri << "\n";
-                success = false;
-            } else if (!(0 <= ri &&
-                         (t.is_min((int64_t)bi) || ri < (T)std::abs((int64_t)bi))) &&
-                       (ecount++) < 10) {
-                std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
-                std::cerr << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
-                          << ", " << (int64_t)bi
-                          << "; q, r = " << (int64_t)qi
-                          << ", " << (int64_t)ri << "\n";
-                success = false;
-            }
+            ASSERT_EQ(BIG(qi) * BIG(bi) + ri, ai)
+                << "div_mod failure for t=" << target << ":\n"
+                << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
+                << ", " << (int64_t)bi
+                << "; q, r = " << (int64_t)qi
+                << ", " << (int64_t)ri;
+
+            ASSERT_TRUE(0 <= ri && (t.is_min((int64_t)bi) || ri < (T)std::abs((int64_t)bi)))
+                << "div_mod failure for t=" << target << ":\n"
+                << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
+                << ", " << (int64_t)bi
+                << "; q, r = " << (int64_t)qi
+                << ", " << (int64_t)ri;
 
             if (i < SWIDTH && j < SHEIGHT) {
                 Expr ae = Expr(ai);
                 Expr be = Expr(bi);
                 Expr qe = simplify(ae / be);
                 Expr re = simplify(ae % be);
-
-                if (!Internal::equal(qe, Expr(qi)) && (ecount++) < 10) {
-                    std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
-                    std::cerr << "Compiled a/b != simplified a/b: " << (int64_t)ai
-                              << "/" << (int64_t)bi
-                              << " = " << (int64_t)qi
-                              << " != " << qe << "\n";
-                    success = false;
-                } else if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
-                    std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
-                    std::cerr << "Compiled a%b != simplified a%b: " << (int64_t)ai
-                              << "%" << (int64_t)bi
-                              << " = " << (int64_t)ri
-                              << " != " << re << "\n";
-                    success = false;
-                }
+                ASSERT_TRUE(Internal::equal(qe, Expr(qi)))
+                    << "div_mod failure for t=" << target << ":\n"
+                    << "Compiled a/b != simplified a/b: " << (int64_t)ai
+                    << "/" << (int64_t)bi
+                    << " = " << (int64_t)qi
+                    << " != " << qe;
+                ASSERT_TRUE(Internal::equal(re, Expr(ri)))
+                    << "div_mod failure for t=" << target << ":\n"
+                    << "Compiled a%b != simplified a%b: " << (int64_t)ai
+                    << "%" << (int64_t)bi
+                    << " = " << (int64_t)ri
+                    << " != " << re;
             }
         }
     }
-
-    return success;
 }
 
 // f_mod tests floating mod operations.
 // BIG should be double.
 // T should be a type known to Halide.
 template<typename T, typename BIG>
-bool f_mod() {
-    // std::cout << "Test mod of " << type_of<T>() << "\n";
-
+void f_mod() {
     int i, j;
-    Type t = type_of<T>();
-    bool success = true;
 
-    Buffer<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
-    Buffer<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
+    Buffer<T> a = init<T, BIG>(1, WIDTH, HEIGHT);
+    Buffer<T> b = init<T, BIG>(2, WIDTH, HEIGHT);
     Buffer<T> out(WIDTH, HEIGHT);
 
     // Filter the input values for the operation to be tested.
@@ -478,119 +411,147 @@ bool f_mod() {
     f.realize(out);
 
     // Explicit checks of the simplifier for consistency with runtime computation
-    int ecount = 0;
     for (i = 0; i < std::min(SWIDTH, WIDTH); i++) {
         for (j = 0; j < std::min(SHEIGHT, HEIGHT); j++) {
             T arg_a = a(i, j);
             T arg_b = b(i, j);
             T v = out(i, j);
-            Expr in_e = cast<T>((float)arg_a) % cast<T>((float)arg_b);
-            Expr e = simplify(in_e);
-            Expr eout = cast<T>((float)v);
-            if (!Internal::equal(e, eout) && (ecount++) < 10) {
-                Expr diff = simplify(e - eout);
-                Expr smalldiff = simplify(diff < (float)(0.000001) && diff > (float)(-0.000001));
-                if (!Internal::is_const_one(smalldiff)) {
-                    std::cerr << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
-                    std::cerr << "          difference=" << diff << "\n";
-                    success = false;
-                }
-            }
+
+            Expr in_e = simplify(cast<T>((float)arg_a) % cast<T>((float)arg_b));
+            Expr out_e = simplify(cast<T>((float)v));
+
+            const auto *in_f = in_e.as<Internal::FloatImm>();
+            const auto *out_f = out_e.as<Internal::FloatImm>();
+
+            ASSERT_NE(in_f, nullptr);
+            ASSERT_NE(out_f, nullptr);
+            ASSERT_EQ(in_f->value, out_f->value) << "in_e = " << in_e << ", out_e = " << out_e;
         }
     }
-
-    return success;
 }
 
-struct Task {
-    std::function<bool()> fn;
+class MulDivModTest : public ::testing::Test {
+protected:
+    Target target{get_jit_target_from_environment()};
 };
+class MulTest : public MulDivModTest, public ::testing::WithParamInterface<std::tuple<int, ScheduleVariant>> {};
+class DivModTest : public MulDivModTest, public ::testing::WithParamInterface<std::tuple<int, ScheduleVariant>> {};
+class FloatModTest : public MulDivModTest {};
+}  // namespace
 
-void add_test_mul(int vector_width, ScheduleVariant scheduling, Target target, std::vector<Task> &tasks) {
-    // Non-widening multiplication.
-    tasks.push_back({[=]() { return mul<uint8_t, uint8_t, uint8_t, uint64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return mul<uint16_t, uint16_t, uint16_t, uint64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return mul<uint32_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return mul<int8_t, int8_t, int8_t, int64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return mul<int16_t, int16_t, int16_t, int64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return mul<int32_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target); }});
-
-    // Widening multiplication.
-    tasks.push_back({[=]() { return mul<uint8_t, uint8_t, uint16_t, uint64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return mul<uint16_t, uint16_t, uint32_t, uint64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return mul<int8_t, int8_t, int16_t, int64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return mul<int16_t, int16_t, int32_t, int64_t>(vector_width, scheduling, target); }});
-
-    // Mixed multiplication. This isn't all of the possible mixed
-    // multiplications, but it covers all of the special cases we
-    // have in Halide.
-    tasks.push_back({[=]() { return mul<uint16_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return mul<int16_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return mul<uint16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target); }});
+// Multiplication tests
+TEST_P(MulTest, NonWideningUInt8) {
+    mul<uint8_t, uint8_t, uint8_t, uint64_t>(GetParam(), target);
 }
 
-void add_test_div_mod(int vector_width, ScheduleVariant scheduling, Target target, std::vector<Task> &tasks) {
-    tasks.push_back({[=]() { return div_mod<uint8_t, uint64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return div_mod<uint16_t, uint64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return div_mod<uint32_t, uint64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return div_mod<int8_t, int64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return div_mod<int16_t, int64_t>(vector_width, scheduling, target); }});
-    tasks.push_back({[=]() { return div_mod<int32_t, int64_t>(vector_width, scheduling, target); }});
+TEST_P(MulTest, NonWideningUInt16) {
+    mul<uint16_t, uint16_t, uint16_t, uint64_t>(GetParam(), target);
 }
 
-int main(int argc, char **argv) {
-    Target target = get_jit_target_from_environment();
+TEST_P(MulTest, NonWideningUInt32) {
+    mul<uint32_t, uint32_t, uint32_t, uint64_t>(GetParam(), target);
+}
 
-    ScheduleVariant scheduling = CPU;
+TEST_P(MulTest, NonWideningInt8) {
+    mul<int8_t, int8_t, int8_t, int64_t>(GetParam(), target);
+}
+
+TEST_P(MulTest, NonWideningInt16) {
+    mul<int16_t, int16_t, int16_t, int64_t>(GetParam(), target);
+}
+
+TEST_P(MulTest, NonWideningInt32) {
+    mul<int32_t, int32_t, int32_t, int64_t>(GetParam(), target);
+}
+
+TEST_P(MulTest, WideningUInt8ToUInt16) {
+    mul<uint8_t, uint8_t, uint16_t, uint64_t>(GetParam(), target);
+}
+
+TEST_P(MulTest, WideningUInt16ToUInt32) {
+    mul<uint16_t, uint16_t, uint32_t, uint64_t>(GetParam(), target);
+}
+
+TEST_P(MulTest, WideningInt8ToInt16) {
+    mul<int8_t, int8_t, int16_t, int64_t>(GetParam(), target);
+}
+
+TEST_P(MulTest, WideningInt16ToInt32) {
+    mul<int16_t, int16_t, int32_t, int64_t>(GetParam(), target);
+}
+
+// These aren't all the possible mixed multiplications, but they
+// cover the special cases we have in Halide.
+
+TEST_P(MulTest, MixedUInt16UInt32) {
+    mul<uint16_t, uint32_t, uint32_t, uint64_t>(GetParam(), target);
+}
+
+TEST_P(MulTest, MixedInt16Int32) {
+    mul<int16_t, int32_t, int32_t, int64_t>(GetParam(), target);
+}
+
+TEST_P(MulTest, MixedUInt16Int32) {
+    mul<uint16_t, int32_t, int32_t, uint64_t>(GetParam(), target);
+}
+
+// Division/Modulo tests
+TEST_P(DivModTest, UInt8) {
+    div_mod<uint8_t, uint64_t>(GetParam(), target);
+}
+
+TEST_P(DivModTest, UInt16) {
+    div_mod<uint16_t, uint64_t>(GetParam(), target);
+}
+
+TEST_P(DivModTest, UInt32) {
+    div_mod<uint32_t, uint64_t>(GetParam(), target);
+}
+
+TEST_P(DivModTest, Int8) {
+    div_mod<int8_t, int64_t>(GetParam(), target);
+}
+
+TEST_P(DivModTest, Int16) {
+    div_mod<int16_t, int64_t>(GetParam(), target);
+}
+
+TEST_P(DivModTest, Int32) {
+    div_mod<int32_t, int64_t>(GetParam(), target);
+}
+
+// Floating-point modulo test
+TEST_F(FloatModTest, Float32Modulo) {
+    f_mod<float, double>();
+}
+
+// Test instantiations
+namespace {
+Target target = get_jit_target_from_environment();
+ScheduleVariant get_scheduling() {
     if (target.has_gpu_feature()) {
-        scheduling = TiledGPU;
-    } else if (target.has_feature(Target::HVX)) {
-        scheduling = Hexagon;
+        return TiledGPU;
     }
-
-    // Test multiplication and division
-    std::vector<int> vector_widths = {1};
-    if (target.has_feature(Target::Metal) ||
-        target.has_feature(Target::D3D12Compute) ||
-        target.has_feature(Target::Vulkan) ||
-        target.has_feature(Target::WebGPU)) {
-        for (int i = 2; i <= 4; i *= 2) {
-            vector_widths.push_back(i);
-        }
-    } else if (target.has_feature(Target::HVX)) {
-        vector_widths.push_back(128);
-    } else {
-        for (int i = 2; i <= 16; i *= 2) {
-            vector_widths.push_back(i);
-        }
+    if (target.has_feature(Target::HVX)) {
+        return Hexagon;
     }
-
-    std::vector<Task> tasks;
-    for (int vector_width : vector_widths) {
-        add_test_mul(vector_width, scheduling, target, tasks);
-    }
-    for (int vector_width : vector_widths) {
-        add_test_div_mod(vector_width, scheduling, target, tasks);
-    }
-
-    using Sharder = Halide::Internal::Test::Sharder;
-    Sharder sharder;
-
-    std::vector<std::future<bool>> futures;
-
-    Halide::Tools::ThreadPool<bool> pool;
-    for (size_t t = 0; t < tasks.size(); t++) {
-        if (!sharder.should_run(t)) continue;
-        const auto &task = tasks.at(t);
-        futures.push_back(pool.async(task.fn));
-    }
-
-    for (auto &f : futures) {
-        if (!f.get()) {
-            return 1;
-        }
-    }
-
-    printf("Success!\n");
-    return 0;
+    return CPU;
 }
+std::vector<int> get_vector_widths() {
+    if (target.has_gpu_feature()) {
+        return {1, 2, 4};
+    }
+    if (target.has_feature(Target::HVX)) {
+        return {1, 128};
+    }
+    return {1, 2, 4, 8, 16};
+}
+const auto MulDivModTestParams =
+    ::testing::Combine(::testing::ValuesIn(get_vector_widths()), ::testing::Values(get_scheduling()));
+std::string MulDivModTestParamsToString(const ::testing::TestParamInfo<std::tuple<int, ScheduleVariant>> &info) {
+    return "VectorWidth" + std::to_string(std::get<0>(info.param)) +
+           "_" + schedule_variant_to_string(std::get<1>(info.param));
+}
+}  // namespace
+INSTANTIATE_TEST_SUITE_P(VectorWidth, MulTest, MulDivModTestParams, MulDivModTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(VectorWidth, DivModTest, MulDivModTestParams, MulDivModTestParamsToString);
