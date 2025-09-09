@@ -221,7 +221,7 @@ target_sources(
     loop_carry.cpp
     loop_invariant_extern_calls.cpp
     loop_level_generator_param.cpp
-    #    lossless_cast.cpp
+    lossless_cast.cpp
     lots_of_loop_invariants.cpp
     low_bit_depth_noise.cpp
     make_struct.cpp
