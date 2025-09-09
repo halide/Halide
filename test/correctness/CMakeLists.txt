@@ -277,7 +277,7 @@ target_sources(
     reduction_predicate_racing.cpp
     reduction_non_rectangular.cpp
     reduction_schedule.cpp
-    #    register_shuffle.cpp
+    register_shuffle.cpp
     reorder_storage.cpp
     require.cpp
     reschedule.cpp
