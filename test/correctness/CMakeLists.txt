@@ -261,7 +261,7 @@ target_sources(
     pipeline_set_jit_externs_func.cpp
     #    plain_c_includes.c
     popc_clz_ctz_bounds.cpp
-    #    predicated_store_load.cpp
+    predicated_store_load.cpp
     #    prefetch.cpp
     #    print.cpp
     print_loop_nest.cpp

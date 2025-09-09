@@ -1,26 +1,20 @@
 #include "Halide.h"
 #include "check_call_graphs.h"
+#include <gtest/gtest.h>
 
 #include <cstdio>
 #include <functional>
 
 namespace {
 
-using std::map;
 using std::string;
-using std::vector;
 
 using namespace Halide;
 using namespace Halide::Internal;
 
-class CountPredicatedStoreLoad : public IRVisitor {
-public:
-    int store_count;
-    int load_count;
-
-    CountPredicatedStoreLoad()
-        : store_count(0), load_count(0) {
-    }
+struct CountPredicatedStoreLoad final : IRVisitor {
+    int store_count = 0;
+    int load_count = 0;
 
 protected:
     using IRVisitor::visit;
@@ -40,35 +34,33 @@ protected:
     }
 };
 
-class CheckPredicatedStoreLoad : public IRMutator {
+struct CheckPredicatedStoreLoad final : IRMutator {
     int expected_store_count;
     int expected_load_count;
 
-public:
     CheckPredicatedStoreLoad(int store, int load)
         : expected_store_count(store), expected_load_count(load) {
     }
-    using IRMutator::mutate;
 
+    using IRMutator::mutate;
     Stmt mutate(const Stmt &s) override {
         CountPredicatedStoreLoad c;
         s.accept(&c);
 
-        if (expected_store_count != c.store_count) {
-            printf("There were %d predicated stores; expect %d predicated stores\n",
-                   c.store_count, expected_store_count);
-            exit(1);
-        }
-        if (expected_load_count != c.load_count) {
-            printf("There were %d predicated loads; expect %d predicated loads\n",
-                   c.load_count, expected_load_count);
-            exit(1);
-        }
+        EXPECT_EQ(expected_store_count, c.store_count);
+        EXPECT_EQ(expected_load_count, c.load_count);
         return s;
     }
 };
 
-int predicated_tail_test(const Target &t) {
+class PredicatedStoreLoadTest : public ::testing::Test {
+protected:
+    Target target{get_jit_target_from_environment()};
+};
+
+}  // namespace
+
+TEST_F(PredicatedStoreLoadTest, PredicatedTailTest) {
     int size = 73;
     for (auto i : {TailStrategy::Predicate, TailStrategy::PredicateLoads, TailStrategy::PredicateStores}) {
         Var x("x"), y("y");
@@ -84,7 +76,7 @@ int predicated_tail_test(const Target &t) {
 
         const int vector_size = 32;
         f.vectorize(x, vector_size, i);
-        if (t.has_feature(Target::HVX)) {
+        if (target.has_feature(Target::HVX)) {
             f.hexagon();
         }
         int predicated_loads = i != TailStrategy::PredicateStores ? 1 : 0;
@@ -104,14 +96,11 @@ int predicated_tail_test(const Target &t) {
         auto func = [](int x, int y) {
             return x;
         };
-        if (check_image(im, func)) {
-            return 1;
-        }
+        ASSERT_EQ(0, check_image(im, func));
     }
-    return 0;
 }
 
-int predicated_tail_with_scalar_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, PredicatedTailWithScalarTest) {
     int size = 73;
     Var x("x"), y("y");
     Func f("f"), g("g");
@@ -121,7 +110,7 @@ int predicated_tail_with_scalar_test(const Target &t) {
 
     g.compute_at(f, y);
     f.vectorize(x, 32, TailStrategy::Predicate);
-    if (t.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::HVX)) {
         f.hexagon();
     }
     f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 0));
@@ -130,13 +119,10 @@ int predicated_tail_with_scalar_test(const Target &t) {
     auto func = [](int x, int y) {
         return x + 10;
     };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    ASSERT_EQ(0, check_image(im, func));
 }
 
-int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, VectorizedPredicatedStoreScalarizedPredicatedLoadTest) {
     Var x("x"), y("y");
     Func f("f"), g("g"), ref("ref");
 
@@ -154,7 +140,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t)
     f(r.x, r.y) += g(2 * r.x, r.y) + g(2 * r.x + 1, r.y);
 
     f.update(0).vectorize(r.x, 32);
-    if (t.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
 
@@ -162,13 +148,10 @@ int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t)
 
     Buffer<int> im = f.realize({170, 170});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    ASSERT_EQ(0, check_image(im, func));
 }
 
-int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, VectorizedDenseLoadWithStrideMinusOneTest) {
     int size = 73;
     Var x("x"), y("y");
     Func f("f"), g("g"), ref("ref");
@@ -182,7 +165,7 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
     f(x, y) = select(x < 23, g(size - x, y) * 2 + g(20 - x, y), undef<int>());
 
     f.vectorize(x, 32, TailStrategy::Predicate);
-    if (t.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::HVX)) {
         f.hexagon();
     }
     f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 6));
@@ -192,13 +175,10 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
         // For x >= 23, the buffer is undef
         return (x < 23) ? im_ref(x, y, z) : im(x, y, z);
     };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    ASSERT_EQ(0, check_image(im, func));
 }
 
-int multiple_vectorized_predicate_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, MultipleVectorizedPredicateTest) {
     int size = 100;
     Var x("x"), y("y");
     Func f("f"), g("g"), ref("ref");
@@ -218,20 +198,17 @@ int multiple_vectorized_predicate_test(const Target &t) {
     f(r.x, r.y) = g(size - r.x, r.y) * 2 + g(67 - r.x, r.y);
 
     f.update(0).vectorize(r.x, 32);
-    if (t.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
     f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
 
     Buffer<int> im = f.realize({size, size});
     auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    ASSERT_EQ(0, check_image(im, func));
 }
 
-int scalar_load_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, ScalarLoadTest) {
     Var x("x"), y("y");
     Func f("f"), g("g"), ref("ref");
 
@@ -249,7 +226,7 @@ int scalar_load_test(const Target &t) {
     f(r.x, r.y) += 1 + max(g(0, 1), g(2 * r.x + 1, r.y));
 
     f.update(0).vectorize(r.x, 32);
-    if (t.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
 
@@ -257,13 +234,10 @@ int scalar_load_test(const Target &t) {
 
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    ASSERT_EQ(0, check_image(im, func));
 }
 
-int scalar_store_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, ScalarStoreTest) {
     Var x("x"), y("y");
     Func f("f"), g("g"), ref("ref");
 
@@ -283,7 +257,7 @@ int scalar_store_test(const Target &t) {
     f.update(0).allow_race_conditions();
 
     f.update(0).vectorize(r.x, 32);
-    if (t.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
 
@@ -291,13 +265,10 @@ int scalar_store_test(const Target &t) {
 
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    ASSERT_EQ(0, check_image(im, func));
 }
 
-int not_dependent_on_vectorized_var_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, NotDependentOnVectorizedVarTest) {
     Var x("x"), y("y"), z("z");
     Func f("f"), g("g"), ref("ref");
 
@@ -317,20 +288,17 @@ int not_dependent_on_vectorized_var_test(const Target &t) {
     f.update(0).allow_race_conditions();
 
     f.update(0).vectorize(r.z, 32);
-    if (t.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
     f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
 
     Buffer<int> im = f.realize({160, 160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    ASSERT_EQ(0, check_image(im, func));
 }
 
-int no_op_store_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, NoOpStoreTest) {
     Var x("x"), y("y");
     Func f("f"), ref("ref");
 
@@ -348,20 +316,17 @@ int no_op_store_test(const Target &t) {
 
     f.update(0).vectorize(r.x, 32);
     f.update(1).vectorize(r.y, 32);
-    if (t.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::HVX)) {
         f.update(0).hexagon();
         f.update(1).hexagon();
     }
 
     Buffer<int> im = f.realize({240, 240});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    ASSERT_EQ(0, check_image(im, func));
 }
 
-int vectorized_predicated_predicate_with_pure_call_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, VectorizedPredicatedPredicateWithPureCallTest) {
     Var x("x"), y("y");
     Func f("f"), g("g"), ref("ref");
 
@@ -379,20 +344,17 @@ int vectorized_predicated_predicate_with_pure_call_test(const Target &t) {
     f(r.x, r.y) += abs(r.x * r.y) + g(2 * r.x + 1, r.y);
 
     f.update(0).vectorize(r.x, 32);
-    if (t.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
     f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(2, 4));
 
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    ASSERT_EQ(0, check_image(im, func));
 }
 
-int vectorized_predicated_load_const_index_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, VectorizedPredicatedLoadConstIndexTest) {
     Buffer<int> in(100, 100);
     for (int y = 0; y < 100; y++) {
         for (int x = 0; x < 100; x++) {
@@ -416,25 +378,19 @@ int vectorized_predicated_load_const_index_test(const Target &t) {
     f(r.x, y) = clamp(select((r.x % 2) == 0, r.x, y) + input(r.x % 2, y), 0, 10);
 
     f.update().vectorize(r.x, 32);
-    if (t.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::HVX)) {
         f.update().hexagon();
     }
     f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
 
     Buffer<int> im = f.realize({100, 100});
     auto func = [im_ref](int x, int y) { return im_ref(x, y); };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    ASSERT_EQ(0, check_image(im, func));
 }
 
-int vectorized_predicated_load_lut_test(const Target &t) {
-    if (t.arch != Target::X86) {
-        // This test will fail on Hexagon as the LUT is larger than 16 bits.
-        // Since using less than 16-bit LUT will make the predicate on the
-        // vector store/load disappear, only run the test for X86.
-        return 0;
+TEST_F(PredicatedStoreLoadTest, VectorizedPredicatedLoadLutTest) {
+    if (target.arch == Target::Hexagon || target.has_feature(Target::HVX)) {
+        GTEST_SKIP() << "This test will fail on Hexagon as the LUT is larger than 16 bits.";
     }
 
     constexpr int vector_size = 4;
@@ -460,11 +416,9 @@ int vectorized_predicated_load_lut_test(const Target &t) {
     dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
 
     dst.realize({dst_len});
-
-    return 0;
 }
 
-int predicated_atomic_store_test(const Target &t) {
+TEST_F(PredicatedStoreLoadTest, PredicatedAtomicStoreTest) {
     // We don't support atomic predicated stores, so ensure that we don't
     // generate them. See https://github.com/halide/Halide/issues/8280
     ImageParam in(Float(32), 1);
@@ -478,80 +432,5 @@ int predicated_atomic_store_test(const Target &t) {
 
     // This will cause an internal_error in the LLVM backend if we pass a
     // predicated atomic store down to codegen.
-    f.compile_jit(t);
-    return 0;
-}
-
-}  // namespace
-
-int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-
-    printf("Running vectorized dense load test\n");
-    if (predicated_tail_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running vectorized dense load with scalar test\n");
-    if (predicated_tail_with_scalar_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running vectorized dense load with stride minus one test\n");
-    if (vectorized_dense_load_with_stride_minus_one_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running multiple vectorized predicate test\n");
-    if (multiple_vectorized_predicate_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running vectorized predicated store scalarized predicated load test\n");
-    if (vectorized_predicated_store_scalarized_predicated_load_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running scalar load test\n");
-    if (scalar_load_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running scalar store test\n");
-    if (scalar_store_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running not dependent on vectorized var test\n");
-    if (not_dependent_on_vectorized_var_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running no-op store test\n");
-    if (no_op_store_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running vectorized predicated with pure call test\n");
-    if (vectorized_predicated_predicate_with_pure_call_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running vectorized predicated load with constant index test\n");
-    if (vectorized_predicated_load_const_index_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Running vectorized predicated load lut test\n");
-    if (vectorized_predicated_load_lut_test(t) != 0) {
-        return 1;
-    }
-
-    printf("predicated atomic store test\n");
-    if (predicated_atomic_store_test(t) != 0) {
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(f.compile_jit(target));
 }
