@@ -302,7 +302,7 @@ target_sources(
     #    simd_op_check_x86.cpp
     simplified_away_embedded_image.cpp
     simplify.cpp
-    #    skip_stages.cpp
+    skip_stages.cpp
     #    skip_stages_external_array_functions.cpp
     #    skip_stages_memoize.cpp
     sliding_backwards.cpp
