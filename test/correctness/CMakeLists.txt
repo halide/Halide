@@ -285,7 +285,7 @@ target_sources(
     reuse_stack_alloc.cpp
     ring_buffer.cpp
     round.cpp
-    #    saturating_casts.cpp
+    saturating_casts.cpp
     scatter.cpp
     set_custom_trace.cpp
     shadowed_bound.cpp

@@ -1,7 +1,10 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
+
+#include "type_param_helpers.h"
+
 #include <iostream>
 #include <limits>
-#include <stdio.h>
 
 // Disable a warning in MSVC that we know will be triggered here.
 #ifdef _MSC_VER
@@ -11,6 +14,7 @@
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 
+namespace {
 typedef Expr (*cast_maker_t)(Expr);
 
 // Local alias for terseness. This must be used any time the
@@ -107,32 +111,46 @@ void test_saturating() {
             simpler_correct_result = std::min(std::max((int64_t)in(i),
                                                        (int64_t)target_min),
                                               (int64_t)target_max);
-
-            if (simpler_correct_result != (int64_t)correct_result) {
-                std::cout << "Simpler verification failed for index " << i
-                          << " correct_result is " << correct_result
-                          << " correct_result casted to int64_t is " << (int64_t)correct_result
-                          << " simpler_correct_result is " << simpler_correct_result << "\n";
-                std::cout << "in(i) " << in(i)
-                          << " target_min " << target_min
-                          << " target_max " << target_max << "\n";
-            }
-            assert(simpler_correct_result == (int64_t)correct_result);
+            EXPECT_EQ(simpler_correct_result, (int64_t)correct_result)
+                << "in(i) " << in(i)
+                << " target_min " << target_min
+                << " target_max " << target_max;
         }
 
-        if (result(i) != correct_result) {
-            std::cout << "Match failure at index " << i
-                      << " got " << result(i)
-                      << " expected " << correct_result
-                      << " for input " << in(i) << "\n";
-        }
+        EXPECT_EQ(result(i), correct_result)
+            << "Match failure at index " << i
+            << " got " << result(i)
+            << " expected " << correct_result
+            << " for input " << in(i);
+    }
+}
 
-        assert(result(i) == correct_result);
+template<typename target_t>
+cast_maker_t get_cast_function(bool saturating) {
+    if constexpr (std::is_same_v<target_t, int8_t>) {
+        return saturating ? i8_sat : i8;
+    } else if constexpr (std::is_same_v<target_t, uint8_t>) {
+        return saturating ? u8_sat : u8;
+    } else if constexpr (std::is_same_v<target_t, int16_t>) {
+        return saturating ? i16_sat : i16;
+    } else if constexpr (std::is_same_v<target_t, uint16_t>) {
+        return saturating ? u16_sat : u16;
+    } else if constexpr (std::is_same_v<target_t, int32_t>) {
+        return saturating ? i32_sat : i32;
+    } else if constexpr (std::is_same_v<target_t, uint32_t>) {
+        return saturating ? u32_sat : u32;
+    } else if constexpr (std::is_same_v<target_t, int64_t>) {
+        return saturating ? i64_sat : i64;
+    } else {
+        static_assert(std::is_same_v<target_t, uint64_t>, "Unsupported target type for concise cast");
+        return saturating ? u64_sat : u64;
     }
 }
 
 template<typename source_t, typename target_t>
-void test_concise(cast_maker_t cast_maker, bool saturating) {
+void test_concise(bool saturating) {
+    cast_maker_t cast_maker = get_cast_function<target_t>(saturating);
+
     source_t source_min = std::numeric_limits<source_t>::min();
     source_t source_max = std::numeric_limits<source_t>::max();
 
@@ -213,105 +231,72 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
                                                                (int64_t)target_min),
                                                       (int64_t)target_max);
                 }
-
-                if (simpler_correct_result != (int64_t)correct_result) {
-                    std::cout << "Simpler verification failed for index " << i
-                              << " correct_result is " << correct_result
-                              << " correct_result casted to int64_t is " << (int64_t)correct_result
-                              << " simpler_correct_result is " << simpler_correct_result << "\n"
-                              << "in(i) " << in(i)
-                              << " target_min " << target_min
-                              << " target_max " << target_max << "\n";
-                }
-                assert(simpler_correct_result == (int64_t)correct_result);
+                EXPECT_EQ(simpler_correct_result, (int64_t)correct_result)
+                    << "in(i) " << in(i)
+                    << " target_min " << target_min
+                    << " target_max " << target_max;
             }
 
         } else {
             correct_result = (target_t)in(i);
         }
 
-        if (result(i) != correct_result) {
-            std::cout << "Match failure at index " << i
-                      << " got " << result(i)
-                      << " expected " << correct_result
-                      << " for input " << in(i)
-                      << (saturating ? " saturating" : " nonsaturating") << "\n";
-        }
+        EXPECT_EQ(result(i), correct_result)
+            << "Match failure at index " << i
+            << " got " << result(i)
+            << " expected " << correct_result
+            << " for input " << in(i)
+            << (saturating ? " saturating" : " nonsaturating");
+    }
+}
+}  // namespace
 
-        assert(result(i) == correct_result);
+class SaturatingCastTestBase : public ::testing::Test {
+protected:
+    void SetUp() override {
+#if defined(__i386__) || defined(_M_IX86)
+        GTEST_SKIP() << "Skipping test because it requires bit-exact int to float casts, "
+                     << "and on i386 without SSE it is hard to guarantee that the test "
+                        "binary won't use x87 instructions.";
+#endif
+    }
+};
+
+using AllTypes = ::testing::Types<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double>;
+using IntegerTypes = ::testing::Types<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t>;
+
+template<typename>
+class SaturatingCastTest : public SaturatingCastTestBase {};
+using SaturatingCastTypes = CombineTypes<AllTypes, AllTypes>;
+TYPED_TEST_SUITE(SaturatingCastTest, SaturatingCastTypes);
+
+TYPED_TEST(SaturatingCastTest, SaturatingCastTest) {
+    using source_t = std::tuple_element_t<0, TypeParam>;
+    using target_t = std::tuple_element_t<1, TypeParam>;
+    test_saturating<source_t, target_t>();
+}
+
+template<typename>
+class ConciseCastTest : public SaturatingCastTestBase {};
+using ConciseCastTypes = CombineTypes<IntegerTypes, IntegerTypes>;
+TYPED_TEST_SUITE(ConciseCastTest, ConciseCastTypes);
+
+TYPED_TEST(ConciseCastTest, ConciseCastNonSaturatingTest) {
+    using source_t = std::tuple_element_t<0, TypeParam>;
+    using target_t = std::tuple_element_t<1, TypeParam>;
+    if constexpr (std::is_floating_point_v<target_t>) {
+        GTEST_SKIP() << "No concise cast function for floating-point target types";
+    } else {
+        test_concise<source_t, target_t>(false);
     }
 }
 
-template<typename source_t>
-void test_one_source_saturating() {
-    test_saturating<source_t, int8_t>();
-    test_saturating<source_t, uint8_t>();
-
-    test_saturating<source_t, int16_t>();
-    test_saturating<source_t, uint16_t>();
-
-    test_saturating<source_t, int32_t>();
-    test_saturating<source_t, uint32_t>();
-
-    test_saturating<source_t, int64_t>();
-    test_saturating<source_t, uint64_t>();
-
-    test_saturating<source_t, float>();
-    test_saturating<source_t, double>();
-}
-
-template<typename source_t>
-void test_one_source_concise() {
-    test_concise<source_t, int8_t>(i8, false);
-    test_concise<source_t, uint8_t>(u8, false);
-    test_concise<source_t, int8_t>(i8_sat, true);
-    test_concise<source_t, uint8_t>(u8_sat, true);
-
-    test_concise<source_t, int16_t>(i16, false);
-    test_concise<source_t, uint16_t>(u16, false);
-    test_concise<source_t, int16_t>(i16_sat, true);
-    test_concise<source_t, uint16_t>(u16_sat, true);
-
-    test_concise<source_t, int32_t>(i32, false);
-    test_concise<source_t, uint32_t>(u32, false);
-    test_concise<source_t, int32_t>(i32_sat, true);
-    test_concise<source_t, uint32_t>(u32_sat, true);
-
-    test_concise<source_t, int64_t>(i64, false);
-    test_concise<source_t, uint64_t>(u64, false);
-    test_concise<source_t, int64_t>(i64_sat, true);
-    test_concise<source_t, uint64_t>(u64_sat, true);
-}
-
-template<typename source_t>
-void test_one_source() {
-    test_one_source_saturating<source_t>();
-    test_one_source_concise<source_t>();
-}
-
-int main(int argc, char **argv) {
-
-#if defined(__i386__) || defined(_M_IX86)
-    printf("[SKIP] Skipping test because it requires bit-exact int to float casts,\n"
-           "and on i386 without SSE it is hard to guarantee that the test binary won't use x87 instructions.\n");
-    return 0;
-#endif
-
-    test_one_source<int8_t>();
-    test_one_source<uint8_t>();
-    test_one_source<int16_t>();
-    test_one_source<uint16_t>();
-    test_one_source<int32_t>();
-    test_one_source<uint32_t>();
-    test_one_source<int64_t>();
-    test_one_source<uint64_t>();
-
-    // Casting out of range values from floating-point
-    // to integer types is undefined behavior so only
-    // do the saturating casts.
-    test_one_source_saturating<float>();
-    test_one_source_saturating<double>();
-
-    printf("Success!\n");
-    return 0;
+TYPED_TEST(ConciseCastTest, ConciseCastSaturatingTest) {
+    using source_t = std::tuple_element_t<0, TypeParam>;
+    using target_t = std::tuple_element_t<1, TypeParam>;
+    if constexpr (std::is_floating_point_v<target_t>) {
+        GTEST_SKIP() << "No saturating concise cast function for floating-point target types";
+    } else {
+        test_concise<source_t, target_t>(true);
+    }
 }
