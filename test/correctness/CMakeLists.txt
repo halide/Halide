@@ -310,7 +310,7 @@ target_sources(
     sliding_reduction.cpp
     sliding_window.cpp
     sort_exprs.cpp
-    #    specialize.cpp
+    specialize.cpp
     specialize_to_gpu.cpp
     specialize_trim_condition.cpp
     split_by_non_factor.cpp
