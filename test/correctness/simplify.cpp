@@ -1,4 +1,6 @@
 #include "Halide.h"
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -12,53 +14,41 @@ Stmt not_no_op(Expr x) {
 
 void check_is_sio(const Expr &e) {
     Expr simpler = simplify(e);
-    if (!Call::as_intrinsic(simpler, {Call::signed_integer_overflow})) {
-        std::cerr
-            << "\nSimplification failure:\n"
-            << "Input: " << e << "\n"
-            << "Output: " << simpler << "\n"
-            << "Expected output: signed_integer_overflow(n)\n";
-        abort();
-    }
+    EXPECT_TRUE(Call::as_intrinsic(simpler, {Call::signed_integer_overflow}))
+        << "Simplification failure:\n"
+        << "Input: " << e << "\n"
+        << "Output: " << simpler << "\n"
+        << "Expected output: signed_integer_overflow(n)";
 }
 
 void check(const Expr &a, const Expr &b, const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>()) {
     Expr simpler = simplify(a, true, Scope<Interval>(), alignment);
-    if (!equal(simpler, b)) {
-        std::cerr
-            << "\nSimplification failure:\n"
-            << "Input: " << a << "\n"
-            << "Output: " << simpler << "\n"
-            << "Expected output: " << b << "\n";
-        abort();
-    }
+    EXPECT_TRUE(equal(simpler, b))
+        << "Simplification failure:\n"
+        << "Input: " << a << "\n"
+        << "Output: " << simpler << "\n"
+        << "Expected output: " << b;
 }
 
 void check(const Stmt &a, const Stmt &b) {
     Stmt simpler = simplify(a);
-    if (!equal(simpler, b)) {
-        std::cerr
-            << "\nSimplification failure:\n"
-            << "Input:\n"
-            << a << "\n"
-            << "Output:\n"
-            << simpler << "\n"
-            << "Expected output:\n"
-            << b << "\n";
-        abort();
-    }
+    EXPECT_TRUE(equal(simpler, b))
+        << "Simplification failure:\n"
+        << "Input:\n"
+        << a << "\n"
+        << "Output:\n"
+        << simpler << "\n"
+        << "Expected output:\n"
+        << b;
 }
 
 void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
     Expr simpler = simplify(a, true, bi);
-    if (!equal(simpler, b)) {
-        std::cerr
-            << "\nSimplification failure:\n"
-            << "Input: " << a << "\n"
-            << "Output: " << simpler << "\n"
-            << "Expected output: " << b << "\n";
-        abort();
-    }
+    EXPECT_TRUE(equal(simpler, b))
+        << "Simplification failure:\n"
+        << "Input: " << a << "\n"
+        << "Output: " << simpler << "\n"
+        << "Expected output: " << b;
 }
 
 // Helper functions to use in the tests below
@@ -96,7 +86,7 @@ Expr broadcast(const Expr &base, int w) {
     return Broadcast::make(base, w);
 }
 
-void check_casts() {
+TEST(SimplifyTest, Casts) {
     Expr x = Var("x"), y = Var("y");
 
     check(cast(Int(32), cast(Int(32), x)), x);
@@ -190,7 +180,7 @@ void check_casts() {
     check(Shuffle::make_interleave({even, odd}), Shuffle::make_slice(var_vector, 0, 1, 8));
 }
 
-void check_algebra() {
+TEST(SimplifyTest, Algebra) {
     Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w"), v = Var("v");
     Expr xf = cast<float>(x);
     Expr yf = cast<float>(y);
@@ -522,10 +512,10 @@ void check_algebra() {
 
     // Use a require with no error message to test chains of reasoning
     auto require = [](Expr cond, Expr val) {
-        return Internal::Call::make(val.type(),
-                                    Internal::Call::require,
-                                    {cond, val, 0},
-                                    Internal::Call::PureIntrinsic);
+        return Call::make(val.type(),
+                          Call::require,
+                          {cond, val, 0},
+                          Call::PureIntrinsic);
     };
 
     check(require(2 < x && x < 4, x),
@@ -548,7 +538,7 @@ void check_algebra() {
           require(complex_cond, 21));
 }
 
-void check_vectors() {
+TEST(SimplifyTest, Vectors) {
     Expr x = Var("x"), y = Var("y"), z = Var("z");
 
     check(Expr(broadcast(y, 4)) / Expr(broadcast(x, 4)),
@@ -625,11 +615,9 @@ void check_vectors() {
             leaves.pop_back();
         }
         Expr simpler = simplify(leaves[0]);
-        if (!simpler.as<Ramp>() && !simpler.as<Broadcast>()) {
-            std::cerr << "A linear combination of ramps and broadcasts should be a single ramp or broadcast:\n"
-                      << simpler << "\n";
-            abort();
-        }
+        EXPECT_TRUE(simpler.as<Ramp>() || simpler.as<Broadcast>())
+            << "A linear combination of ramps and broadcasts should be a single ramp or broadcast\n"
+            << "simpler = " << simpler;
     }
 
     {
@@ -806,7 +794,7 @@ void check_vectors() {
           VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8));
 }
 
-void check_bounds() {
+TEST(SimplifyTest, Bounds) {
     Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w");
 
     check(min(Expr(7), 3), 3);
@@ -1320,7 +1308,7 @@ void check_bounds() {
     check(cast<int16_t>(abs(cast<int8_t>(x))) - cast<int16_t>(128) <= cast<int16_t>(0), const_true());
 }
 
-void check_boolean() {
+TEST(SimplifyTest, Boolean) {
     Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w");
     Expr xf = cast<float>(x);
     Expr yf = cast<float>(y);
@@ -1850,17 +1838,17 @@ void check_boolean() {
 
         // can_prove(likely(const-true)) = true
         // can_prove(!likely(const-false)) = true
-        internal_assert(can_prove(likely(t)));
-        internal_assert(can_prove(!likely(f)));
+        ASSERT_TRUE(can_prove(likely(t)));
+        ASSERT_TRUE(can_prove(!likely(f)));
 
         // unprovable cases
-        internal_assert(!can_prove(likely(f)));
-        internal_assert(!can_prove(!likely(t)));
-        internal_assert(!can_prove(!likely(x == 2)));
+        ASSERT_FALSE(can_prove(likely(f)));
+        ASSERT_FALSE(can_prove(!likely(t)));
+        ASSERT_FALSE(can_prove(!likely(x == 2)));
     }
 }
 
-void check_math() {
+TEST(SimplifyTest, Math) {
     Var x = Var("x");
 
     check(Halide::sqrt(4.0f), 2.0f);
@@ -1880,7 +1868,7 @@ void check_math() {
     check(strict_float(strict_float(x)), strict_float(x));
 }
 
-void check_overflow() {
+TEST(SimplifyTest, Overflow) {
     Expr overflowing[] = {
         make_const(Int(32), 0x7fffffff) + 1,
         make_const(Int(32), 0x7ffffff0) + 16,
@@ -1919,11 +1907,11 @@ void check_overflow() {
     };
 
     for (Expr e : overflowing) {
-        internal_assert(!is_const(simplify(e)))
+        ASSERT_FALSE(is_const(simplify(e)))
             << "Overflowing expression should not have simplified: " << e << "\n";
     }
     for (Expr e : not_overflowing) {
-        internal_assert(is_const(simplify(e)))
+        ASSERT_TRUE(is_const(simplify(e)))
             << "Non-everflowing expression should have simplified: " << e << "\n";
     }
 
@@ -1952,9 +1940,9 @@ void check_overflow() {
                     scope.push("y", {neg_two_32, zero});
                 }
                 if (x_pos == y_pos) {
-                    internal_assert(!is_const(simplify((x * y) < two_32, true, scope)));
+                    ASSERT_FALSE(is_const(simplify((x * y) < two_32, true, scope)));
                 } else {
-                    internal_assert(!is_const(simplify((x * y) > neg_two_32, true, scope)));
+                    ASSERT_FALSE(is_const(simplify((x * y) > neg_two_32, true, scope)));
                 }
             }
             // Add/Sub
@@ -1971,13 +1959,13 @@ void check_overflow() {
                     scope.push("y", {min_64, zero});
                 }
                 if (x_pos && y_pos) {
-                    internal_assert(!is_const(simplify((x + y) < two_32, true, scope)));
+                    ASSERT_FALSE(is_const(simplify((x + y) < two_32, true, scope)));
                 } else if (x_pos && !y_pos) {
-                    internal_assert(!is_const(simplify((x - y) < two_32, true, scope)));
+                    ASSERT_FALSE(is_const(simplify((x - y) < two_32, true, scope)));
                 } else if (!x_pos && y_pos) {
-                    internal_assert(!is_const(simplify((x - y) > neg_two_32, true, scope)));
+                    ASSERT_FALSE(is_const(simplify((x - y) > neg_two_32, true, scope)));
                 } else {
-                    internal_assert(!is_const(simplify((x + y) > neg_two_32, true, scope)));
+                    ASSERT_FALSE(is_const(simplify((x + y) > neg_two_32, true, scope)));
                 }
             }
         }
@@ -2014,7 +2002,7 @@ void check_popcount(uint64_t value, uint64_t result) {
     check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), popcount(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
-void check_bitwise() {
+TEST(SimplifyTest, Bitwise) {
     Expr x = Var("x");
 
     // Check bitshift operations
@@ -2075,7 +2063,7 @@ void check_bitwise() {
     check_popcount<uint64_t>(0xa5a5a5a5a5a5a5a5, 32);
 }
 
-void check_lets() {
+TEST(SimplifyTest, Lets) {
     Expr x = Var("x"), y = Var("y");
     Expr v = Variable::make(Int(32, 4), "v");
     Expr a = Variable::make(Int(32), "a");
@@ -2104,15 +2092,15 @@ void check_lets() {
           LetStmt::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Evaluate::make(x + 12)));
 }
 
-void check_inv(Expr before) {
+void check_inv(const Expr &before) {
     Expr after = simplify(before);
-    internal_assert(before.same_as(after))
+    ASSERT_TRUE(before.same_as(after))
         << "Expressions should be equal by value and by identity: "
         << " Before: " << before << "\n"
         << " After: " << after << "\n";
 }
 
-void check_invariant() {
+TEST(SimplifyTest, Invariant) {
     // Check a bunch of expressions *don't* simplify. These should try
     // and then fail to match every single rule (which should trigger
     // fuzz testing of each as a side effect). The final expression
@@ -2146,7 +2134,7 @@ void check_invariant() {
     }
 }
 
-void check_unreachable() {
+TEST(SimplifyTest, Unreachable) {
     Var x("x"), y("y");
 
     check(x + unreachable(), unreachable());
@@ -2174,21 +2162,8 @@ void check_unreachable() {
           Evaluate::make(0));
 }
 
-int main(int argc, char **argv) {
-    check_invariant();
-    check_casts();
-    check_algebra();
-    check_vectors();
-    check_bounds();
-    check_math();
-    check_boolean();
-    check_overflow();
-    check_bitwise();
-    check_lets();
-    check_unreachable();
-
-    // Miscellaneous cases that don't fit into one of the categories above.
-    Expr x = Var("x"), y = Var("y");
+TEST(SimplifyTest, StringConcat) {
+    Expr x = Var("x");
 
     // Check that constant args to a stringify get combined
     check(Call::make(type_of<const char *>(), Call::stringify, {3, std::string(" "), 4}, Call::PureIntrinsic),
@@ -2196,227 +2171,231 @@ int main(int argc, char **argv) {
 
     check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, std::string(", "), 3.4f}, Call::PureIntrinsic),
           Call::make(type_of<const char *>(), Call::stringify, {std::string("3"), x, std::string("4, 3.400000")}, Call::PureIntrinsic));
+}
 
-    {
-        // Check that contiguous prefetch call get collapsed
-        Expr base = Variable::make(Handle(), "buf");
-        Expr offset = x;
-        check(Call::make(Int(32), Call::prefetch, {base, offset, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
-              Call::make(Int(32), Call::prefetch, {base, offset, min(x + y, 128) * 256, 1}, Call::Intrinsic));
-    }
+TEST(SimplifyTest, MergeContiguousPrefetches) {
+    Expr x = Var("x"), y = Var("y");
+    Expr base = Variable::make(Handle(), "buf");
+    Expr offset = x;
+    check(Call::make(Int(32), Call::prefetch, {base, offset, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
+          Call::make(Int(32), Call::prefetch, {base, offset, min(x + y, 128) * 256, 1}, Call::Intrinsic));
+}
 
+TEST(SimplifyTest, BugSlowAndOverflowing) {
     // This expression is a good stress-test. It caused exponential
     // slowdown at one point in time, and constant folding leading to
     // overflow at another.
-    {
-        Expr e = x;
-        for (int i = 0; i < 100; i++) {
-            e = max(e, 1) / 2;
-        }
-        check(e, e);
+    Expr e = Var("x");
+    for (int i = 0; i < 100; i++) {
+        e = max(e, 1) / 2;
     }
+    check(e, e);
+}
 
+TEST(SimplifyTest, BugInfiniteRecursion) {
     // This expression used to cause infinite recursion.
     check(Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2)),
           Broadcast::make(make_const(UInt(1), 1), 2));
+}
 
-    {
-        // Verify that integer types passed to min() and max() are coerced to match
-        // Exprs, rather than being promoted to int first. (TODO: This doesn't really
-        // belong in the test for Simplify, but IROperator has no test unit of its own.)
-        Expr one = cast<uint16_t>(1);
-        const int two = 2;  // note that type is int, not uint16_t
-        Expr r1, r2, r3;
+TEST(SimplifyTest, MinMaxCoersionSemantics) {
+    // Verify that integer types passed to min() and max() are coerced to match
+    // Exprs, rather than being promoted to int first. (TODO: This doesn't really
+    // belong in the test for Simplify, but IROperator has no test unit of its own.)
+    Expr one = cast<uint16_t>(1);
+    const int two = 2;  // note that type is int, not uint16_t
+    Expr r1, r2, r3;
 
-        r1 = min(one, two);
-        internal_assert(r1.type() == halide_type_of<uint16_t>());
-        r2 = min(one, two, one);
-        internal_assert(r2.type() == halide_type_of<uint16_t>());
-        // Explicitly passing 'two' as an Expr, rather than an int, will defeat this logic.
-        r3 = min(one, Expr(two), one);
-        internal_assert(r3.type() == halide_type_of<int>());
+    r1 = min(one, two);
+    ASSERT_EQ(r1.type(), halide_type_of<uint16_t>());
+    r2 = min(one, two, one);
+    ASSERT_EQ(r2.type(), halide_type_of<uint16_t>());
+    // Explicitly passing 'two' as an Expr, rather than an int, will defeat this logic.
+    r3 = min(one, Expr(two), one);
+    ASSERT_EQ(r3.type(), halide_type_of<int>());
 
-        r1 = max(one, two);
-        internal_assert(r1.type() == halide_type_of<uint16_t>());
-        r2 = max(one, two, one);
-        internal_assert(r2.type() == halide_type_of<uint16_t>());
-        // Explicitly passing 'two' as an Expr, rather than an int, will defeat this logic.
-        r3 = max(one, Expr(two), one);
-        internal_assert(r3.type() == halide_type_of<int>());
-    }
+    r1 = max(one, two);
+    ASSERT_EQ(r1.type(), halide_type_of<uint16_t>());
+    r2 = max(one, two, one);
+    ASSERT_EQ(r2.type(), halide_type_of<uint16_t>());
+    // Explicitly passing 'two' as an Expr, rather than an int, will defeat this logic.
+    r3 = max(one, Expr(two), one);
+    ASSERT_EQ(r3.type(), halide_type_of<int>());
+}
 
-    {
-        Expr x = Variable::make(UInt(32), "x");
-        Expr y = Variable::make(UInt(32), "y");
-        // This is used to get simplified into broadcast(x - y, 2) which is
-        // incorrect when there is overflow.
-        Expr e = simplify(max(ramp(x, y, 2), broadcast(x, 2)) - max(broadcast(y, 2), ramp(y, y, 2)));
-        Expr expected = max(ramp(x, y, 2), broadcast(x, 2)) - max(ramp(y, y, 2), broadcast(y, 2));
-        check(e, expected);
-    }
+TEST(SimplifyTest, BugIncorrectBroadcastWhenOverflowing) {
+    Expr x = Variable::make(UInt(32), "x");
+    Expr y = Variable::make(UInt(32), "y");
+    // This is used to get simplified into broadcast(x - y, 2) which is
+    // incorrect when there is overflow.
+    Expr e = simplify(max(ramp(x, y, 2), broadcast(x, 2)) - max(broadcast(y, 2), ramp(y, y, 2)));
+    Expr expected = max(ramp(x, y, 2), broadcast(x, 2)) - max(ramp(y, y, 2), broadcast(y, 2));
+    check(e, expected);
+}
 
+TEST(SimplifyTest, StripRequires) {
     // Check that provably-true require() expressions are simplified away
-    {
-        Expr result(42);
+    Expr x = Var("x");
+    Expr result(42);
 
-        check(require(Expr(1) > Expr(0), result, "error"), result);
-        check(require(x == x, result, "error"), result);
-    }
+    check(require(Expr(1) > Expr(0), result, "error"), result);
+    check(require(x == x, result, "error"), result);
+}
 
+TEST(SimplifyTest, IsNan) {
     // Check that is_nan() returns a boolean result for constant inputs
-    {
-        check(Halide::is_nan(cast<float16_t>(Expr(0.f))), const_false());
-        check(Halide::is_nan(Expr(0.f)), const_false());
-        check(Halide::is_nan(Expr(0.0)), const_false());
+    check(is_nan(cast<float16_t>(Expr(0.f))), const_false());
+    check(is_nan(Expr(0.f)), const_false());
+    check(is_nan(Expr(0.0)), const_false());
 
-        check(Halide::is_nan(Expr(cast<float16_t>(std::nanf("1")))), const_true());
-        check(Halide::is_nan(Expr(std::nanf("1"))), const_true());
-        check(Halide::is_nan(Expr(std::nan("1"))), const_true());
-    }
+    check(is_nan(Expr(cast<float16_t>(std::nanf("1")))), const_true());
+    check(is_nan(Expr(std::nanf("1"))), const_true());
+    check(is_nan(Expr(std::nan("1"))), const_true());
+}
 
+TEST(SimplifyTest, IsInf) {
     // Check that is_inf() returns a boolean result for constant inputs
-    {
-        constexpr float inf32 = std::numeric_limits<float>::infinity();
-        constexpr double inf64 = std::numeric_limits<double>::infinity();
+    constexpr float inf32 = std::numeric_limits<float>::infinity();
+    constexpr double inf64 = std::numeric_limits<double>::infinity();
 
-        check(Halide::is_inf(cast<float16_t>(Expr(0.f))), const_false());
-        check(Halide::is_inf(Expr(0.f)), const_false());
-        check(Halide::is_inf(Expr(0.0)), const_false());
+    check(is_inf(cast<float16_t>(Expr(0.f))), const_false());
+    check(is_inf(Expr(0.f)), const_false());
+    check(is_inf(Expr(0.0)), const_false());
 
-        check(Halide::is_inf(Expr(cast<float16_t>(inf32))), const_true());
-        check(Halide::is_inf(Expr(inf32)), const_true());
-        check(Halide::is_inf(Expr(inf64)), const_true());
+    check(is_inf(Expr(cast<float16_t>(inf32))), const_true());
+    check(is_inf(Expr(inf32)), const_true());
+    check(is_inf(Expr(inf64)), const_true());
 
-        check(Halide::is_inf(Expr(cast<float16_t>(-inf32))), const_true());
-        check(Halide::is_inf(Expr(-inf32)), const_true());
-        check(Halide::is_inf(Expr(-inf64)), const_true());
-    }
+    check(is_inf(Expr(cast<float16_t>(-inf32))), const_true());
+    check(is_inf(Expr(-inf32)), const_true());
+    check(is_inf(Expr(-inf64)), const_true());
+}
 
+TEST(SimplifyTest, IsFinite) {
     // Check that is_finite() returns a boolean result for constant inputs
-    {
-        constexpr float inf32 = std::numeric_limits<float>::infinity();
-        constexpr double inf64 = std::numeric_limits<double>::infinity();
+    constexpr float inf32 = std::numeric_limits<float>::infinity();
+    constexpr double inf64 = std::numeric_limits<double>::infinity();
 
-        check(Halide::is_finite(cast<float16_t>(Expr(0.f))), const_true());
-        check(Halide::is_finite(Expr(0.f)), const_true());
-        check(Halide::is_finite(Expr(0.0)), const_true());
+    check(is_finite(cast<float16_t>(Expr(0.f))), const_true());
+    check(is_finite(Expr(0.f)), const_true());
+    check(is_finite(Expr(0.0)), const_true());
 
-        check(Halide::is_finite(Expr(cast<float16_t>(std::nanf("1")))), const_false());
-        check(Halide::is_finite(Expr(std::nanf("1"))), const_false());
-        check(Halide::is_finite(Expr(std::nan("1"))), const_false());
+    check(is_finite(Expr(cast<float16_t>(std::nanf("1")))), const_false());
+    check(is_finite(Expr(std::nanf("1"))), const_false());
+    check(is_finite(Expr(std::nan("1"))), const_false());
 
-        check(Halide::is_finite(Expr(cast<float16_t>(inf32))), const_false());
-        check(Halide::is_finite(Expr(inf32)), const_false());
-        check(Halide::is_finite(Expr(inf64)), const_false());
+    check(is_finite(Expr(cast<float16_t>(inf32))), const_false());
+    check(is_finite(Expr(inf32)), const_false());
+    check(is_finite(Expr(inf64)), const_false());
 
-        check(Halide::is_finite(Expr(cast<float16_t>(-inf32))), const_false());
-        check(Halide::is_finite(Expr(-inf32)), const_false());
-        check(Halide::is_finite(Expr(-inf64)), const_false());
-    }
+    check(is_finite(Expr(cast<float16_t>(-inf32))), const_false());
+    check(is_finite(Expr(-inf32)), const_false());
+    check(is_finite(Expr(-inf64)), const_false());
+}
 
-    {
-        using ConciseCasts::i32;
+TEST(SimplifyTest, SignedOverflowI32) {
+    using ConciseCasts::i32;
 
-        // Wrap all in i32() to ensure C++ won't optimize our multiplies away at compiletime
-        Expr e = max(max(max(i32(-1074233344) * i32(-32767), i32(-32783) * i32(32783)), i32(32767) * i32(-32767)), i32(1074200561) * i32(32783)) / i32(64);
-        Expr e2 = e / i32(2);
-        check_is_sio(e2);
-    }
+    // Wrap all in i32() to ensure C++ won't optimize our multiplies away at compiletime
+    Expr e = max(max(max(i32(-1074233344) * i32(-32767), i32(-32783) * i32(32783)), i32(32767) * i32(-32767)), i32(1074200561) * i32(32783)) / i32(64);
+    Expr e2 = e / i32(2);
+    check_is_sio(e2);
+}
 
-    {
-        Expr m = Int(32).max();
-        Expr e = m + m;
-        Expr l = Let::make("x", e, x + 1);
-        Expr sl = substitute_in_all_lets(simplify(l));
-        check_is_sio(sl);
-    }
+TEST(SimplifyTest, SignedOverflowI32InLet) {
+    Expr x = Var("x");
+    Expr m = Int(32).max();
+    Expr e = m + m;
+    Expr l = Let::make("x", e, x + 1);
+    Expr sl = substitute_in_all_lets(simplify(l));
+    check_is_sio(sl);
+}
 
-    {
-        using ConciseCasts::i16;
+TEST(SimplifyTest, ShiftingI16) {
+    using ConciseCasts::i16;
 
-        const Expr a = Expr(std::numeric_limits<int16_t>::lowest());
-        const Expr b = Expr(std::numeric_limits<int16_t>::max());
+    const Expr a = Expr(std::numeric_limits<int16_t>::lowest());
+    const Expr b = Expr(std::numeric_limits<int16_t>::max());
 
-        check(a >> 14, i16(-2));
-        check(a << 14, i16(0));
-        check(a >> 15, i16(-1));
-        check(a << 15, i16(0));
+    check(a >> 14, i16(-2));
+    check(a << 14, i16(0));
+    check(a >> 15, i16(-1));
+    check(a << 15, i16(0));
 
-        check(b >> 14, i16(1));
-        check(b << 14, i16(-16384));
-        check(b >> 15, i16(0));
-        check(b << 15, i16(-32768));
-    }
+    check(b >> 14, i16(1));
+    check(b << 14, i16(-16384));
+    check(b >> 15, i16(0));
+    check(b << 15, i16(-32768));
+}
 
-    {
-        using ConciseCasts::u16;
+TEST(SimplifyTest, ShiftingU16) {
+    using ConciseCasts::u16;
 
-        const Expr a = Expr(std::numeric_limits<uint16_t>::lowest());
-        const Expr b = Expr(std::numeric_limits<uint16_t>::max());
+    const Expr a = Expr(std::numeric_limits<uint16_t>::lowest());
+    const Expr b = Expr(std::numeric_limits<uint16_t>::max());
 
-        check(a >> 15, u16(0));
-        check(b >> 15, u16(1));
-        check(a << 15, u16(0));
-        check(b << 15, Expr((uint16_t)0x8000));
-    }
+    check(a >> 15, u16(0));
+    check(b >> 15, u16(1));
+    check(a << 15, u16(0));
+    check(b << 15, Expr((uint16_t)0x8000));
+}
 
-    {
-        using ConciseCasts::i64;
+TEST(SimplifyTest, ShiftingI64) {
+    using ConciseCasts::i64;
 
-        const Expr a = Expr(std::numeric_limits<int64_t>::lowest());
-        const Expr b = Expr(std::numeric_limits<int64_t>::max());
+    const Expr a = Expr(std::numeric_limits<int64_t>::lowest());
+    const Expr b = Expr(std::numeric_limits<int64_t>::max());
 
-        check(a >> 62, i64(-2));
-        check_is_sio(a << 62);
-        check(a >> 63, i64(-1));
-        check(a << 63, i64(0));
+    check(a >> 62, i64(-2));
+    check_is_sio(a << 62);
+    check(a >> 63, i64(-1));
+    check(a << 63, i64(0));
 
-        check(b >> 62, i64(1));
-        check_is_sio(b << 62);
-        check(b >> 63, i64(0));
-        check(b << 63, Expr(std::numeric_limits<int64_t>::lowest()));
-    }
+    check(b >> 62, i64(1));
+    check_is_sio(b << 62);
+    check(b >> 63, i64(0));
+    check(b << 63, Expr(std::numeric_limits<int64_t>::lowest()));
+}
 
-    {
-        using ConciseCasts::u64;
+TEST(SimplifyTest, ShiftingU64) {
+    using ConciseCasts::u64;
 
-        const Expr a = Expr(std::numeric_limits<uint64_t>::lowest());
-        const Expr b = Expr(std::numeric_limits<uint64_t>::max());
+    const Expr a = Expr(std::numeric_limits<uint64_t>::lowest());
+    const Expr b = Expr(std::numeric_limits<uint64_t>::max());
 
-        check(a >> 63, u64(0));
-        check(b >> 63, u64(1));
-        check(a << 63, u64(0));
-        check(b << 63, Expr((uint64_t)0x8000000000000000ULL));
-    }
+    check(a >> 63, u64(0));
+    check(b >> 63, u64(1));
+    check(a << 63, u64(0));
+    check(b << 63, Expr((uint64_t)0x8000000000000000ULL));
+}
 
-    {
-        Expr vec_x = Variable::make(Int(32, 32), "x");
-        Expr vec_y = Variable::make(Int(32, 32), "y");
-        Expr vec_z = Variable::make(Int(32, 32), "z");
-        check(slice(slice(vec_x, 2, 3, 8), 3, 2, 3), slice(vec_x, 11, 6, 3));
-        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 0, 2, 32), slice(concat_vectors({vec_x, vec_y}), 0, 2, 32));
-        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 1, 2, 32), slice(concat_vectors({vec_x, vec_y}), 1, 2, 32));
-        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 32), slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 32));
-        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 31), slice(concat_vectors({vec_x, vec_y}), 2, 2, 31));
-        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 0, 2, 16), slice(concat_vectors({vec_x}), 0, 2, 16));
-        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 32, 2, 22), slice(concat_vectors({vec_y, vec_z}), 0, 2, 22));
-        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 33, 2, 16), slice(concat_vectors({vec_y}), 1, 2, 16));
-    }
+TEST(SimplifyTest, SliceVectorConcats) {
+    Expr vec_x = Variable::make(Int(32, 32), "x");
+    Expr vec_y = Variable::make(Int(32, 32), "y");
+    Expr vec_z = Variable::make(Int(32, 32), "z");
+    check(slice(slice(vec_x, 2, 3, 8), 3, 2, 3), slice(vec_x, 11, 6, 3));
+    check(slice(concat_vectors({vec_x, vec_y, vec_z}), 0, 2, 32), slice(concat_vectors({vec_x, vec_y}), 0, 2, 32));
+    check(slice(concat_vectors({vec_x, vec_y, vec_z}), 1, 2, 32), slice(concat_vectors({vec_x, vec_y}), 1, 2, 32));
+    check(slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 32), slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 32));
+    check(slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 31), slice(concat_vectors({vec_x, vec_y}), 2, 2, 31));
+    check(slice(concat_vectors({vec_x, vec_y, vec_z}), 0, 2, 16), slice(concat_vectors({vec_x}), 0, 2, 16));
+    check(slice(concat_vectors({vec_x, vec_y, vec_z}), 32, 2, 22), slice(concat_vectors({vec_y, vec_z}), 0, 2, 22));
+    check(slice(concat_vectors({vec_x, vec_y, vec_z}), 33, 2, 16), slice(concat_vectors({vec_y}), 1, 2, 16));
+}
 
-    {
-        Stmt body = AssertStmt::make(x > 0, y);
-        check(For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body),
-              Evaluate::make(0));
-    }
+TEST(SimplifyTest, EliminateLoopWithContextuallyTrueAssertion) {
+    Expr x = Var("x"), y = Var("y");
+    Stmt body = AssertStmt::make(x > 0, y);
+    check(For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body),
+          Evaluate::make(0));
+}
 
-    {
-        check(concat_bits({x}), x);
-    }
+TEST(SimplifyTest, ConcatBits) {
+    Expr x = Var("x");
+    check(concat_bits({x}), x);
+}
 
+TEST(SimplifyTest, BugBoundsRegression) {
     // Check a bounds-related fuzz tester failure found in issue https://github.com/halide/Halide/issues/3764
     check(Let::make("b", 105, 336 / max(cast<int32_t>(cast<int16_t>(Variable::make(Int(32), "b"))), 38) + 29), 32);
-
-    printf("Success!\n");
-
-    return 0;
 }
