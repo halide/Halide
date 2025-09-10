@@ -308,7 +308,7 @@ target_sources(
     sliding_backwards.cpp
     sliding_over_guard_with_if.cpp
     sliding_reduction.cpp
-    #    sliding_window.cpp
+    sliding_window.cpp
     sort_exprs.cpp
     #    specialize.cpp
     specialize_to_gpu.cpp
