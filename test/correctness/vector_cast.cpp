@@ -1,41 +1,11 @@
 #include "Halide.h"
 #include "halide_thread_pool.h"
 #include "test_sharding.h"
+#include "type_param_helpers.h"
 
 #include <gtest/gtest.h>
 
 using namespace Halide;
-
-// TODO: factor this out into helpers header
-template<typename...>
-struct concat_types;
-
-template<typename... Ts>
-struct concat_types<::testing::Types<Ts...>> {
-    using type = ::testing::Types<Ts...>;
-};
-
-template<typename... Ts, typename... Us, typename... Rest>
-struct concat_types<::testing::Types<Ts...>, ::testing::Types<Us...>, Rest...> {
-    using type = typename concat_types<::testing::Types<Ts..., Us...>, Rest...>::type;
-};
-
-template<typename... Ts>
-using ConcatTypes = typename concat_types<Ts...>::type;
-
-template<typename ListA, typename ListB>
-struct combine_types;
-
-template<typename... As, typename... Bs>
-struct combine_types<::testing::Types<As...>, ::testing::Types<Bs...>> {
-    template<typename A>
-    using tuples_with = ::testing::Types<std::tuple<A, Bs>...>;
-
-    using type = ConcatTypes<tuples_with<As>...>;
-};
-
-template<typename... Ts>
-using CombineTypes = typename combine_types<Ts...>::type;
 
 namespace {
 
