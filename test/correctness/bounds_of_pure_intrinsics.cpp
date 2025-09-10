@@ -3,7 +3,39 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#include <malloc.h>
+#define ALLOCA(size) _alloca(size)
+#else
+#define ALLOCA(size) __builtin_alloca(size)
+#endif
+
+const int N = 1024 * 1024 * 4;
+
+void paint_stack() {
+    constexpr int padding = 1024 * 1024;
+    char *ptr = (char *)ALLOCA(N + padding);
+    memset(ptr, 0x42, N + padding);
+}
+
+void check_stack() {
+    char *ptr = (char *)ALLOCA(N);
+#if defined(_MSC_VER)
+    _ReadBarrier();
+#else
+    asm volatile("" : : "r"(ptr) : "memory");
+#endif
+    int i = 0;
+    while (ptr[i] == 0x42) {
+        i++;
+    }
+    printf("Peak stack usage = %d kb\n", (N - i) / 1024);
+}
+
 int main(int argc, char **argv) {
+
+    paint_stack();
 
     // There were scalability problems with taking bounds of nested pure
     // intrinsics. This test hangs if those problems still exist, using the
@@ -27,7 +59,9 @@ int main(int argc, char **argv) {
         bounds_of_expr_in_scope(e, scope);
     }
 
-    printf("Success!\n");
+    // printf("Success!\n");
 
-    return 0;
+    check_stack();
+
+    return -1;
 }
