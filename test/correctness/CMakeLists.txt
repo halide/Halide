@@ -319,10 +319,10 @@ target_sources(
     split_store_compute.cpp
     stable_realization_order.cpp
     stack_allocations.cpp
-    #    stage_strided_loads.cpp
+    stage_strided_loads.cpp
     stencil_chain_in_update_definitions.cpp
     stmt_to_html.cpp
-    #    storage_folding.cpp
+    storage_folding.cpp
     store_in.cpp
     #    strict_float.cpp
     strict_float_bounds.cpp
