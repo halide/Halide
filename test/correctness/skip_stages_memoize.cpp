@@ -1,235 +1,166 @@
 #include "Halide.h"
-#include <stdio.h>
+#include <gtest/gtest.h>
+
+#include <utility>
 
 using namespace Halide;
 
-int buffer_index = 0;
-bool set_toggle1 = false;
-bool set_toggle2 = false;
-
-int single_toggle_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
-    if (!set_toggle1) {
-        std::string buffer_name = "f1_" + std::to_string(buffer_index);
-        if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
-            printf("set_toggle1 is false; %s's producer should never have had been executed.\n",
-                   buffer_name.c_str());
-            exit(1);
-        }
+namespace {
+struct SingleToggleTrace : JITUserContext {
+    Func func;
+    Param<bool> toggle{false};
+    explicit SingleToggleTrace(Func func)
+        : func(std::move(func)) {
+        handlers.custom_trace = &custom_trace;
     }
-    return 0;
-}
-
-int double_toggle_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
-    if (!set_toggle1) {
-        std::string buffer_name = "f1_" + std::to_string(buffer_index);
-        if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
-            printf("set_toggle1 is false; %s's producer should never have had been executed.\n",
-                   buffer_name.c_str());
-            exit(1);
+    static int custom_trace(JITUserContext *ctx, const halide_trace_event_t *e) {
+        if (const auto *self = static_cast<SingleToggleTrace *>(ctx); !self->toggle.get()) {
+            std::string buffer_name = self->func.name();
+            if (e->event == halide_trace_store) {
+                EXPECT_NE(e->func, buffer_name) << "toggle is false; producer should never have been executed";
+            }
         }
-    } else if (!set_toggle2) {
-        std::string buffer_name = "f2_" + std::to_string(buffer_index);
-        if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
-            printf("set_toggle2 is false; %s's producer should never have had been executed.\n",
-                   buffer_name.c_str());
-            exit(1);
-        }
+        return 0;
     }
-    return 0;
-}
+};
 
-int check_correctness_single(const Buffer<int> &out, bool toggle) {
+struct DoubleToggleTrace : JITUserContext {
+    Func func1, func2;
+    Param<bool> toggle1{false}, toggle2{false};
+    explicit DoubleToggleTrace(Func func1, Func func2)
+        : func1(std::move(func1)), func2(std::move(func2)) {
+        handlers.custom_trace = &custom_trace;
+    }
+    static int custom_trace(JITUserContext *ctx, const halide_trace_event_t *e) {
+        const auto *self = static_cast<DoubleToggleTrace *>(ctx);
+        if (!self->toggle1.get()) {
+            std::string buffer_name = self->func1.name();
+            if (e->event == halide_trace_store) {
+                EXPECT_NE(e->func, buffer_name) << "toggle1 is false; producer should never have been executed";
+            }
+        } else if (!self->toggle2.get()) {
+            std::string buffer_name = self->func2.name();
+            if (e->event == halide_trace_store) {
+                EXPECT_NE(e->func, buffer_name) << "toggle2 is false; producer should never have been executed";
+            }
+        }
+        return 0;
+    }
+};
+
+class SkipStagesMemoizeTest : public ::testing::Test {
+protected:
+    void TearDown() override {
+        Internal::JITSharedRuntime::release_all();
+    }
+};
+
+void check_correctness_single(const Buffer<int> &out, bool toggle) {
     for (int x = 0; x < out.width(); ++x) {
-        int correct = 1;
-        if (toggle) {
-            correct = 2 * x;
-        }
-        if (out(x) != correct) {
-            printf("out(%d) = %d instead of %d\n",
-                   x, out(x), correct);
-            return 1;
-        }
+        int correct = toggle ? 2 * x : 1;
+        EXPECT_EQ(out(x), correct) << "x = " << x;
     }
-    return 0;
 }
 
-int check_correctness_double(const Buffer<int> &out, bool toggle1, bool toggle2) {
+void check_correctness_double(const Buffer<int> &out, bool toggle1, bool toggle2) {
     for (int x = 0; x < out.width(); ++x) {
-        int correct;
-        if (toggle1 && toggle2) {
-            correct = 2 * x;
-        } else if (toggle1 && !toggle2) {
-            correct = x;
-        } else if (!toggle1 && toggle2) {
-            correct = x + 1;
-        } else {
-            correct = 1;
-        }
-        if (out(x) != correct) {
-            printf("out(%d) = %d instead of %d\n",
-                   x, out(x), correct);
-            return 1;
-        }
+        int correct = toggle1 && toggle2 ? 2 * x :
+                      toggle1            ? x :
+                      toggle2            ? x + 1 :
+                                           1;
+        EXPECT_EQ(out(x), correct) << "x = " << x;
     }
-    return 0;
 }
+}  // namespace
 
-int single_memoize_test(int index) {
-    buffer_index = index;
-
-    Param<bool> toggle;
-    Func f1("f1_" + std::to_string(index)), f2("f2_" + std::to_string(index));
+TEST_F(SkipStagesMemoizeTest, Single) {
+    Func f1{"f1"}, f2{"f2"};
     Var x;
+
+    SingleToggleTrace trace{f1};
 
     f1(x) = 2 * x;
-    f2(x) = select(toggle, f1(x), 1);
+    f2(x) = select(trace.toggle, f1(x), 1);
 
     f1.compute_root().memoize();
-
-    f2.jit_handlers().custom_trace = &single_toggle_trace;
     f1.trace_stores();
 
-    f2.compile_jit();
-
     for (bool toggle_val : {false, true}) {
-        set_toggle1 = toggle_val;
-        toggle.set(set_toggle1);
-        Buffer<int> out = f2.realize({10});
-        if (check_correctness_single(out, set_toggle1) != 0) {
-            return 1;
-        }
+        trace.toggle.set(toggle_val);
+        Buffer<int> out = f2.realize(&trace, {10});
+        check_correctness_single(out, toggle_val);
     }
-    return 0;
 }
 
-int tuple_memoize_test(int index) {
-    buffer_index = index;
-
-    Param<bool> toggle;
-    Func f1("f1_" + std::to_string(index)), f2("f2_" + std::to_string(index));
+TEST_F(SkipStagesMemoizeTest, Tuple) {
+    Func f1{"f1"}, f2{"f2"};
     Var x;
+
+    SingleToggleTrace trace{f1};
 
     f1(x) = Tuple(2 * x, 2 * x);
-    f2(x) = Tuple(select(toggle, f1(x)[0], 1),
-                  select(toggle, f1(x)[1], 1));
+    f2(x) = Tuple(select(trace.toggle, f1(x)[0], 1),
+                  select(trace.toggle, f1(x)[1], 1));
 
     f1.compute_root().memoize();
-
-    f2.jit_handlers().custom_trace = &single_toggle_trace;
     f1.trace_stores();
 
-    f2.compile_jit();
-
     for (bool toggle_val : {false, true}) {
-        set_toggle1 = toggle_val;
-        toggle.set(set_toggle1);
-        Realization out = f2.realize({128});
-        Buffer<int> out0 = out[0];
-        Buffer<int> out1 = out[1];
-
-        if (check_correctness_single(out0, set_toggle1) != 0) {
-            return 1;
-        }
-        if (check_correctness_single(out1, set_toggle1) != 0) {
-            return 1;
-        }
+        trace.toggle.set(toggle_val);
+        Realization out = f2.realize(&trace, {128});
+        check_correctness_single(out[0], toggle_val);
+        check_correctness_single(out[1], toggle_val);
     }
-    return 0;
 }
 
-int non_trivial_allocate_predicate_test(int index) {
-    buffer_index = index;
-
-    Param<bool> toggle;
-    Func f1("f1_" + std::to_string(index)), f2("f2_" + std::to_string(index));
-    Func f3("f3_" + std::to_string(index));
+TEST_F(SkipStagesMemoizeTest, NonTrivialAllocatePredicate) {
+    Func f1{"f1"}, f2{"f2"}, f3{"f3"};
     Var x;
+
+    DoubleToggleTrace trace{f1, f2};
 
     // Generate allocate f1[...] if toggle
     f1(x) = 2 * x;
-    f2(x) = select(toggle, f1(x), 1);
-    f3(x) = select(toggle, f2(x), 1);
+    f2(x) = select(trace.toggle1, f1(x), 1);
+    f3(x) = select(trace.toggle2, f2(x), 1);
 
     f1.compute_root().memoize();
     f2.compute_root().memoize();
 
-    f3.jit_handlers().custom_trace = &double_toggle_trace;
     f1.trace_stores();
     f2.trace_stores();
 
-    f3.compile_jit();
-
     for (bool toggle_val : {false, true}) {
-        set_toggle1 = toggle_val;
-        set_toggle2 = toggle_val;
-        toggle.set(set_toggle1);
-        Buffer<int> out = f3.realize({10});
-        if (check_correctness_single(out, set_toggle1) != 0) {
-            return 1;
-        }
+        trace.toggle1.set(toggle_val);
+        trace.toggle2.set(toggle_val);
+        Buffer<int> out = f3.realize(&trace, {10});
+        check_correctness_single(out, toggle_val);
     }
-    return 0;
 }
 
-int double_memoize_test(int index) {
-    buffer_index = index;
-
-    Param<bool> toggle1, toggle2;
-    Func f1("f1_" + std::to_string(index)), f2("f2_" + std::to_string(index));
-    Func f3("f3_" + std::to_string(index));
+TEST_F(SkipStagesMemoizeTest, Double) {
+    Func f1{"f1"}, f2{"f2"}, f3{"f3"};
     Var x;
+
+    DoubleToggleTrace trace{f1, f2};
 
     f1(x) = x;
     f2(x) = x;
-    f3(x) = select(toggle1, f1(x), 1) + select(toggle2, f2(x), 0);
+    f3(x) = select(trace.toggle1, f1(x), 1) +
+            select(trace.toggle2, f2(x), 0);
 
     f1.compute_root().memoize();
     f2.compute_root().memoize();
 
-    f3.jit_handlers().custom_trace = &double_toggle_trace;
     f1.trace_stores();
     f2.trace_stores();
 
-    f3.compile_jit();
-
-    for (int toggle_val1 = 0; toggle_val1 <= 1; toggle_val1++) {
-        for (int toggle_val2 = 0; toggle_val2 <= 1; toggle_val2++) {
-            set_toggle1 = toggle_val1;
-            set_toggle2 = toggle_val2;
-            toggle1.set(set_toggle1);
-            toggle2.set(toggle_val2);
-            Buffer<int> out = f3.realize({10});
-            if (check_correctness_double(out, set_toggle1, set_toggle2) != 0) {
-                return 1;
-            }
+    for (bool toggle_val1 : {false, true}) {
+        for (bool toggle_val2 : {false, true}) {
+            trace.toggle1.set(toggle_val1);
+            trace.toggle2.set(toggle_val2);
+            Buffer<int> out = f3.realize(&trace, {10});
+            check_correctness_double(out, toggle_val1, toggle_val2);
         }
     }
-    return 0;
-}
-
-int main(int argc, char **argv) {
-    printf("Running single_memoize_test\n");
-    if (single_memoize_test(0) != 0) {
-        return 1;
-    }
-
-    printf("Running tuple_memoize_test\n");
-    if (tuple_memoize_test(1) != 0) {
-        return 1;
-    }
-
-    printf("Running non_trivial_allocate_predicate_test\n");
-    if (non_trivial_allocate_predicate_test(2) != 0) {
-        return 1;
-    }
-
-    printf("Running double_memoize_test\n");
-    if (double_memoize_test(3) != 0) {
-        return 1;
-    }
-
-    Internal::JITSharedRuntime::release_all();
-
-    printf("Success!\n");
-    return 0;
 }

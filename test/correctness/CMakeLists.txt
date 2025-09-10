@@ -303,8 +303,8 @@ target_sources(
     simplified_away_embedded_image.cpp
     simplify.cpp
     skip_stages.cpp
-    #    skip_stages_external_array_functions.cpp
-    #    skip_stages_memoize.cpp
+    skip_stages_external_array_functions.cpp
+    skip_stages_memoize.cpp
     sliding_backwards.cpp
     sliding_over_guard_with_if.cpp
     sliding_reduction.cpp
