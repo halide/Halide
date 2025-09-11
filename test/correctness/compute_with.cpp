@@ -1,17 +1,16 @@
 #include "Halide.h"
-#include "check_call_graphs.h"
-#include "test_sharding.h"
+#include <gtest/gtest.h>
 
-#include <cstdio>
+#include "check_call_graphs.h"
+
 #include <map>
+#include <utility>
 
 namespace {
-
 using std::map;
 using std::string;
 
 using namespace Halide;
-using namespace Halide::Internal;
 
 struct Bound {
     int32_t min[3];
@@ -37,59 +36,72 @@ struct Bound {
     }
 };
 
-map<string, Bound> stores, loads;
-uint64_t loads_total = 0, stores_total = 0;
+struct BoundsCheckingContext : JITUserContext {
+    const map<string, Bound> stores, loads;
+    uint64_t loads_total = 0, stores_total = 0;
 
-// These mutexes (mutices?) are only needed for accessing stores/loads
-// from the my_trace callback (which can be called by multiple threads);
-// the ordinary code that initializes stores/loads is single-threaded
-// and has no contention.
-std::mutex stores_mutex, loads_mutex;
+    BoundsCheckingContext(map<string, Bound> stores, map<string, Bound> loads)
+        : stores(std::move(stores)), loads(std::move(loads)) {
+        handlers.custom_trace = custom_trace;
+    }
 
-// Return true if the coordinate values in 'coordinates' are within the bound 'b'
-bool check_coordinates(const Bound &b, const int32_t *coordinates, int32_t dims, int32_t lanes,
-                       string event, string fname) {
-    for (int32_t idx = 0; idx < dims; ++idx) {
-        int32_t i = idx / lanes;
-        if ((coordinates[idx] < b.min[i]) || (coordinates[idx] > b.max[i])) {
-            printf("Bounds on %s to %s at dimension %d were supposed to be between [%d, %d]\n"
-                   "Instead it is: %d\n",
-                   event.c_str(), fname.c_str(), i, b.min[i], b.max[i],
-                   coordinates[idx]);
-            return false;
+    BoundsCheckingContext()
+        : BoundsCheckingContext({}, {}) {
+    }
+
+private:
+    // These mutexes (mutices?) are only needed for accessing stores/loads
+    // from the my_trace callback (which can be called by multiple threads);
+    // the ordinary code that initializes stores/loads is single-threaded
+    // and has no contention.
+    std::mutex stores_mutex{}, loads_mutex{};
+
+    // Return true if the coordinate values in 'coordinates' are within the bound 'b'
+    static void check_coordinates(const Bound &b, const int32_t *coordinates, int32_t dims, int32_t lanes) {
+        for (int32_t idx = 0; idx < dims; ++idx) {
+            int32_t i = idx / lanes;
+            EXPECT_GE(coordinates[idx], b.min[i]) << "dimension = " << i;
+            EXPECT_LE(coordinates[idx], b.max[i]) << "dimension = " << i;
         }
     }
-    return true;
-}
 
-// A trace that check the region accessed by stores/loads of a buffer
-int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
-    string fname = std::string(e->func);
-    if (e->event == halide_trace_store) {
-        std::lock_guard<std::mutex> lock(stores_mutex);
-        const auto &iter = stores.find(fname);
-        if (iter != stores.end()) {
-            const Bound &b = iter->second;
-            if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "store", fname)) {
-                exit(1);
+    // A trace that check the region accessed by stores/loads of a buffer
+    static int custom_trace(JITUserContext *ctx, const halide_trace_event_t *e) {
+        auto *self = static_cast<BoundsCheckingContext *>(ctx);
+        if (e->event == halide_trace_store) {
+            SCOPED_TRACE(testing::Message() << "store to " << e->func);
+            std::lock_guard lock(self->stores_mutex);
+            const auto &iter = self->stores.find(e->func);
+            if (iter != self->stores.end()) {
+                const Bound &b = iter->second;
+                check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes);
             }
-        }
-        stores_total++;
-    } else if (e->event == halide_trace_load) {
-        std::lock_guard<std::mutex> lock(loads_mutex);
-        const auto &iter = loads.find(fname);
-        if (iter != loads.end()) {
-            const Bound &b = iter->second;
-            if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "load", fname)) {
-                exit(1);
+            self->stores_total++;
+        } else if (e->event == halide_trace_load) {
+            SCOPED_TRACE(testing::Message() << "load from " << e->func);
+            std::lock_guard lock(self->loads_mutex);
+            const auto &iter = self->loads.find(e->func);
+            if (iter != self->loads.end()) {
+                const Bound &b = iter->second;
+                check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes);
             }
+            self->loads_total++;
         }
-        loads_total++;
+        return 0;
     }
-    return 0;
-}
+};
 
-int split_test() {
+class ComputeWithTest : public ::testing::Test {
+protected:
+    template<typename... Args>
+    void check_image(Args &&...args) {
+        // TODO: Convert this to a proper GTest helper in check_call_graphs.h
+        EXPECT_EQ(::check_image(std::forward<Args>(args)...), 0);
+    }
+};
+}  // namespace
+
+TEST_F(ComputeWithTest, Split) {
     Buffer<int> im_ref, im;
     {
         Var x("x"), y("y");
@@ -120,31 +132,28 @@ int split_test() {
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
-        stores = {
-            {f.name(), Bound(-1, 198, 1, 200)},
-            {g.name(), Bound(2, 201, -2, 197)},
-            {h.name(), Bound(0, 199, 0, 199)},
-        };
-        loads = {
-            {f.name(), Bound(-1, 198, 1, 200)},
-            {g.name(), Bound(2, 201, -2, 197)},
-            {h.name(), Bound()},  // There shouldn't be any load from h
-        };
-        h.jit_handlers().custom_trace = &my_trace;
 
-        im = h.realize({200, 200});
+        BoundsCheckingContext ctx{
+            {
+                {f.name(), Bound(-1, 198, 1, 200)},
+                {g.name(), Bound(2, 201, -2, 197)},
+                {h.name(), Bound(0, 199, 0, 199)},
+            },
+            {
+                {f.name(), Bound(-1, 198, 1, 200)},
+                {g.name(), Bound(2, 201, -2, 197)},
+                {h.name(), Bound()},  // There shouldn't be any load from h
+            }};
+
+        im = h.realize(&ctx, {200, 200});
     }
 
-    auto func = [im_ref](int x, int y) {
+    check_image(im, [&](int x, int y) {
         return im_ref(x, y);
-    };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    });
 }
 
-int fuse_test() {
+TEST_F(ComputeWithTest, Fuse) {
     const int size = 20;
     Buffer<int> im_ref, im;
     {
@@ -175,31 +184,28 @@ int fuse_test() {
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
-        stores = {
-            {f.name(), Bound(2, size + 1, -1, size - 2, 3, size + 2)},
-            {g.name(), Bound(-5, size - 6, -6, size - 7, 2, size + 1)},
-            {h.name(), Bound(0, size - 1, 0, size - 1, 0, size - 1)},
-        };
-        loads = {
-            {f.name(), Bound(2, size + 1, -1, size - 2, 3, size + 2)},
-            {g.name(), Bound(-5, size - 6, -6, size - 7, 2, size + 1)},
-            {h.name(), Bound()},  // There shouldn't be any load from h
-        };
-        h.jit_handlers().custom_trace = &my_trace;
 
-        im = h.realize({size, size, size});
+        BoundsCheckingContext ctx{
+            {
+                {f.name(), Bound(2, size + 1, -1, size - 2, 3, size + 2)},
+                {g.name(), Bound(-5, size - 6, -6, size - 7, 2, size + 1)},
+                {h.name(), Bound(0, size - 1, 0, size - 1, 0, size - 1)},
+            },
+            {
+                {f.name(), Bound(2, size + 1, -1, size - 2, 3, size + 2)},
+                {g.name(), Bound(-5, size - 6, -6, size - 7, 2, size + 1)},
+                {h.name(), Bound()},  // There shouldn't be any load from h
+            }};
+
+        im = h.realize(&ctx, {size, size, size});
     }
 
-    auto func = [im_ref](int x, int y, int z) {
+    check_image(im, [&](int x, int y, int z) {
         return im_ref(x, y, z);
-    };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    });
 }
 
-int multiple_fuse_group_test() {
+TEST_F(ComputeWithTest, MultipleFuseGroup) {
     Buffer<int> im_ref, im;
     {
         Var x("x"), y("y");
@@ -255,35 +261,32 @@ int multiple_fuse_group_test() {
         h.trace_loads().trace_stores();
         p.trace_loads().trace_stores();
         q.trace_loads().trace_stores();
-        stores = {
-            {f.name(), Bound(0, 199, 0, 199)},
-            {g.name(), Bound(0, 199, 0, 199)},
-            {h.name(), Bound(0, 199, 0, 199)},
-            {p.name(), Bound(0, 199, 0, 199)},
-            {q.name(), Bound(0, 199, 0, 199)},
-        };
-        loads = {
-            {f.name(), Bound(0, 199, 0, 199)},
-            {g.name(), Bound(0, 199, 0, 199)},
-            {h.name(), Bound(0, 199, 0, 199)},
-            {p.name(), Bound(0, 199, 0, 199)},
-            {q.name(), Bound()},  // There shouldn't be any load from q
-        };
-        q.jit_handlers().custom_trace = &my_trace;
 
-        im = q.realize({200, 200});
+        BoundsCheckingContext ctx{
+            {
+                {f.name(), Bound(0, 199, 0, 199)},
+                {g.name(), Bound(0, 199, 0, 199)},
+                {h.name(), Bound(0, 199, 0, 199)},
+                {p.name(), Bound(0, 199, 0, 199)},
+                {q.name(), Bound(0, 199, 0, 199)},
+            },
+            {
+                {f.name(), Bound(0, 199, 0, 199)},
+                {g.name(), Bound(0, 199, 0, 199)},
+                {h.name(), Bound(0, 199, 0, 199)},
+                {p.name(), Bound(0, 199, 0, 199)},
+                {q.name(), Bound()},  // There shouldn't be any load from q
+            }};
+
+        im = q.realize(&ctx, {200, 200});
     }
 
-    auto func = [im_ref](int x, int y) {
+    check_image(im, [&](int x, int y) {
         return im_ref(x, y);
-    };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    });
 }
 
-int multiple_outputs_test() {
+TEST_F(ComputeWithTest, MultipleOutputs) {
     const int f_size = 4;
     const int g_size = 6;
     Buffer<int> f_im(f_size, f_size), g_im(g_size, g_size);
@@ -314,40 +317,33 @@ int multiple_outputs_test() {
         input.trace_loads().trace_stores();
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
-        stores = {
-            {input.name(), Bound(0, std::max(f_size, g_size) - 1, 0, std::max(f_size, g_size) - 1)},
-            {f.name(), Bound(0, f_size - 1, 0, f_size - 1)},
-            {g.name(), Bound(0, g_size - 1, 0, g_size - 1)},
-        };
-        loads = {
-            {input.name(), Bound(0, std::max(f_size, g_size) - 1, 0, std::max(f_size, g_size) - 1)},
-            {f.name(), Bound()},  // There shouldn't be any load from f
-            {g.name(), Bound()},  // There shouldn't be any load from g
-        };
+
+        BoundsCheckingContext ctx{
+            {
+                {input.name(), Bound(0, std::max(f_size, g_size) - 1, 0, std::max(f_size, g_size) - 1)},
+                {f.name(), Bound(0, f_size - 1, 0, f_size - 1)},
+                {g.name(), Bound(0, g_size - 1, 0, g_size - 1)},
+            },
+            {
+                {input.name(), Bound(0, std::max(f_size, g_size) - 1, 0, std::max(f_size, g_size) - 1)},
+                {f.name(), Bound()},  // There shouldn't be any load from f
+                {g.name(), Bound()},  // There shouldn't be any load from g
+            }};
 
         Pipeline p({f, g});
-        p.jit_handlers().custom_trace = &my_trace;
-        p.realize({f_im, g_im});
+        p.realize(&ctx, {f_im, g_im});
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int fuse_compute_at_test() {
+TEST_F(ComputeWithTest, FuseComputeAt) {
     Buffer<int> im_ref, im;
     {
         Var x("x"), y("y");
@@ -391,37 +387,33 @@ int fuse_compute_at_test() {
         p.trace_loads().trace_stores();
         q.trace_loads().trace_stores();
         r.trace_loads().trace_stores();
-        stores = {
-            {f.name(), Bound(-1, 165, 0, 166)},
-            {g.name(), Bound(2, 168, -3, 163)},
-            {h.name(), Bound(0, 166, -1, 165)},
-            {p.name(), Bound(0, 166, -1, 165)},
-            {q.name(), Bound(-1, 165, 0, 166)},
-            {r.name(), Bound(0, 166, 0, 166)},
-        };
-        loads = {
-            {f.name(), Bound(-1, 165, 0, 166)},
-            {g.name(), Bound(2, 168, -3, 163)},
-            {h.name(), Bound(0, 166, -1, 165)},
-            {p.name(), Bound(0, 166, -1, 165)},
-            {q.name(), Bound(-1, 165, 0, 166)},
-            {r.name(), Bound()},  // There shouldn't be any load from r
-        };
-        r.jit_handlers().custom_trace = &my_trace;
+        BoundsCheckingContext ctx{
+            {
+                {f.name(), Bound(-1, 165, 0, 166)},
+                {g.name(), Bound(2, 168, -3, 163)},
+                {h.name(), Bound(0, 166, -1, 165)},
+                {p.name(), Bound(0, 166, -1, 165)},
+                {q.name(), Bound(-1, 165, 0, 166)},
+                {r.name(), Bound(0, 166, 0, 166)},
+            },
+            {
+                {f.name(), Bound(-1, 165, 0, 166)},
+                {g.name(), Bound(2, 168, -3, 163)},
+                {h.name(), Bound(0, 166, -1, 165)},
+                {p.name(), Bound(0, 166, -1, 165)},
+                {q.name(), Bound(-1, 165, 0, 166)},
+                {r.name(), Bound()},  // There shouldn't be any load from r
+            }};
 
-        im = r.realize({167, 167});
+        im = r.realize(&ctx, {167, 167});
     }
 
-    auto func = [im_ref](int x, int y) {
+    check_image(im, [&](int x, int y) {
         return im_ref(x, y);
-    };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    });
 }
 
-int double_split_fuse_test() {
+TEST_F(ComputeWithTest, DoubleSplit) {
     Buffer<int> im_ref, im;
     {
         Func f("f"), g("g"), h("h");
@@ -454,31 +446,28 @@ int double_split_fuse_test() {
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
-        stores = {
-            {f.name(), Bound(0, 199, 0, 199)},
-            {g.name(), Bound(0, 199, 0, 199)},
-            {h.name(), Bound(0, 199, 0, 199)},
-        };
-        loads = {
-            {f.name(), Bound(0, 199, 0, 199)},
-            {g.name(), Bound(0, 199, 0, 199)},
-            {h.name(), Bound()},  // There shouldn't be any load from h
-        };
-        h.jit_handlers().custom_trace = &my_trace;
 
-        im = h.realize({200, 200});
+        BoundsCheckingContext ctx{
+            {
+                {f.name(), Bound(0, 199, 0, 199)},
+                {g.name(), Bound(0, 199, 0, 199)},
+                {h.name(), Bound(0, 199, 0, 199)},
+            },
+            {
+                {f.name(), Bound(0, 199, 0, 199)},
+                {g.name(), Bound(0, 199, 0, 199)},
+                {h.name(), Bound()},  // There shouldn't be any load from h
+            }};
+
+        im = h.realize(&ctx, {200, 200});
     }
 
-    auto func = [im_ref](int x, int y) {
+    check_image(im, [&](int x, int y) {
         return im_ref(x, y);
-    };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    });
 }
 
-int rgb_yuv420_test() {
+TEST_F(ComputeWithTest, RGBtoYUV420) {
     // Somewhat approximating the behavior of rgb -> yuv420 (downsample by half in the u and v channels)
     const int size = 64;
     Buffer<int> y_im(size, size), u_im(size / 2, size / 2), v_im(size / 2, size / 2);
@@ -494,7 +483,7 @@ int rgb_yuv420_test() {
         }
     }
 
-    uint64_t load_count_ref, store_count_ref;
+    BoundsCheckingContext ref;
     {
         Var x("x"), y("y"), z("z");
         Func y_part("y_part"), u_part("u_part"), v_part("v_part"), rgb("rgb"), rgb_x("rgb_x");
@@ -511,13 +500,8 @@ int rgb_yuv420_test() {
         u_part.vectorize(x, 8);
         v_part.vectorize(x, 8);
 
-        loads_total = 0;
-        stores_total = 0;
         Pipeline p({y_part, u_part, v_part});
-        p.jit_handlers().custom_trace = &my_trace;
-        p.realize({y_im_ref, u_im_ref, v_im_ref}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
-        load_count_ref = loads_total;
-        store_count_ref = stores_total;
+        p.realize(&ref, {y_im_ref, u_im_ref, v_im_ref}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
     }
 
     {
@@ -559,28 +543,25 @@ int rgb_yuv420_test() {
         rgb_x.compute_at(y_part, y).vectorize(x, 8);
         rgb.compute_at(y_part, y).vectorize(x, 8);
 
-        stores = {
-            {rgb_x.name(), Bound(0, size - 1, -1, size - 1, 0, 2)},
-            {rgb.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {y_part.name(), Bound(0, size - 1, 0, size - 1)},
-            {u_part.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
-            {v_part.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
-        };
-        loads = {
-            {rgb_x.name(), Bound(0, size - 1, -1, size - 1, 0, 2)},
-            {rgb.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {y_part.name(), Bound()},  // There shouldn't be any load from y_part
-            {u_part.name(), Bound()},  // There shouldn't be any load from u_part
-            {v_part.name(), Bound()},  // There shouldn't be any load from v_part
-        };
+        BoundsCheckingContext ctx{
+            {
+                {rgb_x.name(), Bound(0, size - 1, -1, size - 1, 0, 2)},
+                {rgb.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
+                {y_part.name(), Bound(0, size - 1, 0, size - 1)},
+                {u_part.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+                {v_part.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+            },
+            {
+                {rgb_x.name(), Bound(0, size - 1, -1, size - 1, 0, 2)},
+                {rgb.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
+                {y_part.name(), Bound()},  // There shouldn't be any load from y_part
+                {u_part.name(), Bound()},  // There shouldn't be any load from u_part
+                {v_part.name(), Bound()},  // There shouldn't be any load from v_part
+            }};
 
-        loads_total = 0;
-        stores_total = 0;
         Pipeline p({y_part, u_part, v_part});
-        p.jit_handlers().custom_trace = &my_trace;
-        p.realize({y_im, u_im, v_im}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+        p.realize(&ctx, {y_im, u_im, v_im}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
 
-        bool too_many_memops = false;
         // Store count for reference:
         // y_part: width * height
         // u_part: (width / 2) * (height / 2)
@@ -596,11 +577,9 @@ int rgb_yuv420_test() {
         // Note: each of the items above also needs to be divided by vector_width, but it doesn't change
         // the ratio between reference and compute_with.
         // It should be 4x based on above, but let's make it 5x to account for boundary condtions for rgb_x.
-        if (stores_total > 5 * store_count_ref) {
-            printf("Store count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 5x. (Reference: %llu, compute_with: %llu).\n",
-                   (unsigned long long)store_count_ref, (unsigned long long)stores_total);
-            too_many_memops = true;
-        }
+        EXPECT_LE(ctx.stores_total, 5 * ref.stores_total)
+            << "Store count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 5x.";
+
         // Reference should have more loads, because everything is recomputed.
         // TODO: Bizarrely, https://github.com/halide/Halide/pull/5479 caused the
         // reference loads to decrease by around 2x, which causes the compute_with
@@ -608,41 +587,24 @@ int rgb_yuv420_test() {
         // lot of shifts have side-effecty trace calls in them, which are not dead
         // code eliminated as they "should" be. So, this test was erroneously
         // passing before that PR.
-        if (loads_total >= 2 * load_count_ref) {
-            printf("Load count for correctness_compute_with rgb to yuv420 case exceeds reference. (Reference: %llu, compute_with: %llu).\n",
-                   (unsigned long long)load_count_ref, (unsigned long long)loads_total);
-            too_many_memops = true;
-        }
-        if (too_many_memops) {
-            return 1;
-        }
+        EXPECT_LT(ctx.loads_total, 2 * ref.loads_total)
+            << "Load count for correctness_compute_with rgb to yuv420 case exceeds reference by more than 2x.";
     }
 
-    auto y_func = [y_im_ref](int x, int y) {
+    check_image(y_im, [&](int x, int y) {
         return y_im_ref(x, y);
-    };
-    if (check_image(y_im, y_func)) {
-        return 1;
-    }
+    });
 
-    auto u_func = [u_im_ref](int x, int y) {
+    check_image(u_im, [&](int x, int y) {
         return u_im_ref(x, y);
-    };
-    if (check_image(u_im, u_func)) {
-        return 1;
-    }
+    });
 
-    auto v_func = [v_im_ref](int x, int y) {
+    check_image(v_im, [&](int x, int y) {
         return v_im_ref(x, y);
-    };
-    if (check_image(v_im, v_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int vectorize_test() {
+TEST_F(ComputeWithTest, Vectorize) {
     const int width = 111;
     const int height = 31;
     Buffer<int> im_ref, im;
@@ -677,32 +639,31 @@ int vectorize_test() {
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
-        stores = {
-            {f.name(), Bound(-1, width - 2, 1, height)},
-            {g.name(), Bound(2, width + 1, -2, height - 3)},
-            {h.name(), Bound(0, width - 1, 0, height - 1)},
-        };
-        loads = {
-            {f.name(), Bound(-1, width - 2, 1, height)},
-            {g.name(), Bound(2, width + 1, -2, height - 3)},
-            {h.name(), Bound()},  // There shouldn't be any load from h
-        };
-        h.jit_handlers().custom_trace = &my_trace;
 
-        im = h.realize({width, height});
+        BoundsCheckingContext ctx{
+            {
+                {f.name(), Bound(-1, width - 2, 1, height)},
+                {g.name(), Bound(2, width + 1, -2, height - 3)},
+                {h.name(), Bound(0, width - 1, 0, height - 1)},
+            },
+            {
+                {f.name(), Bound(-1, width - 2, 1, height)},
+                {g.name(), Bound(2, width + 1, -2, height - 3)},
+                {h.name(), Bound()},  // There shouldn't be any load from h
+            }};
+
+        im = h.realize(&ctx, {width, height});
     }
 
-    auto func = [im_ref](int x, int y) {
+    check_image(im, [&](int x, int y) {
         return im_ref(x, y);
-    };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    });
 }
 
-/*
-int some_are_skipped_test() {
+// Note: we are deprecating skipping parts of a fused group in favor of
+//       cloning funcs in particular stages via a new (clone_)in overload.
+// TODO: remove this code when the new clone_in is implemented.
+TEST_F(ComputeWithTest, DISABLED_SomeAreSkipped) {
     Buffer<int> im_ref, im;
     {
         Var x("x"), y("y");
@@ -737,38 +698,32 @@ int some_are_skipped_test() {
         g.trace_loads().trace_stores();
         p.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
-        stores = {
-            {f.name(), Bound(-1, 199, 0, 200)},
-            {g.name(), Bound(0, 201, -2, 197)},
-            {p.name(), Bound(0, 199, 0, 199)},
-            {h.name(), Bound(0, 199, 0, 199)},
-        };
-        loads = {
-            {f.name(), Bound(-1, 199, 0, 200)},
-            {g.name(), Bound(0, 201, -2, 197)},
-            {p.name(), Bound(0, 199, 0, 199)},
-            {h.name(), Bound(0, 199, 0, 199)},
-        };
-        h.jit_handlers().custom_trace = &my_trace;
 
-        im = h.realize({200, 200});
+        BoundsCheckingContext ctx{
+            {
+                {f.name(), Bound(-1, 199, 0, 200)},
+                {g.name(), Bound(0, 201, -2, 197)},
+                {p.name(), Bound(0, 199, 0, 199)},
+                {h.name(), Bound(0, 199, 0, 199)},
+            },
+            {
+                {f.name(), Bound(-1, 199, 0, 200)},
+                {g.name(), Bound(0, 201, -2, 197)},
+                {p.name(), Bound(0, 199, 0, 199)},
+                {h.name(), Bound(0, 199, 0, 199)},
+            }};
+
+        im = h.realize(&ctx, {200, 200});
     }
 
-    auto func = [im_ref](int x, int y) {
+    check_image(im, [&](int x, int y) {
         return im_ref(x, y);
-    };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    });
 }
-*/
 
-int multiple_outputs_on_gpu_test() {
-    Target target = get_jit_target_from_environment();
-    if (!target.has_gpu_feature()) {
-        printf("No GPU feature enabled in target. Skipping test\n");
-        return 0;
+TEST_F(ComputeWithTest, MultipleOutputsOnGPU) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        GTEST_SKIP() << "No GPU feature enabled in target. Skipping test";
     }
 
     const int f_size = 550;
@@ -808,24 +763,16 @@ int multiple_outputs_on_gpu_test() {
         r[1].copy_to_host();
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int mixed_tile_factor_test() {
+TEST_F(ComputeWithTest, MixedTileFactor) {
     const int size = 256;
     Buffer<int> f_im(size, size), g_im(size / 2, size / 2), h_im(size / 2, size / 2);
     Buffer<int> f_im_ref(size, size), g_im_ref(size / 2, size / 2), h_im_ref(size / 2, size / 2);
@@ -876,49 +823,39 @@ int mixed_tile_factor_test() {
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
-        stores = {
-            {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {f.name(), Bound(0, size - 1, 0, size - 1)},
-            {g.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
-            {h.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
-        };
-        loads = {
-            {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {f.name(), Bound()},  // There shouldn't be any load from f
-            {g.name(), Bound()},  // There shouldn't be any load from g
-            {h.name(), Bound()},  // There shouldn't be any load from h
-        };
+
+        BoundsCheckingContext ctx{
+            {
+                {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
+                {f.name(), Bound(0, size - 1, 0, size - 1)},
+                {g.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+                {h.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+            },
+            {
+                {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
+                {f.name(), Bound()},  // There shouldn't be any load from f
+                {g.name(), Bound()},  // There shouldn't be any load from g
+                {h.name(), Bound()},  // There shouldn't be any load from h
+            }};
 
         Pipeline p({f, g, h});
-        p.jit_handlers().custom_trace = &my_trace;
-        p.realize({f_im, g_im, h_im});
+        p.realize(&ctx, {f_im, g_im, h_im});
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
+    });
 
-    auto h_func = [h_im_ref](int x, int y) {
+    check_image(h_im, [&](int x, int y) {
         return h_im_ref(x, y);
-    };
-    if (check_image(h_im, h_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int multi_tile_mixed_tile_factor_test() {
+TEST_F(ComputeWithTest, MultiTileMixedTileFactor) {
     const int size = 256;
     Buffer<int> f_im(size, size), g_im(size / 2, size / 2), h_im(size / 2, size / 2);
     Buffer<int> f_im_ref(size, size), g_im_ref(size / 2, size / 2), h_im_ref(size / 2, size / 2);
@@ -974,49 +911,40 @@ int multi_tile_mixed_tile_factor_test() {
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
-        stores = {
-            {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {f.name(), Bound(0, size - 1, 0, size - 1)},
-            {g.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
-            {h.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
-        };
-        loads = {
-            {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {f.name(), Bound()},  // There shouldn't be any load from f
-            {g.name(), Bound()},  // There shouldn't be any load from g
-            {h.name(), Bound()},  // There shouldn't be any load from h
-        };
+
+        BoundsCheckingContext ctx{
+            {
+                {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
+                {f.name(), Bound(0, size - 1, 0, size - 1)},
+                {g.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+                {h.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+            },
+            {
+                {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
+                {f.name(), Bound()},  // There shouldn't be any load from f
+                {g.name(), Bound()},  // There shouldn't be any load from g
+                {h.name(), Bound()},  // There shouldn't be any load from h
+            }};
 
         Pipeline p({f, g, h});
-        p.jit_handlers().custom_trace = &my_trace;
-        p.realize({f_im, g_im, h_im});
+        p.realize(&ctx, {f_im, g_im, h_im});
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
+    });
 
-    auto h_func = [h_im_ref](int x, int y) {
+    check_image(h_im, [&](int x, int y) {
         return h_im_ref(x, y);
-    };
-    if (check_image(h_im, h_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int only_some_are_tiled_test() {
+// NOTE: disabled because it generates OOB (see #4751 for discussion).
+TEST_F(ComputeWithTest, DISABLED_OnlySomeAreTiled) {
     const int size = 256;
     Buffer<int> f_im(size, size), g_im(size / 2, size / 2), h_im(size / 2, size / 2);
     Buffer<int> f_im_ref(size, size), g_im_ref(size / 2, size / 2), h_im_ref(size / 2, size / 2);
@@ -1065,49 +993,39 @@ int only_some_are_tiled_test() {
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
-        stores = {
-            {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {f.name(), Bound(0, size - 1, 0, size - 1)},
-            {g.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
-            {h.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
-        };
-        loads = {
-            {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
-            {f.name(), Bound()},  // There shouldn't be any load from f
-            {g.name(), Bound()},  // There shouldn't be any load from g
-            {h.name(), Bound()},  // There shouldn't be any load from h
-        };
+
+        BoundsCheckingContext ctx{
+            {
+                {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
+                {f.name(), Bound(0, size - 1, 0, size - 1)},
+                {g.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+                {h.name(), Bound(0, size / 2 - 1, 0, size / 2 - 1)},
+            },
+            {
+                {input.name(), Bound(0, size - 1, 0, size - 1, 0, 2)},
+                {f.name(), Bound()},  // There shouldn't be any load from f
+                {g.name(), Bound()},  // There shouldn't be any load from g
+                {h.name(), Bound()},  // There shouldn't be any load from h
+            }};
 
         Pipeline p({f, g, h});
-        p.jit_handlers().custom_trace = &my_trace;
-        p.realize({f_im, g_im, h_im});
+        p.realize(&ctx, {f_im, g_im, h_im});
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
+    });
 
-    auto h_func = [h_im_ref](int x, int y) {
+    check_image(h_im, [&](int x, int y) {
         return h_im_ref(x, y);
-    };
-    if (check_image(h_im, h_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int with_specialization_test() {
+TEST_F(ComputeWithTest, WithSpecialization) {
     Buffer<int> im_ref, im;
     {
         Var x("x"), y("y");
@@ -1139,32 +1057,29 @@ int with_specialization_test() {
         f.trace_loads().trace_stores();
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
-        stores = {
-            {f.name(), Bound(-1, 198, 1, 200)},
-            {g.name(), Bound(2, 201, -2, 197)},
-            {h.name(), Bound(0, 199, 0, 199)},
-        };
-        loads = {
-            {f.name(), Bound(-1, 198, 1, 200)},
-            {g.name(), Bound(2, 201, -2, 197)},
-            {h.name(), Bound()},  // There shouldn't be any load from h
-        };
-        h.jit_handlers().custom_trace = &my_trace;
+
+        BoundsCheckingContext ctx{
+            {
+                {f.name(), Bound(-1, 198, 1, 200)},
+                {g.name(), Bound(2, 201, -2, 197)},
+                {h.name(), Bound(0, 199, 0, 199)},
+            },
+            {
+                {f.name(), Bound(-1, 198, 1, 200)},
+                {g.name(), Bound(2, 201, -2, 197)},
+                {h.name(), Bound()},  // There shouldn't be any load from h
+            }};
 
         tile.set(true);
-        im = h.realize({200, 200});
+        im = h.realize(&ctx, {200, 200});
     }
 
-    auto func = [im_ref](int x, int y) {
+    check_image(im, [&](int x, int y) {
         return im_ref(x, y);
-    };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    });
 }
 
-int nested_compute_with_test() {
+TEST_F(ComputeWithTest, NestedComputeWith) {
     const int g1_size = 20;
     const int g2_size = 10;
     Buffer<int> g1_im(g1_size, g1_size + 5), g2_im(g2_size, g2_size + 10);
@@ -1202,41 +1117,35 @@ int nested_compute_with_test() {
         f2.trace_loads().trace_stores();
         g1.trace_loads().trace_stores();
         g2.trace_loads().trace_stores();
-        stores = {
-            {f1.name(), Bound(0, std::max(g1_size, g2_size) - 1, 0, std::max(g1_size + 4, g2_size + 9))},
-            {f2.name(), Bound(0, g2_size - 1, 0, g2_size + 9)},
-            {g1.name(), Bound(0, g1_size - 1, 0, g1_size + 4)},
-            {g2.name(), Bound(0, g2_size - 1, 0, g2_size + 9)},
-        };
-        loads = {
-            {f1.name(), Bound(0, std::max(g1_size, g2_size) - 1, 0, std::max(g1_size + 4, g2_size + 9))},
-            {f2.name(), Bound(0, g2_size - 1, 0, g2_size + 9)},
-            {g1.name(), Bound()},  // There shouldn't be any load from g1
-            {g2.name(), Bound()},  // There shouldn't be any load from g2
-        };
+
+        BoundsCheckingContext ctx{
+            {
+                {f1.name(), Bound(0, std::max(g1_size, g2_size) - 1, 0, std::max(g1_size + 4, g2_size + 9))},
+                {f2.name(), Bound(0, g2_size - 1, 0, g2_size + 9)},
+                {g1.name(), Bound(0, g1_size - 1, 0, g1_size + 4)},
+                {g2.name(), Bound(0, g2_size - 1, 0, g2_size + 9)},
+            },
+            {
+                {f1.name(), Bound(0, std::max(g1_size, g2_size) - 1, 0, std::max(g1_size + 4, g2_size + 9))},
+                {f2.name(), Bound(0, g2_size - 1, 0, g2_size + 9)},
+                {g1.name(), Bound()},  // There shouldn't be any load from g1
+                {g2.name(), Bound()},  // There shouldn't be any load from g2
+            }};
 
         Pipeline p({g1, g2});
-        p.jit_handlers().custom_trace = &my_trace;
-        p.realize({g1_im, g2_im});
+        p.realize(&ctx, {g1_im, g2_im});
     }
 
-    auto g1_func = [g1_im_ref](int x, int y) {
+    check_image(g1_im, [&](int x, int y) {
         return g1_im_ref(x, y);
-    };
-    if (check_image(g1_im, g1_func)) {
-        return 1;
-    }
+    });
 
-    auto g2_func = [g2_im_ref](int x, int y) {
+    check_image(g2_im, [&](int x, int y) {
         return g2_im_ref(x, y);
-    };
-    if (check_image(g2_im, g2_func)) {
-        return 1;
-    }
-    return 0;
+    });
 }
 
-int update_stage_test() {
+TEST_F(ComputeWithTest, UpdateStage) {
     const int f_size = 128;
     const int g_size = 128;
     const int base = 31;
@@ -1291,25 +1200,16 @@ int update_stage_test() {
         p.realize({f_im, g_im});
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-// two in row.
-int update_stage2_test() {
+TEST_F(ComputeWithTest, UpdateStageTwoInARow) {
     const int f_size = 128;
     const int g_size = 128;
     const int base = 31;
@@ -1364,24 +1264,16 @@ int update_stage2_test() {
         p.realize({f_im, g_im});
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int update_stage3_test() {
+TEST_F(ComputeWithTest, UpdateStageThreeInARow) {
     const int f_size = 128;
     const int g_size = 128;
     const int base = 31;
@@ -1437,24 +1329,16 @@ int update_stage3_test() {
         p.realize({f_im, g_im});
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int update_stage_pairwise_test() {
+TEST_F(ComputeWithTest, UpdateStagePairwise) {
     const int f_size = 128;
     const int g_size = 128;
     const int base = 31;
@@ -1510,24 +1394,17 @@ int update_stage_pairwise_test() {
         p.realize({f_im, g_im});
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int update_stage_pairwise_zigzag_test() {
+// TODO(vksnk): I think this should work, but there is an overzealous check somewhere.
+TEST_F(ComputeWithTest, DISABLED_UpdateStagePairwiseZigzag) {
     const int f_size = 128;
     const int g_size = 128;
     const int base = 31;
@@ -1588,24 +1465,16 @@ int update_stage_pairwise_zigzag_test() {
         p.realize({f_im, g_im});
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int update_stage_diagonal_test() {
+TEST_F(ComputeWithTest, UpdateStageDiagonal) {
     const int f_size = 128;
     const int g_size = 128;
     const int h_size = 128;
@@ -1675,31 +1544,20 @@ int update_stage_diagonal_test() {
         p.realize({f_im, g_im, h_im});
     }
 
-    auto f_func = [f_im_ref](int x, int y) {
+    check_image(f_im, [&](int x, int y) {
         return f_im_ref(x, y);
-    };
-    if (check_image(f_im, f_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
+    });
 
-    auto h_func = [h_im_ref](int x, int y) {
+    check_image(h_im, [&](int x, int y) {
         return h_im_ref(x, y);
-    };
-    if (check_image(h_im, h_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int update_stage_rfactor_test() {
+TEST_F(ComputeWithTest, UpdateStageRFactor) {
     Func f0, f1, cost;
     Var x;
     f0(x) = x;
@@ -1724,23 +1582,16 @@ int update_stage_rfactor_test() {
     tmp1.update().compute_with(tmp2.update(), r.x);
 
     Buffer<int> result = cost.realize();
-
-    const int reference = 9900;
-    if (result(0) != reference) {
-        printf("Wrong result: expected %d, got %d\n", reference, result(0));
-        return 1;
-    }
-
-    return 0;
+    EXPECT_EQ(result(0), 9900);
 }
 
-int vectorize_inlined_test() {
+TEST_F(ComputeWithTest, VectorizeInlined) {
     const int f_size = 128;
     const int g_size = 256;
     Buffer<int> h_im(f_size, f_size, 5), g_im(g_size, g_size);
     Buffer<int> h_im_ref(f_size, f_size, 5), g_im_ref(g_size, g_size);
 
-    uint64_t load_count_ref, store_count_ref;
+    BoundsCheckingContext ref;
     {
         Var x("x"), y("y"), c("c"), xi("xi"), yi("yi"), yii("yii"), yo("yo");
         Func f("f"), g("g"), h("h"), input("input");
@@ -1767,13 +1618,8 @@ int vectorize_inlined_test() {
         g.bound(y, 0, g_size);
         h.bound(y, 0, f_size).bound(c, 0, 5);
 
-        loads_total = 0;
-        stores_total = 0;
         Pipeline p({h, g});
-        p.jit_handlers().custom_trace = &my_trace;
-        p.realize({h_im_ref, g_im_ref}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
-        load_count_ref = loads_total;
-        store_count_ref = stores_total;
+        p.realize(&ref, {h_im_ref, g_im_ref}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
     }
 
     {
@@ -1803,45 +1649,24 @@ int vectorize_inlined_test() {
         g.bound(y, 0, g_size);
         h.bound(y, 0, f_size).bound(c, 0, 5);
 
-        loads_total = 0;
-        stores_total = 0;
+        BoundsCheckingContext ctx;
         Pipeline p({h, g});
-        p.jit_handlers().custom_trace = &my_trace;
-        p.realize({h_im, g_im}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+        p.realize(&ctx, {h_im, g_im}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
 
-        bool too_many_memops = false;
-        if (stores_total != store_count_ref) {
-            printf("Store count should be equal between compute_root and compute_with schedules\n");
-            too_many_memops = true;
-        }
-        if (loads_total != load_count_ref) {
-            printf("Load count should be equal between compute_root and compute_with schedules\n");
-            too_many_memops = true;
-        }
-
-        if (too_many_memops) {
-            return 1;
-        }
+        EXPECT_EQ(ctx.stores_total, ref.stores_total);
+        EXPECT_EQ(ctx.loads_total, ref.loads_total);
     }
 
-    auto h_func = [h_im_ref](int x, int y, int c) {
+    check_image(h_im, [&](int x, int y, int c) {
         return h_im_ref(x, y, c);
-    };
-    if (check_image(h_im, h_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int mismatching_splits_test() {
+TEST_F(ComputeWithTest, MismatchingSplits) {
     const int h_size = 128;
     const int g_size = 256;
     Buffer<int> h_im(h_size, h_size, 5), g_im(g_size, g_size);
@@ -1893,24 +1718,16 @@ int mismatching_splits_test() {
         p.realize({h_im, g_im});
     }
 
-    auto h_func = [h_im_ref](int x, int y, int z) {
+    check_image(h_im, [&](int x, int y, int z) {
         return h_im_ref(x, y, z);
-    };
-    if (check_image(h_im, h_func)) {
-        return 1;
-    }
+    });
 
-    auto g_func = [g_im_ref](int x, int y) {
+    check_image(g_im, [&](int x, int y) {
         return g_im_ref(x, y);
-    };
-    if (check_image(g_im, g_func)) {
-        return 1;
-    }
-
-    return 0;
+    });
 }
 
-int different_arg_num_compute_at_test() {
+TEST_F(ComputeWithTest, DifferentArgNumComputeAt) {
     const int width = 16;
     const int height = 16;
     const int channels = 3;
@@ -1949,60 +1766,37 @@ int different_arg_num_compute_at_test() {
         output_a.bound(x, 0, width).bound(y, 0, width).bound(c, 0, channels);
         output_b.bound(c, 0, channels);
 
-        loads_total = 0;
-        stores_total = 0;
+        BoundsCheckingContext ctx;
         Pipeline p({output_a, output_b});
-        p.jit_handlers().custom_trace = &my_trace;
-        p.realize({buffer_a, buffer_b}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
+        p.realize(&ctx, {buffer_a, buffer_b}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
 
-        bool too_many_memops = false;
         // Store count:
         // big: width * height * channels
         // reduce_big: channels
         // output_a: width * height * channels
         // output_b: channels
         // Total: 2 * width * height * channels + 2 * channels
+        EXPECT_EQ(ctx.stores_total, 2 * width * height * channels + 2 * channels);
+
         // Load count:
         // big: width * height * channels
         // reduce_big: width * height * channels + channels
         // output_a: 0
         // output_b: 0
         // Total: 2 * width * height * channels + channels
-        uint64_t expected_store_count = 2 * width * height * channels + 2 * channels;
-        uint64_t expected_load_count = 2 * width * height * channels + channels;
-        if (stores_total != expected_store_count) {
-            printf("Store count for different_arg_num_compute_at_test is not as expected. (Expected: %llu, compute_with: %llu).\n",
-                   (unsigned long long)expected_store_count, (unsigned long long)stores_total);
-            too_many_memops = true;
-        }
-        if (loads_total != expected_load_count) {
-            printf("Load count for different_arg_num_compute_at_test is not as expected. (Expected: %llu, compute_with: %llu).\n",
-                   (unsigned long long)expected_load_count, (unsigned long long)loads_total);
-            too_many_memops = true;
-        }
-        if (too_many_memops) {
-            return 1;
-        }
+        EXPECT_EQ(ctx.loads_total, 2 * width * height * channels + channels);
     }
 
-    auto buffer_a_func = [buffer_a_ref](int x, int y, int c) {
+    check_image(buffer_a, [&](int x, int y, int c) {
         return buffer_a_ref(x, y, c);
-    };
-    if (check_image(buffer_a, buffer_a_func)) {
-        return 1;
-    }
+    });
 
     for (int i = 0; i < buffer_b.width(); i++) {
-        if (buffer_b(i) != buffer_b_ref(i)) {
-            printf("Mismatch %d %d %d\n", i, buffer_b(i), buffer_b_ref(i));
-            return 1;
-        }
+        EXPECT_EQ(buffer_b(i), buffer_b_ref(i)) << "i = " << i;
     }
-
-    return 0;
 }
 
-int store_at_different_levels_test() {
+TEST_F(ComputeWithTest, StoreAtDifferentLevels) {
     Func producer1, producer2, consumer;
     Var x, y;
 
@@ -2020,19 +1814,13 @@ int store_at_different_levels_test() {
 
     for (int y = 0; y < out.height(); y++) {
         for (int x = 0; x < out.width(); x++) {
-            int correct = 8 * x + 6 * y;
-            if (out(x, y) != correct) {
-                printf("out(%d, %d) = %d instead of %d\n",
-                       x, y, out(x, y), correct);
-                return 1;
-            }
+            EXPECT_EQ(out(x, y), 8 * x + 6 * y)
+                << "x = " << x << ", y = " << y;
         }
     }
-
-    return 0;
 }
 
-int rvar_bounds_test() {
+TEST_F(ComputeWithTest, RVarBounds) {
     ImageParam input(Int(16), 2, "input");
     Var x{"x"}, y{"y"};
     Func input_c{"input_c"};
@@ -2088,37 +1876,28 @@ int rvar_bounds_test() {
     sum_2.compute_root();
     total_sum.compute_root();
 
-    class CheckAllocationSize : public IRMutator {
-
-    protected:
+    struct CheckAllocationSize : Internal::IRMutator {
         using IRMutator::visit;
-
-        Stmt visit(const Allocate *op) override {
-            if ((op->name == "input_c") && (op->constant_allocation_size() != 64)) {
-                printf("Expected allocation size for input_c is 64, but is %d instead\n", op->constant_allocation_size());
-                exit(1);
+        Internal::Stmt visit(const Internal::Allocate *op) override {
+            if (op->name == "input_c") {
+                EXPECT_EQ(op->constant_allocation_size(), 64);
             }
             return IRMutator::visit(op);
         }
     };
 
-    total_sum.add_custom_lowering_pass(new CheckAllocationSize());
+    total_sum.add_custom_lowering_pass(new CheckAllocationSize);
 
     Buffer<int16_t> in(32, 64);
     in.fill(1);
     input.set(in);
 
     Buffer<int16_t> result = total_sum.realize();
-
-    if (result() != 8192) {
-        return 1;
-    }
-
-    return 0;
+    EXPECT_EQ(result(), 8192);
 }
 
 // Test for the issue described in https://github.com/halide/Halide/issues/6367.
-int two_compute_at_test() {
+TEST_F(ComputeWithTest, TwoComputeAt) {
     ImageParam input1(Int(16), 2, "input1");
     Func output1("output1"), output2("output2"), output3("output3");
     Var k{"k"};
@@ -2184,28 +1963,14 @@ int two_compute_at_test() {
     p.realize({o1, o2, o3});
 
     for (int x = 0; x < 8; x++) {
-        int val = (x * (x + 1)) * (x * (x + 1));
-        if (o1(x) != val) {
-            printf("o1(%d) = %d instead of %d\n",
-                   x, o1(x), val);
-            return 1;
-        }
-        if (o2(x) != 2 * val) {
-            printf("o2(%d) = %d instead of %d\n",
-                   x, o2(x), 2 * val);
-            return 1;
-        }
-        if (o3(x) != x + 2) {
-            printf("o2(%d) = %d instead of %d\n",
-                   x, o3(x), x + 2);
-            return 1;
-        }
+        EXPECT_EQ(o1(x), x * (x + 1) * (x * (x + 1))) << "x = " << x;
+        EXPECT_EQ(o2(x), x * (x + 1) * (x * (x + 1)) * 2) << "x = " << x;
+        EXPECT_EQ(o3(x), x + 2) << "x = " << x;
     }
-    return 0;
 }
 
 // Test for the issue described in https://github.com/halide/Halide/issues/8149.
-int child_var_dependent_bounds_test() {
+TEST_F(ComputeWithTest, ChildVarDependentBounds) {
     Func f{"f"}, g{"g"};
     Var x{"x"}, y{"y"};
     RDom r(0, 10, "r");
@@ -2237,20 +2002,12 @@ int child_var_dependent_bounds_test() {
     f_buf.set_min(0);
 
     for (int i = 0; i < 10; i++) {
-        int correct_f = 10 + 11 * (i + 2);
-        int correct_g = 10 + 11 * i;
-        if (f_buf(i) != correct_f) {
-            printf("f(%d) = %d instead of %d\n", i, f_buf(i), correct_f);
-        }
-        if (g_buf(i) != correct_g) {
-            printf("g(%d) = %d instead of %d\n", i, g_buf(i), correct_f);
-        }
+        EXPECT_EQ(f_buf(i), 10 + 11 * (i + 2)) << "i = " << i;
+        EXPECT_EQ(g_buf(i), 10 + 11 * i) << "i = " << i;
     }
-
-    return 0;
 }
 
-int overlapping_updates_test() {
+TEST_F(ComputeWithTest, OverlappingUpdates) {
     Func f{"f"}, g{"g"};
     Var x{"x"};
 
@@ -2272,80 +2029,7 @@ int overlapping_updates_test() {
     f_buf.set_min(0);
 
     for (int i = 0; i < 10; i++) {
-        int correct_f = i + 2;
-        int correct_g = i;
-        if (f_buf(i) != correct_f) {
-            printf("f(%d) = %d instead of %d\n", i, f_buf(i), correct_f);
-            return 1;
-        }
-        if (g_buf(i) != correct_g) {
-            printf("g(%d) = %d instead of %d\n", i, g_buf(i), correct_f);
-            return 1;
-        }
+        EXPECT_EQ(f_buf(i), i + 2) << "i = " << i;
+        EXPECT_EQ(g_buf(i), i) << "i = " << i;
     }
-
-    return 0;
-}
-
-}  // namespace
-
-int main(int argc, char **argv) {
-    struct Task {
-        std::string desc;
-        std::function<int()> fn;
-    };
-
-    std::vector<Task> tasks = {
-        {"split reorder test", split_test},
-        {"fuse test", fuse_test},
-        {"multiple fuse group test", multiple_fuse_group_test},
-        {"multiple outputs test", multiple_outputs_test},
-        {"double split fuse test", double_split_fuse_test},
-        {"vectorize test", vectorize_test},
-        //
-        // Note: we are deprecating skipping parts of a fused group in favor of
-        //       cloning funcs in particular stages via a new (clone_)in overload.
-        // TODO: remove this code when the new clone_in is implemented.
-        //
-        // {"some are skipped test", some_are_skipped_test},
-        {"rgb to yuv420 test", rgb_yuv420_test},
-        {"with specialization test", with_specialization_test},
-        {"fuse compute at test", fuse_compute_at_test},
-        {"nested compute with test", nested_compute_with_test},
-        {"mixed tile factor test", mixed_tile_factor_test},
-        // NOTE: disabled because it generates OOB (see #4751 for discussion).
-        // {"only some are tiled test", only_some_are_tiled_test},
-        {"multiple outputs on gpu test", multiple_outputs_on_gpu_test},
-        {"multi tile mixed tile factor test", multi_tile_mixed_tile_factor_test},
-        {"update stage test", update_stage_test},
-        {"update stage2 test", update_stage2_test},
-        {"update stage3 test", update_stage3_test},
-        {"update stage pairwise test", update_stage_pairwise_test},
-        // I think this should work, but there is an overzealous check somewhere.
-        // {"update stage pairwise zigzag test", update_stage_pairwise_zigzag_test},
-        {"update stage diagonal test", update_stage_diagonal_test},
-        {"update stage rfactor test", update_stage_rfactor_test},
-        {"vectorize inlined test", vectorize_inlined_test},
-        {"mismatching splits test", mismatching_splits_test},
-        {"different arg number compute_at test", different_arg_num_compute_at_test},
-        {"store_at different levels test", store_at_different_levels_test},
-        {"rvar bounds test", rvar_bounds_test},
-        {"two compute at test", two_compute_at_test},
-        {"overlapping updates test", overlapping_updates_test},
-        {"child var dependent bounds test", child_var_dependent_bounds_test},
-    };
-
-    using Sharder = Halide::Internal::Test::Sharder;
-    Sharder sharder;
-    for (size_t t = 0; t < tasks.size(); t++) {
-        if (!sharder.should_run(t)) continue;
-        const auto &task = tasks.at(t);
-        std::cout << task.desc << "\n";
-        if (task.fn() != 0) {
-            return 1;
-        }
-    }
-
-    printf("Success!\n");
-    return 0;
 }

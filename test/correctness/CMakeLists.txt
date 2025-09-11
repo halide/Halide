@@ -386,7 +386,7 @@ target_sources(
     atomic_tuples.cpp
     atomics.cpp
     compute_outermost.cpp
-    #    compute_with.cpp
+    compute_with.cpp
     convolution.cpp
     extern_consumer_tiled.cpp
     extern_stage.cpp
