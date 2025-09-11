@@ -1,10 +1,9 @@
 #include "Halide.h"
 #include "check_call_graphs.h"
+#include <gtest/gtest.h>
 
 #include <cstdio>
 #include <map>
-
-namespace {
 
 using std::map;
 using std::string;
@@ -13,7 +12,11 @@ using std::vector;
 using namespace Halide;
 using namespace Halide::Internal;
 
-int calling_wrapper_no_op_test() {
+namespace {
+class FuncWrapperTest : public ::testing::Test {};
+}  // namespace
+
+TEST_F(FuncWrapperTest, CallingWrapperNoOp) {
     Var x("x"), y("y");
 
     {
@@ -26,10 +29,7 @@ int calling_wrapper_no_op_test() {
         Func wrapper = f.in(g);
         for (int i = 0; i < 5; ++i) {
             Func temp = f.in(g);
-            if (wrapper.name() != temp.name()) {
-                std::cerr << "Expect " << wrapper.name() << "; got " << temp.name() << " instead\n";
-                return 1;
-            }
+            EXPECT_EQ(wrapper.name(), temp.name()) << "i = " << i;
         }
     }
 
@@ -41,10 +41,7 @@ int calling_wrapper_no_op_test() {
         // Should return the same global wrapper
         Func wrapper1 = f.in();
         Func wrapper2 = f.in();
-        if (wrapper1.name() != wrapper2.name()) {
-            std::cerr << "Expect " << wrapper1.name() << "; got " << wrapper2.name() << " instead\n";
-            return 1;
-        }
+        EXPECT_EQ(wrapper1.name(), wrapper2.name());
     }
 
     {
@@ -57,16 +54,11 @@ int calling_wrapper_no_op_test() {
 
         Func wrapper1 = d.in({e, f, g});
         Func wrapper2 = d.in({g, f, e});
-        if (wrapper1.name() != wrapper2.name()) {
-            std::cerr << "Expect " << wrapper1.name() << "; got " << wrapper2.name() << " instead\n";
-            return 1;
-        }
+        EXPECT_EQ(wrapper1.name(), wrapper2.name());
     }
-
-    return 0;
 }
 
-int func_wrapper_test() {
+TEST_F(FuncWrapperTest, BasicFuncWrapper) {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
@@ -83,19 +75,13 @@ int func_wrapper_test() {
         {wrapper.name(), {f.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(g, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(g, expected), 0);
 
     Buffer<int> im = g.realize({200, 200});
-    auto func = [](int x, int y) { return x; };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(check_image(im, [](int x, int y) { return x; }), 0);
 }
 
-int multiple_funcs_sharing_wrapper_test() {
+TEST_F(FuncWrapperTest, MultipleFuncsSharingWrapper) {
     Func f("f"), g1("g1"), g2("g2"), g3("g3");
     Var x("x"), y("y");
 
@@ -118,28 +104,19 @@ int multiple_funcs_sharing_wrapper_test() {
         {f_wrapper.name(), {f.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(p, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(p, expected), 0);
 
     Realization r = p.realize({200, 200});
     Buffer<int> img1 = r[0];
     Buffer<int> img2 = r[1];
     Buffer<int> img3 = r[2];
     auto func = [](int x, int y) { return x; };
-    if (check_image(img1, func)) {
-        return 1;
-    }
-    if (check_image(img2, func)) {
-        return 1;
-    }
-    if (check_image(img3, func)) {
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(check_image(img1, func), 0);
+    EXPECT_EQ(check_image(img2, func), 0);
+    EXPECT_EQ(check_image(img3, func), 0);
 }
 
-int global_wrapper_test() {
+TEST_F(FuncWrapperTest, GlobalWrapper) {
     Func f("f"), g("g"), h("h"), i("i");
     Var x("x"), y("y");
 
@@ -163,19 +140,13 @@ int global_wrapper_test() {
         {wrapper.name(), {f.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(h, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(h, expected), 0);
 
     Buffer<int> im = h.realize({200, 200});
-    auto func = [](int x, int y) { return 2 * (x + y); };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(check_image(im, [](int x, int y) { return 2 * (x + y); }), 0);
 }
 
-int update_defined_after_wrapper_test() {
+TEST_F(FuncWrapperTest, UpdateDefinedAfterWrapper) {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
@@ -204,26 +175,20 @@ int update_defined_after_wrapper_test() {
         {wrapper.name(), {f.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(g, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(g, expected), 0);
 
     for (bool param_value : {false, true}) {
         param.set(param_value);
 
         Buffer<int> im = g.realize({200, 200});
-        auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
-        };
-        if (check_image(im, func)) {
-            return 1;
-        }
+        EXPECT_EQ(check_image(im, [](int x, int y) {
+                      return 0 <= x && x <= 99 && 0 <= y && y <= 99 && x < y ? 3 * (x + y) : x + y;
+                  }),
+                  0);
     }
-
-    return 0;
 }
 
-int rdom_wrapper_test() {
+TEST_F(FuncWrapperTest, RdomWrapper) {
     Func f("f"), g("g"), result("result");
     Var x("x"), y("y");
 
@@ -250,19 +215,13 @@ int rdom_wrapper_test() {
         {wrapper.name(), {g.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(wrapper, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(wrapper, expected), 0);
 
     Buffer<int> im = wrapper.realize({W, H});
-    auto func = [](int x, int y) { return 4 * x + 6 * y + 10; };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(check_image(im, [](int x, int y) { return 4 * x + 6 * y + 10; }), 0);
 }
 
-int global_and_custom_wrapper_test() {
+TEST_F(FuncWrapperTest, GlobalAndCustomWrapper) {
     Func f("f"), g("g"), result("result");
     Var x("x"), y("y");
 
@@ -286,19 +245,13 @@ int global_and_custom_wrapper_test() {
         {f_in_g.name(), {f.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(result, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(result, expected), 0);
 
     Buffer<int> im = result.realize({200, 200});
-    auto func = [](int x, int y) { return 2 * x; };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(check_image(im, [](int x, int y) { return 2 * x; }), 0);
 }
 
-int wrapper_depend_on_mutated_func_test() {
+TEST_F(FuncWrapperTest, WrapperDependOnMutatedFunc) {
     Func e("e"), f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
@@ -327,19 +280,13 @@ int wrapper_depend_on_mutated_func_test() {
         {e_in_f.name(), {e.name()}},
         {e.name(), {}},
     };
-    if (check_call_graphs(h, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(h, expected), 0);
 
     Buffer<int> im = h.realize({200, 200});
-    auto func = [](int x, int y) { return x + y; };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(check_image(im, [](int x, int y) { return x + y; }), 0);
 }
 
-int wrapper_on_wrapper_test() {
+TEST_F(FuncWrapperTest, WrapperOnWrapper) {
     Func e("e"), f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
@@ -367,19 +314,13 @@ int wrapper_on_wrapper_test() {
         {f.name(), {e.name()}},
         {e.name(), {}},
     };
-    if (check_call_graphs(h, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(h, expected), 0);
 
     Buffer<int> im = h.realize({200, 200});
-    auto func = [](int x, int y) { return 4 * (x + y); };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(check_image(im, [](int x, int y) { return 4 * (x + y); }), 0);
 }
 
-int wrapper_on_rdom_predicate_test() {
+TEST_F(FuncWrapperTest, WrapperOnRdomPredicate) {
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
@@ -406,21 +347,16 @@ int wrapper_on_rdom_predicate_test() {
         {h_wrapper.name(), {h.name()}},
         {h.name(), {}},
     };
-    if (check_call_graphs(g, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(g, expected), 0);
 
     Buffer<int> im = g.realize({200, 200});
-    auto func = [](int x, int y) {
-        return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x + y + 5 < 50)) ? 15 : 10;
-    };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(check_image(im, [](int x, int y) {
+                  return 0 <= x && x <= 99 && 0 <= y && y <= 99 && x + y + 5 < 50 ? 15 : 10;
+              }),
+              0);
 }
 
-int two_fold_wrapper_test() {
+TEST_F(FuncWrapperTest, TwoFoldWrapper) {
     Func input("input"), input_in_output_in_output, input_in_output, output("output");
     Var x("x"), y("y");
 
@@ -442,19 +378,13 @@ int two_fold_wrapper_test() {
         {input_in_output.name(), {input.name()}},
         {input.name(), {}},
     };
-    if (check_call_graphs(output, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(output, expected), 0);
 
     Buffer<int> im = output.realize({1024, 1024});
-    auto func = [](int x, int y) { return 3 * x + 2 * y; };
-    if (check_image(im, func)) {
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(check_image(im, [](int x, int y) { return 3 * x + 2 * y; }), 0);
 }
 
-int multi_folds_wrapper_test() {
+TEST_F(FuncWrapperTest, MultiFoldsWrapper) {
     Func f("f"), f_in_g_in_g, f_in_g, f_in_g_in_g_in_h, f_in_g_in_g_in_h_in_h, g("g"), h("h");
     Var x("x"), y("y");
 
@@ -484,24 +414,17 @@ int multi_folds_wrapper_test() {
         {f_in_g_in_g_in_h_in_h.name(), {f_in_g_in_g_in_h.name()}},
         {f_in_g_in_g_in_h.name(), {f_in_g_in_g.name()}},
     };
-    if (check_call_graphs(p, expected) != 0) {
-        return 1;
-    }
+    EXPECT_EQ(check_call_graphs(p, expected), 0);
 
     Realization r = p.realize({1024, 1024});
     Buffer<int> img_g = r[0];
     Buffer<int> img_h = r[1];
     auto func = [](int x, int y) { return 3 * x + 2 * y; };
-    if (check_image(img_g, func)) {
-        return 1;
-    }
-    if (check_image(img_h, func)) {
-        return 1;
-    }
-    return 0;
+    EXPECT_EQ(check_image(img_g, func), 0);
+    EXPECT_EQ(check_image(img_h, func), 0);
 }
 
-int lots_of_wrappers_test() {
+TEST_F(FuncWrapperTest, LotsOfWrappers) {
     // This is a case that showed up in practice. It demonstrates that
     // it's important that the different wrappers of a Func get
     // different names.
@@ -532,78 +455,5 @@ int lots_of_wrappers_test() {
     }
 
     // This used to crash
-    funcs.back().compile_jit();
-    return 0;
-}
-
-}  // namespace
-
-int main(int argc, char **argv) {
-    printf("Running calling wrap no op test\n");
-    if (calling_wrapper_no_op_test() != 0) {
-        return 1;
-    }
-
-    printf("Running func wrap test\n");
-    if (func_wrapper_test() != 0) {
-        return 1;
-    }
-
-    printf("Running multiple funcs sharing wrapper test\n");
-    if (multiple_funcs_sharing_wrapper_test() != 0) {
-        return 1;
-    }
-
-    printf("Running global wrap test\n");
-    if (global_wrapper_test() != 0) {
-        return 1;
-    }
-
-    printf("Running update is defined after wrap test\n");
-    if (update_defined_after_wrapper_test() != 0) {
-        return 1;
-    }
-
-    printf("Running rdom wrapper test\n");
-    if (rdom_wrapper_test() != 0) {
-        return 1;
-    }
-
-    printf("Running global + custom wrapper test\n");
-    if (global_and_custom_wrapper_test() != 0) {
-        return 1;
-    }
-
-    printf("Running wrapper depend on mutated func test\n");
-    if (wrapper_depend_on_mutated_func_test() != 0) {
-        return 1;
-    }
-
-    printf("Running wrapper on wrapper test\n");
-    if (wrapper_on_wrapper_test() != 0) {
-        return 1;
-    }
-
-    printf("Running wrapper on rdom predicate test\n");
-    if (wrapper_on_rdom_predicate_test() != 0) {
-        return 1;
-    }
-
-    printf("Running two fold wrapper test\n");
-    if (two_fold_wrapper_test() != 0) {
-        return 1;
-    }
-
-    printf("Running multi folds wrapper test\n");
-    if (multi_folds_wrapper_test() != 0) {
-        return 1;
-    }
-
-    printf("Running lots of wrappers test\n");
-    if (lots_of_wrappers_test() != 0) {
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    ASSERT_NO_THROW(funcs.back().compile_jit());
 }
