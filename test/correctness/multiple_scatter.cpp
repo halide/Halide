@@ -1,10 +1,15 @@
 #include "Halide.h"
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 using namespace Halide;
-
 using std::vector;
 
-int main(int argc, char **argv) {
+namespace {
+class MultipleScatterTest : public ::testing::Test {};
+}  // namespace
+
+TEST_F(MultipleScatterTest, SortingNetwork) {
     // Implement a sorting network using update definitions that write to multiple outputs
 
     // The links in the sorting network. Sorts 8 things.
@@ -88,163 +93,136 @@ int main(int argc, char **argv) {
         }
         std::sort(correct.begin(), correct.end());
         for (int j = 0; j < output1.dim(1).extent(); j++) {
-            if (output1(i, j) != correct[j]) {
-                printf("output1(%d, %d) = %d instead of %d\n", i, j, output1(i, j), correct[j]);
-                return 1;
-            }
-            if (output2(i, j) != correct[j]) {
-                printf("output2(%d, %d) = %d instead of %d\n", i, j, output2(i, j), correct[j]);
-                return 1;
-            }
+            SCOPED_TRACE(testing::Message() << "i = " << i << ", j = " << j);
+            EXPECT_EQ(output1(i, j), correct[j]);
+            EXPECT_EQ(output2(i, j), correct[j]);
         }
     }
+}
 
-    {
-        // An update definitions that rotates a square region in-place.
+TEST_F(MultipleScatterTest, InPlaceRotation) {
+    // An update definitions that rotates a square region in-place.
+    const int sz = 17;
+    SCOPED_TRACE(testing::Message() << "sz = " << sz);
 
-        const int sz = 17;
-        Buffer<uint8_t> input(sz, sz);
-        std::mt19937 rng;
-        input.fill([&](int x, int y) { return (uint8_t)(rng() & 0xff); });
+    Buffer<uint8_t> input(sz, sz);
+    std::mt19937 rng;
+    input.fill([&](int x, int y) { return (uint8_t)(rng() & 0xff); });
 
-        Func rot;
-        rot(x, y) = input(x, y);
+    Func rot;
+    Var x, y;
+    rot(x, y) = input(x, y);
 
-        RDom r(0, (sz + 1) / 2, 0, sz / 2);
+    RDom r(0, (sz + 1) / 2, 0, sz / 2);
 
-        vector<Expr> src_x{r.x, sz - 1 - r.y, sz - 1 - r.x, r.y};
-        vector<Expr> src_y{r.y, r.x, sz - 1 - r.y, sz - 1 - r.x};
-        vector<Expr> dst_x = src_x, dst_y = src_y;
+    vector<Expr> src_x{r.x, sz - 1 - r.y, sz - 1 - r.x, r.y};
+    vector<Expr> src_y{r.y, r.x, sz - 1 - r.y, sz - 1 - r.x};
+    vector<Expr> dst_x = src_x, dst_y = src_y;
 
-        std::rotate(dst_x.begin(), dst_x.begin() + 1, dst_x.end());
-        std::rotate(dst_y.begin(), dst_y.begin() + 1, dst_y.end());
+    std::rotate(dst_x.begin(), dst_x.begin() + 1, dst_x.end());
+    std::rotate(dst_y.begin(), dst_y.begin() + 1, dst_y.end());
 
-        rot(scatter(dst_x), scatter(dst_y)) =
-            rot(gather(src_x), gather(src_y));
+    rot(scatter(dst_x), scatter(dst_y)) =
+        rot(gather(src_x), gather(src_y));
 
-        Buffer<uint8_t> output = rot.realize({sz, sz});
+    Buffer<uint8_t> output = rot.realize({sz, sz});
 
-        for (int y = 0; y < sz; y++) {
-            for (int x = 0; x < sz; x++) {
-                int correct = input(y, sz - 1 - x);
-                if (output(x, y) != correct) {
-                    printf("output(%d, %d) = %d instead of %d\n",
-                           x, y, output(x, y), correct);
-                    return 1;
-                }
-            }
+    for (int y = 0; y < sz; y++) {
+        for (int x = 0; x < sz; x++) {
+            EXPECT_EQ(output(x, y), input(y, sz - 1 - x)) << "x = " << x << ", y = " << y;
         }
     }
+}
 
-    {
-        // Atomic complex multiplication modulo 2^256 where the complex numbers
-        // are a dimension of the Func rather than a tuple
+TEST_F(MultipleScatterTest, AtomicComplexMultiplication) {
+    // Atomic complex multiplication modulo 2^256 where the complex numbers
+    // are a dimension of the Func rather than a tuple
 
-        Buffer<uint8_t> input(2, 100);
-        std::mt19937 rng;
-        input.fill([&](int x, int y) { return (uint8_t)(rng() & 0xff); });
+    Buffer<uint8_t> input(2, 100);
+    std::mt19937 rng;
+    input.fill([&](int x, int y) { return (uint8_t)(rng() & 0xff); });
 
-        Func prod;
-        Var x;
-        RDom r(0, input.dim(1).extent());
-        prod(x) = cast<uint8_t>(mux(x, {1, 0}));
-        prod(scatter(0, 1)) =
-            gather(prod(0) * input(0, r) - prod(1) * input(1, r),
-                   prod(0) * input(1, r) + prod(1) * input(0, r));
+    Func prod;
+    Var x;
+    RDom r(0, input.dim(1).extent());
+    prod(x) = cast<uint8_t>(mux(x, {1, 0}));
+    prod(scatter(0, 1)) =
+        gather(prod(0) * input(0, r) - prod(1) * input(1, r),
+               prod(0) * input(1, r) + prod(1) * input(0, r));
 
-        // TODO: We don't currently recognize this as an
-        // associative update, so for now we force it by passing
-        // 'true' to atomic().
-        prod.update().atomic(true).parallel(r);
+    // TODO: We don't currently recognize this as an
+    //   associative update, so for now we force it by passing
+    //   'true' to atomic().
+    prod.update().atomic(true).parallel(r);
 
-        Buffer<uint8_t> result = prod.realize({2});
+    Buffer<uint8_t> result = prod.realize({2});
 
-        uint8_t correct_re = 1, correct_im = 0;
-        for (int i = 0; i < input.dim(1).extent(); i++) {
-            int new_re = correct_re * input(0, i) - correct_im * input(1, i);
-            int new_im = correct_re * input(1, i) + correct_im * input(0, i);
-            correct_re = new_re;
-            correct_im = new_im;
-        }
-
-        if (correct_re != result(0) || correct_im != result(1)) {
-            printf("Complex multiplication reduction produced wrong result: \n"
-                   "Got %d + %di instead of %d + %di\n",
-                   result(0), result(1), correct_re, correct_im);
-        }
+    uint8_t correct_re = 1, correct_im = 0;
+    for (int i = 0; i < input.dim(1).extent(); i++) {
+        int new_re = correct_re * input(0, i) - correct_im * input(1, i);
+        int new_im = correct_re * input(1, i) + correct_im * input(0, i);
+        correct_re = new_re;
+        correct_im = new_im;
     }
 
-    {
-        // Lexicographic bubble sort on tuples
-        Func f;
-        Var x, y;
+    EXPECT_EQ(result(0), correct_re) << "Real part mismatch";
+    EXPECT_EQ(result(1), correct_im) << "Imaginary part mismatch";
+}
 
-        f(x) = {13 - (x % 10), cast<uint8_t>(x * 17)};
+TEST_F(MultipleScatterTest, LexicographicBubbleSort) {
+    // Lexicographic bubble sort on tuples
+    Func f;
+    Var x, y;
 
-        RDom r(0, 99, 0, 99);
-        r.where(r.x < 99 - r.y);
+    f(x) = {13 - (x % 10), cast<uint8_t>(x * 17)};
 
-        Expr should_swap = (f(r.x)[0] > f(r.x + 1)[0] ||
-                            (f(r.x)[0] == f(r.x + 1)[0] &&
-                             f(r.x)[1] > f(r.x + 1)[1]));
-        r.where(should_swap);
+    RDom r(0, 99, 0, 99);
+    r.where(r.x < 99 - r.y);
 
-        // Swap elements that satisfy the RDom predicate
-        f(scatter(r.x, r.x + 1)) = f(gather(r.x + 1, r.x));
+    Expr should_swap = (f(r.x)[0] > f(r.x + 1)[0] ||
+                        (f(r.x)[0] == f(r.x + 1)[0] &&
+                         f(r.x)[1] > f(r.x + 1)[1]));
+    r.where(should_swap);
 
-        Buffer<int> out_0(100);
-        Buffer<uint8_t> out_1(100);
-        f.realize({out_0, out_1});
+    // Swap elements that satisfy the RDom predicate
+    f(scatter(r.x, r.x + 1)) = f(gather(r.x + 1, r.x));
 
-        for (int i = 0; i < 99; i++) {
-            bool check = (out_0(i) < out_0(i + 1) ||
-                          (out_0(i) == out_0(i + 1) && out_1(i) < out_1(i + 1)));
-            if (!check) {
-                printf("Sort result is not correctly ordered at elements %d, %d:\n"
-                       "(%d, %d) vs (%d, %d)\n",
-                       i, i + 1, out_0(i), out_1(i), out_0(i + 1), out_1(i + 1));
-                return 1;
-            }
-        }
+    Buffer<int> out_0(100);
+    Buffer<uint8_t> out_1(100);
+    f.realize({out_0, out_1});
+
+    for (int i = 0; i < 99; i++) {
+        auto out_i = std::make_pair(out_0(i), (int)out_1(i));
+        auto out_j = std::make_pair(out_0(i + 1), (int)out_1(i + 1));
+        EXPECT_LT(out_i, out_j) << "i = " << i << ", j = " << i + 1;
     }
+}
 
-    {
-        // A scatter can exist without a gather if you're just broadcasting
-        Func f;
-        Var x;
-        f(x) = 0;
-        f(scatter(0, 1, 2, 3)) = 5;
+TEST_F(MultipleScatterTest, ScatterWithoutGather) {
+    // A scatter can exist without a gather if you're just broadcasting
+    Func f;
+    Var x;
+    f(x) = 0;
+    f(scatter(0, 1, 2, 3)) = 5;
 
-        Buffer<int> out = f.realize({5});
-        for (int i = 0; i < 5; i++) {
-            int correct = i < 4 ? 5 : 0;
-            if (out(i) != correct) {
-                printf("out(%d) = %d instead of %d\n", i, out(i), correct);
-                return 1;
-            }
-        }
+    Buffer<int> out = f.realize({5});
+    for (int i = 0; i < 5; i++) {
+        EXPECT_EQ(out(i), i < 4 ? 5 : 0) << "i = " << i;
     }
+}
 
-    {
-        // A gather can exist without a scatter, but it's sort of
-        // silly because last element wins. It's not outright
-        // disallowed because it may be a degenerate case of some
-        // generic code.
-        Func f;
-        Var x;
-        f(x) = 0;
-        f(3) = gather(1, 9);
+TEST_F(MultipleScatterTest, GatherWithoutScatter) {
+    // A gather can exist without a scatter, but it's sort of
+    // silly because last element wins. It's not outright
+    // disallowed because it may be a degenerate case of some
+    // generic code.
+    Func f;
+    Var x;
+    f(x) = 0;
+    f(3) = gather(1, 9);
 
-        Buffer<int> out = f.realize({5});
-        for (int i = 0; i < 5; i++) {
-            int correct = i == 3 ? 9 : 0;
-            if (out(i) != correct) {
-                printf("out(%d) = %d instead of %d\n", i, out(i), correct);
-                return 1;
-            }
-        }
+    Buffer<int> out = f.realize({5});
+    for (int i = 0; i < 5; i++) {
+        EXPECT_EQ(out(i), i == 3 ? 9 : 0) << "i = " << i;
     }
-
-    printf("Success!\n");
-    return 0;
 }

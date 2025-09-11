@@ -1,7 +1,19 @@
 #include "Halide.h"
+#include <gtest/gtest.h>
 #include <stdio.h>
 
 using namespace Halide;
+
+namespace {
+class TiledMatmulTest : public ::testing::Test {
+protected:
+    Target target{get_jit_target_from_environment()};
+    void SetUp() override {
+        if (!target.has_feature(Target::AVX512_SapphireRapids)) {
+            GTEST_SKIP() << "No AMX target enabled";
+        }
+    }
+};
 
 void fill_buffer_a_bf16(Buffer<bfloat16_t> &buf, int row, int acc) {
     for (int iy = 0; iy < row; ++iy) {
@@ -44,51 +56,8 @@ void fill_buffer_b(Buffer<IntT> &buf, int col, int acc) {
     }
 }
 
-bool equal_eps(float lhs, float rhs, float eps) {
-    return std::abs(lhs - rhs) < eps;
-}
-
-struct make_uint_t {
-    template<typename... Args>
-    Type operator()(Args &&...args) const {
-        return UInt(static_cast<Args &&>(args)...);
-    }
-};
-
-struct make_int_t {
-    template<typename... Args>
-    Type operator()(Args &&...args) const {
-        return Int(static_cast<Args &&>(args)...);
-    }
-};
-
-template<typename T>
-void print_mat(const Buffer<T> &buf, int rows, int cols) {
-    using cast_T = std::conditional_t<std::is_integral_v<T>, int, T>;
-    for (int j = 0; j != rows; ++j) {
-        for (int i = 0; i != cols; ++i) {
-            std::cout << static_cast<cast_T>(buf(i, j)) << " ";
-        }
-        std::cout << std::endl;
-    }
-}
-
-template<typename T>
-void print_mat_rhs(const Buffer<T> &buf, int rows, int cols) {
-    using cast_T = std::conditional_t<std::is_integral_v<T>, int, T>;
-    for (int j = 0; j != (rows / (4 / sizeof(T))); ++j) {
-        for (int k = 0; k != (4 / sizeof(T)); ++k) {
-            for (int i = 0; i != cols; ++i) {
-                std::cout << static_cast<cast_T>(buf(k, i, j)) << " ";
-            }
-
-            std::cout << std::endl;
-        }
-    }
-}
-
 template<typename LhsInt8, typename RhsInt8>
-bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
+void matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
     Buffer<LhsInt8> A_buf(acc, row);
     Buffer<RhsInt8> B_buf(4, col, acc / 4);
 
@@ -135,35 +104,21 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
 
     result.realize(out);
 
-    // uncomment to check the matrices
-    // std::cout << "Matrix A\n";
-    // print_mat(A_buf, row, acc);
-    // std::cout << "Matrix B\n";
-    // print_mat_rhs(B_buf, acc, col);
-
-    // std::cout << "result\n";
-    // print_mat(out, row, col);
-
     for (int j = 0; j < row; ++j) {
         for (int i = 0; i < col; ++i) {
             int32_t val = 0;
             for (int k = 0; k < acc; ++k) {
                 val += static_cast<int32_t>(A_buf(k, j)) * static_cast<int32_t>(B_buf(k % 4, i, k / 4));
             }
-            if (val != out(i, j)) {
-                std::cerr << "Invalid result at " << i << ", " << j << "\n"
-                          << out(i, j) << " != " << val << "\n"
-                          << "Matrix dims: " << row << "x" << col << "x" << acc << "\nTile dims: " << tile_x << "x" << tile_y << "x" << tile_r << "\n";
-                return false;
-            }
+            EXPECT_EQ(out(i, j), val)
+                << "i = " << i << ", j = " << j << "\n"
+                << "Matrix dims: " << row << "x" << col << "x" << acc << "\n"
+                << "Tile dims: " << tile_x << "x" << tile_y << "x" << tile_r;
         }
     }
-
-    std::cout << "Success!\n";
-    return true;
 }
 
-bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
+void matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
     Var x("x"), y("y");
     Buffer<bfloat16_t> A(acc, row);
     Buffer<bfloat16_t> B(2, col, acc / 2);
@@ -207,21 +162,7 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) 
     fill_buffer_b_bf16(B, col, acc);
 
     Buffer<float> out(col, row);
-
-    // Uncomment to check the asm
-    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
-    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
-
     result.realize(out);
-
-    // uncomment to check the matrices
-    // std::cout << "Matrix A\n";
-    // print_mat(A, row, acc);
-    // std::cout << "Matrix B\n";
-    // print_mat_rhs(B, acc, col);
-
-    // std::cout << "result\n";
-    // print_mat(out, row, col);
 
     for (int j = 0; j < row; ++j) {
         for (int i = 0; i < col; ++i) {
@@ -229,59 +170,38 @@ bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) 
             for (int k = 0; k < acc; ++k) {
                 val += static_cast<float>(A(k, j)) * static_cast<float>(B(k % 2, i, k / 2));
             }
-            if (!equal_eps(val, out(i, j), 0.03f)) {
-                std::cerr << "Invalid result at " << i << ", " << j << "\n"
-                          << out(i, j) << " != " << val << "\n"
-                          << "Matrix dims: " << row << "x" << col << "x" << acc << "\nTile dims: " << tile_x << "x" << tile_y << "x" << tile_r << "\n";
-                return false;
-            }
+            EXPECT_NEAR(out(i, j), val, 0.03f)
+                << "i = " << i << ", j = " << j << "\n"
+                << "Matrix dims: " << row << "x" << col << "x" << acc << "\n"
+                << "Tile dims: " << tile_x << "x" << tile_y << "x" << tile_r;
         }
     }
-
-    std::cout << "Success!\n";
-    return true;
 }
 
-auto matmul_ss = &matmul<int8_t, int8_t>;
-auto matmul_us = &matmul<uint8_t, int8_t>;
-auto matmul_su = &matmul<int8_t, uint8_t>;
-auto matmul_uu = &matmul<uint8_t, uint8_t>;
+void run_tests(void (*fn)(int, int, int, int, int, int), int element_width) {
+    fn(2, 2, 16, 2, 2, 8 / element_width);
+    fn(4, 4, 8, 4, 4, 8 / element_width);
+    fn(32, 32, 32, 8, 8, 8 / element_width);
+    fn(32, 32, 32, 8, 8, 4 / element_width);
+}
+}  // namespace
 
-bool run_tests(bool (*fn)(int, int, int, int, int, int), int element_width) {
-    return fn(2, 2, 16, 2, 2, 8 / element_width) && fn(4, 4, 8, 4, 4, 8 / element_width) && fn(32, 32, 32, 8, 8, 8 / element_width) && fn(32, 32, 32, 8, 8, 4 / element_width);
+TEST_F(TiledMatmulTest, SignedSigned) {
+    run_tests(matmul<int8_t, int8_t>, 1);
 }
 
-int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-    if (!t.has_feature(Target::AVX512_SapphireRapids)) {
-        printf("[SKIP] No AMX target enabled\n");
-        return 0;
-    }
+TEST_F(TiledMatmulTest, SignedUnsigned) {
+    run_tests(matmul<int8_t, uint8_t>, 1);
+}
 
-    printf("Running AMX matmul (signed/signed)\n");
-    if (!run_tests(matmul_ss, 1)) {
-        return 1;
-    }
+TEST_F(TiledMatmulTest, UnsignedSigned) {
+    run_tests(matmul<uint8_t, int8_t>, 1);
+}
 
-    printf("Running AMX matmul (signed/unsigned)\n");
-    if (!run_tests(matmul_su, 1)) {
-        return 1;
-    }
+TEST_F(TiledMatmulTest, UnsignedUnsigned) {
+    run_tests(matmul<uint8_t, uint8_t>, 1);
+}
 
-    printf("Running AMX matmul (unsigned/signed)\n");
-    if (!run_tests(matmul_us, 1)) {
-        return 1;
-    }
-
-    printf("Running AMX matmul (unsigned/unsigned)\n");
-    if (!run_tests(matmul_uu, 1)) {
-        return 1;
-    }
-
-    printf("Running AMX matmul (bf16)\n");
-    if (!run_tests(matmul_bf16, 2)) {
-        return 1;
-    }
-
-    return 0;
+TEST_F(TiledMatmulTest, Bfloat16) {
+    run_tests(matmul_bf16, 2);
 }

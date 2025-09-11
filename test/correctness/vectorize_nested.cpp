@@ -1,9 +1,14 @@
 #include "Halide.h"
 #include "check_call_graphs.h"
+#include <gtest/gtest.h>
 
 using namespace Halide;
 
-int vectorize_2d_round_up() {
+namespace {
+class VectorizeNestedTest : public ::testing::Test {};
+}  // namespace
+
+TEST_F(VectorizeNestedTest, Vectorize2dRoundUp) {
     const int width = 32;
     const int height = 24;
 
@@ -22,14 +27,10 @@ int vectorize_2d_round_up() {
     auto cmp_func = [](int x, int y) {
         return 3 * x + y;
     };
-    if (check_image(result, cmp_func)) {
-        return 1;
-    }
-
-    return 0;
+    EXPECT_EQ(check_image(result, cmp_func), 0);
 }
 
-int vectorize_2d_guard_with_if_and_predicate() {
+TEST_F(VectorizeNestedTest, Vectorize2dGuardWithIfAndPredicate) {
     for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
         const int width = 33;
         const int height = 22;
@@ -49,14 +50,11 @@ int vectorize_2d_guard_with_if_and_predicate() {
         auto cmp_func = [](int x, int y) {
             return 3 * x + y;
         };
-        if (check_image(result, cmp_func)) {
-            return 1;
-        }
+        EXPECT_EQ(check_image(result, cmp_func), 0);
     }
-    return 0;
 }
 
-int vectorize_2d_inlined_with_update() {
+TEST_F(VectorizeNestedTest, Vectorize2dInlinedWithUpdate) {
     const int width = 33;
     const int height = 22;
 
@@ -77,14 +75,10 @@ int vectorize_2d_inlined_with_update() {
     auto cmp_func = [](int x, int y) {
         return x + 2 * y + 45;
     };
-    if (check_image(result, cmp_func)) {
-        return 1;
-    }
-
-    return 0;
+    EXPECT_EQ(check_image(result, cmp_func), 0);
 }
 
-int vectorize_2d_with_inner_for() {
+TEST_F(VectorizeNestedTest, Vectorize2dWithInnerFor) {
     const int width = 33;
     const int height = 22;
 
@@ -103,14 +97,10 @@ int vectorize_2d_with_inner_for() {
     auto cmp_func = [](int x, int y, int c) {
         return 3 * x + y + 7 * c;
     };
-    if (check_image(result, cmp_func)) {
-        return 1;
-    }
-
-    return 0;
+    EXPECT_EQ(check_image(result, cmp_func), 0);
 }
 
-int vectorize_2d_with_compute_at_vectorized() {
+TEST_F(VectorizeNestedTest, Vectorize2dWithComputeAtVectorized) {
     const int width = 16;
     const int height = 16;
 
@@ -128,14 +118,10 @@ int vectorize_2d_with_compute_at_vectorized() {
     auto cmp_func = [](int x, int y) {
         return 6 * x + 3 + 2 * y;
     };
-    if (check_image(result, cmp_func)) {
-        return 1;
-    }
-
-    return 0;
+    EXPECT_EQ(check_image(result, cmp_func), 0);
 }
 
-int vectorize_2d_with_compute_at() {
+TEST_F(VectorizeNestedTest, Vectorize2dWithComputeAt) {
     const int width = 35;
     const int height = 17;
 
@@ -156,14 +142,10 @@ int vectorize_2d_with_compute_at() {
     auto cmp_func = [](int x, int y) {
         return 6 * x + 3 + 2 * y;
     };
-    if (check_image(result, cmp_func)) {
-        return 1;
-    }
-
-    return 0;
+    EXPECT_EQ(check_image(result, cmp_func), 0);
 }
 
-int vectorize_all_d() {
+TEST_F(VectorizeNestedTest, VectorizeAllD) {
     const int width = 12;
     const int height = 10;
 
@@ -185,14 +167,10 @@ int vectorize_all_d() {
     auto cmp_func = [](int x, int y) {
         return 3 * x + y;
     };
-    if (check_image(result, cmp_func)) {
-        return 1;
-    }
-
-    return 0;
+    EXPECT_EQ(check_image(result, cmp_func), 0);
 }
 
-int vectorize_lets_order() {
+TEST_F(VectorizeNestedTest, VectorizeLetsOrder) {
     const int width = 128;
     const int height = 128;
 
@@ -209,13 +187,9 @@ int vectorize_lets_order() {
     auto cmp_func = [](int x, int y) {
         return x + y;
     };
-    if (check_image(result, cmp_func)) {
-        return 1;
-    }
-
-    return 0;
+    EXPECT_EQ(check_image(result, cmp_func), 0);
 }
-int vectorize_inner_of_scalarization() {
+TEST_F(VectorizeNestedTest, VectorizeInnerOfScalarization) {
     ImageParam in(UInt(8), 2);
 
     Var x("x_inner"), y("y_inner");
@@ -230,98 +204,27 @@ int vectorize_inner_of_scalarization() {
         .vectorize(y);
 
     // We are looking for a specific loop, which shouldn't have been scalarized.
-    class CheckForScalarizedLoop : public Internal::IRMutator {
+    struct CheckForScalarizedLoop : Internal::IRMutator {
         using IRMutator::visit;
 
         Internal::Stmt visit(const Internal::For *op) override {
             if (Internal::ends_with(op->name, ".x_inner")) {
-                *x_loop_found = true;
+                x_loop_found = true;
             }
 
             if (Internal::ends_with(op->name, ".y_inner")) {
-                *y_loop_found = true;
+                y_loop_found = true;
             }
 
             return IRMutator::visit(op);
         }
-
-    public:
-        explicit CheckForScalarizedLoop(bool *fx, bool *fy)
-            : x_loop_found(fx), y_loop_found(fy) {
-        }
-
-        bool *x_loop_found = nullptr;
-        bool *y_loop_found = nullptr;
-    };
-
-    bool is_x_loop_found = false;
-    bool is_y_loop_found = false;
-
-    out.add_custom_lowering_pass(new CheckForScalarizedLoop(&is_x_loop_found, &is_y_loop_found));
+        bool x_loop_found = false;
+        bool y_loop_found = false;
+    } checker;
+    out.add_custom_lowering_pass(&checker, nullptr);
 
     out.compile_jit();
 
-    if (is_x_loop_found) {
-        std::cerr << "Found scalarized loop for " << x << "\n";
-
-        return 1;
-    }
-
-    if (!is_y_loop_found) {
-        std::cerr << "Expected to find scalarized loop for " << y << "\n";
-
-        return 1;
-    }
-
-    return 0;
-}
-
-int main(int argc, char **argv) {
-    if (vectorize_2d_round_up()) {
-        printf("vectorize_2d_round_up failed\n");
-        return 1;
-    }
-
-    if (vectorize_2d_guard_with_if_and_predicate()) {
-        printf("vectorize_2d_guard_with_if failed\n");
-        return 1;
-    }
-
-    if (vectorize_2d_inlined_with_update()) {
-        printf("vectorize_2d_inlined_with_update failed\n");
-        return 1;
-    }
-
-    if (vectorize_2d_with_inner_for()) {
-        printf("vectorize_2d_with_inner_for failed\n");
-        return 1;
-    }
-
-    if (vectorize_2d_with_compute_at()) {
-        printf("vectorize_2d_with_compute_at failed\n");
-        return 1;
-    }
-
-    if (vectorize_2d_with_compute_at_vectorized()) {
-        printf("vectorize_2d_with_compute_at_vectorized failed\n");
-        return 1;
-    }
-
-    if (vectorize_all_d()) {
-        printf("vectorize_all_d failed\n");
-        return 1;
-    }
-
-    if (vectorize_lets_order()) {
-        printf("vectorize_lets_order failed\n");
-        return 1;
-    }
-
-    if (vectorize_inner_of_scalarization()) {
-        printf("vectorize_inner_of_scalarization failed\n");
-        return 1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    EXPECT_FALSE(checker.x_loop_found) << "Found scalarized loop for " << x;
+    EXPECT_TRUE(checker.y_loop_found) << "Expected to find scalarized loop for " << y;
 }

@@ -329,13 +329,13 @@ target_sources(
     strided_load.cpp
     target.cpp
     target_query.cpp
-    #    tiled_matmul.cpp # give to claude
-    #    tracing.cpp # give to claude
+    tiled_matmul.cpp
+    tracing.cpp
     tracing_bounds.cpp
     tracing_broadcast.cpp
     tracing_stack.cpp
     transitive_bounds.cpp
-    #    trim_no_ops.cpp # give to claude
+    trim_no_ops.cpp
     tuple_partial_update.cpp
     tuple_reduction.cpp
     tuple_select.cpp
@@ -363,7 +363,7 @@ target_sources(
     vector_tile.cpp
     vectorize_guard_with_if.cpp
     vectorize_mixed_widths.cpp
-    #    vectorize_nested.cpp # give to claude
+    vectorize_nested.cpp
     vectorize_predicated.cpp
     vectorize_varying_allocation_size.cpp
     vectorized_assert.cpp
@@ -393,14 +393,14 @@ target_sources(
     func_clone.cpp
     func_wrapper.cpp
     gpu_allocation_cache.cpp
-    #    image_wrapper.cpp # give to claude
+    image_wrapper.cpp
     interpreter.cpp
     legal_race_condition.cpp
     lots_of_dimensions.cpp
     #    memoize.cpp
     multi_pass_reduction.cpp
     multiple_outputs_extern.cpp
-    #    multiple_scatter.cpp # give to claude
+    multiple_scatter.cpp
     named_updates.cpp
     nested_shiftinwards.cpp
     oddly_sized_output.cpp
