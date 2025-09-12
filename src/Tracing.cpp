@@ -7,6 +7,7 @@
 #include "runtime/HalideRuntime.h"
 
 #include <unordered_set>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -443,7 +444,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                 builder.func = func_name;
                 builder.trace_tag_expr =
                     Call::make(type_of<const char *>(), Call::stringify, strings, Call::PureIntrinsic);
-                return Block::make(Evaluate::make(builder.build()), s);
+                return Block::make(Evaluate::make(builder.build()), std::move(s));
             };
 
         for (const auto &o : reverse_view(order)) {
