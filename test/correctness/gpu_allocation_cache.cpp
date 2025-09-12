@@ -101,7 +101,18 @@ TEST_F(GPUAllocationCacheTest, Basic) {
         Internal::JITSharedRuntime::reuse_device_allocations(false);
     };
 
-    Tools::ThreadPool<void> pool(1);
+    // We want to launch multiple instances of each test, but compilation of a
+    // single Func is not thread-safe, so we'd better jit-compile them ahead of
+    // time.
+    f1[N - 1].compile_jit();
+    f2[N - 1].compile_jit();
+    f3[N - 1].compile_jit();
+
+    // Run all at the same time to check for concurrency issues. They'll
+    // intentionally race on making allocations, and on setting the
+    // allocation-cache-enabled flag. This shouldn't cause any incorrect output
+    // or crashes.
+    Tools::ThreadPool<void> pool;
     std::vector<std::future<void>> futures;
     futures.emplace_back(pool.async(test_func, f1[N - 1], correct1, test1_incorrect));
     futures.emplace_back(pool.async(test_func, f1[N - 1], correct1, test1_incorrect));

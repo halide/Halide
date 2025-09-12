@@ -286,8 +286,8 @@ def test_int_promotion():
 def test_vector_tile():
     # Test Func.tile() and Stage.tile() with vector arguments
     x, y, z = [hl.Var(c) for c in "xyz"]
-    xi, yi, zi = [hl.Var(c + "i") for c in "xyz"]
-    xo, yo, zo = [hl.Var(c + "o") for c in "xyz"]
+    xi, yi = hl.vars("xi yi")
+    xo, yo = hl.vars("xo yo")
     f = hl.Func("f")
     g = hl.Func("g")
     hl.Func("h")

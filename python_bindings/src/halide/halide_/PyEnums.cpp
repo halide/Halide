@@ -215,6 +215,7 @@ void define_enums(py::module &m) {
         .value("Semihosting", Target::Feature::Semihosting)
         .value("AVX10_1", Target::Feature::AVX10_1)
         .value("X86APX", Target::Feature::X86APX)
+        .value("Simulator", Target::Feature::Simulator)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")
