@@ -39,7 +39,7 @@ inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type)
     if (type.code == halide_type_uint && type.bits == 1) {
         stream << "bool";
     } else {
-        assert(type.code >= 0 && type.code <= 3);
+        _halide_internal_assert(type.code >= 0 && type.code <= 3);
         static const char *const names[4] = {"int", "uint", "float", "handle"};
         stream << names[type.code] << (int)type.bits;
     }
@@ -986,7 +986,7 @@ public:
     // Parse all the input arguments, loading images as necessary.
     // (Don't handle outputs yet.)
     void load_inputs(const std::string &user_specified_output_shape_string) {
-        assert(output_shapes.empty());
+        _halide_internal_assert(output_shapes.empty());
 
         Shape first_input_shape;
         std::map<std::string, ShapePromise> auto_input_shape_promises;
@@ -1397,7 +1397,7 @@ private:
     }
 
     std::map<std::string, ShapePromise> bounds_query_input_shapes() const {
-        assert(!output_shapes.empty());
+        _halide_internal_assert(!output_shapes.empty());
         std::vector<void *> filter_argv(args.size(), nullptr);
         std::vector<Buffer<>> bounds_query_buffers(args.size());
         for (const auto &arg_pair : args) {

@@ -318,9 +318,9 @@ private:
         }
     };
 
-    /** Setup the device ref count for a buffer to indicate it is a crop (or slice, embed, etc) of cropped_from */
+    /** Set up the device ref count for a buffer to indicate it is a crop (or slice, embed, etc) of cropped_from */
     void crop_from(const Buffer<T, AnyDims> &cropped_from) {
-        assert(dev_ref_count == nullptr);
+        _halide_internal_assert(dev_ref_count == nullptr);
         dev_ref_count = new DevRefCountCropped(cropped_from);
     }
 
@@ -344,11 +344,11 @@ private:
         }
         if (new_count == 0) {
             if (buf.device) {
-                assert(!(alloc && device_dirty()) &&
-                       "Implicitly freeing a dirty device allocation while a host allocation still lives. "
+                _halide_internal_assert(!(alloc && device_dirty()))
+                    << "Implicitly freeing a dirty device allocation while a host allocation still lives. "
                        "Call device_free explicitly if you want to drop dirty device-side data. "
                        "Call copy_to_host explicitly if you want the data copied to the host allocation "
-                       "before the device allocation is freed.");
+                       "before the device allocation is freed.";
                 int result = halide_error_code_success;
                 if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
                     result = buf.device_interface->detach_native(nullptr, &buf);
@@ -360,7 +360,8 @@ private:
                     result = buf.device_interface->device_free(nullptr, &buf);
                 }
                 // No reasonable way to return the error, but we can at least assert-fail in debug builds.
-                assert((result == halide_error_code_success) && "device_interface call returned a nonzero result in Buffer::decref()");
+                _halide_internal_assert(result == halide_error_code_success)
+                    << "device_interface call returned a nonzero result in Buffer::decref()";
                 (void)result;
             }
             if (dev_ref_count) {
@@ -402,9 +403,8 @@ private:
     }
 
     void make_shape_storage(const int dimensions) {
-        if (Dims != AnyDims && Dims != dimensions) {
-            assert(false && "Number of arguments to Buffer() does not match static dimensionality");
-        }
+        _halide_user_assert(Dims == AnyDims || Dims == dimensions)
+            << "Number of arguments to Buffer() does not match static dimensionality";
         // This should usually be inlined, so if dimensions is statically known,
         // we can skip the call to new
         buf.dimensions = dimensions;
@@ -454,7 +454,7 @@ private:
 
     /** Initialize the shape from a vector of extents */
     void initialize_shape(const std::vector<int> &sizes) {
-        assert(buf.dimensions == (int)sizes.size());
+        _halide_internal_assert(buf.dimensions == (int)sizes.size());
         initialize_shape(sizes.data());
     }
 
@@ -500,8 +500,8 @@ private:
 
     /** Crop a single dimension without handling device allocation. */
     void crop_host(int d, int min, int extent) {
-        assert(dim(d).min() <= min);
-        assert(dim(d).max() >= min + extent - 1);
+        _halide_internal_assert(dim(d).min() <= min);
+        _halide_internal_assert(dim(d).max() >= min + extent - 1);
         ptrdiff_t shift = min - dim(d).min();
         if (buf.host != nullptr) {
             buf.host += (shift * dim(d).stride()) * type().bytes();
@@ -512,16 +512,16 @@ private:
 
     /** Crop as many dimensions as are in rect, without handling device allocation. */
     void crop_host(const std::vector<std::pair<int, int>> &rect) {
-        assert(rect.size() <= static_cast<decltype(rect.size())>(std::numeric_limits<int>::max()));
+        _halide_internal_assert(rect.size() <= static_cast<decltype(rect.size())>(std::numeric_limits<int>::max()));
         int limit = (int)rect.size();
-        assert(limit <= dimensions());
+        _halide_internal_assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
             crop_host(i, rect[i].first, rect[i].second);
         }
     }
 
     void complete_device_crop(Buffer<T, Dims, InClassDimStorage> &result_host_cropped) const {
-        assert(buf.device_interface != nullptr);
+        _halide_internal_assert(buf.device_interface != nullptr);
         if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == halide_error_code_success) {
             // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
             // is it possible to get to this point without incref having run at least once since
@@ -538,9 +538,9 @@ private:
     /** slice a single dimension without handling device allocation. */
     void slice_host(int d, int pos) {
         static_assert(Dims == AnyDims);
-        assert(dimensions() > 0);
-        assert(d >= 0 && d < dimensions());
-        assert(pos >= dim(d).min() && pos <= dim(d).max());
+        _halide_internal_assert(dimensions() > 0);
+        _halide_internal_assert(d >= 0 && d < dimensions());
+        _halide_internal_assert(pos >= dim(d).min() && pos <= dim(d).max());
         buf.dimensions--;
         ptrdiff_t shift = pos - buf.dim[d].min;
         if (buf.host != nullptr) {
@@ -553,7 +553,7 @@ private:
     }
 
     void complete_device_slice(Buffer<T, AnyDims, InClassDimStorage> &result_host_sliced, int d, int pos) const {
-        assert(buf.device_interface != nullptr);
+        _halide_internal_assert(buf.device_interface != nullptr);
         if (buf.device_interface->device_slice(nullptr, &this->buf, d, pos, &result_host_sliced.buf) == halide_error_code_success) {
             // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
             // is it possible to get to this point without incref having run at least once since
@@ -631,7 +631,7 @@ public:
 
     /** Access the shape of the buffer */
     HALIDE_ALWAYS_INLINE Dimension dim(int i) const {
-        assert(i >= 0 && i < this->dimensions());
+        _halide_internal_assert(i >= 0 && i < this->dimensions());
         return Dimension(buf.dim[i]);
     }
 
@@ -671,13 +671,13 @@ public:
     /** A pointer to the element with the lowest address. If all
      * strides are positive, equal to the host pointer. */
     T *begin() const {
-        assert(buf.host != nullptr);  // Cannot call begin() on an unallocated Buffer.
+        _halide_internal_assert(buf.host != nullptr);  // Cannot call begin() on an unallocated Buffer.
         return (T *)buf.begin();
     }
 
     /** A pointer to one beyond the element with the highest address. */
     T *end() const {
-        assert(buf.host != nullptr);  // Cannot call end() on an unallocated Buffer.
+        _halide_internal_assert(buf.host != nullptr);  // Cannot call end() on an unallocated Buffer.
         return (T *)buf.end();
     }
 
@@ -705,7 +705,7 @@ public:
     /** Make a Buffer from a halide_buffer_t */
     explicit Buffer(const halide_buffer_t &buf,
                     BufferDeviceOwnership ownership = BufferDeviceOwnership::Unmanaged) {
-        assert(T_is_void || buf.type == static_halide_type());
+        _halide_internal_assert(T_is_void || buf.type == static_halide_type());
         initialize_from_buffer(buf, ownership);
     }
 
@@ -761,7 +761,7 @@ public:
         // that we always get compile-time checking, even if compiling with
         // assertions disabled.
         static_assert_can_convert_from<T2, D2, S2>();
-        assert(can_convert_from(other));
+        _halide_internal_assert(can_convert_from(other));
     }
 
     /** Copy constructor. Does not copy underlying data. */
@@ -889,7 +889,8 @@ public:
         for (int i = 0; i < dimensions(); i++) {
             size /= dim(i).extent();
         }
-        assert(size == (size_t)type().bytes() && "Error: Overflow computing total size of buffer.");
+        _halide_internal_assert(size == (size_t)type().bytes())
+            << "Error: Overflow computing total size of buffer.";
     }
 
     /** Allocate memory for this Buffer. Drops the reference to any
@@ -919,7 +920,7 @@ public:
             // wasteful, but probably not a big deal.
             static_assert(sizeof(AllocationHeader) <= alignment);
             void *alloc_storage = ::aligned_alloc(alignment, align_up(size) + alignment);
-            assert((uintptr_t)alloc_storage == align_up((uintptr_t)alloc_storage));
+            _halide_internal_assert((uintptr_t)alloc_storage == align_up((uintptr_t)alloc_storage));
             alloc = new (alloc_storage) AllocationHeader(free);
             buf.host = (uint8_t *)((uintptr_t)alloc_storage + alignment);
             return;
@@ -976,9 +977,7 @@ public:
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
     Buffer(halide_type_t t, int first, Args... rest) {
-        if (!T_is_void) {
-            assert(static_halide_type() == t);
-        }
+        _halide_internal_assert(T_is_void || static_halide_type() == t);
         int extents[] = {first, (int)rest...};
         buf.type = t;
         constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
@@ -1029,9 +1028,7 @@ public:
 
     /** Allocate a new image of unknown type using a vector of ints as the size. */
     Buffer(halide_type_t t, const std::vector<int> &sizes) {
-        if (!T_is_void) {
-            assert(static_halide_type() == t);
-        }
+        _halide_internal_assert(T_is_void || static_halide_type() == t);
         buf.type = t;
         // make_shape_storage() will do a runtime check that dimensionality matches.
         make_shape_storage((int)sizes.size());
@@ -1050,7 +1047,7 @@ public:
 private:
     // Create a copy of the sizes vector, ordered as specified by order.
     static std::vector<int> make_ordered_sizes(const std::vector<int> &sizes, const std::vector<int> &order) {
-        assert(order.size() == sizes.size());
+        _halide_internal_assert(order.size() == sizes.size());
         std::vector<int> ordered_sizes(sizes.size());
         for (size_t i = 0; i < sizes.size(); ++i) {
             ordered_sizes[i] = sizes.at(order[i]);
@@ -1090,9 +1087,7 @@ public:
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
     explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args &&...rest) {
-        if (!T_is_void) {
-            assert(static_halide_type() == t);
-        }
+        _halide_internal_assert(T_is_void || static_halide_type() == t);
         int extents[] = {first, (int)rest...};
         buf.type = t;
         buf.host = (uint8_t *)const_cast<void *>(data);
@@ -1131,9 +1126,7 @@ public:
      * coordinate of zero. Does not take ownership of the data and
      * does not set the host_dirty flag. */
     explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, const std::vector<int> &sizes) {
-        if (!T_is_void) {
-            assert(static_halide_type() == t);
-        }
+        _halide_internal_assert(T_is_void || static_halide_type() == t);
         buf.type = t;
         buf.host = (uint8_t *)const_cast<void *>(data);
         make_shape_storage((int)sizes.size());
@@ -1144,9 +1137,7 @@ public:
      * an array describing the shape.  Does not take ownership of the
      * data, and does not set the host_dirty flag. */
     explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int d, const halide_dimension_t *shape) {
-        if (!T_is_void) {
-            assert(static_halide_type() == t);
-        }
+        _halide_internal_assert(T_is_void || static_halide_type() == t);
         buf.type = t;
         buf.host = (uint8_t *)const_cast<void *>(data);
         make_shape_storage(d);
@@ -1357,7 +1348,7 @@ public:
     Buffer<not_const_T, Dims, InClassDimStorage> copy_to_interleaved(void *(*allocate_fn)(size_t) = nullptr,
                                                                      void (*deallocate_fn)(void *) = nullptr) const {
         static_assert(Dims == AnyDims || Dims == 3);
-        assert(dimensions() == 3);
+        _halide_internal_assert(dimensions() == 3);
         Buffer<not_const_T, Dims, InClassDimStorage> dst = Buffer<not_const_T, Dims, InClassDimStorage>::make_interleaved(nullptr, width(), height(), channels());
         dst.set_min(min(0), min(1), min(2));
         dst.allocate(allocate_fn, deallocate_fn);
@@ -1410,13 +1401,13 @@ public:
     template<typename T2, int D2, int S2>
     void copy_from(Buffer<T2, D2, S2> src) {
         static_assert(!std::is_const<T>::value, "Cannot call copy_from() on a Buffer<const T>");
-        assert(!device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.");
-        assert(!src.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
+        _halide_internal_assert(!device_dirty()) << "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.";
+        _halide_internal_assert(!src.device_dirty()) << "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.";
 
         Buffer<T, Dims, InClassDimStorage> dst(*this);
 
         static_assert(Dims == AnyDims || D2 == AnyDims || Dims == D2);
-        assert(src.dimensions() == dst.dimensions());
+        _halide_internal_assert(src.dimensions() == dst.dimensions());
 
         // Trim the copy to the region in common
         const int d = dimensions();
@@ -1456,7 +1447,7 @@ public:
             auto &typed_src = reinterpret_cast<Buffer<const MemType, D2, S2> &>(src);
             typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else {
-            assert(false && "type().bytes() must be 1, 2, 4, or 8");
+            _halide_internal_assert(false) << "type().bytes() must be 1, 2, 4, or 8";
         }
         set_host_dirty();
     }
@@ -1547,7 +1538,7 @@ public:
     /** Translate an image in-place along one dimension by changing
      * how it is indexed. Does not move any data around in memory. */
     void translate(int d, int delta) {
-        assert(d >= 0 && d < this->dimensions());
+        _halide_internal_assert(d >= 0 && d < this->dimensions());
         device_deallocate();
         buf.dim[d].min += delta;
     }
@@ -1564,9 +1555,9 @@ public:
      * how it is indexed. Does not move any data around in memory. */
     void translate(const std::vector<int> &delta) {
         device_deallocate();
-        assert(delta.size() <= static_cast<decltype(delta.size())>(std::numeric_limits<int>::max()));
+        _halide_internal_assert(delta.size() <= static_cast<decltype(delta.size())>(std::numeric_limits<int>::max()));
         int limit = (int)delta.size();
-        assert(limit <= dimensions());
+        _halide_internal_assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
             translate(i, delta[i]);
         }
@@ -1575,7 +1566,7 @@ public:
     /** Set the min coordinate of an image in the first N dimensions. */
     // @{
     void set_min(const std::vector<int> &mins) {
-        assert(mins.size() <= static_cast<decltype(mins.size())>(dimensions()));
+        _halide_internal_assert(mins.size() <= static_cast<decltype(mins.size())>(dimensions()));
         device_deallocate();
         for (size_t i = 0; i < mins.size(); i++) {
             buf.dim[i].min = mins[i];
@@ -1591,7 +1582,7 @@ public:
     /** Test if a given coordinate is within the bounds of an image. */
     // @{
     bool contains(const std::vector<int> &coords) const {
-        assert(coords.size() <= static_cast<decltype(coords.size())>(dimensions()));
+        _halide_internal_assert(coords.size() <= static_cast<decltype(coords.size())>(dimensions()));
         for (size_t i = 0; i < coords.size(); i++) {
             if (coords[i] < dim((int)i).min() || coords[i] > dim((int)i).max()) {
                 return false;
@@ -1624,8 +1615,8 @@ public:
      * data around in memory, so other views of the same memory will
      * not see the data as having been transposed. */
     void transpose(int d1, int d2) {
-        assert(d1 >= 0 && d1 < this->dimensions());
-        assert(d2 >= 0 && d2 < this->dimensions());
+        _halide_internal_assert(d1 >= 0 && d1 < this->dimensions());
+        _halide_internal_assert(d2 >= 0 && d2 < this->dimensions());
         std::swap(buf.dim[d1], buf.dim[d2]);
     }
 
@@ -1634,7 +1625,7 @@ public:
      * the desired order. This does not move any data around in memory
      * - it just permutes how it is indexed. */
     void transpose(const std::vector<int> &order) {
-        assert((int)order.size() == dimensions());
+        _halide_internal_assert((int)order.size() == dimensions());
         if (dimensions() < 2) {
             // My, that was easy
             return;
@@ -1662,7 +1653,7 @@ public:
     Buffer<T, (Dims == AnyDims ? AnyDims : Dims - 1)>
     sliced(int d, int pos) const {
         static_assert(Dims == AnyDims || Dims > 0, "Cannot slice a 0-dimensional buffer");
-        assert(dimensions() > 0);
+        _halide_internal_assert(dimensions() > 0);
 
         Buffer<T, AnyDims, InClassDimStorage> im = *this;
 
@@ -1683,7 +1674,7 @@ public:
     Buffer<T, (Dims == AnyDims ? AnyDims : Dims - 1)>
     sliced(int d) const {
         static_assert(Dims == AnyDims || Dims > 0, "Cannot slice a 0-dimensional buffer");
-        assert(dimensions() > 0);
+        _halide_internal_assert(dimensions() > 0);
 
         return sliced(d, dim(d).min());
     }
@@ -1695,7 +1686,7 @@ public:
      * only be called on a Buffer with dynamic dimensionality. */
     void slice(int d, int pos) {
         static_assert(Dims == AnyDims, "Cannot call slice() on a Buffer with static dimensionality.");
-        assert(dimensions() > 0);
+        _halide_internal_assert(dimensions() > 0);
 
         // An optimization for non-device buffers. For the device case,
         // a temp buffer is required, so reuse the not-in-place version.
@@ -1734,7 +1725,7 @@ public:
      * dimensionality. */
     void embed(int d, int pos = 0) {
         static_assert(Dims == AnyDims, "Cannot call embed() on a Buffer with static dimensionality.");
-        assert(d >= 0 && d <= dimensions());
+        _halide_internal_assert(d >= 0 && d <= dimensions());
         add_dimension();
         translate(dimensions() - 1, pos);
         for (int i = dimensions() - 1; i > d; i--) {
@@ -1789,7 +1780,9 @@ public:
     // access. Must be inlined so it can be hoisted out of loops.
     HALIDE_ALWAYS_INLINE
     void set_host_dirty(bool v = true) {
-        assert((!v || !device_dirty()) && "Cannot set host dirty when device is already dirty. Call copy_to_host() before accessing the buffer from host.");
+        _halide_internal_assert(!v || !device_dirty())
+            << "Cannot set host dirty when device is already dirty. "
+               "Call copy_to_host() before accessing the buffer from host.";
         buf.set_host_dirty(v);
     }
 
@@ -1806,7 +1799,8 @@ public:
     }
 
     void set_device_dirty(bool v = true) {
-        assert((!v || !host_dirty()) && "Cannot set device dirty when host is already dirty.");
+        _halide_internal_assert(!v || !host_dirty())
+            << "Cannot set device dirty when host is already dirty.";
         buf.set_device_dirty(v);
     }
 
@@ -1830,15 +1824,15 @@ public:
 
     int device_free(void *ctx = nullptr) {
         if (dev_ref_count) {
-            assert(dev_ref_count->ownership == BufferDeviceOwnership::Allocated &&
-                   "Can't call device_free on an unmanaged or wrapped native device handle. "
-                   "Free the source allocation or call device_detach_native instead.");
+            _halide_internal_assert(dev_ref_count->ownership == BufferDeviceOwnership::Allocated)
+                << "Can't call device_free on an unmanaged or wrapped native device handle. "
+                   "Free the source allocation or call device_detach_native instead.";
             // Multiple people may be holding onto this dev field
-            assert(dev_ref_count->count == 1 &&
-                   "Multiple Halide::Runtime::Buffer objects share this device "
+            _halide_internal_assert(dev_ref_count->count == 1)
+                << "Multiple Halide::Runtime::Buffer objects share this device "
                    "allocation. Freeing it would create dangling references. "
                    "Don't call device_free on Halide buffers that you have copied or "
-                   "passed by value.");
+                   "passed by value.";
         }
         int ret = halide_error_code_success;
         if (buf.device_interface) {
@@ -1853,25 +1847,24 @@ public:
 
     int device_wrap_native(const struct halide_device_interface_t *device_interface,
                            uint64_t handle, void *ctx = nullptr) {
-        assert(device_interface);
+        _halide_internal_assert(device_interface);
         dev_ref_count = new DeviceRefCount;
         dev_ref_count->ownership = BufferDeviceOwnership::WrappedNative;
         return device_interface->wrap_native(ctx, &buf, handle, device_interface);
     }
 
     int device_detach_native(void *ctx = nullptr) {
-        assert(dev_ref_count &&
-               dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative &&
-               "Only call device_detach_native on buffers wrapping a native "
+        _halide_internal_assert(dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative)
+            << "Only call device_detach_native on buffers wrapping a native "
                "device handle via device_wrap_native. This buffer was allocated "
                "using device_malloc, or is unmanaged. "
-               "Call device_free or free the original allocation instead.");
+               "Call device_free or free the original allocation instead.";
         // Multiple people may be holding onto this dev field
-        assert(dev_ref_count->count == 1 &&
-               "Multiple Halide::Runtime::Buffer objects share this device "
+        _halide_internal_assert(dev_ref_count->count == 1)
+            << "Multiple Halide::Runtime::Buffer objects share this device "
                "allocation. Freeing it could create dangling references. "
                "Don't call device_detach_native on Halide buffers that you "
-               "have copied or passed by value.");
+               "have copied or passed by value.";
         int ret = halide_error_code_success;
         if (buf.device_interface) {
             ret = buf.device_interface->detach_native(ctx, &buf);
@@ -1887,15 +1880,15 @@ public:
 
     int device_and_host_free(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
         if (dev_ref_count) {
-            assert(dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost &&
-                   "Can't call device_and_host_free on a device handle not allocated with device_and_host_malloc. "
-                   "Free the source allocation or call device_detach_native instead.");
+            _halide_internal_assert(dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost)
+                << "Can't call device_and_host_free on a device handle not allocated with device_and_host_malloc. "
+                   "Free the source allocation or call device_detach_native instead.";
             // Multiple people may be holding onto this dev field
-            assert(dev_ref_count->count == 1 &&
-                   "Multiple Halide::Runtime::Buffer objects share this device "
+            _halide_internal_assert(dev_ref_count->count == 1)
+                << "Multiple Halide::Runtime::Buffer objects share this device "
                    "allocation. Freeing it would create dangling references. "
                    "Don't call device_and_host_free on Halide buffers that you have copied or "
-                   "passed by value.");
+                   "passed by value.";
         }
         int ret = halide_error_code_success;
         if (buf.device_interface) {
@@ -2052,8 +2045,8 @@ private:
         ptrdiff_t
         offset_of(int d, int first, Args... rest) const {
 #if HALIDE_RUNTIME_BUFFER_CHECK_INDICES
-        assert(first >= this->buf.dim[d].min);
-        assert(first < this->buf.dim[d].min + this->buf.dim[d].extent);
+        _halide_internal_assert(first >= this->buf.dim[d].min);
+        _halide_internal_assert(first < this->buf.dim[d].min + this->buf.dim[d].extent);
 #endif
         return offset_of(d + 1, rest...) + (ptrdiff_t)this->buf.dim[d].stride * (first - this->buf.dim[d].min);
     }
@@ -2077,8 +2070,8 @@ private:
         ptrdiff_t offset = 0;
         for (int i = this->dimensions() - 1; i >= 0; i--) {
 #if HALIDE_RUNTIME_BUFFER_CHECK_INDICES
-            assert(pos[i] >= this->buf.dim[i].min);
-            assert(pos[i] < this->buf.dim[i].min + this->buf.dim[i].extent);
+            _halide_internal_assert(pos[i] >= this->buf.dim[i].min);
+            _halide_internal_assert(pos[i] < this->buf.dim[i].min + this->buf.dim[i].extent);
 #endif
             offset += (ptrdiff_t)this->buf.dim[i].stride * (pos[i] - this->buf.dim[i].min);
         }
@@ -2114,7 +2107,7 @@ public:
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 1 + (int)(sizeof...(rest));
         static_assert(Dims == AnyDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
-        assert(!device_dirty());
+        _halide_internal_assert(!device_dirty());
         return *((const not_void_T *)(address_of(first, rest...)));
     }
 
@@ -2124,7 +2117,7 @@ public:
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 0;
         static_assert(Dims == AnyDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
-        assert(!device_dirty());
+        _halide_internal_assert(!device_dirty());
         return *((const not_void_T *)(data()));
     }
 
@@ -2133,7 +2126,7 @@ public:
     operator()(const int *pos) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
-        assert(!device_dirty());
+        _halide_internal_assert(!device_dirty());
         return *((const not_void_T *)(address_of(pos)));
     }
 
@@ -2232,27 +2225,27 @@ private:
     HALIDE_NEVER_INLINE static std::pair<int, bool> for_each_value_prep(for_each_value_task_dim<N> *t,
                                                                         const halide_buffer_t **buffers) {
         const int dimensions = buffers[0]->dimensions;
-        assert(dimensions > 0);
+        _halide_internal_assert(dimensions > 0);
 
         // Check the buffers all have clean host allocations
         for (int i = 0; i < N; i++) {
             if (buffers[i]->device) {
-                assert(buffers[i]->host &&
-                       "Buffer passed to for_each_value has device allocation but no host allocation. Call allocate() and copy_to_host() first");
-                assert(!buffers[i]->device_dirty() &&
-                       "Buffer passed to for_each_value is dirty on device. Call copy_to_host() first");
+                _halide_internal_assert(buffers[i]->host)
+                    << "Buffer passed to for_each_value has device allocation but no host allocation. Call allocate() and copy_to_host() first";
+                _halide_internal_assert(!buffers[i]->device_dirty())
+                    << "Buffer passed to for_each_value is dirty on device. Call copy_to_host() first";
             } else {
-                assert(buffers[i]->host &&
-                       "Buffer passed to for_each_value has no host or device allocation");
+                _halide_internal_assert(buffers[i]->host)
+                    << "Buffer passed to for_each_value has no host or device allocation";
             }
         }
 
         // Extract the strides in all the dimensions
         for (int i = 0; i < dimensions; i++) {
             for (int j = 0; j < N; j++) {
-                assert(buffers[j]->dimensions == dimensions);
-                assert(buffers[j]->dim[i].extent == buffers[0]->dim[i].extent &&
-                       buffers[j]->dim[i].min == buffers[0]->dim[i].min);
+                _halide_internal_assert(buffers[j]->dimensions == dimensions);
+                _halide_internal_assert(buffers[j]->dim[i].extent == buffers[0]->dim[i].extent &&
+                                        buffers[j]->dim[i].min == buffers[0]->dim[i].min);
                 const int s = buffers[j]->dim[i].stride;
                 t[i].stride[j] = s;
             }
@@ -2466,7 +2459,7 @@ private:
     template<typename Fn>
     HALIDE_ALWAYS_INLINE static void for_each_element(double, int dims, const for_each_element_task_dim *t, Fn &&f) {
         int args = num_args(0, std::forward<Fn>(f));
-        assert(dims >= args);
+        _halide_internal_assert(dims >= args);
         for_each_element_variadic(0, args - 1, t, std::forward<Fn>(f));
     }
 

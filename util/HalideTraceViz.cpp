@@ -163,7 +163,7 @@ struct PacketAndPayload : public halide_trace_packet_t {
             }
             p += bytes_read;
         }
-        assert(p == p_end);
+        _halide_internal_assert(p == p_end);
         return true;
     }
 
@@ -506,7 +506,7 @@ void finalize_func_config_values(const GlobalConfig &globals, std::map<std::stri
 }
 
 void do_auto_layout(const GlobalConfig &globals, const std::string &func_name, FuncInfo &fi) {
-    assert(fi.type_and_dim_valid);
+    _halide_internal_assert(fi.type_and_dim_valid);
 
     const Point &pad = globals.auto_layout_pad;
     Point cell_size = {
@@ -1097,7 +1097,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             std::ostringstream dumps;
             for (const auto &p : state.funcs) {
                 const auto &fi = p.second;
-                assert(fi.type_and_dim_valid);
+                _halide_internal_assert(fi.type_and_dim_valid);
                 fi.type_and_dim.dump(dumps, p.first);
             }
             info() << dumps.str();
@@ -1121,7 +1121,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             Point cell_size = best_cell_size(cells_needed, state.globals.frame_size.x, state.globals.frame_size.y);
             state.globals.auto_layout_grid.x = state.globals.frame_size.x / cell_size.x;
             state.globals.auto_layout_grid.y = state.globals.frame_size.y / cell_size.y;
-            assert(state.globals.auto_layout_grid.x * state.globals.auto_layout_grid.y >= cells_needed);
+            _halide_internal_assert(state.globals.auto_layout_grid.x * state.globals.auto_layout_grid.y >= cells_needed);
             info() << "For cells_needed = " << cells_needed
                    << " using " << state.globals.auto_layout_grid.x << "x" << state.globals.auto_layout_grid.y << " grid"
                    << " with cells of size " << cell_size.x << "x" << cell_size.y;
@@ -1162,7 +1162,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         }
 
         if (halide_clock > video_clock) {
-            assert(is_state_finalized);
+            _halide_internal_assert(is_state_finalized);
 
             const int64_t frame_bytes = surface->frame_elems() * sizeof(uint32_t);
 
@@ -1217,7 +1217,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             pipeline_info[p.id] = {p.func(), p.id};
             continue;
         } else if (p.event == halide_trace_end_pipeline) {
-            assert(pipeline_info.count(p.parent_id));
+            _halide_internal_assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
             continue;
         } else if (p.event == halide_trace_tag) {
@@ -1267,12 +1267,12 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         if (p.event == halide_trace_begin_realization ||
             p.event == halide_trace_produce ||
             p.event == halide_trace_consume) {
-            assert(!pipeline_info.count(p.id));
+            _halide_internal_assert(!pipeline_info.count(p.id));
             pipeline_info[p.id] = pipeline;
         } else if (p.event == halide_trace_end_realization ||
                    p.event == halide_trace_end_produce ||
                    p.event == halide_trace_end_consume) {
-            assert(pipeline_info.count(p.parent_id));
+            _halide_internal_assert(pipeline_info.count(p.parent_id));
             pipeline_info.erase(p.parent_id);
         }
 
@@ -1336,7 +1336,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                 const float z = fi.config.zoom;
                 for (int d = 0; d < dims; d++) {
                     const int coord = d * p.type.lanes + lane;
-                    assert(coord < p.dimensions);
+                    _halide_internal_assert(coord < p.dimensions);
                     const int a = coords[coord];
                     const auto &stride = fi.config.strides[d];
                     x += z * stride.x * a;

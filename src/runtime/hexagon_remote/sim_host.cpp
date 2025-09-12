@@ -130,7 +130,10 @@ int init_sim() {
 }
 
 int write_memory(int dest, const void *src, int size) {
-    assert(sim);
+    if (!sim) {
+        fprintf(stderr, "FATAL ERROR: sim was NULL\n");
+        abort();
+    }
 
     while (size > 0) {
         // WriteMemory only works with powers of 2, so align down. It
@@ -165,7 +168,10 @@ int write_memory(int dest, const void *src, int size) {
 }
 
 int read_memory(void *dest, int src, int size) {
-    assert(sim);
+    if (!sim) {
+        fprintf(stderr, "FATAL ERROR: sim was NULL\n");
+        abort();
+    }
 
     while (size > 0) {
         // This is the same logic as in write_memory above.
@@ -194,7 +200,10 @@ int read_memory(void *dest, int src, int size) {
 int profiler_current_func;
 
 int send_message(int msg, const std::vector<int> &arguments) {
-    assert(sim);
+    if (!sim) {
+        fprintf(stderr, "FATAL ERROR: sim was NULL\n");
+        abort();
+    }
 
     HEXAPI_Status status;
 
@@ -380,7 +389,10 @@ DLLEXPORT
 int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char *name, int nameLen, handle_t *sym) {
     std::lock_guard<std::mutex> guard(mutex);
 
-    assert(sim);
+    if (!sim) {
+        fprintf(stderr, "FATAL ERROR: sim was NULL\n");
+        abort();
+    }
 
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_name(name, nameLen);
@@ -398,7 +410,10 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const host_buffer *input_scalarsPtrs, int input_scalarsLen) {
     std::lock_guard<std::mutex> guard(mutex);
 
-    assert(sim);
+    if (!sim) {
+        fprintf(stderr, "FATAL ERROR: sim was NULL\n");
+        abort();
+    }
 
     std::vector<remote_buffer> remote_input_buffers;
     std::vector<remote_buffer> remote_output_buffers;

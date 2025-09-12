@@ -18,7 +18,6 @@ Node *used_blocks = NULL;
 
 // Create a new node with given addr and size.
 Node *createNode(void *addr, uint64_t size) {
-    assert(size > 0);
     Node *mb = (Node *)malloc(sizeof(Node));
     mb->addr = addr;
     mb->size = size;

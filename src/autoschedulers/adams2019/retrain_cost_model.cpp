@@ -348,18 +348,18 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
         std::ofstream f(flags.best_benchmark_path, std::ios_base::trunc);
         f << o.str();
         f.close();
-        assert(!f.fail());
+        _halide_internal_assert(!f.fail());
     }
     if (!flags.best_schedule_path.empty()) {
         // best_path points to a .sample file; look for a .schedule.h file in the same dir
         size_t dot = best_path.rfind('.');
-        assert(dot != string::npos && best_path.substr(dot) == ".sample");
+        _halide_internal_assert(dot != string::npos && best_path.substr(dot) == ".sample");
         string schedule_file = best_path.substr(0, dot) + ".schedule.h";
         std::ifstream src(schedule_file);
         std::ofstream dst(flags.best_schedule_path);
         dst << src.rdbuf();
-        assert(!src.fail());
-        assert(!dst.fail());
+        _halide_internal_assert(!src.fail());
+        _halide_internal_assert(!dst.fail());
     }
 
     return result;
@@ -472,7 +472,7 @@ int main(int argc, char **argv) {
                         float loss = 0.0f;
                         if (train) {
                             loss = tp->backprop(runtimes, learning_rate);
-                            assert(!std::isnan(loss));
+                            _halide_internal_assert(!std::isnan(loss));
                             loss_sum[model] += loss;
                             loss_sum_counter[model]++;
 
@@ -499,7 +499,7 @@ int main(int argc, char **argv) {
                                 if (sched.second.prediction[model] == 0) {
                                     continue;
                                 }
-                                assert(sched.second.runtimes[0] >= ref.runtimes[0]);
+                                _halide_internal_assert(sched.second.runtimes[0] >= ref.runtimes[0]);
                                 float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
                                 if (runtime_ratio <= 1.3f) {
                                     continue;  // Within 30% of the runtime of the best

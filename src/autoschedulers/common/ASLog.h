@@ -30,8 +30,9 @@ public:
     }
 
     std::ostream &get_ostream() {
-        // It is an error to call this for an aslog() instance that cannot log.
-        assert(logging);
+        if (!logging) {
+            throw std::runtime_error("Cannot get ostream for aslog() instance that cannot log.");
+        }
         return std::cerr;
     }
 

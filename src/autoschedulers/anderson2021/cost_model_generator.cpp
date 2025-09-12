@@ -351,7 +351,7 @@ public:
         Expr num_threads_per_block = schedule_features(n, idx++, w);
         Expr expr_branching = schedule_features(n, idx++, w);
 
-        assert(idx == head2_w);
+        _halide_internal_assert(idx == head2_w);
 
         num_blocks = max(1, num_blocks);
 

@@ -3919,10 +3919,10 @@ void spirv_ir_test() {
 #ifdef WITH_SPIRV
     SpvBinary binary;
     SpvInstruction label_inst = SpvFactory::label(777);
-    assert(label_inst.result_id() == 777);
-    assert(label_inst.op_code() == SpvOpLabel);
+    internal_assert(label_inst.result_id() == 777);
+    internal_assert(label_inst.op_code() == SpvOpLabel);
     label_inst.encode(binary);
-    assert(binary.size() == 2);  // encodes to 2x 32-bit words [Length|OpCode, ResultId]
+    internal_assert(binary.size() == 2);  // encodes to 2x 32-bit words [Length|OpCode, ResultId]
 
     SpvBuilder builder;
     SpvId void_type_id = builder.reserve_id(SpvVoidTypeId);

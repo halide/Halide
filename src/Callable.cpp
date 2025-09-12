@@ -180,15 +180,12 @@ Callable::FailureFn Callable::check_fcci(size_t argc, const FullCallCheckInfo *a
 // Entry point used from the std::function<> variant; we can skip the check_qcci() stuff
 // since we verified the signature when we created the std::function, so incorrect types or counts
 // should be impossible.
-/*static*/ int Callable::call_argv_fast(size_t argc, const void *const *argv) const {
-    // Callable should enforce these, so we can use assert() instead of internal_assert() --
-    // this is effectively just documentation that these invariants are expected to have
-    // been enforced prior to this call.
-    assert(contents->jit_cache.jit_target.has_feature(Target::UserContext));
-    assert(contents->jit_cache.arguments[0].name == "__user_context");
+int Callable::call_argv_fast(size_t argc, const void *const *argv) const {
+    internal_assert(contents->jit_cache.jit_target.has_feature(Target::UserContext));
+    internal_assert(contents->jit_cache.arguments[0].name == "__user_context");
 
     JITUserContext *context = *(JITUserContext **)const_cast<void *>(argv[0]);
-    assert(context != nullptr);
+    internal_assert(context != nullptr);
 
     JITFuncCallContext jit_call_context(context, contents->saved_jit_handlers);
 

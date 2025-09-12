@@ -91,7 +91,7 @@ public:
     ThreadPool(size_t desired_num_threads = num_processors_online()) {
         // This file doesn't depend on anything else in libHalide, so
         // we'll use assert, not internal_assert.
-        assert(desired_num_threads > 0);
+        _halide_internal_assert(desired_num_threads > 0);
 
         std::lock_guard<std::mutex> lock(mutex);
 

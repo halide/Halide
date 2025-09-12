@@ -253,7 +253,7 @@ class HalideMemoryTracker {
 
 public:
     void install() {
-        assert(!active);
+        _halide_internal_assert(!active);
         active = this;
         halide_set_custom_malloc(tracker_malloc);
         halide_set_custom_free(tracker_free);

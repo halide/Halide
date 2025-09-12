@@ -289,7 +289,7 @@ public:
         Expr working_set_at_production = schedule_features(n, idx++, w);
         Expr working_set_at_realization = schedule_features(n, idx++, w);
         Expr working_set_at_root = schedule_features(n, idx++, w);
-        assert(idx == head2_w);
+        _halide_internal_assert(idx == head2_w);
 
         // Count up the number of things computed, applying a
         // different cost to vectors and scalars, and a different cost

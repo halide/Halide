@@ -1264,7 +1264,7 @@ struct NpyHeader {
             if (*ptr == ' ') {
                 ptr++;
             }
-            assert(ptr <= &header.back());
+            _halide_internal_assert(ptr <= &header.back());
         }
     }
 };
@@ -2281,7 +2281,7 @@ bool save_tiff(ImageType &im, const std::string &filename) {
     tag++->assign32(32997, 1, depth);                                      // Image depth
 
     // Verify we used exactly the number we declared
-    assert(tag == &header.entries[header.entry_count]);
+    _halide_internal_assert(tag == &header.entries[header.entry_count]);
 
     header.ifd0_end = 0;
     header.width_resolution[0] = 1;
@@ -2344,7 +2344,7 @@ bool save_tiff(ImageType &im, const std::string &filename) {
         HANDLE_CASE(halide_type_uint, 64, uint64_t)
     // Note that we don't attempt to handle halide_type_handle here.
     default:
-        assert(false && "Unsupported type");
+        _halide_internal_assert(false) << "Unsupported type";
         return false;
     }
 #undef HANDLE_CASE
@@ -2523,7 +2523,7 @@ struct ImageTypeConversion {
         case halide_type_t(halide_type_uint, 64).as_u32():
             return convert_image<DstElemType>(src.template as<uint64_t, AnyDims>());
         default:
-            assert(false && "Unsupported type");
+            _halide_internal_assert(false) << "Unsupported type";
             using DstImageType = typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type;
             return DstImageType();
         }
@@ -2572,7 +2572,7 @@ struct ImageTypeConversion {
         case halide_type_t(halide_type_uint, 64).as_u32():
             return convert_image<uint64_t>(src);
         default:
-            assert(false && "Unsupported type");
+            _halide_internal_assert(false) << "Unsupported type";
             using RetImageType = typename Internal::ImageTypeWithDynamicDims<ImageType>::type;
             return RetImageType();
         }
@@ -2621,7 +2621,7 @@ struct ImageTypeConversion {
         case halide_type_t(halide_type_uint, 64).as_u32():
             return convert_image(src.template as<uint64_t, AnyDims>(), dst_type);
         default:
-            assert(false && "Unsupported type");
+            _halide_internal_assert(false) << "Unsupported type";
             using RetImageType = typename Internal::ImageTypeWithDynamicDims<ImageType>::type;
             return RetImageType();
         }
