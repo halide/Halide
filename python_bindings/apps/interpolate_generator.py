@@ -89,7 +89,7 @@ class interpolate:
             pass
         elif g.target().has_gpu_feature():
             # 0.86ms on a 2060 RTX
-            yo, yi, xo, xi, ci, xii, yii = hl.vars("yo yi xo xi ci xii yii")
+            yo, yi, xo, xi, xii, yii = hl.vars("yo yi xo xi xii yii")
 
             (
                 g.output_buf.bound(x, 0, g.input_buf.width())
