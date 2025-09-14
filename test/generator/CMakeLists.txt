@@ -461,7 +461,7 @@ endif ()  # (NOT ${_USING_WASM})
 # define_extern_opencl_aottest.cpp
 # define_extern_opencl_generator.cpp
 _add_halide_libraries(define_extern_opencl)
-_add_halide_aot_tests(define_extern_opencl)
+_add_halide_aot_tests(define_extern_opencl LINK_TO_GPU)
 
 # embed_image_aottest.cpp
 # embed_image_generator.cpp
