@@ -1,6 +1,7 @@
 #ifndef TEST_H
 #define TEST_H
 
+#define HALIDE_KEEP_MACROS
 #include "Halide.h"
 
 namespace Halide {
