@@ -95,6 +95,7 @@ tests(GROUPS correctness
       early_out.cpp
       embed_bitcode.cpp
       erf.cpp
+      error_macro_unreachable.cpp
       exception.cpp
       explicit_inline_reductions.cpp
       extern_bounds_inference.cpp
