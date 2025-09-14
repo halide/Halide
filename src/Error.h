@@ -199,9 +199,10 @@ struct WarningReport final : ReportBase<WarningReport> {
     for (Halide::Internal::ErrorReport<type> _err; 1; _err.issue()) \
     /**/ _err.init(__FILE__, __FUNCTION__, __LINE__, nullptr)
 
-#define _halide_assert_impl(condition, type) \
-    if (!(condition))                        \
-    /**/ _halide_error_impl(type)
+#define _halide_assert_impl(condition, type)                            \
+    if (!(condition))                                                   \
+        for (Halide::Internal::ErrorReport<type> _err; 1; _err.issue()) \
+    /*****/ _err.init(__FILE__, __FUNCTION__, __LINE__, #condition)
 
 #define _halide_user_warning                                       \
     for (Halide::Internal::WarningReport _err; _err; _err.issue()) \
