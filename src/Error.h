@@ -221,6 +221,7 @@ struct WarningReport final : ReportBase<WarningReport> {
 // but user code might want to do halide-style user_asserts (e.g. the
 // Extern macros introduce calls to user_assert), so for that purpose
 // we define an equivalent macro that can be used outside of Halide.h
+#define _halide_user_error _halide_error_impl(Halide::CompileError)
 #define _halide_internal_error _halide_error_impl(Halide::InternalError)
 #define _halide_runtime_error _halide_error_impl(Halide::RuntimeError)
 #define _halide_internal_assert(c) _halide_assert_impl(c, Halide::InternalError)
