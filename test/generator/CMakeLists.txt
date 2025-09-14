@@ -253,13 +253,19 @@ function(_add_one_aot_test TARGET)
 endfunction()
 
 function(_add_halide_aot_tests NAME)
-    set(options OMIT_C_BACKEND)
+    set(options OMIT_C_BACKEND LINK_TO_GPU)
     set(oneValueArgs "")
     set(multiValueArgs ENABLE_IF GROUPS INCLUDES HALIDE_LIBRARIES HALIDE_RUNTIME DEPS SRCS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
         return()
+    endif ()
+
+    if (args_LINK_TO_GPU)
+        set(_LINK_TO_GPU LINK_TO_GPU)
+    else ()
+        set(_LINK_TO_GPU "")
     endif ()
 
     # If HALIDE_LIBRARIES is omitted, assume we want just a single halide_library target
@@ -303,7 +309,8 @@ function(_add_halide_aot_tests NAME)
                           SRCS "${args_SRCS}"
                           DEPS ${args_HALIDE_LIBRARIES} ${args_HALIDE_RUNTIME} ${args_DEPS}
                           INCLUDES ${args_INCLUDES}
-                          GROUPS ${args_GROUPS})
+                          GROUPS ${args_GROUPS}
+                          ${_LINK_TO_GPU})
         if (NOT args_OMIT_C_BACKEND)
             set(HALIDE_LIBRARIES_CPP "")
             foreach (hl IN LISTS args_HALIDE_LIBRARIES)
@@ -313,7 +320,8 @@ function(_add_halide_aot_tests NAME)
                               SRCS "${args_SRCS}"
                               DEPS ${HALIDE_LIBRARIES_CPP} ${args_HALIDE_RUNTIME} ${args_DEPS}
                               INCLUDES ${args_INCLUDES}
-                              GROUPS ${args_GROUPS})
+                              GROUPS ${args_GROUPS}
+                              ${_LINK_TO_GPU})
         endif ()
     endif ()
 endfunction()
