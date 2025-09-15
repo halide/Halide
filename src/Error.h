@@ -182,46 +182,51 @@ struct WarningReport final : ReportBase<WarningReport> {
 };
 
 /**
- * _halide_internal_diagnostic is used to implement our assertion macros
- * in such a way that the messages output for the assertion are only
- * evaluated if the assertion's value is false.
+ * The following three diagnostic macros are implemented such that the
+ * message is evaluated only if the assertion's value is false.
  *
  * This (regrettably) requires a macro to work, but has the highly desirable
  * effect that all assertion parameters are totally skipped (not ever evaluated)
  * when the assertion is true.
  *
- * The macro works by deferring the call to issue() until after the stream
+ * The macros work by deferring the call to issue() until after the stream
  * has been evaluated. This previously used a trick where ErrorReport would
  * throw in the destructor, but throwing in a destructor is UB in a lot of
  * scenarios, and it was easy to break things by mistake.
  */
-// clang-format off
-#define _halide_internal_diagnostic(condition, type, condition_string)  \
-    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-    if (!(condition)) for (type _err; _err; _err.issue()) _err.init(__FILE__, __FUNCTION__, __LINE__, condition_string)
-// clang-format on
+/// @{
+#define _halide_error_impl(type)                                    \
+    for (Halide::Internal::ErrorReport<type> _err; 1; _err.issue()) \
+    /**/ _err.init(__FILE__, __FUNCTION__, __LINE__, nullptr)
 
-#define _halide_internal_error(type) \
-    _halide_internal_diagnostic(0, Halide::Internal::ErrorReport<type>, nullptr)
+#define _halide_assert_impl(condition, type)                            \
+    if (!(condition))                                                   \
+        for (Halide::Internal::ErrorReport<type> _err; 1; _err.issue()) \
+    /*****/ _err.init(__FILE__, __FUNCTION__, __LINE__, #condition)
 
-#define _halide_internal_assertion(condition, type) \
-    _halide_internal_diagnostic(condition, Halide::Internal::ErrorReport<type>, #condition)
+#define _halide_user_warning                                       \
+    for (Halide::Internal::WarningReport _err; _err; _err.issue()) \
+    /**/ _err.init(__FILE__, __FUNCTION__, __LINE__, nullptr)
+/// @}
 
-#define user_error _halide_internal_error(Halide::CompileError)
-#define internal_error _halide_internal_error(Halide::InternalError)
-#define halide_runtime_error _halide_internal_error(Halide::RuntimeError)
+#define user_warning _halide_user_warning
 
-#define user_warning _halide_internal_diagnostic(0, Halide::Internal::WarningReport, nullptr)
+#define user_error _halide_error_impl(Halide::CompileError)
+#define internal_error _halide_error_impl(Halide::InternalError)
+#define halide_runtime_error _halide_error_impl(Halide::RuntimeError)
 
-#define internal_assert(c) _halide_internal_assertion(c, Halide::InternalError)
-#define user_assert(c) _halide_internal_assertion(c, Halide::CompileError)
+#define internal_assert(c) _halide_assert_impl(c, Halide::InternalError)
+#define user_assert(c) _halide_assert_impl(c, Halide::CompileError)
 
 // The nicely named versions get cleaned up at the end of Halide.h,
 // but user code might want to do halide-style user_asserts (e.g. the
 // Extern macros introduce calls to user_assert), so for that purpose
 // we define an equivalent macro that can be used outside of Halide.h
-#define _halide_internal_assert(c) _halide_internal_assertion(c, Halide::InternalError)
-#define _halide_user_assert(c) _halide_internal_assertion(c, Halide::CompileError)
+#define _halide_user_error _halide_error_impl(Halide::CompileError)
+#define _halide_internal_error _halide_error_impl(Halide::InternalError)
+#define _halide_runtime_error _halide_error_impl(Halide::RuntimeError)
+#define _halide_internal_assert(c) _halide_assert_impl(c, Halide::InternalError)
+#define _halide_user_assert(c) _halide_assert_impl(c, Halide::CompileError)
 
 // N.B. Any function that might throw a user_assert or user_error may
 // not be inlined into the user's code, or the line number will be
