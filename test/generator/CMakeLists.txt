@@ -203,7 +203,7 @@ function(_add_halide_libraries TARGET)
 endfunction()
 
 function(_add_one_aot_test TARGET)
-    set(options "")
+    set(options LINK_TO_GPU)
     set(oneValueArgs "")
     set(multiValueArgs SRCS DEPS GROUPS INCLUDES DEFINES)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -235,11 +235,17 @@ function(_add_one_aot_test TARGET)
             target_compile_definitions("${TARGET}" PRIVATE WITH_DAWN_NATIVE)
         endif ()
     endif ()
-    if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
+    if (args_LINK_TO_GPU)
         if (Halide_TARGET MATCHES "cuda")
+            if (NOT TARGET CUDA::cuda_driver)
+                find_package(CUDAToolkit REQUIRED)
+            endif ()
             target_link_libraries("${TARGET}" PRIVATE CUDA::cuda_driver CUDA::cudart)
         endif ()
         if (Halide_TARGET MATCHES "opencl")
+            if (NOT TARGET OpenCL::OpenCL)
+                find_package(OpenCL REQUIRED)
+            endif ()
             target_link_libraries("${TARGET}" PRIVATE OpenCL::OpenCL)
         endif ()
     endif ()
@@ -247,13 +253,19 @@ function(_add_one_aot_test TARGET)
 endfunction()
 
 function(_add_halide_aot_tests NAME)
-    set(options OMIT_C_BACKEND)
+    set(options OMIT_C_BACKEND LINK_TO_GPU)
     set(oneValueArgs "")
     set(multiValueArgs ENABLE_IF GROUPS INCLUDES HALIDE_LIBRARIES HALIDE_RUNTIME DEPS SRCS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
         return()
+    endif ()
+
+    if (args_LINK_TO_GPU)
+        set(_LINK_TO_GPU LINK_TO_GPU)
+    else ()
+        set(_LINK_TO_GPU "")
     endif ()
 
     # If HALIDE_LIBRARIES is omitted, assume we want just a single halide_library target
@@ -297,7 +309,8 @@ function(_add_halide_aot_tests NAME)
                           SRCS "${args_SRCS}"
                           DEPS ${args_HALIDE_LIBRARIES} ${args_HALIDE_RUNTIME} ${args_DEPS}
                           INCLUDES ${args_INCLUDES}
-                          GROUPS ${args_GROUPS})
+                          GROUPS ${args_GROUPS}
+                          ${_LINK_TO_GPU})
         if (NOT args_OMIT_C_BACKEND)
             set(HALIDE_LIBRARIES_CPP "")
             foreach (hl IN LISTS args_HALIDE_LIBRARIES)
@@ -307,19 +320,11 @@ function(_add_halide_aot_tests NAME)
                               SRCS "${args_SRCS}"
                               DEPS ${HALIDE_LIBRARIES_CPP} ${args_HALIDE_RUNTIME} ${args_DEPS}
                               INCLUDES ${args_INCLUDES}
-                              GROUPS ${args_GROUPS})
+                              GROUPS ${args_GROUPS}
+                              ${_LINK_TO_GPU})
         endif ()
     endif ()
 endfunction()
-
-if ("NVPTX" IN_LIST Halide_LLVM_COMPONENTS)
-    if (Halide_TARGET MATCHES "cuda")
-        find_package(CUDAToolkit REQUIRED)
-    endif ()
-    if (Halide_TARGET MATCHES "opencl")
-        find_package(OpenCL REQUIRED)
-    endif ()
-endif ()
 
 ##
 # Create targets for the AOT tests
@@ -328,7 +333,7 @@ endif ()
 # acquire_release_aottest.cpp
 # acquire_release_generator.cpp
 _add_halide_libraries(acquire_release)
-_add_halide_aot_tests(acquire_release)
+_add_halide_aot_tests(acquire_release LINK_TO_GPU)
 
 # TODO: what are these?
 # configure_jittest.cpp
@@ -464,7 +469,7 @@ endif ()  # (NOT ${_USING_WASM})
 # define_extern_opencl_aottest.cpp
 # define_extern_opencl_generator.cpp
 _add_halide_libraries(define_extern_opencl)
-_add_halide_aot_tests(define_extern_opencl)
+_add_halide_aot_tests(define_extern_opencl LINK_TO_GPU)
 
 # embed_image_aottest.cpp
 # embed_image_generator.cpp
@@ -505,7 +510,8 @@ if ((NOT ${_USING_WASM}) AND (NOT Halide_TARGET MATCHES "vulkan"))
                           FROM gpu_multi_context_threaded.generator
                           FEATURES user_context)
     _add_halide_aot_tests(gpu_multi_context_threaded
-                          HALIDE_LIBRARIES gpu_multi_context_threaded_add gpu_multi_context_threaded_mul)
+                          HALIDE_LIBRARIES gpu_multi_context_threaded_add gpu_multi_context_threaded_mul
+                          LINK_TO_GPU)
 endif ()
 
 # gpu_object_lifetime_aottest.cpp
