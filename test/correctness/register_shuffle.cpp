@@ -11,10 +11,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // As 8/26/2025 llvm 21.1.0 includes some bugs w.r.t float32x2 vectors.
-    // See https://github.com/llvm/llvm-project/pull/126337#issuecomment-3192412599
-    const bool bad_llvm_version = Halide::Internal::get_llvm_version() == 211;
-
     {
         // Shuffle test to do a small convolution
         Func f, g;
@@ -97,7 +93,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (!bad_llvm_version) {
+    {
         // Vectorized broadcast test. Each lane is responsible for a
         // 2-vector from 'a' and a 2-vector from 'b' instead of a single
         // value.
@@ -255,7 +251,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (!bad_llvm_version) {
+    {
         // Bilinear upsample
         Func f, upx, upy;
         Var x, y;
