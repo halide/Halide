@@ -58,10 +58,9 @@ using std::vector;
 namespace {
 
 #if defined(__aarch64__)
-__attribute__((target("+sve")))
-int get_sve_vector_length() {
+__attribute__((target("+sve"))) int get_sve_vector_length() {
     register int result asm("w0");
-    __asm__ ("cntb %x0, all, mul #8" : "=r"(result));
+    __asm__("cntb %x0, all, mul #8" : "=r"(result));
     return result;
 }
 #endif
