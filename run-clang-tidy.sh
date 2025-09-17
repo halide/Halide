@@ -75,11 +75,33 @@ fi
 CLANG_TIDY_BUILD_DIR=$(mktemp -d)
 echo "CLANG_TIDY_BUILD_DIR = ${CLANG_TIDY_BUILD_DIR}"
 
-# Specify Halide_LLVM_SHARED_LIBS=ON because some installers may provide only that.
+export CC="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang"
+export CXX="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang++"
+
+if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
+  # Homebrew clang 21 is badly misconfigured and needs help finding the
+  # system headers, even though it uses system libc++ by default.
+  SDKROOT="$(xcrun --show-sdk-path)"
+  TOOLCHAINROOT="$(xcrun --show-toolchain-path)"
+  cat > "${CLANG_TIDY_BUILD_DIR}/toolchain.cmake" << EOF
+set(CMAKE_SYSROOT "${SDKROOT}")
+set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES
+    "${TOOLCHAINROOT}/usr/lib/clang/17/include"
+    "${SDKROOT}/usr/include"
+    "${TOOLCHAINROOT}/usr/include"
+    "${SDKROOT}/System/Library/Frameworks"
+    "${SDKROOT}/System/Library/SubFrameworks"
+)
+set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
+    "${SDKROOT}/usr/include/c++/v1"
+    \${CMAKE_C_STANDARD_INCLUDE_DIRECTORIES}
+)
+EOF
+  export CMAKE_TOOLCHAIN_FILE="${CLANG_TIDY_BUILD_DIR}/toolchain.cmake"
+fi
+
 echo Building compile_commands.json...
 cmake -G Ninja -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev \
-      -DCMAKE_C_COMPILER="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang" \
-      -DCMAKE_CXX_COMPILER="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang++" \
       -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
       -DHalide_CLANG_TIDY_BUILD=ON \
