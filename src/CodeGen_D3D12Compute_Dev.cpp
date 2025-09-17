@@ -388,10 +388,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
     } else if (op->name == "pow_f32" && can_prove(op->args[0] > 0)) {
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
         // directly.
-        stream << "pow(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
+        Expr equiv = Call::make(op->type, "pow", op->args, Call::PureExtern);
+        equiv.accept(this);
     } else if (op->is_intrinsic(Call::round)) {
         // HLSL's round intrinsic has the correct semantics for our rounding.
-        print_assignment(op->type, "round(" + print_expr(op->args[0]) + ")");
+        Expr equiv = Call::make(op->type, "round", op->args, Call::PureExtern);
+        equiv.accept(this);
     } else {
         CodeGen_GPU_C::visit(op);
     }
