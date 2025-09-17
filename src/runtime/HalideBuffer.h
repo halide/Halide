@@ -971,7 +971,7 @@ public:
 
     /** Allocate a new image of the given size with a runtime
      * type. Only used when you do know what size you want but you
-     * don't know statically what type the elements are. Pass zeroes
+     * don't know statically what type the elements are. Pass zeros
      * to make a buffer suitable for bounds query calls. */
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
@@ -990,7 +990,7 @@ public:
         }
     }
 
-    /** Allocate a new image of the given size. Pass zeroes to make a
+    /** Allocate a new image of the given size. Pass zeros to make a
      * buffer suitable for bounds query calls. */
     // @{
 
@@ -2119,8 +2119,7 @@ public:
     }
 
     HALIDE_ALWAYS_INLINE
-    const not_void_T &
-    operator()() const {
+    const not_void_T &operator()() const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 0;

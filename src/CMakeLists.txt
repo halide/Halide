@@ -149,6 +149,7 @@ target_sources(
     LLVM_Output.h
     LLVM_Runtime_Linker.h
     LoopCarry.h
+    LoopPartitioningDirective.h
     Lower.h
     LowerParallelTasks.h
     LowerWarpShuffles.h
@@ -167,6 +168,7 @@ target_sources(
     PartitionLoops.h
     Pipeline.h
     Prefetch.h
+    PrefetchDirective.h
     Profiling.h
     PurifyIndexMath.h
     PythonExtensionGen.h
@@ -467,7 +469,9 @@ set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(headers "$<TARGET_PROPERTY:Halide,HEADER_SET_private_headers>")
 add_custom_command(OUTPUT "${HALIDE_H}"
                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<SHELL_PATH:${Halide_BINARY_DIR}/include>"
-                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>"
+                   COMMAND build_halide_h "$<SHELL_PATH:${LICENSE_PATH}>" "${headers}" > "$<SHELL_PATH:${HALIDE_H}>.tmp"
+                   COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<SHELL_PATH:${HALIDE_H}>.tmp" "$<SHELL_PATH:${HALIDE_H}>"
+                   COMMAND ${CMAKE_COMMAND} -E rm "$<SHELL_PATH:${HALIDE_H}>.tmp"
                    DEPENDS build_halide_h "${LICENSE_PATH}" "${headers}"
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
                    COMMAND_EXPAND_LISTS
@@ -549,10 +553,11 @@ if (WITH_SERIALIZATION)
     add_custom_command(
         OUTPUT "${fb_header}"
         COMMAND flatbuffers::flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix --filename-suffix ".fbs" -o "${fb_dir}" "${fb_def}"
-        DEPENDS "${fb_def}"
+        DEPENDS flatbuffers::flatc "${fb_def}"
         VERBATIM
     )
     add_custom_target(generate_fb_header DEPENDS "${fb_header}")
+    add_dependencies(Halide generate_fb_header)
 
     target_sources(
         Halide

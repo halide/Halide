@@ -42,6 +42,21 @@
 
 #endif
 */
+#include "HalidePlugin.h"
+
+#include "ASLog.h"
+#include "AutoSchedule.h"
+#include "CostModel.h"
+#include "DefaultCostModel.h"
+#include "Featurization.h"
+#include "FunctionDAG.h"
+#include "LoopNest.h"
+#include "LoopNestParser.h"
+#include "NetworkSize.h"
+#include "ParamParser.h"
+#include "PerfectHashMap.h"
+#include "State.h"
+
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -51,22 +66,6 @@
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
-
-#include "ASLog.h"
-#include "AutoSchedule.h"
-#include "CostModel.h"
-#include "DefaultCostModel.h"
-#include "Errors.h"
-#include "Featurization.h"
-#include "FunctionDAG.h"
-#include "Halide.h"
-#include "HalidePlugin.h"
-#include "LoopNest.h"
-#include "LoopNestParser.h"
-#include "NetworkSize.h"
-#include "ParamParser.h"
-#include "PerfectHashMap.h"
-#include "State.h"
 
 #ifdef _WIN32
 #include <io.h>

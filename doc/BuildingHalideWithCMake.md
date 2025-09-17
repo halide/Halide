@@ -31,6 +31,7 @@ are looking for Halide's CMake coding guidelines, see [CodeStyleCMake.md].
   * [Build options](#build-options)
   * [Installing](#installing)
 * [Building Halide with pip](#building-halide-with-pip)
+  * [Using ccache with pip builds](#using-ccache-with-pip-builds)
 <!-- TOC -->
 
 # Installing CMake
@@ -147,8 +148,8 @@ building the core pieces of Halide.
 | [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                     |
 | [wabt]        | `==1.0.36`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
 | [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | Difficult to build. See [WebAssembly.md]            |
-| [Python]      | `>=3.8`            | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
-| [pybind11]    | `~=2.10.4`         | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
+| [Python]      | `>=3.9`            | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
+| [pybind11]    | `~=2.11.1`         | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 
 Halide maintains the following compatibility policy with LLVM: Halide version
 `N` supports LLVM versions `N`, `N-1`, and `N-2`. Our binary distributions
@@ -243,15 +244,17 @@ from the root of the repository.
 On macOS, it is possible to install all dependencies via [Homebrew][homebrew]:
 
 ```shell
-$ brew install llvm flatbuffers wabt python pybind11 doxygen eigen libpng libjpeg openblas
+$ brew install llvm flatbuffers wabt python pybind11 doxygen eigen libpng libjpeg-turbo openblas
 ```
 
 The `llvm` package includes `clang`, `clang-format`, and `lld`, too. To ensure
-CMake can find the keg-only dependencies, set the following:
+CMake can find LLVM, set the following cache variable:
 
 ```shell
-$ export CMAKE_PREFIX_PATH="/opt/homebrew:/opt/homebrew/opt/llvm:/opt/homebrew/opt/jpeg"
+$ cmake ... -DHalide_ROOT=/opt/homebrew/opt/llvm
 ```
+
+Or use the `macOS` CMake preset, which does this for you.
 
 ### Ubuntu / Debian
 
@@ -260,7 +263,7 @@ module dependencies):
 
 ```
 $ sudo apt install clang-tools lld llvm-dev libclang-dev liblld-dev \
-    libpng-dev libjpeg-dev libgl-dev python3-dev python3-numpy python3-scipy \
+    libpng-dev libjpeg-dev libgl-dev python3-dev python3-numpy \
     python3-imageio python3-pybind11 libopenblas-dev libeigen3-dev \ 
     libatlas-base-dev doxygen
 ```
@@ -514,6 +517,71 @@ However, this comes with a few caveats:
 Even so, this is a very good method of installing Halide. It supports both
 Python and C++ `find_package` workflows.
 
+## Using ccache with pip builds
+
+Because Python's build infrastructure creates temporary CMake build directories,
+simply setting `CMAKE_CXX_COMPILER_LAUNCHER` to `ccache` is insufficient to
+produce a well-cached build. The following settings should serve as a starting
+point to configure your environment (assuming `$PWD` is the repository root)
+for using `ccache` with `pip install .`.
+
+```shell
+# Point CMake to ccache
+export CMAKE_C_COMPILER_LAUNCHER=ccache
+export CMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+# Settings to make ccache try to ignore the build directory
+export CCACHE_BASEDIR=$PWD
+export CCACHE_NOHASHDIR=true
+
+# Enable caching of pre-compiled headers and rewrite debug paths
+# -Xclang -fno-pch-timestamp is only necessary when using Clang (not GCC)
+export CCACHE_SLOPPINESS=include_file_ctime,include_file_mtime,pch_defines,time_macros
+export CFLAGS="-Xclang -fno-pch-timestamp -fdebug-prefix-map=$PWD=."
+export CXXFLAGS="$CFLAGS"
+
+# Locate the temporary build beneath $PWD so that CCACHE_BASEDIR works
+export TMPDIR=$PWD/build/tmp
+
+# If using uv, don't create a temporary venv
+export UV_NO_BUILD_ISOLATION=1
+```
+
+See the CCache documentation on [compiling in different directories] and on
+using [precompiled headers] for more information about these settings. To check
+that ccache is working, run,
+
+```shell
+$ uv pip install .  # first run, populate cache
+Resolved 4 packages in 397ms
+      Built halide @ file:///Users/areinking/dev/Halide
+Prepared 1 package in 29.17s
+Installed 1 package in 8ms
+ + halide==20.0.0.dev87+gf6c939fd3.d20250724 (from file:///Users/areinking/dev/Halide)
+$ ccache -z
+Statistics zeroed
+$ uv pip install .  # second run, reload from cache
+Resolved 4 packages in 338ms
+      Built halide @ file:///Users/areinking/dev/Halide
+Prepared 1 package in 10.82s
+Uninstalled 1 package in 7ms
+Installed 1 package in 6ms
+ ~ halide==20.0.0.dev87+gf6c939fd3.d20250724 (from file:///Users/areinking/dev/Halide)
+$ ccache -s
+Cacheable calls:   1079 / 1080 (99.91%)
+  Hits:            1079 / 1079 (100.0%)
+    Direct:        1079 / 1079 (100.0%)
+    Preprocessed:     0 / 1079 ( 0.00%)
+  Misses:             0 / 1079 ( 0.00%)
+Uncacheable calls:    1 / 1080 ( 0.09%)
+Local storage:
+  Cache size (GB):  2.2 / 30.0 ( 7.24%)
+  Hits:            1079 / 1079 (100.0%)
+  Misses:             0 / 1079 ( 0.00%)
+```
+
+On this test system (an M3 MacBook Pro), the build is three times faster,
+with a 100% cache hit rate!
 
 [ATLAS]: http://math-atlas.sourceforge.net/
 
@@ -577,6 +645,8 @@ Python and C++ `find_package` workflows.
 
 [cmake_presets]: https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
 
+[compiling in different directories]: https://ccache.dev/manual/4.11.3.html#_compiling_in_different_directories
+
 [doxygen-download]: https://www.doxygen.nl/download.html
 
 [doxygen]: https://www.doxygen.nl/index.html
@@ -602,6 +672,8 @@ Python and C++ `find_package` workflows.
 [ninja-download]: https://github.com/ninja-build/ninja/releases
 
 [pipx]: https://pipx.pypa.io/stable/
+
+[precompiled headers]: https://ccache.dev/manual/4.11.3.html#_precompiled_headers
 
 [pybind11]: https://github.com/pybind/pybind11
 

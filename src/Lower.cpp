@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -120,11 +121,15 @@ public:
 
     ~LoweringLogger() {
         if (time_lowering_passes) {
+            double total = 0.0;
             debug(0) << "Lowering pass runtimes:\n";
             std::sort(timings.begin(), timings.end());
             for (const auto &p : timings) {
-                debug(0) << " " << p.first << " ms : " << p.second << "\n";
+                total += p.first;
+                debug(0) << std::setw(10) << std::fixed << std::setprecision(3) << p.first << " ms : "
+                         << p.second << "\n";
             }
+            debug(0) << std::setw(10) << std::fixed << std::setprecision(3) << total << " ms in total\n";
         }
     }
 };

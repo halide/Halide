@@ -331,7 +331,7 @@ namespace {
 void do_device_to_device_copy(void *user_context, mtl_blit_command_encoder *encoder,
                               const device_copy &c, uint64_t src_offset, uint64_t dst_offset, int d) {
     if (d == 0) {
-        buffer_to_buffer_1d_copy(encoder, ((device_handle *)c.src)->buf, c.src_begin + src_offset,
+        buffer_to_buffer_1d_copy(encoder, ((device_handle *)c.src)->buf, src_offset,
                                  ((device_handle *)c.dst)->buf, dst_offset, c.chunk_size);
     } else {
         // TODO: deal with negative strides. Currently the code in
@@ -1156,8 +1156,9 @@ WEAK int halide_metal_buffer_copy(void *user_context, struct halide_buffer_t *sr
             const char *buffer_label = "halide_metal_buffer_copy";
             mtl_command_buffer *blit_command_buffer = new_command_buffer(metal_context.queue, buffer_label, strlen(buffer_label));
             mtl_blit_command_encoder *blit_encoder = new_blit_command_encoder(blit_command_buffer);
-            do_device_to_device_copy(user_context, blit_encoder, c, ((device_handle *)c.src)->offset,
-                                     ((device_handle *)c.dst)->offset, dst->dimensions);
+            do_device_to_device_copy(user_context, blit_encoder, c,
+                                     ((device_handle *)c.src)->offset + c.src_begin,
+                                     ((device_handle *)c.dst)->offset + c.dst_begin, dst->dimensions);
             end_encoding(blit_encoder);
             commit_command_buffer(blit_command_buffer);
         } else {

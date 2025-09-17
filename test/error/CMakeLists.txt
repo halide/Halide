@@ -23,6 +23,7 @@ tests(GROUPS error
       bad_ring_buffer.cpp
       bad_extern_split.cpp
       bad_fold.cpp
+      bad_func_object.cpp
       bad_host_alignment.cpp
       bad_hoist_storage.cpp
       bad_partition_always.cpp
@@ -51,6 +52,7 @@ tests(GROUPS error
       device_target_mismatch.cpp
       dupe_param_name.cpp
       expanding_reduction.cpp
+      extern_device_function_with_no_target_support.cpp
       extern_func_self_argument.cpp
       five_d_gpu_buffer.cpp
       float_arg.cpp
@@ -74,6 +76,7 @@ tests(GROUPS error
       lerp_mismatch.cpp
       lerp_signed_weight.cpp
       memoize_different_compute_store.cpp
+      memoize_output_invalid.cpp
       memoize_redefine_eviction_key.cpp
       metal_threads_too_large.cpp
       metal_vector_too_large.cpp

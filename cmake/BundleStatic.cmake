@@ -98,7 +98,7 @@ function(bundle_static TARGET)
     endif ()
 
     _bundle_static_check_output(version_info "${CMAKE_AR}" V)
-    if (version_info MATCHES "GNU")
+    if (version_info MATCHES "GNU|LLVM")
         string(CONFIGURE [[
             create $<TARGET_FILE:@TARGET@>
             addlib $<TARGET_FILE:@TARGET@>.tmp

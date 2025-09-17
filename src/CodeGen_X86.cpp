@@ -39,6 +39,11 @@ Target complete_x86_target(Target t) {
     }
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
         t.set_feature(Target::AVX512_Zen4);
+        t.set_feature(Target::AVXVNNI);
+    }
+    if (t.has_feature(Target::AVX512_Zen5)) {
+        t.set_feature(Target::AVX512_Zen4);
+        t.set_feature(Target::AVXVNNI);
     }
     if (t.has_feature(Target::AVX512_Zen4)) {
         t.set_feature(Target::AVX512_Cannonlake);
@@ -263,25 +268,29 @@ const x86Intrinsic intrinsic_defs[] = {
 
     // 4-way dot product vector reduction
     // The LLVM intrinsics combine the bf16 pairs into i32, so provide a wrapper to correctly call the intrinsic.
+
+    // Currently, all targets which support avx_vnni inherit AVX512_Zen4, which also implies avx512vl.
+    // This means AVX512_Zen4 can cover all 128, 256, 512 bit vectors of bf16 and vnni.
+
     {"dpbf16psx16", Float(32, 16), "dot_product", {Float(32, 16), BFloat(16, 32), BFloat(16, 32)}, Target::AVX512_Zen4},
-    {"dpbf16psx8", Float(32, 8), "dot_product", {Float(32, 8), BFloat(16, 16), BFloat(16, 16)}, Target::AVX512_SapphireRapids},
-    {"dpbf16psx4", Float(32, 4), "dot_product", {Float(32, 4), BFloat(16, 8), BFloat(16, 8)}, Target::AVX512_SapphireRapids},
+    {"dpbf16psx8", Float(32, 8), "dot_product", {Float(32, 8), BFloat(16, 16), BFloat(16, 16)}, Target::AVX512_Zen4},
+    {"dpbf16psx4", Float(32, 4), "dot_product", {Float(32, 4), BFloat(16, 8), BFloat(16, 8)}, Target::AVX512_Zen4},
 
     {"dpbusdx16", Int(32, 16), "dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_Zen4},
-    {"dpbusdx8", Int(32, 8), "dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_SapphireRapids},
-    {"dpbusdx4", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx8", Int(32, 8), "dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_Zen4},
+    {"dpbusdx4", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_Zen4},
 
     {"dpwssdx16", Int(32, 16), "dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_Zen4},
-    {"dpwssdx8", Int(32, 8), "dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
-    {"dpwssdx4", Int(32, 4), "dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx8", Int(32, 8), "dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_Zen4},
+    {"dpwssdx4", Int(32, 4), "dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_Zen4},
 
     {"dpbusdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_Zen4},
-    {"dpbusdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_SapphireRapids},
-    {"dpbusdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_SapphireRapids},
+    {"dpbusdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_Zen4},
+    {"dpbusdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_Zen4},
 
     {"dpwssdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_Zen4},
-    {"dpwssdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
-    {"dpwssdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
+    {"dpwssdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_Zen4},
+    {"dpwssdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_Zen4},
 
     {"tileloadd64_i8", Int(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
     {"tileloadd64_i8", UInt(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
@@ -420,6 +429,7 @@ void CodeGen_X86::visit(const GT *op) {
             Value *sb = slice_vector(b, i, slice_size);
             Value *slice_value;
             if (t.is_float()) {
+                ScopedFastMath guard(this);
                 slice_value = builder->CreateFCmpOGT(sa, sb);
             } else if (t.is_int()) {
                 slice_value = builder->CreateICmpSGT(sa, sb);
@@ -453,6 +463,7 @@ void CodeGen_X86::visit(const EQ *op) {
             Value *sb = slice_vector(b, i, slice_size);
             Value *slice_value;
             if (t.is_float()) {
+                ScopedFastMath guard(this);
                 slice_value = builder->CreateFCmpOEQ(sa, sb);
             } else {
                 slice_value = builder->CreateICmpEQ(sa, sb);
@@ -522,6 +533,7 @@ void CodeGen_X86::visit(const Cast *op) {
         // This target doesn't support full float16 arithmetic, but it *does*
         // support float16 casts, so we emit a vanilla LLVM cast node.
         value = codegen(op->value);
+        ScopedFastMath guard(this);
         value = builder->CreateFPCast(value, llvm_type_of(dst));
         return;
     }
@@ -947,6 +959,8 @@ string CodeGen_X86::mcpu_target() const {
     //          The CPU choice here *WILL* affect -mattrs!
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         return "sapphirerapids";
+    } else if (target.has_feature(Target::AVX512_Zen5)) {
+        return (LLVM_VERSION >= 190) ? "znver5" : "znver4";
     } else if (target.has_feature(Target::AVX512_Zen4)) {
         return "znver4";
     } else if (target.has_feature(Target::AVX512_Cannonlake)) {
@@ -989,6 +1003,7 @@ bool gather_might_be_slow(Target target) {
     case Target::Processor::ZnVer2:
     case Target::Processor::ZnVer3:
     case Target::Processor::ZnVer4:
+    case Target::Processor::ZnVer5:
         return false;
     default:
         return !target.has_feature(Target::AVX512_Zen4);
@@ -1025,6 +1040,8 @@ string CodeGen_X86::mcpu_tune() const {
         return "znver3";
     case Target::Processor::ZnVer4:
         return "znver4";
+    case Target::Processor::ZnVer5:
+        return (LLVM_VERSION >= 190) ? "znver5" : "znver4";
 
     case Target::Processor::ProcessorGeneric:
         break;
@@ -1072,8 +1089,10 @@ string CodeGen_X86::mattrs() const {
             attrs.emplace_back("+avx512bitalg");
             attrs.emplace_back("+avx512vbmi2");
         }
-        if (target.has_feature(Target::AVX512_SapphireRapids)) {
+        if (target.has_feature(Target::AVXVNNI)) {
             attrs.emplace_back("+avxvnni");
+        }
+        if (target.has_feature(Target::AVX512_SapphireRapids)) {
             attrs.emplace_back("+amx-int8");
             attrs.emplace_back("+amx-bf16");
         }

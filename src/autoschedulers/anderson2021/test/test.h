@@ -1,13 +1,13 @@
 #ifndef TEST_H
 #define TEST_H
 
+#define HALIDE_KEEP_MACROS
 #include "Halide.h"
 
 namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-#define user_assert(c) _halide_internal_assertion(c, Halide::Internal::ErrorReport::User)
 #define EXPECT_EQ(expected, actual) expect_eq(__LINE__, expected, actual)
 #define APPROX_EQ(expected, actual, epsilon) approx_eq(__LINE__, expected, actual, epsilon)
 #define EXPECT(expected) expect(__LINE__, expected)

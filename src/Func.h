@@ -587,6 +587,9 @@ public:
     /** How many outputs does the function this refers to produce. */
     size_t size() const;
 
+    /** Is this FuncRef syntactically equivalent to another one? */
+    bool equivalent_to(const FuncRef &other) const;
+
     /** What function is this calling? */
     Internal::Function function() const {
         return func;
@@ -753,7 +756,7 @@ public:
      * not contain free variables). */
     explicit Func(const Expr &e);
 
-    /** Construct a new Func to wrap an existing, already-define
+    /** Construct a new Func to wrap an existing, already-defined
      * Function object. */
     explicit Func(Internal::Function f);
 
@@ -1162,14 +1165,6 @@ public:
         define_extern(function_name, params, t,
                       Internal::make_argument_list(dimensionality), mangling,
                       device_api);
-    }
-
-    void define_extern(const std::string &function_name,
-                       const std::vector<ExternFuncArgument> &params,
-                       const std::vector<Type> &types, int dimensionality,
-                       NameMangling mangling) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality), mangling);
     }
 
     void define_extern(const std::string &function_name,
@@ -2264,6 +2259,11 @@ public:
      * to remove memoized entries using this eviction key from the
      * cache. Memoized computations that do not provide an eviction
      * key will never be evicted by this mechanism.
+     *
+     * It is invalid to memoize the output of a Pipeline; attempting
+     * to do so will issue an error. To cache an entire pipeline,
+     * either implement a caching mechanism outside of Halide or
+     * explicitly copy out of the cache with another output Func.
      */
     Func &memoize(const EvictionKey &eviction_key = EvictionKey());
 

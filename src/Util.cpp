@@ -262,14 +262,13 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
-string replace_all(const string &str, const string &find, const string &replace) {
+string replace_all(string str, const string &find, const string &replace) {
     size_t pos = 0;
-    string result = str;
-    while ((pos = result.find(find, pos)) != string::npos) {
-        result.replace(pos, find.length(), replace);
+    while ((pos = str.find(find, pos)) != string::npos) {
+        str.replace(pos, find.length(), replace);
         pos += replace.length();
     }
-    return result;
+    return str;
 }
 
 std::vector<std::string> split_string(const std::string &source, const std::string &delim) {
@@ -388,7 +387,7 @@ std::string get_windows_tmp_dir() {
     std::string tmp = from_utf16(wlocal_path);
     CoTaskMemFree(wlocal_path);
 
-    tmp = replace_all(tmp, "\\", "/");
+    tmp = replace_all(std::move(tmp), "\\", "/");
     if (tmp.back() != '/') tmp += '/';
     tmp += "Temp/";
     return tmp;

@@ -499,7 +499,11 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     for (const Function &f : contents->outputs) {
         user_assert(f.has_pure_definition() || f.has_extern_definition())
-            << "Can't compile Pipeline with undefined output Func: " << f.name() << ".\n";
+            << "Can't compile Pipeline with undefined output Func: " << f.name() << ".";
+        user_assert(!f.schedule().memoized())
+            << "Can't compile Pipeline with memoized output Func: " << f.name() << ". "
+            << "Memoization is valid only on intermediate Funcs because it takes "
+            << "control of buffer allocation.";
     }
 
     string new_fn_name(fn_name);
@@ -701,11 +705,13 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
         for (const LoweredFunc &f : module.functions()) {
             f.body.accept(&find_externs);
         }
-        if (debug::debug_level() >= 1) {
+        debug(1) << [&] {
+            std::stringstream ss;
             for (const auto &p : jit_externs) {
-                debug(1) << "Found extern: " << p.first << "\n";
+                ss << "Found extern: " << p.first << "\n";
             }
-        }
+            return ss.str();
+        }();
 
         wasm_module = WasmModule::compile(module, args,
                                           module.name(), jit_externs, externs_jit_module);
@@ -1140,10 +1146,10 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
             tb.orig = tb.query;
         }
 
-        Internal::debug(2) << "Calling jitted function\n";
+        debug(2) << "Calling jitted function\n";
         int exit_status = call_jit_code(args);
         jit_context.finalize(exit_status);
-        Internal::debug(2) << "Back from jitted function\n";
+        debug(2) << "Back from jitted function\n";
         bool changed = false;
 
         // Check if there were any changes

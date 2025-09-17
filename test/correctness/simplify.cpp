@@ -3,8 +3,6 @@
 using namespace Halide;
 using namespace Halide::Internal;
 
-#define internal_assert _halide_user_assert
-
 // Helper to wrap an expression in a statement using the expression
 // that won't be simplified away.
 Stmt not_no_op(Expr x) {

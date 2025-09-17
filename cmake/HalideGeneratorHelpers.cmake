@@ -68,10 +68,6 @@ function(add_halide_generator TARGET)
             add_custom_target("${ARG_PACKAGE_NAME}")
         endif ()
 
-        if (NOT Halide_FOUND)
-            find_package(Halide REQUIRED)
-        endif ()
-
         if (ARG_SOURCES MATCHES ".py$")
             if (ARG_LINK_LIBRARIES)
                 message(FATAL_ERROR "You cannot specify LINK_LIBRARIES in conjunction with Python source code.")
@@ -94,6 +90,10 @@ function(add_halide_generator TARGET)
         else ()
             add_executable(${TARGET} ${ARG_SOURCES})
             add_executable(${gen} ALIAS ${TARGET})
+
+            if (NOT TARGET Halide::Generator)
+                find_package(Halide REQUIRED)
+            endif ()
             target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
 
             _Halide_place_dll(${TARGET})
@@ -173,18 +173,26 @@ function(_Halide_library_from_generator TARGET)
     )
 
     ## "hash table" of extra outputs to extensions
+    # Keep in sync with Module.cpp
     set(assembly_extension ".s")
     set(bitcode_extension ".bc")
+    # set(c_header_extension ".h")  # handled specially
     set(c_source_extension ".halide_generated.cpp")
     set(compiler_log_extension ".halide_compiler_log")
+    set(conceptual_stmt_extension ".conceptual.stmt")
+    set(conceptual_stmt_html_extension ".conceptual.stmt.html")
+    # set(cpp_stub_extension ".stub.h")  # not implemented
+    set(device_code_extension ".device_code")
     set(featurization_extension ".featurization")
     set(function_info_header_extension ".function_info.h")
     set(hlpipe_extension ".hlpipe")
     set(llvm_assembly_extension ".ll")
+    # set(object_extension (is_windows_coff ? ".obj" : ".o"))  # handled specially
     set(python_extension_extension ".py.cpp")
     set(pytorch_wrapper_extension ".pytorch.h")
     set(registration_extension ".registration.cpp")
     set(schedule_extension ".schedule.h")
+    # set(static_library_extension (is_windows_coff ? ".lib" : ".a"))  # handled specially
     set(stmt_extension ".stmt")
     set(stmt_html_extension ".stmt.html")
 
@@ -440,15 +448,17 @@ function(add_halide_library TARGET)
 
     # See Module.cpp for list of extra outputs. The following outputs intentionally do not appear:
     # - `c_header` is always generated
-    # - `c_source` is selected by C_BACKEND
+    # - `cpp_stub` is not available
     # - `object` is selected for CMake-target-compile
     # - `static_library` is selected for cross-compile
-    # - `cpp_stub` is not available
     set(extra_output_names
         ASSEMBLY
         BITCODE
         COMPILER_LOG
+        CONCEPTUAL_STMT
+        CONCEPTUAL_STMT_HTML
         C_SOURCE
+        DEVICE_CODE
         FEATURIZATION
         FUNCTION_INFO_HEADER
         HLPIPE
@@ -458,7 +468,8 @@ function(add_halide_library TARGET)
         REGISTRATION
         SCHEDULE
         STMT
-        STMT_HTML)
+        STMT_HTML
+    )
 
     ##
     # Parse the arguments and set defaults for missing values.
@@ -475,12 +486,20 @@ function(add_halide_library TARGET)
 
     set(options C_BACKEND GRADIENT_DESCENT)
     set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER HEADER ${extra_output_names} NO_THREADS NO_DL_LIBS)
-    set(multiValueArgs TARGETS PARAMS PLUGINS ${features_args})
+    set(multiValueArgs DEPENDS TARGETS PARAMS PLUGINS ${features_args})
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT "${ARG_UNPARSED_ARGUMENTS}" STREQUAL "")
         message(AUTHOR_WARNING "Arguments to add_halide_library were not recognized: ${ARG_UNPARSED_ARGUMENTS}")
     endif ()
+
+    set(nonEmptyArgs ${oneValueArgs})
+    list(REMOVE_ITEM nonEmptyArgs AUTOSCHEDULER FUNCTION_NAME GENERATOR NAMESPACE USE_RUNTIME)
+    foreach (name IN LISTS ARG_KEYWORDS_MISSING_VALUES)
+        if (name IN_LIST nonEmptyArgs)
+            message(AUTHOR_WARNING "The argument ${name} passed to add_halide_library is undefined")
+        endif ()
+    endforeach ()
 
     if (ARG_C_BACKEND AND ARG_TARGETS)
         message(AUTHOR_WARNING "The C backend sources will be compiled with the current CMake toolchain.")
@@ -613,7 +632,7 @@ function(add_halide_library TARGET)
 
     set(generator_args
         COMMAND ${generator_cmd}
-        DEPENDS ${generator_cmd_deps}
+        DEPENDS ${generator_cmd_deps} ${ARG_DEPENDS}
         EXTRA_OUTPUTS ${extra_outputs}
         FUNCTION_NAME "${ARG_FUNCTION_NAME}"
         GENERATOR "${ARG_GENERATOR}"

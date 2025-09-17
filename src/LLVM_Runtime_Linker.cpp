@@ -27,16 +27,25 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     return result;
 }
 
+}  // namespace
+}  // namespace Halide
+
 #define DECLARE_INITMOD(mod)                                                              \
     extern "C" unsigned char halide_internal_initmod_##mod[];                             \
     extern "C" int halide_internal_initmod_##mod##_length;                                \
+    namespace Halide {                                                                    \
+    namespace {                                                                           \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context) {         \
         llvm::StringRef sb = llvm::StringRef((const char *)halide_internal_initmod_##mod, \
                                              halide_internal_initmod_##mod##_length);     \
         return parse_bitcode_file(sb, context, #mod);                                     \
+    }                                                                                     \
+    }                                                                                     \
     }
 
 #define DECLARE_NO_INITMOD(mod)                                                                                         \
+    namespace Halide {                                                                                                  \
+    namespace {                                                                                                         \
     [[maybe_unused]] std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool = false, bool = false) { \
         user_error << "Halide was compiled without support for this target\n";                                          \
         return std::unique_ptr<llvm::Module>();                                                                         \
@@ -44,6 +53,8 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     [[maybe_unused]] std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {                        \
         user_error << "Halide was compiled without support for this target\n";                                          \
         return std::unique_ptr<llvm::Module>();                                                                         \
+    }                                                                                                                   \
+    }                                                                                                                   \
     }
 
 #define DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, bits)              \
@@ -56,15 +67,21 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     } while (0)
 
 #define DECLARE_CPP_INITMOD_LOOKUP(mod)                                                                     \
+    namespace Halide {                                                                                      \
+    namespace {                                                                                             \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
         if (bits_64) {                                                                                      \
             DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 64);                                                       \
         } else {                                                                                            \
             DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 32);                                                       \
         }                                                                                                   \
+    }                                                                                                       \
+    }                                                                                                       \
     }
 
 #define DECLARE_CPP_INITMOD_LOOKUP_64(mod)                                                                  \
+    namespace Halide {                                                                                      \
+    namespace {                                                                                             \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
         if (bits_64) {                                                                                      \
             DECLARE_CPP_INITMOD_LOOKUP_BITS(mod, 64);                                                       \
@@ -72,6 +89,8 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
             internal_error << "No support for 32-bit initmod: " #mod;                                       \
             return nullptr; /* appease warnings */                                                          \
         }                                                                                                   \
+    }                                                                                                       \
+    }                                                                                                       \
     }
 
 #define DECLARE_CPP_INITMOD(mod)    \
@@ -314,6 +333,9 @@ DECLARE_CPP_INITMOD(riscv_cpu_features)
 // DECLARE_NO_INITMOD(riscv)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
+
+namespace Halide {
+namespace {
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
@@ -574,6 +596,11 @@ llvm::Triple get_triple_for_target(const Target &target) {
         // Return default-constructed triple. Must be set later.
     }
 
+    if (target.has_feature(Target::Simulator)) {
+        user_assert(target.os == Target::IOS) << "Simulator only supported for iOS\n";
+        triple.setEnvironment(llvm::Triple::Simulator);
+    }
+
     // Setting a minimum OS version here enables LLVM to include platform
     // metadata in the MachO object file. Without this, Xcode 15's ld
     // issues warnings about missing the "platform load command".
@@ -624,7 +651,11 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
             }
         }
         module->setDataLayout(data_layout);
+#if LLVM_VERSION >= 210
+        module->setTargetTriple(triple);
+#else
         module->setTargetTriple(triple.str());
+#endif
     }
 
     // Link them all together
@@ -668,6 +699,29 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
         convert_weak_to_linkonce(gv);
+    }
+
+    // Implement a quick-and-dirty trick to drop runtime functions for the runtime
+    // in case you want to replace them with your own version.
+    // WARNING: Do expect this environment variable to disappear in the future.
+    // Consider this an undocumented and unstable feature. @zvookin has better
+    // ideas for a more sustainable solution involving renaming those functions.
+    if (const char *drop_str = getenv("HL_RUNTIME_DROP_FUNCS")) {
+        int start = 0;
+        int len = strlen(drop_str);
+        while (start < len) {
+            int stop = start;
+            while (drop_str[stop] != 0 && drop_str[stop] != ',') {
+                stop++;
+            }
+            std::string_view func_name(drop_str + start, stop - start);
+            llvm::Function *func = modules[0]->getFunction(func_name);
+            user_assert(func) << "[HL_RUNTIME_DROP_FUNCS] No runtime function found by the name: " << func_name;
+            func->deleteBody();
+            func->setLinkage(llvm::GlobalValue::ExternalLinkage);
+
+            start = stop + 1;
+        }
     }
 
     // Enumerate the functions.
@@ -840,6 +894,13 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     // so convert all of them to linkonce
     constexpr bool allow_stripping_all_weak_functions = true;
     link_modules(modules, t, allow_stripping_all_weak_functions);
+
+    // The initmods are compiled by clang and have some attributes associated with
+    // them that are irrelevant to Wasm. Strip them out.
+    for (llvm::Function &F : *modules[0]) {
+        F.removeFnAttr("target-features");
+        F.removeFnAttr("target-cpu");
+    }
 
     return std::move(modules[0]);
 }
@@ -1380,7 +1441,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
     }
 
     llvm::Triple triple("nvptx64--");
+#if LLVM_VERSION >= 210
+    modules[0]->setTargetTriple(triple);
+#else
     modules[0]->setTargetTriple(triple.str());
+#endif
 
     llvm::DataLayout dl("e-i64:64-v16:16-v32:32-n16:32:64");
     modules[0]->setDataLayout(dl);

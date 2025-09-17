@@ -12,7 +12,7 @@ on:
 
 env:
   # TODO: detect this from repo somehow: https://github.com/halide/Halide/issues/8406
-  LLVM_VERSION: 19.1.6
+  LLVM_VERSION: 21.1.1
   FLATBUFFERS_VERSION: 23.5.26
   WABT_VERSION: 1.0.36
 
@@ -59,20 +59,8 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      # See: https://github.com/pypa/setuptools-scm/issues/455
-      - name: Suppress git version tag
-        if: github.event_name == 'push' && github.ref_name == 'main'
-        run: |
-          echo 'local_scheme = "no-local-version"' >> pyproject.toml
-          git update-index --assume-unchanged pyproject.toml
-
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@v3.28.4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.8
-        if: runner.os == 'macOS' && runner.arch == 'ARM64'
 
       ########################################################################
       # flatbuffers
@@ -214,13 +202,18 @@ jobs:
         uses: pypa/cibuildwheel@v2.20.0
         env:
           CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7}*"
+          CIBW_SKIP: "cp3{5,6,7,8}*"
+          # Suppress the git version tag (necessary for TestPyPI)
+          CIBW_ENVIRONMENT: >
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
           CIBW_ENVIRONMENT_MACOS: >
             CMAKE_PREFIX_PATH='${{ github.workspace }}/opt'
             Python_ROOT_DIR=''
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
           CIBW_ENVIRONMENT_WINDOWS: >
             CMAKE_GENERATOR=Ninja
             CMAKE_PREFIX_PATH='${{ github.workspace }}\opt'
+            SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
           CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/halide/manylinux_2_28_x86_64-llvm:${{ env.LLVM_VERSION }}"
           CIBW_TEST_COMMAND: >
             cmake -G Ninja -S {project}/python_bindings/apps -B build -DCMAKE_BUILD_TYPE=Release &&

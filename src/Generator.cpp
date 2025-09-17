@@ -1720,6 +1720,15 @@ void GIOBase::set_type(const Type &type) {
     types_ = {type};
 }
 
+// Conceptually related to the method above, but attached to the
+// GeneratorOutputBase subclass instead of GIOBase because currently input
+// buffers can't be tuples.
+void GeneratorOutputBase::set_type(const std::vector<Type> &types) {
+    generator->check_exact_phase(GeneratorBase::ConfigureCalled);
+    user_assert(!gio_types_defined()) << "set_type() may only be called on an Input or Output that has no type specified.";
+    types_ = types;
+}
+
 void GIOBase::set_dimensions(int dims) {
     generator->check_exact_phase(GeneratorBase::ConfigureCalled);
     user_assert(!dims_defined()) << "set_dimensions() may only be called on an Input or Output that has no dimensionality specified.";

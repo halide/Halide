@@ -1,7 +1,8 @@
 #ifndef HALIDE_HALIDEPLUGIN_H
 #define HALIDE_HALIDEPLUGIN_H
 
-#include "Errors.h"
+#define HALIDE_KEEP_MACROS
+#include "Halide.h"
 
 #define REGISTER_AUTOSCHEDULER(NAME)                                  \
     struct HALIDE_EXPORT Register##NAME {                             \

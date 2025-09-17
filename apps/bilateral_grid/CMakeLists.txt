@@ -25,7 +25,13 @@ add_halide_library(bilateral_grid_auto_schedule FROM bilateral_grid.generator
                    GENERATOR bilateral_grid
                    STMT bilateral_grid_auto_schedule_STMT
                    SCHEDULE bilateral_grid_auto_schedule_SCHEDULE
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   # Note(antonysigma): With gpu_tile(...,
+                   # TailStrategy::GuardWithIf), the OSX Metal API reports the
+                   # maximum GPU threads of 896 per block. Manually down adjust
+                   # the cache size per block to force a smaller thread count.
+                   PARAMS autoscheduler.last_level_cache_size=10000 autoscheduler.experimental_gpu_schedule=1
+                   )
 
 # Main executable
 add_executable(bilateral_grid_process filter.cpp)

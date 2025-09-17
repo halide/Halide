@@ -328,7 +328,7 @@ namespace {
 // llvm::CloneModule has issues with debug info. As a workaround,
 // serialize it to bitcode in memory, and then parse the bitcode back in.
 std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
-    Internal::debug(2) << "Cloning module " << module_in.getName().str() << "\n";
+    debug(2) << "Cloning module " << module_in.getName().str() << "\n";
 
     // Write the module to a buffer.
     llvm::SmallVector<char, 16> clone_buffer;
@@ -351,8 +351,12 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
 
 void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
                llvm::CodeGenFileType file_type) {
-    Internal::debug(1) << "emit_file.Compiling to native code...\n";
-    Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
+    debug(1) << "emit_file.Compiling to native code...\n";
+#if LLVM_VERSION >= 210
+    debug(2) << "Target triple: " << module_in.getTargetTriple().str() << "\n";
+#else
+    debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
+#endif
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
@@ -384,17 +388,29 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
     llvm::legacy::PassManager pass_manager;
 
-    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module->getTargetTriple())));
+    const auto &triple = llvm::Triple(module->getTargetTriple());
+    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(triple));
 
     // Make sure things marked as always-inline get inlined
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
 
     if (target_machine->isPositionIndependent()) {
-        Internal::debug(1) << "Target machine is Position Independent!\n";
+        debug(1) << "Target machine is Position Independent!\n";
     }
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
+
+#if 200 <= LLVM_VERSION && LLVM_VERSION < 220
+    if (triple.isMacOSX() && triple.isAArch64()) {
+        // The AArch64 syntax variant is able to display the arguments to SDOT
+        // while the Darwin-specific one is bugged. See this GitHub issue for
+        // more info: https://github.com/llvm/llvm-project/issues/151330
+        enum { Generic = 0,
+               Apple = 1 } variant = Generic;
+        target_machine->Options.MCOptions.OutputAsmVariant = variant;
+    }
+#endif
 
     // Ask the target to add backend passes as necessary.
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);

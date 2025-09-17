@@ -136,15 +136,18 @@ int main(int argc, char **argv) {
         Halide::Internal::JITSharedRuntime::reuse_device_allocations(false);
     };
 
-    // First run them serially (compilation of a Func isn't thread-safe).
-    // test1(true);
-    // test2(true);
-    // test3(true);
-    // return 0;
+    // We want to launch multiple instances of each test, but compilation of a
+    // single Func is not thread-safe, so we'd better jit-compile them ahead of
+    // time.
+    f1[N - 1].compile_jit();
+    f2[N - 1].compile_jit();
+    f3[N - 1].compile_jit();
 
-    // Now run all at the same time to check for concurrency issues.
-
-    Halide::Tools::ThreadPool<void> pool(1);
+    // Run all at the same time to check for concurrency issues. They'll
+    // intentionally race on making allocations, and on setting the
+    // allocation-cache-enabled flag. This shouldn't cause any incorrect output
+    // or crashes.
+    Halide::Tools::ThreadPool<void> pool;
     std::vector<std::future<void>> futures;
     futures.emplace_back(pool.async(test1, true));
     futures.emplace_back(pool.async(test1, true));

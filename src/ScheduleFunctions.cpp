@@ -32,6 +32,18 @@ using std::vector;
 
 namespace {
 
+std::ostream &operator<<(std::ostream &out, const std::vector<Function> &v) {
+    out << "{ ";
+    for (size_t i = 0; i < v.size(); ++i) {
+        out << v[i].name();
+        if (i != v.size() - 1) {
+            out << ", ";
+        }
+    }
+    out << " }";
+    return out;
+}
+
 // A structure representing a containing LetStmt, IfThenElse, or For
 // loop. Used in build_provide_loop_nest below. Both If and IfInner represent
 // IfThenElse stmts, however, IfInner should not be reordered to outside of
@@ -2201,6 +2213,17 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
+    if (f.has_extern_definition()) {
+        const auto api = f.extern_function_device_api();
+        if (!target.supports_device_api(api)) {
+            user_error << "Func " << f.name() << " has an extern definition that "
+                       << "may leave the output with a dirty " << api << " device allocation,"
+                       << " but no compatible target feature is enabled in target "
+                       << target.to_string() << ", so the pipeline would not be able to "
+                       << "copy back the result.";
+        }
+    }
+
     int racy_shift_inwards_count = 0;
     int allow_race_conditions_count = 0;
     for (const Definition &def : definitions) {
@@ -2559,20 +2582,6 @@ bool group_should_be_inlined(const vector<Function> &funcs) {
 }
 
 }  // namespace
-
-// We want this to have internal linkage, but putting it in an anonymous
-// namespace doesn't work due to two-phase lookup peculiarities.
-static std::ostream &operator<<(std::ostream &out, const std::vector<Function> &v) {  // NOLINT
-    out << "{ ";
-    for (size_t i = 0; i < v.size(); ++i) {
-        out << v[i].name();
-        if (i != v.size() - 1) {
-            out << ", ";
-        }
-    }
-    out << " }";
-    return out;
-}
 
 Stmt schedule_functions(const vector<Function> &outputs,
                         const vector<vector<string>> &fused_groups,

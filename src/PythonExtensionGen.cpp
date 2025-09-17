@@ -319,22 +319,57 @@ template<int dimensions>
 struct PyHalideBuffer {
     // Must allocate at least 1, even if d=0
     static constexpr int dims_to_allocate = (dimensions < 1) ? 1 : dimensions;
+    static constexpr const char* get_raw_halide_runtime_buffer_fn = "_get_raw_halide_buffer_t";
 
     Py_buffer py_buf;
-    halide_dimension_t halide_dim[dims_to_allocate];
-    halide_buffer_t halide_buf;
+    halide_buffer_t* halide_buf = nullptr;
     bool py_buf_needs_release = false;
     bool needs_device_free = false;
 
+    bool unpack_from_halide_buffer(PyObject *py_obj) {
+        if (!PyObject_HasAttrString(py_obj, get_raw_halide_runtime_buffer_fn)) {
+            return false;
+        }
+
+        PyObject *py_raw_buffer = PyObject_CallMethod(py_obj, get_raw_halide_runtime_buffer_fn, NULL);
+        if (!py_raw_buffer) {
+            PyErr_Clear();
+            return false;
+        }
+
+        if (!PyLong_Check(py_raw_buffer)) {
+            Py_DECREF(py_raw_buffer);
+            return false;
+        }
+
+        uintptr_t py_raw_buffer_ptr = (uintptr_t)PyLong_AsUnsignedLongLong(py_raw_buffer);
+        Py_DECREF(py_raw_buffer);
+
+        if (py_raw_buffer_ptr == 0) {
+            return false;
+        }
+
+        halide_buf = reinterpret_cast<halide_buffer_t *>(py_raw_buffer_ptr);
+        return true;
+    }
+
     bool unpack(PyObject *py_obj, int py_getbuffer_flags, const char *name) {
-        return Halide::PythonRuntime::unpack_buffer(py_obj, py_getbuffer_flags,
-            name, dimensions, py_buf, halide_dim, halide_buf, py_buf_needs_release,
-            needs_device_free);
+        if (unpack_from_halide_buffer(py_obj)) {
+            return true;
+        }
+        if (Halide::PythonRuntime::unpack_buffer(
+                py_obj, py_getbuffer_flags, name, dimensions, py_buf,
+                unpacked_dim, unpacked_buf, py_buf_needs_release,
+                needs_device_free)) {
+            halide_buf = &unpacked_buf;
+            return true;
+        }
+        return false;
     }
 
     ~PyHalideBuffer() {
         if (needs_device_free) {
-            halide_device_free(nullptr, &halide_buf);
+            halide_device_free(nullptr, halide_buf);
         }
         if (py_buf_needs_release) {
             PyBuffer_Release(&py_buf);
@@ -346,6 +381,10 @@ struct PyHalideBuffer {
     PyHalideBuffer &operator=(const PyHalideBuffer &other) = delete;
     PyHalideBuffer(PyHalideBuffer &&other) = delete;
     PyHalideBuffer &operator=(PyHalideBuffer &&other) = delete;
+
+private:
+    halide_dimension_t unpacked_dim[dims_to_allocate];
+    halide_buffer_t unpacked_buf;
 };
 
 }  // namespace
@@ -470,7 +509,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     // do a lazy-copy-to-GPU if needed.
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer() && args[i].is_input()) {
-            dest << indent << "b_" << arg_names[i] << ".halide_buf.set_host_dirty();\n";
+            dest << indent << "b_" << arg_names[i] << ".halide_buf->set_host_dirty();\n";
         }
     }
     dest << indent << "int result;\n";
@@ -479,7 +518,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     indent.indent += 2;
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
-            dest << indent << "&b_" << arg_names[i] << ".halide_buf";
+            dest << indent << "b_" << arg_names[i] << ".halide_buf";
         } else {
             dest << indent << "py_" << arg_names[i] << "";
         }
@@ -496,7 +535,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     // random garbage. (We need a better solution for this, see https://github.com/halide/Halide/issues/6868)
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer() && args[i].is_output()) {
-            dest << indent << "if (result == 0) result = halide_copy_to_host(nullptr, &b_" << arg_names[i] << ".halide_buf);\n";
+            dest << indent << "if (result == 0) result = halide_copy_to_host(nullptr, b_" << arg_names[i] << ".halide_buf);\n";
         }
     }
     dest << indent << "if (result != 0) {\n";

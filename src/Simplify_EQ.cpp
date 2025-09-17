@@ -4,20 +4,20 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const EQ *op, ExprInfo *info) {
-    if (truths.count(op)) {
-        return const_true(op->type.lanes());
-    } else if (falsehoods.count(op)) {
-        return const_false(op->type.lanes());
+    if (info) {
+        // There are three possibilities:
+        // 1) We know the result is zero.
+        // 2) We know the result is one.
+        // 3) The result might be either zero or one.
+        // The line below takes care of case 3, and cases 1 and 2 are handled in
+        // the constant folding rules that come later in this method.
+        info->cast_to(op->type);
     }
 
-    if (!may_simplify(op->a.type())) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return op;
-        } else {
-            return EQ::make(a, b);
-        }
+    if (truths.count(op)) {
+        return const_true(op->type.lanes(), info);
+    } else if (falsehoods.count(op)) {
+        return const_false(op->type.lanes(), info);
     }
 
     if (op->a.type().is_bool()) {
@@ -26,14 +26,13 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
         if (should_commute(a, b)) {
             std::swap(a, b);
         }
-        const int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type);
         if (rewrite(x == 1, x)) {
             return rewrite.result;
         } else if (rewrite(x == 0, !x)) {
             return mutate(rewrite.result, info);
-        } else if (rewrite(x == x, const_true(lanes))) {
-            return rewrite.result;
+        } else if (rewrite(x == x, true)) {
+            return const_true(op->type.lanes(), info);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
@@ -47,17 +46,17 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
 
     // If the delta is 0, then it's just x == x
     if (is_const_zero(delta)) {
-        return const_true(lanes);
+        return const_true(lanes, info);
     }
 
     // Attempt to disprove using bounds analysis
     if (!delta_info.bounds.contains(0)) {
-        return const_false(lanes);
+        return const_false(lanes, info);
     }
 
     // Attempt to disprove using modulus remainder analysis
     if (delta_info.alignment.remainder != 0) {
-        return const_false(lanes);
+        return const_false(lanes, info);
     }
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), op->type, delta.type());
@@ -133,16 +132,6 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
 
 // ne redirects to not eq
 Expr Simplify::visit(const NE *op, ExprInfo *info) {
-    if (!may_simplify(op->a.type())) {
-        Expr a = mutate(op->a, nullptr);
-        Expr b = mutate(op->b, nullptr);
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return op;
-        } else {
-            return NE::make(a, b);
-        }
-    }
-
     Expr mutated = mutate(Not::make(EQ::make(op->a, op->b)), info);
     if (const NE *ne = mutated.as<NE>()) {
         if (ne->a.same_as(op->a) && ne->b.same_as(op->b)) {

@@ -21,6 +21,7 @@
 #include "Simplify.h"
 #include "SimplifyCorrelatedDifferences.h"
 #include "Solve.h"
+#include "StrictifyFloat.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -183,11 +184,12 @@ private:
         Bounds *const self;
         BoundsLogger(Bounds *self, const char *pretty_function)
             : self(self) {
-            string name = replace_all(pretty_function, "(anonymous namespace)::", "");
-            name = replace_all(name, "virtual void Halide::Internal::", "");
-            name = replace_all(name, "(const Halide::Internal::", "(");
-            name = replace_all(name, "::visit", "");
-            name = replace_all(name, " *)", ")");
+            string name = pretty_function;
+            name = replace_all(std::move(name), "(anonymous namespace)::", "");
+            name = replace_all(std::move(name), "virtual void Halide::Internal::", "");
+            name = replace_all(std::move(name), "(const Halide::Internal::", "(");
+            name = replace_all(std::move(name), "::visit", "");
+            name = replace_all(std::move(name), " *)", ")");
             log_line(name, " {");
             self->log_indent++;
         }
@@ -1150,10 +1152,9 @@ private:
         TRACK_BOUNDS_INTERVAL;
         TRACK_BOUNDS_INFO("name:", op->name);
 
-        // Tags are hints that don't affect the results of the expression,
-        // and can be very deeply nested in the case of strict_float. The
-        // bounds of this call are *always* exactly that of its first argument,
-        // so short circuit it here.
+        // Tags are hints that don't affect the results of the expression, and
+        // can be very deeply nested. The bounds of this call are *always*
+        // exactly that of its first argument, so short circuit it here.
         if (op->is_tag()) {
             internal_assert(op->args.size() == 1);
             op->args[0].accept(this);
@@ -1194,17 +1195,13 @@ private:
             return;
         }
 
-        if (!const_bound &&
-            (op->call_type == Call::PureExtern ||
-             op->call_type == Call::PureIntrinsic ||
-             op->call_type == Call::Image)) {
-
-            // If the args are const we can return the call of those args
-            // for pure functions. For other types of functions, the same
-            // call in two different places might produce different
-            // results (e.g. during the update step of a reduction), so we
-            // can't move around call nodes.
-
+        // A helper which converts a call with single-point args into the same
+        // call applied to those args. For some types of Call node if the args
+        // are const we can return the call of those args for pure
+        // functions. For other types of Call, the same call in two
+        // different places might produce different results (e.g. during the
+        // update step of a reduction), so we can't move around call nodes.
+        auto handle_const_arg_call = [&]() {
             std::vector<Expr> new_args(op->args.size());
             bool const_args = true;
             for (size_t i = 0; i < op->args.size() && const_args; i++) {
@@ -1219,14 +1216,37 @@ private:
                 Expr call = Call::make(t, op->name, new_args, op->call_type,
                                        op->func, op->value_index, op->image, op->param);
                 interval = Interval::single_point(call);
-                return;
+                return true;
+            } else {
+                return false;
             }
+        };
+
+        if (!const_bound &&
+            (op->call_type == Call::PureExtern ||
+             op->call_type == Call::Image) &&
+            handle_const_arg_call()) {
+
+            // PureIntrinsics could also be handled here, but they may be
+            // lowered by the code below into different forms, so to avoid
+            // exponential complexity we handle those later.
+            return;
+
             // else fall thru and continue
         }
 
-        const auto handle_expr_bounds = [this, t](const Expr &e) -> void {
+        // If we lower a call expr into another form, we want to keep the
+        // original form if it turns out to have been a const. This helper
+        // accomplishes that, and also treats undefined Exprs as being unbounded
+        // as a convenience for things that may or may not be able to be
+        // lowered.
+        const auto handle_lowered_expr_bounds = [this, t, op](const Expr &e) -> void {
             if (e.defined()) {
                 e.accept(this);
+                if (interval.is_single_point(e)) {
+                    // It was unvarying, so just return the original unlowered form.
+                    interval = Interval::single_point(op);
+                }
             } else {
                 // Just use the bounds of the type
                 this->bounds_of_type(t);
@@ -1265,7 +1285,7 @@ private:
             internal_assert(!t.is_handle());
             if (t.is_float()) {
                 Expr e = abs(op->args[0] - op->args[1]);
-                e.accept(this);
+                handle_lowered_expr_bounds(e);
             } else {
                 // absd() for int types will always produce a uint result
                 internal_assert(t.is_uint());
@@ -1281,9 +1301,8 @@ private:
         } else if (op->is_intrinsic(Call::saturating_cast)) {
             internal_assert(op->args.size() == 1);
 
-            Expr a = lower_saturating_cast(op->type, op->args[0]);
-            a.accept(this);
-            return;
+            Expr e = lower_saturating_cast(op->type, op->args[0]);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
             // Unlike an explicit clamp, we are also permitted to
@@ -1330,7 +1349,7 @@ private:
             // Probably more conservative than necessary
             Expr false_value = op->args.size() == 2 ? op->args[1] : op->args[2];
             Expr equivalent_select = Select::make(op->args[0], op->args[1], false_value);
-            equivalent_select.accept(this);
+            handle_lowered_expr_bounds(equivalent_select);
         } else if (op->is_intrinsic(Call::require)) {
             internal_assert(op->args.size() == 3);
             interval = arg_bounds.get(1);
@@ -1407,8 +1426,8 @@ private:
                             }
                         } else if (is_const(b)) {
                             // We can normalize to multiplication
-                            Expr equiv = a * (make_const(t, 1) << b);
-                            equiv.accept(this);
+                            Expr e = a * (make_const(t, 1) << b);
+                            handle_lowered_expr_bounds(e);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
                         // Only try to improve on bounds-of-type if we can prove 0 <= b < t.bits,
@@ -1517,7 +1536,7 @@ private:
             }
         } else if (op->args.size() == 1 &&
                    (op->is_intrinsic(Call::round) ||
-                    op->is_intrinsic(Call::strict_float) ||
+                    op->name == "sqrt_f32" || op->name == "sqrt_f64" ||
                     op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
                     op->name == "exp_f32" || op->name == "exp_f64" ||
@@ -1572,105 +1591,117 @@ private:
             Expr e = can_widen(op->args[1]) ?
                          lower_widen_right_add(op->args[0], op->args[1]) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::widen_right_mul)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen(op->args[1]) ?
                          lower_widen_right_mul(op->args[0], op->args[1]) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::widen_right_sub)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen(op->args[1]) ?
                          lower_widen_right_sub(op->args[0], op->args[1]) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::widening_add)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen_all(op->args) ?
                          lower_widening_add(op->args[0], op->args[1]) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::widening_mul)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen_all(op->args) ?
                          lower_widening_mul(op->args[0], op->args[1]) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::widening_sub)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen_all(op->args) ?
                          lower_widening_sub(op->args[0], op->args[1]) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::saturating_add)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen_all(op->args) ?
                          narrow(clamp(widen(op->args[0]) + widen(op->args[1]), t.min(), t.max())) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::saturating_sub)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen_all(op->args) ?
                          narrow(clamp(widen(op->args[0]) - widen(op->args[1]), t.min(), t.max())) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::widening_shift_left)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen(op->args[0]) ?
                          lower_widening_shift_left(op->args[0], op->args[1]) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::widening_shift_right)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen(op->args[0]) ?
                          lower_widening_shift_right(op->args[0], op->args[1]) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::rounding_shift_right)) {
             internal_assert(op->args.size() == 2);
             // TODO: uses bitwise ops we may not handle well
-            handle_expr_bounds(lower_rounding_shift_right(op->args[0], op->args[1]));
+            handle_lowered_expr_bounds(lower_rounding_shift_right(op->args[0], op->args[1]));
         } else if (op->is_intrinsic(Call::rounding_shift_left)) {
             internal_assert(op->args.size() == 2);
             // TODO: uses bitwise ops we may not handle well
-            handle_expr_bounds(lower_rounding_shift_left(op->args[0], op->args[1]));
+            handle_lowered_expr_bounds(lower_rounding_shift_left(op->args[0], op->args[1]));
         } else if (op->is_intrinsic(Call::halving_add)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen_all(op->args) ?
                          narrow((widen(op->args[0]) + widen(op->args[1])) / 2) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::halving_sub)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen_all(op->args) ?
                          narrow((widen(op->args[0]) - widen(op->args[1])) / 2) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::rounding_halving_add)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen_all(op->args) ?
                          narrow((widen(op->args[0]) + widen(op->args[1]) + 1) / 2) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
             internal_assert(op->args.size() == 3);
             Expr e = can_widen_all(op->args) ?
                          saturating_narrow(rounding_shift_right(widening_mul(op->args[0], op->args[1]), op->args[2])) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::mul_shift_right)) {
             internal_assert(op->args.size() == 3);
             Expr e = can_widen_all(op->args) ?
                          saturating_narrow(widening_mul(op->args[0], op->args[1]) >> op->args[2]) :
                          Expr();
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
         } else if (op->is_intrinsic(Call::sorted_avg)) {
             internal_assert(op->args.size() == 2);
             Expr e = lower_sorted_avg(op->args[0], op->args[1]);
-            handle_expr_bounds(e);
+            handle_lowered_expr_bounds(e);
+        } else if (op->is_strict_float_intrinsic()) {
+            // We'll just unstrictify it to do the analysis. This is
+            // dubious. Constructing a bounds expression that uses non-strict
+            // operations might get simplified during bounds analysis (we call
+            // simplify above!) to something approximate, resulting in an
+            // out-of-bounds read. See https://github.com/halide/Halide/issues/8646
+            Expr e = unstrictify_float(op);
+            handle_lowered_expr_bounds(e);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
+        } else if (!const_bound &&
+                   op->call_type == Call::PureIntrinsic && handle_const_arg_call()) {
+            // It was some other pure intrinsic that we don't lower. If the args
+            // are const we can just preserve it.
         } else {
             // Just use the bounds of the type
             bounds_of_type(t);
@@ -2189,16 +2220,17 @@ private:
 
         BoxesTouchedLogger(BoxesTouched *self, const char *pretty_function)
             : self(self), parent_logger(self->current_logger), boxes(self->boxes) {
-            string name = replace_all(pretty_function, "(anonymous namespace)::", "");
-            name = replace_all(name, "virtual void Halide::Internal::", "");
-            name = replace_all(name, "(const Halide::Internal::", "(");
-            name = replace_all(name, "::visit", "");
-            name = replace_all(name, " *)", ")");
+            string name = pretty_function;
+            name = replace_all(std::move(name), "(anonymous namespace)::", "");
+            name = replace_all(std::move(name), "virtual void Halide::Internal::", "");
+            name = replace_all(std::move(name), "(const Halide::Internal::", "(");
+            name = replace_all(std::move(name), "::visit", "");
+            name = replace_all(std::move(name), " *)", ")");
 
             if (self->consider_calls && !self->consider_provides) {
-                name = replace_all(name, "BoxesTouched", "BoxesRequired");
+                name = replace_all(std::move(name), "BoxesTouched", "BoxesRequired");
             } else if (!self->consider_calls && self->consider_provides) {
-                name = replace_all(name, "BoxesTouched", "BoxesProvided");
+                name = replace_all(std::move(name), "BoxesTouched", "BoxesProvided");
             }
 
             log_line(name, " {");

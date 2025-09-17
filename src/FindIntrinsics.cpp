@@ -597,6 +597,9 @@ protected:
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
+            auto is_y_same_int = op->type.is_int() && is_int(y, bits);
+            auto is_y_same_uint = op->type.is_uint() && is_uint(y, bits);
+            auto is_y_same_int_or_uint = is_y_same_int || is_y_same_uint;
             auto x_y_same_sign = (is_int(x) && is_int(y)) || (is_uint(x) && is_uint(y));
 
             if (
@@ -662,9 +665,9 @@ protected:
                         rounding_halving_add(x, y),
                         is_x_same_int_or_uint) ||
 
-                rewrite(halving_add(widening_add(x, 1), y),
+                rewrite(halving_add(widening_add(x, 1), cast(op->type, y)),
                         rounding_halving_add(x, y),
-                        is_x_same_int_or_uint) ||
+                        is_x_same_int_or_uint && is_y_same_int_or_uint) ||
 
                 rewrite(rounding_shift_right(widening_add(x, y), 1),
                         rounding_halving_add(x, y),
@@ -741,16 +744,18 @@ protected:
                 bool is_saturated = op->value.as<Max>() || op->value.as<Min>();
                 Expr a = lossless_cast(op->type, shift->args[0]);
                 Expr b = lossless_cast(op->type.with_code(shift->args[1].type().code()), shift->args[1]);
-                // Doing the shift in the narrower type might introduce UB where
-                // there was no UB before, so we need to make sure b is bounded.
-                auto b_bounds = constant_integer_bounds(b);
-                const int max_shift = op->type.bits() - 1;
+                if (b.defined()) {
+                    // Doing the shift in the narrower type might introduce UB where
+                    // there was no UB before, so we need to make sure b is bounded.
+                    auto b_bounds = constant_integer_bounds(b);
+                    const int max_shift = op->type.bits() - 1;
 
-                if (a.defined() && b.defined() && b_bounds >= -max_shift && b_bounds <= max_shift) {
-                    if (!is_saturated ||
-                        (shift->is_intrinsic(Call::rounding_shift_right) && can_prove(b >= 0)) ||
-                        (shift->is_intrinsic(Call::rounding_shift_left) && can_prove(b <= 0))) {
-                        return mutate(Call::make(op->type, shift->name, {a, b}, Call::PureIntrinsic));
+                    if (a.defined() && b_bounds >= -max_shift && b_bounds <= max_shift) {
+                        if (!is_saturated ||
+                            (shift->is_intrinsic(Call::rounding_shift_right) && can_prove(b >= 0)) ||
+                            (shift->is_intrinsic(Call::rounding_shift_left) && can_prove(b <= 0))) {
+                            return mutate(Call::make(op->type, shift->name, {a, b}, Call::PureIntrinsic));
+                        }
                     }
                 }
             }

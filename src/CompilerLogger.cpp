@@ -179,8 +179,8 @@ std::ostream &emit_value(std::ostream &o, const VALUE &value) {
 template<>
 std::ostream &emit_value<std::string>(std::ostream &o, const std::string &value) {
     std::string v = value;
-    v = replace_all(v, "\\", "\\\\");
-    v = replace_all(v, "\"", "\\\"");
+    v = replace_all(std::move(v), "\\", "\\\\");
+    v = replace_all(std::move(v), "\"", "\\\"");
     o << "\"" << v << "\"";
     return o;
 }

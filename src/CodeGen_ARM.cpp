@@ -1319,6 +1319,7 @@ void CodeGen_ARM::visit(const Sub *op) {
                     return;
                 }
             } else if (op->type.bits() >= 16 && op->type.is_float()) {
+                ScopedFastMath guard(this);
                 value = builder->CreateFNeg(codegen(op->b));
                 return;
             }
@@ -1344,6 +1345,7 @@ void CodeGen_ARM::visit(const Sub *op) {
                 if (op->type.lanes() > 1) {
                     a = get_splat(op->type.lanes(), a);
                 }
+                ScopedFastMath guard(this);
                 value = builder->CreateFSub(a, b);
                 return;
             }
@@ -1371,6 +1373,7 @@ void CodeGen_ARM::visit(const Sub *op) {
         if (op->type.lanes() > 1) {
             a = get_splat(op->type.lanes(), a);
         }
+        ScopedFastMath guard(this);
         value = builder->CreateFSub(a, b);
         return;
     }
@@ -1500,7 +1503,7 @@ void CodeGen_ARM::visit(const Store *op) {
                   << (t.is_float() ? 'f' : 'i')
                   << t.bits();
             arg_types = vector<llvm::Type *>(num_vecs + 2, intrin_llvm_type);
-            arg_types.front() = PointerType::get(i8_t, 0);
+            arg_types.front() = ptr_t;
             arg_types.back() = i32_t;
         } else {
             if (is_sve) {
@@ -1512,7 +1515,7 @@ void CodeGen_ARM::visit(const Store *op) {
                       << t.bits();
                 arg_types = vector<llvm::Type *>(num_vecs, intrin_llvm_type);
                 arg_types.emplace_back(get_vector_type(i1_t, intrin_type.lanes() / target_vscale(), VectorTypeConstraint::VScale));  // predicate
-                arg_types.emplace_back(PointerType::get(llvm_type_of(intrin_type.element_of()), 0));
+                arg_types.emplace_back(ptr_t);
             } else {
                 instr << "llvm.aarch64.neon.st"
                       << num_vecs
@@ -1522,7 +1525,7 @@ void CodeGen_ARM::visit(const Store *op) {
                       << t.bits()
                       << ".p0";
                 arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
-                arg_types.back() = PointerType::get(llvm_type_of(intrin_type.element_of()), 0);
+                arg_types.back() = ptr_t;
             }
         }
         llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
@@ -1545,8 +1548,6 @@ void CodeGen_ARM::visit(const Store *op) {
             }
 
             if (target.bits == 32) {
-                // The arm32 versions take an i8*, regardless of the type stored.
-                ptr = builder->CreatePointerCast(ptr, PointerType::get(i8_t, 0));
                 // Set the pointer argument
                 slice_args.insert(slice_args.begin(), ptr);
                 // Set the alignment argument
@@ -1823,7 +1824,7 @@ void CodeGen_ARM::visit(const Load *op) {
                 llvm::Type *elt = llvm_type_of(op->type.element_of());
                 llvm::Type *slice_type = get_vector_type(elt, slice_lanes);
                 StructType *sret_type = StructType::get(module->getContext(), std::vector(stride->value, slice_type));
-                std::vector<llvm::Type *> arg_types{get_vector_type(i1_t, slice_lanes), PointerType::get(elt, 0)};
+                std::vector<llvm::Type *> arg_types{get_vector_type(i1_t, slice_lanes), ptr_t};
                 llvm::FunctionType *fn_type = FunctionType::get(sret_type, arg_types, false);
                 FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
 

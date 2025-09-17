@@ -16,7 +16,7 @@ if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
 endif ()
 
 project(Halide
-        VERSION 20.0.0
+        VERSION 21.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
@@ -50,10 +50,14 @@ include(HalidePackageConfigHelpers)
 # Build Halide as a shared lib by default, but still honor command-line settings.
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
-# Warn if the user did not set a build type and is using a single-configuration generator.
-get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if (NOT IS_MULTI_CONFIG AND NOT DEFINED CMAKE_BUILD_TYPE)
-    message(WARNING "Single-configuration generators require CMAKE_BUILD_TYPE to be set.")
+# Bail out if the user did not set a build type on a single-config generator.
+get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if (NOT is_multi_config AND CMAKE_BUILD_TYPE STREQUAL "")
+    string(JOIN "" error_message
+           "Halide cannot be built when CMAKE_BUILD_TYPE is empty. "
+           "Please set CMAKE_BUILD_TYPE to one of the standard types: "
+           "Debug, Release, RelWithDebInfo, or MinSizeRel.")
+    message(FATAL_ERROR "${error_message}")
 endif ()
 
 # Windows has file name length restrictions and lacks an RPATH mechanism.

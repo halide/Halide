@@ -74,6 +74,7 @@ struct Target {
         ZnVer2,    /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
         ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
         ZnVer4,    /// Tune for AMD Zen 4 CPU (AMD Family 19h, launched 2022).
+        ZnVer5,    /// Tune for AMD Zen 5 CPU (AMD Family 1Ah, launched 2024).
     } processor_tune = ProcessorGeneric;
 
     /** Optional features a target can have.
@@ -83,11 +84,13 @@ struct Target {
     enum Feature {
         JIT = halide_target_feature_jit,
         Debug = halide_target_feature_debug,
+        EnableBacktraces = halide_target_feature_enable_backtraces,
         NoAsserts = halide_target_feature_no_asserts,
         NoBoundsQuery = halide_target_feature_no_bounds_query,
         SSE41 = halide_target_feature_sse41,
         AVX = halide_target_feature_avx,
         AVX2 = halide_target_feature_avx2,
+        AVXVNNI = halide_target_feature_avxvnni,
         FMA = halide_target_feature_fma,
         FMA4 = halide_target_feature_fma4,
         F16C = halide_target_feature_f16c,
@@ -132,6 +135,7 @@ struct Target {
         AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
         AVX512_SapphireRapids = halide_target_feature_avx512_sapphirerapids,
         AVX512_Zen4 = halide_target_feature_avx512_zen4,
+        AVX512_Zen5 = halide_target_feature_avx512_zen5,
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
@@ -179,6 +183,7 @@ struct Target {
         Semihosting = halide_target_feature_semihosting,
         AVX10_1 = halide_target_feature_avx10_1,
         X86APX = halide_target_feature_x86_apx,
+        Simulator = halide_target_feature_simulator,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

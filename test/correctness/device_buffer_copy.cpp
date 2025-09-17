@@ -98,11 +98,11 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < 128; i++) {
             for (int j = 0; j < 128; j++) {
-                bool in_gpu3 = (i >= gpu_buf2.dim(0).min()) &&
-                               (i < (gpu_buf2.dim(0).min() + gpu_buf2.dim(0).extent())) &&
+                bool in_gpu2 = (i >= gpu_buf2.dim(0).min()) &&
+                               (i <= gpu_buf2.dim(0).max()) &&
                                (j >= gpu_buf2.dim(1).min()) &&
-                               (j < (gpu_buf2.dim(1).min() + gpu_buf2.dim(1).extent()));
-                assert(gpu_buf1(i, j) == (in_gpu3 ? 0 : (i + j * 256)));
+                               (j <= gpu_buf2.dim(1).max());
+                assert(gpu_buf1(i, j) == (in_gpu2 ? 0 : (i + j * 256)));
             }
         }
     }
@@ -121,15 +121,15 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 128; i++) {
             for (int j = 0; j < 128; j++) {
                 bool in_cpu1 = (i >= cpu_buf1.dim(0).min()) &&
-                               (i < (cpu_buf1.dim(0).min() + cpu_buf1.dim(0).extent())) &&
+                               (i <= cpu_buf1.dim(0).max()) &&
                                (j >= cpu_buf1.dim(1).min()) &&
-                               (j < (cpu_buf1.dim(1).min() + cpu_buf1.dim(1).extent()));
+                               (j <= cpu_buf1.dim(1).max());
                 assert(cpu_buf(i, j) == (in_cpu1 ? (i + j * 256) : 0));
             }
         }
     }
 
-    printf("Test copy device to device -- subset area.\n");
+    printf("Test copy device to device -- subset area (from bigger to smaller buffer).\n");
     {
         Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(hexagon_rpc);
         assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
@@ -147,10 +147,71 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 128; i++) {
             for (int j = 0; j < 128; j++) {
                 bool in_gpu3 = (i >= gpu_buf3.dim(0).min()) &&
-                               (i < (gpu_buf3.dim(0).min() + gpu_buf3.dim(0).extent())) &&
+                               (i <= gpu_buf3.dim(0).max()) &&
                                (j >= gpu_buf3.dim(1).min()) &&
-                               (j < (gpu_buf3.dim(1).min() + gpu_buf3.dim(1).extent()));
+                               (j <= gpu_buf3.dim(1).max());
                 assert(gpu_buf2(i, j) == (i + j * 256 + (in_gpu3 ? 0 : 256000)));
+            }
+        }
+    }
+
+    printf("Test copy device to device -- subset area (from smaller to bigger buffer).\n");
+    {
+        Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(hexagon_rpc);
+        assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
+
+        Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(hexagon_rpc, 256000);
+        assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
+
+        Halide::Runtime::Buffer<int32_t> gpu_buf3 = gpu_buf2.cropped({{32, 64}, {32, 64}});
+        assert(gpu_buf3.raw_buffer()->device_interface != nullptr);
+
+        assert(gpu_buf3.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf3, gpu_buf1.raw_buffer()->device_interface, gpu_buf1) == 0);
+        gpu_buf1.set_device_dirty();
+        gpu_buf1.copy_to_host();
+
+        for (int i = 0; i < 128; i++) {
+            for (int j = 0; j < 128; j++) {
+                bool in_gpu3 = (i >= gpu_buf3.dim(0).min()) &&
+                               (i <= gpu_buf3.dim(0).max()) &&
+                               (j >= gpu_buf3.dim(1).min()) &&
+                               (j <= gpu_buf3.dim(1).max());
+                assert(gpu_buf1(i, j) == (i + j * 256 + (in_gpu3 ? 256000 : 0)));
+            }
+        }
+    }
+
+    printf("Test copy device to device -- subset area (from and to not-contained-within-each-other crops).\n");
+    {
+        Halide::Runtime::Buffer<int32_t> gpu_buf1 = make_gpu_buffer(hexagon_rpc);
+        assert(gpu_buf1.raw_buffer()->device_interface != nullptr);
+
+        Halide::Runtime::Buffer<int32_t> gpu_buf2 = make_gpu_buffer(hexagon_rpc, 256000);
+        assert(gpu_buf2.raw_buffer()->device_interface != nullptr);
+
+        // Two crops: one horizontal, and one vertical rectangle.
+        Halide::Runtime::Buffer<int32_t> gpu_buf1_crop = gpu_buf1.cropped({{32, 64}, {32, 16}});
+        Halide::Runtime::Buffer<int32_t> gpu_buf2_crop = gpu_buf2.cropped({{32, 16}, {32, 64}});
+        assert(gpu_buf1_crop.raw_buffer()->device_interface != nullptr);
+        assert(gpu_buf2_crop.raw_buffer()->device_interface != nullptr);
+
+        // Copy from the crop to another crop.
+        assert(gpu_buf2_crop.raw_buffer()->device_interface->buffer_copy(nullptr, gpu_buf2_crop, gpu_buf1_crop.raw_buffer()->device_interface, gpu_buf1_crop) == 0);
+        gpu_buf1.set_device_dirty();
+        gpu_buf1.copy_to_host();
+
+        for (int i = 0; i < 128; i++) {
+            for (int j = 0; j < 128; j++) {
+                bool in_gpu1_crop = (i >= gpu_buf1_crop.dim(0).min()) &&
+                                    (i <= gpu_buf1_crop.dim(0).max()) &&
+                                    (j >= gpu_buf1_crop.dim(1).min()) &&
+                                    (j <= gpu_buf1_crop.dim(1).max());
+                bool in_gpu2_crop = (i >= gpu_buf2_crop.dim(0).min()) &&
+                                    (i <= gpu_buf2_crop.dim(0).max()) &&
+                                    (j >= gpu_buf2_crop.dim(1).min()) &&
+                                    (j <= gpu_buf2_crop.dim(1).max());
+                // printf("gpu_buf1(%d, %d) = %d  (in_gpu1_crop=%d in_gpu2_crop=%d)\n", i, j, gpu_buf1(i, j), in_gpu1_crop, in_gpu2_crop);
+                assert(gpu_buf1(i, j) == (i + j * 256 + (in_gpu1_crop && in_gpu2_crop ? 256000 : 0)));
             }
         }
     }

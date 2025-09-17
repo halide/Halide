@@ -14,6 +14,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Interval.h"
+#include "StrictifyFloat.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -781,7 +782,7 @@ Expr halide_log(const Expr &x_full) {
 
     Expr use_nan = x_full < 0.0f;       // log of a negative returns nan
     Expr use_neg_inf = x_full == 0.0f;  // log of zero is -inf
-    Expr exceptional = use_nan | use_neg_inf;
+    Expr exceptional = use_nan || use_neg_inf;
 
     // Avoid producing nans or infs by generating ln(1.0f) instead and
     // then fixing it later.
@@ -2419,54 +2420,81 @@ Expr reinterpret(Type t, Expr e) {
 Expr operator&(Expr x, Expr y) {
     match_types_bitwise(x, y, "bitwise and");
     Type t = x.type();
+    if (t.is_bool()) {
+        return std::move(x) && std::move(y);
+    }
     return Call::make(t, Call::bitwise_and, {std::move(x), std::move(y)}, Call::PureIntrinsic);
 }
 
 Expr operator&(Expr x, int y) {
     Type t = x.type();
     check_representable(t, y);
+    if (t.is_bool()) {
+        return std::move(x) && make_const(t, y);
+    }
     return Call::make(t, Call::bitwise_and, {std::move(x), make_const(t, y)}, Call::PureIntrinsic);
 }
 
 Expr operator&(int x, Expr y) {
     Type t = y.type();
     check_representable(t, x);
+    if (t.is_bool()) {
+        return make_const(t, x) && std::move(y);
+    }
     return Call::make(t, Call::bitwise_and, {make_const(t, x), std::move(y)}, Call::PureIntrinsic);
 }
 
 Expr operator|(Expr x, Expr y) {
     match_types_bitwise(x, y, "bitwise or");
     Type t = x.type();
+    if (t.is_bool()) {
+        return std::move(x) || std::move(y);
+    }
     return Call::make(t, Call::bitwise_or, {std::move(x), std::move(y)}, Call::PureIntrinsic);
 }
 
 Expr operator|(Expr x, int y) {
     Type t = x.type();
     check_representable(t, y);
+    if (t.is_bool()) {
+        return std::move(x) || make_const(t, y);
+    }
     return Call::make(t, Call::bitwise_or, {std::move(x), make_const(t, y)}, Call::PureIntrinsic);
 }
 
 Expr operator|(int x, Expr y) {
     Type t = y.type();
     check_representable(t, x);
+    if (t.is_bool()) {
+        return make_const(t, x) || std::move(y);
+    }
     return Call::make(t, Call::bitwise_or, {make_const(t, x), std::move(y)}, Call::PureIntrinsic);
 }
 
 Expr operator^(Expr x, Expr y) {
     match_types_bitwise(x, y, "bitwise xor");
     Type t = x.type();
+    if (t.is_bool()) {
+        return std::move(x) != std::move(y);
+    }
     return Call::make(t, Call::bitwise_xor, {std::move(x), std::move(y)}, Call::PureIntrinsic);
 }
 
 Expr operator^(Expr x, int y) {
     Type t = x.type();
     check_representable(t, y);
+    if (t.is_bool()) {
+        return std::move(x) != make_const(t, y);
+    }
     return Call::make(t, Call::bitwise_xor, {std::move(x), make_const(t, y)}, Call::PureIntrinsic);
 }
 
 Expr operator^(int x, Expr y) {
     Type t = y.type();
     check_representable(t, x);
+    if (t.is_bool()) {
+        return make_const(t, x) != std::move(y);
+    }
     return Call::make(t, Call::bitwise_xor, {make_const(t, x), std::move(y)}, Call::PureIntrinsic);
 }
 
@@ -2677,10 +2705,8 @@ Expr likely_if_innermost(Expr e) {
                       {std::move(e)}, Call::PureIntrinsic);
 }
 
-Expr strict_float(Expr e) {
-    Type t = e.type();
-    return Call::make(t, Call::strict_float,
-                      {std::move(e)}, Call::PureIntrinsic);
+Expr strict_float(const Expr &e) {
+    return strictify_float(e);
 }
 
 Expr undef(Type t) {

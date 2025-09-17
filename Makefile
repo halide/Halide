@@ -56,6 +56,11 @@ SHELL = bash
 CXX ?= g++
 PREFIX ?= /usr/local
 LLVM_CONFIG ?= llvm-config
+
+ifneq ($(shell $(LLVM_CONFIG) --version > /dev/null && echo OK),OK)
+$(error "Error: could not find or run llvm-config. Set LLVM_CONFIG to point to the llvm-config binary for the version of llvm you want to build Halide against, and set CLANG to point to the corresponding version of clang.")
+endif
+
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1.\2/')
 
@@ -64,7 +69,11 @@ LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
 # Apparently there is no llvm_config flag to get canonical paths to tools,
 # so we'll just construct one relative to --src-root and hope that is stable everywhere.
-LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
+LLVM_SYSTEM_LIBS = $(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
+ifeq ($(UNAME), Darwin)
+# homebrew LLVM on macos likes to depend on things in /opt/homebrew/lib without explicitly adding that linker flag
+LLVM_SYSTEM_LIBS += -L$(shell brew --prefix | sed -e 's/[\/&]/\\&/g')\/lib
+endif
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 # Note, removing -D_GLIBCXX_ASSERTIONS is a workaround for https://reviews.llvm.org/D142279
@@ -271,6 +280,9 @@ TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 # In the tests, default to exporting no symbols that aren't explicitly exported
 TEST_CXX_FLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
 
+# In the tests, enable the debug() and internal_assert() macros
+TEST_CXX_FLAGS += -DHALIDE_KEEP_MACROS
+
 # gcc 4.8 fires a bogus warning on old versions of png.h
 ifneq (,$(findstring g++,$(CXX_VERSION)))
 ifneq (,$(findstring 4.8,$(CXX_VERSION)))
@@ -359,9 +371,37 @@ TEST_CXX_FLAGS += -DTEST_CUDA
 TEST_CXX_FLAGS += -I/usr/local/cuda/include
 endif
 
-# Compiling the tutorials requires libpng
-LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
-LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
+ifeq (,$(shell pkg-config --exists libpng && echo yes))
+ifeq ($(UNAME), Darwin)
+$(error libpng not found. Please install with: brew install libpng)
+else
+$(error libpng not found. Please install with: sudo apt install libpng-dev)
+endif
+endif
+
+ifeq (,$(shell pkg-config --exists libjpeg && echo yes))
+ifeq ($(UNAME), Darwin)
+# Thanks to a schism between libjpeg and libjpeg-turbo, Homebrew
+# and many other distributions (Ubuntu, Debian, Fedora, Firefox,
+# Chrome, etc.) refuse to use the IJG's libjpeg. Instead, the
+# open-source world appears to have adopted libjpeg-turbo.
+# Users can override the search by setting PKG_CONFIG_PATH.
+# See: https://libjpeg-turbo.org/About/Jpeg-9
+$(error libjpeg not found. Please install with: brew install jpeg-turbo)
+else
+$(error libjpeg not found. Please install with: sudo apt install libjpeg-turbo8-dev)
+endif
+endif
+
+# Find libjpeg and libpng. The code to set IMAGE_IO_LIBS is duplicated
+# in apps/support/Makefile.inc and any changes here should be repeated
+# there.
+
+LIBPNG_LIBS_DEFAULT = $(shell pkg-config libpng --libs)
+LIBPNG_CXX_FLAGS ?= $(shell pkg-config libpng --cflags)
+LIBJPEG_LIBS ?= $(shell pkg-config libjpeg --libs)
+LIBJPEG_CXX_FLAGS ?= $(shell pkg-config libjpeg --cflags)
+
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
 ifneq (,$(findstring -m32,$(CXX)))
 ifneq (,$(findstring x86_64,$(LIBPNG_LIBS_DEFAULT)))
@@ -369,17 +409,6 @@ LIBPNG_LIBS ?= -lpng
 endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
-
-# Workaround brew Cellar path for libpng-config output.
-LIBJPEG_LINKER_PATH ?= $(shell echo $(LIBPNG_LIBS_DEFAULT) | sed -e'/-L.*[/][Cc]ellar[/]libpng/!d;s=\(.*\)/[Cc]ellar/libpng/.*=\1/lib=')
-LIBJPEG_LIBS ?= $(LIBJPEG_LINKER_PATH) -ljpeg
-
-# There's no libjpeg-config, unfortunately. We should look for
-# jpeglib.h one directory level up from png.h . Also handle
-# Mac OS brew installs where libpng-config returns paths
-# into the PNG cellar.
-LIBPNG_INCLUDE_DIRS = $(filter -I%,$(LIBPNG_CXX_FLAGS))
-LIBJPEG_CXX_FLAGS ?= $(shell echo $(LIBPNG_INCLUDE_DIRS) | sed -e'/[Cc]ellar[/]libpng/!s=\(.*\)=\1/..=;s=\(.*\)/[Cc]ellar/libpng/.*=\1/include=')
 
 IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
@@ -713,6 +742,7 @@ HEADER_FILES = \
   LLVM_Output.h \
   LLVM_Runtime_Linker.h \
   LoopCarry.h \
+  LoopPartitioningDirective.h \
   Lower.h \
   LowerParallelTasks.h \
   LowerWarpShuffles.h \
@@ -731,6 +761,7 @@ HEADER_FILES = \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
+  PrefetchDirective.h \
   Profiling.h \
   PurifyIndexMath.h \
   PythonExtensionGen.h \
