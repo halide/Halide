@@ -643,13 +643,8 @@ private:
                 // No corresponding instructions exists for is_nan, is_inf, is_finite.
                 // The instructions expected to be generated depends on CodeGen_LLVM::visit(const Call *op)
                 add_arm64("nan", is_vector ? sel_op("", "fcmge", "fcmuo") : "fcmp", is_nan(f_1));
-                if (Halide::Internal::get_llvm_version() >= 200) {
-                    add_arm64("inf", is_vector ? sel_op("", "fcmge", "fcmeq") : "", is_inf(f_1));
-                    add_arm64("finite", is_vector ? sel_op("", "fcmge", "fcmeq") : "", is_inf(f_1));
-                } else {
-                    add_arm64("inf", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
-                    add_arm64("finite", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
-                }
+                add_arm64("inf", is_vector ? sel_op("", "fcmge", "fcmeq") : "", is_inf(f_1));
+                add_arm64("finite", is_vector ? sel_op("", "fcmge", "fcmeq") : "", is_inf(f_1));
             }
 
             if (bits == 16) {
@@ -701,7 +696,7 @@ private:
                 if (has_sve()) {
                     // This pattern has changed with LLVM 21, see https://github.com/halide/Halide/issues/8584 for more
                     // details.
-                    if (Halide::Internal::get_llvm_version() <= 200) {
+                    if (Halide::Internal::get_llvm_version() < 210) {
                         // in native width, ld1b/st1b is used regardless of data type
                         const bool allow_byte_ls = (width == target.vector_bits);
                         add({get_sve_ls_instr("ld1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
@@ -1380,11 +1375,6 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (Halide::Internal::get_llvm_version() < 190) {
-        std::cout << "[SKIP] simd_op_check_sve2 requires LLVM 19 or later.\n";
-        return 0;
-    }
-
     return SimdOpCheckTest::main<SimdOpCheckArmSve>(
         argc, argv,
         {

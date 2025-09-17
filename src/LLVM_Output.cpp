@@ -401,7 +401,7 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
 
-#if 200 <= LLVM_VERSION && LLVM_VERSION < 220
+#if LLVM_VERSION < 220
     if (triple.isMacOSX() && triple.isAArch64()) {
         // The AArch64 syntax variant is able to display the arguments to SDOT
         // while the Darwin-specific one is bugged. See this GitHub issue for
@@ -439,11 +439,7 @@ void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &
 }
 
 void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
-#if LLVM_VERSION >= 180
     emit_file(module, out, llvm::CodeGenFileType::AssemblyFile);
-#else
-    emit_file(module, out, llvm::CGFT_AssemblyFile);
-#endif
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream &out) {

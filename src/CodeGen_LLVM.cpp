@@ -1185,24 +1185,14 @@ void CodeGen_LLVM::optimize_module() {
         // Add a pass that converts lookup tables to relative lookup tables to make them PIC-friendly.
         // See https://bugs.llvm.org/show_bug.cgi?id=45244
         pb.registerOptimizerLastEPCallback(
-#if LLVM_VERSION >= 200
-            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
-#else
-            [&](ModulePassManager &mpm, OptimizationLevel)
-#endif
-            {
+            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase) {
                 mpm.addPass(RelLookupTableConverterPass());
             });
     }
 
     if (get_target().has_feature(Target::SanitizerCoverage)) {
         pb.registerOptimizerLastEPCallback(
-#if LLVM_VERSION >= 200
-            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
-#else
-            [&](ModulePassManager &mpm, OptimizationLevel)
-#endif
-            {
+            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase) {
                 SanitizerCoverageOptions sanitizercoverage_options;
                 // Mirror what -fsanitize=fuzzer-no-link would enable.
                 // See https://github.com/halide/Halide/issues/6528
@@ -1237,12 +1227,7 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::TSAN)) {
         pb.registerOptimizerLastEPCallback(
-#if LLVM_VERSION >= 200
-            [](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
-#else
-            [](ModulePassManager &mpm, OptimizationLevel)
-#endif
-            {
+            [](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase) {
                 mpm.addPass(
                     createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
             });
@@ -1272,11 +1257,7 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (tm) {
-#if LLVM_VERSION < 190
-        tm->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
-#else
         tm->registerPassBuilderCallbacks(pb);
-#endif
     }
 
     mpm = pb.buildPerModuleDefaultPipeline(level);
@@ -2808,11 +2789,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type *> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
-#if LLVM_VERSION >= 200
         llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::ctpop, arg_type);
-#else
-        llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::ctpop, arg_type);
-#endif
         Value *a = codegen(op->args[0]);
         CallInst *call = builder->CreateCall(fn, a);
         value = call;
@@ -2821,15 +2798,9 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type *> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
-#if LLVM_VERSION >= 200
         llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(),
                                                                      (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
                                                                      arg_type);
-#else
-        llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(),
-                                                             (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
-                                                             arg_type);
-#endif
         llvm::Value *is_const_zero_poison = llvm::ConstantInt::getFalse(*context);
         llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_poison};
         CallInst *call = builder->CreateCall(fn, args);
