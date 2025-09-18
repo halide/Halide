@@ -82,7 +82,8 @@ if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
   # Homebrew clang 21 is badly misconfigured and needs help finding the
   # system headers, even though it uses system libc++ by default.
   SDKROOT="$(xcrun --show-sdk-path)"
-  TOOLCHAINROOT="$(xcrun --show-toolchain-path)"
+  # TOOLCHAINROOT="$(xcrun --show-toolchain-path)"
+  TOOLCHAINROOT="$(cd $(dirname $(xcrun --find clang))/../.. && pwd)"
   cat > "${CLANG_TIDY_BUILD_DIR}/toolchain.cmake" << EOF
 set(CMAKE_SYSROOT "${SDKROOT}")
 set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES
