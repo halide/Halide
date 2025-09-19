@@ -331,6 +331,10 @@ void lower_impl(const vector<Function> &output_funcs,
         debug(1) << "Selecting a GPU API for extern stages...\n";
         s = select_gpu_api(s, t);
         log("Lowering after selecting a GPU API for extern stages:", s);
+    } else {
+        debug(1) << "Injecting host-dirty marking...\n";
+        s = inject_host_dev_buffer_copies(s, t);
+        log("Lowering after injecting host-dirty marking:", s);
     }
 
     debug(1) << "Simplifying...\n";
