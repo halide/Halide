@@ -41,18 +41,18 @@ if [ -n "${FIX}" ]; then
     echo "Operating in -fix mode!"
 fi
 
-# We are currently standardized on using LLVM/Clang 19 for this script.
+# We are currently standardized on using LLVM/Clang 21 for this script.
 # Note that this is totally independent of the version of LLVM that you
-# are using to build Halide itself. If you don't have LLVM19 installed,
+# are using to build Halide itself. If you don't have LLVM21 installed,
 # you can usually install what you need easily via:
 #
-# sudo apt-get install llvm-19 clang-19 libclang-19-dev clang-tidy-19
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-19
+# sudo apt-get install llvm-21 clang-21 libclang-21-dev clang-tidy-21
+# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-21
 #
 # On macOS:
 #
-# brew install llvm@19
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@19
+# brew install llvm@21
+# export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@21
 
 if [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ]; then
   echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script."
@@ -62,11 +62,11 @@ fi
 echo "CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}"
 
 VERSION=$("${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy" --version)
-if [[ ${VERSION} =~ .*version\ 19.* ]]
+if [[ ${VERSION} =~ .*version\ 21.* ]]
 then
-    echo "clang-tidy version 19 found."
+    echo "clang-tidy version 21 found."
 else
-    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 19 install!"
+    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 21 install!"
     exit 1
 fi
 
@@ -75,11 +75,34 @@ fi
 CLANG_TIDY_BUILD_DIR=$(mktemp -d)
 echo "CLANG_TIDY_BUILD_DIR = ${CLANG_TIDY_BUILD_DIR}"
 
-# Specify Halide_LLVM_SHARED_LIBS=ON because some installers may provide only that.
+export CC="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang"
+export CXX="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang++"
+
+if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
+  # Homebrew clang 21 is badly misconfigured and needs help finding the
+  # system headers, even though it uses system libc++ by default.
+  SDKROOT="$(xcrun --show-sdk-path)"
+  # TOOLCHAINROOT="$(xcrun --show-toolchain-path)"
+  TOOLCHAINROOT="$(cd $(dirname $(xcrun --find clang))/../.. && pwd)"
+  cat > "${CLANG_TIDY_BUILD_DIR}/toolchain.cmake" << EOF
+set(CMAKE_SYSROOT "${SDKROOT}")
+set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES
+    "${TOOLCHAINROOT}/usr/lib/clang/17/include"
+    "${SDKROOT}/usr/include"
+    "${TOOLCHAINROOT}/usr/include"
+    "${SDKROOT}/System/Library/Frameworks"
+    "${SDKROOT}/System/Library/SubFrameworks"
+)
+set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES
+    "${SDKROOT}/usr/include/c++/v1"
+    \${CMAKE_C_STANDARD_INCLUDE_DIRECTORIES}
+)
+EOF
+  export CMAKE_TOOLCHAIN_FILE="${CLANG_TIDY_BUILD_DIR}/toolchain.cmake"
+fi
+
 echo Building compile_commands.json...
 cmake -G Ninja -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev \
-      -DCMAKE_C_COMPILER="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang" \
-      -DCMAKE_CXX_COMPILER="${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang++" \
       -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
       -DHalide_CLANG_TIDY_BUILD=ON \
