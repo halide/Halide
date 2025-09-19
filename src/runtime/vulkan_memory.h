@@ -556,7 +556,7 @@ int VulkanMemoryAllocator::lookup_requirements(void *user_context, size_t size, 
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Looking up requirements ("
                    << "user_context=" << user_context << " "
-                   << "size=" << (uint32_t)block->size << ", "
+                   << "size=" << (uint32_t)size << ", "
                    << "usage_flags=" << usage_flags << ") ... \n";
 #endif
     VkBufferCreateInfo create_info = {
@@ -998,7 +998,7 @@ int VulkanMemoryAllocator::conform(void *user_context, MemoryRequest *request) {
 
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Buffer requirements ("
-                   << "requested_size=" << (uint32_t)region->size << ", "
+                   << "requested_size=" << (uint32_t)request->size << ", "
                    << "required_alignment=" << (uint32_t)memory_requirements.alignment << ", "
                    << "required_size=" << (uint32_t)memory_requirements.size << ")\n";
 #endif
@@ -1051,7 +1051,7 @@ int VulkanMemoryAllocator::conform_region_request(void *instance_ptr, MemoryRequ
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Conforming region request ("
                    << "user_context=" << user_context << " "
-                   << "request=" << (void *)(region) << ") ... \n";
+                   << "request=" << (void *)(request) << ") ... \n";
 #endif
 
     if ((instance->device == nullptr) || (instance->physical_device == nullptr)) {
@@ -1125,6 +1125,9 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
 
     VkResult result = vkCreateBuffer(instance->device, &create_info, instance->alloc_callbacks, buffer);
     if (result != VK_SUCCESS) {
+        debug(user_context) << "VulkanRegionAllocator: Failed to create buffer!\n\t"
+                            << "vkCreateBuffer returned: " << vk_get_error_name(result) << "\n";
+
         // Allocation failed ... collect unused regions and try again ...
         instance->collect(user_context);
         result = vkCreateBuffer(instance->device, &create_info, instance->alloc_callbacks, buffer);
@@ -1165,11 +1168,8 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
                                 << "vkCreateBuffer returned: " << vk_get_error_name(result) << "\n";
             return halide_error_code_device_malloc_failed;
         }
+        region->size = create_info.size;
     }
-
-#ifdef DEBUG_RUNTIME
-    debug(nullptr) << "vkCreateBuffer: Created buffer for device region (" << (uint64_t)region->size << " bytes) ...\n";
-#endif
 
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, region);
     if (region_allocator == nullptr) {
@@ -1189,6 +1189,10 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
         return halide_error_code_internal_error;
     }
 
+#ifdef DEBUG_RUNTIME
+    debug(nullptr) << "vkCreateBuffer: Created buffer for device region (" << (uint64_t)region->size << " bytes) ...\n";
+#endif
+
     // Finally, bind buffer to the device memory
     result = vkBindBufferMemory(instance->device, *buffer, *device_memory, region->offset);
     if (result != VK_SUCCESS) {
@@ -1196,6 +1200,10 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
                             << "vkBindBufferMemory returned: " << vk_get_error_name(result) << "\n";
         return halide_error_code_generic_error;
     }
+
+#ifdef DEBUG_RUNTIME
+    debug(nullptr) << "vkBindBufferMemory: Bound memory to device buffer for device region (" << (uint64_t)region->size << " bytes) ...\n";
+#endif
 
     region->handle = (void *)buffer;
     region->is_owner = true;
