@@ -397,7 +397,7 @@ private:
             builder.dimensions = f.dimensions();
             std::string max_stage_num = std::to_string(f.updates().size());
             for (const std::string &arg : f.args()) {
-                std::string prefix = op->name + ".s" + max_stage_num + "." + arg;
+                std::string prefix = concat_strings(op->name, ".s", max_stage_num, ".", arg);
                 Expr min = Variable::make(Int(32), prefix + ".min");
                 Expr max = Variable::make(Int(32), prefix + ".max");
                 builder.mins.push_back(min);

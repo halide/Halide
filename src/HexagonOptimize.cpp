@@ -134,7 +134,7 @@ string type_suffix(const vector<Expr> &ops, bool signed_variants) {
     }
     string suffix = type_suffix(ops.front(), signed_variants);
     for (size_t i = 1; i < ops.size(); i++) {
-        suffix = suffix + type_suffix(ops[i], signed_variants);
+        suffix += type_suffix(ops[i], signed_variants);
     }
     return suffix;
 }

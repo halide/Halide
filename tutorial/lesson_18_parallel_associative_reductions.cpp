@@ -18,19 +18,24 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
+#include <random>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+int main() {
     // Declare some Vars to use below.
     Var x("x"), y("y"), i("i"), u("u"), v("v");
 
     // Create an input with random values.
     Buffer<uint8_t> input(8, 8, "input");
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dis(0, 255);
+
     for (int y = 0; y < 8; ++y) {
         for (int x = 0; x < 8; ++x) {
-            input(x, y) = (rand() % 256);
+            input(x, y) = dis(gen);
         }
     }
 

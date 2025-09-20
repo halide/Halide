@@ -448,7 +448,6 @@ escape hatches for third-party packagers.
 
 | Option                      | Default                                                            | Description                                                                              |
 |-----------------------------|--------------------------------------------------------------------|------------------------------------------------------------------------------------------|
-| `Halide_CLANG_TIDY_BUILD`   | `OFF`                                                              | Used internally to generate fake compile jobs for runtime files when running clang-tidy. |
 | `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                      |
 | `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            |
 | `Halide_VERSION_OVERRIDE`   | `${Halide_VERSION}`                                                | Override the VERSION for libHalide.                                                      |

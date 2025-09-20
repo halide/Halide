@@ -15,11 +15,11 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+int main() {
     // First we'll declare some Vars to use below.
     Var x("x"), y("y");
 
@@ -316,7 +316,7 @@ int main(int argc, char **argv) {
 
                 // Skip over rows of producer that we've already
                 // computed in a previous iteration.
-                if (y > 0 && py == y) continue;
+                if (y > 0 && py == y) { continue; }
 
                 for (int px = 0; px < 5; px++) {
                     producer_storage[py][px] = sin(px * py);
@@ -359,7 +359,7 @@ int main(int argc, char **argv) {
             float producer_storage[2][5];
             for (int y = 0; y < 4; y++) {
                 for (int py = y; py < y + 2; py++) {
-                    if (y > 0 && py == y) continue;
+                    if (y > 0 && py == y) { continue; }
                     for (int px = 0; px < 5; px++) {
                         // Stores to producer_storage have their y coordinate bit-masked.
                         producer_storage[py & 1][px] = sin(px * py);
@@ -608,14 +608,14 @@ int main(int argc, char **argv) {
 
                 for (int py = y; py < y + 2; py++) {
                     // Skip scanlines already computed *within this task*
-                    if (yi > 0 && py == y) continue;
+                    if (yi > 0 && py == y) { continue; }
 
                     // Compute this scanline of the producer in 4-wide vectors
                     for (int x_vec = 0; x_vec < 160 / 4 + 1; x_vec++) {
                         int x_base = x_vec * 4;
                         // 4 doesn't divide 161, so push the last vector left
                         // (see lesson 05).
-                        if (x_base > 161 - 4) x_base = 161 - 4;
+                        if (x_base > 161 - 4) { x_base = 161 - 4; }
                         // If you're on x86, Halide generates SSE code for this part:
                         int x[] = {x_base, x_base + 1, x_base + 2, x_base + 3};
                         float vec[4] = {sinf(x[0] * py), sinf(x[1] * py),

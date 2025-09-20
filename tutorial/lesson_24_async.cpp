@@ -18,11 +18,11 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+int main() {
     // Declare some Vars to use below.
     Var x("x"), y("y"), c("c"), xo("xo"), yo("yo"), xi("xi"), yi("yi"), tile("tile");
 

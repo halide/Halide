@@ -367,6 +367,7 @@ private:
     void visit(const Call *op) override {
         IRVisitor::visit(op);
         std::vector<const IRNode *> args;
+        args.reserve(op->args.size());
         for (const auto &arg : op->args) {
             args.push_back(arg.get());
         }
@@ -385,6 +386,7 @@ private:
     void visit(const Shuffle *op) override {
         IRVisitor::visit(op);
         std::vector<const IRNode *> args;
+        args.reserve(op->vectors.size());
         for (const auto &arg : op->vectors) {
             args.push_back(arg.get());
         }
@@ -441,6 +443,7 @@ private:
     void visit(const Provide *op) override {
         IRVisitor::visit(op);
         std::vector<const IRNode *> args;
+        args.reserve(op->values.size() + op->args.size() + 1);
         for (const auto &arg : op->values) {
             args.push_back(arg.get());
         }
@@ -456,6 +459,7 @@ private:
         // We do not model allocation/de-allocation costs
         IRVisitor::visit(op);
         std::vector<const IRNode *> args_inline;
+        args_inline.reserve(op->extents.size() + 2);
         for (const auto &arg : op->extents) {
             args_inline.push_back(arg.get());
         }
@@ -957,6 +961,7 @@ public:
                     }
                 }
                 operands_str += ";";
+                // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
                 line = line.substr(0, idx + 2) + operands_str;
             }
 

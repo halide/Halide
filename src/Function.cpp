@@ -397,7 +397,7 @@ struct PrintTypeList {
         }
         const char *comma = "";
         for (const auto &t : self.list_) {
-            if constexpr (std::is_same<Type, T>::value) {
+            if constexpr (std::is_same_v<Type, T>) {
                 s << comma << t;
             } else {
                 s << comma << t.type();

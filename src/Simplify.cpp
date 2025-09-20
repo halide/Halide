@@ -381,6 +381,7 @@ Expr simplify(const Expr &e, bool remove_dead_let_stmts,
               const std::vector<Expr> &assumptions) {
     Simplify m(remove_dead_let_stmts, &bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
+    facts.reserve(assumptions.size());
     for (const Expr &a : assumptions) {
         facts.push_back(m.scoped_truth(a));
     }
@@ -397,6 +398,7 @@ Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
               const std::vector<Expr> &assumptions) {
     Simplify m(remove_dead_let_stmts, &bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
+    facts.reserve(assumptions.size());
     for (const Expr &a : assumptions) {
         facts.push_back(m.scoped_truth(a));
     }

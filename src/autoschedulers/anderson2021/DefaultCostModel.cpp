@@ -29,11 +29,12 @@ namespace {
 using Halide::Internal::aslog;
 using Halide::Internal::PipelineFeatures;
 using Halide::Internal::ScheduleFeatures;
-using Halide::Internal::Weights;
 using Halide::Runtime::Buffer;
 
 bool ends_with(const std::string &str, const std::string &suffix) {
-    if (str.size() < suffix.size()) return false;
+    if (str.size() < suffix.size()) {
+        return false;
+    }
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
         if (str[off + i] != suffix[i]) {
@@ -195,6 +196,7 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
     if (!head1_filter_update.data()) {
         auto weight_update_buffer = [](const Runtime::Buffer<float> &w) {
             std::vector<int> size;
+            size.reserve(w.dimensions() + 1);
             for (int i = 0; i < w.dimensions(); i++) {
                 size.push_back(w.dim(i).extent());
             }
@@ -379,7 +381,7 @@ void DefaultCostModel::load_weights() {
     }
 
     if (need_randomize) {
-        auto seed = time(NULL);
+        auto seed = time(nullptr);
         std::cout << "Randomizing weights using seed = " << seed << "\n";
         weights.randomize((uint32_t)seed);
     }
@@ -412,7 +414,7 @@ std::unique_ptr<DefaultCostModel> make_default_cost_model(Internal::Autoschedule
                                                           const std::string &weights_in_path,
                                                           const std::string &weights_out_path,
                                                           bool randomize_weights) {
-    return std::unique_ptr<DefaultCostModel>(new DefaultCostModel(weights_in_path, weights_out_path, randomize_weights, stats));
+    return std::make_unique<DefaultCostModel>(weights_in_path, weights_out_path, randomize_weights, stats);
 }
 
 }  // namespace Halide

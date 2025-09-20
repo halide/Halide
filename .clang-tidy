@@ -114,11 +114,8 @@ Checks: >
     -misc-unconventional-assign-operator,
     -misc-unused-parameters,
     -misc-use-internal-linkage,
-    -modernize-avoid-bind,
     -modernize-avoid-c-arrays,
     -modernize-concat-nested-namespaces,
-    -modernize-deprecated-ios-base-aliases,
-    -modernize-loop-convert,
     -modernize-macro-to-enum,
     -modernize-pass-by-value,
     -modernize-raw-string-literal,
@@ -127,7 +124,6 @@ Checks: >
     -modernize-replace-random-shuffle,
     -modernize-return-braced-init-list,
     -modernize-shrink-to-fit,
-    -modernize-type-traits,
     -modernize-unary-static-assert,
     -modernize-use-auto,
     -modernize-use-nodiscard,
@@ -139,8 +135,6 @@ Checks: >
     -modernize-use-uncaught-exceptions,
     -modernize-use-using,
     -performance-enum-size,
-    -performance-inefficient-string-concatenation,
-    -performance-inefficient-vector-operation,
     -performance-no-int-to-ptr,
     -portability-avoid-pragma-once,
     -portability-template-virtual-member-function,
@@ -184,6 +178,7 @@ Checks: >
     -readability-use-std-min-max,
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
+ExcludeHeaderFilterRegex: '\.fbs\.h'
 FormatStyle: 'file'
 CheckOptions:
     -   key: modernize-use-default-member-init.UseAssignment

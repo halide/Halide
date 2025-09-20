@@ -22,15 +22,16 @@ const char *const dom_var_names[] = {"$x", "$y", "$z", "$w"};
 
 // T is an ImageParam, Buffer<>, Input<Buffer<>>
 template<typename T>
-Internal::ReductionDomain make_dom_from_dimensions(const T &t, const std::string &name) {
-    std::vector<Internal::ReductionVariable> vars;
+ReductionDomain make_dom_from_dimensions(const T &t, const std::string &name) {
+    std::vector<ReductionVariable> vars;
+    vars.reserve(t.dimensions());
     for (int i = 0; i < t.dimensions(); i++) {
         vars.push_back({name + dom_var_names[i],
                         t.dim(i).min(),
                         t.dim(i).extent()});
     }
 
-    return Internal::ReductionDomain(vars);
+    return ReductionDomain(vars);
 }
 
 }  // namespace
@@ -181,7 +182,7 @@ void RDom::initialize_from_region(const Region &region, string name) {
             break;
         }
         ReductionVariable rv;
-        rv.var = name + "$" + rvar_uniquifier;
+        rv.var = concat_strings(name, "$", rvar_uniquifier);
         rv.min = cast<int32_t>(region[i].min);
         rv.extent = cast<int32_t>(region[i].extent);
         vars.push_back(rv);

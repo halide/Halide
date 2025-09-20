@@ -156,6 +156,7 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
 
         // Traverse all the vector args
         std::vector<std::string> vecs;
+        vecs.reserve(op->vectors.size());
         for (const Expr &v : op->vectors) {
             vecs.push_back(print_expr(v));
         }

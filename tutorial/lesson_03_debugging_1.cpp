@@ -17,12 +17,12 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
 
 // This time we'll just import the entire Halide namespace
 using namespace Halide;
 
-int main(int argc, char **argv) {
+int main() {
 
     // We'll start by defining the simple single-stage imaging
     // pipeline from lesson 1.

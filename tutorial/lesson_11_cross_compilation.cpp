@@ -18,10 +18,39 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
+#include <fstream>
+#include <vector>
+
 using namespace Halide;
 
-int main(int argc, char **argv) {
+template<typename T, size_t N>
+bool check_file_header(const std::string& filename, const T (&expected)[N]) {
+    std::ifstream file(filename, std::ios::binary);
+    if (!file) {
+        std::cout << "Could not open file: " << filename << "\n";
+        return false;
+    }
+
+    T header[N];
+    if (!file.read(reinterpret_cast<char*>(header), sizeof header)) {
+        std::cout << "Could not read header from file: " << filename << "\n";
+        return false;
+    }
+
+    for (size_t i = 0; i < N; i++) {
+        if (header[i] != expected[i]) {
+            std::cout << "File " << filename << " has bad data: "
+                      << static_cast<int>(header[i]) << " instead of "
+                      << static_cast<int>(expected[i]) << "\n";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+int main() {
 
     // We'll define the simple one-stage pipeline that we used in lesson 10.
     Func brighter;
@@ -93,33 +122,14 @@ int main(int argc, char **argv) {
                                       1,                    // 32-bit
                                       1,                    // 2's complement little-endian
                                       1};                   // Current version of elf
-
-    FILE *f = fopen("lesson_11_arm_32_android.o", "rb");
-    uint8_t header[32];
-    if (!f || fread(header, 32, 1, f) != 1) {
-        printf("Object file not generated\n");
-        return -1;
-    }
-    fclose(f);
-
-    if (memcmp(header, arm_32_android_magic, sizeof(arm_32_android_magic))) {
-        printf("Unexpected header bytes in 32-bit arm object file.\n");
+    if (!check_file_header("lesson_11_arm_32_android.o", arm_32_android_magic)) {
         return -1;
     }
 
     // 64-bit windows object files start with the magic 16-bit value 0x8664
     // (presumably referring to x86-64)
     uint8_t win_64_magic[] = {0x64, 0x86};
-
-    f = fopen("lesson_11_x86_64_windows.obj", "rb");
-    if (!f || fread(header, 32, 1, f) != 1) {
-        printf("Object file not generated\n");
-        return -1;
-    }
-    fclose(f);
-
-    if (memcmp(header, win_64_magic, sizeof(win_64_magic))) {
-        printf("Unexpected header bytes in 64-bit windows object file.\n");
+    if (!check_file_header("lesson_11_x86_64_windows.obj", win_64_magic)) {
         return -1;
     }
 
@@ -127,16 +137,8 @@ int main(int argc, char **argv) {
     uint32_t arm_32_ios_magic[] = {0xfeedface,  // Mach-o magic bytes
                                    12,          // CPU type is ARM
                                    11,          // CPU subtype is ARMv7s
-                                   1};          // It's a relocatable object file.
-    f = fopen("lesson_11_arm_32_ios.o", "rb");
-    if (!f || fread(header, 32, 1, f) != 1) {
-        printf("Object file not generated\n");
-        return -1;
-    }
-    fclose(f);
-
-    if (memcmp(header, arm_32_ios_magic, sizeof(arm_32_ios_magic))) {
-        printf("Unexpected header bytes in 32-bit arm ios object file.\n");
+                                   1};          // It's a relocatable object file
+    if (!check_file_header("lesson_11_arm_32_ios.o", arm_32_ios_magic)) {
         return -1;
     }
 
