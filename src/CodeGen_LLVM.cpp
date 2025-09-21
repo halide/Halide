@@ -3428,6 +3428,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             std::vector<std::string> namespaces;
             name = extract_namespaces(op->name, namespaces);
             std::vector<ExternFuncArgument> mangle_args;
+            mangle_args.reserve(op->args.size());
             for (const auto &arg : op->args) {
                 mangle_args.emplace_back(arg);
             }
@@ -4072,6 +4073,7 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
 
 void CodeGen_LLVM::visit(const Shuffle *op) {
     vector<Value *> vecs;
+    vecs.reserve(op->vectors.size());
     for (const Expr &e : op->vectors) {
         vecs.push_back(codegen(e));
     }
@@ -4129,6 +4131,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             if (interleave_of_slices) {
                 value = codegen(op->vectors[0]);
                 vector<Value *> slices;
+                slices.reserve(f);
                 for (int i = 0; i < f; i++) {
                     slices.push_back(slice_vector(value, i * step, step));
                 }
@@ -4377,6 +4380,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
                 // call will assume that the args should scalarize.
                 if (!module->getFunction(intrin_name)) {
                     vector<llvm::Type *> arg_types;
+                    arg_types.reserve(args.size());
                     for (const Expr &e : args) {
                         arg_types.push_back(llvm_type_of(e.type()));
                     }

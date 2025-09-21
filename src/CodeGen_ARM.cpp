@@ -2361,6 +2361,7 @@ bool CodeGen_ARM::codegen_across_vector_reduce(const VectorReduce *op, const Exp
         // call will assume that the args should scalarize.
         if (!module->getFunction(intrin_name)) {
             vector<llvm::Type *> arg_types;
+            arg_types.reserve(args.size());
             for (const Expr &e : args) {
                 arg_types.push_back(llvm_type_with_constraint(e.type(), false, VectorTypeConstraint::VScale));
             }
@@ -2435,6 +2436,7 @@ Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
 Value *CodeGen_ARM::codegen_with_lanes(int slice_lanes, int total_lanes,
                                        const std::vector<Expr> &args, codegen_func_t &cg_func) {
     std::vector<Value *> llvm_args;
+    llvm_args.reserve(args.size());
     // codegen args
     for (const auto &arg : args) {
         llvm_args.push_back(codegen(arg));

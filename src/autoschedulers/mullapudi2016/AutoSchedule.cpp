@@ -2643,6 +2643,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
 Partitioner::Group Partitioner::merge_groups(const Group &prod_group,
                                              const Group &cons_group) {
     vector<FStage> group_members;
+    group_members.reserve(prod_group.members.size() + cons_group.members.size());
     for (const auto &s : prod_group.members) {
         group_members.push_back(s);
     }
@@ -3336,6 +3337,7 @@ void Partitioner::generate_group_cpu_schedule(
     if (!outer_dims.empty()) {
 
         vector<VarOrRVar> ordering;
+        ordering.reserve(inner_dims.size() + outer_dims.size());
         for (const auto &v : inner_dims) {
             ordering.push_back(v);
         }

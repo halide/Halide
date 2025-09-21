@@ -1650,6 +1650,7 @@ void CodeGen_C::visit(const Call *op) {
 
             // Get the args
             vector<string> values;
+            values.reserve(op->args.size());
             for (const auto &arg : op->args) {
                 values.push_back(print_expr(arg));
             }
@@ -1683,6 +1684,7 @@ void CodeGen_C::visit(const Call *op) {
 
             // Get the args
             vector<string> values;
+            values.reserve(op->args.size());
             for (const auto &arg : op->args) {
                 values.push_back(print_expr(arg));
             }
@@ -2470,6 +2472,7 @@ void CodeGen_C::visit(const Shuffle *op) {
     }
 
     std::vector<string> vecs;
+    vecs.reserve(op->vectors.size());
     for (const Expr &v : op->vectors) {
         vecs.push_back(print_expr(v));
     }

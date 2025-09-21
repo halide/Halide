@@ -767,6 +767,7 @@ gengen
 
     const auto build_targets = [](const std::vector<std::string> &target_strings) {
         std::vector<Target> targets;
+        targets.reserve(target_strings.size());
         for (const auto &s : target_strings) {
             targets.emplace_back(s);
         }
