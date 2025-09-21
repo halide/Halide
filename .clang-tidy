@@ -116,7 +116,6 @@ Checks: >
     -misc-use-internal-linkage,
     -modernize-avoid-c-arrays,
     -modernize-concat-nested-namespaces,
-    -modernize-loop-convert,
     -modernize-macro-to-enum,
     -modernize-pass-by-value,
     -modernize-raw-string-literal,
