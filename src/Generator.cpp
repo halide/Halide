@@ -2196,14 +2196,14 @@ void generator_test() {
 
         Tester tester_instance;
 
-        static_assert(std::is_same<decltype(tester_instance.expr_array_input[0]), const Expr &>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.expr_array_output[0]), const Expr &>::value, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.expr_array_input[0]), const Expr &>, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.expr_array_output[0]), const Expr &>, "type mismatch");
 
-        static_assert(std::is_same<decltype(tester_instance.func_array_input[0]), const Func &>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.func_array_output[0]), Func &>::value, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.func_array_input[0]), const Func &>, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.func_array_output[0]), Func &>, "type mismatch");
 
-        static_assert(std::is_same<decltype(tester_instance.buffer_array_input[0]), ImageParam>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), Func>::value, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.buffer_array_input[0]), ImageParam>, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.buffer_array_output[0]), Func>, "type mismatch");
     }
 
     class GPTester : public Generator<GPTester> {

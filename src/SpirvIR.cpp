@@ -119,7 +119,7 @@ const std::string &spirv_op_name(SpvId op);
 
 template<typename T, typename S>
 T constexpr rotl(const T n, const S i) {
-    static_assert(std::is_unsigned<T>::value, "rotl only works on unsigned types");
+    static_assert(std::is_unsigned_v<T>, "rotl only works on unsigned types");
     const T m = (std::numeric_limits<T>::digits - 1);
     const T c = i & m;
     return (n << c) | (n >> ((T(0) - c) & m));
@@ -1866,11 +1866,11 @@ SpvId SpvBuilder::declare_scalar_constant_of_type(const Type &scalar_type, const
              << "data=" << stringify_constant(value) << "\n";
 
     // small signed integers have to be sign extended to fit 32-bits
-    if constexpr (std::is_same<int8_t, T>::value) {
+    if constexpr (std::is_same_v<int8_t, T>) {
         uint32_t sext_value = uint32_t(value);
         SpvInstruction inst = SpvFactory::constant(result_id, type_id, sizeof(uint32_t), &sext_value, value_type);
         module.add_constant(inst);
-    } else if constexpr (std::is_same<int16_t, T>::value) {
+    } else if constexpr (std::is_same_v<int16_t, T>) {
         uint32_t sext_value = uint32_t(value);
         SpvInstruction inst = SpvFactory::constant(result_id, type_id, sizeof(uint32_t), &sext_value, value_type);
         module.add_constant(inst);
