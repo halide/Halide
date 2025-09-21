@@ -110,6 +110,7 @@ struct trace : public PrinterBase {
     }
 };
 
+// NOLINTBEGIN(bugprone-macro-parentheses)
 #define TRACEPRINT(msg) trace() << msg;
 #define TRACELEVEL(level, msg) \
     if (level <= HALIDE_D3D12_TRACE_LEVEL) TRACEPRINT(msg);
@@ -119,6 +120,7 @@ struct trace : public PrinterBase {
 #define TRACEERROR(msg) TRACELEVEL(-2, "ERROR: " << msg);
 #define TRACEWARN(msg) TRACELEVEL(-1, "WARNING: " << msg);
 #define TRACEINFO(msg) TRACELEVEL(0, msg);
+// NOLINTEND(bugprone-macro-parentheses)
 
 #ifdef HALIDE_D3D12_TRACE_TIME
 #define TRACETIME_CHECKPOINT() halide_current_time_ns(user_context)

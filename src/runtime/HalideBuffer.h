@@ -2408,7 +2408,7 @@ private:
              typename = typename std::enable_if<(d >= 0)>::type>
     HALIDE_ALWAYS_INLINE static void for_each_element_array_helper(int, const for_each_element_task_dim *t, Fn &&f, int *pos) {
         for (pos[d] = t[d].min; pos[d] <= t[d].max; pos[d]++) {
-            for_each_element_array_helper<d - 1>(0, t, std::forward<Fn>(f), pos);
+            for_each_element_array_helper<d - 1>(0, t, f, pos);
         }
     }
 
@@ -2442,7 +2442,7 @@ private:
             for_each_element_array_helper<3, Fn>(0, t, std::forward<Fn>(f), pos);
         } else {
             for (pos[d] = t[d].min; pos[d] <= t[d].max; pos[d]++) {
-                for_each_element_array(d - 1, t, std::forward<Fn>(f), pos);
+                for_each_element_array(d - 1, t, f, pos);
             }
         }
     }

@@ -154,6 +154,9 @@ set(RUNTIME_HEADER_FILES
 add_library(Halide_initmod OBJECT)
 add_library(Halide::initmod ALIAS Halide_initmod)
 
+# All these are binary2cpp-generated files, so no need to export compile commands for them.
+set_target_properties(Halide_initmod PROPERTIES EXPORT_COMPILE_COMMANDS NO)
+
 # Note: ensure that these flags match the flags in the Makefile.
 # Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
 set(RUNTIME_CXX_FLAGS
@@ -184,11 +187,6 @@ set(RUNTIME_CXX_FLAGS
     -Wimplicit-fallthrough
     -Wno-sync-alignment
     -isystem "${VulkanHeaders_INCLUDE_DIR}"
-)
-
-Halide_feature(
-    Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF
-    ADVANCED
 )
 
 foreach (i IN LISTS RUNTIME_CPP)
@@ -270,33 +268,15 @@ foreach (i IN LISTS RUNTIME_CPP)
 
             set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S -MD -MF "${basename}.d")
 
-            if (Halide_CLANG_TIDY_BUILD)
-                # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
-                # that it can use for tidy-checking. (This branch should never be taken by 'normal'
-                # compilations.)
-                if (NOT i MATCHES "vulkan")
-                    # On macOS (at least), the vulkan runtime file needs some sort of threading API
-                    # to be defined. Otherwise, we get errors like:
-                    #
-                    # __config:858:8: error: "No thread API" [clang-diagnostic-error]
-                    # 858 | #      error "No thread API"
-                    #     |        ^
-                    # availability.h:292:4: error: "It looks like you're trying to enable vendor availability markup, but you haven't defined the corresponding macros yet!" [clang-diagnostic-error]
-                    # 292 | #  error                                                                                                               \
-                    #     |    ^
-                    #
-                    # TODO: see if we can fix this somehow.
-                    add_library(${basename} STATIC "${SOURCE}")
-                    target_compile_options(${basename} PRIVATE ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} -m${j} -target ${TARGET})
-                    target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
-                endif ()
-            else ()
-                add_custom_command(OUTPUT "${LL}"
-                                   COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
-                                   DEPENDS $<TARGET_NAME:clang> "${SOURCE}"
-                                   DEPFILE "${basename}.d"
-                                   VERBATIM)
+            if (CMAKE_EXPORT_COMPILE_COMMANDS)
+                list(PREPEND clang_flags -MJ "${basename}.json")
             endif ()
+
+            add_custom_command(OUTPUT "${LL}"
+                               COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
+                               DEPENDS $<TARGET_NAME:clang> "${SOURCE}"
+                               DEPFILE "${basename}.d"
+                               VERBATIM)
 
             add_custom_command(OUTPUT "${BC}"
                                COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL}" -o "${BC}"
@@ -377,7 +357,6 @@ target_sources(Halide_Runtime
 
 Halide_feature(
     Halide_BUILD_HEXAGON_REMOTE_RUNTIME "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF
-    DEPENDS NOT Halide_CLANG_TIDY_BUILD
     ADVANCED
 )
 if (Halide_BUILD_HEXAGON_REMOTE_RUNTIME)

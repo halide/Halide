@@ -288,11 +288,11 @@ public:
     /** Aliases for halide_type_code_t values for legacy compatibility
      * and to match the Halide internal C++ style. */
     // @{
-    static const halide_type_code_t Int = halide_type_int;
-    static const halide_type_code_t UInt = halide_type_uint;
-    static const halide_type_code_t Float = halide_type_float;
-    static const halide_type_code_t BFloat = halide_type_bfloat;
-    static const halide_type_code_t Handle = halide_type_handle;
+    static constexpr halide_type_code_t Int = halide_type_int;
+    static constexpr halide_type_code_t UInt = halide_type_uint;
+    static constexpr halide_type_code_t Float = halide_type_float;
+    static constexpr halide_type_code_t BFloat = halide_type_bfloat;
+    static constexpr halide_type_code_t Handle = halide_type_handle;
     // @}
 
     /** The number of bytes required to store a single scalar value of this type. Ignores vector lanes. */

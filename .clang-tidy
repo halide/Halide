@@ -114,10 +114,8 @@ Checks: >
     -misc-unconventional-assign-operator,
     -misc-unused-parameters,
     -misc-use-internal-linkage,
-    -modernize-avoid-bind,
     -modernize-avoid-c-arrays,
     -modernize-concat-nested-namespaces,
-    -modernize-deprecated-ios-base-aliases,
     -modernize-loop-convert,
     -modernize-macro-to-enum,
     -modernize-pass-by-value,
@@ -131,7 +129,6 @@ Checks: >
     -modernize-unary-static-assert,
     -modernize-use-auto,
     -modernize-use-nodiscard,
-    -modernize-use-noexcept,
     -modernize-use-scoped-lock,
     -modernize-use-std-print,
     -modernize-use-trailing-return-type,
@@ -184,6 +181,7 @@ Checks: >
     -readability-use-std-min-max,
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
+ExcludeHeaderFilterRegex: '\.fbs\.h|common/cmdline\.h'
 FormatStyle: 'file'
 CheckOptions:
     -   key: modernize-use-default-member-init.UseAssignment

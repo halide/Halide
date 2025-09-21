@@ -57,7 +57,9 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
                   "Incorrect size for pipeline features");
     int num_stages = 0;
     for (const auto &n : dag.nodes) {
-        if (!n.is_input) num_stages += (int)n.stages.size();
+        if (!n.is_input) {
+            num_stages += (int)n.stages.size();
+        }
     }
     Runtime::Buffer<float> pipeline_features(head1_w, head1_h, num_stages);
     int stage = 0;
@@ -107,7 +109,9 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
     for (const auto &n : dag.nodes) {
 
         // Inputs are computed outside of the pipeline and don't count.
-        if (n.is_input) continue;
+        if (n.is_input) {
+            continue;
+        }
 
         // The remaining stages are not yet
         // scheduled. Optimistically assume their internal costs
@@ -117,7 +121,9 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
         // cost for loading from these unscheduled stages is
         // already baked into the scheduled stages that consume
         // them.
-        if (stage >= num_stages) break;
+        if (stage >= num_stages) {
+            break;
+        }
 
         // Load up the schedule features for all stages of this Func.
         for (const auto &s : Internal::reverse_view(n.stages)) {
@@ -235,14 +241,14 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
             any_nans = true;
             aslog(1) << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
             aslog(1) << "Checking pipeline features for NaNs...\n";
-            pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+            pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) { abort(); } });
             aslog(1) << "None found\n";
             aslog(1) << "Checking schedule features for NaNs...\n";
-            schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+            schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) { abort(); } });
             aslog(1) << "None found\n";
             aslog(1) << "Checking network weights for NaNs...\n";
             weights.for_each_buffer([&](const Runtime::Buffer<float> &buf) {
-                buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+                buf.for_each_value([&](float f) { if (std::isnan(f)) { abort(); } });
             });
             aslog(1) << "None found\n";
         }
@@ -383,7 +389,7 @@ void DefaultCostModel::reset() {
 std::unique_ptr<DefaultCostModel> make_default_cost_model(const std::string &weights_in_path,
                                                           const std::string &weights_out_path,
                                                           bool randomize_weights) {
-    return std::unique_ptr<DefaultCostModel>(new DefaultCostModel(weights_in_path, weights_out_path, randomize_weights));
+    return std::make_unique<DefaultCostModel>(weights_in_path, weights_out_path, randomize_weights);
 }
 
 }  // namespace Halide

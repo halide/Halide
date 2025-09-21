@@ -5,6 +5,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/google/flatbuffers.git
     GIT_TAG 0100f6a5779831fa7a651e4b67ef389a8752bd9b # v23.5.26
     GIT_SHALLOW TRUE
+    SYSTEM
 )
 
 FetchContent_Declare(
@@ -12,6 +13,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/pybind/pybind11.git
     GIT_TAG 8a099e44b3d5f85b20f05828d919d2332a8de841 # v2.11.1
     GIT_SHALLOW TRUE
+    SYSTEM
 )
 
 FetchContent_Declare(
@@ -19,6 +21,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
     GIT_TAG 3e826ecde1adfba5f88d10d361131405637e65a3 # 1.0.36
     GIT_SHALLOW TRUE
+    SYSTEM
 )
 
 macro(Halide_provide_dependency method dep_name)
@@ -50,10 +53,20 @@ macro(Halide_provide_dependency method dep_name)
             if (NOT TARGET flatbuffers::flatbuffers)
                 add_library(flatbuffers::flatbuffers ALIAS flatbuffers)
                 add_executable(flatbuffers::flatc ALIAS flatc)
+                set_target_properties(
+                    flatbuffers flatc
+                    PROPERTIES
+                    EXPORT_COMPILE_COMMANDS OFF
+                )
             endif ()
         endif ()
         if ("${dep_name}" STREQUAL "wabt")
-            set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)
+            set_target_properties(
+                wabt wasm-rt-impl
+                PROPERTIES
+                POSITION_INDEPENDENT_CODE ON
+                EXPORT_COMPILE_COMMANDS OFF
+            )
         endif ()
     endif ()
 endmacro()
