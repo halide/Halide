@@ -22,7 +22,7 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
 
 using namespace Halide;
 
@@ -35,7 +35,7 @@ public:
     Output<Buffer<float, 2>> output1{"output1"};
     Output<Buffer<float, 2>> output2{"output2"};
 
-    Expr sum3x3(Func f, Var x, Var y) {
+    static Expr sum3x3(const Func &f, const Var &x, const Var &y) {
         return f(x - 1, y - 1) + f(x - 1, y) + f(x - 1, y + 1) +
                f(x, y - 1) + f(x, y) + f(x, y + 1) +
                f(x + 1, y - 1) + f(x + 1, y) + f(x + 1, y + 1);
