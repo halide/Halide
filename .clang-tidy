@@ -129,7 +129,6 @@ Checks: >
     -modernize-unary-static-assert,
     -modernize-use-auto,
     -modernize-use-nodiscard,
-    -modernize-use-scoped-lock,
     -modernize-use-std-print,
     -modernize-use-trailing-return-type,
     -modernize-use-transparent-functors,
