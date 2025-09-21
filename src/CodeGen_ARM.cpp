@@ -1045,15 +1045,17 @@ void CodeGen_ARM::init_module() {
                 continue;
             }
 
-            string full_name = intrin_name;
-            const bool is_vanilla_intrinsic = starts_with(full_name, "llvm.");
-            if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
-                if (target.bits == 32) {
-                    full_name = "llvm.arm.neon." + full_name;
-                } else {
-                    full_name = (is_sve ? "llvm.aarch64.sve." : "llvm.aarch64.neon.") + full_name;
+            const auto full_name = [&]() -> string {
+                const bool is_vanilla_intrinsic = starts_with(intrin_name, "llvm.");
+                if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
+                    const char *prefix =
+                        target.bits == 32 ? "llvm.arm.neon." :
+                        is_sve            ? "llvm.aarch64.sve." :
+                                            "llvm.aarch64.neon.";
+                    return concat_strings(prefix, intrin_name);
                 }
-            }
+                return intrin_name;
+            }();
 
             int width_factor = 1;
             if (!((intrin.ret_type.lanes <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {

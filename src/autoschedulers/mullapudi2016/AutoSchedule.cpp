@@ -3416,7 +3416,7 @@ void Partitioner::generate_group_cpu_schedule(
                     } else {
                         f_handle.reorder(seq, v);
                         sched.push_schedule(f_handle.name(), g.output.stage_num,
-                                            "reorder(" + seq_var + ", " + var + ")",
+                                            concat_strings("reorder(", seq_var, ", ", var, ")"),
                                             {seq_var, var});
                     }
                 }

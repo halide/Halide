@@ -2321,9 +2321,9 @@ void CodeGen_C::visit(const Allocate *op) {
                 string new_size_id_rhs;
                 string next_extent = print_expr(op->extents[i]);
                 if (i > 1) {
-                    new_size_id_rhs = "(" + size_id + " > ((int64_t(1) << 31) - 1)) ? " + size_id + " : (" + size_id + " * " + next_extent + ")";
+                    new_size_id_rhs = concat_strings("(", size_id, " > ((int64_t(1) << 31) - 1)) ? ", size_id, " : (", size_id, " * ", next_extent, ")");
                 } else {
-                    new_size_id_rhs = size_id + " * " + next_extent;
+                    new_size_id_rhs = concat_strings(size_id, " * ", next_extent);
                 }
                 size_id = print_assignment(Int(64), new_size_id_rhs);
             }
