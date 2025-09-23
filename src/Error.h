@@ -1,6 +1,7 @@
 #ifndef HALIDE_ERROR_H
 #define HALIDE_ERROR_H
 
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 
@@ -122,38 +123,42 @@ namespace Internal {
 void issue_warning(const char *warning);
 
 template<typename T>
-struct ReportBase {
+class ReportBase {
+    struct Contents {
+        std::ostringstream msg{};
+        bool finalized{false};
+    };
+    std::unique_ptr<Contents> contents = std::make_unique<Contents>();
+
+public:
     template<typename S>
     HALIDE_ALWAYS_INLINE T &operator<<(const S &x) {
-        msg << x;
+        contents->msg << x;
         return *static_cast<T *>(this);
     }
 
     HALIDE_ALWAYS_INLINE operator bool() const {
-        return !finalized;
+        return !contents->finalized;
     }
 
 protected:
-    std::ostringstream msg{};
-    bool finalized{false};
-
     // This function is called as part of issue() below. We can't use a
     // virtual function because issue() needs to be marked [[noreturn]]
     // for errors and be left alone for warnings (i.e., they have
     // different signatures).
     std::string finalize_message() {
-        if (!msg.str().empty() && msg.str().back() != '\n') {
-            msg << "\n";
+        if (!contents->msg.str().empty() && contents->msg.str().back() != '\n') {
+            contents->msg << "\n";
         }
-        finalized = true;
-        return msg.str();
+        contents->finalized = true;
+        return contents->msg.str();
     }
 
     T &init(const char *file, const char *function, const int line, const char *condition_string, const char *prefix) {
         if (debug_is_active_impl(1, file, function, line)) {
-            msg << prefix << " at " << file << ":" << line << ' ';
+            contents->msg << prefix << " at " << file << ":" << line << ' ';
             if (condition_string) {
-                msg << "Condition failed: " << condition_string << ' ';
+                contents->msg << "Condition failed: " << condition_string << ' ';
             }
         }
         return *static_cast<T *>(this);
