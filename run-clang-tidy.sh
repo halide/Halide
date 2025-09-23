@@ -112,7 +112,7 @@ EOF
 fi
 
 echo Configuring Halide...
-cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF -DWITH_TUTORIALS=OFF
+cmake -S "${ROOT_DIR}" -B "${CLANG_TIDY_BUILD_DIR}" -Wno-dev -DWITH_TESTS=OFF
 
 [ -a "${CLANG_TIDY_BUILD_DIR}/compile_commands.json" ]
 
