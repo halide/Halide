@@ -22,15 +22,16 @@ const char *const dom_var_names[] = {"$x", "$y", "$z", "$w"};
 
 // T is an ImageParam, Buffer<>, Input<Buffer<>>
 template<typename T>
-Internal::ReductionDomain make_dom_from_dimensions(const T &t, const std::string &name) {
-    std::vector<Internal::ReductionVariable> vars;
+ReductionDomain make_dom_from_dimensions(const T &t, const std::string &name) {
+    std::vector<ReductionVariable> vars;
+    vars.reserve(t.dimensions());
     for (int i = 0; i < t.dimensions(); i++) {
         vars.push_back({name + dom_var_names[i],
                         t.dim(i).min(),
                         t.dim(i).extent()});
     }
 
-    return Internal::ReductionDomain(vars);
+    return ReductionDomain(vars);
 }
 
 }  // namespace

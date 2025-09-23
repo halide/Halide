@@ -135,7 +135,6 @@ Checks: >
     -modernize-use-using,
     -performance-enum-size,
     -performance-inefficient-string-concatenation,
-    -performance-inefficient-vector-operation,
     -performance-no-int-to-ptr,
     -portability-avoid-pragma-once,
     -portability-template-virtual-member-function,
