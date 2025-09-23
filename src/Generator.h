@@ -867,7 +867,7 @@ public:
     std::string get_type_decls() const override {
         std::ostringstream oss;
         oss << "enum class Enum_" << this->name() << " {\n";
-        for (auto key_value : enum_map) {
+        for (const auto &key_value : enum_map) {
             oss << "  " << key_value.first << ",\n";
         }
         oss << "};\n";
@@ -877,7 +877,7 @@ public:
         // since we can ensure that the enum values are a nice tight range.
         oss << "inline HALIDE_NO_USER_CODE_INLINE const std::map<Enum_" << this->name() << ", std::string>& Enum_" << this->name() << "_map() {\n";
         oss << "  static const std::map<Enum_" << this->name() << ", std::string> m = {\n";
-        for (auto key_value : enum_map) {
+        for (const auto &key_value : enum_map) {
             oss << "    { Enum_" << this->name() << "::" << key_value.first << ", \"" << key_value.first << "\"},\n";
         }
         oss << "  };\n";
@@ -2419,7 +2419,7 @@ public:
     template<typename ExprOrVar, typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
     FuncRef operator()(std::vector<ExprOrVar> args) const {
         this->check_gio_access();
-        return get_values<ValueType>().at(0)(args);
+        return get_values<ValueType>().at(0)(std::move(args));
     }
 
     template<typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
