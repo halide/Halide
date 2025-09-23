@@ -198,34 +198,34 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 
 template<typename T>
 /*static*/ halide_handle_cplusplus_type halide_handle_cplusplus_type::make() {
-    constexpr bool is_ptr = std::is_pointer<T>::value;
-    constexpr bool is_lvalue_reference = std::is_lvalue_reference<T>::value;
-    constexpr bool is_rvalue_reference = std::is_rvalue_reference<T>::value;
+    constexpr bool is_ptr = std::is_pointer_v<T>;
+    constexpr bool is_lvalue_reference = std::is_lvalue_reference_v<T>;
+    constexpr bool is_rvalue_reference = std::is_rvalue_reference_v<T>;
 
-    using TNoRef = typename std::remove_reference<T>::type;
-    using TNoRefNoPtr = typename std::remove_pointer<TNoRef>::type;
-    constexpr bool is_function_pointer = std::is_pointer<TNoRef>::value &&
-                                         std::is_function<TNoRefNoPtr>::value;
+    using TNoRef = std::remove_reference_t<T>;
+    using TNoRefNoPtr = std::remove_pointer_t<TNoRef>;
+    constexpr bool is_function_pointer = std::is_pointer_v<TNoRef> &&
+                                         std::is_function_v<TNoRefNoPtr>;
 
     // Don't remove the pointer-ness from a function pointer.
-    using TBase = typename std::conditional<is_function_pointer, TNoRef, TNoRefNoPtr>::type;
-    constexpr bool is_const = std::is_const<TBase>::value;
-    constexpr bool is_volatile = std::is_volatile<TBase>::value;
+    using TBase = std::conditional_t<is_function_pointer, TNoRef, TNoRefNoPtr>;
+    constexpr bool is_const = std::is_const_v<TBase>;
+    constexpr bool is_volatile = std::is_volatile_v<TBase>;
 
     constexpr uint8_t modifiers = static_cast<uint8_t>(
-        (is_function_pointer ? halide_handle_cplusplus_type::FunctionTypedef : 0) |
-        (is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
-        (is_const ? halide_handle_cplusplus_type::Const : 0) |
-        (is_volatile ? halide_handle_cplusplus_type::Volatile : 0));
+        (is_function_pointer ? FunctionTypedef : 0) |
+        (is_ptr ? Pointer : 0) |
+        (is_const ? Const : 0) |
+        (is_volatile ? Volatile : 0));
 
     // clang-format off
-    constexpr halide_handle_cplusplus_type::ReferenceType ref_type =
-        (is_lvalue_reference ? halide_handle_cplusplus_type::LValueReference :
-         is_rvalue_reference ? halide_handle_cplusplus_type::RValueReference :
-                               halide_handle_cplusplus_type::NotReference);
+    constexpr ReferenceType ref_type =
+        (is_lvalue_reference ? LValueReference :
+         is_rvalue_reference ? RValueReference :
+                               NotReference);
     // clang-format on
 
-    using TNonCVBase = typename std::remove_cv<TBase>::type;
+    using TNonCVBase = std::remove_cv_t<TBase>;
     constexpr bool known_type = halide_c_type_to_name<TNonCVBase>::known_type;
     static_assert(!(!known_type && !is_ptr), "Unknown types must be pointers");
 
@@ -257,9 +257,9 @@ struct halide_handle_traits {
     // This trait must return a pointer to a global structure. I.e. it should never be freed.
     // A return value of nullptr here means "void *".
     HALIDE_ALWAYS_INLINE static const halide_handle_cplusplus_type *type_info() {
-        if (std::is_pointer<T>::value ||
-            std::is_lvalue_reference<T>::value ||
-            std::is_rvalue_reference<T>::value) {
+        if (std::is_pointer_v<T> ||
+            std::is_lvalue_reference_v<T> ||
+            std::is_rvalue_reference_v<T>) {
             static const halide_handle_cplusplus_type the_info = halide_handle_cplusplus_type::make<T>();
             return &the_info;
         }
