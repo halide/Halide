@@ -1000,7 +1000,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * JITSharedRuntime::release_all is called, the global state is reset
  * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     std::vector<JITModule> result;
 
@@ -1074,7 +1074,7 @@ void JITSharedRuntime::populate_jit_handlers(JITUserContext *jit_user_context, c
 }
 
 void JITSharedRuntime::release_all() {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     for (int i = MaxRuntimeKind; i > 0; i--) {
         shared_runtimes((RuntimeKind)(i - 1)) = JITModule();
@@ -1090,7 +1090,7 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
 }
 
 void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     if (size != default_cache_size) {
         default_cache_size = size;
@@ -1099,22 +1099,22 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
 }
 
 void JITSharedRuntime::memoization_cache_evict(uint64_t eviction_key) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).memoization_cache_evict(eviction_key);
 }
 
 void JITSharedRuntime::reuse_device_allocations(bool b) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).reuse_device_allocations(b);
 }
 
 int JITSharedRuntime::get_num_threads() {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).get_num_threads();
 }
 
 int JITSharedRuntime::set_num_threads(int n) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).set_num_threads(n);
 }
 

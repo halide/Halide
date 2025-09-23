@@ -1194,7 +1194,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
                                          GeneratorFactory generator_factory) {
     user_assert(is_valid_name(name)) << "Invalid Generator name: " << name;
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     internal_assert(registry.factories.find(name) == registry.factories.end())
         << "Duplicate Generator name: " << name;
     registry.factories[name] = std::move(generator_factory);
@@ -1203,7 +1203,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
 /* static */
 void GeneratorRegistry::unregister_factory(const std::string &name) {
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     internal_assert(registry.factories.find(name) != registry.factories.end())
         << "Generator not found: " << name;
     registry.factories.erase(name);
@@ -1213,7 +1213,7 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
 AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
                                                const GeneratorContext &context) {
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     auto it = registry.factories.find(name);
     if (it == registry.factories.end()) {
         return nullptr;
@@ -1228,7 +1228,7 @@ AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
 /* static */
 std::vector<std::string> GeneratorRegistry::enumerate() {
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     std::vector<std::string> result;
     result.reserve(registry.factories.size());
     for (const auto &i : registry.factories) {
