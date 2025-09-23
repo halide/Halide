@@ -1529,13 +1529,13 @@ bool CodeGen_LLVM::try_to_fold_vector_reduce(const Expr &a, Expr b) {
         b = a;
     }
     if (red &&
-        ((std::is_same<Op, Add>::value && red->op == VectorReduce::Add) ||
-         (std::is_same<Op, Min>::value && red->op == VectorReduce::Min) ||
-         (std::is_same<Op, Max>::value && red->op == VectorReduce::Max) ||
-         (std::is_same<Op, Mul>::value && red->op == VectorReduce::Mul) ||
-         (std::is_same<Op, And>::value && red->op == VectorReduce::And) ||
-         (std::is_same<Op, Or>::value && red->op == VectorReduce::Or) ||
-         (std::is_same<Op, Call>::value && red->op == VectorReduce::SaturatingAdd))) {
+        ((std::is_same_v<Op, Add> && red->op == VectorReduce::Add) ||
+         (std::is_same_v<Op, Min> && red->op == VectorReduce::Min) ||
+         (std::is_same_v<Op, Max> && red->op == VectorReduce::Max) ||
+         (std::is_same_v<Op, Mul> && red->op == VectorReduce::Mul) ||
+         (std::is_same_v<Op, And> && red->op == VectorReduce::And) ||
+         (std::is_same_v<Op, Or> && red->op == VectorReduce::Or) ||
+         (std::is_same_v<Op, Call> && red->op == VectorReduce::SaturatingAdd))) {
         codegen_vector_reduce(red, b);
         return true;
     }
@@ -3428,6 +3428,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             std::vector<std::string> namespaces;
             name = extract_namespaces(op->name, namespaces);
             std::vector<ExternFuncArgument> mangle_args;
+            mangle_args.reserve(op->args.size());
             for (const auto &arg : op->args) {
                 mangle_args.emplace_back(arg);
             }
@@ -4072,6 +4073,7 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
 
 void CodeGen_LLVM::visit(const Shuffle *op) {
     vector<Value *> vecs;
+    vecs.reserve(op->vectors.size());
     for (const Expr &e : op->vectors) {
         vecs.push_back(codegen(e));
     }
@@ -4129,6 +4131,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             if (interleave_of_slices) {
                 value = codegen(op->vectors[0]);
                 vector<Value *> slices;
+                slices.reserve(f);
                 for (int i = 0; i < f; i++) {
                     slices.push_back(slice_vector(value, i * step, step));
                 }
@@ -4377,6 +4380,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
                 // call will assume that the args should scalarize.
                 if (!module->getFunction(intrin_name)) {
                     vector<llvm::Type *> arg_types;
+                    arg_types.reserve(args.size());
                     for (const Expr &e : args) {
                         arg_types.push_back(llvm_type_of(e.type()));
                     }

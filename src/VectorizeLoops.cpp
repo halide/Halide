@@ -1034,6 +1034,8 @@ class VectorSubs : public IRMutator {
 
     Stmt visit(const Allocate *op) override {
         vector<Expr> new_extents;
+        new_extents.reserve(vectorized_vars.size() + op->extents.size());
+
         Expr new_expr;
 
         // The new expanded dimensions are innermost.

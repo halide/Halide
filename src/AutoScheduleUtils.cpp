@@ -154,6 +154,7 @@ DimBounds get_stage_bounds(const Function &f, int stage_num, const DimBounds &pu
 vector<DimBounds> get_stage_bounds(const Function &f, const DimBounds &pure_bounds) {
     vector<DimBounds> stage_bounds;
     size_t num_stages = f.updates().size() + 1;
+    stage_bounds.reserve(num_stages);
     for (size_t s = 0; s < num_stages; s++) {
         stage_bounds.push_back(get_stage_bounds(f, s, pure_bounds));
     }

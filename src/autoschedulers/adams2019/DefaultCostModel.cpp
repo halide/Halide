@@ -187,6 +187,7 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
     if (!head1_filter_update.data()) {
         auto weight_update_buffer = [](const Runtime::Buffer<float> &w) {
             std::vector<int> size;
+            size.reserve(w.dimensions() + 1);
             for (int i = 0; i < w.dimensions(); i++) {
                 size.push_back(w.dim(i).extent());
             }

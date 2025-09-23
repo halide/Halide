@@ -776,6 +776,7 @@ gengen
 
     const auto build_targets = [](const std::vector<std::string> &target_strings) {
         std::vector<Target> targets;
+        targets.reserve(target_strings.size());
         for (const auto &s : target_strings) {
             targets.emplace_back(s);
         }
@@ -1204,7 +1205,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
                                          GeneratorFactory generator_factory) {
     user_assert(is_valid_name(name)) << "Invalid Generator name: " << name;
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     internal_assert(registry.factories.find(name) == registry.factories.end())
         << "Duplicate Generator name: " << name;
     registry.factories[name] = std::move(generator_factory);
@@ -1213,7 +1214,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
 /* static */
 void GeneratorRegistry::unregister_factory(const std::string &name) {
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     internal_assert(registry.factories.find(name) != registry.factories.end())
         << "Generator not found: " << name;
     registry.factories.erase(name);
@@ -1223,7 +1224,7 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
 AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
                                                const GeneratorContext &context) {
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     auto it = registry.factories.find(name);
     if (it == registry.factories.end()) {
         return nullptr;
@@ -1238,7 +1239,7 @@ AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
 /* static */
 std::vector<std::string> GeneratorRegistry::enumerate() {
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     std::vector<std::string> result;
     result.reserve(registry.factories.size());
     for (const auto &i : registry.factories) {
@@ -2206,14 +2207,14 @@ void generator_test() {
 
         Tester tester_instance;
 
-        static_assert(std::is_same<decltype(tester_instance.expr_array_input[0]), const Expr &>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.expr_array_output[0]), const Expr &>::value, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.expr_array_input[0]), const Expr &>, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.expr_array_output[0]), const Expr &>, "type mismatch");
 
-        static_assert(std::is_same<decltype(tester_instance.func_array_input[0]), const Func &>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.func_array_output[0]), Func &>::value, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.func_array_input[0]), const Func &>, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.func_array_output[0]), Func &>, "type mismatch");
 
-        static_assert(std::is_same<decltype(tester_instance.buffer_array_input[0]), ImageParam>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), Func>::value, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.buffer_array_input[0]), ImageParam>, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.buffer_array_output[0]), Func>, "type mismatch");
     }
 
     class GPTester : public Generator<GPTester> {
