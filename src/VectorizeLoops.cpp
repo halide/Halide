@@ -987,7 +987,7 @@ class VectorSubs : public IRMutator {
             update_replacements();
             // Go over lets which were vectorized in the order of their occurrence and update
             // them according to the current loop level.
-            for (auto &[var, val] : containing_lets) {
+            for (const auto &[var, val] : containing_lets) {
                 // Skip if this var wasn't vectorized.
                 if (!scope.contains(var)) {
                     continue;
