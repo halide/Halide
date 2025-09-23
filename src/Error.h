@@ -1,6 +1,7 @@
 #ifndef HALIDE_ERROR_H
 #define HALIDE_ERROR_H
 
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 
