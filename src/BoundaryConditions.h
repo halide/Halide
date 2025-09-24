@@ -62,13 +62,13 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_region(Region &collected_args,
     collect_region(collected_args, std::forward<Args>(args)...);
 }
 
-inline const Func &func_like_to_func(const Func &func) {
-    return func;
-}
-
 template<typename T>
-inline HALIDE_NO_USER_CODE_INLINE Func func_like_to_func(const T &func_like) {
-    return lambda(_, func_like(_));
+Func func_like_to_func(T &&func_like) {
+    if constexpr (std::is_same_v<std::decay_t<T>, Func>) {
+        return std::forward<T>(func_like);
+    } else {
+        return lambda(_, func_like(_));
+    }
 }
 
 }  // namespace Internal
