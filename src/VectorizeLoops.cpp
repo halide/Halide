@@ -987,13 +987,13 @@ class VectorSubs : public IRMutator {
             update_replacements();
             // Go over lets which were vectorized in the order of their occurrence and update
             // them according to the current loop level.
-            for (auto let = containing_lets.begin(); let != containing_lets.end(); let++) {
+            for (const auto &[var, val] : containing_lets) {
                 // Skip if this var wasn't vectorized.
-                if (!scope.contains(let->first)) {
+                if (!scope.contains(var)) {
                     continue;
                 }
-                string vectorized_name = get_widened_var_name(let->first);
-                Expr vectorized_value = mutate(scope.get(let->first));
+                string vectorized_name = get_widened_var_name(var);
+                Expr vectorized_value = mutate(scope.get(var));
                 vector_scope.push(vectorized_name, vectorized_value);
             }
 
