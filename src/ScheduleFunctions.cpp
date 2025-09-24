@@ -1414,9 +1414,10 @@ private:
             const string &name = func.name();
             const vector<string> &func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
-                const string &arg = func_args[i];
-                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
-                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
+                string min_name = concat_strings(name, ".", func_args[i], ".min_realized");
+                string extent_name = concat_strings(name, ".", func_args[i], ".extent_realized");
+                Expr min = Variable::make(Int(32), min_name);
+                Expr extent = Variable::make(Int(32), extent_name);
                 bounds.emplace_back(min, extent);
             }
 

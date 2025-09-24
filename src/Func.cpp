@@ -1108,8 +1108,8 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
         if (dim_match(dims[i], VarOrRVar(old, exact))) {
             found = true;
             old_name = dims[i].var;
-            inner_name = old_name + "." + inner;
-            outer_name = old_name + "." + outer;
+            inner_name = concat_strings(old_name, ".", inner);
+            outer_name = concat_strings(old_name, ".", outer);
             dims.insert(dims.begin() + i, dims[i]);
             dims[i].var = inner_name;
             dims[i + 1].var = outer_name;

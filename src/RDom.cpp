@@ -182,7 +182,7 @@ void RDom::initialize_from_region(const Region &region, string name) {
             break;
         }
         ReductionVariable rv;
-        rv.var = name + "$" + rvar_uniquifier;
+        rv.var = concat_strings(name, "$", rvar_uniquifier);
         rv.min = cast<int32_t>(region[i].min);
         rv.extent = cast<int32_t>(region[i].extent);
         vars.push_back(rv);

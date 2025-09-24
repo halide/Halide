@@ -961,6 +961,7 @@ public:
                     }
                 }
                 operands_str += ";";
+                // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
                 line = line.substr(0, idx + 2) + operands_str;
             }
 

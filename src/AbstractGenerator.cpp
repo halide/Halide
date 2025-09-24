@@ -175,10 +175,9 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
                 // by the original string instead.
                 Func d_f = d(input_name + "_im");
 
-                std::string grad_out_name = replace_all(replace_all(grad_output_pattern, "$OUT$", output_name), "$IN$", input_name);
-                if (!d_f.defined()) {
-                    grad_out_name = "_dummy" + grad_out_name;
-                }
+                std::string grad_out_name = concat_strings(
+                    d_f.defined() ? "" : "_dummy",
+                    replace_all(replace_all(grad_output_pattern, "$OUT$", output_name), "$IN$", input_name));
 
                 Func d_out_wrt_in(grad_out_name);
                 if (d_f.defined()) {

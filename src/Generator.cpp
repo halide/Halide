@@ -239,11 +239,15 @@ void StubEmitter::emit_inputs_struct() {
     };
     std::vector<InInfo> in_info;
     for (auto *input : inputs) {
-        std::string c_type = input->get_c_type();
+        std::stringstream c_type;
         if (input->is_array()) {
-            c_type = "std::vector<" + c_type + ">";
+            c_type << "std::vector<";
         }
-        in_info.push_back({c_type, input->name()});
+        c_type << input->get_c_type();
+        if (input->is_array()) {
+            c_type << ">";
+        }
+        in_info.push_back({c_type.str(), input->name()});
     }
 
     const std::string name = "Inputs";
@@ -305,17 +309,22 @@ void StubEmitter::emit() {
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         const bool is_func = (c_type == "Func");
-        std::string getter = "generator->output_func(\"" + output->name() + "\")";
+        std::stringstream getter;
+
         if (!is_func) {
-            getter = c_type + "::to_output_buffers(" + getter + ", generator)";
+            getter << c_type << "::to_output_buffers(";
+        }
+        getter << "generator->output_func(\"" << output->name() << "\")";
+        if (!is_func) {
+            getter << ", generator)";
         }
         if (!output->is_array()) {
-            getter = getter + ".at(0)";
+            getter << ".at(0)";
         }
 
         out_info.push_back({output->name(),
                             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-                            getter});
+                            getter.str()});
         if (c_type != "Func") {
             all_outputs_are_func = false;
         }
@@ -862,11 +871,12 @@ gengen
         args.compiler_logger_factory =
             [obfuscate_compiler_logging, &args](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
             // rebuild generator_args from the map so that they are always canonical
-            std::string generator_args_string, autoscheduler_name;
+            std::stringstream generator_args_string;
+            std::string autoscheduler_name;
             std::string sep;
             for (const auto &it : args.generator_params) {
                 std::string quote = it.second.find(' ') != std::string::npos ? "\\\"" : "";
-                generator_args_string += sep + it.first + "=" + quote + it.second + quote;
+                generator_args_string << sep << it.first << "=" << quote << it.second << quote;
                 sep = " ";
                 if (it.first == "autoscheduler") {
                     autoscheduler_name = it.second;
@@ -877,7 +887,7 @@ gengen
                 obfuscate_compiler_logging ? "" : args.function_name,
                 obfuscate_compiler_logging ? "" : autoscheduler_name,
                 obfuscate_compiler_logging ? Target() : target,
-                obfuscate_compiler_logging ? "" : generator_args_string,
+                obfuscate_compiler_logging ? "" : generator_args_string.str(),
                 obfuscate_compiler_logging));
             return t;
         };

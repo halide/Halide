@@ -134,7 +134,6 @@ Checks: >
     -modernize-use-uncaught-exceptions,
     -modernize-use-using,
     -performance-enum-size,
-    -performance-inefficient-string-concatenation,
     -performance-no-int-to-ptr,
     -portability-avoid-pragma-once,
     -portability-template-virtual-member-function,
