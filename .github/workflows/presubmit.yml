@@ -13,6 +13,7 @@ on:
       - 'run-clang-tidy.sh'
       - 'run-clang-format.sh'
       - '.github/workflows/presubmit.yml'
+      - '**.clang-tidy'
 
 permissions:
   contents: read
