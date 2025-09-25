@@ -202,7 +202,7 @@ jobs:
         uses: pypa/cibuildwheel@v2.20.0
         env:
           CIBW_BUILD: "cp3*-${{ matrix.platform_tag }}"
-          CIBW_SKIP: "cp3{5,6,7,8}*"
+          CIBW_SKIP: "cp3{5,6,7,8,9}*"
           # Suppress the git version tag (necessary for TestPyPI)
           CIBW_ENVIRONMENT: >
             SETUPTOOLS_SCM_OVERRIDES_FOR_HALIDE='{local_scheme="no-local-version"}'
