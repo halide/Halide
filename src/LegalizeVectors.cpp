@@ -58,7 +58,7 @@ class LiftLetToLetStmt : public IRMutator {
     unordered_set<string> lifted_names;
     Expr visit(const Let *op) override {
         internal_assert(lifted_names.find(op->name) == lifted_names.end())
-                << "Let " << op->name << " = ...  cannot be lifted to LetStmt because the name is not unique.";
+            << "Let " << op->name << " = ...  cannot be lifted to LetStmt because the name is not unique.";
         lets.push_back(op);
         lifted_names.insert(op->name);
         return mutate(op->body);
