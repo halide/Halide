@@ -13,7 +13,7 @@ maintainers = [{ name = "Alex Reinking", email = "areinking@adobe.com" }]
 description = "Halide is a programming language designed to make it easier to write high-performance image and array processing code."
 license = { file = "LICENSE.txt" }
 readme = "./packaging/pip/README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "imageio>=2",
     "numpy>=1.26",
@@ -46,11 +46,11 @@ classifiers = [
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Multimedia :: Graphics",
     "Topic :: Scientific/Engineering",
@@ -108,8 +108,7 @@ WITH_TUTORIALS = false
 # Don't version libHalide.so/dylib -- wheels are zip files that do
 # not understand symbolic links. Including version information here
 # causes the final wheel to have three copies of our library. Not good.
-Halide_VERSION_OVERRIDE = ""
-Halide_SOVERSION_OVERRIDE = ""
+CMAKE_PLATFORM_NO_VERSIONED_SONAME = true
 
 [[tool.scikit-build.overrides]]
 if.platform-system = "^win32"
