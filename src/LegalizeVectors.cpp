@@ -8,6 +8,7 @@
 #include "Util.h"
 
 #include <optional>
+#include <unordered_set>
 
 namespace Halide {
 namespace Internal {
@@ -54,12 +55,12 @@ class LiftLetToLetStmt : public IRMutator {
     using IRMutator::visit;
 
     vector<const Let *> lets;
+    unordered_set<string> lifted_names;
     Expr visit(const Let *op) override {
-        for (const Let *existing : lets) {
-            internal_assert(existing->name != op->name)
+        internal_assert(lifted_names.find(op->name) == lifted_names.end())
                 << "Let " << op->name << " = ...  cannot be lifted to LetStmt because the name is not unique.";
-        }
         lets.push_back(op);
+        lifted_names.insert(op->name);
         return mutate(op->body);
     }
 
@@ -124,13 +125,13 @@ class ExtractLanes : public IRMutator {
             return result;
         }
 
-        internal_error << "Unhandled trace call in LegalizeVectors' ExtractLanes: " << *event << legalization_error_guide << "\n"
-                       << "Please report this error on GitHub." << legalization_error_guide;
+        internal_error << "Unhandled trace call in LegalizeVectors' ExtractLanes: " << *event << legalization_error_guide;
         return Expr(0);
     }
 
     Expr visit(const Shuffle *op) override {
         vector<int> new_indices;
+        new_indices.reserve(lane_count);
         for (int i = 0; i < lane_count; ++i) {
             new_indices.push_back(op->indices[lane_start + i]);
         }
@@ -331,7 +332,7 @@ public:
         just_in_let_definition = false;
         Stmt mutated = IRMutator::mutate(s);
         for (auto &let : reverse_view(lets)) {
-            // There is no recurse into let.second. This is handled by repeatedly calling this tranform.
+            // There is no recurse into let.second. This is handled by repeatedly calling this transform.
             mutated = LetStmt::make(let.first, let.second, mutated);
         }
         return mutated;
