@@ -429,8 +429,8 @@ class LegalizeVectors : public IRMutator {
     Expr visit(const Shuffle *op) override {
         internal_assert(op->type.lanes() <= max_lanes) << Expr(op);
         bool requires_mutation = false;
-        for (size_t i = 0; i < op->vectors.size(); ++i) {
-            if (op->vectors[i].type().lanes() > max_lanes) {
+        for (auto &&vec : op->vectors) {
+            if (vec.type().lanes() > max_lanes) {
                 requires_mutation = true;
                 break;
             }
