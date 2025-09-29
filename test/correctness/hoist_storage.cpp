@@ -618,6 +618,31 @@ int main(int argc, char **argv) {
         f[2].compile_jit();
     }
 
+    {
+        // Check hoisting something with two different conditions
+
+        Var x{"x"}, y{"y"};
+
+        // This Func may or may not be loaded, depending on y
+        Func maybe_loaded("maybe_loaded");
+        maybe_loaded(x, y) = x + y;
+
+        // This Func may or may not be used, depending on y
+        Func maybe_used("maybe_used");
+        maybe_used(x, y) = maybe_loaded(x, y);
+
+        Func output("output");
+        output(x, y) = select(y < 75, 0, maybe_used(x, y));
+        output(x, y) = select(y > 25, output(x, y), maybe_used(x, y));
+
+        // The allocation condition depends on y in two different ways,
+        // but the actual allocation happens at the root level.
+        maybe_loaded.compute_at(output, y).hoist_storage_root();
+        maybe_used.compute_at(output, y).hoist_storage_root();
+
+        output.realize({50, 50});
+    }
+
     printf("Success!\n");
     return 0;
 }

@@ -500,14 +500,16 @@ class HoistStorage : public IRMutator {
             << "Couldn't find a matching Allocate node for hoisted storage " << op->name << "\n";
         const auto &alloc_info = hoisted_storages.back().hoisted_allocations.front();
         vector<Expr> extents = alloc_info.extents;
+        Expr condition = alloc_info.condition;
         for (int i = 1; i < (int)hoisted_storages.back().hoisted_allocations.size(); i++) {
             const auto &ai = hoisted_storages.back().hoisted_allocations[i];
             internal_assert(ai.extents.size() == alloc_info.extents.size());
             for (int j = 0; j < (int)extents.size(); j++) {
                 extents[j] = Max::make(extents[j], ai.extents[j]);
             }
+            condition = condition || ai.condition;
         }
-        body = Allocate::make(alloc_info.name, alloc_info.type, alloc_info.memory_type, extents, alloc_info.condition, body);
+        body = Allocate::make(alloc_info.name, alloc_info.type, alloc_info.memory_type, extents, condition, body);
         hoisted_storages_map.erase(op->name);
         hoisted_storages.pop_back();
         return body;
