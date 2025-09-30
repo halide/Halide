@@ -27,65 +27,39 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
     // Cases that fold to a constant
     if (EVAL_IN_LAMBDA
         (rewrite(x && false, false) ||
-         rewrite(x != y && x == y, false) ||
-         rewrite(x != y && y == x, false) ||
-         rewrite((z && x != y) && x == y, false) ||
-         rewrite((z && x != y) && y == x, false) ||
-         rewrite((x != y && z) && x == y, false) ||
-         rewrite((x != y && z) && y == x, false) ||
-         rewrite((z && x == y) && x != y, false) ||
-         rewrite((z && x == y) && y != x, false) ||
-         rewrite((x == y && z) && x != y, false) ||
-         rewrite((x == y && z) && y != x, false) ||
 
-         rewrite((!x && x), false) ||
-         rewrite((x && !x), false) ||
-         rewrite((!x && (x && y)), false) ||
-         rewrite((!x && (y && x)), false) ||
-         rewrite((x && !(x || y)), false) ||
-         rewrite((x && (!x && y)), false) ||
-         rewrite((x && (y && !x)), false) ||
-         rewrite((!(x || y) && x), false) ||
-         rewrite(((!x && y) && x), false) ||
-         rewrite(((y && !x) && x), false) ||
-         rewrite((!x && ((x && z) && y)), false) ||
-         rewrite((!x && (y && (x && z))), false) ||
-         rewrite((!x && ((z && x) && y)), false) ||
-         rewrite((!x && (y && (z && x))), false) ||
-         rewrite((x && !((x || z) || y)), false) ||
-         rewrite((x && (!(x || z) && y)), false) ||
-         rewrite((x && (y && !(x || z))), false) ||
-         rewrite((x && (!(z || x) && y)), false) ||
-         rewrite((x && (y && !(z || x))), false) ||
-         rewrite((x && ((!x && z) && y)), false) ||
-         rewrite((x && (y && (!x && z))), false) ||
-         rewrite((!x && (!(!x || z) && y)), false) ||
-         rewrite((!x && (y && !(!x || z))), false) ||
-         rewrite((x && ((z && !x) && y)), false) ||
-         rewrite((x && (y && (z && !x))), false) ||
-         rewrite((!x && (!(z || !x) && y)), false) ||
-         rewrite((!x && (y && !(z || !x))), false) ||
-         rewrite(((x && y) && (!x && z)), false) ||
-         rewrite(((x && y) && (z && !x)), false) ||
-         rewrite(((y && x) && (!x && z)), false) ||
-         rewrite(((y && x) && (z && !x)), false) ||
-         rewrite((!(x || y) && (x && z)), false) ||
-         rewrite((!(x || y) && (z && x)), false) ||
-         rewrite(((!x && y) && (x && z)), false) ||
-         rewrite(((!x && y) && (z && x)), false) ||
-         rewrite(((y && !x) && (x && z)), false) ||
-         rewrite(((y && !x) && (z && x)), false) ||
-         rewrite((!((x || z) || y) && x), false) ||
-         rewrite(((!(x || z) && y) && x), false) ||
-         rewrite(((y && !(x || z)) && x), false) ||
-         rewrite(((!(z || x) && y) && x), false) ||
-         rewrite(((y && !(z || x)) && x), false) ||
-         rewrite((((!x && z) && y) && x), false) ||
-         rewrite(((y && (!x && z)) && x), false) ||
-         rewrite((((z && !x) && y) && x), false) ||
-         rewrite(((y && (z && !x)) && x), false) ||
+         rewrite(x && neg(x), false) ||
+         rewrite(x && (neg(x) && y), false) ||
+         rewrite(x && (y && neg(x)), false) ||
+         rewrite(x && !(x || y), false) ||
+         rewrite((x && y) && neg(x), false) ||
+         rewrite((y && x) && neg(x), false) ||
+         rewrite(!(x || y) && x, false) ||
+         rewrite(x && ((neg(x) && z) && y), false) ||
+         rewrite(x && (y && (neg(x) && z)), false) ||
+         rewrite(x && ((z && neg(x)) && y), false) ||
+         rewrite(x && (y && (z && neg(x))), false) ||
+         rewrite(x && !((x || z) || y), false) ||
+         rewrite(x && (!(x || z) && y), false) ||
+         rewrite(x && (y && !(x || z)), false) ||
+         rewrite(x && (!(z || x) && y), false) ||
+         rewrite(x && (y && !(z || x)), false) ||
+         rewrite((x && y) && (neg(x) && z), false) ||
+         rewrite((x && y) && (z && neg(x)), false) ||
+         rewrite((y && x) && (neg(x) && z), false) ||
+         rewrite((y && x) && (z && neg(x)), false) ||
+         rewrite(!(x || y) && (x && z), false) ||
+         rewrite(!(x || y) && (z && x), false) ||
+         rewrite(((x && z) && y) && neg(x), false) ||
+         rewrite((y && (x && z)) && neg(x), false) ||
+         rewrite(((z && x) && y) && neg(x), false) ||
+         rewrite((y && (z && x)) && neg(x), false) ||
+         rewrite(!((x || z) || y) && x, false) ||
+         rewrite((!(x || z) && y) && x, false) ||
+         rewrite((y && !(x || z)) && x, false) ||
+         rewrite((!(z || x) && y) && x, false) ||
+         rewrite((y && !(z || x)) && x, false) ||
 
-         rewrite(y <= x && x < y, false) ||
          rewrite(y < x && x < y, false) ||
          rewrite(x == c0 && x == c1, false, c0 != c1) ||
          // Note: In the predicate below, if undefined overflow
@@ -107,83 +81,51 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
     if (EVAL_IN_LAMBDA
         (rewrite(x && true, a) ||
 
-         rewrite((x && x), a) ||
-         rewrite((x && (x && y)), b) ||
-         rewrite((x && (y && x)), b) ||
-         rewrite((x && (x || y)), a) ||
-         rewrite((x && (y || x)), a) ||
-         rewrite((!x && (!x && y)), b) ||
-         rewrite((!x && (!x || y)), a) ||
-         rewrite((!x && (y && !x)), b) ||
-         rewrite((!x && (y || !x)), a) ||
-         rewrite(((x && y) && x), a) ||
-         rewrite(((y && x) && x), a) ||
-         rewrite(((x || y) && x), b) ||
-         rewrite(((y || x) && x), b) ||
-         rewrite((x && ((x && z) && y)), b) ||
-         rewrite((x && (y && (x && z))), b) ||
-         rewrite((!x && (!(x && z) || y)), a) ||
-         rewrite((!x && (y || !(x && z))), a) ||
-         rewrite((x && ((z && x) && y)), b) ||
-         rewrite((x && (y && (z && x))), b) ||
-         rewrite((!x && (!(z && x) || y)), a) ||
-         rewrite((!x && (y || !(z && x))), a) ||
-         rewrite((x && ((x || z) || y)), a) ||
-         rewrite((x && (y || (x || z))), a) ||
-         rewrite((!x && (!(x || z) && y)), b) ||
-         rewrite((!x && (y && !(x || z))), b) ||
-         rewrite((x && ((z || x) || y)), a) ||
-         rewrite((x && (y || (z || x))), a) ||
-         rewrite((!x && (!(z || x) && y)), b) ||
-         rewrite((!x && (y && !(z || x))), b) ||
-         rewrite((!x && ((!x && z) && y)), b) ||
-         rewrite((x && !((!x && z) && y)), a) ||
-         rewrite((!x && (y && (!x && z))), b) ||
-         rewrite((x && (!(!x && z) || y)), a) ||
-         rewrite((x && (y || !(!x && z))), a) ||
-         rewrite((!x && ((!x || z) || y)), a) ||
-         rewrite((x && !((!x || z) || y)), b) ||
-         rewrite((!x && (y || (!x || z))), a) ||
-         rewrite((x && (!(!x || z) && y)), b) ||
-         rewrite((x && (y && !(!x || z))), b) ||
-         rewrite((!x && ((z && !x) && y)), b) ||
-         rewrite((!x && (y && (z && !x))), b) ||
-         rewrite((x && (!(z && !x) || y)), a) ||
-         rewrite((x && (y || !(z && !x))), a) ||
-         rewrite((!x && ((z || !x) || y)), a) ||
-         rewrite((!x && (y || (z || !x))), a) ||
-         rewrite((x && (!(z || !x) && y)), b) ||
-         rewrite((x && (y && !(z || !x))), b) ||
-         rewrite((!(x && y) && (!x && z)), b) ||
-         rewrite((!(x && y) && (z && !x)), b) ||
-         rewrite(((x || y) && (x && z)), b) ||
-         rewrite(((x || y) && (z && x)), b) ||
-         rewrite((!(x || y) && (!x || z)), a) ||
-         rewrite((!(x || y) && (z || !x)), a) ||
-         rewrite(((y || x) && (x && z)), b) ||
-         rewrite(((y || x) && (z && x)), b) ||
-         rewrite(((!x || y) && (!x && z)), b) ||
-         rewrite(((!x || y) && (z && !x)), b) ||
-         rewrite(((y || !x) && (!x && z)), b) ||
-         rewrite(((y || !x) && (z && !x)), b) ||
-         rewrite((((x && z) && y) && x), a) ||
-         rewrite(((y && (x && z)) && x), a) ||
-         rewrite((((z && x) && y) && x), a) ||
-         rewrite(((y && (z && x)) && x), a) ||
-         rewrite((((x || z) || y) && x), b) ||
-         rewrite(((y || (x || z)) && x), b) ||
-         rewrite((((z || x) || y) && x), b) ||
-         rewrite(((y || (z || x)) && x), b) ||
-         rewrite((!((!x && z) && y) && x), b) ||
-         rewrite(((!(!x && z) || y) && x), b) ||
-         rewrite(((y || !(!x && z)) && x), b) ||
-         rewrite((!((!x || z) || y) && x), a) ||
-         rewrite(((!(!x || z) && y) && x), a) ||
-         rewrite(((y && !(!x || z)) && x), a) ||
-         rewrite(((!(z && !x) || y) && x), b) ||
-         rewrite(((y || !(z && !x)) && x), b) ||
-         rewrite(((!(z || !x) && y) && x), a) ||
-         rewrite(((y && !(z || !x)) && x), a) ||
+         rewrite(x && x, a) ||
+         rewrite(x && (x && y), b) ||
+         rewrite(x && (y && x), b) ||
+         rewrite(x && (x || y), a) ||
+         rewrite(x && (y || x), a) ||
+         rewrite((x && y) && x, a) ||
+         rewrite((y && x) && x, a) ||
+         rewrite((x || y) && x, b) ||
+         rewrite((y || x) && x, b) ||
+         rewrite(x && ((x && z) && y), b) ||
+         rewrite(x && (y && (x && z)), b) ||
+         rewrite(x && (!(neg(x) && z) || y), a) ||
+         rewrite(x && (y || !(neg(x) && z)), a) ||
+         rewrite(x && ((z && x) && y), b) ||
+         rewrite(x && (y && (z && x)), b) ||
+         rewrite(x && (!(z && neg(x)) || y), a) ||
+         rewrite(x && (y || !(z && neg(x))), a) ||
+         rewrite(x && ((x || z) || y), a) ||
+         rewrite(x && (y || (x || z)), a) ||
+         rewrite(x && (!(neg(x) || z) && y), b) ||
+         rewrite(x && (y && !(neg(x) || z)), b) ||
+         rewrite(x && ((z || x) || y), a) ||
+         rewrite(x && (y || (z || x)), a) ||
+         rewrite(x && (!(z || neg(x)) && y), b) ||
+         rewrite(x && (y && !(z || neg(x))), b) ||
+         rewrite((x || y) && (x && z), b) ||
+         rewrite((x || y) && (z && x), b) ||
+         rewrite((y || x) && (x && z), b) ||
+         rewrite((y || x) && (z && x), b) ||
+         rewrite(((x && z) && y) && x, a) ||
+         rewrite((y && (x && z)) && x, a) ||
+         rewrite((!(x && z) || y) && neg(x), b) ||
+         rewrite((y || !(x && z)) && neg(x), b) ||
+         rewrite(((z && x) && y) && x, a) ||
+         rewrite((y && (z && x)) && x, a) ||
+         rewrite((!(z && x) || y) && neg(x), b) ||
+         rewrite((y || !(z && x)) && neg(x), b) ||
+         rewrite(((x || z) || y) && x, b) ||
+         rewrite((y || (x || z)) && x, b) ||
+         rewrite((!(x || z) && y) && neg(x), a) ||
+         rewrite((y && !(x || z)) && neg(x), a) ||
+         rewrite(((z || x) || y) && x, b) ||
+         rewrite((y || (z || x)) && x, b) ||
+         rewrite((!(z || x) && y) && neg(x), a) ||
+         rewrite((y && !(z || x)) && neg(x), a) ||
 
          rewrite(x != c0 && x == c1, b, c0 != c1) ||
          rewrite(c0 < x && c1 < x, fold(max(c0, c1)) < x) ||
@@ -203,186 +145,120 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
 
          rewrite(!x && !y, !(x || y)) ||
 
-         rewrite((x && !(x && y)), (!y && x)) ||
-         rewrite((!x && (x || y)), (!x && y)) ||
-         rewrite((!x && (y || x)), (!x && y)) ||
-         rewrite((x && (!x || y)), (x && y)) ||
-         rewrite((x && (y || !x)), (x && y)) ||
-         rewrite((!(x && y) && x), (!y && x)) ||
-         rewrite(((!x || y) && x), (x && y)) ||
-         rewrite(((y || !x) && x), (x && y)) ||
-         rewrite((x && !((x && z) && y)), ((!y || !z) && x)) ||
-         rewrite((x && ((x && z) || y)), ((y || z) && x)) ||
-         rewrite((!x && ((x && z) || y)), (!x && y)) ||
-         rewrite((x && !((x && z) || y)), (!(y || z) && x)) ||
-         rewrite((x && (y || (x && z))), ((y || z) && x)) ||
-         rewrite((!x && (y || (x && z))), (!x && y)) ||
-         rewrite((x && (!(x && z) && y)), ((!z && y) && x)) ||
-         rewrite((!x && (!(x && z) && y)), (!x && y)) ||
-         rewrite((x && (!(x && z) || y)), ((!z || y) && x)) ||
-         rewrite((x && (y && !(x && z))), ((!z && y) && x)) ||
-         rewrite((!x && (y && !(x && z))), (!x && y)) ||
-         rewrite((x && (y || !(x && z))), ((!z || y) && x)) ||
-         rewrite((x && ((z && x) || y)), ((y || z) && x)) ||
-         rewrite((!x && ((z && x) || y)), (!x && y)) ||
-         rewrite((x && (y || (z && x))), ((y || z) && x)) ||
-         rewrite((!x && (y || (z && x))), (!x && y)) ||
-         rewrite((x && (!(z && x) && y)), ((!z && y) && x)) ||
-         rewrite((!x && (!(z && x) && y)), (!x && y)) ||
-         rewrite((x && (!(z && x) || y)), ((!z || y) && x)) ||
-         rewrite((x && (y && !(z && x))), ((!z && y) && x)) ||
-         rewrite((!x && (y && !(z && x))), (!x && y)) ||
-         rewrite((x && (y || !(z && x))), ((!z || y) && x)) ||
-         rewrite((x && ((x || z) && y)), (x && y)) ||
-         rewrite((!x && ((x || z) && y)), (!x && (y && z))) ||
-         rewrite((x && !((x || z) && y)), (!y && x)) ||
-         rewrite((x && (y && (x || z))), (x && y)) ||
-         rewrite((!x && (y && (x || z))), (!x && (y && z))) ||
-         rewrite((!x && ((x || z) || y)), (!x && (y || z))) ||
-         rewrite((!x && (y || (x || z))), (!x && (y || z))) ||
-         rewrite((x && (!(x || z) || y)), (x && y)) ||
-         rewrite((!x && (!(x || z) || y)), (!x && (!z || y))) ||
-         rewrite((x && (y || !(x || z))), (x && y)) ||
-         rewrite((!x && (y || !(x || z))), (!x && (!z || y))) ||
-         rewrite((x && ((z || x) && y)), (x && y)) ||
-         rewrite((!x && ((z || x) && y)), (!x && (y && z))) ||
-         rewrite((x && (y && (z || x))), (x && y)) ||
-         rewrite((!x && (y && (z || x))), (!x && (y && z))) ||
-         rewrite((!x && ((z || x) || y)), (!x && (y || z))) ||
-         rewrite((!x && (y || (z || x))), (!x && (y || z))) ||
-         rewrite((x && (!(z || x) || y)), (x && y)) ||
-         rewrite((!x && (!(z || x) || y)), (!x && (!z || y))) ||
-         rewrite((x && (y || !(z || x))), (x && y)) ||
-         rewrite((!x && (y || !(z || x))), (!x && (!z || y))) ||
-         rewrite((x && ((!x && z) || y)), (x && y)) ||
-         rewrite((!x && ((!x && z) || y)), (!x && (y || z))) ||
-         rewrite((x && !((!x && z) || y)), (!y && x)) ||
-         rewrite((x && (y || (!x && z))), (x && y)) ||
-         rewrite((!x && (y || (!x && z))), (!x && (y || z))) ||
-         rewrite((x && (!(!x && z) && y)), (x && y)) ||
-         rewrite((!x && (!(!x && z) && y)), (!x && (!z && y))) ||
-         rewrite((!x && (!(!x && z) || y)), (!x && (!z || y))) ||
-         rewrite((x && (y && !(!x && z))), (x && y)) ||
-         rewrite((!x && (y && !(!x && z))), (!x && (!z && y))) ||
-         rewrite((!x && (y || !(!x && z))), (!x && (!z || y))) ||
-         rewrite((x && ((!x || z) && y)), ((y && z) && x)) ||
-         rewrite((!x && ((!x || z) && y)), (!x && y)) ||
-         rewrite((x && !((!x || z) && y)), ((!y || !z) && x)) ||
-         rewrite((x && (y && (!x || z))), ((y && z) && x)) ||
-         rewrite((!x && (y && (!x || z))), (!x && y)) ||
-         rewrite((x && ((!x || z) || y)), ((y || z) && x)) ||
-         rewrite((x && (y || (!x || z))), ((y || z) && x)) ||
-         rewrite((x && (!(!x || z) || y)), ((!z || y) && x)) ||
-         rewrite((!x && (!(!x || z) || y)), (!x && y)) ||
-         rewrite((x && (y || !(!x || z))), ((!z || y) && x)) ||
-         rewrite((!x && (y || !(!x || z))), (!x && y)) ||
-         rewrite((x && ((z && !x) || y)), (x && y)) ||
-         rewrite((!x && ((z && !x) || y)), (!x && (y || z))) ||
-         rewrite((x && (y || (z && !x))), (x && y)) ||
-         rewrite((!x && (y || (z && !x))), (!x && (y || z))) ||
-         rewrite((x && (!(z && !x) && y)), (x && y)) ||
-         rewrite((!x && (!(z && !x) && y)), (!x && (!z && y))) ||
-         rewrite((!x && (!(z && !x) || y)), (!x && (!z || y))) ||
-         rewrite((x && (y && !(z && !x))), (x && y)) ||
-         rewrite((!x && (y && !(z && !x))), (!x && (!z && y))) ||
-         rewrite((!x && (y || !(z && !x))), (!x && (!z || y))) ||
-         rewrite((x && ((z || !x) && y)), ((y && z) && x)) ||
-         rewrite((!x && ((z || !x) && y)), (!x && y)) ||
-         rewrite((x && (y && (z || !x))), ((y && z) && x)) ||
-         rewrite((!x && (y && (z || !x))), (!x && y)) ||
-         rewrite((x && ((z || !x) || y)), ((y || z) && x)) ||
-         rewrite((x && (y || (z || !x))), ((y || z) && x)) ||
-         rewrite((x && (!(z || !x) || y)), ((!z || y) && x)) ||
-         rewrite((!x && (!(z || !x) || y)), (!x && y)) ||
-         rewrite((x && (y || !(z || !x))), ((!z || y) && x)) ||
-         rewrite((!x && (y || !(z || !x))), (!x && y)) ||
-         rewrite(((x && y) && (x && z)), ((y && z) && x)) ||
-         rewrite((!(x && y) && (x && z)), ((!y && z) && x)) ||
-         rewrite(((x && y) && (z && x)), ((y && z) && x)) ||
-         rewrite((!(x && y) && (z && x)), ((!y && z) && x)) ||
-         rewrite((!(x && y) && (x || z)), select(x, !y, z)) ||
-         rewrite((!(x && y) && (z || x)), select(x, !y, z)) ||
-         rewrite((!(x && y) && (!x || z)), (!x || (!y && z))) ||
-         rewrite((!(x && y) && (z || !x)), (!x || (!y && z))) ||
-         rewrite(((y && x) && (x && z)), ((y && z) && x)) ||
-         rewrite(((y && x) && (z && x)), ((y && z) && x)) ||
-         rewrite(((x || y) && (x || z)), ((y && z) || x)) ||
-         rewrite((!(x || y) && (x || z)), (!x && (!y && z))) ||
-         rewrite(((x || y) && (z || x)), ((y && z) || x)) ||
-         rewrite((!(x || y) && (z || x)), (!x && (!y && z))) ||
-         rewrite(((x || y) && (!x && z)), (!x && (y && z))) ||
-         rewrite((!(x || y) && (!x && z)), (!x && (!y && z))) ||
-         rewrite(((x || y) && (!x || z)), select(x, z, y)) ||
-         rewrite(((x || y) && (z && !x)), (!x && (y && z))) ||
-         rewrite((!(x || y) && (z && !x)), (!x && (!y && z))) ||
-         rewrite(((x || y) && (z || !x)), select(x, z, y)) ||
-         rewrite(((y || x) && (x || z)), ((y && z) || x)) ||
-         rewrite(((y || x) && (z || x)), ((y && z) || x)) ||
-         rewrite(((y || x) && (!x && z)), (!x && (y && z))) ||
-         rewrite(((y || x) && (!x || z)), select(x, z, y)) ||
-         rewrite(((y || x) && (z && !x)), (!x && (y && z))) ||
-         rewrite(((y || x) && (z || !x)), select(x, z, y)) ||
-         rewrite(((!x && y) && (!x && z)), (!x && (y && z))) ||
-         rewrite(((!x && y) && (z && !x)), (!x && (y && z))) ||
-         rewrite(((!x || y) && (x && z)), ((y && z) && x)) ||
-         rewrite(((!x || y) && (z && x)), ((y && z) && x)) ||
-         rewrite(((!x || y) && (x || z)), select(x, y, z)) ||
-         rewrite(((!x || y) && (z || x)), select(x, y, z)) ||
-         rewrite(((!x || y) && (!x || z)), (!x || (y && z))) ||
-         rewrite(((!x || y) && (z || !x)), (!x || (y && z))) ||
-         rewrite(((y && !x) && (!x && z)), (!x && (y && z))) ||
-         rewrite(((y && !x) && (z && !x)), (!x && (y && z))) ||
-         rewrite(((y || !x) && (x && z)), ((y && z) && x)) ||
-         rewrite(((y || !x) && (z && x)), ((y && z) && x)) ||
-         rewrite(((y || !x) && (x || z)), select(x, y, z)) ||
-         rewrite(((y || !x) && (z || x)), select(x, y, z)) ||
-         rewrite(((y || !x) && (!x || z)), (!x || (y && z))) ||
-         rewrite(((y || !x) && (z || !x)), (!x || (y && z))) ||
-         rewrite((!((x && z) && y) && x), ((!y || !z) && x)) ||
-         rewrite((((x && z) || y) && x), ((y || z) && x)) ||
-         rewrite((!((x && z) || y) && x), (!(y || z) && x)) ||
-         rewrite(((y || (x && z)) && x), ((y || z) && x)) ||
-         rewrite(((!(x && z) && y) && x), ((!z && y) && x)) ||
-         rewrite(((!(x && z) || y) && x), ((!z || y) && x)) ||
-         rewrite(((y && !(x && z)) && x), ((!z && y) && x)) ||
-         rewrite(((y || !(x && z)) && x), ((!z || y) && x)) ||
-         rewrite((((z && x) || y) && x), ((y || z) && x)) ||
-         rewrite(((y || (z && x)) && x), ((y || z) && x)) ||
-         rewrite(((!(z && x) && y) && x), ((!z && y) && x)) ||
-         rewrite(((!(z && x) || y) && x), ((!z || y) && x)) ||
-         rewrite(((y && !(z && x)) && x), ((!z && y) && x)) ||
-         rewrite(((y || !(z && x)) && x), ((!z || y) && x)) ||
-         rewrite((((x || z) && y) && x), (x && y)) ||
-         rewrite((!((x || z) && y) && x), (!y && x)) ||
-         rewrite(((y && (x || z)) && x), (x && y)) ||
-         rewrite(((!(x || z) || y) && x), (x && y)) ||
-         rewrite(((y || !(x || z)) && x), (x && y)) ||
-         rewrite((((z || x) && y) && x), (x && y)) ||
-         rewrite(((y && (z || x)) && x), (x && y)) ||
-         rewrite(((!(z || x) || y) && x), (x && y)) ||
-         rewrite(((y || !(z || x)) && x), (x && y)) ||
-         rewrite((((!x && z) || y) && x), (x && y)) ||
-         rewrite((!((!x && z) || y) && x), (!y && x)) ||
-         rewrite(((y || (!x && z)) && x), (x && y)) ||
-         rewrite(((!(!x && z) && y) && x), (x && y)) ||
-         rewrite(((y && !(!x && z)) && x), (x && y)) ||
-         rewrite((((!x || z) && y) && x), ((y && z) && x)) ||
-         rewrite((!((!x || z) && y) && x), ((!y || !z) && x)) ||
-         rewrite(((y && (!x || z)) && x), ((y && z) && x)) ||
-         rewrite((((!x || z) || y) && x), ((y || z) && x)) ||
-         rewrite(((y || (!x || z)) && x), ((y || z) && x)) ||
-         rewrite(((!(!x || z) || y) && x), ((!z || y) && x)) ||
-         rewrite(((y || !(!x || z)) && x), ((!z || y) && x)) ||
-         rewrite((((z && !x) || y) && x), (x && y)) ||
-         rewrite(((y || (z && !x)) && x), (x && y)) ||
-         rewrite(((!(z && !x) && y) && x), (x && y)) ||
-         rewrite(((y && !(z && !x)) && x), (x && y)) ||
-         rewrite((((z || !x) && y) && x), ((y && z) && x)) ||
-         rewrite(((y && (z || !x)) && x), ((y && z) && x)) ||
-         rewrite((((z || !x) || y) && x), ((y || z) && x)) ||
-         rewrite(((y || (z || !x)) && x), ((y || z) && x)) ||
-         rewrite(((!(z || !x) || y) && x), ((!z || y) && x)) ||
-         rewrite(((y || !(z || !x)) && x), ((!z || y) && x)) ||
+         rewrite(x && !(x && y), !y && x) ||
+         rewrite(x && (neg(x) || y), x && y) ||
+         rewrite(x && (y || neg(x)), x && y) ||
+         rewrite(!(x && y) && x, !y && x) ||
+         rewrite((x || y) && neg(x), !x && y) ||
+         rewrite((y || x) && neg(x), !x && y) ||
+         rewrite(x && !((x && z) && y), (!y || !z) && x) ||
+         rewrite(x && ((x && z) || y), (y || z) && x) ||
+         rewrite(x && ((neg(x) && z) || y), x && y) ||
+         rewrite(x && !((x && z) || y), !(y || z) && x) ||
+         rewrite(x && (y || (x && z)), (y || z) && x) ||
+         rewrite(x && (y || (neg(x) && z)), x && y) ||
+         rewrite(x && (!(x && z) && y), (!z && y) && x) ||
+         rewrite(x && (!(neg(x) && z) && y), x && y) ||
+         rewrite(x && (!(x && z) || y), (!z || y) && x) ||
+         rewrite(x && (y && !(x && z)), (!z && y) && x) ||
+         rewrite(x && (y && !(neg(x) && z)), x && y) ||
+         rewrite(x && (y || !(x && z)), (!z || y) && x) ||
+         rewrite(x && ((z && x) || y), (y || z) && x) ||
+         rewrite(x && ((z && neg(x)) || y), x && y) ||
+         rewrite(x && (y || (z && x)), (y || z) && x) ||
+         rewrite(x && (y || (z && neg(x))), x && y) ||
+         rewrite(x && (!(z && x) && y), (!z && y) && x) ||
+         rewrite(x && (!(z && neg(x)) && y), x && y) ||
+         rewrite(x && (!(z && x) || y), (!z || y) && x) ||
+         rewrite(x && (y && !(z && x)), (!z && y) && x) ||
+         rewrite(x && (y && !(z && neg(x))), x && y) ||
+         rewrite(x && (y || !(z && x)), (!z || y) && x) ||
+         rewrite(x && ((x || z) && y), x && y) ||
+         rewrite(x && ((neg(x) || z) && y), (y && z) && x) ||
+         rewrite(x && !((x || z) && y), !y && x) ||
+         rewrite(x && (y && (x || z)), x && y) ||
+         rewrite(x && (y && (neg(x) || z)), (y && z) && x) ||
+         rewrite(x && ((neg(x) || z) || y), (y || z) && x) ||
+         rewrite(x && (y || (neg(x) || z)), (y || z) && x) ||
+         rewrite(x && (!(x || z) || y), x && y) ||
+         rewrite(x && (!(neg(x) || z) || y), (!z || y) && x) ||
+         rewrite(x && (y || !(x || z)), x && y) ||
+         rewrite(x && (y || !(neg(x) || z)), (!z || y) && x) ||
+         rewrite(x && ((z || x) && y), x && y) ||
+         rewrite(x && ((z || neg(x)) && y), (y && z) && x) ||
+         rewrite(x && (y && (z || x)), x && y) ||
+         rewrite(x && (y && (z || neg(x))), (y && z) && x) ||
+         rewrite(x && ((z || neg(x)) || y), (y || z) && x) ||
+         rewrite(x && (y || (z || neg(x))), (y || z) && x) ||
+         rewrite(x && (!(z || x) || y), x && y) ||
+         rewrite(x && (!(z || neg(x)) || y), (!z || y) && x) ||
+         rewrite(x && (y || !(z || x)), x && y) ||
+         rewrite(x && (y || !(z || neg(x))), (!z || y) && x) ||
+         rewrite((x && y) && (x && z), (y && z) && x) ||
+         rewrite(!(x && y) && (x && z), (!y && z) && x) ||
+         rewrite((x && y) && (z && x), (y && z) && x) ||
+         rewrite(!(x && y) && (z && x), (!y && z) && x) ||
+         rewrite(!(x && y) && (x || z), select(x, !y, z)) ||
+         rewrite(!(x && y) && (z || x), select(x, !y, z)) ||
+         rewrite((y && x) && (x && z), (y && z) && x) ||
+         rewrite((y && x) && (z && x), (y && z) && x) ||
+         rewrite((x || y) && (neg(x) && z), !x && (y && z)) ||
+         rewrite((x || y) && (z && neg(x)), !x && (y && z)) ||
+         rewrite((x || y) && (x || z), (y && z) || x) ||
+         rewrite((x || y) && (neg(x) || z), select(x, z, y)) ||
+         rewrite(!(x || y) && (x || z), !x && (!y && z)) ||
+         rewrite((x || y) && (z || x), (y && z) || x) ||
+         rewrite((x || y) && (z || neg(x)), select(x, z, y)) ||
+         rewrite(!(x || y) && (z || x), !x && (!y && z)) ||
+         rewrite((y || x) && (neg(x) && z), !x && (y && z)) ||
+         rewrite((y || x) && (z && neg(x)), !x && (y && z)) ||
+         rewrite((y || x) && (x || z), (y && z) || x) ||
+         rewrite((y || x) && (neg(x) || z), select(x, z, y)) ||
+         rewrite((y || x) && (z || x), (y && z) || x) ||
+         rewrite((y || x) && (z || neg(x)), select(x, z, y)) ||
+         rewrite(!((x && z) && y) && x, (!y || !z) && x) ||
+         rewrite(((x && z) || y) && x, (y || z) && x) ||
+         rewrite(((x && z) || y) && neg(x), !x && y) ||
+         rewrite(!((x && z) || y) && x, !(y || z) && x) ||
+         rewrite((y || (x && z)) && x, (y || z) && x) ||
+         rewrite((y || (x && z)) && neg(x), !x && y) ||
+         rewrite((!(x && z) && y) && x, (!z && y) && x) ||
+         rewrite((!(x && z) && y) && neg(x), !x && y) ||
+         rewrite((!(x && z) || y) && x, (!z || y) && x) ||
+         rewrite((y && !(x && z)) && x, (!z && y) && x) ||
+         rewrite((y && !(x && z)) && neg(x), !x && y) ||
+         rewrite((y || !(x && z)) && x, (!z || y) && x) ||
+         rewrite(((z && x) || y) && x, (y || z) && x) ||
+         rewrite(((z && x) || y) && neg(x), !x && y) ||
+         rewrite((y || (z && x)) && x, (y || z) && x) ||
+         rewrite((y || (z && x)) && neg(x), !x && y) ||
+         rewrite((!(z && x) && y) && x, (!z && y) && x) ||
+         rewrite((!(z && x) && y) && neg(x), !x && y) ||
+         rewrite((!(z && x) || y) && x, (!z || y) && x) ||
+         rewrite((y && !(z && x)) && x, (!z && y) && x) ||
+         rewrite((y && !(z && x)) && neg(x), !x && y) ||
+         rewrite((y || !(z && x)) && x, (!z || y) && x) ||
+         rewrite(((x || z) && y) && x, x && y) ||
+         rewrite(((x || z) && y) && neg(x), !x && (y && z)) ||
+         rewrite(!((x || z) && y) && x, !y && x) ||
+         rewrite((y && (x || z)) && x, x && y) ||
+         rewrite((y && (x || z)) && neg(x), !x && (y && z)) ||
+         rewrite(((x || z) || y) && neg(x), !x && (y || z)) ||
+         rewrite((y || (x || z)) && neg(x), !x && (y || z)) ||
+         rewrite((!(x || z) || y) && x, x && y) ||
+         rewrite((!(x || z) || y) && neg(x), !x && (!z || y)) ||
+         rewrite((y || !(x || z)) && x, x && y) ||
+         rewrite((y || !(x || z)) && neg(x), !x && (!z || y)) ||
+         rewrite(((z || x) && y) && x, x && y) ||
+         rewrite(((z || x) && y) && neg(x), !x && (y && z)) ||
+         rewrite((y && (z || x)) && x, x && y) ||
+         rewrite((y && (z || x)) && neg(x), !x && (y && z)) ||
+         rewrite(((z || x) || y) && neg(x), !x && (y || z)) ||
+         rewrite((y || (z || x)) && neg(x), !x && (y || z)) ||
+         rewrite((!(z || x) || y) && x, x && y) ||
+         rewrite((!(z || x) || y) && neg(x), !x && (!z || y)) ||
+         rewrite((y || !(z || x)) && x, x && y) ||
+         rewrite((y || !(z || x)) && neg(x), !x && (!z || y)) ||
 
          rewrite(x < y && x < z, x < min(y, z)) ||
          rewrite(y < x && z < x, max(y, z) < x) ||
