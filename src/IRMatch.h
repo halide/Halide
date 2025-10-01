@@ -1678,6 +1678,7 @@ struct SimplifiedNegateOp {
     constexpr static IRNodeType min_node_type = IRNodeType::EQ;
     constexpr static IRNodeType max_node_type = IRNodeType::Not;
     constexpr static bool canonical = true;
+    constexpr static bool foldable = false;
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
