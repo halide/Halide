@@ -1491,6 +1491,17 @@ void check_boolean() {
     check(x < y && x >= y, f);
     check(x <= y && x > y, f);
 
+    // Check an expression can be cancelled against a buried version of itself or its negation
+    check(x < y && (b1 && (b2 && y <= x)), f);
+    check(x < y && (b1 && (b2 && x < y)), ((x < y) && b2) && b1);
+    check(x < y && (b1 || (b2 || y <= x)), (b1 || b2) && (x < y));
+    check(x < y && (b1 || (b2 || x < y)), x < y);
+
+    check(x == y && (b1 && (b2 && y != x)), f);
+    check(x == y && (b1 && (b2 && x == y)), ((x == y) && b2) && b1);
+    check(x == y && (b1 || (b2 || x != y)), (b1 || b2) && (x == y));
+    check(x == y && (b1 || (b2 || x == y)), x == y);
+
     check(x <= max(x, y), t);
     check(x < min(x, y), f);
     check(min(x, y) <= x, t);
