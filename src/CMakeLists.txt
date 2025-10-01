@@ -144,6 +144,7 @@ target_sources(
     IRVisitor.h
     JITModule.h
     Lambda.h
+    LegalizeVectors.h
     Lerp.h
     LICM.h
     LLVM_Output.h
@@ -320,6 +321,7 @@ target_sources(
     IRVisitor.cpp
     JITModule.cpp
     Lambda.cpp
+    LegalizeVectors.cpp
     Lerp.cpp
     LICM.cpp
     LLVM_Output.cpp
