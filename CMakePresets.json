@@ -212,24 +212,13 @@
       }
     },
     {
-      "name": "package-unix-shared",
+      "name": "package-unix",
       "inherits": "package",
       "displayName": "Package UNIX shared libs",
       "description": "Build for packaging UNIX shared libraries.",
       "binaryDir": "shared-Release",
       "cacheVariables": {
         "BUILD_SHARED_LIBS": "YES"
-      }
-    },
-    {
-      "name": "package-unix-static",
-      "inherits": "package",
-      "displayName": "Package UNIX static libs",
-      "description": "Build for packaging UNIX static libraries.",
-      "binaryDir": "static-Release",
-      "cacheVariables": {
-        "BUILD_SHARED_LIBS": "NO",
-        "Halide_BUNDLE_STATIC": "YES"
       }
     },
     {
