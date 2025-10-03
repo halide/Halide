@@ -31,7 +31,7 @@
   * [License](#license)
 <!-- TOC -->
 
-Halide provides Python bindings for most of its public API. Python 3.9 (or
+Halide provides Python bindings for most of its public API. Python 3.10 (or
 higher) is required. The Python bindings are supported on 64-bit Linux, OSX, and
 Windows systems.
 
