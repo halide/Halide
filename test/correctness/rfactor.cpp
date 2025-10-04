@@ -838,8 +838,8 @@ int saturating_add_rfactor_test() {
     uint8_t max_int = 255;
 
     g() = Tuple(cast<uint8_t>(0), cast<uint8_t>(0));
-    g() = Tuple(select(g()[0] > max_int - 3 * f(r.x),   max_int, g()[0] + 3 * f(r.x)),
-                  select(g()[1] > max_int - 9 * f(r.x),  max_int, 9 * f(r.x) + g()[1]));
+    g() = Tuple(select(g()[0] > max_int - 3 * f(r.x), max_int, g()[0] + 3 * f(r.x)),
+                select(g()[1] > max_int - 9 * f(r.x), max_int, 9 * f(r.x) + g()[1]));
 
     RVar rxi("rxi"), rxo("rxo");
     g.update(0).split(r.x, rxo, rxi, 2);
@@ -853,9 +853,9 @@ int saturating_add_rfactor_test() {
     Buffer<uint8_t> im1(rn[0]);
     Buffer<uint8_t> im2(rn[1]);
 
-    auto func1 = [&max_int](int x, int y, int z) {
+    auto func1 = [](int x, int y, int z) {
         int ret = 0;
-        for(int i = 10; i < 16; i++){
+        for (int i = 10; i < 16; i++) {
             ret += 3 * i;
         }
         return std::min(ret, 255);
@@ -864,9 +864,9 @@ int saturating_add_rfactor_test() {
         return 1;
     }
 
-    auto func2 = [&max_int](int x, int y, int z) {
+    auto func2 = [](int x, int y, int z) {
         int ret = 0;
-        for(int i = 10; i < 16; i++){
+        for (int i = 10; i < 16; i++) {
             ret += 9 * i;
         }
         return std::min(ret, 255);
