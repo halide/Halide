@@ -13,6 +13,7 @@ on:
       - 'run-clang-tidy.sh'
       - 'run-clang-format.sh'
       - '.github/workflows/presubmit.yml'
+      - '**.clang-tidy'
 
 permissions:
   contents: read
@@ -25,12 +26,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install clang-format
-        run: brew install llvm@19
+        run: brew install llvm@21
 
       - name: Check clang-format
         run: ./run-clang-format.sh -c
         env:
-          CLANG_FORMAT_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@19
+          CLANG_FORMAT_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@21
 
       - uses: astral-sh/ruff-action@v3
   check_clang_tidy:
@@ -39,11 +40,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install clang-tidy
-        run: brew install llvm@19 ninja lld@19
+        run: brew install llvm@21 ninja lld@21
       - name: Run clang-tidy
         run: ./run-clang-tidy.sh
         env:
-          CLANG_TIDY_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@19
+          CLANG_TIDY_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@21
   check_cmake_file_lists:
     name: Check CMake file lists
     runs-on: ubuntu-22.04

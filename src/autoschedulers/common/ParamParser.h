@@ -21,7 +21,7 @@ class ParamParser {
         // All one-byte ints int8 and uint8 should be parsed as integers, not chars --
         // including 'char' itself. (Note that sizeof(bool) is often-but-not-always-1,
         // so be sure to exclude that case.)
-        if constexpr (sizeof(T) == sizeof(char) && !std::is_same<T, bool>::value) {
+        if constexpr (sizeof(T) == sizeof(char) && !std::is_same_v<T, bool>) {
             int i;
             iss >> i;
             t = (T)i;

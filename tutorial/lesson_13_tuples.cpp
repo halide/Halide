@@ -19,10 +19,10 @@
 
 #include "Halide.h"
 #include <algorithm>
-#include <stdio.h>
+#include <cstdio>
 using namespace Halide;
 
-int main(int argc, char **argv) {
+int main() {
 
     // So far Funcs (such as the one below) have evaluated to a single
     // scalar value for each point in their domain.
@@ -214,11 +214,11 @@ int main(int argc, char **argv) {
 
             // Construct from a pair of Exprs
             Complex(Expr r, Expr i)
-                : real(r), imag(i) {
+                : real(std::move(r)), imag(std::move(i)) {
             }
 
             // Construct from a call to a Func by treating it as a Tuple
-            Complex(FuncRef t)
+            Complex(const FuncRef &t)
                 : Complex(Tuple(t)) {
             }
 

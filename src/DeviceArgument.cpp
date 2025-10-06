@@ -9,8 +9,9 @@ std::vector<DeviceArgument> HostClosure::arguments() {
     debug(2) << *this;
 
     std::vector<DeviceArgument> res;
-    for (const auto &v : vars) {
-        res.emplace_back(v.first, false, MemoryType::Auto, v.second, 0);
+    res.reserve(vars.size());
+    for (const auto &[name, type] : vars) {
+        res.emplace_back(name, false, MemoryType::Auto, type, 0);
     }
     for (const auto &b : buffers) {
         DeviceArgument arg(b.first, true, b.second.memory_type, b.second.type, b.second.dimensions, b.second.size);

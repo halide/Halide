@@ -14,9 +14,9 @@ void define_stage(py::module &m) {
             .def("dump_argument_list", &Stage::dump_argument_list)
             .def("name", &Stage::name)
 
-            .def("rfactor", (Func(Stage::*)(const std::vector<std::pair<RVar, Var>> &))&Stage::rfactor,
+            .def("rfactor", static_cast<Func (Stage::*)(const std::vector<std::pair<RVar, Var>> &)>(&Stage::rfactor),
                  py::arg("preserved"))
-            .def("rfactor", (Func(Stage::*)(const RVar &, const Var &))&Stage::rfactor,
+            .def("rfactor", static_cast<Func (Stage::*)(const RVar &, const Var &)>(&Stage::rfactor),
                  py::arg("r"), py::arg("v"))
 
             .def("unscheduled", &Stage::unscheduled);

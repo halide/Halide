@@ -258,8 +258,7 @@ void sort_funcs_by_name_and_counter(vector<string> *funcs,
                                     const map<string, uint64_t> &visitation_order) {
     vector<std::tuple<string, uint64_t, string>> items;
     items.reserve(funcs->size());
-    for (size_t i = 0; i < funcs->size(); i++) {
-        const string &full_name = (*funcs)[i];
+    for (const auto &full_name : *funcs) {
         string prefix = split_string(full_name, "$")[0];
         while (!prefix.empty() && std::isdigit(prefix.back())) {
             prefix.pop_back();

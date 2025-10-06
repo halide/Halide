@@ -62,13 +62,13 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_region(Region &collected_args,
     collect_region(collected_args, std::forward<Args>(args)...);
 }
 
-inline const Func &func_like_to_func(const Func &func) {
-    return func;
-}
-
 template<typename T>
-inline HALIDE_NO_USER_CODE_INLINE Func func_like_to_func(const T &func_like) {
-    return lambda(_, func_like(_));
+Func func_like_to_func(T &&func_like) {
+    if constexpr (std::is_same_v<std::decay_t<T>, Func>) {
+        return std::forward<T>(func_like);
+    } else {
+        return lambda(_, func_like(_));
+    }
 }
 
 }  // namespace Internal
@@ -122,7 +122,7 @@ HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Expr
 }
 
 template<typename T, typename... Bounds,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
+         std::enable_if_t<Halide::Internal::all_are_convertible<Expr, Bounds...>::value> * = nullptr>
 HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Tuple &value,
                                                   Bounds &&...bounds) {
     Region collected_bounds;
@@ -130,7 +130,7 @@ HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Tupl
     return constant_exterior(Internal::func_like_to_func(func_like), value, collected_bounds);
 }
 template<typename T, typename... Bounds,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
+         std::enable_if_t<Halide::Internal::all_are_convertible<Expr, Bounds...>::value> * = nullptr>
 HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Expr &value,
                                                   Bounds &&...bounds) {
     return constant_exterior(func_like, Tuple(value), std::forward<Bounds>(bounds)...);

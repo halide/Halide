@@ -1045,15 +1045,17 @@ void CodeGen_ARM::init_module() {
                 continue;
             }
 
-            string full_name = intrin_name;
-            const bool is_vanilla_intrinsic = starts_with(full_name, "llvm.");
-            if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
-                if (target.bits == 32) {
-                    full_name = "llvm.arm.neon." + full_name;
-                } else {
-                    full_name = (is_sve ? "llvm.aarch64.sve." : "llvm.aarch64.neon.") + full_name;
+            const auto full_name = [&]() -> string {
+                const bool is_vanilla_intrinsic = starts_with(intrin_name, "llvm.");
+                if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
+                    const char *prefix =
+                        target.bits == 32 ? "llvm.arm.neon." :
+                        is_sve            ? "llvm.aarch64.sve." :
+                                            "llvm.aarch64.neon.";
+                    return concat_strings(prefix, intrin_name);
                 }
-            }
+                return intrin_name;
+            }();
 
             int width_factor = 1;
             if (!((intrin.ret_type.lanes <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
@@ -2361,6 +2363,7 @@ bool CodeGen_ARM::codegen_across_vector_reduce(const VectorReduce *op, const Exp
         // call will assume that the args should scalarize.
         if (!module->getFunction(intrin_name)) {
             vector<llvm::Type *> arg_types;
+            arg_types.reserve(args.size());
             for (const Expr &e : args) {
                 arg_types.push_back(llvm_type_with_constraint(e.type(), false, VectorTypeConstraint::VScale));
             }
@@ -2435,6 +2438,7 @@ Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
 Value *CodeGen_ARM::codegen_with_lanes(int slice_lanes, int total_lanes,
                                        const std::vector<Expr> &args, codegen_func_t &cg_func) {
     std::vector<Value *> llvm_args;
+    llvm_args.reserve(args.size());
     // codegen args
     for (const auto &arg : args) {
         llvm_args.push_back(codegen(arg));

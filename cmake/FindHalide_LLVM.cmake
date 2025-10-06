@@ -17,7 +17,7 @@ foreach (
     "/usr/local/lib/llvm-@VERSION@" # Third-party packages
     "/opt/llvm-@VERSION@" # Third-party packages
 )
-    foreach (VERSION RANGE 18 21) # inclusive!
+    foreach (VERSION RANGE 20 22) # inclusive!
         string(CONFIGURE "${template}" path @ONLY)
         list(APPEND llvm_paths "${path}")
     endforeach ()

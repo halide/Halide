@@ -15,7 +15,7 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
+#include <cstdio>
 
 // We're going to be using x86 SSE intrinsics later on in this lesson.
 #ifdef __SSE2__
@@ -31,7 +31,7 @@ using namespace Halide;
 #include "halide_image_io.h"
 using namespace Halide::Tools;
 
-int main(int argc, char **argv) {
+int main() {
     // Declare some Vars to use below.
     Var x("x"), y("y");
 
