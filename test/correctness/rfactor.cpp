@@ -859,6 +859,40 @@ int check_allocation_bound_test() {
     return 0;
 }
 
+int sub_test() {
+    Var x("x"), u("u");
+    Func f("f"), g("g"), ref("ref");
+
+    RDom r(0, 31);
+    f(x) = x;
+    g(x) = 1;
+    g(r.x) -= f(r.x);
+
+    ref(x) = 1;
+    ref(r.x) -= f(r.x);
+
+    RVar rxo("rxo"), rxi("rxi");
+    g.update(0).split(r.x, rxo, rxi, 2);
+
+    Var x0("x0"), y0("y0");
+    Expr merger = x0 + y0;
+    g.update(0).rfactor({{rxo, u}}, {merger}, {{x0, y0}}, {0}).compute_at(g, rxo);
+
+    //f.trace_realizations();
+    //g.jit_handlers().custom_trace = allocation_bound_test_trace;
+    Buffer<int> g_im = g.realize({20});
+    Buffer<int> ref_im = ref.realize({20});
+
+    auto func1 = [&ref_im](int x, int y, int z) {
+        return ref_im(x, y);
+    };
+    if (check_image(g_im, func1)) {
+        return 1;
+    }
+
+    return 0;
+}
+
 int rfactor_tile_reorder_test() {
     Func ref("ref"), f("f");
     Var x("x");
@@ -1127,6 +1161,7 @@ int main(int argc, char **argv) {
     };
 
     std::vector<Task> tasks = {
+        {"sub_test", sub_test},
         {"self assignment rfactor test", self_assignment_rfactor_test},
         {"simple rfactor test: checking call graphs...", simple_rfactor_test<true>},
         {"simple rfactor test: checking output img correctness...", simple_rfactor_test<false>},

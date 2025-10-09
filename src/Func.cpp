@@ -760,10 +760,10 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
 
 }  // namespace
 
-pair<vector<Split>, vector<Split>> Stage::rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const AssociativeOp &prover_result) {
+pair<vector<Split>, vector<Split>> Stage::rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const AssociativeOp &prover_result, const bool skip_checks) {
     const vector<Dim> &dims = definition.schedule().dims();
 
-    user_assert(prover_result.associative())
+    user_assert(skip_checks || prover_result.associative())
         << "In schedule for " << name() << ": can't perform rfactor() "
         << "because we can't prove associativity of the operator\n"
         << dump_argument_list();
@@ -854,16 +854,18 @@ pair<vector<Split>, vector<Split>> Stage::rfactor_validate_args(const std::vecto
     return std::make_pair(std::move(var_splits), std::move(rvar_splits));
 }
 
-Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
+Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved, const vector<Expr> merge_funcs, const vector<pair<Var, Var>> merge_vars, const vector<Expr> identities) {
     user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
 
     definition.schedule().touched() = true;
 
     // Check whether the operator is associative and determine the operator and
     // its identity for each value in the definition if it is a Tuple
+
+    const bool is_custom = merge_vars.size() > 0;
     const auto &prover_result = prove_associativity(function.name(), definition.args(), definition.values());
 
-    const auto &[var_splits, rvar_splits] = rfactor_validate_args(preserved, prover_result);
+    const auto &[var_splits, rvar_splits] = rfactor_validate_args(preserved, prover_result, is_custom);
 
     const vector<Expr> dim_vars_exprs = [&] {
         vector<Expr> result;
@@ -956,7 +958,13 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
     {
         vector<Expr> args = dim_vars_exprs;
         args.insert(args.end(), preserved_vars.begin(), preserved_vars.end());
-        intm(args) = Tuple(prover_result.pattern.identities);
+        if(is_custom){
+            intm(args) = Tuple(identities);
+        }
+        else{
+            intm(args) = Tuple(prover_result.pattern.identities);
+        }
+        
     }
 
     // Intermediate update definition
@@ -1017,21 +1025,32 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         for (size_t i = 0; i < definition.values().size(); ++i) {
-            if (!prover_result.ys[i].var.empty()) {
+            if(is_custom){
                 Expr r = (definition.values().size() == 1) ? Expr(intm(f_load_args)) : Expr(intm(f_load_args)[i]);
-                add_let(preserved_map, prover_result.ys[i].var, r);
-            }
-
-            if (!prover_result.xs[i].var.empty()) {
+                add_let(preserved_map, merge_vars[i].second.name(), r);
                 Expr prev_val = Call::make(intm.types()[i], function.name(),
-                                           dim_vars_exprs, Call::CallType::Halide,
-                                           FunctionPtr(), i);
-                add_let(preserved_map, prover_result.xs[i].var, prev_val);
-            } else {
-                user_warning << "Update definition of " << name() << " at index " << i
-                             << " doesn't depend on the previous value. This isn't a"
-                             << " reduction operation\n";
+                                            dim_vars_exprs, Call::CallType::Halide,
+                                            FunctionPtr(), i);
+                add_let(preserved_map, merge_vars[i].first.name(), prev_val);
             }
+            else{
+                if (!prover_result.ys[i].var.empty()) {
+                    Expr r = (definition.values().size() == 1) ? Expr(intm(f_load_args)) : Expr(intm(f_load_args)[i]);
+                    add_let(preserved_map, prover_result.ys[i].var, r);
+                }
+
+                if (!prover_result.xs[i].var.empty()) {
+                    Expr prev_val = Call::make(intm.types()[i], function.name(),
+                                            dim_vars_exprs, Call::CallType::Halide,
+                                            FunctionPtr(), i);
+                    add_let(preserved_map, prover_result.xs[i].var, prev_val);
+                } else {
+                    user_warning << "Update definition of " << name() << " at index " << i
+                                << " doesn't depend on the previous value. This isn't a"
+                                << " reduction operation\n";
+                }
+            }
+            
         }
 
         vector<Dim> reducing_dims;
@@ -1063,7 +1082,13 @@ Func Stage::rfactor(const vector<pair<RVar, Var>> &preserved) {
         }
 
         definition.args() = dim_vars_exprs;
-        definition.values() = substitute(preserved_map, substitute(rdom_promises, prover_result.pattern.ops));
+        if(is_custom){
+            definition.values() = substitute(preserved_map, substitute(rdom_promises, merge_funcs));
+
+        }
+        else{
+            definition.values() = substitute(preserved_map, substitute(rdom_promises, prover_result.pattern.ops));
+        }
         definition.predicate() = preserved_rdom.predicate();
         definition.schedule().dims() = subst_dims(preserved_map, reducing_dims);
         definition.schedule().rvars() = preserved_rdom.domain();

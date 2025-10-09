@@ -90,7 +90,7 @@ class Stage {
     Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
 
     std::pair<std::vector<Internal::Split>, std::vector<Internal::Split>>
-    rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const Internal::AssociativeOp &prover_result);
+    rfactor_validate_args(const std::vector<std::pair<RVar, Var>> &preserved, const Internal::AssociativeOp &prover_result, const bool is_custom=false);
 
 public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
@@ -187,7 +187,7 @@ public:
      *
      */
     // @{
-    Func rfactor(const std::vector<std::pair<RVar, Var>> &preserved);
+    Func rfactor(const std::vector<std::pair<RVar, Var>> &preserved, const std::vector<Expr> merge_funcs={}, const std::vector<std::pair<Var, Var>> merge_vars={}, const std::vector<Expr> identities={});
     Func rfactor(const RVar &r, const Var &v);
     // @}
 
