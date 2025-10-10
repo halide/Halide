@@ -22,7 +22,7 @@ std::string fuzz_var(int i) {
 }
 
 Expr random_var(std::mt19937 &rng, Type t) {
-    std::uniform_int_distribution dist(0, fuzz_var_count - 2);
+    std::uniform_int_distribution dist(0, fuzz_var_count - 1);
     int fuzz_count = dist(rng);
     return cast(t, Variable::make(Int(32), fuzz_var(fuzz_count)));
 }
