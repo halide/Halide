@@ -2,8 +2,6 @@
 #include <array>
 #include <functional>
 #include <random>
-#include <stdio.h>
-#include <time.h>
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
 namespace {
@@ -15,7 +13,7 @@ using namespace Halide::Internal;
 
 typedef Expr (*make_bin_op_fn)(Expr, Expr);
 
-const int fuzz_var_count = 5;
+constexpr int fuzz_var_count = 5;
 
 Type fuzz_types[] = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
 
@@ -24,23 +22,15 @@ std::string fuzz_var(int i) {
 }
 
 Expr random_var(std::mt19937 &rng, Type t) {
-    int fuzz_count = rng() % (fuzz_var_count - 1);
+    std::uniform_int_distribution dist(0, fuzz_var_count - 2);
+    int fuzz_count = dist(rng);
     return cast(t, Variable::make(Int(32), fuzz_var(fuzz_count)));
 }
 
-template<typename T, int N>
-T random_choice(std::mt19937 &rng, const T (&choices)[N]) {
-    return choices[rng() % N];
-}
-
 template<typename T>
-T random_choice(std::mt19937 &rng, const std::vector<T> &choices) {
-    return choices[rng() % choices.size()];
-}
-
-template<typename T, size_t N>
-T random_choice(std::mt19937 &rng, const std::array<T, N> &choices) {
-    return choices[rng() % N];
+decltype(auto) random_choice(std::mt19937 &rng, T &&choices) {
+    std::uniform_int_distribution<size_t> dist(0, std::size(choices) - 1);
+    return choices[dist(rng)];
 }
 
 Type random_type(std::mt19937 &rng, int width) {
