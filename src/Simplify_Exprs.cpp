@@ -282,8 +282,7 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
                 ramp(x, c0, c2 * c3),
                 c1 == c0 * fold(c2)) ||
         false) {
-
-        return rewrite.result;
+        return mutate(rewrite.result, info);
     }
 
     if (base.same_as(op->base) &&
