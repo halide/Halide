@@ -240,7 +240,7 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
 
 bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) {
     if (Expr sb = simplify(b); !equal(b, sb)) {
-        std::cerr << "Idempotency failure! " << a << " -> " << b << " -> " << sb << "\n";
+        std::cerr << "Idempotency failure!\n    " << a << "\n -> " << b << "\n -> " << sb << "\n";
         return false;
     }
 
