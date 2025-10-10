@@ -239,6 +239,11 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
 }
 
 bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) {
+    if (Expr sb = simplify(b); !equal(b, sb)) {
+        std::cerr << "Idempotency failure! " << a << " -> " << b << " -> " << sb << "\n";
+        return false;
+    }
+
     for (int j = 0; j < t.lanes(); j++) {
         Expr a_j = a;
         Expr b_j = b;
@@ -257,8 +262,8 @@ bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) 
         if (!equal(a_j_v, b_j_v)) {
             std::cerr << "Simplified Expr is not equal() to Original Expr!\n";
 
-            for (map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
-                std::cerr << "Var " << i->first << " = " << i->second << "\n";
+            for (const auto &[var, val] : vars) {
+                std::cerr << "Var " << var << " = " << val << "\n";
             }
 
             std::cerr << "Original Expr is: " << a << "\n";
@@ -281,14 +286,14 @@ bool test_expression(std::mt19937 &rng, Expr test, int samples) {
     }
 
     for (int i = 0; i < samples; i++) {
-        for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
-            size_t kMaxLeafIterations = 10000;
+        for (auto &[var, val] : vars) {
+            constexpr size_t kMaxLeafIterations = 10000;
             // Don't let the random leaf depend on v itself.
             size_t iterations = 0;
             do {
-                v->second = random_leaf(rng, Int(32), true);
+                val = random_leaf(rng, Int(32), true);
                 iterations++;
-            } while (expr_uses_var(v->second, v->first) && iterations < kMaxLeafIterations);
+            } while (expr_uses_var(val, var) && iterations < kMaxLeafIterations);
         }
 
         if (!test_simplification(test, simplified, test.type(), vars)) {
@@ -302,11 +307,12 @@ bool test_expression(std::mt19937 &rng, Expr test, int samples) {
 
 int main(int argc, char **argv) {
     // Depth of the randomly generated expression trees.
-    const int depth = 5;
+    constexpr int depth = 5;
     // Number of samples to test the generated expressions for.
-    const int samples = 3;
+    constexpr int samples = 3;
 
-    std::mt19937 seed_generator{(uint32_t)time(NULL)};
+    std::random_device rd{};
+    std::mt19937 seed_generator{rd()};
 
     for (int i = 0; i < ((argc == 1) ? 10000 : 1); i++) {
         uint32_t seed = seed_generator();
