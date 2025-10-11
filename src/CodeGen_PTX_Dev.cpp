@@ -609,7 +609,13 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Allocate target machine
 
     std::string err_str;
-    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(triple.str(), err_str);
+    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(
+#if LLVM_VERSION >= 220
+        triple,
+#else
+        triple.str(),
+#endif
+        err_str);
     internal_assert(llvm_target) << err_str << "\n";
 
     TargetOptions options;
