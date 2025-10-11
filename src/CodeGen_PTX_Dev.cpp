@@ -604,15 +604,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
-    llvm::Triple triple(module->getTargetTriple());
-
     // Allocate target machine (similar to code in CodeGen_Internal.cpp make_target_machine)
     std::string err_str;
-    auto triple = llvm::Triple(module.getTargetTriple());
+    auto triple = llvm::Triple(module->getTargetTriple());
     const llvm::Target *llvm_target = TargetRegistry::lookupTarget(
-            module.getTargetTriple(),
+            triple,
             err_str);
-    internal_assert(llvm_target) << err_str << "\n";
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
