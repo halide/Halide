@@ -67,8 +67,8 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
             arg_used[src_vec_and_lane_idx[i].first] = true;
         }
         size_t num_args_used = 0;
-        for (size_t i = 0; i < arg_used.size(); ++i) {
-            if (arg_used[i]) {
+        for (bool used : arg_used) {
+            if (used) {
                 num_args_used++;
             }
         }
@@ -83,10 +83,10 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *info) {
                     for (int i = 0; i < vi; ++i) {
                         vector_start_lane += op->vectors[i].type().lanes();
                     }
-                    for (size_t i = 0; i < new_indices.size(); ++i) {
-                        if (new_indices[i] > vector_start_lane) {
-                            internal_assert(new_indices[i] >= vector_start_lane + lanes_deleted);
-                            new_indices[i] -= lanes_deleted;
+                    for (int &new_index : new_indices) {
+                        if (new_index > vector_start_lane) {
+                            internal_assert(new_index >= vector_start_lane + lanes_deleted);
+                            new_index -= lanes_deleted;
                         }
                     }
                     new_vectors.erase(new_vectors.begin() + vi);

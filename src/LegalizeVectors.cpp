@@ -131,6 +131,7 @@ class ExtractLanes : public IRMutator {
 
     Expr visit(const Shuffle *op) override {
         vector<int> new_indices;
+        new_indices.reserve(lane_count);
         for (int i = 0; i < lane_count; ++i) {
             new_indices.push_back(op->indices[lane_start + i]);
         }
@@ -428,8 +429,8 @@ class LegalizeVectors : public IRMutator {
     Expr visit(const Shuffle *op) override {
         internal_assert(op->type.lanes() <= max_lanes) << Expr(op);
         bool requires_mutation = false;
-        for (size_t i = 0; i < op->vectors.size(); ++i) {
-            if (op->vectors[i].type().lanes() > max_lanes) {
+        for (const auto &vec : op->vectors) {
+            if (vec.type().lanes() > max_lanes) {
                 requires_mutation = true;
                 break;
             }
