@@ -4128,7 +4128,9 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             } else {
                 internal_assert(op->indices[0] == 0);
             }
-            value = create_broadcast(value, op->indices.size());
+            if (op->indices.size() > 1) {
+                value = create_broadcast(value, op->indices.size());
+            }
             return;
         }
     }
