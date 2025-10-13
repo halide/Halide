@@ -606,10 +606,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Allocate target machine (similar to code in CodeGen_Internal.cpp make_target_machine)
     std::string err_str;
-    auto triple = llvm::Triple(module->getTargetTriple());
     const llvm::Target *llvm_target = TargetRegistry::lookupTarget(
-        triple,
+        module->getTargetTriple(),
         err_str);
+    auto triple = llvm::Triple(module->getTargetTriple());
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
