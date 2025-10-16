@@ -1626,11 +1626,13 @@ Stmt vectorize_statement(const Stmt &stmt) {
 }
 
 }  // namespace
+
 Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
-    Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env).mutate(stmt);
+    Stmt s = stmt;
+    s = LiftVectorizableExprsOutOfAllAtomicNodes(env).mutate(s);
     s = vectorize_statement(s);
     s = RemoveUnnecessaryAtomics().mutate(s);
     return s;
