@@ -1084,218 +1084,222 @@ class VectorSubs : public IRMutator {
         return Allocate::make(op->name, op->type, op->memory_type, new_extents, op->condition, body, new_expr, op->free_function);
     }
 
-    Stmt visit(const Atomic *op) override {
-        // Recognize a few special cases that we can handle as within-vector reduction trees.
-        do {
-            if (!op->mutex_name.empty()) {
-                // We can't vectorize over a mutex
-                break;
-            }
+    // Recognize a few special cases that we can handle as within-vector reduction trees.
+    std::optional<Stmt> visit_atomic(const Atomic *op) {
+        if (!op->mutex_name.empty()) {
+            // We can't vectorize over a mutex
+            return std::nullopt;
+        }
 
-            const Store *store = op->body.as<Store>();
-            if (!store) {
-                break;
-            }
+        const Store *store = op->body.as<Store>();
+        if (!store) {
+            return std::nullopt;
+        }
 
-            // f[x] = y
-            if (!expr_uses_var(store->value, store->name) &&
-                !expr_uses_var(store->predicate, store->name)) {
-                // This can be naively vectorized just fine. If there are
-                // repeated values in the vectorized store index, the ordering
-                // of writes may be undetermined and backend-dependent, but
-                // they'll be atomic.
-                Stmt s = mutate(store);
-
-                // We may still need the atomic node, if there was more
-                // parallelism than just the vectorization.
-                s = Atomic::make(op->producer_name, op->mutex_name, s);
-                return s;
-            }
-
-            // f[x] = f[x] <op> y
-            VectorReduce::Operator reduce_op = VectorReduce::Add;
-            Expr a, b;
-            if (const Add *add = store->value.as<Add>()) {
-                a = add->a;
-                b = add->b;
-                reduce_op = VectorReduce::Add;
-            } else if (const Mul *mul = store->value.as<Mul>()) {
-                a = mul->a;
-                b = mul->b;
-                reduce_op = VectorReduce::Mul;
-            } else if (const Min *min = store->value.as<Min>()) {
-                a = min->a;
-                b = min->b;
-                reduce_op = VectorReduce::Min;
-            } else if (const Max *max = store->value.as<Max>()) {
-                a = max->a;
-                b = max->b;
-                reduce_op = VectorReduce::Max;
-            } else if (const Cast *cast_op = store->value.as<Cast>()) {
-                if (cast_op->type.element_of() == UInt(8) &&
-                    cast_op->value.type().is_bool()) {
-                    if (const And *and_op = cast_op->value.as<And>()) {
-                        a = and_op->a;
-                        b = and_op->b;
-                        reduce_op = VectorReduce::And;
-                    } else if (const Or *or_op = cast_op->value.as<Or>()) {
-                        a = or_op->a;
-                        b = or_op->b;
-                        reduce_op = VectorReduce::Or;
-                    }
-                }
-            } else if (const Call *call_op = store->value.as<Call>()) {
-                if (call_op->is_intrinsic(Call::saturating_add)) {
-                    a = call_op->args[0];
-                    b = call_op->args[1];
-                    reduce_op = VectorReduce::SaturatingAdd;
-                }
-            }
-
-            if (!a.defined() || !b.defined()) {
-                break;
-            }
-
-            // Bools get cast to uint8 for storage. Strip off that
-            // cast around any load.
-            if (b.type().is_bool()) {
-                const Cast *cast_op = b.as<Cast>();
-                if (cast_op) {
-                    b = cast_op->value;
-                }
-            }
-            if (a.type().is_bool()) {
-                const Cast *cast_op = b.as<Cast>();
-                if (cast_op) {
-                    a = cast_op->value;
-                }
-            }
-
-            if (a.as<Variable>() && !b.as<Variable>()) {
-                std::swap(a, b);
-            }
-
-            // We require b to be a var, because it should have been lifted.
-            const Variable *var_b = b.as<Variable>();
-            const Load *load_a = a.as<Load>();
-
-            if (!var_b ||
-                !scope.contains(var_b->name) ||
-                !load_a ||
-                load_a->name != store->name ||
-                !is_const_one(load_a->predicate) ||
-                !is_const_one(store->predicate)) {
-                break;
-            }
-
-            b = vector_scope.get(get_widened_var_name(var_b->name));
-            Expr store_index = mutate(store->index);
-            Expr load_index = mutate(load_a->index);
-
-            // The load and store indices must be the same interleaved
-            // ramp (or the same scalar, in the total reduction case).
-            InterleavedRamp store_ir, load_ir;
-            Expr test;
-            if (store_index.type().is_scalar()) {
-                test = simplify(load_index == store_index);
-            } else if (is_interleaved_ramp(store_index, vector_scope, &store_ir) &&
-                       is_interleaved_ramp(load_index, vector_scope, &load_ir) &&
-                       store_ir.inner_repetitions == load_ir.inner_repetitions &&
-                       store_ir.outer_repetitions == load_ir.outer_repetitions &&
-                       store_ir.lanes == load_ir.lanes) {
-                test = simplify(store_ir.base == load_ir.base &&
-                                store_ir.stride == load_ir.stride);
-            }
-
-            if (!test.defined()) {
-                break;
-            }
-
-            if (is_const_zero(test)) {
-                break;
-            } else if (!is_const_one(test)) {
-                // TODO: try harder by substituting in more things in scope
-                break;
-            }
-
-            auto binop = [=](const Expr &a, const Expr &b) {
-                switch (reduce_op) {
-                case VectorReduce::Add:
-                    return a + b;
-                case VectorReduce::Mul:
-                    return a * b;
-                case VectorReduce::Min:
-                    return min(a, b);
-                case VectorReduce::Max:
-                    return max(a, b);
-                case VectorReduce::And:
-                    return a && b;
-                case VectorReduce::Or:
-                    return a || b;
-                case VectorReduce::SaturatingAdd:
-                    return saturating_add(a, b);
-                }
-                return Expr();
-            };
-
-            int output_lanes = 1;
-            if (store_index.type().is_scalar()) {
-                // The index doesn't depend on the value being
-                // vectorized, so it's a total reduction.
-
-                b = VectorReduce::make(reduce_op, b, 1);
-            } else {
-
-                output_lanes = store_index.type().lanes() / (store_ir.inner_repetitions * store_ir.outer_repetitions);
-
-                store_index = Ramp::make(store_ir.base, store_ir.stride, output_lanes / store_ir.base.type().lanes());
-                if (store_ir.inner_repetitions > 1) {
-                    b = VectorReduce::make(reduce_op, b, output_lanes * store_ir.outer_repetitions);
-                }
-
-                // Handle outer repetitions by unrolling the reduction
-                // over slices.
-                if (store_ir.outer_repetitions > 1) {
-                    // First remove all powers of two with a binary reduction tree.
-                    int reps = store_ir.outer_repetitions;
-                    while (reps % 2 == 0) {
-                        int l = b.type().lanes() / 2;
-                        Expr b0 = Shuffle::make_slice(b, 0, 1, l);
-                        Expr b1 = Shuffle::make_slice(b, l, 1, l);
-                        b = binop(b0, b1);
-                        reps /= 2;
-                    }
-
-                    // Then reduce linearly over slices for the rest.
-                    if (reps > 1) {
-                        Expr v = Shuffle::make_slice(b, 0, 1, output_lanes);
-                        for (int i = 1; i < reps; i++) {
-                            Expr slice = simplify(Shuffle::make_slice(b, i * output_lanes, 1, output_lanes));
-                            v = binop(v, slice);
-                        }
-                        b = v;
-                    }
-                }
-            }
-
-            Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
-                                       load_a->name, store_index, load_a->image,
-                                       load_a->param, const_true(output_lanes),
-                                       ModulusRemainder{});
-
-            Expr lhs = cast(b.type(), new_load);
-            b = binop(lhs, b);
-            b = cast(new_load.type(), b);
-
-            Stmt s = Store::make(store->name, b, store_index, store->param,
-                                 const_true(b.type().lanes()), store->alignment);
+        // f[x] = y
+        if (!expr_uses_var(store->value, store->name) &&
+            !expr_uses_var(store->predicate, store->name)) {
+            // This can be naively vectorized just fine. If there are
+            // repeated values in the vectorized store index, the ordering
+            // of writes may be undetermined and backend-dependent, but
+            // they'll be atomic.
+            Stmt s = mutate(store);
 
             // We may still need the atomic node, if there was more
             // parallelism than just the vectorization.
             s = Atomic::make(op->producer_name, op->mutex_name, s);
-
             return s;
-        } while (false);
+        }
+
+        // f[x] = f[x] <op> y
+        VectorReduce::Operator reduce_op = VectorReduce::Add;
+        Expr a, b;
+        if (const Add *add = store->value.as<Add>()) {
+            a = add->a;
+            b = add->b;
+            reduce_op = VectorReduce::Add;
+        } else if (const Mul *mul = store->value.as<Mul>()) {
+            a = mul->a;
+            b = mul->b;
+            reduce_op = VectorReduce::Mul;
+        } else if (const Min *min = store->value.as<Min>()) {
+            a = min->a;
+            b = min->b;
+            reduce_op = VectorReduce::Min;
+        } else if (const Max *max = store->value.as<Max>()) {
+            a = max->a;
+            b = max->b;
+            reduce_op = VectorReduce::Max;
+        } else if (const Cast *cast_op = store->value.as<Cast>()) {
+            if (cast_op->type.element_of() == UInt(8) &&
+                cast_op->value.type().is_bool()) {
+                if (const And *and_op = cast_op->value.as<And>()) {
+                    a = and_op->a;
+                    b = and_op->b;
+                    reduce_op = VectorReduce::And;
+                } else if (const Or *or_op = cast_op->value.as<Or>()) {
+                    a = or_op->a;
+                    b = or_op->b;
+                    reduce_op = VectorReduce::Or;
+                }
+            }
+        } else if (const Call *call_op = store->value.as<Call>()) {
+            if (call_op->is_intrinsic(Call::saturating_add)) {
+                a = call_op->args[0];
+                b = call_op->args[1];
+                reduce_op = VectorReduce::SaturatingAdd;
+            }
+        }
+
+        if (!a.defined() || !b.defined()) {
+            return std::nullopt;
+        }
+
+        // Bools get cast to uint8 for storage. Strip off that
+        // cast around any load.
+        if (b.type().is_bool()) {
+            const Cast *cast_op = b.as<Cast>();
+            if (cast_op) {
+                b = cast_op->value;
+            }
+        }
+        if (a.type().is_bool()) {
+            const Cast *cast_op = b.as<Cast>();
+            if (cast_op) {
+                a = cast_op->value;
+            }
+        }
+
+        if (a.as<Variable>() && !b.as<Variable>()) {
+            std::swap(a, b);
+        }
+
+        // We require b to be a var, because it should have been lifted.
+        const Variable *var_b = b.as<Variable>();
+        const Load *load_a = a.as<Load>();
+
+        if (!var_b ||
+            !scope.contains(var_b->name) ||
+            !load_a ||
+            load_a->name != store->name ||
+            !is_const_one(load_a->predicate) ||
+            !is_const_one(store->predicate)) {
+            return std::nullopt;
+        }
+
+        b = vector_scope.get(get_widened_var_name(var_b->name));
+        Expr store_index = mutate(store->index);
+        Expr load_index = mutate(load_a->index);
+
+        // The load and store indices must be the same interleaved
+        // ramp (or the same scalar, in the total reduction case).
+        InterleavedRamp store_ir, load_ir;
+        Expr test;
+        if (store_index.type().is_scalar()) {
+            test = simplify(load_index == store_index);
+        } else if (is_interleaved_ramp(store_index, vector_scope, &store_ir) &&
+                   is_interleaved_ramp(load_index, vector_scope, &load_ir) &&
+                   store_ir.inner_repetitions == load_ir.inner_repetitions &&
+                   store_ir.outer_repetitions == load_ir.outer_repetitions &&
+                   store_ir.lanes == load_ir.lanes) {
+            test = simplify(store_ir.base == load_ir.base &&
+                            store_ir.stride == load_ir.stride);
+        }
+
+        if (!test.defined()) {
+            return std::nullopt;
+        }
+
+        if (is_const_zero(test)) {
+            return std::nullopt;
+        } else if (!is_const_one(test)) {
+            // TODO: try harder by substituting in more things in scope
+            return std::nullopt;
+        }
+
+        auto binop = [=](const Expr &a, const Expr &b) {
+            switch (reduce_op) {
+            case VectorReduce::Add:
+                return a + b;
+            case VectorReduce::Mul:
+                return a * b;
+            case VectorReduce::Min:
+                return min(a, b);
+            case VectorReduce::Max:
+                return max(a, b);
+            case VectorReduce::And:
+                return a && b;
+            case VectorReduce::Or:
+                return a || b;
+            case VectorReduce::SaturatingAdd:
+                return saturating_add(a, b);
+            }
+            return Expr();
+        };
+
+        int output_lanes = 1;
+        if (store_index.type().is_scalar()) {
+            // The index doesn't depend on the value being
+            // vectorized, so it's a total reduction.
+
+            b = VectorReduce::make(reduce_op, b, 1);
+        } else {
+
+            output_lanes = store_index.type().lanes() / (store_ir.inner_repetitions * store_ir.outer_repetitions);
+
+            store_index = Ramp::make(store_ir.base, store_ir.stride, output_lanes / store_ir.base.type().lanes());
+            if (store_ir.inner_repetitions > 1) {
+                b = VectorReduce::make(reduce_op, b, output_lanes * store_ir.outer_repetitions);
+            }
+
+            // Handle outer repetitions by unrolling the reduction
+            // over slices.
+            if (store_ir.outer_repetitions > 1) {
+                // First remove all powers of two with a binary reduction tree.
+                int reps = store_ir.outer_repetitions;
+                while (reps % 2 == 0) {
+                    int l = b.type().lanes() / 2;
+                    Expr b0 = Shuffle::make_slice(b, 0, 1, l);
+                    Expr b1 = Shuffle::make_slice(b, l, 1, l);
+                    b = binop(b0, b1);
+                    reps /= 2;
+                }
+
+                // Then reduce linearly over slices for the rest.
+                if (reps > 1) {
+                    Expr v = Shuffle::make_slice(b, 0, 1, output_lanes);
+                    for (int i = 1; i < reps; i++) {
+                        Expr slice = simplify(Shuffle::make_slice(b, i * output_lanes, 1, output_lanes));
+                        v = binop(v, slice);
+                    }
+                    b = v;
+                }
+            }
+        }
+
+        Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
+                                   load_a->name, store_index, load_a->image,
+                                   load_a->param, const_true(output_lanes),
+                                   ModulusRemainder{});
+
+        Expr lhs = cast(b.type(), new_load);
+        b = binop(lhs, b);
+        b = cast(new_load.type(), b);
+
+        Stmt s = Store::make(store->name, b, store_index, store->param,
+                             const_true(b.type().lanes()), store->alignment);
+
+        // We may still need the atomic node, if there was more
+        // parallelism than just the vectorization.
+        s = Atomic::make(op->producer_name, op->mutex_name, s);
+
+        return s;
+    }
+
+    Stmt visit(const Atomic *op) override {
+        if (auto vectorized_op = visit_atomic(op)) {
+            return *vectorized_op;
+        }
 
         // In the general case, if a whole stmt has to be done
         // atomically, we need to serialize.
@@ -1578,6 +1582,7 @@ public:
         : s(s) {
     }
 };
+
 bool all_stores_in_scope(const Stmt &stmt, const Scope<> &scope) {
     AllStoresInScope checker(scope);
     stmt.accept(&checker);
