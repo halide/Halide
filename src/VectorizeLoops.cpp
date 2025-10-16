@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <utility>
 
-#include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
@@ -1322,40 +1321,6 @@ class VectorSubs : public IRMutator {
         }
 
         return s;
-    }
-
-    Expr scalarize(Expr e) {
-        // This method returns a select tree that produces a vector lanes
-        // result expression
-        user_assert(replacements.size() == 1) << "Can't scalarize nested vectorization\n";
-        string var = replacements.begin()->first;
-        Expr replacement = replacements.begin()->second;
-
-        Expr result;
-        int lanes = replacement.type().lanes();
-
-        for (int i = lanes - 1; i >= 0; --i) {
-            // Hide all the vector let values in scope with a scalar version
-            // in the appropriate lane.
-            for (Scope<Expr>::const_iterator iter = scope.cbegin(); iter != scope.cend(); ++iter) {
-                e = substitute(iter.name(),
-                               get_lane(Variable::make(iter.value().type(), iter.name()), i),
-                               e);
-            }
-
-            // Replace uses of the vectorized variable with the extracted
-            // lane expression
-            e = substitute(var, i, e);
-
-            if (i == lanes - 1) {
-                result = Broadcast::make(e, lanes);
-            } else {
-                Expr cond = (replacement == Broadcast::make(i, lanes));
-                result = Select::make(cond, Broadcast::make(e, lanes), result);
-            }
-        }
-
-        return result;
     }
 
     // Recompute all replacements for vectorized vars based on
