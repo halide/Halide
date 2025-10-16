@@ -971,64 +971,64 @@ class VectorSubs : public IRMutator {
             body = IfThenElse::make(likely(var < op->min + op->extent), body);
         }
 
-        if (op->for_type == ForType::Vectorized) {
-            const IntImm *extent_int = extent.as<IntImm>();
-            internal_assert(extent_int)
-                << "Vectorized for loop extent should have been rewritten to a constant\n";
-            if (extent_int->value <= 1) {
-                user_error << "Loop over " << op->name
-                           << " has extent " << extent
-                           << ". Can only vectorize loops over a "
-                           << "constant extent > 1\n";
-            }
-
-            vectorized_vars.push_back({op->name, min, (int)extent_int->value});
-            update_replacements();
-            // Go over lets which were vectorized in the order of their occurrence and update
-            // them according to the current loop level.
-            for (const auto &[var, val] : containing_lets) {
-                // Skip if this var wasn't vectorized.
-                if (!scope.contains(var)) {
-                    continue;
-                }
-                string vectorized_name = get_widened_var_name(var);
-                Expr vectorized_value = mutate(scope.get(var));
-                vector_scope.push(vectorized_name, vectorized_value);
-            }
-
-            body = mutate(body);
-
-            // Append vectorized lets for this loop level.
-            for (const auto &[var, _] : reverse_view(containing_lets)) {
-                // Skip if this var wasn't vectorized.
-                if (!scope.contains(var)) {
-                    continue;
-                }
-                string vectorized_name = get_widened_var_name(var);
-                Expr vectorized_value = vector_scope.get(vectorized_name);
-                vector_scope.pop(vectorized_name);
-                InterleavedRamp ir;
-                if (is_interleaved_ramp(vectorized_value, vector_scope, &ir)) {
-                    body = substitute(vectorized_name, vectorized_value, body);
-                } else {
-                    body = LetStmt::make(vectorized_name, vectorized_value, body);
-                }
-            }
-            vectorized_vars.pop_back();
-            update_replacements();
-            return body;
-        } else {
+        if (op->for_type != ForType::Vectorized) {
             body = mutate(body);
 
             if (min.same_as(op->min) &&
                 extent.same_as(op->extent) &&
-                body.same_as(op->body) &&
-                for_type == op->for_type) {
+                for_type == op->for_type &&
+                body.same_as(op->body)) {
                 return op;
+            }
+
+            return For::make(op->name, min, extent, for_type, op->partition_policy, op->device_api, body);
+        }
+
+        const IntImm *extent_int = extent.as<IntImm>();
+        internal_assert(extent_int)
+            << "Vectorized for loop extent should have been rewritten to a constant\n";
+        if (extent_int->value <= 1) {
+            user_error << "Loop over " << op->name
+                       << " has extent " << extent
+                       << ". Can only vectorize loops over a "
+                       << "constant extent > 1\n";
+        }
+
+        vectorized_vars.push_back({op->name, min, (int)extent_int->value});
+        update_replacements();
+        // Go over lets which were vectorized in the order of their occurrence and update
+        // them according to the current loop level.
+        for (const auto &[var, val] : containing_lets) {
+            // Skip if this var wasn't vectorized.
+            if (!scope.contains(var)) {
+                continue;
+            }
+            string vectorized_name = get_widened_var_name(var);
+            Expr vectorized_value = mutate(scope.get(var));
+            vector_scope.push(vectorized_name, vectorized_value);
+        }
+
+        body = mutate(body);
+
+        // Append vectorized lets for this loop level.
+        for (const auto &[var, _] : reverse_view(containing_lets)) {
+            // Skip if this var wasn't vectorized.
+            if (!scope.contains(var)) {
+                continue;
+            }
+            string vectorized_name = get_widened_var_name(var);
+            Expr vectorized_value = vector_scope.get(vectorized_name);
+            vector_scope.pop(vectorized_name);
+            InterleavedRamp ir;
+            if (is_interleaved_ramp(vectorized_value, vector_scope, &ir)) {
+                body = substitute(vectorized_name, vectorized_value, body);
             } else {
-                return For::make(op->name, min, extent, for_type, op->partition_policy, op->device_api, body);
+                body = LetStmt::make(vectorized_name, vectorized_value, body);
             }
         }
+        vectorized_vars.pop_back();
+        update_replacements();
+        return body;
     }
 
     Stmt visit(const Allocate *op) override {
