@@ -611,18 +611,19 @@ class VectorSubs : public IRMutator {
         Expr condition = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
+
         if (condition.same_as(op->condition) &&
             true_value.same_as(op->true_value) &&
             false_value.same_as(op->false_value)) {
             return op;
-        } else {
-            int lanes = std::max(true_value.type().lanes(), false_value.type().lanes());
-            lanes = std::max(lanes, condition.type().lanes());
-            true_value = widen(true_value, lanes);
-            false_value = widen(false_value, lanes);
-            condition = widen(condition, lanes);
-            return Select::make(condition, true_value, false_value);
         }
+
+        int lanes = std::max({condition.type().lanes(),
+                              true_value.type().lanes(),
+                              false_value.type().lanes()});
+        return Select::make(widen(condition, lanes),
+                            widen(true_value, lanes),
+                            widen(false_value, lanes));
     }
 
     Expr visit(const Load *op) override {
@@ -631,12 +632,11 @@ class VectorSubs : public IRMutator {
 
         if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
             return op;
-        } else {
-            int w = index.type().lanes();
-            predicate = widen(predicate, w);
-            return Load::make(op->type.with_lanes(w), op->name, index, op->image,
-                              op->param, predicate, op->alignment);
         }
+
+        int w = index.type().lanes();
+        return Load::make(op->type.with_lanes(w), op->name, index, op->image,
+                          op->param, widen(predicate, w), op->alignment);
     }
 
     Expr visit(const Call *op) override {
@@ -713,12 +713,12 @@ class VectorSubs : public IRMutator {
             }
             return Call::make(op->type, Call::trace, new_args, op->call_type);
         } else if (op->is_intrinsic(Call::if_then_else) && op->args.size() == 2) {
-            Expr cond = widen(new_args[0], max_lanes);
             Expr true_value = widen(new_args[1], max_lanes);
-
-            const Load *load = true_value.as<Load>();
-            if (load) {
-                return Load::make(op->type.with_lanes(max_lanes), load->name, load->index, load->image, load->param, cond, load->alignment);
+            if (const Load *load = true_value.as<Load>()) {
+                return Load::make(op->type.with_lanes(max_lanes),
+                                  load->name, load->index, load->image, load->param,
+                                  widen(new_args[0], max_lanes),
+                                  load->alignment);
             }
         }
 
@@ -826,13 +826,13 @@ class VectorSubs : public IRMutator {
 
         if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             return op;
-        } else {
-            int lanes = std::max({predicate.type().lanes(),
-                                  value.type().lanes(),
-                                  index.type().lanes()});
-            return Store::make(op->name, widen(value, lanes), widen(index, lanes),
-                               op->param, widen(predicate, lanes), op->alignment);
         }
+
+        int lanes = std::max({predicate.type().lanes(),
+                              value.type().lanes(),
+                              index.type().lanes()});
+        return Store::make(op->name, widen(value, lanes), widen(index, lanes),
+                           op->param, widen(predicate, lanes), op->alignment);
     }
 
     Stmt visit(const AssertStmt *op) override {
