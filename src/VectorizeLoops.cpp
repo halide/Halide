@@ -1175,15 +1175,25 @@ class VectorSubs : public IRMutator {
         }
 
         // We require b to be a var, because it should have been lifted.
-        const Variable *var_b = b.as<Variable>();
         const Load *load_a = a.as<Load>();
+        if (!load_a || load_a->name != store->name) {
+            debug(4) << "Unable to vectorize atomic store\n";
+            return std::nullopt;
+        }
 
-        if (!var_b ||
-            !scope.contains(var_b->name) ||
-            !load_a ||
-            load_a->name != store->name ||
-            !is_const_one(load_a->predicate) ||
-            !is_const_one(store->predicate)) {
+        const Variable *var_b = b.as<Variable>();
+        if (!var_b || !scope.contains(var_b->name)) {
+            debug(4) << "Unable to vectorize atomic store because RHS was not vectorized\n";
+            return std::nullopt;
+        }
+
+        if (!is_const_one(load_a->predicate)) {
+            debug(4) << "Not vectorizing an atomic store with a load predicate\n";
+            return std::nullopt;
+        }
+
+        if (!is_const_one(store->predicate)) {
+            debug(4) << "Not vectorizing an atomic store with a store predicate\n";
             return std::nullopt;
         }
 
