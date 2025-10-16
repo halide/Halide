@@ -618,7 +618,6 @@ class VectorSubs : public IRMutator {
         } else {
             int lanes = std::max(true_value.type().lanes(), false_value.type().lanes());
             lanes = std::max(lanes, condition.type().lanes());
-            // Widen the true and false values, but we don't have to widen the condition
             true_value = widen(true_value, lanes);
             false_value = widen(false_value, lanes);
             condition = widen(condition, lanes);
