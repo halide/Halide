@@ -634,9 +634,13 @@ class VectorSubs : public IRMutator {
             return op;
         }
 
-        int w = index.type().lanes();
-        return Load::make(op->type.with_lanes(w), op->name, index, op->image,
-                          op->param, widen(predicate, w), op->alignment);
+        int lanes = std::max(predicate.type().lanes(), index.type().lanes());
+        return Load::make(op->type.with_lanes(lanes),
+                          op->name,
+                          widen(index, lanes),
+                          op->image, op->param,
+                          widen(predicate, lanes),
+                          op->alignment);
     }
 
     Expr visit(const Call *op) override {
