@@ -124,7 +124,7 @@ int predicated_tail_with_scalar_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 1));
 
     Buffer<int> im = f.realize({size, size});
     auto func = [](int x, int y) {
@@ -158,7 +158,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t)
         f.update(0).hexagon();
     }
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(2, 6));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 3));
 
     Buffer<int> im = f.realize({170, 170});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -185,7 +185,7 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 6));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
 
     Buffer<int> im = f.realize({size, size});
     auto func = [&im_ref, &im](int x, int y, int z) {
@@ -253,7 +253,7 @@ int scalar_load_test(const Target &t) {
         f.update(0).hexagon();
     }
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 3));
 
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -287,7 +287,7 @@ int scalar_store_test(const Target &t) {
         f.update(0).hexagon();
     }
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 1));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
 
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -320,7 +320,7 @@ int not_dependent_on_vectorized_var_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
 
     Buffer<int> im = f.realize({160, 160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -382,7 +382,7 @@ int vectorized_predicated_predicate_with_pure_call_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(2, 4));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
 
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
