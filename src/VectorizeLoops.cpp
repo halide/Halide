@@ -1751,8 +1751,8 @@ Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
     Stmt s = stmt;
-    s = PredicateOps().mutate(s);
     s = LiftVectorizableExprsOutOfAllAtomicNodes(env).mutate(s);
+    s = PredicateOps().mutate(s);
     s = vectorize_statement(s);
     s = RemoveUnnecessaryAtomics().mutate(s);
     return s;
