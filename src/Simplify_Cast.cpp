@@ -100,8 +100,8 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         // directly.
         return mutate(Cast::make(op->type, cast->value), info);
     } else if (cast &&
-               (op->type.is_int() || op->type.is_uint()) &&
-               (cast->type.is_int() || cast->type.is_uint()) &&
+               op->type.is_int_or_uint() &&
+               cast->type.is_int_or_uint() &&
                op->type.bits() <= cast->type.bits() &&
                op->type.bits() <= op->value.type().bits()) {
         // If this is a cast between integer types, where the
@@ -109,7 +109,11 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         // inner cast's argument, the inner cast can be
         // eliminated. The inner cast is either a sign extend
         // or a zero extend, and the outer cast truncates the extended bits
-        return mutate(Cast::make(op->type, cast->value), info);
+        if (op->type == cast->value.type()) {
+            return mutate(cast->value, info);
+        } else {
+            return mutate(Cast::make(op->type, cast->value), info);
+        }
     } else if (broadcast_value) {
         // cast(broadcast(x)) -> broadcast(cast(x))
         return mutate(Broadcast::make(Cast::make(op->type.with_lanes(broadcast_value->value.type().lanes()), broadcast_value->value), broadcast_value->lanes), info);

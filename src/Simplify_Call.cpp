@@ -372,11 +372,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             }
             return make_const(a.type(), *fa, info);
         } else if (a.type().is_int() && a_info.bounds >= 0) {
-            if (info) {
-                // Preserve alignment info
-                *info = a_info;
-            }
-            return cast(op->type, a);
+            return mutate(cast(op->type, a), info);
         } else if (a.type().is_int() && a_info.bounds <= 0) {
             if (info) {
                 // Preserve alignment info

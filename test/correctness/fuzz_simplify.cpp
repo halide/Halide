@@ -273,8 +273,7 @@ bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) 
     Expr b_v = simplify(substitute(vars, b));
     // If the simplifier didn't produce constants, there must be
     // undefined behavior in this expression. Ignore it.
-    if (!Internal::is_const(a_v) || !Internal::is_const(b_v) ||
-        a_v.as<Cast>() || b_v.as<Cast>()) {
+    if (!Internal::is_const(a_v) || !Internal::is_const(b_v)) {
         return true;
     }
     if (!equal(a_v, b_v)) {
