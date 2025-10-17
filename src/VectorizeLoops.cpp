@@ -501,16 +501,16 @@ class VectorSubs : public IRMutator {
     vector<pair<string, Expr>> containing_lets;
 
     // Widen an expression to the given number of lanes.
-    Expr widen(Expr e, int lanes) {
+    static Expr widen(Expr e, int lanes) {
         if (e.type().lanes() == lanes) {
             return e;
-        } else if (lanes % e.type().lanes() == 0) {
-            return Broadcast::make(e, lanes / e.type().lanes());
-        } else {
-            internal_error << "Mismatched vector lanes in VectorSubs " << e.type().lanes()
-                           << " " << lanes << "\n";
         }
-        return Expr();
+        if (lanes % e.type().lanes() == 0) {
+            return Broadcast::make(e, lanes / e.type().lanes());
+        }
+        internal_error
+            << "Cannot widen " << e.type().lanes() << " lanes to " << lanes << ".\n"
+            << "Expression: " << e << "\n";
     }
 
     using IRMutator::visit;
