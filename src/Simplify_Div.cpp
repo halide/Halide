@@ -14,8 +14,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
             // this code path for floats.
             info->bounds = a_info.bounds / b_info.bounds;
             info->alignment = a_info.alignment / b_info.alignment;
-            info->trim_bounds_using_alignment();
             info->cast_to(op->type);
+            info->trim_bounds_using_alignment();
 
             // Bounded numerator divided by constantish bounded denominator can
             // sometimes collapse things to a constant at this point. This
@@ -56,8 +56,6 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
     if (rewrite(IRMatcher::Overflow() / x, a) ||
         rewrite(x / IRMatcher::Overflow(), b) ||
         rewrite(x / 1, x) ||
-        (!op->type.is_float() && rewrite(x / 0, 0)) ||
-        (!op->type.is_float() && denominator_non_zero && rewrite(x / x, 1)) ||
         rewrite(0 / x, 0) ||
         false) {
         return rewrite.result;
@@ -69,6 +67,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *info) {
     // clang-format off
     if (EVAL_IN_LAMBDA
         (rewrite(c0 / c1, fold(c0 / c1)) ||
+         (!op->type.is_float() && rewrite(x / 0, 0)) ||
+         (!op->type.is_float() && denominator_non_zero && rewrite(x / x, 1)) ||
          rewrite(broadcast(x, c0) / broadcast(y, c0), broadcast(x / y, c0)) ||
          rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
          (!op->type.is_float() &&

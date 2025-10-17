@@ -121,9 +121,20 @@ Expr make_bitwise_xor(Expr a, Expr b) {
     return a ^ b;
 }
 
-// This just exists to make sure bitwise not gets used somewhere
-Expr make_bitwise_nor(Expr a, Expr b) {
-    return ~a | ~b;
+Expr make_abs(Expr a, Expr) {
+    if (!a.type().is_uint()) {
+        return cast(a.type(), abs(a));
+    } else {
+        return a;
+    }
+}
+
+Expr make_bitwise_not(Expr a, Expr) {
+    return ~a;
+}
+
+Expr make_shift_right(Expr a, Expr b) {
+    return a >> (b % a.type().bits());
 }
 
 Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
@@ -199,16 +210,25 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
                 Max::make,
                 Div::make,
                 Mod::make,
+            };
+
+            static make_bin_op_fn make_rare_bin_op[] = {
                 make_absd,
                 make_bitwise_or,
                 make_bitwise_and,
                 make_bitwise_xor,
-                make_bitwise_nor,
+                make_bitwise_not,
+                make_abs,
+                make_shift_right,  // No shift left or we just keep testing integer overflow
             };
 
             Expr a = random_expr(rng, t, depth, overflow_undef);
             Expr b = random_expr(rng, t, depth, overflow_undef);
-            return random_choice(rng, make_bin_op)(a, b);
+            if ((rng() & 7) == 0) {
+                return random_choice(rng, make_rare_bin_op)(a, b);
+            } else {
+                return random_choice(rng, make_bin_op)(a, b);
+            }
         },
         [&]() {
             static make_bin_op_fn make_bin_op[] = {
@@ -229,41 +249,45 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
 }
 
 bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) {
+    if (equal(a, b) && !a.same_as(b)) {
+        std::cerr << "Simplifier created new IR node but made no changes:\n"
+                  << a << "\n";
+        return false;
+    }
     if (Expr sb = simplify(b); !equal(b, sb)) {
         std::cerr << "Idempotency failure!\n    " << a << "\n -> " << b << "\n -> " << sb << "\n";
+        std::cerr << "---------------------------------\n"
+                  << "Begin simplification of original:\n"
+                  << simplify(a) << "\n";
+        std::cerr << "---------------------------------\n"
+                  << "Begin resimplification of result:\n"
+                  << simplify(b) << "\n"
+                  << "---------------------------------\n";
+
         return false;
     }
 
-    for (int j = 0; j < t.lanes(); j++) {
-        Expr a_j = a;
-        Expr b_j = b;
-        if (t.lanes() != 1) {
-            a_j = extract_lane(a, j);
-            b_j = extract_lane(b, j);
-        }
-
-        Expr a_j_v = simplify(substitute(vars, a_j));
-        Expr b_j_v = simplify(substitute(vars, b_j));
-        // If the simplifier didn't produce constants, there must be
-        // undefined behavior in this expression. Ignore it.
-        if (!Internal::is_const(a_j_v) || !Internal::is_const(b_j_v)) {
-            continue;
-        }
-        if (!equal(a_j_v, b_j_v)) {
-            std::cerr << "Simplified Expr is not equal() to Original Expr!\n";
-
-            for (const auto &[var, val] : vars) {
-                std::cerr << "Var " << var << " = " << val << "\n";
-            }
-
-            std::cerr << "Original Expr is: " << a << "\n";
-            std::cerr << "Simplified Expr is: " << b << "\n";
-            std::cerr << "In vector lane " << j << ", original -> simplified:\n";
-            std::cerr << "   " << a_j << " -> " << a_j_v << "\n";
-            std::cerr << "   " << b_j << " -> " << b_j_v << "\n";
-            return false;
-        }
+    Expr a_v = simplify(substitute(vars, a));
+    Expr b_v = simplify(substitute(vars, b));
+    // If the simplifier didn't produce constants, there must be
+    // undefined behavior in this expression. Ignore it.
+    if (!Internal::is_const(a_v) || !Internal::is_const(b_v)) {
+        return true;
     }
+    if (!equal(a_v, b_v)) {
+        std::cerr << "Simplified Expr is not equal() to Original Expr!\n";
+
+        for (const auto &[var, val] : vars) {
+            std::cerr << "Var " << var << " = " << val << "\n";
+        }
+
+        std::cerr << "Original Expr is: " << a << "\n";
+        std::cerr << "Simplified Expr is: " << b << "\n";
+        std::cerr << "   " << a << " -> " << a_v << "\n";
+        std::cerr << "   " << b << " -> " << b_v << "\n";
+        return false;
+    }
+
     return true;
 }
 
@@ -297,14 +321,14 @@ bool test_expression(std::mt19937 &rng, Expr test, int samples) {
 
 int main(int argc, char **argv) {
     // Depth of the randomly generated expression trees.
-    constexpr int depth = 5;
+    constexpr int depth = 6;
     // Number of samples to test the generated expressions for.
     constexpr int samples = 3;
 
     std::random_device rd{};
     std::mt19937 seed_generator{rd()};
 
-    for (int i = 0; i < ((argc == 1) ? 10000 : 1); i++) {
+    for (int i = 0; (argc == 1) || i < ((argc == 1) ? 10000 : 1); i++) {
         uint32_t seed = seed_generator();
         if (argc > 1) {
             seed = atoi(argv[1]);
@@ -320,6 +344,28 @@ int main(int argc, char **argv) {
         Expr test = random_expr(rng, VT, depth);
         if (!test_expression(rng, test, samples)) {
 
+            class LimitDepth : public IRMutator {
+                int limit;
+
+            public:
+                using IRMutator::mutate;
+
+                Expr mutate(const Expr &e) override {
+                    if (limit == 0) {
+                        return simplify(e);
+                    } else {
+                        limit--;
+                        Expr new_e = IRMutator::mutate(e);
+                        limit++;
+                        return new_e;
+                    }
+                }
+
+                LimitDepth(int l)
+                    : limit(l) {
+                }
+            };
+
             // Failure. Find the minimal subexpression that failed.
             printf("Testing subexpressions...\n");
             class TestSubexpressions : public IRMutator {
@@ -331,10 +377,17 @@ int main(int argc, char **argv) {
                 Expr mutate(const Expr &e) override {
                     // We know there's a failure here somewhere, so test
                     // subexpressions more aggressively.
+                    constexpr int samples = 100;
                     IRMutator::mutate(e);
                     if (e.type().bits() && !found_failure) {
-                        const int samples = 100;
-                        found_failure = !test_expression(rng, e, samples);
+                        Expr limited;
+                        for (int i = 1; i < 4 && !found_failure; i++) {
+                            limited = LimitDepth(i).mutate(e);
+                            found_failure = !test_expression(rng, limited, samples);
+                        }
+                        if (!found_failure) {
+                            found_failure = !test_expression(rng, e, samples);
+                        }
                     }
                     return e;
                 }

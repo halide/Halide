@@ -268,8 +268,8 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
             r = mod_imp(base_info.alignment.remainder, m);
         }
         info->alignment = {m, r};
-        info->trim_bounds_using_alignment();
         info->cast_to(op->type);
+        info->trim_bounds_using_alignment();
     }
 
     // A somewhat torturous way to check if the stride is zero,

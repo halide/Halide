@@ -11,6 +11,10 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
     Expr a = mutate(op->a, nullptr);
     Expr b = mutate(op->b, nullptr);
 
+    if (info && is_const_zero(a) && is_const_zero(b)) {
+        return const_false(op->type.lanes(), info);
+    }
+
     if (should_commute(a, b)) {
         std::swap(a, b);
     }
@@ -26,7 +30,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
     // Cases that fold to a constant
     if (EVAL_IN_LAMBDA
         (rewrite(x || true, true) ||
-
+         rewrite(true || x, true) ||
          rewrite(x || neg(x), true) ||
          rewrite(x || !(x && y), true) ||
          rewrite(x || (neg(x) || y), true) ||

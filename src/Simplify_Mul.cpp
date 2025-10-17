@@ -4,15 +4,27 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Mul *op, ExprInfo *info) {
-    ExprInfo a_info, b_info;
+    ExprInfo a_info, b_info, mul_info;
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
+    if (op->type.is_int_or_uint()) {
+        mul_info.bounds = a_info.bounds * b_info.bounds;
+        mul_info.alignment = a_info.alignment * b_info.alignment;
+        mul_info.cast_to(op->type);
+        mul_info.trim_bounds_using_alignment();
+    }
+
     if (info) {
-        info->bounds = a_info.bounds * b_info.bounds;
-        info->alignment = a_info.alignment * b_info.alignment;
-        info->trim_bounds_using_alignment();
-        info->cast_to(op->type);
+        *info = mul_info;
+    }
+
+    if (!no_overflow(op->type) &&
+        mul_info.bounds.is_single_point()) {
+        // For types with defined overflow, it's possible for a multiply to turn
+        // something into a constant without either arg being a zero
+        // (e.g. select(x, 64, 128)*4 is zero in uint8).
+        return make_const(op->type, mul_info.bounds.min, nullptr);
     }
 
     // Order commutative operations by node type
@@ -24,12 +36,15 @@ Expr Simplify::visit(const Mul *op, ExprInfo *info) {
     auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
 
     if (rewrite(IRMatcher::Overflow() * x, a) ||
-        rewrite(x * IRMatcher::Overflow(), b) ||
-        rewrite(0 * x, 0) ||
+        rewrite(x * IRMatcher::Overflow(), b)) {
+        clear_expr_info(info);
+        return rewrite.result;
+    }
+
+    if (rewrite(0 * x, 0) ||
         rewrite(1 * x, x) ||
         rewrite(x * 0, 0) ||
         rewrite(x * 1, x)) {
-
         return rewrite.result;
     }
 

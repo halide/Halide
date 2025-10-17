@@ -10,16 +10,22 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
     ExprInfo value_info;
     Expr value = mutate(op->value, &value_info);
 
-    if (info) {
-        if (no_overflow(op->type) && !op->type.can_represent(value_info.bounds)) {
-            // If there's overflow in a no-overflow type (e.g. due to casting
-            // from a UInt(64) to an Int(32)), then forget everything we know
-            // about the Expr. The expression may or may not overflow. We don't
-            // know.
-            *info = ExprInfo{};
-        } else {
+    if (info && no_overflow(op->type) && !op->type.can_represent(value_info.bounds)) {
+        // If there's overflow in a no-overflow type (e.g. due to casting
+        // from a UInt(64) to an Int(32)), then forget everything we know
+        // about the Expr. The expression may or may not overflow. We don't
+        // know.
+        *info = ExprInfo{};
+    } else {
+        value_info.cast_to(op->type);
+        value_info.trim_bounds_using_alignment();
+        if (info) {
             *info = value_info;
-            info->cast_to(op->type);
+        }
+        // It's possible we just reduced to a constant. E.g. if we cast an
+        // even number to uint1 we get zero.
+        if (value_info.bounds.is_single_point()) {
+            return make_const(op->type, value_info.bounds.min, nullptr);
         }
     }
 
