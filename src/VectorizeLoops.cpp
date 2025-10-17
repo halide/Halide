@@ -360,114 +360,6 @@ class SerializeLoops : public IRMutator {
     }
 };
 
-// Wrap a vectorized predicate around a Load/Store node.
-class PredicateLoadStore : public IRMutator {
-    string var;
-    Expr vector_predicate;
-    int lanes;
-    bool valid = true;
-    bool vectorized = false;
-
-    using IRMutator::visit;
-
-    Expr merge_predicate(Expr pred, const Expr &new_pred) {
-        if (pred.type().lanes() == new_pred.type().lanes()) {
-            Expr res = simplify(pred && new_pred);
-            return res;
-        }
-        valid = false;
-        return pred;
-    }
-
-    Stmt visit(const Atomic *op) override {
-        // We don't support codegen for vectorized predicated atomic stores, so
-        // just bail out.
-        valid = false;
-        return op;
-    }
-
-    Expr visit(const Load *op) override {
-        valid = valid && ((op->predicate.type().lanes() == lanes) || (op->predicate.type().is_scalar() && !expr_uses_var(op->index, var)));
-        if (!valid) {
-            return op;
-        }
-
-        Expr predicate, index;
-        if (!op->index.type().is_scalar()) {
-            internal_assert(op->predicate.type().lanes() == lanes);
-            internal_assert(op->index.type().lanes() == lanes);
-
-            predicate = mutate(op->predicate);
-            index = mutate(op->index);
-        } else if (expr_uses_var(op->index, var)) {
-            predicate = mutate(Broadcast::make(op->predicate, lanes));
-            index = mutate(Broadcast::make(op->index, lanes));
-        } else {
-            return IRMutator::visit(op);
-        }
-
-        predicate = merge_predicate(predicate, vector_predicate);
-        if (!valid) {
-            return op;
-        }
-        vectorized = true;
-        return Load::make(op->type, op->name, index, op->image, op->param, predicate, op->alignment);
-    }
-
-    Stmt visit(const Store *op) override {
-        valid = valid && ((op->predicate.type().lanes() == lanes) || (op->predicate.type().is_scalar() && !expr_uses_var(op->index, var)));
-        if (!valid) {
-            return op;
-        }
-
-        Expr predicate, value, index;
-        if (!op->index.type().is_scalar()) {
-            internal_assert(op->predicate.type().lanes() == lanes);
-            internal_assert(op->index.type().lanes() == lanes);
-            internal_assert(op->value.type().lanes() == lanes);
-
-            predicate = mutate(op->predicate);
-            value = mutate(op->value);
-            index = mutate(op->index);
-        } else if (expr_uses_var(op->index, var)) {
-            predicate = mutate(Broadcast::make(op->predicate, lanes));
-            value = mutate(Broadcast::make(op->value, lanes));
-            index = mutate(Broadcast::make(op->index, lanes));
-        } else {
-            return IRMutator::visit(op);
-        }
-
-        predicate = merge_predicate(predicate, vector_predicate);
-        if (!valid) {
-            return op;
-        }
-        vectorized = true;
-        return Store::make(op->name, value, index, op->param, predicate, op->alignment);
-    }
-
-    Expr visit(const Call *op) override {
-        // We should not vectorize calls with side-effects
-        valid = valid && op->is_pure();
-        return IRMutator::visit(op);
-    }
-
-    Expr visit(const VectorReduce *op) override {
-        // We can't predicate vector reductions.
-        valid = valid && is_const_one(vector_predicate);
-        return op;
-    }
-
-public:
-    PredicateLoadStore(string v, const Expr &vpred)
-        : var(std::move(v)), vector_predicate(vpred), lanes(vpred.type().lanes()) {
-        internal_assert(lanes > 1);
-    }
-
-    bool is_vectorized() const {
-        return valid && vectorized;
-    }
-};
-
 Stmt vectorize_statement(const Stmt &stmt);
 
 struct VectorizedVar {
@@ -859,25 +751,6 @@ class VectorSubs : public IRMutator {
             // which would mean control flow divergence within the
             // SIMD lanes.
 
-            bool vectorize_predicate = true;
-
-            Stmt predicated_stmt;
-            if (vectorize_predicate) {
-                PredicateLoadStore p(vectorized_vars.front().name, cond);
-                predicated_stmt = p.mutate(then_case);
-                vectorize_predicate = p.is_vectorized();
-            }
-            if (vectorize_predicate && else_case.defined()) {
-                PredicateLoadStore p(vectorized_vars.front().name, !cond);
-                predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
-                vectorize_predicate = p.is_vectorized();
-            }
-
-            debug(4) << "IfThenElse should vectorize predicate "
-                     << "? " << vectorize_predicate << "; cond: " << cond << "\n";
-            debug(4) << "Predicated stmt:\n"
-                     << predicated_stmt << "\n";
-
             // First check if the condition is marked as likely.
             if (const Call *likely = Call::as_intrinsic(cond, {Call::likely, Call::likely_if_innermost})) {
 
@@ -892,48 +765,31 @@ class VectorSubs : public IRMutator {
                 all_true = Call::make(Bool(), likely->name,
                                       {all_true}, Call::PureIntrinsic);
 
-                if (!vectorize_predicate) {
-                    // We should strip the likelies from the case
-                    // that's going to scalarize, because it's no
-                    // longer likely.
-                    Stmt without_likelies =
-                        IfThenElse::make(unwrap_tags(op->condition),
-                                         op->then_case, op->else_case);
+                // We should strip the likelies from the case
+                // that's going to scalarize, because it's no
+                // longer likely.
+                Stmt without_likelies =
+                    IfThenElse::make(unwrap_tags(op->condition),
+                                     op->then_case, op->else_case);
 
-                    // scalarize() will put back all vectorized loops around the statement as serial,
-                    // but it still may happen that there are vectorized loops inside of the statement
-                    // itself which we may want to handle. All the context is invalid though, so
-                    // we just start anew for this specific statement.
-                    Stmt scalarized = scalarize(without_likelies, false);
-                    scalarized = vectorize_statement(scalarized);
-                    Stmt stmt =
-                        IfThenElse::make(all_true,
-                                         then_case,
-                                         scalarized);
-                    debug(4) << "...With all_true likely: \n"
-                             << stmt << "\n";
-                    return stmt;
-                } else {
-                    Stmt stmt =
-                        IfThenElse::make(all_true,
-                                         then_case,
-                                         predicated_stmt);
-                    debug(4) << "...Predicated IfThenElse: \n"
-                             << stmt << "\n";
-                    return stmt;
-                }
+                // scalarize() will put back all vectorized loops around the statement as serial,
+                // but it still may happen that there are vectorized loops inside of the statement
+                // itself which we may want to handle. All the context is invalid though, so
+                // we just start anew for this specific statement.
+                Stmt scalarized = scalarize(without_likelies, false);
+                scalarized = vectorize_statement(scalarized);
+                Stmt stmt =
+                    IfThenElse::make(all_true,
+                                     then_case,
+                                     scalarized);
+                debug(4) << "...With all_true likely: \n"
+                         << stmt << "\n";
+                return stmt;
             } else {
                 // It's some arbitrary vector condition.
-                if (!vectorize_predicate) {
-                    debug(4) << "...Scalarizing vector predicate: \n"
-                             << Stmt(op) << "\n";
-                    return scalarize(op);
-                } else {
-                    Stmt stmt = predicated_stmt;
-                    debug(4) << "...Predicated IfThenElse: \n"
-                             << stmt << "\n";
-                    return stmt;
-                }
+                debug(4) << "...Scalarizing vector predicate: \n"
+                         << Stmt(op) << "\n";
+                return scalarize(op);
             }
         } else {
             // It's an if statement on a scalar, we're ok to vectorize the innards.
