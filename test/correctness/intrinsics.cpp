@@ -377,6 +377,16 @@ int main(int argc, char **argv) {
         g.compile_jit();
     }
 
+    // Mixed integer-floating-point used to crash codegen
+    {
+        Func f, q, s;
+        q(x) = cast<int8_t>(0);
+        s(x) = cast(Float(16), 1.0f);
+        f(x) = widening_mul(q(x), s(x));
+
+        f.compile_jit();
+    }
+
     printf("Success!\n");
     return 0;
 }
