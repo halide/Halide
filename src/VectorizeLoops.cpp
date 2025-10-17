@@ -1187,19 +1187,15 @@ class VectorSubs : public IRMutator {
             return std::nullopt;
         }
 
-        if (!is_const_one(load_a->predicate)) {
-            debug(4) << "Not vectorizing an atomic store with a load predicate\n";
-            return std::nullopt;
-        }
-
-        if (!is_const_one(store->predicate)) {
-            debug(4) << "Not vectorizing an atomic store with a store predicate\n";
+        if (!equal(load_a->predicate, store->predicate)) {
+            debug(4) << "Not vectorizing an atomic store with a mismatched predicate\n";
             return std::nullopt;
         }
 
         b = vector_scope.get(get_widened_var_name(var_b->name));
         Expr store_index = mutate(store->index);
         Expr load_index = mutate(load_a->index);
+        Expr store_predicate = mutate(store->predicate);
 
         // The load and store indices must be the same interleaved
         // ramp (or the same scalar, in the total reduction case).
@@ -1244,8 +1240,30 @@ class VectorSubs : public IRMutator {
             case VectorReduce::SaturatingAdd:
                 return saturating_add(a, b);
             }
-            return Expr();
+            internal_error << "Missing case for " << reduce_op;
         };
+
+        if (!is_const_one(store_predicate)) {
+            Expr identity = [&] {
+                switch (reduce_op) {
+                case VectorReduce::Add:
+                case VectorReduce::SaturatingAdd:
+                    return make_zero(b.type());
+                case VectorReduce::Mul:
+                    return make_one(b.type());
+                case VectorReduce::Min:
+                    return b.type().max();
+                case VectorReduce::Max:
+                    return b.type().min();
+                case VectorReduce::And:
+                    return const_true(b.type().lanes());
+                case VectorReduce::Or:
+                    return const_false(b.type().lanes());
+                }
+                internal_error << "Missing case for " << reduce_op;
+            }();
+            b = Select::make(store_predicate, b, identity);
+        }
 
         int output_lanes = 1;
         if (store_index.type().is_scalar()) {
@@ -1296,8 +1314,15 @@ class VectorSubs : public IRMutator {
         b = binop(lhs, b);
         b = cast(new_load.type(), b);
 
-        Stmt s = Store::make(store->name, b, store_index, store->param,
-                             const_true(b.type().lanes()), store->alignment);
+        Expr final_predicate = [&] {
+            if (is_const_one(store_predicate)) {
+                return const_true(output_lanes);
+            }
+            return VectorReduce::make(VectorReduce::Or, store_predicate, output_lanes);
+        }();
+
+        Stmt s = Store::make(store->name, b, store_index,
+                             store->param, final_predicate, store->alignment);
 
         // We may still need the atomic node, if there was more
         // parallelism than just the vectorization.
@@ -1639,6 +1664,86 @@ Stmt vectorize_statement(const Stmt &stmt) {
     return VectorizeLoops().mutate(stmt);
 }
 
+struct PredicateOps : IRMutator {
+    using IRMutator::visit;
+
+    Scope<> vectorized_vars;
+    std::vector<Expr> predicates;
+
+    Stmt visit(const For *op) override {
+        if (op->for_type != ForType::Vectorized) {
+            return IRMutator::visit(op);
+        }
+
+        vectorized_vars.push(op->name);
+        Stmt body = mutate(op->body);
+        vectorized_vars.pop(op->name);
+
+        if (body.same_as(op->body)) {
+            return op;
+        }
+
+        return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api,
+                         body);
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        if (!expr_uses_vars(op->condition, vectorized_vars)) {
+            // No need to mutate condition if it doesn't use any vectorized vars
+            Stmt then_case = mutate(op->then_case);
+            Stmt else_case = mutate(op->else_case);
+            if (then_case.same_as(op->then_case) && else_case.same_as(op->else_case)) {
+                return op;
+            }
+            return IfThenElse::make(op->condition, then_case, else_case);
+        }
+
+        predicates.push_back(op->condition);
+        Stmt then_case = mutate(op->then_case);
+        predicates.pop_back();
+
+        Stmt else_case = op->else_case;
+        if (!else_case.defined()) {
+            return then_case;
+        }
+
+        predicates.push_back(!op->condition);
+        else_case = mutate(else_case);
+        predicates.pop_back();
+
+        return Block::make(then_case, else_case);
+    }
+
+    Expr apply_predicates(Expr pred) const {
+        for (const Expr &p : predicates) {
+            pred = pred && p;
+        }
+        return simplify(pred);
+    }
+
+    Expr visit(const Load *op) override {
+        if (predicates.empty()) {
+            return op;
+        }
+        return Load::make(op->type, op->name,
+                          mutate(op->index),
+                          op->image, op->param,
+                          apply_predicates(op->predicate),
+                          op->alignment);
+    }
+
+    Stmt visit(const Store *op) override {
+        if (predicates.empty()) {
+            return op;
+        }
+        return Store::make(op->name,
+                           mutate(op->value), mutate(op->index),
+                           op->param,
+                           apply_predicates(op->predicate),
+                           op->alignment);
+    }
+};
+
 }  // namespace
 
 Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
@@ -1646,6 +1751,7 @@ Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
     Stmt s = stmt;
+    s = PredicateOps().mutate(s);
     s = LiftVectorizableExprsOutOfAllAtomicNodes(env).mutate(s);
     s = vectorize_statement(s);
     s = RemoveUnnecessaryAtomics().mutate(s);
