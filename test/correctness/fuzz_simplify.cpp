@@ -256,6 +256,8 @@ bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) 
     }
     if (Expr sb = simplify(b); !equal(b, sb)) {
         std::cerr << "Idempotency failure!\n    " << a << "\n -> " << b << "\n -> " << sb << "\n";
+        // These are broken out below to make it easier to parse any logging
+        // added to the simplifier to debug the failure.
         std::cerr << "---------------------------------\n"
                   << "Begin simplification of original:\n"
                   << simplify(a) << "\n";

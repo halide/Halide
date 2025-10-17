@@ -39,6 +39,9 @@ Expr Simplify::visit(const Cast *op, ExprInfo *info) {
         clear_expr_info(info);
         return make_signed_integer_overflow(op->type);
     } else if (value.type() == op->type) {
+        if (info) {
+            *info = value_info;
+        }
         return value;
     } else if (op->type.is_int() &&
                (f = as_const_float(value)) &&
