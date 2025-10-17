@@ -230,45 +230,37 @@ int vectorize_inner_of_scalarization() {
         .vectorize(y);
 
     // We are looking for a specific loop, which shouldn't have been scalarized.
-    class CheckForScalarizedLoop : public Internal::IRMutator {
+    struct CheckForScalarizedLoop : Internal::IRMutator {
         using IRMutator::visit;
 
         Internal::Stmt visit(const Internal::For *op) override {
             if (Internal::ends_with(op->name, ".x_inner")) {
-                *x_loop_found = true;
+                x_loop_found = true;
             }
 
             if (Internal::ends_with(op->name, ".y_inner")) {
-                *y_loop_found = true;
+                y_loop_found = true;
             }
 
             return IRMutator::visit(op);
         }
 
-    public:
-        explicit CheckForScalarizedLoop(bool *fx, bool *fy)
-            : x_loop_found(fx), y_loop_found(fy) {
-        }
+        bool x_loop_found = false;
+        bool y_loop_found = false;
+    } checker;
 
-        bool *x_loop_found = nullptr;
-        bool *y_loop_found = nullptr;
-    };
-
-    bool is_x_loop_found = false;
-    bool is_y_loop_found = false;
-
-    out.add_custom_lowering_pass(new CheckForScalarizedLoop(&is_x_loop_found, &is_y_loop_found));
+    out.add_custom_lowering_pass(&checker, nullptr);
 
     out.compile_jit();
 
-    if (is_x_loop_found) {
+    if (checker.x_loop_found) {
         std::cerr << "Found scalarized loop for " << x << "\n";
 
         return 1;
     }
 
-    if (!is_y_loop_found) {
-        std::cerr << "Expected to find scalarized loop for " << y << "\n";
+    if (checker.y_loop_found) {
+        std::cerr << "Found scalarized loop for " << y << "\n";
 
         return 1;
     }
