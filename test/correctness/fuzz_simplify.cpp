@@ -188,17 +188,15 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
             return random_expr(rng, t, depth, overflow_undef);
         },
         [&]() {
-            // Get a random type that isn't t or int32 (int32 can overflow and we don't care about that).
-            // Note also that the std::mt19937 doesn't actually promise to return a random distribution --
-            // it can (e.g.) decide to just return 0 for all data, forever -- so this loop has no guarantee
-            // of eventually finding a different type. To remedy this, we'll just put a limit on the retries.
-            int count = 0;
-            Type subtype;
-            do {
-                subtype = random_type(rng, t.lanes());
-            } while (++count < 10 && (subtype == t || (subtype.is_int() && subtype.bits() == 32)));
-            auto e1 = random_expr(rng, subtype, depth, overflow_undef);
-            return Cast::make(t, e1);
+            // Get a random type that isn't `t` or int32 (int32 can overflow, and we don't care about that).
+            std::vector<Type> subtypes;
+            for (const Type &subtype : fuzz_types) {
+                if (subtype != t && subtype != Int(32)) {
+                    subtypes.push_back(subtype);
+                }
+            }
+            Type subtype = random_choice(rng, subtypes).with_lanes(t.lanes());
+            return Cast::make(t, random_expr(rng, subtype, depth, overflow_undef));
         },
         [&]() {
             static make_bin_op_fn make_bin_op[] = {
