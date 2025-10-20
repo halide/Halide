@@ -948,6 +948,13 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
+    void visit(const Select *op) override {
+        // Select can apply to bools
+        internal_assert(op->type.is_bool());
+        Expr equiv = (op->condition && op->true_value) || (!op->condition && op->false_value);
+        equiv.accept(this);
+    }
+
     void visit(const Not *op) override {
         target = !target;
         op->a.accept(this);

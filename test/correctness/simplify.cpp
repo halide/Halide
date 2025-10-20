@@ -1334,7 +1334,7 @@ void check_boolean() {
 
     check(x == x, t);
     check(x == (x + 1), f);
-    check(x - 2 == y + 3, x == y + 5);
+    check(x - 2 == y + 3, y + 5 == x);
     check(x + y == y + z, x == z);
     check(y + x == y + z, x == z);
     check(x + y == z + y, x == z);
@@ -1343,7 +1343,7 @@ void check_boolean() {
     check(x * 0 == y * 0, t);
     check(x == x + y, y == 0);
     check(x + y == x, y == 0);
-    check(100 - x == 99 - y, y == x + (-1));
+    check(100 - x == 99 - y, y + 1 == x);
 
     check(x < x, f);
     check(x < (x + 1), t);

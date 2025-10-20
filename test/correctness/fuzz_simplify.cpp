@@ -337,7 +337,7 @@ int main(int argc, char **argv) {
 
     auto seed_generator = initialize_rng<RandomEngine>();
 
-    for (int i = 0; (argc == 1) || i < ((argc == 1) ? 10000 : 1); i++) {
+    for (int i = 0; i < ((argc == 1) ? 10000 : 1); i++) {
         auto seed = seed_generator();
         if (argc > 1) {
             std::istringstream{argv[1]} >> seed;
