@@ -280,7 +280,12 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
     if (rewrite(ramp(x, 0, lanes), broadcast(x, lanes)) ||
         rewrite(ramp(ramp(x, c0, c2), broadcast(c1, c4), c3),
                 ramp(x, c0, c2 * c3),
-                c1 == c0 * fold(c2)) ||
+                // In the multiply below, it's important c0 is on the
+                // right. When folding constants, binary ops take their type
+                // from the RHS. c2 is an int64 lane count but c0 has the type
+                // we want for the comparison.
+                c1 == c2 * c0) ||
+
         false) {
         return mutate(rewrite.result, info);
     }
