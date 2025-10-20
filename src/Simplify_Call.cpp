@@ -590,6 +590,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
 
         if (arg_info.bounds >= lower_info.bounds &&
             arg_info.bounds <= upper_info.bounds) {
+            if (info) {
+                *info = arg_info;
+            }
             return arg;
         } else if (b_arg && b_lower && b_upper) {
             // Move broadcasts outwards
