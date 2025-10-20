@@ -69,6 +69,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
          rewrite(x * y == y * x, true) ||
 
          rewrite(x + c0 == c1, x == fold(c1 - c0)) ||
+         rewrite(x + c0 == y + c1, x == y + fold(c1 - c0)) ||
 
          // Turn subtracts into additions on the other side
          rewrite(x - y == z, x == y + z) ||
