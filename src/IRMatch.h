@@ -391,7 +391,7 @@ std::ostream &operator<<(std::ostream &s, const WildConstFloat<i> &c) {
     return s;
 }
 
-// Matches and binds to any constant Expr. Does not support constant-folding.
+// Matches and binds to any constant Expr.
 template<int i>
 struct WildConst {
     struct pattern_tag {};
@@ -777,6 +777,7 @@ struct CmpOp {
             b.make_folded_const(val_b, ty, state);
             ty.lanes |= l;
         }
+
         switch (ty.code) {
         case halide_type_int:
             val.u.u64 = constant_fold_cmp_op<Op>(val_a.u.i64, val_b.u.i64);

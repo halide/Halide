@@ -348,10 +348,19 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return mutate(unbroadcast, info);
         }
 
+        ExprInfo abs_info;
+        abs_info.bounds = abs(a_info.bounds);
+        abs_info.alignment = ModulusRemainder::unify(a_info.alignment, negative_alignment);
+        abs_info.cast_to(op->type);
+        abs_info.trim_bounds_using_alignment();
+
         if (info) {
-            info->bounds = abs(a_info.bounds);
-            info->alignment = ModulusRemainder::unify(a_info.alignment, negative_alignment);
-            info->cast_to(op->type);
+            *info = abs_info;
+        }
+
+        if (abs_info.bounds.is_single_point()) {
+            // The arg could have been something like select(x, -30, 30), or ramp(-30, 60, 2)
+            return make_const(op->type, abs_info.bounds.min, info);
         }
 
         Type ta = a.type();
