@@ -320,11 +320,10 @@ bool test_expression(RandomEngine &rng, Expr test, int samples) {
 
 template<typename T>
 T initialize_rng() {
-    constexpr size_t kStateWords = T::state_size * sizeof(typename T::result_type) / sizeof(uint32_t);
-    std::vector<uint32_t> random(kStateWords);
-    std::generate(random.begin(), random.end(), std::random_device{});
-    std::seed_seq seed_seq{random.begin(), random.end()};
-    return T{seed_seq};
+    std::random_device rd;
+    uint64_t hi = rd();
+    uint64_t lo = rd();
+    return T{(hi << 32) | lo};
 }
 
 }  // namespace
