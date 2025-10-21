@@ -26,7 +26,7 @@ if (WITH_PYTHON_BINDINGS)
     if (Halide_TARGET MATCHES "webgpu")
         message(WARNING "li2018_gradient_autoscheduler_test_py is not supported with WebGPU.")
     else()
-        find_package(Python 3.9 REQUIRED COMPONENTS Interpreter Development.Module)
+        find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
 
         add_test(
             NAME li2018_gradient_autoscheduler_test_py
