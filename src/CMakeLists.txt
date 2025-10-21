@@ -487,10 +487,6 @@ target_sources(
     FILES "${Halide_BINARY_DIR}/include/Halide.h"
 )
 
-if (Halide_BUNDLE_STATIC)
-    bundle_static(Halide)
-endif ()
-
 ##
 # CodeGen backends
 ##
@@ -499,11 +495,7 @@ endif ()
 foreach (backend IN LISTS Halide_LLVM_COMPONENTS)
     string(TOUPPER "WITH_${backend}" definition)
     target_compile_definitions(Halide PRIVATE "${definition}")
-    if (Halide_BUNDLE_STATIC AND NOT Halide_LLVM_SHARED_LIBS)
-        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:Halide_LLVM::${backend}>")
-    else ()
-        target_link_libraries(Halide PRIVATE Halide_LLVM::${backend})
-    endif ()
+    target_link_libraries(Halide PRIVATE Halide_LLVM::${backend})
 endforeach ()
 
 # GPU backends
@@ -538,9 +530,7 @@ if (WITH_SERIALIZATION)
     )
     _Halide_pkgdep(flatbuffers)
 
-    if (Halide_BUNDLE_STATIC)
-        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:flatbuffers::flatbuffers>")
-    elseif (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
+    if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
         target_sources(Halide PRIVATE "$<TARGET_OBJECTS:flatbuffers::flatbuffers>")
         target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:flatbuffers::flatbuffers>>")
     else ()
@@ -601,9 +591,7 @@ if (Halide_WASM_BACKEND STREQUAL "wabt")
     find_package(wabt 1.0.36 REQUIRED)
     _Halide_pkgdep(wabt)
 
-    if (Halide_BUNDLE_STATIC)
-        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:wabt::wabt>")
-    elseif (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
+    if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)
         target_sources(Halide PRIVATE "$<TARGET_OBJECTS:wabt::wabt>")
         target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:$<COMPILE_ONLY:wabt::wabt>>")
     else ()
@@ -615,13 +603,7 @@ elseif (Halide_WASM_BACKEND STREQUAL "V8")
     find_package(V8 REQUIRED)
     _Halide_pkgdep(V8)
     target_compile_definitions(Halide PRIVATE WITH_V8)
-
-    get_property(type TARGET V8::V8 PROPERTY TYPE)
-    if (Halide_BUNDLE_STATIC AND type STREQUAL "STATIC_LIBRARY")
-        target_link_libraries(Halide PRIVATE "$<BUILD_LOCAL_INTERFACE:V8::V8>")
-    else ()
-        target_link_libraries(Halide PRIVATE V8::V8)
-    endif ()
+    target_link_libraries(Halide PRIVATE V8::V8)
 elseif (Halide_WASM_BACKEND)
     message(FATAL_ERROR "Unknown Halide_WASM_BACKEND `${Halide_WASM_BACKEND}`")
 endif ()
