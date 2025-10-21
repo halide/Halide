@@ -1162,6 +1162,20 @@ Expr widening_add(Expr a, Expr b) {
 
 Expr widening_mul(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "widening_mul of undefined Expr\n";
+    // Promote float to int if lossless
+    if (a.type().is_float() && b.type().is_int_or_uint()) {
+        Expr float_b = lossless_cast(a.type(), b);
+        user_assert(float_b.defined())
+            << "widening_mul: cannot promote RHS of type " << b.type() << " to " << a.type() << ".\n"
+            << "Please use an explicit cast.\n";
+        b = float_b;
+    } else if (b.type().is_float() && a.type().is_int_or_uint()) {
+        Expr float_a = lossless_cast(b.type(), a);
+        user_assert(float_a.defined())
+            << "widening_mul: cannot promote LHS of type " << a.type() << " to " << b.type() << ".\n"
+            << "Please use an explicit cast.\n";
+        a = float_a;
+    }
     // Widening multiplies can have different signs.
     match_bits(a, b);
     match_lanes(a, b);

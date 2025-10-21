@@ -118,9 +118,10 @@ bool Type::can_represent(Type other) const {
         if (other.is_bfloat()) {
             return bits() > other.bits();
         } else {
-            return ((other.is_float() && other.bits() <= bits()) ||
-                    (bits() == 64 && other.bits() <= 32) ||
-                    (bits() == 32 && other.bits() <= 16));
+            return (other.is_float() && other.bits() <= bits()) ||
+                   (bits() == 64 && other.bits() <= 32) ||
+                   (bits() == 32 && other.bits() <= 16) ||
+                   (bits() == 16 && other.bits() <= 8);
         }
     } else {
         return false;
