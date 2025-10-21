@@ -48,7 +48,8 @@ private:
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
 struct HALIDE_EXPORT_SYMBOL RuntimeError final : Error {
-    static constexpr auto error_name = "Runtime error";
+    static constexpr auto verbose_name = "Runtime error";
+    static constexpr int verbose_debug_level = 1;
 
     explicit RuntimeError(const char *msg);
     explicit RuntimeError(const std::string &msg);
@@ -57,7 +58,8 @@ struct HALIDE_EXPORT_SYMBOL RuntimeError final : Error {
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to a user error. */
 struct HALIDE_EXPORT_SYMBOL CompileError final : Error {
-    static constexpr auto error_name = "User error";
+    static constexpr auto verbose_name = "User error";
+    static constexpr int verbose_debug_level = 1;
 
     explicit CompileError(const char *msg);
     explicit CompileError(const std::string &msg);
@@ -67,7 +69,8 @@ struct HALIDE_EXPORT_SYMBOL CompileError final : Error {
  * attributes to an internal compiler bug, or to an invalid use of
  * Halide's internals. */
 struct HALIDE_EXPORT_SYMBOL InternalError final : Error {
-    static constexpr auto error_name = "Internal error";
+    static constexpr auto verbose_name = "Internal error";
+    static constexpr int verbose_debug_level = 0;  // Always print location/condition info
 
     explicit InternalError(const char *msg);
     explicit InternalError(const std::string &msg);
@@ -154,11 +157,11 @@ protected:
         return contents->msg.str();
     }
 
-    T &init(const char *file, const char *function, const int line, const char *condition_string, const char *prefix) {
-        if (debug_is_active_impl(1, file, function, line)) {
-            contents->msg << prefix << " at " << file << ":" << line << ' ';
+    T &init(const char *file, const char *function, const int line, const char *condition_string) {
+        if (debug_is_active_impl(T::verbose_debug_level, file, function, line)) {
+            contents->msg << T::verbose_name << " at " << file << ":" << line << '\n';
             if (condition_string) {
-                contents->msg << "Condition failed: " << condition_string << ' ';
+                contents->msg << "Condition failed: " << condition_string << '\n';
             }
         }
         return *static_cast<T *>(this);
@@ -167,8 +170,11 @@ protected:
 
 template<typename Exception>
 struct ErrorReport final : ReportBase<ErrorReport<Exception>> {
+    static constexpr auto verbose_name = Exception::verbose_name;
+    static constexpr int verbose_debug_level = Exception::verbose_debug_level;
+
     ErrorReport &init(const char *file, const char *function, const int line, const char *condition_string) {
-        return ReportBase<ErrorReport>::init(file, function, line, condition_string, Exception::error_name) << "Error: ";
+        return ReportBase<ErrorReport>::init(file, function, line, condition_string) << "Error: ";
     }
 
     [[noreturn]] void issue() noexcept(false) {
@@ -177,8 +183,11 @@ struct ErrorReport final : ReportBase<ErrorReport<Exception>> {
 };
 
 struct WarningReport final : ReportBase<WarningReport> {
+    static constexpr auto verbose_name = "Warning";
+    static constexpr int verbose_debug_level = 1;
+
     WarningReport &init(const char *file, const char *function, const int line, const char *condition_string) {
-        return ReportBase::init(file, function, line, condition_string, "Warning") << "Warning: ";
+        return ReportBase::init(file, function, line, condition_string) << "Warning: ";
     }
 
     void issue() {
