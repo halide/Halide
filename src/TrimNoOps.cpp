@@ -366,7 +366,7 @@ class TrimNoOps : public IRMutator {
         IsNoOp is_no_op;
         body.accept(&is_no_op);
         debug(3) << "Condition is " << is_no_op.condition << "\n";
-        is_no_op.condition = simplify(simplify(common_subexpression_elimination(is_no_op.condition)));
+        is_no_op.condition = simplify(common_subexpression_elimination(is_no_op.condition));
 
         debug(3) << "Simplified condition is " << is_no_op.condition << "\n";
 

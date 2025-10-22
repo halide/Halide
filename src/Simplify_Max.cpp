@@ -4,14 +4,25 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Max *op, ExprInfo *info) {
-    ExprInfo a_info, b_info;
+    ExprInfo a_info, b_info, max_info;
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
+    if (op->type.is_int_or_uint()) {
+        max_info.bounds = max(a_info.bounds, b_info.bounds);
+        max_info.alignment = ModulusRemainder::unify(a_info.alignment, b_info.alignment);
+        max_info.trim_bounds_using_alignment();
+    }
+
     if (info) {
-        info->bounds = max(a_info.bounds, b_info.bounds);
-        info->alignment = ModulusRemainder::unify(a_info.alignment, b_info.alignment);
-        info->trim_bounds_using_alignment();
+        *info = max_info;
+    }
+
+    if (max_info.bounds.is_single_point()) {
+        // This is possible when, for example, the largest number in the type
+        // that satisfies the alignment of the left-hand-side is smaller than
+        // the min value of the right-hand-side.
+        return make_const(op->type, max_info.bounds.min, nullptr);
     }
 
     auto strip_likely = [](const Expr &e) {
@@ -26,9 +37,16 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
 
     // Early out when the bounds tells us one side or the other is smaller
     if (a_info.bounds <= b_info.bounds) {
+        if (info) {
+            // We lost information when we unioned the alignment, so revert to the info for b.
+            *info = b_info;
+        }
         return strip_likely(b);
     }
     if (b_info.bounds <= a_info.bounds) {
+        if (info) {
+            *info = a_info;
+        }
         return strip_likely(a);
     }
 
@@ -41,15 +59,19 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
     int lanes = op->type.lanes();
     auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b), op->type);
 
+    if (rewrite(max(IRMatcher::Overflow(), x), a) ||
+        rewrite(max(x, IRMatcher::Overflow()), b)) {
+        clear_expr_info(info);
+        return rewrite.result;
+    }
+
     // clang-format off
     if (EVAL_IN_LAMBDA
-        (rewrite(max(x, x), x) ||
+        (rewrite(max(x, x), a) ||
          rewrite(max(c0, c1), fold(max(c0, c1))) ||
-         rewrite(max(IRMatcher::Overflow(), x), a) ||
-         rewrite(max(x, IRMatcher::Overflow()), b) ||
          // Cases where one side dominates:
          rewrite(max(x, c0), b, is_max_value(c0)) ||
-         rewrite(max(x, c0), x, is_min_value(c0)) ||
+         rewrite(max(x, c0), a, is_min_value(c0)) ||
          rewrite(max((x/c0)*c0, x), b, c0 > 0) ||
          rewrite(max(x, (x/c0)*c0), a, c0 > 0) ||
          rewrite(max(max(x, y), x), a) ||
@@ -84,11 +106,6 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
          rewrite(max(max(x, y), min(z, x)), a) ||
          rewrite(max(max(x, y), min(z, y)), a) ||
 
-         rewrite(max(select(x, max(z, y), w), z), max(select(x, y, w), z)) ||
-         rewrite(max(select(x, max(z, y), w), y), max(select(x, z, w), y)) ||
-         rewrite(max(select(x, w, max(z, y)), z), max(select(x, w, y), z)) ||
-         rewrite(max(select(x, w, max(z, y)), y), max(select(x, w, z), y)) ||
-
          rewrite(max(likely(x), x), b) ||
          rewrite(max(x, likely(x)), a) ||
          rewrite(max(likely_if_innermost(x), x), b) ||
@@ -119,12 +136,24 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
            rewrite(max(x, min(y, x) + c0), a, c0 <= 0) ||
            rewrite(max(min(x, y) + c0, x), b, c0 <= 0) ||
            rewrite(max(min(x, y) + c0, y), b, c0 <= 0) ||
+           rewrite(max(min(x, y + c0), y), b, c0 <= 0) ||
 
            (no_overflow_int(op->type) &&
             (rewrite(max(min(c0 - x, x), c1), b, 2*c1 >= c0 - 1) ||
              rewrite(max(min(x, c0 - x), c1), b, 2*c1 >= c0 - 1))) ||
 
            false)))) {
+
+        if (info) {
+            // One of the cancellation rules above may give us tighter bounds
+            // than just applying max to two constant intervals.
+            if (rewrite.result.same_as(a)) {
+                info->intersect(a_info);
+            } else if (rewrite.result.same_as(b)) {
+                info->intersect(b_info);
+            }
+        }
+
         return rewrite.result;
     }
     // clang-format on
@@ -175,6 +204,10 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
          rewrite(max(z, select(x, y, min(z, w))), select(x, max(z, y), z)) ||
 
          rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
+         rewrite(max(select(x, max(z, y), w), z), max(select(x, y, w), z)) ||
+         rewrite(max(select(x, max(z, y), w), y), max(select(x, z, w), y)) ||
+         rewrite(max(select(x, w, max(z, y)), z), max(select(x, w, y), z)) ||
+         rewrite(max(select(x, w, max(z, y)), y), max(select(x, w, z), y)) ||
 
          // Hoist shuffles. The Shuffle visitor wants to sink
          // extract_elements to the leaves, and those count as degenerate

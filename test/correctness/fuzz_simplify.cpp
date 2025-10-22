@@ -2,8 +2,6 @@
 #include <array>
 #include <functional>
 #include <random>
-#include <stdio.h>
-#include <time.h>
 
 // Test the simplifier in Halide by testing for equivalence of randomly generated expressions.
 namespace {
@@ -13,9 +11,10 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
-typedef Expr (*make_bin_op_fn)(Expr, Expr);
+using make_bin_op_fn = Expr (*)(Expr, Expr);
+using RandomEngine = std::mt19937_64;
 
-const int fuzz_var_count = 5;
+constexpr int fuzz_var_count = 5;
 
 Type fuzz_types[] = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
 
@@ -23,27 +22,19 @@ std::string fuzz_var(int i) {
     return std::string(1, 'a' + i);
 }
 
-Expr random_var(std::mt19937 &rng, Type t) {
-    int fuzz_count = rng() % (fuzz_var_count - 1);
+Expr random_var(RandomEngine &rng, Type t) {
+    std::uniform_int_distribution dist(0, fuzz_var_count - 1);
+    int fuzz_count = dist(rng);
     return cast(t, Variable::make(Int(32), fuzz_var(fuzz_count)));
 }
 
-template<typename T, int N>
-T random_choice(std::mt19937 &rng, const T (&choices)[N]) {
-    return choices[rng() % N];
-}
-
 template<typename T>
-T random_choice(std::mt19937 &rng, const std::vector<T> &choices) {
-    return choices[rng() % choices.size()];
+decltype(auto) random_choice(RandomEngine &rng, T &&choices) {
+    std::uniform_int_distribution<size_t> dist(0, std::size(choices) - 1);
+    return choices[dist(rng)];
 }
 
-template<typename T, size_t N>
-T random_choice(std::mt19937 &rng, const std::array<T, N> &choices) {
-    return choices[rng() % N];
-}
-
-Type random_type(std::mt19937 &rng, int width) {
+Type random_type(RandomEngine &rng, int width) {
     Type t = random_choice(rng, fuzz_types);
     if (width > 1) {
         t = t.with_lanes(width);
@@ -51,7 +42,7 @@ Type random_type(std::mt19937 &rng, int width) {
     return t;
 }
 
-int get_random_divisor(std::mt19937 &rng, Type t) {
+int get_random_divisor(RandomEngine &rng, Type t) {
     std::vector<int> divisors = {t.lanes()};
     for (int dd = 2; dd < t.lanes(); dd++) {
         if (t.lanes() % dd == 0) {
@@ -62,7 +53,7 @@ int get_random_divisor(std::mt19937 &rng, Type t) {
     return random_choice(rng, divisors);
 }
 
-Expr random_leaf(std::mt19937 &rng, Type t, bool overflow_undef = false, bool imm_only = false) {
+Expr random_leaf(RandomEngine &rng, Type t, bool overflow_undef = false, bool imm_only = false) {
     if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
     }
@@ -92,9 +83,9 @@ Expr random_leaf(std::mt19937 &rng, Type t, bool overflow_undef = false, bool im
     }
 }
 
-Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef = false);
+Expr random_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef = false);
 
-Expr random_condition(std::mt19937 &rng, Type t, int depth, bool maybe_scalar) {
+Expr random_condition(RandomEngine &rng, Type t, int depth, bool maybe_scalar) {
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
         NE::make,
@@ -131,12 +122,23 @@ Expr make_bitwise_xor(Expr a, Expr b) {
     return a ^ b;
 }
 
-// This just exists to make sure bitwise not gets used somewhere
-Expr make_bitwise_nor(Expr a, Expr b) {
-    return ~a | ~b;
+Expr make_abs(Expr a, Expr) {
+    if (!a.type().is_uint()) {
+        return cast(a.type(), abs(a));
+    } else {
+        return a;
+    }
 }
 
-Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
+Expr make_bitwise_not(Expr a, Expr) {
+    return ~a;
+}
+
+Expr make_shift_right(Expr a, Expr b) {
+    return a >> (b % a.type().bits());
+}
+
+Expr random_expr(RandomEngine &rng, Type t, int depth, bool overflow_undef) {
     if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
     }
@@ -187,17 +189,15 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
             return random_expr(rng, t, depth, overflow_undef);
         },
         [&]() {
-            // Get a random type that isn't t or int32 (int32 can overflow and we don't care about that).
-            // Note also that the std::mt19937 doesn't actually promise to return a random distribution --
-            // it can (e.g.) decide to just return 0 for all data, forever -- so this loop has no guarantee
-            // of eventually finding a different type. To remedy this, we'll just put a limit on the retries.
-            int count = 0;
-            Type subtype;
-            do {
-                subtype = random_type(rng, t.lanes());
-            } while (++count < 10 && (subtype == t || (subtype.is_int() && subtype.bits() == 32)));
-            auto e1 = random_expr(rng, subtype, depth, overflow_undef);
-            return Cast::make(t, e1);
+            // Get a random type that isn't `t` or int32 (int32 can overflow, and we don't care about that).
+            std::vector<Type> subtypes;
+            for (const Type &subtype : fuzz_types) {
+                if (subtype != t && subtype != Int(32)) {
+                    subtypes.push_back(subtype);
+                }
+            }
+            Type subtype = random_choice(rng, subtypes).with_lanes(t.lanes());
+            return Cast::make(t, random_expr(rng, subtype, depth, overflow_undef));
         },
         [&]() {
             static make_bin_op_fn make_bin_op[] = {
@@ -209,16 +209,25 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
                 Max::make,
                 Div::make,
                 Mod::make,
+            };
+
+            static make_bin_op_fn make_rare_bin_op[] = {
                 make_absd,
                 make_bitwise_or,
                 make_bitwise_and,
                 make_bitwise_xor,
-                make_bitwise_nor,
+                make_bitwise_not,
+                make_abs,
+                make_shift_right,  // No shift left or we just keep testing integer overflow
             };
 
             Expr a = random_expr(rng, t, depth, overflow_undef);
             Expr b = random_expr(rng, t, depth, overflow_undef);
-            return random_choice(rng, make_bin_op)(a, b);
+            if ((rng() & 7) == 0) {
+                return random_choice(rng, make_rare_bin_op)(a, b);
+            } else {
+                return random_choice(rng, make_bin_op)(a, b);
+            }
         },
         [&]() {
             static make_bin_op_fn make_bin_op[] = {
@@ -239,40 +248,51 @@ Expr random_expr(std::mt19937 &rng, Type t, int depth, bool overflow_undef) {
 }
 
 bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) {
-    for (int j = 0; j < t.lanes(); j++) {
-        Expr a_j = a;
-        Expr b_j = b;
-        if (t.lanes() != 1) {
-            a_j = extract_lane(a, j);
-            b_j = extract_lane(b, j);
-        }
-
-        Expr a_j_v = simplify(substitute(vars, a_j));
-        Expr b_j_v = simplify(substitute(vars, b_j));
-        // If the simplifier didn't produce constants, there must be
-        // undefined behavior in this expression. Ignore it.
-        if (!Internal::is_const(a_j_v) || !Internal::is_const(b_j_v)) {
-            continue;
-        }
-        if (!equal(a_j_v, b_j_v)) {
-            std::cerr << "Simplified Expr is not equal() to Original Expr!\n";
-
-            for (map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
-                std::cerr << "Var " << i->first << " = " << i->second << "\n";
-            }
-
-            std::cerr << "Original Expr is: " << a << "\n";
-            std::cerr << "Simplified Expr is: " << b << "\n";
-            std::cerr << "In vector lane " << j << ", original -> simplified:\n";
-            std::cerr << "   " << a_j << " -> " << a_j_v << "\n";
-            std::cerr << "   " << b_j << " -> " << b_j_v << "\n";
-            return false;
-        }
+    if (equal(a, b) && !a.same_as(b)) {
+        std::cerr << "Simplifier created new IR node but made no changes:\n"
+                  << a << "\n";
+        return false;
     }
+    if (Expr sb = simplify(b); !equal(b, sb)) {
+        std::cerr << "Idempotency failure!\n    " << a << "\n -> " << b << "\n -> " << sb << "\n";
+        // These are broken out below to make it easier to parse any logging
+        // added to the simplifier to debug the failure.
+        std::cerr << "---------------------------------\n"
+                  << "Begin simplification of original:\n"
+                  << simplify(a) << "\n";
+        std::cerr << "---------------------------------\n"
+                  << "Begin resimplification of result:\n"
+                  << simplify(b) << "\n"
+                  << "---------------------------------\n";
+
+        return false;
+    }
+
+    Expr a_v = simplify(substitute(vars, a));
+    Expr b_v = simplify(substitute(vars, b));
+    // If the simplifier didn't produce constants, there must be
+    // undefined behavior in this expression. Ignore it.
+    if (!Internal::is_const(a_v) || !Internal::is_const(b_v)) {
+        return true;
+    }
+    if (!equal(a_v, b_v)) {
+        std::cerr << "Simplified Expr is not equal() to Original Expr!\n";
+
+        for (const auto &[var, val] : vars) {
+            std::cerr << "Var " << var << " = " << val << "\n";
+        }
+
+        std::cerr << "Original Expr is: " << a << "\n";
+        std::cerr << "Simplified Expr is: " << b << "\n";
+        std::cerr << "   " << a << " -> " << a_v << "\n";
+        std::cerr << "   " << b << " -> " << b_v << "\n";
+        return false;
+    }
+
     return true;
 }
 
-bool test_expression(std::mt19937 &rng, Expr test, int samples) {
+bool test_expression(RandomEngine &rng, Expr test, int samples) {
     Expr simplified = simplify(test);
 
     map<string, Expr> vars;
@@ -281,14 +301,14 @@ bool test_expression(std::mt19937 &rng, Expr test, int samples) {
     }
 
     for (int i = 0; i < samples; i++) {
-        for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
-            size_t kMaxLeafIterations = 10000;
+        for (auto &[var, val] : vars) {
+            constexpr size_t kMaxLeafIterations = 10000;
             // Don't let the random leaf depend on v itself.
             size_t iterations = 0;
             do {
-                v->second = random_leaf(rng, Int(32), true);
+                val = random_leaf(rng, Int(32), true);
                 iterations++;
-            } while (expr_uses_var(v->second, v->first) && iterations < kMaxLeafIterations);
+            } while (expr_uses_var(val, var) && iterations < kMaxLeafIterations);
         }
 
         if (!test_simplification(test, simplified, test.type(), vars)) {
@@ -298,25 +318,34 @@ bool test_expression(std::mt19937 &rng, Expr test, int samples) {
     return true;
 }
 
+template<typename T>
+T initialize_rng() {
+    constexpr size_t kStateWords = T::state_size * sizeof(typename T::result_type) / sizeof(uint32_t);
+    std::vector<uint32_t> random(kStateWords);
+    std::generate(random.begin(), random.end(), std::random_device{});
+    std::seed_seq seed_seq(random.begin(), random.end());
+    return T{seed_seq};
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
     // Depth of the randomly generated expression trees.
-    const int depth = 5;
+    constexpr int depth = 6;
     // Number of samples to test the generated expressions for.
-    const int samples = 3;
+    constexpr int samples = 3;
 
-    std::mt19937 seed_generator{(uint32_t)time(NULL)};
+    auto seed_generator = initialize_rng<RandomEngine>();
 
     for (int i = 0; i < ((argc == 1) ? 10000 : 1); i++) {
-        uint32_t seed = seed_generator();
+        auto seed = seed_generator();
         if (argc > 1) {
-            seed = atoi(argv[1]);
+            std::istringstream{argv[1]} >> seed;
         }
         // Print the seed on every iteration so that if the simplifier crashes
         // (rather than the check failing), we can reproduce.
-        printf("Seed: %d\n", seed);
-        std::mt19937 rng{seed};
+        std::cout << "Seed: " << seed << "\n";
+        RandomEngine rng{seed};
         std::array<int, 6> vector_widths = {1, 2, 3, 4, 6, 8};
         int width = random_choice(rng, vector_widths);
         Type VT = random_type(rng, width);
@@ -324,10 +353,32 @@ int main(int argc, char **argv) {
         Expr test = random_expr(rng, VT, depth);
         if (!test_expression(rng, test, samples)) {
 
+            class LimitDepth : public IRMutator {
+                int limit;
+
+            public:
+                using IRMutator::mutate;
+
+                Expr mutate(const Expr &e) override {
+                    if (limit == 0) {
+                        return simplify(e);
+                    } else {
+                        limit--;
+                        Expr new_e = IRMutator::mutate(e);
+                        limit++;
+                        return new_e;
+                    }
+                }
+
+                LimitDepth(int l)
+                    : limit(l) {
+                }
+            };
+
             // Failure. Find the minimal subexpression that failed.
-            printf("Testing subexpressions...\n");
+            std::cout << "Testing subexpressions...\n";
             class TestSubexpressions : public IRMutator {
-                std::mt19937 &rng;
+                RandomEngine &rng;
                 bool found_failure = false;
 
             public:
@@ -335,25 +386,32 @@ int main(int argc, char **argv) {
                 Expr mutate(const Expr &e) override {
                     // We know there's a failure here somewhere, so test
                     // subexpressions more aggressively.
+                    constexpr int samples = 100;
                     IRMutator::mutate(e);
                     if (e.type().bits() && !found_failure) {
-                        const int samples = 100;
-                        found_failure = !test_expression(rng, e, samples);
+                        Expr limited;
+                        for (int i = 1; i < 4 && !found_failure; i++) {
+                            limited = LimitDepth(i).mutate(e);
+                            found_failure = !test_expression(rng, limited, samples);
+                        }
+                        if (!found_failure) {
+                            found_failure = !test_expression(rng, e, samples);
+                        }
                     }
                     return e;
                 }
 
-                TestSubexpressions(std::mt19937 &rng)
+                TestSubexpressions(RandomEngine &rng)
                     : rng(rng) {
                 }
             } tester(rng);
             tester.mutate(test);
 
-            printf("Failed with seed %d\n", seed);
+            std::cout << "Failed with seed " << seed << "\n";
             return 1;
         }
     }
 
-    printf("Success!\n");
+    std::cout << "Success!\n";
     return 0;
 }

@@ -268,8 +268,8 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
             r = mod_imp(base_info.alignment.remainder, m);
         }
         info->alignment = {m, r};
-        info->trim_bounds_using_alignment();
         info->cast_to(op->type);
+        info->trim_bounds_using_alignment();
     }
 
     // A somewhat torturous way to check if the stride is zero,
@@ -280,10 +280,14 @@ Expr Simplify::visit(const Ramp *op, ExprInfo *info) {
     if (rewrite(ramp(x, 0, lanes), broadcast(x, lanes)) ||
         rewrite(ramp(ramp(x, c0, c2), broadcast(c1, c4), c3),
                 ramp(x, c0, c2 * c3),
-                c1 == c0 * fold(c2)) ||
-        false) {
+                // In the multiply below, it's important c0 is on the
+                // right. When folding constants, binary ops take their type
+                // from the RHS. c2 is an int64 lane count but c0 has the type
+                // we want for the comparison.
+                c1 == c2 * c0) ||
 
-        return rewrite.result;
+        false) {
+        return mutate(rewrite.result, info);
     }
 
     if (base.same_as(op->base) &&

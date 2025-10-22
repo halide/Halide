@@ -11,8 +11,8 @@ Expr Simplify::visit(const Add *op, ExprInfo *info) {
     if (info) {
         info->bounds = a_info.bounds + b_info.bounds;
         info->alignment = a_info.alignment + b_info.alignment;
-        info->trim_bounds_using_alignment();
         info->cast_to(op->type);
+        info->trim_bounds_using_alignment();
     }
 
     // Order commutative operations by node type

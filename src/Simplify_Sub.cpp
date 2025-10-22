@@ -14,8 +14,8 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
         // remutate to recalculate the bounds.
         info->bounds = a_info.bounds - b_info.bounds;
         info->alignment = a_info.alignment - b_info.alignment;
-        info->trim_bounds_using_alignment();
         info->cast_to(op->type);
+        info->trim_bounds_using_alignment();
     }
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
@@ -31,6 +31,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
         (rewrite(c0 - c1, fold(c0 - c1)) ||
          (!op->type.is_uint() && rewrite(x - c0, x + fold(-c0), !overflows(-c0))) ||
          rewrite(x - x, 0) || // We want to remutate this just to get better bounds
+
          rewrite(ramp(x, y, c0) - ramp(z, w, c0), ramp(x - z, y - w, c0)) ||
          rewrite(ramp(x, y, c0) - broadcast(z, c0), ramp(x - z, y, c0)) ||
          rewrite(broadcast(x, c0) - ramp(z, w, c0), ramp(x - z, -w, c0)) ||

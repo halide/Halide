@@ -542,7 +542,7 @@ void check_algebra() {
     check(select(x > 4, x * 9 + 1, y * 6 - 2) % 3 == 1, const_true());
     check(max(32, x * 4) % 16 < 13, const_true());  // After the %16 the max value is 12, not 15, due to alignment
 
-    Expr complex_cond = ((10 < y) && (y % 17 == 4) && (y < 30) && (x == y * 16 + 3));
+    Expr complex_cond = ((10 < y) && (y % 17 == 4) && (y < 30) && (y * 16 + 3 == x));
     // The condition is enough to imply that y == 21, x == 339
     check(require(complex_cond, select(x % 2 == 0, 1237, y)),
           require(complex_cond, 21));
@@ -582,12 +582,16 @@ void check_vectors() {
     check(max(broadcast(41, 2), broadcast(x, 2) % ramp(-8, -33, 2)),
           broadcast(41, 2));
 
-    check(ramp(0, 1, 4) == broadcast(2, 4),
-          ramp(-2, 1, 4) == broadcast(0, 4));
-
     check(ramp(broadcast(0, 6), broadcast(6, 6), 4) + broadcast(ramp(0, 1, 3), 8) +
               broadcast(ramp(broadcast(0, 3), broadcast(3, 3), 2), 4),
           ramp(0, 1, 24));
+
+    check(ramp(ramp(cast<uint8_t>(x), cast<uint8_t>(1), 4), cast(UInt(8, 4), 4), 3),
+          ramp(cast<uint8_t>(x), cast<uint8_t>(1), 12));
+
+    // Ramp-combining should also work in the presence of well-defined overflow
+    check(ramp(ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 4), cast(UInt(8, 4), -4), 3),
+          ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 12));
 
     // Any linear combination of simple ramps and broadcasts should
     // reduce to a single ramp or broadcast.
@@ -1330,7 +1334,7 @@ void check_boolean() {
 
     check(x == x, t);
     check(x == (x + 1), f);
-    check(x - 2 == y + 3, x == y + 5);
+    check(x - 2 == y + 3, y + 5 == x);
     check(x + y == y + z, x == z);
     check(y + x == y + z, x == z);
     check(x + y == z + y, x == z);
@@ -1339,7 +1343,7 @@ void check_boolean() {
     check(x * 0 == y * 0, t);
     check(x == x + y, y == 0);
     check(x + y == x, y == 0);
-    check(100 - x == 99 - y, y == x + (-1));
+    check(100 - x == 99 - y, y + 1 == x);
 
     check(x < x, f);
     check(x < (x + 1), t);

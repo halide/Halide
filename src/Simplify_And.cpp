@@ -11,6 +11,10 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
     Expr a = mutate(op->a, nullptr);
     Expr b = mutate(op->b, nullptr);
 
+    if (info && is_const_one(a) && is_const_one(b)) {
+        return const_true(op->type.lanes(), info);
+    }
+
     // Order commutative operations by node type
     if (should_commute(a, b)) {
         std::swap(a, b);
@@ -27,7 +31,7 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
     // Cases that fold to a constant
     if (EVAL_IN_LAMBDA
         (rewrite(x && false, false) ||
-
+         rewrite(false && x, false) ||
          rewrite(x && neg(x), false) ||
          rewrite(x && (neg(x) && y), false) ||
          rewrite(x && (y && neg(x)), false) ||
@@ -80,7 +84,6 @@ Expr Simplify::visit(const And *op, ExprInfo *info) {
     // Cases that fold to one of the args
     if (EVAL_IN_LAMBDA
         (rewrite(x && true, a) ||
-
          rewrite(x && x, a) ||
          rewrite(x && (x && y), b) ||
          rewrite(x && (y && x), b) ||

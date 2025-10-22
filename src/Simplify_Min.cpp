@@ -4,14 +4,25 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Min *op, ExprInfo *info) {
-    ExprInfo a_info, b_info;
+    ExprInfo min_info, a_info, b_info;
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
+    if (op->type.is_int_or_uint()) {
+        min_info.bounds = min(a_info.bounds, b_info.bounds);
+        min_info.alignment = ModulusRemainder::unify(a_info.alignment, b_info.alignment);
+        min_info.trim_bounds_using_alignment();
+    }
+
     if (info) {
-        info->bounds = min(a_info.bounds, b_info.bounds);
-        info->alignment = ModulusRemainder::unify(a_info.alignment, b_info.alignment);
-        info->trim_bounds_using_alignment();
+        *info = min_info;
+    }
+
+    if (min_info.bounds.is_single_point()) {
+        // This is possible when, for example, the smallest number in the type
+        // that satisfies the alignment of the left-hand-side is greater than
+        // the max value of the right-hand-side.
+        return make_const(op->type, min_info.bounds.min, nullptr);
     }
 
     // Early out when the bounds tells us one side or the other is smaller
@@ -27,9 +38,16 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
 
     // Early out when the bounds tells us one side or the other is smaller
     if (a_info.bounds >= b_info.bounds) {
+        if (info) {
+            // We lost information when we unioned the alignment, so revert to the info for b.
+            *info = b_info;
+        }
         return strip_likely(b);
     }
     if (b_info.bounds >= a_info.bounds) {
+        if (info) {
+            *info = a_info;
+        }
         return strip_likely(a);
     }
 
@@ -42,15 +60,19 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
     int lanes = op->type.lanes();
     auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type);
 
+    if (rewrite(min(IRMatcher::Overflow(), x), a) ||
+        rewrite(min(x, IRMatcher::Overflow()), b)) {
+        clear_expr_info(info);
+        return rewrite.result;
+    }
+
     // clang-format off
     if (EVAL_IN_LAMBDA
-        (rewrite(min(x, x), x) ||
+        (rewrite(min(x, x), a) ||
          rewrite(min(c0, c1), fold(min(c0, c1))) ||
-         rewrite(min(IRMatcher::Overflow(), x), a) ||
-         rewrite(min(x, IRMatcher::Overflow()), b) ||
          // Cases where one side dominates:
          rewrite(min(x, c0), b, is_min_value(c0)) ||
-         rewrite(min(x, c0), x, is_max_value(c0)) ||
+         rewrite(min(x, c0), a, is_max_value(c0)) ||
          rewrite(min((x/c0)*c0, x), a, c0 > 0) ||
          rewrite(min(x, (x/c0)*c0), b, c0 > 0) ||
          rewrite(min(min(x, y), x), a) ||
@@ -85,11 +107,6 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
          rewrite(min(max(x, y), min(z, x)), b) ||
          rewrite(min(max(x, y), min(z, y)), b) ||
 
-         rewrite(min(select(x, min(z, y), w), y), min(select(x, z, w), y)) ||
-         rewrite(min(select(x, min(z, y), w), z), min(select(x, y, w), z)) ||
-         rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
-         rewrite(min(select(x, w, min(z, y)), z), min(select(x, w, y), z)) ||
-
          rewrite(min(likely(x), x), b) ||
          rewrite(min(x, likely(x)), a) ||
          rewrite(min(likely_if_innermost(x), x), b) ||
@@ -120,13 +137,22 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
            rewrite(min(x, max(y, x) + c0), a, 0 <= c0) ||
            rewrite(min(max(x, y) + c0, x), b, 0 <= c0) ||
            rewrite(min(max(x, y) + c0, y), b, 0 <= c0) ||
-           rewrite(min(max(x, y + c0), y), y, c0 > 0) ||
+           rewrite(min(max(x, y + c0), y), b, 0 <= c0) ||
 
            (no_overflow_int(op->type) &&
             (rewrite(min(max(c0 - x, x), c1), b, 2*c1 <= c0 + 1) ||
              rewrite(min(max(x, c0 - x), c1), b, 2*c1 <= c0 + 1))) ||
 
            false)))) {
+        // One of the cancellation rules above may give us tighter bounds
+        // than just applying min to two constant intervals.
+        if (info) {
+            if (rewrite.result.same_as(a)) {
+                info->intersect(a_info);
+            } else if (rewrite.result.same_as(b)) {
+                info->intersect(b_info);
+            }
+        }
         return rewrite.result;
     }
     // clang-format on
@@ -180,6 +206,10 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
          rewrite(min(z, select(x, y, max(z, w))), select(x, min(z, y), z)) ||
 
          rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
+         rewrite(min(select(x, min(z, y), w), y), min(select(x, z, w), y)) ||
+         rewrite(min(select(x, min(z, y), w), z), min(select(x, y, w), z)) ||
+         rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
+         rewrite(min(select(x, w, min(z, y)), z), min(select(x, w, y), z)) ||
 
          // Hoist shuffles. The Shuffle visitor wants to sink
          // extract_elements to the leaves, and those count as degenerate
