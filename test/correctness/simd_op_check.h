@@ -401,14 +401,18 @@ public:
                         inputs[i].as<double>().for_each_value([&](double &f) { f = (rng() & 0xfff) / 8.0 - 0xff; });
                     } else if (t == Float(16)) {
                         inputs[i].as<float16_t>().for_each_value([&](float16_t &f) { f = float16_t((rng() & 0xff) / 8.0f - 0xf); });
+                    } else if (t == BFloat(16)) {
+                        inputs[i].as<bfloat16_t>().for_each_value([&](bfloat16_t &f) { f = bfloat16_t((rng() & 0xff) / 8.0f - 0xf); });
                     } else {
-                        // Random bits is fine
+                        assert(t.is_int_or_uint());
+                        // Random bits is fine, but in the 32-bit int case we
+                        // never use the top four bits, to avoid signed integer
+                        // overflow.
+                        const uint32_t mask = (t == Int(32)) ? 0x0fffffffU : 0xffffffffU;
                         for (uint32_t *ptr = (uint32_t *)inputs[i].data();
                              ptr != (uint32_t *)inputs[i].data() + inputs[i].size_in_bytes() / 4;
                              ptr++) {
-                            // Never use the top four bits, to avoid
-                            // signed integer overflow.
-                            *ptr = ((uint32_t)rng()) & 0x0fffffff;
+                            *ptr = ((uint32_t)rng()) & mask;
                         }
                     }
                 }
