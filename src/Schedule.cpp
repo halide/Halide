@@ -243,6 +243,7 @@ struct FuncScheduleContents {
     bool async = false;
     // This is an extent of the ring buffer and expected to be a positive integer.
     Expr ring_buffer;
+    bool dma = false;
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
@@ -364,6 +365,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memoized = contents->memoized;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
+    copy.contents->dma = contents->dma;
     copy.contents->ring_buffer = contents->ring_buffer;
 
     // Deep-copy wrapper functions.
@@ -406,6 +408,14 @@ bool &FuncSchedule::async() {
 
 bool FuncSchedule::async() const {
     return contents->async;
+}
+
+bool &FuncSchedule::dma() {
+    return contents->dma;
+}
+
+bool FuncSchedule::dma() const {
+    return contents->dma;
 }
 
 Expr &FuncSchedule::ring_buffer() {
