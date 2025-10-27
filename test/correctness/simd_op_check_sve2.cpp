@@ -1378,6 +1378,10 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckArmSve>(
         argc, argv,
         {
+            // IMPORTANT:
+            // When adding new targets here, make sure to also update
+            // can_run_code in simd_op_check.h to include any new features used.
+
             Target("arm-64-linux-sve2-no_neon-vector_bits_128"),
             Target("arm-64-linux-sve2-no_neon-vector_bits_256"),
         });
