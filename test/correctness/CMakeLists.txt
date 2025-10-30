@@ -350,6 +350,7 @@ tests(GROUPS correctness
       vector_reductions.cpp
       vector_shuffle.cpp
       vector_tile.cpp
+      vectorize_atomic_predicate.cpp
       vectorize_guard_with_if.cpp
       vectorize_mixed_widths.cpp
       vectorize_nested.cpp
