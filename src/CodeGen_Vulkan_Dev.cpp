@@ -418,7 +418,8 @@ struct FindWorkGroupSize : public IRVisitor {
             // Save & validate the workgroup size
             int index = thread_loop_workgroup_index(loop->name);
             if (index >= 0) {
-                const IntImm *literal = loop->extent.as<IntImm>();
+                Expr extent = simplify(loop->extent());
+                const IntImm *literal = extent.as<IntImm>();
                 if (literal != nullptr) {
                     uint32_t new_wg_size = literal->value;
                     user_assert(workgroup_size[index] == 0 || workgroup_size[index] == new_wg_size)
@@ -1683,7 +1684,7 @@ std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
 }  // anonymous namespace
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(For): name=" << op->name << " min=" << op->min << " extent=" << op->extent << "\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(For): name=" << op->name << " min=" << op->min << " max=" << op->max << "\n";
 
     if (is_gpu(op->for_type)) {
         // This should always be true at this point in codegen
@@ -1710,24 +1711,22 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         }
     } else {
 
-        debug(2) << "  (serial for loop): min=" << op->min << " extent=" << op->extent << "\n";
+        debug(2) << "  (serial for loop): min=" << op->min << " max=" << op->max << "\n";
 
         internal_assert(op->for_type == ForType::Serial) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit unhandled For type: " << op->for_type << "\n";
-        user_assert(op->min.type() == op->extent.type());
+        user_assert(op->min.type() == op->max.type());
         user_assert(op->min.type().is_int() || op->min.type().is_uint());
 
         op->min.accept(this);
         SpvId min_id = builder.current_id();
-        op->extent.accept(this);
-        SpvId extent_id = builder.current_id();
+        op->max.accept(this);
+        SpvId max_id = builder.current_id();
 
         // Compute max.
         Type index_type = op->min.type();
         SpvId index_type_id = builder.declare_type(index_type);
         SpvStorageClass storage_class = SpvStorageClassFunction;
         SpvId index_var_type_id = builder.declare_pointer_type(index_type_id, storage_class);
-        SpvId max_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::integer_add(index_type_id, max_id, min_id, extent_id));
 
         // Declare loop var
         const std::string loop_var_name = unique_name(std::string("k") + std::to_string(kernel_index) + "_loop_idx");
@@ -1757,7 +1756,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
             SpvId loop_test_type_id = builder.declare_type(Bool());
             SpvId loop_test_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::load(index_type_id, loop_index_id, loop_var_id));
-            builder.append(SpvFactory::integer_less_than(loop_test_type_id, loop_test_id, loop_index_id, max_id, index_type.is_uint()));
+            builder.append(SpvFactory::integer_less_than_equal(loop_test_type_id, loop_test_id, loop_index_id, max_id, index_type.is_uint()));
             builder.append(SpvFactory::conditional_branch(loop_test_id, body_block_id, merge_block_id));
         }
         builder.leave_block();

@@ -833,28 +833,26 @@ struct Variable : public ExprNode<Variable> {
     static const IRNodeType _node_type = IRNodeType::Variable;
 };
 
-/** A for loop. Execute the 'body' statement for all values of the
- * variable 'name' from 'min' to 'min + extent'. There are four
- * types of For nodes. A 'Serial' for loop is a conventional
- * one. In a 'Parallel' for loop, each iteration of the loop
- * happens in parallel or in some unspecified order. In a
- * 'Vectorized' for loop, each iteration maps to one SIMD lane,
- * and the whole loop is executed in one shot. For this case,
- * 'extent' must be some small integer constant (probably 4, 8, or
- * 16). An 'Unrolled' for loop compiles to a completely unrolled
- * version of the loop. Each iteration becomes its own
- * statement. Again in this case, 'extent' should be a small
- * integer constant. */
+/** A for loop. Execute the 'body' statement for all values of the variable
+ * 'name' from 'min' to 'max' inclusive. There are four types of For nodes. A
+ * 'Serial' for loop is a conventional one. In a 'Parallel' for loop, each
+ * iteration of the loop happens in parallel or in some unspecified order. In a
+ * 'Vectorized' for loop, each iteration maps to one SIMD lane, and the whole
+ * loop is executed in one shot. For this case, the extent (max - min + 1) must
+ * be some small integer constant (probably 4, 8, or 16). An 'Unrolled' for loop
+ * compiles to a completely unrolled version of the loop. Each iteration becomes
+ * its own statement. Again in this case, the extent should be a small integer
+ * constant. */
 struct For : public StmtNode<For> {
     std::string name;
-    Expr min, extent;
+    Expr min, max;
     ForType for_type;
     DeviceAPI device_api;
     Stmt body;
     Partition partition_policy;
 
     static Stmt make(const std::string &name,
-                     Expr min, Expr extent,
+                     Expr min, Expr max,
                      ForType for_type, Partition partition_policy,
                      DeviceAPI device_api,
                      Stmt body);
@@ -864,6 +862,10 @@ struct For : public StmtNode<For> {
     }
     bool is_parallel() const {
         return Halide::Internal::is_parallel(for_type);
+    }
+
+    Expr extent() const {
+        return Add::make(Sub::make(max, min), 1);
     }
 
     static const IRNodeType _node_type = IRNodeType::For;

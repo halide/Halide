@@ -1131,7 +1131,7 @@ void IRPrinter::visit(const For *op) {
     stream << var(op->name) << paren(", ");
     print_no_parens(op->min);
     stream << paren(", ");
-    print_no_parens(op->extent);
+    print_no_parens(op->max);
     closef();
     stream << " ";
 

@@ -55,10 +55,10 @@ private:
 
         for (int i = 0; i < 3; i++) {
             if (ends_with(op->name, gpu_thread_name(i))) {
-                num_threads[i] = op->extent;
+                num_threads[i] = op->extent();
             }
             if (ends_with(op->name, gpu_block_name(i))) {
-                num_blocks[i] = op->extent;
+                num_blocks[i] = op->extent();
             }
         }
 

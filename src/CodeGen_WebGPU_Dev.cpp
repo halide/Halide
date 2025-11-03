@@ -663,11 +663,11 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
             << "Can only use serial loops inside WebGPU shaders\n";
 
         string id_min = print_expr(loop->min);
-        string id_extent = print_expr(loop->extent);
+        string id_max = print_expr(loop->max);
         string id_counter = print_name(loop->name);
         stream << get_indent() << "for (var "
                << id_counter << " = " << id_min << "; "
-               << id_counter << " < " << id_min << " + " << id_extent << "; "
+               << id_counter << " <= " << id_max << "; "
                // TODO: Use increment statement when supported by Chromium.
                << id_counter << " = " << id_counter << " + 1)\n";
         open_scope();

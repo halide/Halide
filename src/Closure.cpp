@@ -38,7 +38,7 @@ void Closure::visit(const LetStmt *op) {
 void Closure::visit(const For *op) {
     ScopedBinding<> p(ignore, op->name);
     op->min.accept(this);
-    op->extent.accept(this);
+    op->max.accept(this);
     op->body.accept(this);
 }
 

@@ -105,7 +105,7 @@ class CanonicalizeGPUVars : public IRMutator {
     Stmt visit(const For *op) override {
         std::string name = op->name;
         Expr min = mutate(op->min);
-        Expr extent = mutate(op->extent);
+        Expr max = mutate(op->max);
         Stmt body = mutate(op->body);
 
         if ((op->for_type == ForType::GPUBlock) ||
@@ -130,18 +130,18 @@ class CanonicalizeGPUVars : public IRMutator {
                 gpu_vars.emplace(op->name, name);
                 Expr new_var = Variable::make(Int(32), name);
                 min = substitute(op->name, new_var, min);
-                extent = substitute(op->name, new_var, extent);
+                max = substitute(op->name, new_var, max);
                 body = substitute(op->name, new_var, body);
             }
         }
 
         if ((name == op->name) &&
             min.same_as(op->min) &&
-            extent.same_as(op->extent) &&
+            max.same_as(op->max) &&
             body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(name, min, extent, op->for_type, op->partition_policy, op->device_api, body);
+            return For::make(name, min, max, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 

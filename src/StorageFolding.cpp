@@ -542,10 +542,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         string dynamic_footprint;
 
         Scope<Interval> bounds;
-        bounds.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+        bounds.push(op->name, Interval(op->min, op->max));
 
         Scope<Interval> steady_bounds;
-        steady_bounds.push(op->name, Interval(simplify(op->min + 1), simplify(op->min + op->extent - 1)));
+        steady_bounds.push(op->name, Interval(simplify(op->min + 1), op->max));
 
         HasExternConsumer has_extern_consumer(func.name());
         body.accept(&has_extern_consumer);
@@ -881,7 +881,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 // for further folding opportunities
                 // recursively.
             } else if (!body.same_as(op->body)) {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+                stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
                 break;
             } else {
                 stmt = op;
@@ -900,7 +900,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
         }
 
         if (func.schedule().async() && !dynamic_footprint.empty()) {

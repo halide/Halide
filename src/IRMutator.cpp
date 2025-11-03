@@ -202,14 +202,14 @@ Stmt IRMutator::visit(const ProducerConsumer *op) {
 
 Stmt IRMutator::visit(const For *op) {
     Expr min = mutate(op->min);
-    Expr extent = mutate(op->extent);
+    Expr max = mutate(op->max);
     Stmt body = mutate(op->body);
     if (min.same_as(op->min) &&
-        extent.same_as(op->extent) &&
+        max.same_as(op->max) &&
         body.same_as(op->body)) {
         return op;
     }
-    return For::make(op->name, std::move(min), std::move(extent),
+    return For::make(op->name, std::move(min), std::move(max),
                      op->for_type, op->partition_policy, op->device_api, std::move(body));
 }
 
