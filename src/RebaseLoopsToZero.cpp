@@ -31,7 +31,6 @@ class RebaseLoopsToZero : public IRMutator {
         Stmt body = mutate(op->body);
         string name = op->name;
         if (!is_const_zero(op->min)) {
-            // Renaming the loop (intentionally) invalidates any .loop_min/.loop_max lets.
             name = op->name + ".rebased";
             Expr loop_var = Variable::make(Int(32), name);
             body = LetStmt::make(op->name, loop_var + op->min, body);

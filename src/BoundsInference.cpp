@@ -114,10 +114,7 @@ private:
     }
 
     void visit(const For *op) override {
-        // At this stage of lowering, loop_min and loop_max
-        // conveniently exist in scope.
-        Interval in(Variable::make(Int(32), op->name + ".loop_min"),
-                    Variable::make(Int(32), op->name + ".loop_max"));
+        Interval in(op->min, op->max);
 
         if (op->name == var) {
             result = in;

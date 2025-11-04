@@ -2967,18 +2967,8 @@ private:
             op->max.accept(this);
         }
 
-        Expr min_val, max_val;
-        if (const Interval *in = scope.find(op->name + ".loop_min")) {
-            min_val = in->min;
-        } else {
-            min_val = bounds_of_expr_in_scope(op->min, scope, func_bounds).min;
-        }
-
-        if (const Interval *in = scope.find(op->name + ".loop_max")) {
-            max_val = in->max;
-        } else {
-            max_val = bounds_of_expr_in_scope(op->max, scope, func_bounds).max;
-        }
+        Expr min_val = bounds_of_expr_in_scope(op->min, scope, func_bounds).min;
+        Expr max_val = bounds_of_expr_in_scope(op->max, scope, func_bounds).max;
 
         push_var(op->name);
         {

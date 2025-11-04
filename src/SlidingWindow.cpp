@@ -794,7 +794,6 @@ class SlidingWindow : public IRMutator {
         Stmt body = op->body;
         Expr loop_min = op->min;
         Expr loop_max = op->max;
-        Expr loop_extent = Variable::make(Int(32), op->name + ".loop_extent");
 
         list<pair<string, Expr>> prev_loop_mins;
         list<pair<string, Expr>> new_lets;
@@ -841,11 +840,9 @@ class SlidingWindow : public IRMutator {
                 // Update the loop body to use the adjusted loop min.
                 string new_name = name + ".$n";
                 loop_min = Variable::make(Int(32), new_name + ".loop_min");
-                loop_extent = Variable::make(Int(32), new_name + ".loop_extent");
                 body = substitute({
                                       {name, Variable::make(Int(32), new_name)},
                                       {name + ".loop_min", loop_min},
-                                      {name + ".loop_extent", loop_extent},
                                   },
                                   body);
                 body = SubstitutePrefetchVar(name, new_name).mutate(body);
@@ -855,7 +852,6 @@ class SlidingWindow : public IRMutator {
                 // The new loop interval is the new loop min to the old loop max.
                 new_lets.emplace_front(name + ".loop_min", new_loop_min);
                 new_lets.emplace_front(name + ".loop_min.orig", loop_min);
-                new_lets.emplace_front(name + ".loop_extent", (loop_max - loop_min) + 1);
             }
 
             if (slid_dims.size() > old_slid_dims_size) {
@@ -874,9 +870,6 @@ class SlidingWindow : public IRMutator {
             return op;
         } else {
             Stmt result = For::make(name, loop_min, loop_max, op->for_type, op->partition_policy, op->device_api, body);
-            if (!new_lets.empty()) {
-                result = LetStmt::make(name + ".loop_max", loop_max, result);
-            }
             for (const auto &i : new_lets) {
                 result = LetStmt::make(i.first, i.second, result);
             }

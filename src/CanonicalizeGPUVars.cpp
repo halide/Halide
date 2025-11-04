@@ -90,18 +90,6 @@ class CanonicalizeGPUVars : public IRMutator {
         return name;
     }
 
-    std::string canonicalize_let(const std::string &name) {
-        if (ends_with(name, ".loop_max")) {
-            return find_replacement(".loop_max", name);
-        } else if (ends_with(name, ".loop_min")) {
-            return find_replacement(".loop_min", name);
-        } else if (ends_with(name, ".loop_extent")) {
-            return find_replacement(".loop_extent", name);
-        } else {
-            return name;
-        }
-    }
-
     Stmt visit(const For *op) override {
         std::string name = op->name;
         Expr min = mutate(op->min);
@@ -143,29 +131,6 @@ class CanonicalizeGPUVars : public IRMutator {
         } else {
             return For::make(name, min, max, op->for_type, op->partition_policy, op->device_api, body);
         }
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        vector<std::pair<std::string, Expr>> lets;
-        Stmt result;
-
-        do {
-            lets.emplace_back(op->name, mutate(op->value));
-            result = op->body;
-        } while ((op = op->body.as<LetStmt>()));
-
-        result = mutate(result);
-
-        for (const auto &[var, value] : reverse_view(lets)) {
-            std::string name = canonicalize_let(var);
-            if (name != var) {
-                Expr new_var = Variable::make(Int(32), name);
-                result = substitute(var, new_var, result);
-            }
-            result = LetStmt::make(name, value, result);
-        }
-
-        return result;
     }
 
     Stmt visit(const IfThenElse *op) override {
