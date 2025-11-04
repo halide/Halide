@@ -544,6 +544,10 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckWASM>(
         argc, argv,
         {
+            // IMPORTANT:
+            // When adding new targets here, make sure to also update
+            // can_run_code in simd_op_check.h to include any new features used.
+
             Target("wasm-32-wasmrt"),
             Target("wasm-32-wasmrt-wasm_simd128"),
             Target("wasm-32-wasmrt-wasm_mvponly"),
