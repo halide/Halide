@@ -8,6 +8,7 @@
 #include "CodeGen_Metal_Dev.h"
 #include "Debug.h"
 #include "IROperator.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,6 +17,16 @@ using std::ostringstream;
 using std::sort;
 using std::string;
 using std::vector;
+
+// Storage for Metal compilation tools
+namespace {
+struct MetalTools {
+    std::string compiler;
+    std::string linker;
+};
+}  // namespace
+
+MetalTools metal_tools;
 
 namespace {
 
@@ -863,14 +874,15 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
     string str = src_stream.str();
     debug(1) << "Metal kernel:\n"
              << str << "\n";
-    
+
     vector<char> buffer(str.begin(), str.end());
 
-    auto metal_compiler = get_env_variable("HL_METAL_COMPILER");
-    auto metal_linker = get_env_variable("HL_METAL_LINKER");
+    auto metal_compiler = get_metal_compiler();
+    auto metal_linker = get_metal_linker();
     if (!metal_compiler.empty() && !metal_linker.empty()) {
-        // The user has specified the Metal compiler and linker to use, so instead of embedding
-        // the shader as a string, we will embed it as a metallib
+        // The user has specified the Metal compiler and linker to use via set_metal_compiler()
+        // and set_metal_linker(), so instead of embedding the shader as a string, we will
+        // embed it as a metallib
         // Write the source to a temporary file.
         auto tmpfile = file_make_temp("metal", ".metal");
         write_entire_file(tmpfile, buffer);
@@ -882,13 +894,13 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
         debug(2) << "Running: " << cmd << "\n";
 
         int ret = system(cmd.c_str());
-        user_assert(ret == 0) << "HL_METAL_COMPILER set, but failed to compile Metal source to Metal IR.\n";
+        user_assert(ret == 0) << "Metal compiler set, but failed to compile Metal source to Metal IR.\n";
 
         cmd = string(metal_linker) + " -o " + metallib + " " + metalir;
         debug(2) << "Running: " << cmd << "\n";
 
         ret = system(cmd.c_str());
-        user_assert(ret == 0) << "HL_METAL_LINKER set, but failed to compile Metal IR to Metal library.\n";
+        user_assert(ret == 0) << "Metal linker set, but failed to compile Metal IR to Metal library.\n";
 
         // Read the metallib into a buffer.
         buffer = read_entire_file(metallib);
@@ -918,5 +930,20 @@ std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Metal_Dev(const Target &target) {
     return std::make_unique<CodeGen_Metal_Dev>(target);
 }
 
+std::string get_metal_compiler() {
+    return metal_tools.compiler;
+}
+
+std::string get_metal_linker() {
+    return metal_tools.linker;
+}
+
 }  // namespace Internal
+
+void set_metal_compilation_tools(const std::string &compiler_path,
+                                  const std::string &linker_path) {
+    Internal::metal_tools.compiler = compiler_path;
+    Internal::metal_tools.linker = linker_path;
+}
+
 }  // namespace Halide
