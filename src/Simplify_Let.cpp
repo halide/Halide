@@ -293,7 +293,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *info) {
             find_var_uses(frame.new_value, unused_vars);
         }
 
-        if ((!remove_dead_code && std::is_same<LetOrLetStmt, LetStmt>::value) ||
+        if ((!remove_dead_code && std::is_same_v<LetOrLetStmt, LetStmt>) ||
             (frame.info.old_uses > 0 && !unused_vars.count(frame.op->name))) {
             // The old name is still in use. We'd better keep it as well.
             result = LetOrLetStmt::make(frame.op->name, frame.value, result);

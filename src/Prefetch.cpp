@@ -50,9 +50,9 @@ public:
         Box b;
         for (int i = 0; i < dims; ++i) {
             string dim_name = std::to_string(i);
-            Expr buf_min_i = Variable::make(Int(32), name + ".min." + dim_name,
+            Expr buf_min_i = Variable::make(Int(32), concat_strings(name, ".min.", i),
                                             image, param, ReductionDomain());
-            Expr buf_extent_i = Variable::make(Int(32), name + ".extent." + dim_name,
+            Expr buf_extent_i = Variable::make(Int(32), concat_strings(name, ".extent.", i),
                                                image, param, ReductionDomain());
             Expr buf_max_i = buf_min_i + buf_extent_i - 1;
             b.push_back(Interval(buf_min_i, buf_max_i));

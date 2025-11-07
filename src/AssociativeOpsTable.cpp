@@ -352,7 +352,7 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
         // get_ops_table_helper() lazily initializes the table, so ensure
         // that multiple threads can't try to do so at the same time.
         static std::mutex ops_table_lock;
-        std::lock_guard<std::mutex> lock_guard(ops_table_lock);
+        std::scoped_lock lock_guard(ops_table_lock);
 
         const vector<AssociativePattern> &table = get_ops_table_helper(types, exprs[0].node_type(), exprs.size());
         debug(7) << "Table size: " << table.size() << "\n";

@@ -277,7 +277,7 @@ constexpr size_t kExtraMallocSlop = 32;
 
 std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_name) {
     static std::mutex link_lock;
-    std::lock_guard<std::mutex> lock(link_lock);
+    std::scoped_lock lock(link_lock);
 
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> fn_module;

@@ -948,6 +948,13 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
+    void visit(const Select *op) override {
+        // Select can apply to bools
+        internal_assert(op->type.is_bool());
+        Expr equiv = (op->condition && op->true_value) || (!op->condition && op->false_value);
+        equiv.accept(this);
+    }
+
     void visit(const Not *op) override {
         target = !target;
         op->a.accept(this);
@@ -1346,8 +1353,20 @@ void solve_test() {
             continue;
         }
         for (int num = 5; num <= 10; num++) {
-            Expr in[] = {x * den < num, x * den <= num, x * den == num, x * den != num, x * den >= num, x * den > num,
-                         x / den < num, x / den <= num, x / den == num, x / den != num, x / den >= num, x / den > num};
+            Expr in[] = {
+                {x * den < num},
+                {x * den <= num},
+                {x * den == num},
+                {x * den != num},
+                {x * den >= num},
+                {x * den > num},
+                {x / den < num},
+                {x / den <= num},
+                {x / den == num},
+                {x / den != num},
+                {x / den >= num},
+                {x / den > num},
+            };
             for (const auto &e : in) {
                 SolverResult solved = solve_expression(e, "x");
                 internal_assert(solved.fully_solved) << "Error: failed to solve for x in " << e << "\n";

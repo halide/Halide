@@ -16,9 +16,9 @@
 // in a shell with the current directory at the top of the halide
 // source tree.
 
-#include <stdio.h>
-
 #include "Halide.h"
+
+#include <cstdio>
 
 // Include a clock to do performance testing.
 #include "clock.h"
@@ -43,7 +43,7 @@ public:
     Buffer<uint8_t> input;
 
     MyPipeline(Buffer<uint8_t> in)
-        : input(in) {
+        : input(std::move(in)) {
         // For this lesson, we'll use a two-stage pipeline that sharpens
         // and then applies a look-up-table (LUT).
 
@@ -248,7 +248,7 @@ public:
     }
 };
 
-int main(int argc, char **argv) {
+int main() {
     // Load an input image.
     Buffer<uint8_t> input = load_image("images/rgb.png");
 

@@ -11,8 +11,11 @@
 
 #include "Debug.h"
 
-#define _halide_check_arg_type(t, name, e, n) \
-    _halide_user_assert(e.type() == t) << "Type mismatch for argument " << n << " to extern function " << #name << ". Type expected is " << t << " but the argument " << e << " has type " << e.type() << ".\n";
+#define _halide_check_arg_type(t, name, e, n)                                      \
+    _halide_user_assert((e).type() == (t))                                         \
+        << "Type mismatch for argument " << (n) << " to extern function " << #name \
+        << ". Type expected is " << (t) << " but the argument " << (e)             \
+        << " has type " << (e).type() << ".\n";
 
 #define HalideExtern_1(rt, name, t1)                                                                             \
     Halide::Expr name(const Halide::Expr &a1) {                                                                  \

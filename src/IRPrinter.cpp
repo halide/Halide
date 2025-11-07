@@ -1027,18 +1027,46 @@ void IRPrinter::visit(const Broadcast *op) {
 }
 
 void IRPrinter::visit(const Call *op) {
-    // TODO: Print indication of C vs C++?
-    if (!known_type.contains(op->name) &&
-        (op->type != Int(32))) {
-        if (op->type.is_handle()) {
-            stream << type(op->type);  // Already has parens
-        } else {
-            stream << typep(op->type);
+
+    if (op->is_intrinsic(Call::bitwise_or)) {
+        open();
+        print(op->args[0]);
+        stream << paren(" | ");
+        print(op->args[1]);
+        close();
+    } else if (op->is_intrinsic(Call::bitwise_and)) {
+        open();
+        print(op->args[0]);
+        stream << paren(" & ");
+        print(op->args[1]);
+        close();
+    } else if (op->is_intrinsic(Call::bitwise_xor)) {
+        open();
+        print(op->args[0]);
+        stream << paren(" ^ ");
+        print(op->args[1]);
+        close();
+    } else if (op->is_intrinsic(Call::bitwise_not)) {
+        stream << ansi_kw << "~(" << ansi_reset;
+        paren_depth++;
+        print_no_parens(op->args[0]);
+        paren_depth--;
+        stream << kw(")");
+    } else {
+
+        // TODO: Print indication of C vs C++?
+        if (!known_type.contains(op->name) &&
+            (op->type != Int(32))) {
+            if (op->type.is_handle()) {
+                stream << type(op->type);  // Already has parens
+            } else {
+                stream << typep(op->type);
+            }
         }
+        openf(op->name.c_str());
+        print_list(op->args);
+        closef();
     }
-    openf(op->name.c_str());
-    print_list(op->args);
-    closef();
 }
 
 void IRPrinter::visit(const Let *op) {

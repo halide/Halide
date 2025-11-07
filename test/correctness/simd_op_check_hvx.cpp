@@ -715,6 +715,10 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckHVX>(
         argc, argv,
         {
+            // IMPORTANT:
+            // When adding new targets here, make sure to also update
+            // can_run_code in simd_op_check.h to include any new features used.
+
             Target("hexagon-32-noos-hvx"),
             Target("hexagon-32-noos-hvx-hvx_128"),
             Target("hexagon-32-noos-hvx-hvx_128-hvx_v62"),

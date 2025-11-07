@@ -960,7 +960,7 @@ string CodeGen_X86::mcpu_target() const {
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         return "sapphirerapids";
     } else if (target.has_feature(Target::AVX512_Zen5)) {
-        return (LLVM_VERSION >= 190) ? "znver5" : "znver4";
+        return "znver5";
     } else if (target.has_feature(Target::AVX512_Zen4)) {
         return "znver4";
     } else if (target.has_feature(Target::AVX512_Cannonlake)) {
@@ -1041,7 +1041,7 @@ string CodeGen_X86::mcpu_tune() const {
     case Target::Processor::ZnVer4:
         return "znver4";
     case Target::Processor::ZnVer5:
-        return (LLVM_VERSION >= 190) ? "znver5" : "znver4";
+        return "znver5";
 
     case Target::Processor::ProcessorGeneric:
         break;

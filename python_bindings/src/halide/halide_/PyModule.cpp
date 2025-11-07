@@ -30,8 +30,8 @@ void define_module(py::module &m) {
             .def("buffers", &Module::buffers)
             .def("submodules", &Module::submodules)
 
-            .def("append", (void(Module::*)(const Buffer<> &)) & Module::append, py::arg("buffer"))
-            .def("append", (void(Module::*)(const Module &)) & Module::append, py::arg("module"))
+            .def("append", static_cast<void (Module::*)(const Buffer<> &)>(&Module::append), py::arg("buffer"))
+            .def("append", static_cast<void (Module::*)(const Module &)>(&Module::append), py::arg("module"))
 
             .def("compile", &Module::compile, py::arg("outputs"))
 
@@ -60,9 +60,9 @@ void define_module(py::module &m) {
             });
 
     m.def("link_modules", &link_modules, py::arg("name"), py::arg("modules"));
-    m.def("compile_standalone_runtime", (void (*)(const std::string &, const Target &))&compile_standalone_runtime, py::arg("filename"), py::arg("target"));
+    m.def("compile_standalone_runtime", static_cast<void (*)(const std::string &, const Target &)>(&compile_standalone_runtime), py::arg("filename"), py::arg("target"));
     using OutputMap = std::map<OutputFileType, std::string>;
-    m.def("compile_standalone_runtime", (OutputMap(*)(const OutputMap &, const Target &))&compile_standalone_runtime, py::arg("outputs"), py::arg("target"));
+    m.def("compile_standalone_runtime", static_cast<OutputMap (*)(const OutputMap &, const Target &)>(&compile_standalone_runtime), py::arg("outputs"), py::arg("target"));
 
     // TODO: compile_multitarget() deliberately skipped for now.
 }

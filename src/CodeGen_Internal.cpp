@@ -612,7 +612,9 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
 
     options = llvm::TargetOptions();
     options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
+#if LLVM_VERSION < 210
     options.UnsafeFPMath = !per_instruction_fast_math_flags;
+#endif
     options.NoInfsFPMath = !per_instruction_fast_math_flags;
     options.NoNaNsFPMath = !per_instruction_fast_math_flags;
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
@@ -621,11 +623,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.FunctionSections = true;
     options.UseInitArray = true;
     options.FloatABIType = use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
-#if LLVM_VERSION >= 190
     options.MCOptions.X86RelaxRelocations = false;
-#else
-    options.RelaxELFRelocations = false;
-#endif
     options.MCOptions.ABIName = mabi;
 }
 
@@ -674,16 +672,6 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     // Get module mcpu_target and mattrs.
     std::string mcpu_target = get_modflag_string(module, "halide_mcpu_target");
     std::string mattrs = get_modflag_string(module, "halide_mattrs");
-
-#if LLVM_VERSION < 200
-    if (triple.isMacOSX() && triple.isAArch64()) {
-        // The generic syntax variant is able to display the arguments to SDOT
-        // while the Apple-specific one is bugged. See this GitHub issue for
-        // more info: https://github.com/llvm/llvm-project/issues/151330
-        const char *args[] = {"llc", "-aarch64-neon-syntax=generic"};
-        cl::ParseCommandLineOptions(2, args, "Halide compiler\n");
-    }
-#endif
 
     auto *tm = llvm_target->createTargetMachine(
 #if LLVM_VERSION >= 210

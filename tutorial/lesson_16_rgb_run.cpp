@@ -16,10 +16,10 @@
 // the pipeline.
 #include "HalideBuffer.h"
 
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include "halide_benchmark.h"
 
@@ -29,7 +29,7 @@ void check_timing(double faster, double slower) {
     }
 }
 
-int main(int argc, char **argv) {
+int main() {
 
     // Let's make some images stored with interleaved and planar
     // memory. Halide::Runtime::Buffer is planar by default.

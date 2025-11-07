@@ -1310,14 +1310,14 @@ protected:
                     _found_store_levels_for_funcs.insert(funcs[i].name());
                 }
             }
-            for (size_t i = 0; i < funcs.size(); i++) {
-                if (funcs[i].schedule().hoist_storage_level().match(for_loop->name)) {
-                    debug(3) << "Found hoist storage level for " << funcs[i].name() << " at " << for_loop->name << "\n";
-                    if (funcs[i].schedule().hoist_storage_level() != funcs[i].schedule().store_level()) {
-                        body = HoistedStorage::make(funcs[i].name(), body);
+            for (const auto &func : funcs) {
+                if (func.schedule().hoist_storage_level().match(for_loop->name)) {
+                    debug(3) << "Found hoist storage level for " << func.name() << " at " << for_loop->name << "\n";
+                    if (func.schedule().hoist_storage_level() != func.schedule().store_level()) {
+                        body = HoistedStorage::make(func.name(), body);
                     } else {
                     }
-                    _found_hoist_storage_levels_for_funcs.insert(funcs[i].name());
+                    _found_hoist_storage_levels_for_funcs.insert(func.name());
                 }
             }
         }
@@ -1414,9 +1414,10 @@ private:
             const string &name = func.name();
             const vector<string> &func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
-                const string &arg = func_args[i];
-                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
-                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
+                string min_name = concat_strings(name, ".", func_args[i], ".min_realized");
+                string extent_name = concat_strings(name, ".", func_args[i], ".extent_realized");
+                Expr min = Variable::make(Int(32), min_name);
+                Expr extent = Variable::make(Int(32), extent_name);
                 bounds.emplace_back(min, extent);
             }
 
