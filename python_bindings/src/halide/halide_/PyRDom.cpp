@@ -37,14 +37,17 @@ void define_rdom(py::module &m) {
         RDom rd;
         int idx = 0;
         RDomIterator() = default;
-        RDomIterator(const RDom &r) : rd(r), idx(0) {}
+        RDomIterator(const RDom &r) : rd(r) {
+        }
         RVar next() {
             if (idx >= rd.dimensions()) {
                 throw py::stop_iteration();
             }
             return rd[idx++];
         }
-        RDomIterator &iter() { return *this; }
+        RDomIterator &iter() {
+            return *this;
+        }
     };
 
     // Expose the iterator type to Python so we can return it from __iter__.
@@ -71,7 +74,7 @@ void define_rdom(py::module &m) {
                 if (i < 0 || i >= r.dimensions()) {
                     throw pybind11::key_error();
                 }
-                return r[i];
+                return r[i];  //
             })
             .def_readonly("x", &RDom::x)
             .def_readonly("y", &RDom::y)
@@ -80,7 +83,7 @@ void define_rdom(py::module &m) {
             .def("__repr__", [](const RDom &r) -> std::string {
                 std::ostringstream o;
                 o << "<halide.RDom " << r << ">";
-                return o.str();
+                return o.str();  //
             });
 
     add_binary_operators(rdom_class);
