@@ -1533,7 +1533,7 @@ void solve_test() {
     check_solve((5 * Broadcast::make(x, 4) + y) / 5,
                 Broadcast::make(x, 4) + (Broadcast::make(y, 4) / 5));
 
-    debug(0) << "Solve test passed\n";
+    std::cout << "Solve test passed\n";
 }
 
 }  // namespace Internal
