@@ -2,6 +2,10 @@
 #include "check_call_graphs.h"
 #include "test_sharding.h"
 
+#ifdef _MSC_VER
+#define _USE_MATH_DEFINES  // For M_PI
+#endif
+
 #include <cmath>
 #include <cstdio>
 #include <map>
