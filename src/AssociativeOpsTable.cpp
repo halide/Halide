@@ -177,12 +177,20 @@ void populate_ops_table_double_general_mul(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_double_general_max(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
-    table.push_back({{max(x0, y0), select(x0 < y0, y1, x1)}, {tmin_0, zero_1}, true});
+    // Argmax
+    table.push_back({{max(x0, y0), select(x0 > y0, x1, y1)}, {tmin_0, zero_1}, true});
+    table.push_back({{max(x0, y0), select(x0 >= y0, x1, y1)}, {tmin_0, zero_1}, true});
+    table.push_back({{max(x0, y0), select(y0 < x0, x1, y1)}, {tmin_0, zero_1}, true});
+    table.push_back({{max(x0, y0), select(y0 <= x0, x1, y1)}, {tmin_0, zero_1}, true});
 }
 
 void populate_ops_table_double_general_min(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
+    // Argmin
     table.push_back({{min(x0, y0), select(x0 < y0, x1, y1)}, {tmax_0, zero_1}, true});
+    table.push_back({{min(x0, y0), select(x0 <= y0, x1, y1)}, {tmax_0, zero_1}, true});
+    table.push_back({{min(x0, y0), select(y0 > x0, x1, y1)}, {tmax_0, zero_1}, true});
+    table.push_back({{min(x0, y0), select(y0 >= x0, x1, y1)}, {tmax_0, zero_1}, true});
 }
 
 void populate_ops_table_double_general_sub(const vector<Type> &types, vector<AssociativePattern> &table) {
