@@ -2,6 +2,7 @@
 #include "check_call_graphs.h"
 #include "test_sharding.h"
 
+#include <cmath>
 #include <cstdio>
 #include <map>
 
