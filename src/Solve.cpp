@@ -116,13 +116,7 @@ private:
         return Expr();
     }
 
-    struct MutationResult {
-        Expr expr;
-        bool uses_var;
-        bool failed;
-    };
-
-    MutationResult mutate_inner(const Expr &e) {
+    CacheEntry mutate_inner(const Expr &e) {
         ScopedValue<bool> old_uses_var(uses_var, false);
         ScopedValue<bool> old_failed(failed, false);
         const Expr result = mutate(e);
@@ -778,8 +772,7 @@ private:
     }
 
     Expr visit(const Let *op) override {
-        auto [value, value_uses_var, value_failed] = mutate_inner(op->value);
-        ScopedBinding<CacheEntry> bind(scope, op->name, {value, value_uses_var, value_failed});
+        ScopedBinding<CacheEntry> bind(scope, op->name, mutate_inner(op->value));
         return mutate(op->body);
     }
 
