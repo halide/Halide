@@ -844,6 +844,37 @@ private:
         ScopedBinding<CacheEntry> bind(scope, op->name, e);
         return mutate(op->body);
     }
+
+    Expr visit(const Select *op) override {
+        bool old_uses_var = uses_var;
+        bool old_failed = failed;
+
+        uses_var = false;
+        failed = false;
+        Expr true_value = mutate(op->true_value);
+        bool true_uses_var = uses_var;
+        bool true_failed = failed;
+
+        uses_var = false;
+        failed = false;
+        Expr false_value = mutate(op->false_value);
+        bool false_uses_var = uses_var;
+        bool false_failed = failed;
+
+        uses_var = old_uses_var || true_uses_var || false_uses_var;
+        failed = old_failed || true_failed || false_failed;
+
+        Expr condition = op->condition;
+
+        // select(cond, a, x) ~> select(!cond, x, a)
+        if (!true_uses_var && false_uses_var) {
+            condition = simplify(!condition);
+            std::swap(true_value, false_value);
+        }
+
+        condition = mutate(condition);
+        return Select::make(condition, true_value, false_value);
+    }
 };
 
 class SolveForInterval : public IRVisitor {
