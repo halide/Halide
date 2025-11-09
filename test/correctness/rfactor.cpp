@@ -2,13 +2,14 @@
 #include "check_call_graphs.h"
 #include "test_sharding.h"
 
-#ifdef _MSC_VER
-#define _USE_MATH_DEFINES  // For M_PI
-#endif
-
 #include <cmath>
 #include <cstdio>
 #include <map>
+
+// MSVC doesn't define these constants
+#if !defined(M_PI)
+#define M_PI 3.14159265358979323846264338327950288
+#endif
 
 namespace {
 
