@@ -116,22 +116,25 @@ private:
         return Expr();
     }
 
-    Expr visit(const Add *op) override {
-        bool old_uses_var = uses_var;
-        uses_var = false;
-        bool old_failed = failed;
-        failed = false;
-        Expr a = mutate(op->a);
-        bool a_uses_var = uses_var;
-        bool a_failed = failed;
+    struct MutationResult {
+        Expr expr;
+        bool uses_var;
+        bool failed;
+    };
 
-        uses_var = false;
-        failed = false;
-        Expr b = mutate(op->b);
-        bool b_uses_var = uses_var;
-        bool b_failed = failed;
-        uses_var = old_uses_var || a_uses_var || b_uses_var;
-        failed = old_failed || a_failed || b_failed;
+    MutationResult mutate_inner(const Expr &e) {
+        ScopedValue<bool> old_uses_var(uses_var, false);
+        ScopedValue<bool> old_failed(failed, false);
+        const Expr result = mutate(e);
+        return {result, uses_var, failed};
+    }
+
+    Expr visit(const Add *op) override {
+        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
+        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
+
+        uses_var = uses_var || a_uses_var || b_uses_var;
+        failed = failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -212,21 +215,13 @@ private:
     }
 
     Expr visit(const Sub *op) override {
-        bool old_uses_var = uses_var;
-        uses_var = false;
         bool old_failed = failed;
-        failed = false;
-        Expr a = mutate(op->a);
-        bool a_uses_var = uses_var;
-        bool a_failed = failed;
 
-        uses_var = false;
-        failed = false;
-        Expr b = mutate(op->b);
-        bool b_uses_var = uses_var;
-        bool b_failed = failed;
-        uses_var = old_uses_var || a_uses_var || b_uses_var;
-        failed = old_failed || a_failed || b_failed;
+        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
+        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
+
+        uses_var = uses_var || a_uses_var || b_uses_var;
+        failed = failed || a_failed || b_failed;
 
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
@@ -308,23 +303,13 @@ private:
     }
 
     Expr visit(const Mul *op) override {
-        bool old_uses_var = uses_var;
-        uses_var = false;
-        bool old_failed = failed;
-        failed = false;
-        Expr a = mutate(op->a);
-        bool a_uses_var = uses_var;
-        bool a_failed = failed;
-
+        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
         internal_assert(!is_const(op->a) || !a_uses_var) << op->a << ", " << uses_var << "\n";
 
-        uses_var = false;
-        failed = false;
-        Expr b = mutate(op->b);
-        bool b_uses_var = uses_var;
-        bool b_failed = failed;
-        uses_var = old_uses_var || a_uses_var || b_uses_var;
-        failed = old_failed || a_failed || b_failed;
+        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
+
+        uses_var = uses_var || a_uses_var || b_uses_var;
+        failed = failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -371,22 +356,21 @@ private:
     }
 
     Expr visit(const Div *op) override {
-        bool old_uses_var = uses_var;
-        uses_var = false;
-        bool old_failed = failed;
-        failed = false;
-        Expr a = mutate(op->a);
-        bool a_uses_var = uses_var;
-        bool a_failed = failed;
+        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
         internal_assert(!is_const(op->a) || !a_uses_var)
             << op->a << ", " << uses_var << "\n";
-        uses_var = false;
-        failed = false;
-        Expr b = mutate(op->b);
-        bool b_uses_var = uses_var;
-        bool b_failed = failed;
-        uses_var = old_uses_var || a_uses_var || b_uses_var;
-        failed = old_failed || a_failed || b_failed;
+
+        // Don't use structured bindings because `b` is captured in a lambda below.
+        // Capturing a structured binding is a C++20 extension, and this code should
+        // be fixed upon upgrading to C++20.
+        const auto b_result = mutate_inner(op->b);
+        Expr b = b_result.expr;
+        bool b_uses_var = b_result.uses_var;
+        bool b_failed = b_result.failed;
+
+        uses_var = uses_var || a_uses_var || b_uses_var;
+        failed = failed || a_failed || b_failed;
+
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
@@ -433,59 +417,40 @@ private:
         // Ignore intrinsics that shouldn't affect the results.
         if (Call::as_tag(op)) {
             return mutate(op->args[0]);
-        } else if (op->is_intrinsic({Call::absd, Call::bitwise_and, Call::bitwise_or,
-                                     Call::bitwise_xor, Call::halving_add, Call::rounding_halving_add,
-                                     Call::saturating_add, Call::widening_add, Call::widening_mul})) {
+        }
+        if (op->is_intrinsic({Call::absd, Call::bitwise_and, Call::bitwise_or,
+                              Call::bitwise_xor, Call::halving_add, Call::rounding_halving_add,
+                              Call::saturating_add, Call::widening_add, Call::widening_mul})) {
             // It's a commutative intrinsic. We won't try to lift uses of the
             // var out of the call, but we will reorder the args if it would
             // help.
             internal_assert(op->args.size() == 2);
-            bool old_uses_var = uses_var;
-            uses_var = false;
-            bool old_failed = failed;
-            failed = false;
-            Expr a = mutate(op->args[0]);
-            bool a_uses_var = uses_var;
-            bool a_failed = failed;
-            uses_var = false;
-            failed = false;
-            Expr b = mutate(op->args[1]);
-            bool b_uses_var = uses_var;
-            bool b_failed = failed;
-            uses_var = old_uses_var || a_uses_var || b_uses_var;
-            failed = old_failed || a_failed || b_failed;
+            auto [a, a_uses_var, a_failed] = mutate_inner(op->args[0]);
+            auto [b, b_uses_var, b_failed] = mutate_inner(op->args[1]);
+
+            uses_var = uses_var || a_uses_var || b_uses_var;
+            failed = failed || a_failed || b_failed;
 
             failed |= a_uses_var && b_uses_var;
 
             if (b_uses_var && !a_uses_var) {
                 return Call::make(op->type, op->name, {b, a}, op->call_type);
-            } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
-                return op;
-            } else {
-                return Call::make(op->type, op->name, {a, b}, op->call_type);
             }
-        } else {
-            return IRMutator::visit(op);
+            if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                return op;
+            }
+            return Call::make(op->type, op->name, {a, b}, op->call_type);
         }
+        return IRMutator::visit(op);
     }
 
     template<typename T, typename Other>
     Expr visit_min_max_op(const T *op) {
-        bool old_uses_var = uses_var;
-        uses_var = false;
-        bool old_failed = failed;
-        failed = false;
-        Expr a = mutate(op->a);
-        bool a_uses_var = uses_var;
-        bool a_failed = failed;
+        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
+        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
 
-        uses_var = false;
-        failed = false;
-        Expr b = mutate(op->b);
-        bool b_uses_var = uses_var;
-        bool b_failed = failed;
-        uses_var = old_uses_var || a_uses_var || b_uses_var;
-        failed = old_failed || a_failed || b_failed;
+        uses_var = uses_var || a_uses_var || b_uses_var;
+        failed = failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -493,14 +458,14 @@ private:
             std::swap(a_failed, b_failed);
         }
 
-        const Add *add_a = a.as<Add>();
-        const Add *add_b = b.as<Add>();
-        const Sub *sub_a = a.as<Sub>();
-        const Sub *sub_b = b.as<Sub>();
-        const Mul *mul_a = a.as<Mul>();
-        const Mul *mul_b = b.as<Mul>();
-        const T *t_a = a.as<T>();
-        const T *t_b = b.as<T>();
+        const Add *add_a = a.template as<Add>();
+        const Add *add_b = b.template as<Add>();
+        const Sub *sub_a = a.template as<Sub>();
+        const Sub *sub_b = b.template as<Sub>();
+        const Mul *mul_a = a.template as<Mul>();
+        const Mul *mul_b = b.template as<Mul>();
+        const T *t_a = a.template as<T>();
+        const T *t_b = b.template as<T>();
 
         Expr expr;
 
@@ -586,21 +551,11 @@ private:
 
     template<typename T>
     Expr visit_and_or_op(const T *op) {
-        bool old_uses_var = uses_var;
-        uses_var = false;
-        bool old_failed = failed;
-        failed = false;
-        Expr a = mutate(op->a);
-        bool a_uses_var = uses_var;
-        bool a_failed = failed;
+        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
+        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
 
-        uses_var = false;
-        failed = false;
-        Expr b = mutate(op->b);
-        bool b_uses_var = uses_var;
-        bool b_failed = failed;
-        uses_var = old_uses_var || a_uses_var || b_uses_var;
-        failed = old_failed || a_failed || b_failed;
+        uses_var = uses_var || a_uses_var || b_uses_var;
+        failed = failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -608,8 +563,8 @@ private:
             std::swap(a_failed, b_failed);
         }
 
-        const T *t_a = a.as<T>();
-        const T *t_b = b.as<T>();
+        const T *t_a = a.template as<T>();
+        const T *t_b = b.template as<T>();
 
         Expr expr;
 
@@ -658,30 +613,20 @@ private:
 
     template<typename Cmp, typename Opp>
     Expr visit_cmp(const Cmp *op) {
-        bool old_uses_var = uses_var;
-        uses_var = false;
-        bool old_failed = failed;
-        failed = false;
-        Expr a = mutate(op->a);
-        bool a_uses_var = uses_var;
-        bool a_failed = failed;
+        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
+        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
 
-        uses_var = false;
-        failed = false;
-        Expr b = mutate(op->b);
-        bool b_uses_var = uses_var;
-        bool b_failed = failed;
-        uses_var = old_uses_var || a_uses_var || b_uses_var;
-        failed = old_failed || a_failed || b_failed;
+        uses_var = uses_var || a_uses_var || b_uses_var;
+        failed = failed || a_failed || b_failed;
 
         if (b_uses_var && !a_uses_var) {
             return mutate(Opp::make(b, a));
         }
 
-        const Add *add_a = a.as<Add>();
-        const Sub *sub_a = a.as<Sub>();
-        const Mul *mul_a = a.as<Mul>();
-        const Div *div_a = a.as<Div>();
+        const Add *add_a = a.template as<Add>();
+        const Sub *sub_a = a.template as<Sub>();
+        const Mul *mul_a = a.template as<Mul>();
+        const Div *div_a = a.template as<Div>();
 
         bool is_eq = Expr(op).as<EQ>() != nullptr;
         bool is_ne = Expr(op).as<NE>() != nullptr;
@@ -817,52 +762,33 @@ private:
         if (op->name == var) {
             uses_var = true;
             return op;
-        } else if (const CacheEntry *e = scope.find(op->name)) {
+        }
+        if (const CacheEntry *e = scope.find(op->name)) {
             uses_var = uses_var || e->uses_var;
             failed = failed || e->failed;
             return e->expr;
-        } else if (const Expr *e = external_scope.find(op->name)) {
+        }
+        if (const Expr *e = external_scope.find(op->name)) {
             // Expressions in the external scope haven't been solved
             // yet. This will either pull its solution from the cache,
             // or solve it and then put it into the cache.
             return mutate(*e);
-        } else {
-            return op;
         }
+        return op;
     }
 
     Expr visit(const Let *op) override {
-        bool old_uses_var = uses_var;
-        bool old_failed = failed;
-        uses_var = false;
-        failed = false;
-        Expr value = mutate(op->value);
-        CacheEntry e = {value, uses_var, failed};
-        uses_var = old_uses_var;
-        failed = old_failed;
-
-        ScopedBinding<CacheEntry> bind(scope, op->name, e);
+        auto [value, value_uses_var, value_failed] = mutate_inner(op->value);
+        ScopedBinding<CacheEntry> bind(scope, op->name, {value, value_uses_var, value_failed});
         return mutate(op->body);
     }
 
     Expr visit(const Select *op) override {
-        bool old_uses_var = uses_var;
-        bool old_failed = failed;
+        auto [true_value, true_uses_var, true_failed] = mutate_inner(op->true_value);
+        auto [false_value, false_uses_var, false_failed] = mutate_inner(op->false_value);
 
-        uses_var = false;
-        failed = false;
-        Expr true_value = mutate(op->true_value);
-        bool true_uses_var = uses_var;
-        bool true_failed = failed;
-
-        uses_var = false;
-        failed = false;
-        Expr false_value = mutate(op->false_value);
-        bool false_uses_var = uses_var;
-        bool false_failed = failed;
-
-        uses_var = old_uses_var || true_uses_var || false_uses_var;
-        failed = old_failed || true_failed || false_failed;
+        uses_var = uses_var || true_uses_var || false_uses_var;
+        failed = failed || true_failed || false_failed;
 
         Expr condition = op->condition;
 
