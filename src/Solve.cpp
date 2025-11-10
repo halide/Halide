@@ -41,28 +41,21 @@ public:
     using IRMutator::mutate;
 
     Expr mutate(const Expr &e) override {
-        map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
-        if (iter == cache.end()) {
-            // Not in the cache, call the base class version.
-            debug(4) << "Mutating " << e << " (" << uses_var << ", " << failed << ")\n";
-            bool old_uses_var = uses_var;
-            uses_var = false;
-            bool old_failed = failed;
-            failed = false;
-            Expr new_e = IRMutator::mutate(e);
-            CacheEntry entry = {new_e, uses_var, failed};
-            uses_var = old_uses_var || uses_var;
-            failed = old_failed || failed;
-            cache[e] = entry;
-            debug(4) << "(Miss) Rewrote " << e << " -> " << new_e << " (" << uses_var << ", " << failed << ")\n";
-            return new_e;
-        } else {
+        if (auto iter = cache.find(e); iter != cache.end()) {
             // Cache hit.
-            uses_var = uses_var || iter->second.uses_var;
-            failed = failed || iter->second.failed;
-            debug(4) << "(Hit) Rewrote " << e << " -> " << iter->second.expr << " (" << uses_var << ")\n";
-            return iter->second.expr;
+            auto [new_e, e_uses_var, e_failed] = iter->second;
+            uses_var |= e_uses_var;
+            failed |= e_failed;
+            debug(4) << "(Hit) Rewrote " << e << " -> " << new_e << " (" << uses_var << ")\n";
+            return new_e;
         }
+
+        // Not in the cache, call the base class version.
+        debug(4) << "Mutating " << e << " (" << uses_var << ", " << failed << ")\n";
+        CacheEntry entry = mutate_with_state<IRMutator>(e);
+        cache[e] = entry;
+        debug(4) << "(Miss) Rewrote " << e << " -> " << entry.expr << " (" << uses_var << ", " << failed << ")\n";
+        return entry.expr;
     }
 
     // Has the solve failed.
@@ -116,19 +109,25 @@ private:
         return Expr();
     }
 
-    CacheEntry mutate_inner(const Expr &e) {
-        ScopedValue<bool> old_uses_var(uses_var, false);
-        ScopedValue<bool> old_failed(failed, false);
-        const Expr result = mutate(e);
-        return {result, uses_var, failed};
+    // Mutate a subexpression under a reset use/fail state. Return the
+    // mutated result and the local use/fail state while also updating
+    // the global use/fail state.
+    template<typename Base = SolveExpression>
+    CacheEntry mutate_with_state(const Expr &e) {
+        auto entry = [&]() -> CacheEntry {
+            ScopedValue<bool> old_uses_var(uses_var, false);
+            ScopedValue<bool> old_failed(failed, false);
+            const Expr new_e = Base::mutate(e);
+            return {new_e, uses_var, failed};
+        }();
+        uses_var |= entry.uses_var;
+        failed |= entry.failed;
+        return entry;
     }
 
     Expr visit(const Add *op) override {
-        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
-        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
-
-        uses_var = uses_var || a_uses_var || b_uses_var;
-        failed = failed || a_failed || b_failed;
+        auto [a, a_uses_var, a_failed] = mutate_with_state(op->a);
+        auto [b, b_uses_var, b_failed] = mutate_with_state(op->b);
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -211,11 +210,8 @@ private:
     Expr visit(const Sub *op) override {
         bool old_failed = failed;
 
-        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
-        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
-
-        uses_var = uses_var || a_uses_var || b_uses_var;
-        failed = failed || a_failed || b_failed;
+        auto [a, a_uses_var, a_failed] = mutate_with_state(op->a);
+        auto [b, b_uses_var, b_failed] = mutate_with_state(op->b);
 
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
@@ -297,13 +293,10 @@ private:
     }
 
     Expr visit(const Mul *op) override {
-        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
+        auto [a, a_uses_var, a_failed] = mutate_with_state(op->a);
         internal_assert(!is_const(op->a) || !a_uses_var) << op->a << ", " << uses_var << "\n";
 
-        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
-
-        uses_var = uses_var || a_uses_var || b_uses_var;
-        failed = failed || a_failed || b_failed;
+        auto [b, b_uses_var, b_failed] = mutate_with_state(op->b);
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -350,20 +343,16 @@ private:
     }
 
     Expr visit(const Div *op) override {
-        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
+        auto [a, a_uses_var, a_failed] = mutate_with_state(op->a);
         internal_assert(!is_const(op->a) || !a_uses_var)
             << op->a << ", " << uses_var << "\n";
 
         // Don't use structured bindings because `b` is captured in a lambda below.
         // Capturing a structured binding is a C++20 extension, and this code should
         // be fixed upon upgrading to C++20.
-        const auto b_result = mutate_inner(op->b);
+        const auto b_result = mutate_with_state(op->b);
         Expr b = b_result.expr;
         bool b_uses_var = b_result.uses_var;
-        bool b_failed = b_result.failed;
-
-        uses_var = uses_var || a_uses_var || b_uses_var;
-        failed = failed || a_failed || b_failed;
 
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
@@ -419,11 +408,8 @@ private:
             // var out of the call, but we will reorder the args if it would
             // help.
             internal_assert(op->args.size() == 2);
-            auto [a, a_uses_var, a_failed] = mutate_inner(op->args[0]);
-            auto [b, b_uses_var, b_failed] = mutate_inner(op->args[1]);
-
-            uses_var = uses_var || a_uses_var || b_uses_var;
-            failed = failed || a_failed || b_failed;
+            auto [a, a_uses_var, a_failed] = mutate_with_state(op->args[0]);
+            auto [b, b_uses_var, b_failed] = mutate_with_state(op->args[1]);
 
             failed |= a_uses_var && b_uses_var;
 
@@ -440,11 +426,8 @@ private:
 
     template<typename T, typename Other>
     Expr visit_min_max_op(const T *op) {
-        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
-        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
-
-        uses_var = uses_var || a_uses_var || b_uses_var;
-        failed = failed || a_failed || b_failed;
+        auto [a, a_uses_var, a_failed] = mutate_with_state(op->a);
+        auto [b, b_uses_var, b_failed] = mutate_with_state(op->b);
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -545,11 +528,8 @@ private:
 
     template<typename T>
     Expr visit_and_or_op(const T *op) {
-        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
-        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
-
-        uses_var = uses_var || a_uses_var || b_uses_var;
-        failed = failed || a_failed || b_failed;
+        auto [a, a_uses_var, a_failed] = mutate_with_state(op->a);
+        auto [b, b_uses_var, b_failed] = mutate_with_state(op->b);
 
         if (b_uses_var && !a_uses_var) {
             std::swap(a, b);
@@ -607,11 +587,8 @@ private:
 
     template<typename Cmp, typename Opp>
     Expr visit_cmp(const Cmp *op) {
-        auto [a, a_uses_var, a_failed] = mutate_inner(op->a);
-        auto [b, b_uses_var, b_failed] = mutate_inner(op->b);
-
-        uses_var = uses_var || a_uses_var || b_uses_var;
-        failed = failed || a_failed || b_failed;
+        auto [a, a_uses_var, a_failed] = mutate_with_state(op->a);
+        auto [b, b_uses_var, b_failed] = mutate_with_state(op->b);
 
         if (b_uses_var && !a_uses_var) {
             return mutate(Opp::make(b, a));
@@ -758,8 +735,8 @@ private:
             return op;
         }
         if (const CacheEntry *e = scope.find(op->name)) {
-            uses_var = uses_var || e->uses_var;
-            failed = failed || e->failed;
+            uses_var |= e->uses_var;
+            failed |= e->failed;
             return e->expr;
         }
         if (const Expr *e = external_scope.find(op->name)) {
@@ -772,16 +749,18 @@ private:
     }
 
     Expr visit(const Let *op) override {
-        ScopedBinding<CacheEntry> bind(scope, op->name, mutate_inner(op->value));
+        CacheEntry entry = [&] {
+            ScopedValue<bool> save_uses_var(uses_var);
+            ScopedValue<bool> save_failed(failed);
+            return mutate_with_state(op->value);
+        }();
+        ScopedBinding<CacheEntry> bind(scope, op->name, entry);
         return mutate(op->body);
     }
 
     Expr visit(const Select *op) override {
-        auto [true_value, true_uses_var, true_failed] = mutate_inner(op->true_value);
-        auto [false_value, false_uses_var, false_failed] = mutate_inner(op->false_value);
-
-        uses_var = uses_var || true_uses_var || false_uses_var;
-        failed = failed || true_failed || false_failed;
+        auto [true_value, true_uses_var, true_failed] = mutate_with_state(op->true_value);
+        auto [false_value, false_uses_var, false_failed] = mutate_with_state(op->false_value);
 
         Expr condition = op->condition;
 
@@ -791,15 +770,12 @@ private:
             std::swap(true_value, false_value);
         }
 
-        auto [c, condition_uses_var, condition_failed] = mutate_inner(condition);
+        auto [c, condition_uses_var, condition_failed] = mutate_with_state(condition);
         condition = c;
-
-        uses_var = uses_var || condition_uses_var;
-        failed = failed || condition_failed;
 
         // If two or more of the children use the var, we failed to fully solve the expression.
         int total_used = (true_uses_var ? 1 : 0) + (false_uses_var ? 1 : 0) + (condition_uses_var ? 1 : 0);
-        failed = failed || total_used > 1;
+        failed |= total_used > 1;
 
         return Select::make(condition, true_value, false_value);
     }
