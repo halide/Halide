@@ -880,9 +880,8 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
     auto metal_compiler = get_metal_compiler();
     auto metal_linker = get_metal_linker();
     if (!metal_compiler.empty() && !metal_linker.empty()) {
-        // The user has specified the Metal compiler and linker to use via set_metal_compiler()
-        // and set_metal_linker(), so instead of embedding the shader as a string, we will
-        // embed it as a metallib
+        // The user has specified the Metal compiler and linker to use via set_metal_compiler_and_linker(),
+        // so instead of embedding the shader as a string, we will embed it as a metallib
         // Write the source to a temporary file.
         auto tmpfile = file_make_temp("metal", ".metal");
         write_entire_file(tmpfile, buffer);
@@ -940,8 +939,8 @@ std::string get_metal_linker() {
 
 }  // namespace Internal
 
-void set_metal_compilation_tools(const std::string &compiler_path,
-                                  const std::string &linker_path) {
+void set_metal_compiler_and_linker(const std::string &compiler_path,
+                                    const std::string &linker_path) {
     Internal::metal_tools.compiler = compiler_path;
     Internal::metal_tools.linker = linker_path;
 }
