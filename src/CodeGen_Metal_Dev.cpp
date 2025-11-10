@@ -940,7 +940,7 @@ std::string get_metal_linker() {
 }  // namespace Internal
 
 void set_metal_compiler_and_linker(const std::string &compiler_path,
-                                    const std::string &linker_path) {
+                                   const std::string &linker_path) {
     Internal::metal_tools.compiler = compiler_path;
     Internal::metal_tools.linker = linker_path;
 }

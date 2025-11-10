@@ -15,7 +15,7 @@ extern struct ObjectiveCClass _NSConcreteGlobalBlock;
 extern struct ObjectiveCClass _NSConcreteStackBlock;
 void *dlsym(void *, const char *);
 #define RTLD_DEFAULT ((void *)-2)
-extern objc_id /*dispatch_data_t*/ dispatch_data_create(const void * buffer, size_t size, objc_id queue, objc_id destructor);
+extern objc_id /*dispatch_data_t*/ dispatch_data_create(const void *buffer, size_t size, objc_id queue, objc_id destructor);
 }
 
 namespace Halide {
@@ -204,18 +204,16 @@ WEAK mtl_library *new_library_from_data(mtl_device *device, const char *source_d
     objc_id error_return;
 
     debug(nullptr) << "source_len: " << source_len << "\n";
-    
+
     // With DISPATCH_DATA_DESTRUCTOR_DEFAULT, the data is copied, and no dispatch queue needs to be provided
     // for the destructor
-    objc_id dispatch_data = dispatch_data_create((void*)source_data, source_len, nullptr, 
+    objc_id dispatch_data = dispatch_data_create((void *)source_data, source_len, nullptr,
                                                  /* DISPATCH_DATA_DESTRUCTOR_DEFAULT */ nullptr);
     if (dispatch_data == nullptr) {
         debug(nullptr) << "dispatch_data_create failed\n";
     } else {
         debug(nullptr) << "dispatch_data_create succeeded\n";
     }
-
-
 
     typedef mtl_library *(*new_library_with_data_method)(objc_id device, objc_sel sel, objc_id data, objc_id *error_return);
     new_library_with_data_method method2 = (new_library_with_data_method)&objc_msgSend;
@@ -694,15 +692,15 @@ WEAK int halide_metal_device_free(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
-    bool is_compiled_metallib(const char *source, int source_size) {
-        // Check for the magic bytes at the beginning of the file
-        if (source_size < 4) {
-            return false;
-        }
-        const uint8_t metal_magic_number[4] = {0x4D, 0x54, 0x4c, 0x42};  // MTLB
-        return memcmp(source, metal_magic_number, 4) == 0;
+bool is_compiled_metallib(const char *source, int source_size) {
+    // Check for the magic bytes at the beginning of the file
+    if (source_size < 4) {
+        return false;
     }
+    const uint8_t metal_magic_number[4] = {0x4D, 0x54, 0x4c, 0x42};  // MTLB
+    return memcmp(source, metal_magic_number, 4) == 0;
 }
+}  // namespace
 
 WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, const char *source, int source_size) {
     MetalContextHolder metal_context(user_context, true);

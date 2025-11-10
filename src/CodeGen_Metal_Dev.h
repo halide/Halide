@@ -13,8 +13,8 @@ namespace Halide {
 struct Target;
 
 /** Set the Metal compiler and linker commands to use for generating
- * precompiled Metal shaders (embedded metallibs instead of source code). 
- * If both are set to non-empty strings, the Metal code generator will invoke 
+ * precompiled Metal shaders (embedded metallibs instead of source code).
+ * If both are set to non-empty strings, the Metal code generator will invoke
  * these tools to precompile shaders instead of embedding source code.
  * The compiler should typically be set to something like "xcrun -sdk macosx metal"
  * and the linker to "xcrun -sdk macosx metallib".
