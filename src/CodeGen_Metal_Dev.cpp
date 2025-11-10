@@ -24,9 +24,10 @@ struct MetalTools {
     std::string compiler;
     std::string linker;
 };
-}  // namespace
 
 MetalTools metal_tools;
+
+}  // namespace
 
 namespace {
 
