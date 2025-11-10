@@ -791,7 +791,16 @@ private:
             std::swap(true_value, false_value);
         }
 
-        condition = mutate(condition);
+        auto [c, condition_uses_var, condition_failed] = mutate_inner(condition);
+        condition = c;
+
+        uses_var = uses_var || condition_uses_var;
+        failed = failed || condition_failed;
+
+        // If two or more of the children use the var, we failed to fully solve the expression.
+        int total_used = (true_uses_var ? 1 : 0) + (false_uses_var ? 1 : 0) + (condition_uses_var ? 1 : 0);
+        failed = failed || total_used > 1;
+
         return Select::make(condition, true_value, false_value);
     }
 };
@@ -1482,6 +1491,15 @@ void solve_test() {
 
     check_solve((5 * Broadcast::make(x, 4) + y) / 5,
                 Broadcast::make(x, 4) + (Broadcast::make(y, 4) / 5));
+
+    // Select negates the condition to move x leftward
+    check_solve(select(y < z, z, x),
+                select(z <= y, x, z));
+
+    // Select negates the condition and then mutates it, moving x
+    // leftward (despite the simplifier preferring < to >).
+    check_solve(select(x < 10, 10, x),
+                select(x >= 10, x, 10));
 
     std::cout << "Solve test passed\n";
 }
