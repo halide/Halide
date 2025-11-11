@@ -20,7 +20,7 @@ namespace PythonBindings {
 
 namespace {
 
-bool is_expr(const py::object &obj) {
+bool is_expr(const py::handle &obj) {
     try {
         (void)obj.cast<Expr>();  // Check if casting succeeds
         return true;
@@ -30,30 +30,26 @@ bool is_expr(const py::object &obj) {
 }
 
 template<typename T>
-T pop_and_cast(std::vector<py::object> &args) {
-    const auto last = args.back();
+T cast_arg(const py::handle &arg) {
     try {
-        T value = last.cast<T>();
-        args.pop_back();
-        return value;
+        return arg.cast<T>();
     } catch (const py::cast_error &) {
         _halide_user_error
             << "select(): Expected " << py::str(py::type::of<T>().attr("__name__"))
-            << " but got " << py::str(last.get_type().attr("__name__")) << ": "
-            << py::str(last);
+            << " but got " << py::str(arg.get_type().attr("__name__")) << ": "
+            << py::str(arg);
     }
 }
 
 template<typename TCond, typename TVal>
-py::object py_select_reduce(std::vector<py::object> &args) {
-    while (args.size() > 1) {
-        auto false_t = pop_and_cast<TVal>(args);
-        auto true_t = pop_and_cast<TVal>(args);
-        auto cond_t = pop_and_cast<TCond>(args);
-        args.push_back(py::cast(select(cond_t, true_t, false_t)));
+py::object py_select_reduce(const py::args &args) {
+    auto false_case = cast_arg<TVal>(args[args.size() - 1]);
+    for (size_t pos = args.size() - 1; pos >= 2; pos -= 2) {
+        auto true_case = cast_arg<TVal>(args[pos - 1]);
+        auto condition = cast_arg<TCond>(args[pos - 2]);
+        false_case = select(condition, true_case, false_case);
     }
-    _halide_internal_assert(args.size() == 1);
-    return args.back();
+    return py::cast(false_case);
 }
 
 py::object py_select(const py::args &args) {
@@ -65,21 +61,12 @@ py::object py_select(const py::args &args) {
         throw py::value_error("select() must have an odd number of arguments");
     }
 
-    std::vector<py::object> cases;
-    for (const auto &arg : args) {
-        cases.push_back(py::reinterpret_borrow<py::object>(arg));
+    if (is_expr(args[0])) {        // If the condition is an Expr, then ...
+        return is_expr(args[1]) ?  // ... we need to check the value's kind.
+                   py_select_reduce<Expr, Expr>(args) :
+                   py_select_reduce<Expr, Tuple>(args);
     }
-
-    // If the condition is an expr, then ...
-    if (is_expr(cases[0])) {
-        // ... we need to check the value's kind.
-        if (is_expr(cases[1])) {
-            return py_select_reduce<Expr, Expr>(cases);
-        }
-        return py_select_reduce<Expr, Tuple>(cases);
-    }
-    // Otherwise, the value must be a tuple, too.
-    return py_select_reduce<Tuple, Tuple>(cases);
+    return py_select_reduce<Tuple, Tuple>(args);  // Otherwise, the value must be a tuple, too.
 }
 
 }  // namespace
