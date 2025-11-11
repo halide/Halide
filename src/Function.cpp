@@ -222,6 +222,7 @@ struct CheckVars : public IRGraphVisitor {
 
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
+        /*
         if (op->name == name && op->call_type == Call::Halide) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 const Variable *var = op->args[i].as<Variable>();
@@ -234,6 +235,7 @@ struct CheckVars : public IRGraphVisitor {
                 }
             }
         }
+        */
     }
 
     void visit(const Variable *var) override {
@@ -570,6 +572,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     // Freeze all called functions
     FreezeFunctions freezer(name());
+    // TODO: Check for calls to undefined Funcs
     for (const auto &value : values) {
         value.accept(&freezer);
     }

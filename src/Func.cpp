@@ -3324,8 +3324,15 @@ Stage FuncRef::operator/=(const FuncRef &e) {
 }
 
 FuncRef::operator Expr() const {
+    /*
     user_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+    */
+
+    if (!(func.has_pure_definition() || func.has_extern_definition())) {
+        return Call::make(Type{}, func.name(), args, Call::Halide,
+                          FunctionPtr(), 0, Buffer<>(), Parameter());
+    }
 
     user_assert(func.outputs() == 1)
         << "Can't convert a reference Func \"" << func.name()
