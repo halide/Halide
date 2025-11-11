@@ -670,6 +670,16 @@ void match_types(Expr &a, Expr &b) {
         return;
     }
 
+    if (a.type().is_unknown() && !b.type().is_unknown()) {
+        b = cast(Type{}, b);
+        return;
+    }
+
+    if (b.type().is_unknown() && !a.type().is_unknown()) {
+        a = cast(Type{}, a);
+        return;
+    }
+
     user_assert(!a.type().is_handle() && !b.type().is_handle())
         << "Can't do arithmetic on opaque pointer types: "
         << a << ", " << b << "\n";
@@ -1480,10 +1490,45 @@ Expr saturating_cast(Type t, Expr e) {
     return Call::make(t, Call::saturating_cast, {std::move(e)}, Call::PureIntrinsic);
 }
 
+Expr declare_type(Type t, const Expr &e) {
+    // TODO: This may be called on unsanitized exprs. May need CSE.
+    internal_assert(e.type().is_unknown());
+    if (const Call *op = e.as<Call>()) {
+        internal_assert(op->call_type == Call::Halide);
+        return Call::make(t, op->name, op->args, op->call_type,
+                          op->func, op->value_index, op->image, op->param);
+    } else if (const Add *op = e.as<Add>()) {
+        return Add::make(declare_type(t, op->a), declare_type(t, op->b));
+    } else if (const Sub *op = e.as<Sub>()) {
+        return Sub::make(declare_type(t, op->a), declare_type(t, op->b));
+    } else if (const Mul *op = e.as<Mul>()) {
+        return Mul::make(declare_type(t, op->a), declare_type(t, op->b));
+    } else if (const Div *op = e.as<Div>()) {
+        return Div::make(declare_type(t, op->a), declare_type(t, op->b));
+    } else if (const Min *op = e.as<Min>()) {
+        return Min::make(declare_type(t, op->a), declare_type(t, op->b));
+    } else if (const Max *op = e.as<Max>()) {
+        return Max::make(declare_type(t, op->a), declare_type(t, op->b));
+    } else if (const Cast *op = e.as<Cast>()) {
+        // Must be a cast to unknown
+        return Cast::make(t, op->value);
+    } else {
+        user_error << "Can't do top-down type inference on " << e;
+    }
+}
+
 Expr select(Expr condition, Expr true_value, Expr false_value) {
     if (as_const_int(condition)) {
         // Why are you doing this? We'll preserve the select node until constant folding for you.
         condition = cast(Bool(true_value.type().lanes()), std::move(condition));
+    }
+
+    if (true_value.type().is_unknown() && !false_value.type().is_unknown()) {
+        true_value = declare_type(false_value.type(), true_value);
+    }
+
+    if (false_value.type().is_unknown() && !true_value.type().is_unknown()) {
+        false_value = declare_type(true_value.type(), false_value);
     }
 
     // Coerce int literals to the type of the other argument
