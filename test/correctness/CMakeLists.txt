@@ -220,6 +220,7 @@ tests(GROUPS correctness
       many_updates.cpp
       math.cpp
       median3x3.cpp
+      metal_precompiled_shaders.cpp
       memoize_cloned.cpp
       min_extent.cpp
       mod.cpp
