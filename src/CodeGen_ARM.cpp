@@ -1075,7 +1075,12 @@ void CodeGen_ARM::init_module() {
 
             Type ret_type = intrin.ret_type;
             ret_type = ret_type.with_lanes(ret_type.lanes() * width_factor);
-            internal_assert(ret_type.bits() * ret_type.lanes() <= 128 * width_factor) << full_name << "\n";
+            if (!(intrin.flags & ArmIntrinsic::NoMangle)) {
+                internal_assert(ret_type.bits() * ret_type.lanes() <= 128 * width_factor)
+                    << "Invalid intrinsic `" << full_name << "`: "
+                    << ret_type.bits() << " * " << ret_type.lanes()
+                    << " > 128 * " << width_factor;
+            }
             vector<Type> arg_types;
             arg_types.reserve(4);
             for (halide_type_t i : intrin.arg_types) {
