@@ -233,6 +233,12 @@ public:
                                   const std::string &fn_name,
                                   const Target &target = get_target_from_environment());
 
+    /** Emit MLIR code. */
+    void compile_to_mlir(const std::string &filename,
+                         const std::vector<Argument> &args,
+                         const std::string &fn_name,
+                         const Target &target = get_target_from_environment());
+
     /** Statically compile a pipeline with multiple output functions to an
      * object file, with the given filename (which should probably end in
      * .o or .obj), type signature, and C function name (which defaults to
