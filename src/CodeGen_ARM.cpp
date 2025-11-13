@@ -1016,11 +1016,11 @@ void CodeGen_ARM::init_module() {
         }
 
         // This makes up to three passes defining intrinsics for 64-bit,
-        // 128-bit, and, if SVE is avaailable, whatever the SVE target width
+        // 128-bit, and, if SVE is available, whatever the SVE target width
         // is. Some variants will not result in a definition getting added based
         // on the target and the intrinsic flags. The intrinsic width may be
-        // scaled and one of two opcodes may be selected by different
-        // interations of this loop.
+        // scaled, and one of two opcodes may be selected by different
+        // iterations of this loop.
         for (const auto flavor : flavors) {
             const bool is_sve = (flavor == SIMDFlavors::SVE);
 
