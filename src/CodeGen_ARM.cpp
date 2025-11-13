@@ -45,6 +45,11 @@ namespace {
 //
 // v8r has no relation to anything.
 Target complete_arm_target(Target t) {
+    if (t.os == Target::OSX) {
+        // The Apple M1 implements the full ARM v8.4a spec.
+        t.set_feature(Target::ARMv84a);
+    }
+
     constexpr int num_arm_v8_features = 10;
     static const Target::Feature arm_v8_features[num_arm_v8_features] = {
         Target::ARMv89a,
