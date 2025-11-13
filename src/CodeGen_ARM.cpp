@@ -1240,7 +1240,8 @@ void CodeGen_ARM::visit(const Add *op) {
     }
 
     // FMLAL
-    if (op->type.is_vector() && target.has_feature(Target::ARMFp16) && op->type.is_float() && op->type.bits() == 32) {
+    if (op->type.is_vector() && op->type.is_float() && op->type.bits() == 32 &&
+        target.features_all_of({Target::ARMv84a, Target::ARMFp16})) {
         // Initial value
         Expr a = Variable::make(Float(32, 0), "a");
         // Values
@@ -2542,6 +2543,9 @@ string CodeGen_ARM::mattrs() const {
     }
     if (target.has_feature(Target::ARMv84a)) {
         attrs.emplace_back("+v8.4a");
+        if (target.has_feature(Target::ARMFp16)) {
+            attrs.emplace_back("+fp16fml");
+        }
     }
     if (target.has_feature(Target::ARMv85a)) {
         attrs.emplace_back("+v8.5a");
