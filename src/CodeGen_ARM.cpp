@@ -202,7 +202,7 @@ protected:
             : intrin(intrin), pattern(std::move(p)) {
         }
     };
-    vector<Pattern> casts, calls, averagings, negations;
+    vector<Pattern> casts, calls, negations;
 
     string mcpu_target() const override;
     string mcpu_tune() const override;
