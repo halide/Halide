@@ -395,6 +395,10 @@ public:
                 if (!arm32)
                     check(arm32 ? "vmla.f32" : "fmla", 2 * w, f32_1 + f32_2 * f32_3);
             }
+            if (!arm32 && target.has_feature(Target::ARMFp16)) {
+                check("fmlal", 4 * w, f32_1 + widening_mul(f16_2, f16_3));
+                check("fmlal2", 8 * w, widening_mul(f16_1, f16_2) + f32_3);
+            }
 
             // VMLS     I, F    F, D    Multiply Subtract
             check(arm32 ? "vmls.i8" : "mls", 8 * w, i8_1 - i8_2 * i8_3);
@@ -1151,6 +1155,6 @@ int main(int argc, char **argv) {
 
             Target("arm-32-linux"),
             Target("arm-64-linux"),
-            Target("arm-64-linux-arm_dot_prod"),
+            Target("arm-64-linux-armv84a-arm_dot_prod-arm_fp16"),
         });
 }
