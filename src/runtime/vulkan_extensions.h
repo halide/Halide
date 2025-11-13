@@ -203,10 +203,18 @@ uint32_t vk_get_required_device_extensions(void *user_context, StringTable &ext_
 uint32_t vk_get_optional_device_extensions(void *user_context, StringTable &ext_table) {
     const char *optional_ext_table[] = {
         "VK_KHR_portability_subset",  //< necessary for running under Molten (aka Vulkan on Mac)
+        VK_KHR_MAINTENANCE_1_EXTENSION_NAME,
+        VK_KHR_MAINTENANCE_2_EXTENSION_NAME,
+        VK_KHR_MAINTENANCE_3_EXTENSION_NAME,
+        VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
         VK_KHR_MAINTENANCE_5_EXTENSION_NAME,
+        VK_KHR_MAINTENANCE_6_EXTENSION_NAME,
+        VK_KHR_MAINTENANCE_7_EXTENSION_NAME,
         VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
         VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
-        VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME};
+        VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
+        VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME};
+
     const uint32_t optional_ext_count = sizeof(optional_ext_table) / sizeof(optional_ext_table[0]);
     ext_table.fill(user_context, (const char **)optional_ext_table, optional_ext_count);
     return optional_ext_count;
