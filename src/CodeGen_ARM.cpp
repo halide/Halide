@@ -828,6 +828,9 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
     {"vabdl_u32x2", "vabdl_u32x2", Int(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
     {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+
+    // FMLAL - Fused widening multiply-add
+    {nullptr, "fmlal_f32x8", Float(32, 8), "widening_fma", {Float(32, 8), Float(16, 8), Float(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable | ArmIntrinsic::RequireFp16},
 };
 
 // List of fp16 math functions which we can avoid "emulated" equivalent code generation.
@@ -1226,74 +1229,96 @@ void CodeGen_ARM::visit(const Cast *op) {
 }
 
 void CodeGen_ARM::visit(const Add *op) {
-    if (simd_intrinsics_disabled() ||
-        !op->type.is_vector() ||
-        !target.has_feature(Target::ARMDotProd) ||
-        !op->type.is_int_or_uint() ||
-        op->type.bits() != 32) {
+    struct Pattern {
+        Expr pattern;
+        const char *intrin;
+    };
+
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
 
-    struct Pattern {
-        Expr pattern;
-        const char *intrin;
-        Type coeff_type = UInt(8);
-    };
+    // FMLAL
+    if (op->type.is_vector() && target.has_feature(Target::ARMFp16) && op->type.is_float() && op->type.bits() == 32) {
+        // Initial value
+        Expr a = Variable::make(Float(32, 0), "a");
+        // Values
+        Expr b = Variable::make(Float(16, 0), "b");
+        Expr c = Variable::make(Float(16, 0), "c");
 
-    // Initial values.
-    Expr init_i32 = Variable::make(Int(32, 0), "init");
-    Expr init_u32 = Variable::make(UInt(32, 0), "init");
-    // Values
-    Expr a_i8 = Variable::make(Int(8, 0), "a"), b_i8 = Variable::make(Int(8, 0), "b");
-    Expr c_i8 = Variable::make(Int(8, 0), "c"), d_i8 = Variable::make(Int(8, 0), "d");
-    Expr a_u8 = Variable::make(UInt(8, 0), "a"), b_u8 = Variable::make(UInt(8, 0), "b");
-    Expr c_u8 = Variable::make(UInt(8, 0), "c"), d_u8 = Variable::make(UInt(8, 0), "d");
-    // Coefficients
-    Expr ac_i8 = Variable::make(Int(8, 0), "ac"), bc_i8 = Variable::make(Int(8, 0), "bc");
-    Expr cc_i8 = Variable::make(Int(8, 0), "cc"), dc_i8 = Variable::make(Int(8, 0), "dc");
-    Expr ac_u8 = Variable::make(UInt(8, 0), "ac"), bc_u8 = Variable::make(UInt(8, 0), "bc");
-    Expr cc_u8 = Variable::make(UInt(8, 0), "cc"), dc_u8 = Variable::make(UInt(8, 0), "dc");
+        static const Pattern patterns[] = {
+            {a + widening_mul(b, c), "widening_fma"},
+            {widening_mul(b, c) + a, "widening_fma"},
+        };
 
-    Expr ma_i8 = widening_mul(a_i8, ac_i8);
-    Expr mb_i8 = widening_mul(b_i8, bc_i8);
-    Expr mc_i8 = widening_mul(c_i8, cc_i8);
-    Expr md_i8 = widening_mul(d_i8, dc_i8);
-
-    Expr ma_u8 = widening_mul(a_u8, ac_u8);
-    Expr mb_u8 = widening_mul(b_u8, bc_u8);
-    Expr mc_u8 = widening_mul(c_u8, cc_u8);
-    Expr md_u8 = widening_mul(d_u8, dc_u8);
-
-    static const Pattern patterns[] = {
-        // Signed variants.
-        {(init_i32 + widening_add(ma_i8, mb_i8)) + widening_add(mc_i8, md_i8), "dot_product"},
-        {init_i32 + (widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8)), "dot_product"},
-        {widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8), "dot_product"},
-
-        // Unsigned variants.
-        {(init_u32 + widening_add(ma_u8, mb_u8)) + widening_add(mc_u8, md_u8), "dot_product"},
-        {init_u32 + (widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8)), "dot_product"},
-        {widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8), "dot_product"},
-    };
-
-    std::map<std::string, Expr> matches;
-    for (const Pattern &p : patterns) {
-        if (expr_match(p.pattern, op, matches)) {
-            Expr init;
-            auto it = matches.find("init");
-            if (it == matches.end()) {
-                init = make_zero(op->type);
-            } else {
-                init = it->second;
+        std::map<std::string, Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (expr_match(p.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, p.intrin, {matches["a"], matches["b"], matches["c"]});
+                if (value) {
+                    return;
+                }
             }
-            Expr values = Shuffle::make_interleave({matches["a"], matches["b"],
-                                                    matches["c"], matches["d"]});
-            Expr coeffs = Shuffle::make_interleave({matches["ac"], matches["bc"],
-                                                    matches["cc"], matches["dc"]});
-            value = call_overloaded_intrin(op->type, p.intrin, {init, values, coeffs});
-            if (value) {
-                return;
+        }
+    }
+
+    // SDOT, UDOT
+    if (op->type.is_vector() && target.has_feature(Target::ARMDotProd) && op->type.is_int_or_uint() && op->type.bits() == 32) {
+        // Initial values.
+        Expr init_i32 = Variable::make(Int(32, 0), "init");
+        Expr init_u32 = Variable::make(UInt(32, 0), "init");
+        // Values
+        Expr a_i8 = Variable::make(Int(8, 0), "a"), b_i8 = Variable::make(Int(8, 0), "b");
+        Expr c_i8 = Variable::make(Int(8, 0), "c"), d_i8 = Variable::make(Int(8, 0), "d");
+        Expr a_u8 = Variable::make(UInt(8, 0), "a"), b_u8 = Variable::make(UInt(8, 0), "b");
+        Expr c_u8 = Variable::make(UInt(8, 0), "c"), d_u8 = Variable::make(UInt(8, 0), "d");
+        // Coefficients
+        Expr ac_i8 = Variable::make(Int(8, 0), "ac"), bc_i8 = Variable::make(Int(8, 0), "bc");
+        Expr cc_i8 = Variable::make(Int(8, 0), "cc"), dc_i8 = Variable::make(Int(8, 0), "dc");
+        Expr ac_u8 = Variable::make(UInt(8, 0), "ac"), bc_u8 = Variable::make(UInt(8, 0), "bc");
+        Expr cc_u8 = Variable::make(UInt(8, 0), "cc"), dc_u8 = Variable::make(UInt(8, 0), "dc");
+
+        Expr ma_i8 = widening_mul(a_i8, ac_i8);
+        Expr mb_i8 = widening_mul(b_i8, bc_i8);
+        Expr mc_i8 = widening_mul(c_i8, cc_i8);
+        Expr md_i8 = widening_mul(d_i8, dc_i8);
+
+        Expr ma_u8 = widening_mul(a_u8, ac_u8);
+        Expr mb_u8 = widening_mul(b_u8, bc_u8);
+        Expr mc_u8 = widening_mul(c_u8, cc_u8);
+        Expr md_u8 = widening_mul(d_u8, dc_u8);
+
+        static const Pattern patterns[] = {
+            // Signed variants.
+            {(init_i32 + widening_add(ma_i8, mb_i8)) + widening_add(mc_i8, md_i8), "dot_product"},
+            {init_i32 + (widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8)), "dot_product"},
+            {widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8), "dot_product"},
+
+            // Unsigned variants.
+            {(init_u32 + widening_add(ma_u8, mb_u8)) + widening_add(mc_u8, md_u8), "dot_product"},
+            {init_u32 + (widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8)), "dot_product"},
+            {widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8), "dot_product"},
+        };
+
+        std::map<std::string, Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (expr_match(p.pattern, op, matches)) {
+                Expr init;
+                auto it = matches.find("init");
+                if (it == matches.end()) {
+                    init = make_zero(op->type);
+                } else {
+                    init = it->second;
+                }
+                Expr values = Shuffle::make_interleave({matches["a"], matches["b"],
+                                                        matches["c"], matches["d"]});
+                Expr coeffs = Shuffle::make_interleave({matches["ac"], matches["bc"],
+                                                        matches["cc"], matches["dc"]});
+                value = call_overloaded_intrin(op->type, p.intrin, {init, values, coeffs});
+                if (value) {
+                    return;
+                }
             }
         }
     }
