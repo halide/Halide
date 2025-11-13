@@ -2223,7 +2223,7 @@ void CodeGen_C::visit(const Atomic *op) {
 
 void CodeGen_C::visit(const For *op) {
     string id_min = print_expr(op->min);
-    string id_extent = print_expr(op->extent);
+    string id_max = print_expr(op->max);
 
     if (op->for_type == ForType::Parallel) {
         stream << get_indent() << "#pragma omp parallel for\n";
@@ -2237,8 +2237,7 @@ void CodeGen_C::visit(const For *op) {
            << " = " << id_min
            << "; "
            << print_name(op->name)
-           << " < " << id_min
-           << " + " << id_extent
+           << " <= " << id_max
            << "; "
            << print_name(op->name)
            << "++)\n";
