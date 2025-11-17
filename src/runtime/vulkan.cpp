@@ -86,6 +86,17 @@ WEAK bool halide_vulkan_is_initialized() {
     return is_initialized;
 }
 
+WEAK int halide_vulkan_export_memory_allocator(void *user_context, halide_vulkan_memory_allocator *allocator) {
+    halide_mutex_lock(&thread_lock);
+    halide_error_code_t status = halide_error_code_success;
+    if (allocator == nullptr) {
+        error(user_context) << "Vulkan: Memory allocator is null!\n";
+        status = halide_error_code_buffer_argument_is_null;
+    }
+    halide_mutex_unlock(&thread_lock);
+    return status;
+}
+
 WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *halide_buffer) {
     debug(user_context)
         << "halide_vulkan_device_free (user_context: " << user_context
@@ -256,6 +267,21 @@ WEAK int halide_vulkan_device_release(void *user_context) {
     }
 
     return destroy_status;
+}
+
+WEAK int halide_vulkan_memory_allocator_release(void *user_context,
+                                                struct halide_vulkan_memory_allocator *allocator,
+                                                VkInstance instance,
+                                                VkDebugUtilsMessengerEXT messenger) {
+    debug(user_context) << "halide_vulkan_memory_allocator_release (user_context: " << user_context << ")\n";
+    // Destroy the context if we created it
+    if (allocator == nullptr) {
+        error(user_context) << "Vulkan: Memory allocator is null!\n";
+        return halide_error_code_buffer_argument_is_null;
+    }
+
+    return vk_release_memory_allocator(user_context, (VulkanMemoryAllocator *)allocator,
+                                       instance, messenger);
 }
 
 WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
