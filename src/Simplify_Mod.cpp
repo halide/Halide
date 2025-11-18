@@ -43,10 +43,8 @@ Expr Simplify::visit(const Mod *op, ExprInfo *info) {
         return rewrite.result;
     }
 
-    // clang-format off
-    if (EVAL_IN_LAMBDA
-        (
-         rewrite(c0 % c1, fold(c0 % c1)) ||
+    if (EVAL_IN_LAMBDA  //
+        (rewrite(c0 % c1, fold(c0 % c1)) ||
          rewrite(0 % x, 0) ||
          rewrite(x % x, 0) ||
          rewrite(x % 0, 0) ||
@@ -55,12 +53,12 @@ Expr Simplify::visit(const Mod *op, ExprInfo *info) {
          (no_overflow_int(op->type) &&
           (rewrite((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
            rewrite((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
-           rewrite((x * c0) % c1, (x % fold(c1/c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
+           rewrite((x * c0) % c1, (x % fold(c1 / c0)) * c0, c0 > 0 && c1 % c0 == 0) ||
            rewrite((x * c0 + y) % c1, y % c1, c0 % c1 == 0) ||
            rewrite((y + x * c0) % c1, y % c1, c0 % c1 == 0) ||
            rewrite((x * c0 - y) % c1, (-y) % c1, c0 % c1 == 0) ||
            rewrite((y - x * c0) % c1, y % c1, c0 % c1 == 0) ||
-           rewrite((x - y) % 2, (x + y) % 2) || // Addition and subtraction are the same modulo 2, because -1 == 1
+           rewrite((x - y) % 2, (x + y) % 2) ||  // Addition and subtraction are the same modulo 2, because -1 == 1
 
            rewrite(ramp(x, c0, c2) % broadcast(c1, c2), broadcast(x, c2) % broadcast(c1, c2), (c0 % c1 == 0)) ||
            rewrite(ramp(x, c0, lanes) % broadcast(c1, lanes), ramp(x % c1, c0, lanes),
@@ -80,7 +78,6 @@ Expr Simplify::visit(const Mod *op, ExprInfo *info) {
                    c0 % c1 == 0))))) {
         return mutate(rewrite.result, info);
     }
-    // clang-format on
 
     if (a.same_as(op->a) && b.same_as(op->b)) {
         return op;

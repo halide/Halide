@@ -69,7 +69,7 @@ extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *n
 }
 
 // Declare all the function pointers for the Vulkan API methods that will be resolved dynamically
-// clang-format off
+
 #define VULKAN_FN(fn) WEAK PFN_##fn fn = nullptr;
 #define HL_USE_VULKAN_LOADER_FNS
 #define HL_USE_VULKAN_INSTANCE_FNS
@@ -79,7 +79,6 @@ extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *n
 #undef HL_USE_VULKAN_INSTANCE_FNS
 #undef HL_USE_VULKAN_LOADER_FNS
 #undef VULKAN_FN
-// clang-format on
 
 // Get the function pointers to the Vulkan loader (to find all available instances)
 void WEAK vk_load_vulkan_loader_functions(void *user_context) {

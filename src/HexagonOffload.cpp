@@ -607,12 +607,12 @@ public:
         }
 
         static const uint8_t hexagon_plt1[] = {
-            // clang-format off
+
             0x00, 0x40, 0x00, 0x00,  // { immext (#0) (Relocation:R_HEX_B32_PCREL_X)
             0x0e, 0xc0, 0x49, 0x6a,  //   r14 = add (pc, ##GOTn@PCREL) }  (Relocation:R_HEX_6_PCREL_X)
             0x1c, 0xc0, 0x8e, 0x91,  //   r28 = memw (r14)
             0x00, 0xc0, 0x9c, 0x52,  //   jumpr r28
-            // clang-format on
+
         };
 
         debug(2) << "Adding PLT entry for symbol " << sym.get_name() << "\n";

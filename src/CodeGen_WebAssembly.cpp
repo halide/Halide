@@ -58,7 +58,6 @@ struct WasmIntrinsic {
     Target::Feature feature = Target::FeatureEnd;
 };
 
-// clang-format off
 const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.sadd.sat.v8i16", Int(16, 8), "saturating_add", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
     {"llvm.uadd.sat.v8i16", UInt(16, 8), "saturating_add", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
@@ -111,7 +110,6 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.nearbyint.f32", Float(32), "nearbyint", {Float(32)}},
     {"llvm.nearbyint.f64", Float(64), "nearbyint", {Float(64)}},
 };
-// clang-format on
 
 void CodeGen_WebAssembly::init_module() {
     CodeGen_Posix::init_module();
@@ -144,7 +142,6 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         Target::Feature required_feature;
     };
 
-    // clang-format off
     static const Pattern patterns[] = {
         {"int_to_double", f64(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_u32x_), Target::WasmSimd128},
@@ -155,7 +152,6 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         {"widen_integer", i64(wild_i32x_), Target::WasmSimd128},
         {"widen_integer", u64(wild_u32x_), Target::WasmSimd128},
     };
-    // clang-format on
 
     if (op->type.is_vector()) {
         std::vector<Expr> matches;
@@ -193,7 +189,6 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         Target::Feature required_feature;
     };
 
-    // clang-format off
     static const Pattern patterns[] = {
         {"q15mulr_sat_s", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15), Target::WasmSimd128},
         {"saturating_narrow", i8_sat(wild_i16x_), Target::WasmSimd128},
@@ -213,7 +208,6 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
         {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
     };
-    // clang-format on
 
     if (op->type.is_vector()) {
         std::vector<Expr> matches;
@@ -287,7 +281,7 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
         const char *intrin;
         Target::Feature required_feature;
     };
-    // clang-format off
+
     static const Pattern patterns[] = {
         {VectorReduce::Add, 2, i16(wild_i8x_), "pairwise_widening_add", Target::WasmSimd128},
         {VectorReduce::Add, 2, u16(wild_u8x_), "pairwise_widening_add", Target::WasmSimd128},
@@ -299,7 +293,6 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
 
         {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Target::WasmSimd128},
     };
-    // clang-format on
 
     // Other values will be added soon, so this switch isn't actually pointless
     using ValuePtr = llvm::Value *;

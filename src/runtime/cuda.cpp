@@ -14,17 +14,15 @@ namespace Cuda {
 
 // Define the function pointers for the CUDA API.
 
-// clang-format off
-#define CUDA_FN(ret, fn, args)                  WEAK ret(CUDAAPI *fn) args;  // NOLINT(bugprone-macro-parentheses)
-#define CUDA_FN_OPTIONAL(ret, fn, args)         WEAK ret(CUDAAPI *fn) args;  // NOLINT(bugprone-macro-parentheses)
-#define CUDA_FN_3020(ret, fn, fn_3020, args)    WEAK ret(CUDAAPI *fn) args;  // NOLINT(bugprone-macro-parentheses)
-#define CUDA_FN_4000(ret, fn, fn_4000, args)    WEAK ret(CUDAAPI *fn) args;  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN(ret, fn, args) WEAK ret(CUDAAPI *fn) args;                // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_OPTIONAL(ret, fn, args) WEAK ret(CUDAAPI *fn) args;       // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_3020(ret, fn, fn_3020, args) WEAK ret(CUDAAPI *fn) args;  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_4000(ret, fn, fn_4000, args) WEAK ret(CUDAAPI *fn) args;  // NOLINT(bugprone-macro-parentheses)
 #include "cuda_functions.h"
 #undef CUDA_FN
 #undef CUDA_FN_OPTIONAL
 #undef CUDA_FN_3020
 #undef CUDA_FN_4000
-// clang-format on
 
 // The default implementation of halide_cuda_get_symbol attempts to load
 // the CUDA shared library/DLL, and then get the symbol from it.
@@ -76,17 +74,24 @@ WEAK int load_libcuda(void *user_context) {
     halide_abort_if_false(user_context, cuInit == nullptr);
     halide_error_code_t result;
 
-    // clang-format off
-#define CUDA_FN(ret, fn, args)               result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, false, fn); if (result) return result;        // NOLINT(bugprone-macro-parentheses)
-#define CUDA_FN_OPTIONAL(ret, fn, args)      result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, true, fn); if (result) return result; // NOLINT(bugprone-macro-parentheses)
-#define CUDA_FN_3020(ret, fn, fn_3020, args) result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_3020, false, fn); if (result) return result;  // NOLINT(bugprone-macro-parentheses)
-#define CUDA_FN_4000(ret, fn, fn_4000, args) result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_4000, false, fn); if (result) return result;  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN(ret, fn, args)                                                   \
+    result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, false, fn); \
+    if (result) return result;  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_OPTIONAL(ret, fn, args)                                         \
+    result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, true, fn); \
+    if (result) return result;  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_3020(ret, fn, fn_3020, args)                                          \
+    result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_3020, false, fn); \
+    if (result) return result;  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_4000(ret, fn, fn_4000, args)                                          \
+    result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_4000, false, fn); \
+    if (result) return result;  // NOLINT(bugprone-macro-parentheses)
 #include "cuda_functions.h"
 #undef CUDA_FN
 #undef CUDA_FN_OPTIONAL
 #undef CUDA_FN_3020
 #undef CUDA_FN_4000
-    // clang-format on
+
     return halide_error_code_success;
 }
 

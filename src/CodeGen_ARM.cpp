@@ -361,7 +361,6 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     negations.emplace_back("saturating_negate", -max(wild_i8x_, -127));
     negations.emplace_back("saturating_negate", -max(wild_i16x_, -32767));
     negations.emplace_back("saturating_negate", -max(wild_i32x_, -(0x7fffffff)));
-    // clang-format on
 }
 
 constexpr int max_intrinsic_args = 4;
@@ -391,7 +390,6 @@ struct ArmIntrinsic {
     };
 };
 
-// clang-format off
 const ArmIntrinsic intrinsic_defs[] = {
     // TODO(https://github.com/halide/Halide/issues/8093):
     // Some of the Arm intrinsic have the same name between Neon and SVE2 but with different behavior. For example,
@@ -404,7 +402,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabs", "abs", UInt(32, 2), "abs", {Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
     {"llvm.fabs", "llvm.fabs", Float(16, 4), "abs", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs", "llvm.fabs", Float(32, 2), "abs", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
-    {"llvm.fabs", "llvm.fabs", Float(64, 2), "abs", {Float(64, 2)},  ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs", "llvm.fabs", Float(64, 2), "abs", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs.f16", "llvm.fabs.f16", Float(16), "abs", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs.f32", "llvm.fabs.f32", Float(32), "abs", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs.f64", "llvm.fabs.f64", Float(64), "abs", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
@@ -865,7 +863,6 @@ const std::map<string, string> float16_transcendental_remapping = {
     {"tan_f16", "tan_f32"},
     {"tanh_f16", "tanh_f32"},
 };
-// clang-format on
 
 llvm::Type *CodeGen_ARM::llvm_type_with_constraint(const Type &t, bool scalars_are_vectors,
                                                    VectorTypeConstraint constraint) {
@@ -2146,7 +2143,7 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
         Target::Feature required_feature;
         std::vector<int> extra_operands;
     };
-    // clang-format off
+
     static const Pattern patterns[] = {
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
@@ -2169,7 +2166,6 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
         {VectorReduce::Add, 4, i64(wild_u16x_), "dot_product", Target::SVE2, {1}},
         {VectorReduce::Add, 4, u64(wild_u16x_), "dot_product", Target::SVE2, {1}},
     };
-    // clang-format on
 
     int factor = op->value.type().lanes() / op->type.lanes();
     vector<Expr> matches;
