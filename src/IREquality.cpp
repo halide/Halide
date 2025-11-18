@@ -608,7 +608,7 @@ void ir_equality_test() {
     e2 = e2 * e2 + e2;
     check_not_equal(e1, e2);
 
-    debug(0) << "ir_equality_test passed\n";
+    std::cout << "ir_equality_test passed\n";
 }
 
 }  // namespace Internal

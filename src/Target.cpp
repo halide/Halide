@@ -57,6 +57,14 @@ using std::vector;
 
 namespace {
 
+#if defined(__aarch64__)
+__attribute__((target("+sve"))) int get_sve_vector_length() {
+    register int result asm("w0");
+    __asm__("cntb %x0, all, mul #8" : "=r"(result));
+    return result;
+}
+#endif
+
 #if defined(_M_IX86) || defined(_M_AMD64)
 
 void cpuid(int info[4], int infoType, int extra) {
@@ -232,6 +240,7 @@ Target calculate_host_target() {
 #else
 #if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC)
     Target::Arch arch = Target::ARM;
+    bool has_scalable_vector = false;
 
 #ifdef __APPLE__
     if (is_armv7s()) {
@@ -261,10 +270,12 @@ Target calculate_host_target() {
 
     if (hwcaps & HWCAP_SVE) {
         initial_features.push_back(Target::SVE);
+        has_scalable_vector = true;
     }
 
     if (hwcaps2 & HWCAP2_SVE2) {
         initial_features.push_back(Target::SVE2);
+        has_scalable_vector = true;
     }
 #endif
 
@@ -286,8 +297,15 @@ Target calculate_host_target() {
 
     if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
         initial_features.push_back(Target::SVE);
+        has_scalable_vector = true;
     }
 
+#endif
+
+#if defined(__aarch64__)
+    if (has_scalable_vector) {
+        vector_bits = get_sve_vector_length();
+    }
 #endif
 
 #else
