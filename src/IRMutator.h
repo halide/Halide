@@ -102,7 +102,7 @@ protected:
     virtual Stmt visit(const HoistedStorage *);
 };
 
-/** A mutator that caches and reapplies previously-done mutations, so
+/** A mutator that caches and reapplies previously done mutations so
  * that it can handle graphs of IR that have not had CSE done to
  * them. */
 class IRGraphMutator : public IRMutator {
@@ -111,12 +111,9 @@ protected:
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;
 
 public:
+    using IRMutator::mutate;
     Stmt mutate(const Stmt &s) override;
     Expr mutate(const Expr &e) override;
-
-    std::vector<Expr> mutate(const std::vector<Expr> &exprs) {
-        return IRMutator::mutate(exprs);
-    }
 };
 
 /** A helper function for mutator-like things to mutate regions */
