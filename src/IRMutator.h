@@ -6,6 +6,8 @@
  */
 
 #include <map>
+#include <type_traits>
+#include <utility>
 
 #include "IR.h"
 
@@ -114,6 +116,218 @@ public:
     using IRMutator::mutate;
     Stmt mutate(const Stmt &s) override;
     Expr mutate(const Expr &e) override;
+};
+
+template<typename Derived>
+struct LambdaMutatorBase : IRMutator {
+    /** Public helper to call the base visitor from lambdas. */
+    template<typename T>
+    auto visit_base(const T *op) {
+        return IRMutator::visit(op);
+    }
+
+protected:
+    template<typename T>
+    auto visit_helper(const T *op) {
+        return static_cast<Derived *>(this)->visit_helper_impl(op);
+    }
+
+    Expr visit(const IntImm *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const UIntImm *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const FloatImm *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const StringImm *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Cast *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Reinterpret *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Variable *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Add *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Sub *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Mul *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Div *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Mod *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Min *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Max *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const EQ *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const NE *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const LT *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const LE *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const GT *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const GE *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const And *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Or *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Not *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Select *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Load *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Ramp *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Broadcast *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Call *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Let *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const Shuffle *e) override {
+        return visit_helper(e);
+    }
+    Expr visit(const VectorReduce *e) override {
+        return visit_helper(e);
+    }
+    Stmt visit(const LetStmt *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const AssertStmt *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const ProducerConsumer *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const For *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Store *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Provide *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Allocate *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Free *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Realize *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Block *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const IfThenElse *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Evaluate *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Prefetch *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Acquire *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Fork *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const Atomic *s) override {
+        return visit_helper(s);
+    }
+    Stmt visit(const HoistedStorage *s) override {
+        return visit_helper(s);
+    }
+};
+
+template<typename... Ts>
+struct LambdaOverloads : Ts... {
+    using Ts::operator()...;
+    explicit LambdaOverloads(Ts... ts)
+        : Ts(std::move(ts))... {
+    }
+};
+
+/** A lambda-based IR mutator that accepts multiple lambdas for different
+ * node types. */
+template<typename... Lambdas>
+struct LambdaMutator final : LambdaMutatorBase<LambdaMutator<Lambdas...>> {
+    explicit LambdaMutator(Lambdas... lambdas)
+        : handlers(std::move(lambdas)...) {
+    }
+
+private:
+    LambdaOverloads<Lambdas...> handlers;
+
+    // Make LambdaMutatorBase a friend so it can call visit_helper_impl
+    friend class LambdaMutatorBase<LambdaMutator>;
+
+    template<typename T>
+    auto visit_helper_impl(const T *op) {
+        if constexpr (std::is_invocable_v<decltype(handlers), const T *, LambdaMutator *>) {
+            return handlers(op, this);
+        } else {
+            return this->visit_base(op);
+        }
+    }
+};
+
+/** A lambda-based IR mutator that accepts a single generic lambda that
+ * handles all node types via if-constexpr. */
+template<typename Lambda>
+struct GenericLambdaMutator final : LambdaMutatorBase<GenericLambdaMutator<Lambda>> {
+    explicit GenericLambdaMutator(Lambda lambda)
+        : handler(std::move(lambda)) {
+    }
+
+private:
+    Lambda handler;
+
+    // Make LambdaMutatorBase a friend so it can call visit_helper_impl
+    friend class LambdaMutatorBase<GenericLambdaMutator>;
+
+    template<typename T>
+    auto visit_helper_impl(const T *op) {
+        return handler(op, this);
+    }
 };
 
 /** A helper function for mutator-like things to mutate regions */
