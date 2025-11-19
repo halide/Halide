@@ -109,7 +109,7 @@ private:
     LambdaOverloads<Lambdas...> handlers;
 
     // Make LambdaMutatorBase a friend so it can call visit_impl
-    friend class LambdaMutatorBase<LambdaMutator>;
+    friend struct LambdaMutatorBase<LambdaMutator>;
 
     template<typename T>
     auto visit_impl(const T *op) {
@@ -133,7 +133,7 @@ private:
     Lambda handler;
 
     // Make LambdaMutatorBase a friend so it can call visit_impl
-    friend class LambdaMutatorBase<GenericLambdaMutator>;
+    friend struct LambdaMutatorBase<GenericLambdaMutator>;
 
     template<typename T>
     auto visit_impl(const T *op) {
