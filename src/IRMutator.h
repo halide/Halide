@@ -81,14 +81,9 @@ struct LambdaMutatorBase : IRMutator {
     }
 
 protected:
-    template<typename T>
-    auto visit_helper(const T *op) {
-        return static_cast<Derived *>(this)->visit_helper_impl(op);
-    }
-
-#define HALIDE_LAMBDA_MUTATOR_VISIT(kind, type) \
-    kind visit(const type *op) override {        \
-        return visit_helper(op);                 \
+#define HALIDE_LAMBDA_MUTATOR_VISIT(kind, type)              \
+    kind visit(const type *op) override {                    \
+        return static_cast<Derived *>(this)->visit_impl(op); \
     }
     HALIDE_IR_NODE_X(HALIDE_LAMBDA_MUTATOR_VISIT)
 #undef HALIDE_LAMBDA_MUTATOR_VISIT
@@ -113,11 +108,11 @@ struct LambdaMutator final : LambdaMutatorBase<LambdaMutator<Lambdas...>> {
 private:
     LambdaOverloads<Lambdas...> handlers;
 
-    // Make LambdaMutatorBase a friend so it can call visit_helper_impl
+    // Make LambdaMutatorBase a friend so it can call visit_impl
     friend class LambdaMutatorBase<LambdaMutator>;
 
     template<typename T>
-    auto visit_helper_impl(const T *op) {
+    auto visit_impl(const T *op) {
         if constexpr (std::is_invocable_v<decltype(handlers), const T *, LambdaMutator *>) {
             return handlers(op, this);
         } else {
@@ -137,11 +132,11 @@ struct GenericLambdaMutator final : LambdaMutatorBase<GenericLambdaMutator<Lambd
 private:
     Lambda handler;
 
-    // Make LambdaMutatorBase a friend so it can call visit_helper_impl
+    // Make LambdaMutatorBase a friend so it can call visit_impl
     friend class LambdaMutatorBase<GenericLambdaMutator>;
 
     template<typename T>
-    auto visit_helper_impl(const T *op) {
+    auto visit_impl(const T *op) {
         return handler(op, this);
     }
 };
