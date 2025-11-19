@@ -15,9 +15,11 @@ namespace OpenCL {
 // Define the function pointers for the OpenCL API.
 #define HAVE_OPENCL_12
 
+// clang-format off
 #define CL_FN(ret, fn, args) WEAK ret(CL_API_CALL *fn) args;  // NOLINT(bugprone-macro-parentheses)
 #include "cl_functions.h"
 #undef CL_FN
+// clang-format on
 
 // The default implementation of halide_opencl_get_symbol attempts to load
 // the OpenCL runtime shared library/DLL, and then get the symbol from it.
@@ -66,15 +68,13 @@ WEAK int load_libopencl(void *user_context) {
     halide_abort_if_false(user_context, clCreateContext == nullptr);
     halide_error_code_t result;
 
-#define CL_FN(ret, fn, args)                                                      \
-    result = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, true, fn); \
-    if (result) return result;  // NOLINT(bugprone-macro-parentheses)
-#define CL_12_FN(ret, fn, args)                                                    \
-    result = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, false, fn); \
-    if (result) return result;  // NOLINT(bugprone-macro-parentheses)
+    // clang-format off
+#define CL_FN(ret, fn, args)     result = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, true, fn); if (result) return result;   // NOLINT(bugprone-macro-parentheses)
+#define CL_12_FN(ret, fn, args)  result = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, false, fn); if (result) return result; // NOLINT(bugprone-macro-parentheses)
 #include "cl_functions.h"
 #undef CL_12_FN
 #undef CL_FN
+    // clang-format on
 
     return halide_error_code_success;
 }
