@@ -1138,10 +1138,10 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     // Avoiding the assert on inner functions is both an efficiency and a correctness issue
     // as the assertion code may not compile in all contexts.
     if (f.linkage != LinkageType::Internal) {
-        int effecitve_vscale = target_vscale();
-        if (effecitve_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
+        int effective_vscale = target_vscale();
+        if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
             Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_vscale, {}, Call::PureIntrinsic);
-            Expr compiletime_vscale = Expr(effecitve_vscale);
+            Expr compiletime_vscale = Expr(effective_vscale);
             Expr error = Call::make(Int(32), "halide_error_vscale_invalid",
                                     {simple_name, runtime_vscale, compiletime_vscale}, Call::Extern);
             func.body = Block::make(AssertStmt::make(runtime_vscale == compiletime_vscale, error), func.body);
