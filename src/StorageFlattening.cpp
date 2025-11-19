@@ -449,7 +449,7 @@ class HoistStorage : public IRMutator {
 
     // Perform all the substitutions in a scope
     static Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
-        auto m = LambdaMutator{
+        Expr result = LambdaMutator{
             [&](const Variable *var, auto *mut) -> Expr {
                 if (const Expr *value = scope.find(var->name)) {
                     // Mutate the expression, so lets can get replaced recursively.
@@ -458,9 +458,7 @@ class HoistStorage : public IRMutator {
                     return expr;
                 }
                 return var;
-            }};
-
-        Expr result = m.mutate(e);
+            }}.mutate(e);
         debug(4) << "Expanded " << e << " into " << result << "\n";
         return result;
     }
