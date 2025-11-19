@@ -166,9 +166,6 @@ protected:
     void compile_func(const LoweredFunc &f,
                       const std::string &simple_name, const std::string &extern_name) override;
 
-    void begin_func(LinkageType linkage, const std::string &simple_name,
-                    const std::string &extern_name, const std::vector<LoweredArgument> &args) override;
-
     /** Nodes for which we want to emit specific ARM vector intrinsics */
     // @{
     void visit(const Cast *) override;
@@ -1150,6 +1147,20 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
 
     LoweredFunc func = f;
 
+    // Make sure run-time vscale is equal to compile-time vscale.
+    // Avoiding the assert on inner functions is both an efficiency and a correctness issue
+    // as the assertion code may not compile in all contexts.
+    if (f.linkage != LinkageType::Internal) {
+        int effective_vscale = target_vscale();
+        if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
+            Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_vscale, {}, Call::PureIntrinsic);
+            Expr compiletime_vscale = Expr(effective_vscale);
+            Expr error = Call::make(Int(32), "halide_error_vscale_invalid",
+                                    {simple_name, runtime_vscale, compiletime_vscale}, Call::Extern);
+            func.body = Block::make(AssertStmt::make(runtime_vscale == compiletime_vscale, error), func.body);
+        }
+    }
+
     if (target.os != Target::IOS && target.os != Target::OSX) {
         // Substitute in strided loads to get vld2/3/4 emission. We don't do it
         // on Apple silicon, because doing a dense load and then shuffling is
@@ -1161,29 +1172,6 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     func.body = distribute_shifts(func.body, /* multiply_adds */ true);
 
     CodeGen_Posix::compile_func(func, simple_name, extern_name);
-}
-
-void CodeGen_ARM::begin_func(LinkageType linkage, const std::string &simple_name,
-                             const std::string &extern_name, const std::vector<LoweredArgument> &args) {
-    CodeGen_Posix::begin_func(linkage, simple_name, extern_name, args);
-
-    // TODO(https://github.com/halide/Halide/issues/8092): There is likely a
-    // better way to ensure this is only generated for the outermost function
-    // that is being compiled. Avoiding the assert on inner functions is both an
-    // efficiency and a correctness issue as the assertion code may not compile
-    // in all contexts.
-    if (linkage != LinkageType::Internal) {
-        int effective_vscale = target_vscale();
-        if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
-            // Make sure run-time vscale is equal to compile-time vscale
-            Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_vscale, {}, Call::PureIntrinsic);
-            Value *val_runtime_vscale = codegen(runtime_vscale);
-            Value *val_compiletime_vscale = ConstantInt::get(i32_t, effective_vscale);
-            Value *cond = builder->CreateICmpEQ(val_runtime_vscale, val_compiletime_vscale);
-            create_assertion(cond, Call::make(Int(32), "halide_error_vscale_invalid",
-                                              {simple_name, runtime_vscale, Expr(effective_vscale)}, Call::Extern));
-        }
-    }
 }
 
 void CodeGen_ARM::visit(const Cast *op) {

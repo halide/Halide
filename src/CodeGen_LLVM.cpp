@@ -3333,11 +3333,30 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::concat_bits)) {
         value = codegen(lower_concat_bits(op));
     } else if (op->is_intrinsic(Call::get_runtime_vscale)) {
+        // This intrin function must be defined independently.
+        // Otherwise, vscale_range(n, n) attribute is added and llvm compiler optimize away the runtime call,
+        // which makes runtime assertion of vscale useless.
+        llvm::Function *fn = module->getFunction(op->name);
+        if (!fn) {
+            FunctionType *func_t = FunctionType::get(i32_t, {}, false);
+            fn = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, op->name, module.get());
+            llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", fn);
+            IRBuilderBase::InsertPoint here = builder->saveIP();
+            builder->SetInsertPoint(block);
 #if LLVM_VERSION >= 210
-        value = builder->CreateVScale(i32_t);
+            Value *ret = builder->CreateVScale(i32_t);
 #else
-        value = builder->CreateVScale(ConstantInt::get(i32_t, 1));
+            Value *ret = builder->CreateVScale(ConstantInt::get(i32_t, 1));
 #endif
+            builder->CreateRet(ret);
+
+            // To avoid vscale_range(n,n) added in CodeGen_Internal
+            fn->addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(*context, 1, 16));
+            fn->addFnAttr(llvm::Attribute::NoInline);
+            internal_assert(!verifyFunction(*fn, &llvm::errs()));
+            builder->restoreIP(here);
+        }
+        value = builder->CreateCall(fn, {});
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (!lowered.defined()) {
