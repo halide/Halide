@@ -53,55 +53,9 @@ protected:
     template<typename T>
     friend struct StmtNode;
 
-    virtual Expr visit(const IntImm *);
-    virtual Expr visit(const UIntImm *);
-    virtual Expr visit(const FloatImm *);
-    virtual Expr visit(const StringImm *);
-    virtual Expr visit(const Cast *);
-    virtual Expr visit(const Reinterpret *);
-    virtual Expr visit(const Variable *);
-    virtual Expr visit(const Add *);
-    virtual Expr visit(const Sub *);
-    virtual Expr visit(const Mul *);
-    virtual Expr visit(const Div *);
-    virtual Expr visit(const Mod *);
-    virtual Expr visit(const Min *);
-    virtual Expr visit(const Max *);
-    virtual Expr visit(const EQ *);
-    virtual Expr visit(const NE *);
-    virtual Expr visit(const LT *);
-    virtual Expr visit(const LE *);
-    virtual Expr visit(const GT *);
-    virtual Expr visit(const GE *);
-    virtual Expr visit(const And *);
-    virtual Expr visit(const Or *);
-    virtual Expr visit(const Not *);
-    virtual Expr visit(const Select *);
-    virtual Expr visit(const Load *);
-    virtual Expr visit(const Ramp *);
-    virtual Expr visit(const Broadcast *);
-    virtual Expr visit(const Call *);
-    virtual Expr visit(const Let *);
-    virtual Expr visit(const Shuffle *);
-    virtual Expr visit(const VectorReduce *);
-
-    virtual Stmt visit(const LetStmt *);
-    virtual Stmt visit(const AssertStmt *);
-    virtual Stmt visit(const ProducerConsumer *);
-    virtual Stmt visit(const For *);
-    virtual Stmt visit(const Store *);
-    virtual Stmt visit(const Provide *);
-    virtual Stmt visit(const Allocate *);
-    virtual Stmt visit(const Free *);
-    virtual Stmt visit(const Realize *);
-    virtual Stmt visit(const Block *);
-    virtual Stmt visit(const IfThenElse *);
-    virtual Stmt visit(const Evaluate *);
-    virtual Stmt visit(const Prefetch *);
-    virtual Stmt visit(const Acquire *);
-    virtual Stmt visit(const Fork *);
-    virtual Stmt visit(const Atomic *);
-    virtual Stmt visit(const HoistedStorage *);
+#define HALIDE_IR_MUTATOR_VISIT(kind, type) virtual kind visit(const type *);
+    HALIDE_IR_NODE_X(HALIDE_IR_MUTATOR_VISIT)
+#undef HALIDE_IR_MUTATOR_VISIT
 };
 
 /** A mutator that caches and reapplies previously done mutations so
@@ -132,150 +86,12 @@ protected:
         return static_cast<Derived *>(this)->visit_helper_impl(op);
     }
 
-    Expr visit(const IntImm *e) override {
-        return visit_helper(e);
+#define HALIDE_LAMBDA_MUTATOR_VISIT(kind, type) \
+    kind visit(const type *op) override {        \
+        return visit_helper(op);                 \
     }
-    Expr visit(const UIntImm *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const FloatImm *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const StringImm *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Cast *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Reinterpret *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Variable *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Add *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Sub *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Mul *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Div *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Mod *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Min *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Max *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const EQ *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const NE *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const LT *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const LE *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const GT *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const GE *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const And *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Or *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Not *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Select *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Load *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Ramp *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Broadcast *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Call *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Let *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const Shuffle *e) override {
-        return visit_helper(e);
-    }
-    Expr visit(const VectorReduce *e) override {
-        return visit_helper(e);
-    }
-    Stmt visit(const LetStmt *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const AssertStmt *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const ProducerConsumer *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const For *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Store *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Provide *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Allocate *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Free *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Realize *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Block *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const IfThenElse *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Evaluate *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Prefetch *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Acquire *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Fork *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const Atomic *s) override {
-        return visit_helper(s);
-    }
-    Stmt visit(const HoistedStorage *s) override {
-        return visit_helper(s);
-    }
+    HALIDE_IR_NODE_X(HALIDE_LAMBDA_MUTATOR_VISIT)
+#undef HALIDE_LAMBDA_MUTATOR_VISIT
 };
 
 template<typename... Ts>
