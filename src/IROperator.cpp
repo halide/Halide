@@ -1052,40 +1052,34 @@ Expr strided_ramp_base(const Expr &e, int stride) {
 namespace {
 
 // Replace a specified list of intrinsics with their first arg.
-class RemoveIntrinsics : public IRMutator {
-    using IRMutator::visit;
-    const std::initializer_list<Call::IntrinsicOp> &ops;
-
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(ops)) {
-            return mutate(op->args[0]);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-public:
-    RemoveIntrinsics(const std::initializer_list<Call::IntrinsicOp> &ops)
-        : ops(ops) {
-    }
-};
+template<typename T>
+T remove_intrinsics(const T &e, const std::initializer_list<Call::IntrinsicOp> &ops) {
+    return LambdaMutator{
+        [&](const Call *op, auto *mut) {
+            if (op->is_intrinsic(ops)) {
+                return mut->mutate(op->args[0]);
+            }
+            return mut->visit_base(op);
+        }}
+        .mutate(e);
+}
 
 }  // namespace
 
 Expr remove_likelies(const Expr &e) {
-    return RemoveIntrinsics({Call::likely, Call::likely_if_innermost}).mutate(e);
+    return remove_intrinsics(e, {Call::likely, Call::likely_if_innermost});
 }
 
 Stmt remove_likelies(const Stmt &s) {
-    return RemoveIntrinsics({Call::likely, Call::likely_if_innermost}).mutate(s);
+    return remove_intrinsics(s, {Call::likely, Call::likely_if_innermost});
 }
 
 Expr remove_promises(const Expr &e) {
-    return RemoveIntrinsics({Call::promise_clamped, Call::unsafe_promise_clamped}).mutate(e);
+    return remove_intrinsics(e, {Call::promise_clamped, Call::unsafe_promise_clamped});
 }
 
 Stmt remove_promises(const Stmt &s) {
-    return RemoveIntrinsics({Call::promise_clamped, Call::unsafe_promise_clamped}).mutate(s);
+    return remove_intrinsics(s, {Call::promise_clamped, Call::unsafe_promise_clamped});
 }
 
 Expr unwrap_tags(const Expr &e) {
