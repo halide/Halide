@@ -983,6 +983,15 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
 void CodeGen_ARM::init_module() {
     CodeGen_Posix::init_module();
 
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (target.features_any_of({Target::SVE, Target::SVE2})) {
+    if (target.has_feature(Target::SVE2)) {
+        user_assert(target.vector_bits != 0) << "For SVE/SVE2 support, target_vector_bits=<size> must be set in target.\n";
+        user_assert((target.vector_bits % 128) == 0) << "For SVE/SVE2 support, target_vector_bits must be a multiple of 128.\n";
+    } else if (target.has_feature(Target::SVE)) {
+        user_warning << "Halide does not support SVE for now. Use SVE2 if your target device supports it.\n";
+    }
+
     const bool has_neon = !target.has_feature(Target::NoNEON);
     const bool has_sve = target.has_feature(Target::SVE2);
     if (!(has_neon || has_sve)) {
@@ -1477,7 +1486,7 @@ void CodeGen_ARM::visit(const Store *op) {
             // TODO(zvookin): Handle vector_bits_*.
             if (vec_bits % 128 == 0) {
                 type_ok_for_vst = true;
-                int target_vector_bits = target.vector_bits;
+                int target_vector_bits = native_vector_bits();
                 if (target_vector_bits == 0) {
                     target_vector_bits = 128;
                 }
@@ -2573,7 +2582,8 @@ string CodeGen_ARM::mattrs() const {
         if (target.has_feature(Target::SVE2)) {
             attrs.emplace_back("+sve2");
         } else if (target.has_feature(Target::SVE)) {
-            attrs.emplace_back("+sve");
+            // TODO: https://github.com/halide/Halide/issues/8872
+            // attrs.emplace_back("+sve");
         }
         if (target.os == Target::IOS || target.os == Target::OSX) {
             attrs.emplace_back("+reserve-x18");
@@ -2592,17 +2602,13 @@ bool CodeGen_ARM::use_soft_float_abi() const {
 }
 
 int CodeGen_ARM::native_vector_bits() const {
-    if (target.has_feature(Target::SVE) || target.has_feature(Target::SVE2)) {
-        return std::max(target.vector_bits, 128);
-    } else {
-        return 128;
-    }
+    return std::max(target_vscale(), 1) * 128;
 }
 
 int CodeGen_ARM::target_vscale() const {
-    if (target.features_any_of({Target::SVE, Target::SVE2})) {
-        user_assert(target.vector_bits != 0) << "For SVE/SVE2 support, target_vector_bits=<size> must be set in target.\n";
-        user_assert((target.vector_bits % 128) == 0) << "For SVE/SVE2 support, target_vector_bits must be a multiple of 128.\n";
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (target.features_any_of({Target::SVE, Target::SVE2})) {
+    if (target.has_feature(Target::SVE2)) {
         return target.vector_bits / 128;
     }
 
