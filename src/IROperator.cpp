@@ -1054,14 +1054,14 @@ namespace {
 // Replace a specified list of intrinsics with their first arg.
 template<typename T>
 T remove_intrinsics(const T &e, const std::initializer_list<Call::IntrinsicOp> &ops) {
-    return LambdaMutator{
+    return mutate_with(
+        e,
         [&](const Call *op, auto *mut) {
             if (op->is_intrinsic(ops)) {
                 return mut->mutate(op->args[0]);
             }
             return mut->visit_base(op);
-        }}
-        .mutate(e);
+        });
 }
 
 }  // namespace

@@ -592,7 +592,8 @@ class InjectBufferCopies : public IRMutator {
 
     Stmt inject_free_after_last_use(Stmt body, const Stmt &last_use, const Stmt &free_stmt) {
         bool success = false;
-        body = GenericLambdaMutator{
+        body = mutate_with_generic(
+            body,
             [&](const auto *op, auto *mut) {
                 if constexpr (std::is_convertible_v<decltype(op), Stmt>) {
                     if (Stmt(op).same_as(last_use)) {
@@ -602,7 +603,7 @@ class InjectBufferCopies : public IRMutator {
                     }
                 }
                 return mut->visit_base(op);
-            }}.mutate(body);
+            });
         internal_assert(success);
         return body;
     }
