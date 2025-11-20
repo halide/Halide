@@ -121,6 +121,11 @@ private:
     }
 };
 
+template<typename T, typename... Lambdas>
+auto mutate_with(const T &ir, Lambdas &&...lambdas) {
+    return LambdaMutator{std::forward<Lambdas>(lambdas)...}.mutate(ir);
+}
+
 /** A lambda-based IR mutator that accepts a single generic lambda that
  * handles all node types via if-constexpr. */
 template<typename Lambda>
@@ -140,6 +145,11 @@ private:
         return handler(op, this);
     }
 };
+
+template<typename T, typename Lambda>
+auto mutate_with_generic(const T &ir, Lambda &&lambda) {
+    return GenericLambdaMutator{std::forward<Lambda>(lambda)}.mutate(ir);
+}
 
 /** A helper function for mutator-like things to mutate regions */
 template<typename Mutator, typename... Args>
