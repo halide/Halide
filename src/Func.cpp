@@ -491,7 +491,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition,
             // unless it is flagged explicitly or is a associative atomic operation.
-            if (!dim.is_pure() && var.is_rvar && is_parallel(t)) {
+            if (!dim.is_pure() && (var.is_rvar || dim.is_inductive()) && is_parallel(t)) {
                 if (!definition.schedule().allow_race_conditions() &&
                     definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
@@ -3334,7 +3334,7 @@ FuncRef::operator Expr() const {
 
     if (!(func.has_pure_definition() || func.has_extern_definition())) {
         return Call::make(Type{}, func.name(), args, Call::Halide,
-                          FunctionPtr(), 0, Buffer<>(), Parameter());
+                          func.get_contents(), 0, Buffer<>(), Parameter());
     }
 
     user_assert(func.outputs() == 1)
