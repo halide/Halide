@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 
     Var x("x");
 
-    f(x) = x + f(x - 1);
+    f(x) = cast<int>(x + f(x - 1));
 
     g(x) = f(x) * 2;
 
