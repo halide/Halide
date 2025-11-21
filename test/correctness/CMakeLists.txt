@@ -185,6 +185,7 @@ tests(
     implicit_pure_def_with_rvar_args.cpp
     in_place.cpp
     indexing_access_undef.cpp
+    inductive.cpp
     infer_arguments.cpp
     inline_reduction.cpp
     inlined_generator.cpp

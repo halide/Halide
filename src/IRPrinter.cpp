@@ -500,6 +500,9 @@ std::ostream &operator<<(std::ostream &out, const DimType &t) {
     case DimType::PureRVar:
         out << "PureRVar";
         break;
+    case DimType::InductiveVar:
+        out << "InductiveVar";
+        break;
     case DimType::ImpureRVar:
         out << "ImpureRVar";
         break;
