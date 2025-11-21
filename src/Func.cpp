@@ -708,15 +708,14 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
     for (const auto &[var, min, extent] : rdom.domain()) {
         add_let(bounds_projection, var + ".loop_min", min);
         add_let(bounds_projection, var + ".loop_max", min + extent - 1);
-        add_let(bounds_projection, var + ".loop_extent", extent);
     }
 
     // Build the new RDom from the bounds_projection.
     vector<ReductionVariable> new_rvars;
     for (const Dim &dim : dims) {
         const Expr new_min = simplify(bounds_projection.at(dim.var + ".loop_min"));
-        const Expr new_extent = simplify(bounds_projection.at(dim.var + ".loop_extent"));
-        new_rvars.push_back(ReductionVariable{dequalify(dim.var), new_min, new_extent});
+        const Expr new_max = simplify(bounds_projection.at(dim.var + ".loop_max"));
+        new_rvars.push_back(ReductionVariable{dequalify(dim.var), new_min, (new_max - new_min) + 1});
     }
     ReductionDomain new_rdom{new_rvars};
     new_rdom.where(rdom.predicate());

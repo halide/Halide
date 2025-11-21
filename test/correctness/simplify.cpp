@@ -1736,10 +1736,10 @@ void check_boolean() {
     // A for loop is also an if statement that the extent is greater than zero
     Stmt body = AssertStmt::make(y == z, y);
     Stmt loop = For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body);
-    check(IfThenElse::make(0 < x, loop), loop);
+    check(IfThenElse::make(0 <= x, loop), loop);
 
-    // A for loop where the extent is exactly one is just the body
-    check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
+    // A for loop where the min equals the max is just the body
+    check(IfThenElse::make(x == 0, loop), IfThenElse::make(x == 0, body));
 
     // Check we can learn from conditions on variables
     check(IfThenElse::make(x < 5, not_no_op(min(x, 17))),
@@ -2419,7 +2419,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        Stmt body = AssertStmt::make(x > 0, y);
+        Stmt body = AssertStmt::make(x >= 0, y);
         check(For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body),
               Evaluate::make(0));
     }

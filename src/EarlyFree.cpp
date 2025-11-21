@@ -30,7 +30,7 @@ private:
 
     void visit(const For *loop) override {
         loop->min.accept(this);
-        loop->extent.accept(this);
+        loop->max.accept(this);
         ScopedValue<bool> old_in_loop(in_loop, true);
         loop->body.accept(this);
     }
