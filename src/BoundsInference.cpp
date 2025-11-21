@@ -7,6 +7,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Inductive.h"
 #include "Inline.h"
 #include "Qualify.h"
 #include "Scope.h"
@@ -1004,6 +1005,21 @@ public:
 
                     producer.bounds[{consumer.name, consumer.stage}] = b;
                     producer.consumers.push_back((int)i);
+                }
+            }
+        }
+
+        // For any inductively defined functions, make sure their
+        // bounds include the base case.
+        for (Stage &s : stages) {
+            if (!s.func.is_pure() || !s.func.is_inductive()) {
+                continue;
+            }
+            debug(4) << "Expanding bounds for inductively defined function " << s.func.name() << "\n";
+            for (const auto &b1 : s.bounds) {
+                const Box &b = b1.second;
+                for (const auto &cval : s.exprs) {
+                    s.bounds[b1.first] = expand_to_include_base_case(s.func.args(), cval.value, s.func.name(), b);
                 }
             }
         }

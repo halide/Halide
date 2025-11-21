@@ -70,6 +70,14 @@ tests(GROUPS error
       implicit_args.cpp
       impossible_constraints.cpp
       incomplete_target.cpp
+      inductive_loop.cpp
+      inductive_loop_2.cpp
+      inductive_loop_3.cpp
+      inductive_nested_select.cpp
+      inductive_no_select.cpp
+      inductive_reorder.cpp
+      inductive_var_swap.cpp
+      inductive_vectorize.cpp
       init_def_should_be_all_vars.cpp
       inspect_loop_level.cpp
       lerp_float_weight_out_of_range.cpp

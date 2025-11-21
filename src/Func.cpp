@@ -1341,6 +1341,9 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
             } else if (dims[i].dim_type == DimType::PureRVar ||
                        outer_type == DimType::PureRVar) {
                 dims[i].dim_type = DimType::PureRVar;
+            } else if (dims[i].dim_type == DimType::InductiveVar ||
+                       outer_type == DimType::InductiveVar) {
+                dims[i].dim_type = DimType::InductiveVar;
             } else {
                 dims[i].dim_type = DimType::PureVar;
             }
