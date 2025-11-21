@@ -612,7 +612,9 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
 
     options = llvm::TargetOptions();
     options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
+#if LLVM_VERSION < 210
     options.UnsafeFPMath = !per_instruction_fast_math_flags;
+#endif
     options.NoInfsFPMath = !per_instruction_fast_math_flags;
     options.NoNaNsFPMath = !per_instruction_fast_math_flags;
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
@@ -717,8 +719,9 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     // inaccurate even for us.
     fn.addFnAttr("reciprocal-estimates", "none");
 
-    // If a fixed vscale is asserted, add it as an attribute on the function.
-    if (vscale_range != 0) {
+    // If a fixed vscale is asserted, add it as an attribute on the function
+    // except for those which already have vscale_range for some purpose
+    if (vscale_range != 0 && !fn.hasFnAttribute(llvm::Attribute::VScaleRange)) {
         fn.addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(
             module.getContext(), vscale_range, vscale_range));
     }

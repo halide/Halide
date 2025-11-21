@@ -1757,7 +1757,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
             SpvId loop_test_type_id = builder.declare_type(Bool());
             SpvId loop_test_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::load(index_type_id, loop_index_id, loop_var_id));
-            builder.append(SpvFactory::integer_less_than(loop_test_type_id, loop_test_id, loop_index_id, max_id, index_type.is_uint()));
+            builder.append(SpvFactory::integer_less_than(loop_test_type_id, loop_test_id, loop_index_id, max_id, index_type.is_int()));
             builder.append(SpvFactory::conditional_branch(loop_test_id, body_block_id, merge_block_id));
         }
         builder.leave_block();

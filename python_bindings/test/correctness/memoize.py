@@ -13,7 +13,7 @@ def test_memoize():
     output[x] = f[x]
 
     result = output.realize([3])
-    assert list(result) == [1., 1., 1.]
+    assert list(result) == [1.0, 1.0, 1.0]
 
 
 def main():

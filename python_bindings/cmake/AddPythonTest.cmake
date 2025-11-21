@@ -13,6 +13,8 @@ function(add_python_test)
     cmake_path(GET ARG_FILE STEM test_name)
     set(test_name "${ARG_LABEL}_${test_name}")
 
+    set(test_labels python ${ARG_LABEL})
+
     add_test(
         NAME "${test_name}"
         COMMAND ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python::Interpreter>" "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
@@ -20,7 +22,7 @@ function(add_python_test)
     set_tests_properties(
         "${test_name}"
         PROPERTIES
-        LABELS "python"
+        LABELS "${test_labels}"
         ENVIRONMENT "${ARG_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "${ARG_PYTHONPATH}"
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"

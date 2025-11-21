@@ -45,6 +45,11 @@ namespace {
 //
 // v8r has no relation to anything.
 Target complete_arm_target(Target t) {
+    if (t.os == Target::OSX) {
+        // The Apple M1 implements the full ARM v8.4a spec.
+        t.set_feature(Target::ARMv84a);
+    }
+
     constexpr int num_arm_v8_features = 10;
     static const Target::Feature arm_v8_features[num_arm_v8_features] = {
         Target::ARMv89a,
@@ -161,9 +166,6 @@ protected:
     void compile_func(const LoweredFunc &f,
                       const std::string &simple_name, const std::string &extern_name) override;
 
-    void begin_func(LinkageType linkage, const std::string &simple_name,
-                    const std::string &extern_name, const std::vector<LoweredArgument> &args) override;
-
     /** Nodes for which we want to emit specific ARM vector intrinsics */
     // @{
     void visit(const Cast *) override;
@@ -202,7 +204,7 @@ protected:
             : intrin(intrin), pattern(std::move(p)) {
         }
     };
-    vector<Pattern> casts, calls, averagings, negations;
+    vector<Pattern> casts, calls, negations;
 
     string mcpu_target() const override;
     string mcpu_tune() const override;
@@ -826,6 +828,9 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
     {"vabdl_u32x2", "vabdl_u32x2", Int(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
     {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable},
+
+    // FMLAL - Fused widening multiply-add
+    {nullptr, "fmlal_f32x8", Float(32, 8), "widening_fma", {Float(32, 8), Float(16, 8), Float(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix | ArmIntrinsic::SveUnavailable | ArmIntrinsic::RequireFp16},
 };
 
 // List of fp16 math functions which we can avoid "emulated" equivalent code generation.
@@ -1013,11 +1018,11 @@ void CodeGen_ARM::init_module() {
         }
 
         // This makes up to three passes defining intrinsics for 64-bit,
-        // 128-bit, and, if SVE is avaailable, whatever the SVE target width
+        // 128-bit, and, if SVE is available, whatever the SVE target width
         // is. Some variants will not result in a definition getting added based
         // on the target and the intrinsic flags. The intrinsic width may be
-        // scaled and one of two opcodes may be selected by different
-        // interations of this loop.
+        // scaled, and one of two opcodes may be selected by different
+        // iterations of this loop.
         for (const auto flavor : flavors) {
             const bool is_sve = (flavor == SIMDFlavors::SVE);
 
@@ -1072,7 +1077,12 @@ void CodeGen_ARM::init_module() {
 
             Type ret_type = intrin.ret_type;
             ret_type = ret_type.with_lanes(ret_type.lanes() * width_factor);
-            internal_assert(ret_type.bits() * ret_type.lanes() <= 128 * width_factor) << full_name << "\n";
+            if (!(intrin.flags & ArmIntrinsic::NoMangle)) {
+                internal_assert(ret_type.bits() * ret_type.lanes() <= 128 * width_factor)
+                    << "Invalid intrinsic `" << full_name << "`: "
+                    << ret_type.bits() << " * " << ret_type.lanes()
+                    << " > 128 * " << width_factor;
+            }
             vector<Type> arg_types;
             arg_types.reserve(4);
             for (halide_type_t i : intrin.arg_types) {
@@ -1134,6 +1144,20 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
 
     LoweredFunc func = f;
 
+    // Make sure run-time vscale is equal to compile-time vscale.
+    // Avoiding the assert on inner functions is both an efficiency and a correctness issue
+    // as the assertion code may not compile in all contexts.
+    if (f.linkage != LinkageType::Internal) {
+        int effective_vscale = target_vscale();
+        if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
+            Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_vscale, {}, Call::PureIntrinsic);
+            Expr compiletime_vscale = Expr(effective_vscale);
+            Expr error = Call::make(Int(32), "halide_error_vscale_invalid",
+                                    {simple_name, runtime_vscale, compiletime_vscale}, Call::Extern);
+            func.body = Block::make(AssertStmt::make(runtime_vscale == compiletime_vscale, error), func.body);
+        }
+    }
+
     if (target.os != Target::IOS && target.os != Target::OSX) {
         // Substitute in strided loads to get vld2/3/4 emission. We don't do it
         // on Apple silicon, because doing a dense load and then shuffling is
@@ -1145,29 +1169,6 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     func.body = distribute_shifts(func.body, /* multiply_adds */ true);
 
     CodeGen_Posix::compile_func(func, simple_name, extern_name);
-}
-
-void CodeGen_ARM::begin_func(LinkageType linkage, const std::string &simple_name,
-                             const std::string &extern_name, const std::vector<LoweredArgument> &args) {
-    CodeGen_Posix::begin_func(linkage, simple_name, extern_name, args);
-
-    // TODO(https://github.com/halide/Halide/issues/8092): There is likely a
-    // better way to ensure this is only generated for the outermost function
-    // that is being compiled. Avoiding the assert on inner functions is both an
-    // efficiency and a correctness issue as the assertion code may not compile
-    // in all contexts.
-    if (linkage != LinkageType::Internal) {
-        int effective_vscale = target_vscale();
-        if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
-            // Make sure run-time vscale is equal to compile-time vscale
-            Expr runtime_vscale = Call::make(Int(32), Call::get_runtime_vscale, {}, Call::PureIntrinsic);
-            Value *val_runtime_vscale = codegen(runtime_vscale);
-            Value *val_compiletime_vscale = ConstantInt::get(i32_t, effective_vscale);
-            Value *cond = builder->CreateICmpEQ(val_runtime_vscale, val_compiletime_vscale);
-            create_assertion(cond, Call::make(Int(32), "halide_error_vscale_invalid",
-                                              {simple_name, runtime_vscale, Expr(effective_vscale)}, Call::Extern));
-        }
-    }
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
@@ -1218,74 +1219,97 @@ void CodeGen_ARM::visit(const Cast *op) {
 }
 
 void CodeGen_ARM::visit(const Add *op) {
-    if (simd_intrinsics_disabled() ||
-        !op->type.is_vector() ||
-        !target.has_feature(Target::ARMDotProd) ||
-        !op->type.is_int_or_uint() ||
-        op->type.bits() != 32) {
+    struct Pattern {
+        Expr pattern;
+        const char *intrin;
+    };
+
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
 
-    struct Pattern {
-        Expr pattern;
-        const char *intrin;
-        Type coeff_type = UInt(8);
-    };
+    // FMLAL
+    if (op->type.is_vector() && op->type.is_float() && op->type.bits() == 32 &&
+        target.features_all_of({Target::ARMv84a, Target::ARMFp16})) {
+        // Initial value
+        Expr a = Variable::make(Float(32, 0), "a");
+        // Values
+        Expr b = Variable::make(Float(16, 0), "b");
+        Expr c = Variable::make(Float(16, 0), "c");
 
-    // Initial values.
-    Expr init_i32 = Variable::make(Int(32, 0), "init");
-    Expr init_u32 = Variable::make(UInt(32, 0), "init");
-    // Values
-    Expr a_i8 = Variable::make(Int(8, 0), "a"), b_i8 = Variable::make(Int(8, 0), "b");
-    Expr c_i8 = Variable::make(Int(8, 0), "c"), d_i8 = Variable::make(Int(8, 0), "d");
-    Expr a_u8 = Variable::make(UInt(8, 0), "a"), b_u8 = Variable::make(UInt(8, 0), "b");
-    Expr c_u8 = Variable::make(UInt(8, 0), "c"), d_u8 = Variable::make(UInt(8, 0), "d");
-    // Coefficients
-    Expr ac_i8 = Variable::make(Int(8, 0), "ac"), bc_i8 = Variable::make(Int(8, 0), "bc");
-    Expr cc_i8 = Variable::make(Int(8, 0), "cc"), dc_i8 = Variable::make(Int(8, 0), "dc");
-    Expr ac_u8 = Variable::make(UInt(8, 0), "ac"), bc_u8 = Variable::make(UInt(8, 0), "bc");
-    Expr cc_u8 = Variable::make(UInt(8, 0), "cc"), dc_u8 = Variable::make(UInt(8, 0), "dc");
+        static const Pattern patterns[] = {
+            {a + widening_mul(b, c), "widening_fma"},
+            {widening_mul(b, c) + a, "widening_fma"},
+        };
 
-    Expr ma_i8 = widening_mul(a_i8, ac_i8);
-    Expr mb_i8 = widening_mul(b_i8, bc_i8);
-    Expr mc_i8 = widening_mul(c_i8, cc_i8);
-    Expr md_i8 = widening_mul(d_i8, dc_i8);
-
-    Expr ma_u8 = widening_mul(a_u8, ac_u8);
-    Expr mb_u8 = widening_mul(b_u8, bc_u8);
-    Expr mc_u8 = widening_mul(c_u8, cc_u8);
-    Expr md_u8 = widening_mul(d_u8, dc_u8);
-
-    static const Pattern patterns[] = {
-        // Signed variants.
-        {(init_i32 + widening_add(ma_i8, mb_i8)) + widening_add(mc_i8, md_i8), "dot_product"},
-        {init_i32 + (widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8)), "dot_product"},
-        {widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8), "dot_product"},
-
-        // Unsigned variants.
-        {(init_u32 + widening_add(ma_u8, mb_u8)) + widening_add(mc_u8, md_u8), "dot_product"},
-        {init_u32 + (widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8)), "dot_product"},
-        {widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8), "dot_product"},
-    };
-
-    std::map<std::string, Expr> matches;
-    for (const Pattern &p : patterns) {
-        if (expr_match(p.pattern, op, matches)) {
-            Expr init;
-            auto it = matches.find("init");
-            if (it == matches.end()) {
-                init = make_zero(op->type);
-            } else {
-                init = it->second;
+        std::map<std::string, Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (expr_match(p.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, p.intrin, {matches["a"], matches["b"], matches["c"]});
+                if (value) {
+                    return;
+                }
             }
-            Expr values = Shuffle::make_interleave({matches["a"], matches["b"],
-                                                    matches["c"], matches["d"]});
-            Expr coeffs = Shuffle::make_interleave({matches["ac"], matches["bc"],
-                                                    matches["cc"], matches["dc"]});
-            value = call_overloaded_intrin(op->type, p.intrin, {init, values, coeffs});
-            if (value) {
-                return;
+        }
+    }
+
+    // SDOT, UDOT
+    if (op->type.is_vector() && target.has_feature(Target::ARMDotProd) && op->type.is_int_or_uint() && op->type.bits() == 32) {
+        // Initial values.
+        Expr init_i32 = Variable::make(Int(32, 0), "init");
+        Expr init_u32 = Variable::make(UInt(32, 0), "init");
+        // Values
+        Expr a_i8 = Variable::make(Int(8, 0), "a"), b_i8 = Variable::make(Int(8, 0), "b");
+        Expr c_i8 = Variable::make(Int(8, 0), "c"), d_i8 = Variable::make(Int(8, 0), "d");
+        Expr a_u8 = Variable::make(UInt(8, 0), "a"), b_u8 = Variable::make(UInt(8, 0), "b");
+        Expr c_u8 = Variable::make(UInt(8, 0), "c"), d_u8 = Variable::make(UInt(8, 0), "d");
+        // Coefficients
+        Expr ac_i8 = Variable::make(Int(8, 0), "ac"), bc_i8 = Variable::make(Int(8, 0), "bc");
+        Expr cc_i8 = Variable::make(Int(8, 0), "cc"), dc_i8 = Variable::make(Int(8, 0), "dc");
+        Expr ac_u8 = Variable::make(UInt(8, 0), "ac"), bc_u8 = Variable::make(UInt(8, 0), "bc");
+        Expr cc_u8 = Variable::make(UInt(8, 0), "cc"), dc_u8 = Variable::make(UInt(8, 0), "dc");
+
+        Expr ma_i8 = widening_mul(a_i8, ac_i8);
+        Expr mb_i8 = widening_mul(b_i8, bc_i8);
+        Expr mc_i8 = widening_mul(c_i8, cc_i8);
+        Expr md_i8 = widening_mul(d_i8, dc_i8);
+
+        Expr ma_u8 = widening_mul(a_u8, ac_u8);
+        Expr mb_u8 = widening_mul(b_u8, bc_u8);
+        Expr mc_u8 = widening_mul(c_u8, cc_u8);
+        Expr md_u8 = widening_mul(d_u8, dc_u8);
+
+        static const Pattern patterns[] = {
+            // Signed variants.
+            {(init_i32 + widening_add(ma_i8, mb_i8)) + widening_add(mc_i8, md_i8), "dot_product"},
+            {init_i32 + (widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8)), "dot_product"},
+            {widening_add(ma_i8, mb_i8) + widening_add(mc_i8, md_i8), "dot_product"},
+
+            // Unsigned variants.
+            {(init_u32 + widening_add(ma_u8, mb_u8)) + widening_add(mc_u8, md_u8), "dot_product"},
+            {init_u32 + (widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8)), "dot_product"},
+            {widening_add(ma_u8, mb_u8) + widening_add(mc_u8, md_u8), "dot_product"},
+        };
+
+        std::map<std::string, Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (expr_match(p.pattern, op, matches)) {
+                Expr init;
+                auto it = matches.find("init");
+                if (it == matches.end()) {
+                    init = make_zero(op->type);
+                } else {
+                    init = it->second;
+                }
+                Expr values = Shuffle::make_interleave({matches["a"], matches["b"],
+                                                        matches["c"], matches["d"]});
+                Expr coeffs = Shuffle::make_interleave({matches["ac"], matches["bc"],
+                                                        matches["cc"], matches["dc"]});
+                value = call_overloaded_intrin(op->type, p.intrin, {init, values, coeffs});
+                if (value) {
+                    return;
+                }
             }
         }
     }
@@ -2508,6 +2532,9 @@ string CodeGen_ARM::mattrs() const {
     }
     if (target.has_feature(Target::ARMv84a)) {
         attrs.emplace_back("+v8.4a");
+        if (target.has_feature(Target::ARMFp16)) {
+            attrs.emplace_back("+fp16fml");
+        }
     }
     if (target.has_feature(Target::ARMv85a)) {
         attrs.emplace_back("+v8.5a");

@@ -612,7 +612,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     TargetOptions options;
     options.AllowFPOpFusion = FPOpFusion::Fast;
+#if LLVM_VERSION < 210
     options.UnsafeFPMath = true;
+#endif
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;

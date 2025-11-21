@@ -66,6 +66,11 @@ void define_tuple(py::module &m) {
                 std::ostringstream o;
                 o << "<halide.Tuple of size " << t.size() << ">";
                 return o.str();
+            })
+            .def("__str__", [](const Tuple &t) -> std::string {
+                std::ostringstream o;
+                o << t;
+                return o.str();
             });
 
     py::implicitly_convertible<py::tuple, Tuple>();
