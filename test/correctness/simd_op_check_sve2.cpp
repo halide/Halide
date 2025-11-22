@@ -69,16 +69,16 @@ public:
 
 private:
     void check_arm_integer() {
-        // clang-format off
+
         vector<tuple<int, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy,
                      CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy,
-                     CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy>> test_params{
-            {8,  in_i8,  in_u8,  in_f16, in_i16, in_u16, i8,  i8_sat,  i16, i8,  i8_sat,  u8,  u8_sat,  u16, u8,  u8_sat},
-            {16, in_i16, in_u16, in_f16, in_i32, in_u32, i16, i16_sat, i32, i8,  i8_sat,  u16, u16_sat, u32, u8,  u8_sat},
-            {32, in_i32, in_u32, in_f32, in_i64, in_u64, i32, i32_sat, i64, i16, i16_sat, u32, u32_sat, u64, u16, u16_sat},
-            {64, in_i64, in_u64, in_f64, in_i64, in_u64, i64, i64_sat, i64, i32, i32_sat, u64, u64_sat, u64, u32, u32_sat},
-        };
-        // clang-format on
+                     CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy>>
+            test_params{
+                {8, in_i8, in_u8, in_f16, in_i16, in_u16, i8, i8_sat, i16, i8, i8_sat, u8, u8_sat, u16, u8, u8_sat},
+                {16, in_i16, in_u16, in_f16, in_i32, in_u32, i16, i16_sat, i32, i8, i8_sat, u16, u16_sat, u32, u8, u8_sat},
+                {32, in_i32, in_u32, in_f32, in_i64, in_u64, i32, i32_sat, i64, i16, i16_sat, u32, u32_sat, u64, u16, u16_sat},
+                {64, in_i64, in_u64, in_f64, in_i64, in_u64, i64, i64_sat, i64, i32, i32_sat, u64, u64_sat, u64, u32, u32_sat},
+            };
 
         for (const auto &[bits, in_i, in_u, in_f, in_i_wide, in_u_wide,
                           cast_i, satcast_i, widen_i, narrow_i, satnarrow_i,
@@ -874,7 +874,6 @@ private:
                 {32, in_i32, in_u32, i64, i64, u64, u64},
                 {64, in_i64, in_u64, i64, i64, u64, u64},
             };
-            // clang-format on
 
             for (const auto &[bits, in_i, in_u, widen_i, widenx4_i, widen_u, widenx4_u] : test_params) {
 
@@ -975,13 +974,13 @@ private:
 
         // Tests for Float type
         {
-            // clang-format off
+
             vector<tuple<int, CastFuncTy>> test_params{
                 {16, in_f16},
                 {32, in_f32},
                 {64, in_f64},
             };
-            // clang-format on
+
             if (!has_sve()) {
                 for (const auto &[bits, in_f] : test_params) {
                     for (auto &total_bits : {64, 128}) {

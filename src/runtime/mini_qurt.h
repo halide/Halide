@@ -21,8 +21,6 @@ typedef unsigned int qurt_thread_t;
    Macros for QuRT thread attributes.
  */
 
-// clang-format off
-
 /**
  * \defgroup qurt_thread_macros QURT threading macros
  * @{
@@ -45,8 +43,6 @@ typedef unsigned int qurt_thread_t;
 #define QURT_THREAD_ATTR_BUS_PRIO_DEFAULT 255                                     /**< */
 #define QURT_THREAD_ATTR_TIMETEST_ID_DEFAULT (-2)                                 /**< */
 /** @} */
-
-// clang-format on
 
 /** Thread attributes */
 typedef struct _qurt_thread_attr {

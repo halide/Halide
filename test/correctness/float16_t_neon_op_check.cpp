@@ -68,12 +68,10 @@ public:
             std::vector<std::pair<int, string>> vl_params;
             Expr f_1, f_2, f_3, u_1, i_1;
         };
-        // clang-format off
+
         TestParams test_params[2] = {
-            {32, in_f32, {{1, "s"}, {2, ".2s"}, {4, ".4s"}, { 8, ".4s"}}, f32_1, f32_2, f32_3, u32_1, i32_1},
-            {16, in_f16, {{1, "h"}, {4, ".4h"}, {8, ".8h"}, {16, ".8h"}}, f16_1, f16_2, f16_3, u16_1, i16_1}
-        };
-        // clang-format on
+            {32, in_f32, {{1, "s"}, {2, ".2s"}, {4, ".4s"}, {8, ".4s"}}, f32_1, f32_2, f32_3, u32_1, i32_1},
+            {16, in_f16, {{1, "h"}, {4, ".4h"}, {8, ".8h"}, {16, ".8h"}}, f16_1, f16_2, f16_3, u16_1, i16_1}};
 
         for (auto &test_param : test_params) {  // outer loop for {fp32, fp16}
             const int bits = test_param.bits;

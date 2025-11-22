@@ -48,11 +48,10 @@ bool debug_is_active_impl(int verbosity, const char *file, const char *function,
  * is determined by the value of the environment variable
  * HL_DEBUG_CODEGEN
  */
-// clang-format off
+
 #define debug(n)                                     \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
     if (debug_is_active((n))) std::cerr
-// clang-format on
 
 /** Allow easily printing the contents of containers, or std::vector-like containers,
  *  in debug output. Used like so:
