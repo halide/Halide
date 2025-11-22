@@ -192,7 +192,6 @@ int multi_baseline_test() {
         std::vector<int> ans;
 
         for (int a = 0; a <= y; a++) {
-            int b = 2 * x + a;
             if (a <= 0) {
                 ans.emplace_back(4 * x);
             } else if (a <= 3) {
