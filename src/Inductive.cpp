@@ -115,7 +115,7 @@ const Box expand_to_include_base_case(const Function &fn, const Box &box_require
 
 const Box expand_to_include_base_case(const Function &fn, const Box &box_required) {
     Box b = expand_to_include_base_case(fn.args(), fn.values()[0], fn.name(), box_required);
-    for (int pos = 1; pos < fn.values().size(); pos++) {
+    for (size_t pos = 1; pos < fn.values().size(); pos++) {
         Box b2 = expand_to_include_base_case(fn.args(), fn.values()[pos], fn.name(), box_required);
         merge_boxes(b, b2);
     }
