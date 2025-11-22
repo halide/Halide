@@ -33,20 +33,20 @@ class BaseCaseSolver : public IRVisitor {
         if (op->is_intrinsic(Call::if_then_else)) {
             nested_select += 1;
             vector<Interval> old_intervals = condition_intervals;
-            for (int i = 0; i < vars.size(); i++) {
+            for (size_t i = 0; i < vars.size(); i++) {
                 condition_intervals[i] = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(op->args[0]), vars[i]));
                 bounds.push(vars[i], condition_intervals[i]);
             }
 
             op->args[1].accept(this);
-            for (int i = 0; i < vars.size(); i++) {
+            for (size_t i = 0; i < vars.size(); i++) {
                 condition_intervals[i] = Interval::make_intersection(old_intervals[i], solve_for_outer_interval(simplify(!op->args[0]), vars[i]));
                 bounds.pop(vars[i]);
                 bounds.push(vars[i], condition_intervals[i]);
             }
             op->args[2].accept(this);
             condition_intervals = old_intervals;
-            for (int i = 0; i < vars.size(); i++) {
+            for (size_t i = 0; i < vars.size(); i++) {
                 bounds.pop(vars[i]);
             }
             nested_select -= 1;
@@ -54,7 +54,7 @@ class BaseCaseSolver : public IRVisitor {
             user_assert(nested_select > 0) << "Function " << func << " contains an inductive function reference outside of a select operation.\n";
             user_assert(nested_select == 1) << "Function " << func << " contains an inductive function reference inside a nested select operation.\n";
             bool found_inductive = false;
-            for (int position = 0; position < vars.size(); position++) {
+            for (size_t position = 0; position < vars.size(); position++) {
                 const Expr inductive_expr = op->args[position];
                 const Expr new_v = Variable::make(inductive_expr.type(), vars[position]);
                 const Expr gets_lower = simplify(new_v - inductive_expr > 0, true, bounds);
@@ -100,7 +100,7 @@ const Box expand_to_include_base_case(const vector<string> &vars, const Expr &RH
     Box box2 = box_required;
     BaseCaseSolver b(vars, func, box_required.bounds);
     substed.accept(&b);
-    for (uint i = 0; i < vars.size(); i++) {
+    for (size_t i = 0; i < vars.size(); i++) {
         user_assert(b.result_intervals[i].is_bounded()) << "Unable to prove that the inductive function " << func << " uses a bounded interval";
         Interval new_interval(min(b.result_intervals[i].min, box_required[i].min), box_required[i].max);
         box2[i] = new_interval;

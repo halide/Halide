@@ -301,7 +301,7 @@ public:
 
     // Default ctor initializes everything to predictable-but-unlikely values
     Type()
-        : type(Unknown, 0, 1) {
+        : type(Unknown, 0, 0) {
     }
 
     /** Construct a runtime representation of a Halide type from:

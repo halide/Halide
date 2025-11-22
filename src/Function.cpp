@@ -1136,7 +1136,7 @@ bool Function::is_inductive(const string &var) const {
     }
 
     int pos = -1;
-    for (int i = 0; i < definition().args().size(); i++) {
+    for (size_t i = 0; i < definition().args().size(); i++) {
         if (const auto &v = definition().args()[i].as<Variable>()) {
             if (v->name == var) {
                 pos = i;
