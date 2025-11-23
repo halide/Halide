@@ -82,7 +82,9 @@ tests(
     inductive_nested_select.cpp
     inductive_no_select.cpp
     inductive_reorder.cpp
+    inductive_update.cpp
     inductive_var_swap.cpp
+    inductive_vectorize.cpp
     init_def_should_be_all_vars.cpp
     input_buffer_func_name_collision.cpp
     input_generator_buffer_func_name_collision.cpp
