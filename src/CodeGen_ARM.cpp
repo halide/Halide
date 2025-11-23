@@ -212,9 +212,12 @@ protected:
                !target.has_feature(Target::SVE2);
     }
 
+    bool has_feature_fp16() const {
+        return target.features_any_of({Target::ARMFp16, Target::SVE, Target::SVE2});
+    }
     bool is_float16_and_has_feature(const Type &t) const {
         // NOTE : t.is_float() returns true even in case of BFloat16. We don't include it for now.
-        return t.code() == Type::Float && t.bits() == 16 && target.has_feature(Target::ARMFp16);
+        return t.code() == Type::Float && t.bits() == 16 && has_feature_fp16();
     }
     bool supports_call_as_float16(const Call *op) const override;
 
@@ -1004,7 +1007,7 @@ void CodeGen_ARM::init_module() {
     }
 
     for (const ArmIntrinsic &intrin : intrinsic_defs) {
-        if (intrin.flags & ArmIntrinsic::RequireFp16 && !target.has_feature(Target::ARMFp16)) {
+        if ((intrin.flags & ArmIntrinsic::RequireFp16) && !has_feature_fp16()) {
             continue;
         }
 
@@ -1259,7 +1262,8 @@ void CodeGen_ARM::visit(const Add *op) {
     }
 
     // SDOT, UDOT
-    if (op->type.is_vector() && target.has_feature(Target::ARMDotProd) && op->type.is_int_or_uint() && op->type.bits() == 32) {
+    if (op->type.is_vector() && op->type.is_int_or_uint() && op->type.bits() == 32 &&
+        target.features_any_of({Target::ARMDotProd, Target::SVE2})) {
         // Initial values.
         Expr init_i32 = Variable::make(Int(32, 0), "init");
         Expr init_u32 = Variable::make(UInt(32, 0), "init");
@@ -2056,7 +2060,7 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     }
 
-    if (target.has_feature(Target::ARMFp16)) {
+    if (has_feature_fp16()) {
         auto it = float16_transcendental_remapping.find(op->name);
         if (it != float16_transcendental_remapping.end()) {
             // This op doesn't have float16 native function.
@@ -2489,7 +2493,7 @@ int CodeGen_ARM::target_vscale() const {
 bool CodeGen_ARM::supports_call_as_float16(const Call *op) const {
     bool is_fp16_native = float16_native_funcs.find(op->name) != float16_native_funcs.end();
     bool is_fp16_transcendental = float16_transcendental_remapping.find(op->name) != float16_transcendental_remapping.end();
-    return target.has_feature(Target::ARMFp16) && (is_fp16_native || is_fp16_transcendental);
+    return has_feature_fp16() && (is_fp16_native || is_fp16_transcendental);
 }
 
 }  // namespace
