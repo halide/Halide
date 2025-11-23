@@ -696,7 +696,10 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     user_assert(!frozen())
         << "Func " << name() << " cannot be given a new update definition, "
         << "because it has already been realized or used in the definition of another Func.\n";
-
+    user_assert(!is_inductive())
+        << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
+        << "Inductive functions cannot have update definitions.\n";
+        
     for (auto &value : values) {
         user_assert(value.defined())
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
