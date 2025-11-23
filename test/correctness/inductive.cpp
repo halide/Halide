@@ -208,6 +208,27 @@ int multi_baseline_test() {
     return 0;
 }
 
+int type_declare_test() {
+    Func g = Func(Int(32), AnyDims, "g");
+    Func h("h");
+    Var x("x"), y("y");
+
+    g(x, y) = select(x <= 0, 0, 1 + g(max(0, x - 1), y) + x + 2);
+
+    h(x, y) = g(x + 5, y) / 4;
+
+    g.compute_at(h, x).store_at(h, y);
+
+    Buffer<int> im = h.realize({600, 5});
+    auto func = [](int x, int y) {
+        return (3 * (x + 5) + (x + 5) * (x + 6) / 2) / 4;
+    };
+    if (check_image(im, func)) {
+        return 1;
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -224,7 +245,9 @@ int main(int argc, char **argv) {
         {"fibonacci test", fibonacci},
         {"2d sum test", sum_2d_test},
         {"1d sum test", sum_1d_test},
-        {"multi-baseline tset", multi_baseline_test}};
+        {"multi-baseline test", multi_baseline_test},
+        {"type declaration test", type_declare_test},
+    };
 
     using Sharder = Halide::Internal::Test::Sharder;
     Sharder sharder;

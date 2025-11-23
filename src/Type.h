@@ -322,7 +322,7 @@ public:
 
     // Default ctor initializes everything to predictable-but-unlikely values
     constexpr Type()
-        : type_code(Unknown), type_bits(0), type_lanes(0) {
+        : type_code(Unknown), type_bits(0), type_lanes(1) {
     }
 
     /** Construct a runtime representation of a Halide type from:
@@ -633,7 +633,7 @@ HALIDE_ALWAYS_INLINE Type Handle(int lanes = 1, const halide_handle_cplusplus_ty
 
 /** Construct an unknown type */
 inline Type Unknown() {
-    return Type{};
+    return Type(Type::Unknown, 0, 1);
 }
 
 /** Construct the halide equivalent of a C type */

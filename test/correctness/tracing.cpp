@@ -219,7 +219,11 @@ int main(int argc, char **argv) {
     f.realize({10}, get_jit_target_from_environment().with_feature(Target::TracePipeline));
 
     // The golden trace, recorded when this test was written
+<<<<<<< HEAD
     static event correct_pipeline_trace[] = {
+=======
+    event correct_pipeline_trace[] = {
+>>>>>>> 2197d3da2 (get default types back to normal; add new test)
         {102, 0, 8, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {102, 1, 9, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
     };
