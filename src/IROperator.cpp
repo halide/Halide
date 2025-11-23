@@ -671,12 +671,12 @@ void match_types(Expr &a, Expr &b) {
     }
 
     if (a.type().is_unknown() && !b.type().is_unknown()) {
-        b = cast(Type{}, b);
+        b = cast(a.type(), b);
         return;
     }
 
     if (b.type().is_unknown() && !a.type().is_unknown()) {
-        a = cast(Type{}, a);
+        a = cast(b.type(), a);
         return;
     }
 

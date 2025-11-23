@@ -3333,7 +3333,11 @@ FuncRef::operator Expr() const {
     */
 
     if (!(func.has_pure_definition() || func.has_extern_definition())) {
-        return Call::make(Type{}, func.name(), args, Call::Halide,
+        Type t = Type(Type::Unknown, 0, 1);
+        if (!func.required_types().empty()) {
+            t = func.required_types()[0];
+        }
+        return Call::make(t, func.name(), args, Call::Halide,
                           func.get_contents(), 0, Buffer<>(), Parameter());
     }
 

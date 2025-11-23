@@ -501,15 +501,6 @@ def test_unevaluated_funcref():
 
     with assert_throws(
         hl.HalideError,
-        r"Error: Can't call Func \"f(\$\d+)?\" because it has not yet been defined\.",
-    ):
-        # This is invalid because we only allow unevaluated func refs on the LHS of a
-        # binary operator.
-        f = hl.Func("f")
-        f[x] = 1 + f[x]
-
-    with assert_throws(
-        hl.HalideError,
         r"Cannot use an unevaluated reference to 'f(\$\d+)?' to define an update at a different location\.",
     ):
         # This is OK

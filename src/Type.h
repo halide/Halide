@@ -301,7 +301,7 @@ public:
 
     // Default ctor initializes everything to predictable-but-unlikely values
     Type()
-        : type(Unknown, 0, 0) {
+        : type(Handle, 0, 0) {
     }
 
     /** Construct a runtime representation of a Halide type from:
@@ -574,7 +574,7 @@ inline Type Handle(int lanes = 1, const halide_handle_cplusplus_type *handle_typ
 
 /** Construct an unknown type */
 inline Type Unknown() {
-    return Type{};
+    return Type(Type::Unknown, 0, 1);
 }
 
 /** Construct the halide equivalent of a C type */
