@@ -699,7 +699,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     user_assert(!is_inductive())
         << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Inductive functions cannot have update definitions.\n";
-        
+
     for (auto &value : values) {
         user_assert(value.defined())
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"

@@ -370,7 +370,7 @@ Expr make_const_helper(Type t, T val) {
         return UIntImm::make(t, (uint64_t)val);
     } else if (t.is_float()) {
         return FloatImm::make(t, (double)val);
-    } else if(t.is_unknown()){
+    } else if (t.is_unknown()) {
         user_error << "Can't make a constant of unknown type.\n"
                    << "This is likely caused by a failure of type inference inside an inductive function definition.\n"
                    << "If you are trying to create an inductive function, you must define its type explicitly.\n";
