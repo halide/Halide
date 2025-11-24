@@ -268,10 +268,11 @@ Target calculate_host_target() {
         initial_features.push_back(Target::ARMFp16);
     }
 
-    if (hwcaps & HWCAP_SVE) {
-        initial_features.push_back(Target::SVE);
-        has_scalable_vector = true;
-    }
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (hwcaps & HWCAP_SVE) {
+    //     initial_features.push_back(Target::SVE);
+    //     has_scalable_vector = true;
+    // }
 
     if (hwcaps2 & HWCAP2_SVE2) {
         initial_features.push_back(Target::SVE2);
@@ -295,10 +296,11 @@ Target calculate_host_target() {
         initial_features.push_back(Target::ARMDotProd);
     }
 
-    if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
-        initial_features.push_back(Target::SVE);
-        has_scalable_vector = true;
-    }
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
+    //     initial_features.push_back(Target::SVE);
+    //     has_scalable_vector = true;
+    // }
 
 #endif
 
