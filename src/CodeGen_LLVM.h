@@ -512,6 +512,20 @@ protected:
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
+    /** concat_vectors, specialized for scalable vector */
+    virtual llvm::Value *concat_scalable_vectors(const std::vector<llvm::Value *> &);
+
+    /** Equivalent of slice_vector, specialized for scalable vector */
+    virtual llvm::Value *slice_scalable_vector(llvm::Value *vec, int start, int extent);
+
+    /** Extract a sub vector from a vector, all the elements in the sub vector must be in the src vector.
+     * Specialized for scalable vector */
+    llvm::Value *extract_scalable_vector(llvm::Value *vec, int start, int extract_size);
+
+    /** Insert a vector into the "start" position of a base vector.
+     * Specialized for scalable vector */
+    llvm::Value *insert_scalable_vector(llvm::Value *base_vec, llvm::Value *new_vec, int start);
+
     /** Reverse elements in a vector */
     llvm::Value *reverse_vector(llvm::Value *vec);
 
@@ -605,6 +619,9 @@ protected:
         VScale,  /// For use of scalable vectors.
     };
     llvm::Type *get_vector_type(llvm::Type *, int n,
+                                VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
+
+    llvm::Type *get_vector_type(llvm::Value *vec_or_scalar, int n,
                                 VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
     // @}
 
