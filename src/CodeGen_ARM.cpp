@@ -146,7 +146,6 @@ public:
     CodeGen_ARM(const Target &);
 
 protected:
-    using codegen_func_t = std::function<Value *(int lanes, const std::vector<Value *> &)>;
     using CodeGen_Posix::visit;
 
     /** Similar to llvm_type_of, but allows providing a VectorTypeConstraint to
@@ -188,12 +187,6 @@ protected:
     Type upgrade_type_for_arithmetic(const Type &t) const override;
     Type upgrade_type_for_argument_passing(const Type &t) const override;
     Type upgrade_type_for_storage(const Type &t) const override;
-
-    /** Helper function to perform codegen of vector operation in a way that
-     * total_lanes are divided into slices, codegen is performed for each slice
-     * and results are concatenated into total_lanes.
-     */
-    Value *codegen_with_lanes(int slice_lanes, int total_lanes, const std::vector<Expr> &args, codegen_func_t &cg_func);
 
     /** Various patterns to peephole match against */
     struct Pattern {
@@ -1958,17 +1951,7 @@ void CodeGen_ARM::visit(const Shuffle *op) {
 void CodeGen_ARM::visit(const Ramp *op) {
     if (target_vscale() != 0 && op->type.is_int_or_uint()) {
         if (is_const_zero(op->base) && is_const_one(op->stride)) {
-            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
-                internal_assert(args.empty());
-                // Generate stepvector intrinsic for ScalableVector
-                return builder->CreateStepVector(llvm_type_of(op->type.with_lanes(lanes)));
-            };
-
-            // codgen with next-power-of-two lanes, because if we sliced into natural_lanes(e.g. 4),
-            // it would produce {0,1,2,3,0,1,..} instead of {0,1,2,3,4,5,..}
-            const int ret_lanes = op->type.lanes();
-            const int aligned_lanes = next_power_of_two(ret_lanes);
-            value = codegen_with_lanes(aligned_lanes, ret_lanes, {}, cg_func);
+            value = builder->CreateStepVector(llvm_type_of(op->type));
             return;
         } else {
             Expr broadcast_base = Broadcast::make(op->base, op->lanes);
@@ -2439,40 +2422,6 @@ Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
         return t;
     }
     return CodeGen_Posix::upgrade_type_for_storage(t);
-}
-
-Value *CodeGen_ARM::codegen_with_lanes(int slice_lanes, int total_lanes,
-                                       const std::vector<Expr> &args, codegen_func_t &cg_func) {
-    std::vector<Value *> llvm_args;
-    llvm_args.reserve(args.size());
-    // codegen args
-    for (const auto &arg : args) {
-        llvm_args.push_back(codegen(arg));
-    }
-
-    if (slice_lanes == total_lanes) {
-        // codegen op
-        return cg_func(slice_lanes, llvm_args);
-    }
-
-    std::vector<Value *> results;
-    for (int start = 0; start < total_lanes; start += slice_lanes) {
-        std::vector<Value *> sliced_args;
-        for (auto &llvm_arg : llvm_args) {
-            Value *v = llvm_arg;
-            if (get_vector_num_elements(llvm_arg->getType()) == total_lanes) {
-                // Except for scalar argument which some ops have, arguments are sliced
-                v = slice_vector(llvm_arg, start, slice_lanes);
-            }
-            sliced_args.push_back(v);
-        }
-        // codegen op
-        value = cg_func(slice_lanes, sliced_args);
-        results.push_back(value);
-    }
-    // Restore the results into vector with total_lanes
-    value = concat_vectors(results);
-    return slice_vector(value, 0, total_lanes);
 }
 
 string CodeGen_ARM::mcpu_target() const {
