@@ -28,6 +28,14 @@
  * recursive reference must be monotonically decreasing. Currently, only single-valued 
  * functions are supported. Inductive functions cannot be inlined, and cannot have 
  * update definitions.
+ *
+ * In some cases, the inductive function's type cannot be inferred and must be declared
+ * explicitly. This occurs when constants appear in operations with a recursive reference. 
+ * For example, in the following code, Halide cannot infer the type of f:
+ * f(x) = select(x <= 0, 0, f(x - 1) + 1);
+ *
+ * To fix this, declare f with an explicit type:
+ * Func f = Func(Int(32), "f");
  */
 
 #include "Bounds.h"
