@@ -465,7 +465,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
     // TODO: Support rewriting to arbitrary calls in IRMatch and use that instead
     // of expr_match here. That would probably allow avoiding the redundant swapping
     // operands logic.
-    // clang-format off
     static const Pattern patterns[] = {
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_i8x)), "dp4a"},
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_u8x)), "dp4a"},
@@ -480,7 +479,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
         {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
     };
-    // clang-format on
 
     const int input_lanes = op->value.type().lanes();
     const int factor = input_lanes / op->type.lanes();

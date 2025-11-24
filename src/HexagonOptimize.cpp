@@ -1184,7 +1184,7 @@ class VectorReducePatterns : public IRMutator {
         // Map of instruction signatures
         static const vector<Signature> sigs = ([&]() HALIDE_NEVER_INLINE {
             return vector<Signature>{
-                // clang-format off
+
                 // --------- vrmpy ---------
                 // Sliding window
                 {4, 32, widening_mul(wild_u8x, wild_u8x), Signature::SlidingWindow | Signature::ScalarB},
@@ -1239,7 +1239,6 @@ class VectorReducePatterns : public IRMutator {
                 {2, 16, wild_u8x},
                 {2, 32, wild_i16x},
             };
-            // clang-format on
         })();
 
         std::vector<Expr> matches;

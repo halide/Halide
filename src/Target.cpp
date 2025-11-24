@@ -1568,7 +1568,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
-    // clang-format off
     const std::vector<Feature> union_features = {{
         // These are true union features.
         CUDA,
@@ -1611,9 +1610,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         ARMv88a,
         ARMv89a,
     }};
-    // clang-format on
 
-    // clang-format off
     const std::vector<Feature> intersection_features = {{
         ARMv7s,
         AVX,
@@ -1632,9 +1629,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         SSE41,
         VSX,
     }};
-    // clang-format on
 
-    // clang-format off
     const std::vector<Feature> matching_features = {{
         ASAN,
         Debug,
@@ -1648,7 +1643,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         SanitizerCoverage,
         Simulator,
     }};
-    // clang-format on
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;

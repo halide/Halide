@@ -581,7 +581,6 @@ halide_type_t u8v2 = u8v1.with_lanes(u8v1.lanes * 2);
 halide_type_t u16v2 = u16v1.with_lanes(u16v1.lanes * 2);
 halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
 
-// clang-format off
 #define INTRINSIC_128B(id) llvm::Intrinsic::hexagon_V6_##id##_128B
 const HvxIntrinsic intrinsic_wrappers[] = {
     // Zero/sign extension:
@@ -689,7 +688,7 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vavghrnd), i16v1, "avg_rnd.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vavgwrnd), i32v1, "avg_rnd.vw.vw", {i32v1, i32v1}},
 
-     // This one is weird: i8_sat((u8 - u8)/2). It both saturates and averages.
+    // This one is weird: i8_sat((u8 - u8)/2). It both saturates and averages.
     {INTRINSIC_128B(vnavgub), i8v1, "navg.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vnavgb), i8v1, "navg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
     {INTRINSIC_128B(vnavgh), i16v1, "navg.vh.vh", {i16v1, i16v1}},
@@ -841,7 +840,6 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vnormamth), u16v1, "cls.vh", {u16v1}},
     {INTRINSIC_128B(vnormamtw), u32v1, "cls.vw", {u32v1}},
 };
-// clang-format on
 
 // TODO: Many variants of the above functions are missing. They
 // need to be implemented in the runtime module, or via
