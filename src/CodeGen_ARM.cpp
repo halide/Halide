@@ -1220,7 +1220,9 @@ void CodeGen_ARM::visit(const Cast *op) {
     }
 
     // LLVM fptoui generates fcvtzs or fcvtzu in inconsistent way
-    if (op->value.type().is_float() && op->type.is_int_or_uint()) {
+    if (op->value.type().is_float() &&
+        op->type.is_int_or_uint() &&
+        !target.has_feature(Target::SVE2)) {
         if (Value *v = call_overloaded_intrin(op->type, "fp_to_int", {op->value})) {
             value = v;
             return;
@@ -1346,51 +1348,22 @@ void CodeGen_ARM::visit(const Sub *op) {
     }
 
     // Peep-hole (0 - b) pattern to generate "negate" instruction
-    if (is_const_zero(op->a)) {
-        if (target_vscale() != 0) {
-            if ((op->type.bits() >= 8 && op->type.is_int())) {
-                if (Value *v = call_overloaded_intrin(op->type, "negate", {op->b})) {
-                    value = v;
-                    return;
-                }
-            } else if (op->type.bits() >= 16 && op->type.is_float()) {
-                ScopedFastMath guard(this);
-                value = builder->CreateFNeg(codegen(op->b));
-                return;
-            }
-        } else {
-            // llvm.neon.neg/fneg intrinsic doesn't seem to exist. Instead,
-            // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
-            if (op->type.is_float() &&
-                (op->type.bits() >= 32 || is_float16_and_has_feature(op->type))) {
-                Constant *a;
-                if (op->type.bits() == 16) {
-                    a = ConstantFP::getNegativeZero(f16_t);
-                } else if (op->type.bits() == 32) {
-                    a = ConstantFP::getNegativeZero(f32_t);
-                } else if (op->type.bits() == 64) {
-                    a = ConstantFP::getNegativeZero(f64_t);
-                } else {
-                    a = nullptr;
-                    internal_error << "Unknown bit width for floating point type: " << op->type << "\n";
-                }
-
-                Value *b = codegen(op->b);
-
-                if (op->type.lanes() > 1) {
-                    a = get_splat(op->type.lanes(), a);
-                }
-                ScopedFastMath guard(this);
-                value = builder->CreateFSub(a, b);
-                return;
-            }
+    if (is_const_zero(op->a) &&
+        (target_vscale() != 0 && op->type.is_vector()) &&
+        (op->type.bits() >= 8 && op->type.is_int())) {
+        if (Value *v = call_overloaded_intrin(op->type, "negate", {op->b})) {
+            value = v;
+            return;
         }
     }
 
+    // llvm.neon.neg/fneg intrinsic doesn't seem to exist. Instead,
     // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
-    if (op->type.is_float() &&
+    if (is_const_zero(op->a) &&
+        op->type.is_float() &&
         (op->type.bits() >= 32 || is_float16_and_has_feature(op->type)) &&
-        is_const_zero(op->a)) {
+        (op->type.is_vector() || !target.has_feature(Target::Feature::SVE2))) {
+
         Constant *a;
         if (op->type.bits() == 16) {
             a = ConstantFP::getNegativeZero(f16_t);
@@ -1418,7 +1391,9 @@ void CodeGen_ARM::visit(const Sub *op) {
 
 void CodeGen_ARM::visit(const Min *op) {
     // Use a 2-wide vector for scalar floats.
-    if (!simd_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
+    if (!simd_intrinsics_disabled() &&
+        ((op->type.is_float() && !target.has_feature(Target::SVE2)) ||
+         op->type.is_vector())) {
         value = call_overloaded_intrin(op->type, "min", {op->a, op->b});
         if (value) {
             return;
@@ -1430,7 +1405,9 @@ void CodeGen_ARM::visit(const Min *op) {
 
 void CodeGen_ARM::visit(const Max *op) {
     // Use a 2-wide vector for scalar floats.
-    if (!simd_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
+    if (!simd_intrinsics_disabled() &&
+        ((op->type.is_float() && !target.has_feature(Target::SVE2)) ||
+         op->type.is_vector())) {
         value = call_overloaded_intrin(op->type, "max", {op->a, op->b});
         if (value) {
             return;
