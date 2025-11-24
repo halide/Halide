@@ -66,7 +66,7 @@ Func::Func(const string &name)
     : func(unique_name(name)) {
 }
 
-Func::Func(const Type  &required_type, const string &name)
+Func::Func(const Type &required_type, const string &name)
     : func({required_type}, AnyDims, unique_name(name)) {
 }
 
