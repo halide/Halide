@@ -1630,7 +1630,7 @@ void CodeGen_ARM::visit(const Store *op) {
             // Basically we can deal with vanilla codegen,
             // but to avoid LLVM error, process with the multiple of natural_lanes
             const int natural_lanes = target.natural_vector_size(op->value.type());
-            if (ramp->lanes % natural_lanes) {
+            if (ramp->lanes % natural_lanes && !emit_atomic_stores) {
                 int aligned_lanes = align_up(ramp->lanes, natural_lanes);
                 // Use predicate to prevent overrun
                 Expr vpred;
