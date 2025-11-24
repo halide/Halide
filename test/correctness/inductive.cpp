@@ -209,7 +209,7 @@ int multi_baseline_test() {
 }
 
 int type_declare_test() {
-    Func g = Func(Int(32), AnyDims, "g");
+    Func g = Func(Int(32), "g");
     Func h("h");
     Var x("x"), y("y");
 
