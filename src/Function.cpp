@@ -222,6 +222,7 @@ struct CheckVars : public IRGraphVisitor {
 
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
+        /*
         if (op->name == name && op->call_type == Call::Halide) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 const Variable *var = op->args[i].as<Variable>();
@@ -234,6 +235,7 @@ struct CheckVars : public IRGraphVisitor {
                 }
             }
         }
+        */
     }
 
     void visit(const Variable *var) override {
@@ -570,6 +572,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     // Freeze all called functions
     FreezeFunctions freezer(name());
+    // TODO: Check for calls to undefined Funcs
     for (const auto &value : values) {
         value.accept(&freezer);
     }
@@ -633,7 +636,11 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     contents->init_def = Definition(init_def_args, values, rdom, true);
 
     for (const auto &arg : args) {
-        Dim d = {arg, ForType::Serial, DeviceAPI::None, DimType::PureVar};
+        DimType dtype = DimType::PureVar;
+        if (is_inductive(arg)) {
+            dtype = DimType::InductiveVar;
+        }
+        Dim d = {arg, ForType::Serial, DeviceAPI::None, dtype};
         contents->init_def.schedule().dims().push_back(d);
         StorageDim sd = {arg};
         contents->func_schedule.storage_dims().push_back(sd);
@@ -689,6 +696,9 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     user_assert(!frozen())
         << "Func " << name() << " cannot be given a new update definition, "
         << "because it has already been realized or used in the definition of another Func.\n";
+    user_assert(!is_inductive())
+        << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
+        << "Inductive functions cannot have update definitions.\n";
 
     for (auto &value : values) {
         user_assert(value.defined())
@@ -1066,8 +1076,89 @@ bool Function::has_pure_definition() const {
     return contents->init_def.defined();
 }
 
+bool Function::is_inductive() const {
+    class RecursiveHelper : public IRVisitor {
+        using IRVisitor::visit;
+        const string &func;
+        void visit(const Call *op) override {
+            if (op->name == func) {
+                recursive = true;
+            }
+            IRVisitor::visit(op);
+        }
+
+    public:
+        bool recursive = false;
+        RecursiveHelper(const string &func)
+            : func(func) {
+        }
+    };
+
+    if (!has_pure_definition()) {
+        return false;
+    }
+
+    RecursiveHelper r(name());
+    for (const Expr &e : definition().values()) {
+        e.accept(&r);
+    }
+
+    return r.recursive;
+}
+
+bool Function::is_inductive(const string &var) const {
+    class RecursiveHelper : public IRVisitor {
+        using IRVisitor::visit;
+        const string &func;
+        const string &var;
+        const int &pos;
+        void visit(const Call *op) override {
+            if (op->name == func) {
+                recursive = true;
+                if (const auto &v = op->args[pos].as<Variable>()) {
+                    if (v->name != var) {
+                        inductive_in_var = true;
+                    }
+                } else {
+                    inductive_in_var = true;
+                }
+            }
+            IRVisitor::visit(op);
+        }
+
+    public:
+        bool recursive = false;
+        bool inductive_in_var = false;
+        RecursiveHelper(const string &func, const string &var, const int &pos)
+            : func(func), var(var), pos(pos) {
+        }
+    };
+
+    if (!has_pure_definition()) {
+        return false;
+    }
+
+    int pos = -1;
+    for (size_t i = 0; i < definition().args().size(); i++) {
+        if (const auto &v = definition().args()[i].as<Variable>()) {
+            if (v->name == var) {
+                pos = i;
+            }
+        }
+    }
+    if (pos == -1) {
+        return false;
+    }
+    RecursiveHelper r(name(), var, pos);
+    for (const Expr &e : definition().values()) {
+        e.accept(&r);
+    }
+
+    return r.inductive_in_var;
+}
+
 bool Function::can_be_inlined() const {
-    return is_pure() && definition().specializations().empty();
+    return is_pure() && definition().specializations().empty() && !is_inductive();
 }
 
 bool Function::has_update_definition() const {
