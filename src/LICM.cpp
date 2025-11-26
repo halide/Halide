@@ -318,7 +318,7 @@ class LICM : public IRMutator {
             const For *loop = new_stmt.as<For>();
             internal_assert(loop);
 
-            new_stmt = For::make(loop->name, loop->min, loop->extent,
+            new_stmt = For::make(loop->name, loop->min, loop->max,
                                  loop->for_type, loop->partition_policy, loop->device_api, mutate(loop->body));
 
             // Wrap lets for the lifted invariants
@@ -563,7 +563,7 @@ class HoistIfStatements : public IRMutator {
             if (!i->else_case.defined() &&
                 is_pure(i->condition) &&
                 !expr_uses_var(i->condition, op->name)) {
-                Stmt s = For::make(op->name, op->min, op->extent,
+                Stmt s = For::make(op->name, op->min, op->max,
                                    op->for_type, op->partition_policy, op->device_api, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
@@ -571,7 +571,7 @@ class HoistIfStatements : public IRMutator {
         if (body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, op->min, op->extent,
+            return For::make(op->name, op->min, op->max,
                              op->for_type, op->partition_policy, op->device_api, body);
         }
     }

@@ -236,7 +236,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after uniquifying variable names:", s);
 
     debug(1) << "Simplifying...\n";
-    s = simplify(s, false);  // Storage folding and allocation bounds inference needs .loop_max symbols
+    s = simplify(s);
     log("Lowering after first simplification:", s);
 
     debug(1) << "Simplifying correlated differences...\n";

@@ -22,7 +22,7 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
         Expr inner = Variable::make(Int(32), prefix + split.inner);
         Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
         Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
-        Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
+        Expr old_extent = (old_max - old_min) + 1;
 
         dim_extent_alignment[split.inner] = split.factor;
 
@@ -135,10 +135,10 @@ vector<ApplySplitResult> apply_split(const Split &split, const string &prefix,
         // Define the inner and outer in terms of the fused var
         Expr fused = Variable::make(Int(32), prefix + split.old_var);
         Expr inner_min = Variable::make(Int(32), prefix + split.inner + ".loop_min");
+        Expr inner_max = Variable::make(Int(32), prefix + split.inner + ".loop_max");
         Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
-        Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
 
-        const Expr &factor = inner_extent;
+        const Expr &factor = (inner_max - inner_min) + 1;
         Expr inner = fused % factor + inner_min;
         Expr outer = fused / factor + outer_min;
 
@@ -169,7 +169,6 @@ vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &spl
     // Define the bounds on the split dimensions using the bounds on the function args.
     vector<std::pair<string, Expr>> let_stmts;
 
-    Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
     Expr old_var_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
     Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
     switch (split.split_type) {
@@ -178,24 +177,22 @@ vector<std::pair<string, Expr>> compute_loop_bounds_after_split(const Split &spl
         Expr outer_extent = (old_var_max - old_var_min + split.factor) / split.factor;
         let_stmts.emplace_back(prefix + split.inner + ".loop_min", 0);
         let_stmts.emplace_back(prefix + split.inner + ".loop_max", inner_extent - 1);
-        let_stmts.emplace_back(prefix + split.inner + ".loop_extent", inner_extent);
         let_stmts.emplace_back(prefix + split.outer + ".loop_min", 0);
         let_stmts.emplace_back(prefix + split.outer + ".loop_max", outer_extent - 1);
-        let_stmts.emplace_back(prefix + split.outer + ".loop_extent", outer_extent);
     } break;
     case Split::FuseVars: {
         // Define bounds on the fused var using the bounds on the inner and outer
-        Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
-        Expr outer_extent = Variable::make(Int(32), prefix + split.outer + ".loop_extent");
-        Expr fused_extent = inner_extent * outer_extent;
+        Expr inner_min = Variable::make(Int(32), prefix + split.inner + ".loop_min");
+        Expr inner_max = Variable::make(Int(32), prefix + split.inner + ".loop_max");
+        Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
+        Expr outer_max = Variable::make(Int(32), prefix + split.outer + ".loop_max");
+        Expr fused_extent = (inner_max - inner_min + 1) * (outer_max - outer_min + 1);
         let_stmts.emplace_back(prefix + split.old_var + ".loop_min", 0);
         let_stmts.emplace_back(prefix + split.old_var + ".loop_max", fused_extent - 1);
-        let_stmts.emplace_back(prefix + split.old_var + ".loop_extent", fused_extent);
     } break;
     case Split::RenameVar:
         let_stmts.emplace_back(prefix + split.outer + ".loop_min", old_var_min);
         let_stmts.emplace_back(prefix + split.outer + ".loop_max", old_var_max);
-        let_stmts.emplace_back(prefix + split.outer + ".loop_extent", old_var_extent);
         break;
     }
 

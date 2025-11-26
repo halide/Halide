@@ -406,7 +406,7 @@ class FindSimplifications : public IRVisitor {
         for (Simplification &s : simplifications) {
             if (expr_uses_var(s.condition, op->name)) {
                 Scope<Interval> varying;
-                varying.push(op->name, Interval(op->min, op->min + op->extent - 1));
+                varying.push(op->name, Interval(op->min, op->max));
                 Expr relaxed = and_condition_over_domain(s.condition, varying);
                 internal_assert(!expr_uses_var(relaxed, op->name))
                     << "Should not have had used the loop var (" << op->name
@@ -721,7 +721,7 @@ class PartitionLoops : public IRMutator {
         }
 
         // Construct variables for the bounds of the simplified middle section
-        Expr min_steady = op->min, max_steady = op->extent + op->min;
+        Expr min_steady = op->min, max_steady = op->max + 1;
         Expr prologue_val, epilogue_val;
         string prologue_name = unique_name(op->name + ".prologue");
         string epilogue_name = unique_name(op->name + ".epilogue");
@@ -735,7 +735,7 @@ class PartitionLoops : public IRMutator {
             min_vals.push_back(op->min);
             prologue_val = fold_left(min_vals, Max::make);
             // Stop the prologue from running past the end of the loop
-            prologue_val = min(prologue_val, op->extent + op->min);
+            prologue_val = min(prologue_val, op->max + 1);
             // prologue_val = print(prologue_val, prologue_name);
             min_steady = Variable::make(Int(32), prologue_name);
 
@@ -743,7 +743,7 @@ class PartitionLoops : public IRMutator {
         }
         if (make_epilogue) {
             std::sort(max_vals.begin(), max_vals.end(), IRDeepCompare());
-            max_vals.push_back(op->min + op->extent - 1);
+            max_vals.push_back(op->max);
             epilogue_val = fold_left(max_vals, Min::make) + 1;
             // Stop the epilogue from running before the start of the loop/prologue
             if (make_prologue) {
@@ -760,17 +760,17 @@ class PartitionLoops : public IRMutator {
         Stmt stmt;
         // Bust simple serial for loops up into three.
         if (op->for_type == ForType::Serial && !op->body.as<Acquire>()) {
-            stmt = For::make(op->name, min_steady, max_steady - min_steady,
+            stmt = For::make(op->name, min_steady, max_steady - 1,
                              op->for_type, op->partition_policy, op->device_api, simpler_body);
 
             if (make_prologue) {
-                prologue = For::make(op->name, op->min, min_steady - op->min,
+                prologue = For::make(op->name, op->min, min_steady - 1,
                                      op->for_type, op->partition_policy, op->device_api, prologue);
                 stmt = Block::make(prologue, stmt);
                 mutated = true;
             }
             if (make_epilogue) {
-                epilogue = For::make(op->name, max_steady, op->min + op->extent - max_steady,
+                epilogue = For::make(op->name, max_steady, op->max,
                                      op->for_type, op->partition_policy, op->device_api, epilogue);
                 stmt = Block::make(stmt, epilogue);
                 mutated = true;
@@ -803,19 +803,19 @@ class PartitionLoops : public IRMutator {
                     mutated = true;
                 }
             }
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, stmt);
+            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, stmt);
         }
 
         if (make_epilogue) {
             // Uncomment to include code that prints the epilogue value
-            // epilogue_val = print(epilogue_val, op->name, "epilogue");
+            // epilogue_val = print(epilogue_val, op->name, "epilogue", op->min, op->max);
             stmt = LetStmt::make(epilogue_name, epilogue_val, stmt);
         } else {
-            epilogue_val = op->min + op->extent;
+            epilogue_val = op->max + 1;
         }
         if (make_prologue) {
             // Uncomment to include code that prints the prologue value
-            // prologue_val = print(prologue_val, op->name, "prologue");
+            // prologue_val = print(prologue_val, op->name, "prologue", op->min, op->max);
             stmt = LetStmt::make(prologue_name, prologue_val, stmt);
         } else {
             prologue_val = op->min;
@@ -924,9 +924,9 @@ class RenormalizeGPULoops : public IRMutator {
         // Move lets in-between gpu loop levels inwards.
         if (f && in_gpu_loop && !in_thread_loop) {
             internal_assert(!expr_uses_var(f->min, op->name) &&
-                            !expr_uses_var(f->extent, op->name));
+                            !expr_uses_var(f->max, op->name));
             Stmt inner = LetStmt::make(op->name, op->value, f->body);
-            inner = For::make(f->name, f->min, f->extent, f->for_type, f->partition_policy, f->device_api, inner);
+            inner = For::make(f->name, f->min, f->max, f->for_type, f->partition_policy, f->device_api, inner);
             return mutate(inner);
         } else if (a && in_gpu_loop && !in_thread_loop) {
             internal_assert(a->extents.size() == 1);
@@ -1002,9 +1002,9 @@ class RenormalizeGPULoops : public IRMutator {
         } else if (for_a && for_b &&
                    for_a->name == for_b->name &&
                    for_a->min.same_as(for_b->min) &&
-                   for_a->extent.same_as(for_b->extent)) {
+                   for_a->max.same_as(for_b->max)) {
             Stmt inner = IfThenElse::make(op->condition, for_a->body, for_b->body);
-            inner = For::make(for_a->name, for_a->min, for_a->extent, for_a->for_type, for_a->partition_policy, for_a->device_api, inner);
+            inner = For::make(for_a->name, for_a->min, for_a->max, for_a->for_type, for_a->partition_policy, for_a->device_api, inner);
             return mutate(inner);
         } else {
             internal_error << "Unexpected construct inside if statement: " << Stmt(op) << "\n";
