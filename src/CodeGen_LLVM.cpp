@@ -1362,13 +1362,10 @@ void CodeGen_LLVM::codegen(const Stmt &s) {
     value = nullptr;
     s.accept(this);
 }
-namespace {
 
-bool is_power_of_two(int x) {
+bool CodeGen_LLVM::is_power_of_two(int x) const {
     return (x & (x - 1)) == 0;
 }
-
-}  // namespace
 
 Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
@@ -4158,8 +4155,8 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             }
 
             // Check for an interleave of slices (i.e. an in-vector transpose)
-            bool interleave_of_slices = op->vectors.size() == 1 && (op->indices.size() % f) == 0;
             int step = op->type.lanes() / f;
+            bool interleave_of_slices = step != 1 && op->vectors.size() == 1 && (op->indices.size() % f) == 0;
             for (int i = 0; i < step; i++) {
                 for (int j = 0; j < f; j++) {
                     interleave_of_slices &= (op->indices[i * f + j] == j * step + i);
@@ -4173,6 +4170,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
                     slices.push_back(slice_vector(value, i * step, step));
                 }
                 value = interleave_vectors(slices);
+                return;
             }
         }
         // If the indices form contiguous aligned runs, do the shuffle
@@ -5412,6 +5410,10 @@ llvm::Constant *CodeGen_LLVM::get_splat(int lanes, llvm::Constant *value,
     llvm::ElementCount ec = scalable ? llvm::ElementCount::getScalable(lanes) :
                                        llvm::ElementCount::getFixed(lanes);
     return ConstantVector::getSplat(ec, value);
+}
+
+bool CodeGen_LLVM::is_scalable_vector(llvm::Value *v) const {
+    return isa<ScalableVectorType>(v->getType());
 }
 
 std::string CodeGen_LLVM::mangle_llvm_type(llvm::Type *type) {
