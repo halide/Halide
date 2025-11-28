@@ -202,6 +202,19 @@ protected:
     void visit(const Call *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;
+
+    llvm::Type *get_vector_type_from_value(llvm::Value *vec_or_scalar, int n);
+    Value *concat_vectors(const std::vector<llvm::Value *> &) override;
+    Value *slice_vector(Value *vec, int start, int extent) override;
+
+    /** Extract a sub vector from a vector, all the elements in the sub vector must be in the src vector.
+     * Specialized for scalable vector */
+    Value *extract_scalable_vector(Value *vec, int start, int extract_size);
+
+    /** Insert a vector into the "start" position of a base vector.
+     * Specialized for scalable vector */
+    Value *insert_scalable_vector(Value *base_vec, Value *new_vec, int start);
+
     Value *interleave_vectors(const std::vector<Value *> &) override;
     Value *shuffle_vectors(Value *a, Value *b, const std::vector<int> &indices) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
@@ -1895,6 +1908,166 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     } else {
         CodeGen_Posix::visit(op);
     }
+}
+
+llvm::Type *CodeGen_ARM::get_vector_type_from_value(Value *vec_or_scalar, int n) {
+    llvm::Type *t = vec_or_scalar->getType();
+    llvm::Type *elt = t->isVectorTy() ? get_vector_element_type(t) : t;
+    return CodeGen_Posix::get_vector_type(elt, n);
+}
+
+Value *CodeGen_ARM::concat_vectors(const vector<Value *> &vecs) {
+    // Override only for scalable vector which includes
+    // the case where scalars are concatenated into scalable vector.
+    if (target_vscale() == 0 ||
+        vecs.size() <= 1 ||
+        isa<FixedVectorType>(vecs[0]->getType())) {
+        return CodeGen_Posix::concat_vectors(vecs);
+    }
+
+    int total_lanes = 0;
+    for (auto *v : vecs) {
+        total_lanes += get_vector_num_elements(v->getType());
+    }
+
+    llvm::Type *concat_type = get_vector_type(get_vector_element_type(vecs[0]->getType()), total_lanes);
+    Value *ret = UndefValue::get(concat_type);
+    int insert_index = 0;
+    for (auto *v : vecs) {
+        ret = insert_scalable_vector(ret, v, insert_index);
+        insert_index += get_vector_num_elements(v->getType());
+    }
+    return ret;
+}
+
+Value *CodeGen_ARM::slice_vector(llvm::Value *vec, int start, int slice_size) {
+    // Override only for scalable vector
+    if (target_vscale() == 0 ||
+        !is_scalable_vector(vec)) {
+        return CodeGen_Posix::slice_vector(vec, start, slice_size);
+    }
+
+    const int vec_lanes = get_vector_num_elements(vec->getType());
+    if (slice_size == 1) {
+        return builder->CreateExtractElement(vec, ConstantInt::get(i64_t, start, true));
+    } else if (start == 0) {
+        if (vec_lanes == slice_size) {
+            return vec;
+        } else if (vec_lanes < slice_size) {
+            return insert_scalable_vector(UndefValue::get(get_vector_type_from_value(vec, slice_size)), vec, 0);
+        } else {
+            auto *dst_type = get_vector_type_from_value(vec, slice_size);
+            Value *val_index = ConstantInt::get(i64_t, 0, true);
+            return builder->CreateExtractVector(dst_type, vec, val_index);
+        }
+    } else {
+        const int extract_size = std::min(vec_lanes - start, slice_size);
+        Value *extracted = extract_scalable_vector(vec, start, extract_size);
+        if (slice_size == extract_size) {
+            return extracted;
+        } else {
+            Value *sliced = UndefValue::get(get_vector_type_from_value(vec, slice_size));
+            sliced = insert_scalable_vector(sliced, extracted, 0);
+            return sliced;
+        }
+    }
+}
+
+Value *CodeGen_ARM::extract_scalable_vector(Value *vec, int start, int extract_size) {
+    internal_assert(target_vscale() > 0 && is_scalable_vector(vec));
+    internal_assert(start + extract_size <= get_vector_num_elements(vec->getType()));  // No overrun
+
+    if (extract_size == 1) {
+        return builder->CreateExtractElement(vec, ConstantInt::get(i64_t, start, true));
+    } else {
+        // To follow the requirement of ‘llvm.vector.extract’ intrinsic that
+        // idx must be a constant multiple of the known-minimum vector length of the result type,
+        // the extraction is performed as multiple sub-extraction, where the worst case is extraction of scalar.
+        std::vector<Value *> sub_slices;
+        int i = 0;
+        while (i < extract_size) {
+            int sub_extract_pos = start + i;
+            for (int sub_extract_size = extract_size - i; sub_extract_size > 0; --sub_extract_size) {
+                if (sub_extract_pos % sub_extract_size == 0) {
+                    internal_assert(sub_extract_pos % target_vscale() == 0);
+                    Value *sub_extracted;
+                    if (sub_extract_size == 1) {
+                        sub_extracted = builder->CreateExtractElement(vec, sub_extract_pos);
+                    } else {
+                        // In vector operation, index needs to be normalized by vscale
+                        Value *idx_val = ConstantInt::get(i64_t, sub_extract_pos / target_vscale(), true);
+                        llvm::Type *sub_extract_type = get_vector_type_from_value(vec, sub_extract_size);
+                        sub_extracted = builder->CreateExtractVector(sub_extract_type, vec, idx_val);
+                    }
+                    sub_slices.push_back(sub_extracted);
+
+                    i += sub_extract_size;
+                    break;
+                }
+            }
+        }
+        Value *extracted = concat_vectors(sub_slices);
+        return extracted;
+    }
+}
+
+Value *CodeGen_ARM::insert_scalable_vector(Value *base_vec, Value *new_vec, int start) {
+    const int base_lanes = get_vector_num_elements(base_vec->getType());
+    const int new_vec_lanes = get_vector_num_elements(new_vec->getType());
+    llvm::Type *element_type = get_vector_element_type(base_vec->getType());
+
+    internal_assert(start + new_vec_lanes <= base_lanes);
+
+    if (base_lanes == 1 && new_vec_lanes == 1) {
+        return new_vec;
+    }
+
+    internal_assert(target_vscale() > 0 && is_scalable_vector(base_vec));
+
+    if (!new_vec->getType()->isVectorTy()) {
+        return builder->CreateInsertElement(base_vec, new_vec, start);
+    } else if (start % new_vec_lanes == 0) {
+        // Most of the ordinal use cases are this pattern
+        // In vector operation, index needs to be normalized by vscale
+        Value *val_start_index = ConstantInt::get(i64_t, start / target_vscale(), true);
+        return builder->CreateInsertVector(base_vec->getType(), base_vec, new_vec, val_start_index);
+    }
+
+    // To follow the requirement of ‘llvm.vector.insert’ intrinsic that
+    // idx must be a constant multiple of subvec’s known minimum vector length,
+    // insertion is performed in multiple sub slices.
+    Value *ret = base_vec;
+    int extract_index = 0;
+    int insert_index = start;
+    int sub_slice_size = std::min(start, new_vec_lanes);
+
+    while (extract_index < new_vec_lanes) {
+        if (extract_index + sub_slice_size <= new_vec_lanes &&  // Condition to not overrun
+            extract_index % sub_slice_size == 0 &&              // Requirement of LLVM intrinsic
+            insert_index % sub_slice_size == 0) {               // Requirement of LLVM intrinsic
+
+            internal_assert(extract_index % target_vscale() == 0);
+            internal_assert(insert_index % target_vscale() == 0);
+
+            if (sub_slice_size == 1) {
+                Value *sub_slice = builder->CreateExtractElement(new_vec, extract_index);
+                ret = builder->CreateInsertElement(ret, sub_slice, insert_index);
+            } else {
+                // In vector operation, index needs to be normalized by vscale
+                Value *val_extract_index = ConstantInt::get(i64_t, extract_index / target_vscale(), true);
+                Value *val_insert_index = ConstantInt::get(i64_t, insert_index / target_vscale(), true);
+                llvm::Type *sub_sliced_type = get_vector_type(element_type, sub_slice_size);
+                Value *sub_slice = builder->CreateExtractVector(sub_sliced_type, new_vec, val_extract_index);
+                ret = builder->CreateInsertVector(base_vec->getType(), ret, sub_slice, val_insert_index);
+            }
+            insert_index += sub_slice_size;
+            extract_index += sub_slice_size;
+        } else {
+            // move on to next candidate
+            --sub_slice_size;
+        }
+    }
+    return ret;
 }
 
 Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
