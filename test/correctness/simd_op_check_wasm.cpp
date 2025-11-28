@@ -78,15 +78,16 @@ public:
                 // create arbitrary 16-byte constant
                 check("v128.const", 16 * w, u8_1 * u8(42 + x));
 
-                // Create vector with identical lanes
-                // (Note that later LLVMs will use 64-bit constants for some smaller splats)
-                check("i8x16.splat", 16 * w, u8_1 * u8(in_u8(2) << 1));
-                // LLVM13 likes to emit all of these as v128.const
-                check("v128.const", 8 * w, u16_1 * u16(42));
-                check("v128.const", 4 * w, u32_1 * u32(42));
-                check("v128.const", 2 * w, u64_1 * u64(42));
-                check("v128.const", 8 * w, f32_1 * f32(42));
-                check("v128.const", 4 * w, f64_1 * f64(42));
+                // Create vector splat (broadcast) by doing a non-vectorizable
+                // scalar operation (integer division by a non-constant) and
+                // combining it with a vector.
+                check("i8x16.splat", 16 * w, u8_1 * (in_u8(2) / in_u8(3)));
+                check("i16x8.splat", 8 * w, u16_1 * (in_u16(2) / in_u16(3)));
+                check("i32x4.splat", 4 * w, u32_1 * (in_u32(2) / in_u32(3)));
+                check("i64x2.splat", 2 * w, u64_1 * (in_u64(2) / in_u64(3)));
+                // For floats we'll use a transcendental call
+                check("f32x4.splat", 4 * w, f32_1 * sin(in_f32(1)));
+                check("f64x2.splat", 4 * w, f64_1 * sin(in_f64(1)));
 
                 // Extract lane as a scalar (extract_lane)
                 // Replace lane value (replace_lane)
