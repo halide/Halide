@@ -86,7 +86,7 @@ public:
                 check("i32x4.splat", 4 * w, u32_1 * (in_u32(2) / in_u32(3)));
                 check("i64x2.splat", 2 * w, u64_1 * (in_u64(2) / in_u64(3)));
                 // For floats we'll use a transcendental call
-                check("f32x4.spslat", 4 * w, f32_1 * sin(in_f32(1)));
+                check("f32x4.splat", 4 * w, f32_1 * sin(in_f32(1)));
                 check("f64x2.splat", 4 * w, f64_1 * sin(in_f64(1)));
 
                 // Extract lane as a scalar (extract_lane)
