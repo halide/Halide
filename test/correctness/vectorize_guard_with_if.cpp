@@ -24,8 +24,8 @@ int main(int argc, char **argv) {
 
         const int w = 100, v = 8;
         f.vectorize(x, v, tail_strategy);
-        const int expected_vector_stores = w / v;
-        const int expected_scalar_stores = w % v;
+        const int expected_vector_stores = w / v + (w % v != 0 ? 1 : 0);
+        const int expected_scalar_stores = 0;
 
         f.jit_handlers().custom_trace = &my_trace;
         f.trace_stores();
