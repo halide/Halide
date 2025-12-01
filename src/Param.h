@@ -177,18 +177,17 @@ public:
                 << "The value " << val << " cannot be losslessly converted to type " << type();
             param.set_scalar<T>(val);
         } else {
-            // clang-format off
 
             // Specialized version for when T = void (thus the type is only known at runtime,
             // not compiletime). Note that this actually works fine for all Params; we specialize
             // it just to reduce code size for the common case of T != void.
 
-            #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
-                case halide_type_t(CODE, BITS).as_u32():                                              \
-                    user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
-                        << "The value " << val << " cannot be losslessly converted to type " << type; \
-                    param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val));                   \
-                    break;
+#define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
+    case halide_type_t(CODE, BITS).as_u32():                                              \
+        user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
+            << "The value " << val << " cannot be losslessly converted to type " << type; \
+        param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val));                   \
+        break;
 
             const Type type = param.type();
             switch (((halide_type_t)type).element_of().as_u32()) {
@@ -208,9 +207,7 @@ public:
                 internal_error << "Unsupported type in Param::set<" << type << ">\n";
             }
 
-            #undef HALIDE_HANDLE_TYPE_DISPATCH
-
-            // clang-format on
+#undef HALIDE_HANDLE_TYPE_DISPATCH
         }
     }
 
@@ -257,18 +254,17 @@ public:
                 << "The value " << val << " cannot be losslessly converted to type " << type();
             param.set_estimate(Expr(val));
         } else {
-            // clang-format off
 
             // Specialized version for when T = void (thus the type is only known at runtime,
             // not compiletime). Note that this actually works fine for all Params; we specialize
             // it just to reduce code size for the common case of T != void.
 
-            #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
-                case halide_type_t(CODE, BITS).as_u32():                                              \
-                    user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
-                        << "The value " << val << " cannot be losslessly converted to type " << type; \
-                    param.set_estimate(Expr(Internal::StaticCast<TYPE>::value(val)));                   \
-                    break;
+#define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
+    case halide_type_t(CODE, BITS).as_u32():                                              \
+        user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
+            << "The value " << val << " cannot be losslessly converted to type " << type; \
+        param.set_estimate(Expr(Internal::StaticCast<TYPE>::value(val)));                 \
+        break;
 
             const Type type = param.type();
             switch (((halide_type_t)type).element_of().as_u32()) {
@@ -288,9 +284,7 @@ public:
                 internal_error << "Unsupported type in Param::set<" << type << ">\n";
             }
 
-            #undef HALIDE_HANDLE_TYPE_DISPATCH
-
-            // clang-format on
+#undef HALIDE_HANDLE_TYPE_DISPATCH
         }
     }
 

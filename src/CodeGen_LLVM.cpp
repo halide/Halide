@@ -1509,12 +1509,23 @@ void CodeGen_LLVM::visit(const Reinterpret *op) {
     Type dst = op->type;
     llvm::Type *llvm_dst = llvm_type_of(dst);
     value = codegen(op->value);
-    // Our `Reinterpret` expr directly maps to LLVM IR bitcast/ptrtoint/inttoptr
-    // instructions with no additional handling required:
-    // * bitcast between vectors and scalars is well-formed.
-    // * ptrtoint/inttoptr implicitly truncates/zero-extends the integer
-    //   to match the pointer size.
-    value = builder->CreateBitOrPointerCast(value, llvm_dst);
+
+    // Bitcast between ScalableVector and scalar is invalid in LLVM
+    if (isa<ScalableVectorType>(value->getType()) && dst.is_scalar()) {
+        value = scalable_to_fixed_vector_type(value);
+        value = builder->CreateBitOrPointerCast(value, llvm_dst);
+    } else if (isa<ScalableVectorType>(llvm_dst) && op->value.type().is_scalar()) {
+        llvm::Type *llvm_dst_fixed = get_vector_type(llvm_type_of(dst.element_of()), dst.lanes(), VectorTypeConstraint::Fixed);
+        value = builder->CreateBitOrPointerCast(value, llvm_dst_fixed);
+        value = fixed_to_scalable_vector_type(value);
+    } else {
+        // Our `Reinterpret` expr directly maps to LLVM IR bitcast/ptrtoint/inttoptr
+        // instructions with no additional handling required:
+        // * bitcast between vectors and scalars is well-formed.
+        // * ptrtoint/inttoptr implicitly truncates/zero-extends the integer
+        //   to match the pointer size.
+        value = builder->CreateBitOrPointerCast(value, llvm_dst);
+    }
 }
 
 void CodeGen_LLVM::visit(const Variable *op) {
@@ -2872,8 +2883,15 @@ void CodeGen_LLVM::visit(const Call *op) {
             vector<llvm::Value *> args(op->args.size());
             vector<llvm::Type *> types(op->args.size());
             for (size_t i = 0; i < op->args.size(); i++) {
+                Expr e = op->args[i];
                 args[i] = codegen(op->args[i]);
-                types[i] = args[i]->getType();
+                if (e.type().is_vector() && isa<ScalableVectorType>(args[i]->getType())) {
+                    // Use FixedSizedVector type for now, due to the alignment limitation of llvm
+                    llvm::Type *elt = llvm_type_of(e.type().element_of());
+                    types[i] = get_vector_type(elt, e.type().lanes(), VectorTypeConstraint::Fixed);
+                } else {
+                    types[i] = args[i]->getType();
+                }
                 all_same_type &= (types[0] == types[i]);
             }
 
@@ -4511,7 +4529,11 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
     int align = native_vector_bits() / 8;
     const llvm::DataLayout &d = module->getDataLayout();
-    int allocated_size = n * (int)d.getTypeAllocSize(t);
+    TypeSize sizeof_t = d.getTypeAllocSize(t);
+    int allocated_size = n * sizeof_t.getKnownMinValue();
+    if (sizeof_t.isScalable() && effective_vscale > 0) {
+        allocated_size *= effective_vscale;
+    }
     if (t->isVectorTy() || n > 1) {
         ptr->setAlignment(llvm::Align(align));
     }

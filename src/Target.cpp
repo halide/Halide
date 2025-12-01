@@ -268,10 +268,11 @@ Target calculate_host_target() {
         initial_features.push_back(Target::ARMFp16);
     }
 
-    if (hwcaps & HWCAP_SVE) {
-        initial_features.push_back(Target::SVE);
-        has_scalable_vector = true;
-    }
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (hwcaps & HWCAP_SVE) {
+    //     initial_features.push_back(Target::SVE);
+    //     has_scalable_vector = true;
+    // }
 
     if (hwcaps2 & HWCAP2_SVE2) {
         initial_features.push_back(Target::SVE2);
@@ -295,10 +296,11 @@ Target calculate_host_target() {
         initial_features.push_back(Target::ARMDotProd);
     }
 
-    if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
-        initial_features.push_back(Target::SVE);
-        has_scalable_vector = true;
-    }
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
+    //     initial_features.push_back(Target::SVE);
+    //     has_scalable_vector = true;
+    // }
 
 #endif
 
@@ -1566,7 +1568,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
-    // clang-format off
     const std::vector<Feature> union_features = {{
         // These are true union features.
         CUDA,
@@ -1609,9 +1610,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         ARMv88a,
         ARMv89a,
     }};
-    // clang-format on
 
-    // clang-format off
     const std::vector<Feature> intersection_features = {{
         ARMv7s,
         AVX,
@@ -1630,9 +1629,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         SSE41,
         VSX,
     }};
-    // clang-format on
 
-    // clang-format off
     const std::vector<Feature> matching_features = {{
         ASAN,
         Debug,
@@ -1646,7 +1643,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         SanitizerCoverage,
         Simulator,
     }};
-    // clang-format on
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;

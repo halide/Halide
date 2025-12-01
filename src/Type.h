@@ -218,12 +218,10 @@ template<typename T>
         (is_const ? Const : 0) |
         (is_volatile ? Volatile : 0));
 
-    // clang-format off
     constexpr ReferenceType ref_type =
         (is_lvalue_reference ? LValueReference :
          is_rvalue_reference ? RValueReference :
                                NotReference);
-    // clang-format on
 
     using TNonCVBase = std::remove_cv_t<TBase>;
     constexpr bool known_type = halide_c_type_to_name<TNonCVBase>::known_type;

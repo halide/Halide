@@ -65,15 +65,14 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
         return rewrite.result;
     }
 
-    // clang-format off
-    if (EVAL_IN_LAMBDA
+    if (EVAL_IN_LAMBDA  //
         (rewrite(max(x, x), a) ||
          rewrite(max(c0, c1), fold(max(c0, c1))) ||
          // Cases where one side dominates:
          rewrite(max(x, c0), b, is_max_value(c0)) ||
          rewrite(max(x, c0), a, is_min_value(c0)) ||
-         rewrite(max((x/c0)*c0, x), b, c0 > 0) ||
-         rewrite(max(x, (x/c0)*c0), a, c0 > 0) ||
+         rewrite(max((x / c0) * c0, x), b, c0 > 0) ||
+         rewrite(max(x, (x / c0) * c0), a, c0 > 0) ||
          rewrite(max(max(x, y), x), a) ||
          rewrite(max(max(x, y), y), a) ||
          rewrite(max(max(max(x, y), z), x), a) ||
@@ -117,20 +116,20 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
            rewrite(max(ramp(x, y, lanes), broadcast(z, lanes)), b,
                    can_prove(x + y * (lanes - 1) <= z && x <= z, this)) ||
            // Compare x to a stair-step function in x
-           rewrite(max(((x + c0)/c1)*c1 + c2, x), a, c1 > 0 && c0 + c2 >= c1 - 1) ||
-           rewrite(max(x, ((x + c0)/c1)*c1 + c2), b, c1 > 0 && c0 + c2 >= c1 - 1) ||
-           rewrite(max(((x + c0)/c1)*c1 + c2, x), b, c1 > 0 && c0 + c2 <= 0) ||
-           rewrite(max(x, ((x + c0)/c1)*c1 + c2), a, c1 > 0 && c0 + c2 <= 0) ||
-           rewrite(max((x/c0)*c0, (x/c1)*c1 + c2), b, c2 >= c1 && c1 > 0 && c0 != 0) ||
+           rewrite(max(((x + c0) / c1) * c1 + c2, x), a, c1 > 0 && c0 + c2 >= c1 - 1) ||
+           rewrite(max(x, ((x + c0) / c1) * c1 + c2), b, c1 > 0 && c0 + c2 >= c1 - 1) ||
+           rewrite(max(((x + c0) / c1) * c1 + c2, x), b, c1 > 0 && c0 + c2 <= 0) ||
+           rewrite(max(x, ((x + c0) / c1) * c1 + c2), a, c1 > 0 && c0 + c2 <= 0) ||
+           rewrite(max((x / c0) * c0, (x / c1) * c1 + c2), b, c2 >= c1 && c1 > 0 && c0 != 0) ||
            // Special cases where c0 or c2 is zero
-           rewrite(max((x/c1)*c1 + c2, x), a, c1 > 0 && c2 >= c1 - 1) ||
-           rewrite(max(x, (x/c1)*c1 + c2), b, c1 > 0 && c2 >= c1 - 1) ||
-           rewrite(max(((x + c0)/c1)*c1, x), a, c1 > 0 && c0 >= c1 - 1) ||
-           rewrite(max(x, ((x + c0)/c1)*c1), b, c1 > 0 && c0 >= c1 - 1) ||
-           rewrite(max((x/c1)*c1 + c2, x), b, c1 > 0 && c2 <= 0) ||
-           rewrite(max(x, (x/c1)*c1 + c2), a, c1 > 0 && c2 <= 0) ||
-           rewrite(max(((x + c0)/c1)*c1, x), b, c1 > 0 && c0 <= 0) ||
-           rewrite(max(x, ((x + c0)/c1)*c1), a, c1 > 0 && c0 <= 0) ||
+           rewrite(max((x / c1) * c1 + c2, x), a, c1 > 0 && c2 >= c1 - 1) ||
+           rewrite(max(x, (x / c1) * c1 + c2), b, c1 > 0 && c2 >= c1 - 1) ||
+           rewrite(max(((x + c0) / c1) * c1, x), a, c1 > 0 && c0 >= c1 - 1) ||
+           rewrite(max(x, ((x + c0) / c1) * c1), b, c1 > 0 && c0 >= c1 - 1) ||
+           rewrite(max((x / c1) * c1 + c2, x), b, c1 > 0 && c2 <= 0) ||
+           rewrite(max(x, (x / c1) * c1 + c2), a, c1 > 0 && c2 <= 0) ||
+           rewrite(max(((x + c0) / c1) * c1, x), b, c1 > 0 && c0 <= 0) ||
+           rewrite(max(x, ((x + c0) / c1) * c1), a, c1 > 0 && c0 <= 0) ||
 
            rewrite(max(x, min(x, y) + c0), a, c0 <= 0) ||
            rewrite(max(x, min(y, x) + c0), a, c0 <= 0) ||
@@ -139,8 +138,8 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
            rewrite(max(min(x, y + c0), y), b, c0 <= 0) ||
 
            (no_overflow_int(op->type) &&
-            (rewrite(max(min(c0 - x, x), c1), b, 2*c1 >= c0 - 1) ||
-             rewrite(max(min(x, c0 - x), c1), b, 2*c1 >= c0 - 1))) ||
+            (rewrite(max(min(c0 - x, x), c1), b, 2 * c1 >= c0 - 1) ||
+             rewrite(max(min(x, c0 - x), c1), b, 2 * c1 >= c0 - 1))) ||
 
            false)))) {
 
@@ -156,10 +155,8 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
 
         return rewrite.result;
     }
-    // clang-format on
 
-    // clang-format off
-    if (EVAL_IN_LAMBDA
+    if (EVAL_IN_LAMBDA  //
         (rewrite(max(max(x, c0), c1), max(x, fold(max(c0, c1)))) ||
          rewrite(max(max(x, c0), y), max(max(x, y), c0)) ||
          rewrite(max(max(x, y), max(x, z)), max(max(y, z), x)) ||
@@ -246,10 +243,10 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
            rewrite(max(y + x, x), max(y, 0) + x) ||
            rewrite(max(x + y, x), x + max(y, 0)) ||
 
-           rewrite(max((x*c0 + y)*c1, x*c2 + z), max(y*c1, z) + x*c2, c0 * c1 == c2) ||
-           rewrite(max((y + x*c0)*c1, x*c2 + z), max(y*c1, z) + x*c2, c0 * c1 == c2) ||
-           rewrite(max((x*c0 + y)*c1, z + x*c2), max(y*c1, z) + x*c2, c0 * c1 == c2) ||
-           rewrite(max((y + x*c0)*c1, z + x*c2), max(y*c1, z) + x*c2, c0 * c1 == c2) ||
+           rewrite(max((x * c0 + y) * c1, x * c2 + z), max(y * c1, z) + x * c2, c0 * c1 == c2) ||
+           rewrite(max((y + x * c0) * c1, x * c2 + z), max(y * c1, z) + x * c2, c0 * c1 == c2) ||
+           rewrite(max((x * c0 + y) * c1, z + x * c2), max(y * c1, z) + x * c2, c0 * c1 == c2) ||
+           rewrite(max((y + x * c0) * c1, z + x * c2), max(y * c1, z) + x * c2, c0 * c1 == c2) ||
 
            rewrite(max(max(x + y, z), x + w), max(x + max(y, w), z)) ||
            rewrite(max(max(z, x + y), x + w), max(x + max(y, w), z)) ||
@@ -311,19 +308,18 @@ Expr Simplify::visit(const Max *op, ExprInfo *info) {
 
            rewrite(max(((x + c0) / c1) * c1, x + c2), ((x + c0) / c1) * c1, c1 > 0 && c0 + 1 >= c1 + c2) ||
 
-           rewrite(max((x + c0)/c1, ((x + c2)/c3)*c4), (x + c0)/c1, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(max((x + c0)/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(max(x/c1, ((x + c2)/c3)*c4), x/c1, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(max(x/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(max((x + c0)/c1, (x/c3)*c4), (x + c0)/c1, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(max((x + c0)/c1, (x/c3)*c4), (x/c3)*c4, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(max(x/c1, (x/c3)*c4), x/c1, c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(max((x + c0) / c1, ((x + c2) / c3) * c4), (x + c0) / c1, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(max((x + c0) / c1, ((x + c2) / c3) * c4), ((x + c2) / c3) * c4, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(max(x / c1, ((x + c2) / c3) * c4), x / c1, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(max(x / c1, ((x + c2) / c3) * c4), ((x + c2) / c3) * c4, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(max((x + c0) / c1, (x / c3) * c4), (x + c0) / c1, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(max((x + c0) / c1, (x / c3) * c4), (x / c3) * c4, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(max(x / c1, (x / c3) * c4), x / c1, c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
 
            rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
 
         return mutate(rewrite.result, info);
     }
-    // clang-format on
 
     if (a.same_as(op->a) && b.same_as(op->b)) {
         return op;

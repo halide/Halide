@@ -146,7 +146,6 @@ public:
     CodeGen_ARM(const Target &);
 
 protected:
-    using codegen_func_t = std::function<Value *(int lanes, const std::vector<Value *> &)>;
     using CodeGen_Posix::visit;
 
     /** Similar to llvm_type_of, but allows providing a VectorTypeConstraint to
@@ -188,12 +187,6 @@ protected:
     Type upgrade_type_for_arithmetic(const Type &t) const override;
     Type upgrade_type_for_argument_passing(const Type &t) const override;
     Type upgrade_type_for_storage(const Type &t) const override;
-
-    /** Helper function to perform codegen of vector operation in a way that
-     * total_lanes are divided into slices, codegen is performed for each slice
-     * and results are concatenated into total_lanes.
-     */
-    Value *codegen_with_lanes(int slice_lanes, int total_lanes, const std::vector<Expr> &args, codegen_func_t &cg_func);
 
     /** Various patterns to peephole match against */
     struct Pattern {
@@ -363,7 +356,6 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     negations.emplace_back("saturating_negate", -max(wild_i8x_, -127));
     negations.emplace_back("saturating_negate", -max(wild_i16x_, -32767));
     negations.emplace_back("saturating_negate", -max(wild_i32x_, -(0x7fffffff)));
-    // clang-format on
 }
 
 constexpr int max_intrinsic_args = 4;
@@ -393,7 +385,6 @@ struct ArmIntrinsic {
     };
 };
 
-// clang-format off
 const ArmIntrinsic intrinsic_defs[] = {
     // TODO(https://github.com/halide/Halide/issues/8093):
     // Some of the Arm intrinsic have the same name between Neon and SVE2 but with different behavior. For example,
@@ -406,7 +397,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabs", "abs", UInt(32, 2), "abs", {Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
     {"llvm.fabs", "llvm.fabs", Float(16, 4), "abs", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs", "llvm.fabs", Float(32, 2), "abs", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
-    {"llvm.fabs", "llvm.fabs", Float(64, 2), "abs", {Float(64, 2)},  ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs", "llvm.fabs", Float(64, 2), "abs", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs.f16", "llvm.fabs.f16", Float(16), "abs", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs.f32", "llvm.fabs.f32", Float(32), "abs", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
     {"llvm.fabs.f64", "llvm.fabs.f64", Float(64), "abs", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
@@ -582,12 +573,12 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vrshiftn", nullptr, UInt(32, 2), "rounding_shift_right_narrow", {UInt(64, 2), Int(64, 2)}},
 
     // arm64 expects a 32-bit constant.
-    {nullptr, "rshrn", Int(8, 8), "rounding_shift_right_narrow", {Int(16, 8), UInt(32)}},
-    {nullptr, "rshrn", UInt(8, 8), "rounding_shift_right_narrow", {UInt(16, 8), UInt(32)}},
-    {nullptr, "rshrn", Int(16, 4), "rounding_shift_right_narrow", {Int(32, 4), UInt(32)}},
-    {nullptr, "rshrn", UInt(16, 4), "rounding_shift_right_narrow", {UInt(32, 4), UInt(32)}},
-    {nullptr, "rshrn", Int(32, 2), "rounding_shift_right_narrow", {Int(64, 2), UInt(32)}},
-    {nullptr, "rshrn", UInt(32, 2), "rounding_shift_right_narrow", {UInt(64, 2), UInt(32)}},
+    {nullptr, "rshrn", Int(8, 8), "rounding_shift_right_narrow", {Int(16, 8), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "rshrn", UInt(8, 8), "rounding_shift_right_narrow", {UInt(16, 8), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "rshrn", Int(16, 4), "rounding_shift_right_narrow", {Int(32, 4), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "rshrn", UInt(16, 4), "rounding_shift_right_narrow", {UInt(32, 4), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "rshrn", Int(32, 2), "rounding_shift_right_narrow", {Int(64, 2), UInt(32)}, ArmIntrinsic::SveUnavailable},
+    {nullptr, "rshrn", UInt(32, 2), "rounding_shift_right_narrow", {UInt(64, 2), UInt(32)}, ArmIntrinsic::SveUnavailable},
 
     // SHRN - Shift right narrow (by immediate in [1, output bits])
     // LLVM pattern matches these.
@@ -870,7 +861,6 @@ const std::map<string, string> float16_transcendental_remapping = {
     {"tan_f16", "tan_f32"},
     {"tanh_f16", "tanh_f32"},
 };
-// clang-format on
 
 llvm::Type *CodeGen_ARM::llvm_type_with_constraint(const Type &t, bool scalars_are_vectors,
                                                    VectorTypeConstraint constraint) {
@@ -982,6 +972,15 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
 
 void CodeGen_ARM::init_module() {
     CodeGen_Posix::init_module();
+
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (target.features_any_of({Target::SVE, Target::SVE2})) {
+    if (target.has_feature(Target::SVE2)) {
+        user_assert(target.vector_bits != 0) << "For SVE/SVE2 support, target_vector_bits=<size> must be set in target.\n";
+        user_assert((target.vector_bits % 128) == 0) << "For SVE/SVE2 support, target_vector_bits must be a multiple of 128.\n";
+    } else if (target.has_feature(Target::SVE)) {
+        user_warning << "Halide does not support SVE for now. Use SVE2 if your target device supports it.\n";
+    }
 
     const bool has_neon = !target.has_feature(Target::NoNEON);
     const bool has_sve = target.has_feature(Target::SVE2);
@@ -1211,7 +1210,9 @@ void CodeGen_ARM::visit(const Cast *op) {
     }
 
     // LLVM fptoui generates fcvtzs or fcvtzu in inconsistent way
-    if (op->value.type().is_float() && op->type.is_int_or_uint()) {
+    if (op->value.type().is_float() &&
+        op->type.is_int_or_uint() &&
+        !target.has_feature(Target::SVE2)) {
         if (Value *v = call_overloaded_intrin(op->type, "fp_to_int", {op->value})) {
             value = v;
             return;
@@ -1337,51 +1338,22 @@ void CodeGen_ARM::visit(const Sub *op) {
     }
 
     // Peep-hole (0 - b) pattern to generate "negate" instruction
-    if (is_const_zero(op->a)) {
-        if (target_vscale() != 0) {
-            if ((op->type.bits() >= 8 && op->type.is_int())) {
-                if (Value *v = call_overloaded_intrin(op->type, "negate", {op->b})) {
-                    value = v;
-                    return;
-                }
-            } else if (op->type.bits() >= 16 && op->type.is_float()) {
-                ScopedFastMath guard(this);
-                value = builder->CreateFNeg(codegen(op->b));
-                return;
-            }
-        } else {
-            // llvm.neon.neg/fneg intrinsic doesn't seem to exist. Instead,
-            // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
-            if (op->type.is_float() &&
-                (op->type.bits() >= 32 || is_float16_and_has_feature(op->type))) {
-                Constant *a;
-                if (op->type.bits() == 16) {
-                    a = ConstantFP::getNegativeZero(f16_t);
-                } else if (op->type.bits() == 32) {
-                    a = ConstantFP::getNegativeZero(f32_t);
-                } else if (op->type.bits() == 64) {
-                    a = ConstantFP::getNegativeZero(f64_t);
-                } else {
-                    a = nullptr;
-                    internal_error << "Unknown bit width for floating point type: " << op->type << "\n";
-                }
-
-                Value *b = codegen(op->b);
-
-                if (op->type.lanes() > 1) {
-                    a = get_splat(op->type.lanes(), a);
-                }
-                ScopedFastMath guard(this);
-                value = builder->CreateFSub(a, b);
-                return;
-            }
+    if (is_const_zero(op->a) &&
+        (target_vscale() != 0 && op->type.is_vector()) &&
+        (op->type.bits() >= 8 && op->type.is_int())) {
+        if (Value *v = call_overloaded_intrin(op->type, "negate", {op->b})) {
+            value = v;
+            return;
         }
     }
 
+    // llvm.neon.neg/fneg intrinsic doesn't seem to exist. Instead,
     // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
-    if (op->type.is_float() &&
+    if (is_const_zero(op->a) &&
+        op->type.is_float() &&
         (op->type.bits() >= 32 || is_float16_and_has_feature(op->type)) &&
-        is_const_zero(op->a)) {
+        (op->type.is_vector() || !target.has_feature(Target::Feature::SVE2))) {
+
         Constant *a;
         if (op->type.bits() == 16) {
             a = ConstantFP::getNegativeZero(f16_t);
@@ -1409,7 +1381,9 @@ void CodeGen_ARM::visit(const Sub *op) {
 
 void CodeGen_ARM::visit(const Min *op) {
     // Use a 2-wide vector for scalar floats.
-    if (!simd_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
+    if (!simd_intrinsics_disabled() &&
+        ((op->type.is_float() && !target.has_feature(Target::SVE2)) ||
+         op->type.is_vector())) {
         value = call_overloaded_intrin(op->type, "min", {op->a, op->b});
         if (value) {
             return;
@@ -1421,7 +1395,9 @@ void CodeGen_ARM::visit(const Min *op) {
 
 void CodeGen_ARM::visit(const Max *op) {
     // Use a 2-wide vector for scalar floats.
-    if (!simd_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
+    if (!simd_intrinsics_disabled() &&
+        ((op->type.is_float() && !target.has_feature(Target::SVE2)) ||
+         op->type.is_vector())) {
         value = call_overloaded_intrin(op->type, "max", {op->a, op->b});
         if (value) {
             return;
@@ -1477,7 +1453,7 @@ void CodeGen_ARM::visit(const Store *op) {
             // TODO(zvookin): Handle vector_bits_*.
             if (vec_bits % 128 == 0) {
                 type_ok_for_vst = true;
-                int target_vector_bits = target.vector_bits;
+                int target_vector_bits = native_vector_bits();
                 if (target_vector_bits == 0) {
                     target_vector_bits = 128;
                 }
@@ -1621,7 +1597,7 @@ void CodeGen_ARM::visit(const Store *op) {
             // Basically we can deal with vanilla codegen,
             // but to avoid LLVM error, process with the multiple of natural_lanes
             const int natural_lanes = target.natural_vector_size(op->value.type());
-            if (ramp->lanes % natural_lanes) {
+            if (ramp->lanes % natural_lanes && !emit_atomic_stores) {
                 int aligned_lanes = align_up(ramp->lanes, natural_lanes);
                 // Use predicate to prevent overrun
                 Expr vpred;
@@ -1975,17 +1951,7 @@ void CodeGen_ARM::visit(const Shuffle *op) {
 void CodeGen_ARM::visit(const Ramp *op) {
     if (target_vscale() != 0 && op->type.is_int_or_uint()) {
         if (is_const_zero(op->base) && is_const_one(op->stride)) {
-            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
-                internal_assert(args.empty());
-                // Generate stepvector intrinsic for ScalableVector
-                return builder->CreateStepVector(llvm_type_of(op->type.with_lanes(lanes)));
-            };
-
-            // codgen with next-power-of-two lanes, because if we sliced into natural_lanes(e.g. 4),
-            // it would produce {0,1,2,3,0,1,..} instead of {0,1,2,3,4,5,..}
-            const int ret_lanes = op->type.lanes();
-            const int aligned_lanes = next_power_of_two(ret_lanes);
-            value = codegen_with_lanes(aligned_lanes, ret_lanes, {}, cg_func);
+            value = builder->CreateStepVector(llvm_type_of(op->type));
             return;
         } else {
             Expr broadcast_base = Broadcast::make(op->base, op->lanes);
@@ -2170,7 +2136,7 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
         Target::Feature required_feature;
         std::vector<int> extra_operands;
     };
-    // clang-format off
+
     static const Pattern patterns[] = {
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
@@ -2193,7 +2159,6 @@ bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, cons
         {VectorReduce::Add, 4, i64(wild_u16x_), "dot_product", Target::SVE2, {1}},
         {VectorReduce::Add, 4, u64(wild_u16x_), "dot_product", Target::SVE2, {1}},
     };
-    // clang-format on
 
     int factor = op->value.type().lanes() / op->type.lanes();
     vector<Expr> matches;
@@ -2459,40 +2424,6 @@ Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
     return CodeGen_Posix::upgrade_type_for_storage(t);
 }
 
-Value *CodeGen_ARM::codegen_with_lanes(int slice_lanes, int total_lanes,
-                                       const std::vector<Expr> &args, codegen_func_t &cg_func) {
-    std::vector<Value *> llvm_args;
-    llvm_args.reserve(args.size());
-    // codegen args
-    for (const auto &arg : args) {
-        llvm_args.push_back(codegen(arg));
-    }
-
-    if (slice_lanes == total_lanes) {
-        // codegen op
-        return cg_func(slice_lanes, llvm_args);
-    }
-
-    std::vector<Value *> results;
-    for (int start = 0; start < total_lanes; start += slice_lanes) {
-        std::vector<Value *> sliced_args;
-        for (auto &llvm_arg : llvm_args) {
-            Value *v = llvm_arg;
-            if (get_vector_num_elements(llvm_arg->getType()) == total_lanes) {
-                // Except for scalar argument which some ops have, arguments are sliced
-                v = slice_vector(llvm_arg, start, slice_lanes);
-            }
-            sliced_args.push_back(v);
-        }
-        // codegen op
-        value = cg_func(slice_lanes, sliced_args);
-        results.push_back(value);
-    }
-    // Restore the results into vector with total_lanes
-    value = concat_vectors(results);
-    return slice_vector(value, 0, total_lanes);
-}
-
 string CodeGen_ARM::mcpu_target() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
@@ -2573,7 +2504,8 @@ string CodeGen_ARM::mattrs() const {
         if (target.has_feature(Target::SVE2)) {
             attrs.emplace_back("+sve2");
         } else if (target.has_feature(Target::SVE)) {
-            attrs.emplace_back("+sve");
+            // TODO: https://github.com/halide/Halide/issues/8872
+            // attrs.emplace_back("+sve");
         }
         if (target.os == Target::IOS || target.os == Target::OSX) {
             attrs.emplace_back("+reserve-x18");
@@ -2592,17 +2524,13 @@ bool CodeGen_ARM::use_soft_float_abi() const {
 }
 
 int CodeGen_ARM::native_vector_bits() const {
-    if (target.has_feature(Target::SVE) || target.has_feature(Target::SVE2)) {
-        return std::max(target.vector_bits, 128);
-    } else {
-        return 128;
-    }
+    return std::max(target_vscale(), 1) * 128;
 }
 
 int CodeGen_ARM::target_vscale() const {
-    if (target.features_any_of({Target::SVE, Target::SVE2})) {
-        user_assert(target.vector_bits != 0) << "For SVE/SVE2 support, target_vector_bits=<size> must be set in target.\n";
-        user_assert((target.vector_bits % 128) == 0) << "For SVE/SVE2 support, target_vector_bits must be a multiple of 128.\n";
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (target.features_any_of({Target::SVE, Target::SVE2})) {
+    if (target.has_feature(Target::SVE2)) {
         return target.vector_bits / 128;
     }
 
