@@ -126,12 +126,150 @@ struct LambdaMutatorBase : IRMutator {
     }
 
 protected:
-#define HALIDE_LAMBDA_MUTATOR_VISIT(kind, type)              \
-    kind visit(const type *op) override {                    \
-        return static_cast<Derived *>(this)->visit_impl(op); \
+    Expr visit(const IntImm *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
     }
-    HALIDE_IR_NODE_X(HALIDE_LAMBDA_MUTATOR_VISIT)
-#undef HALIDE_LAMBDA_MUTATOR_VISIT
+    Expr visit(const UIntImm *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const FloatImm *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const StringImm *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Cast *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Reinterpret *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Add *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Sub *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Mul *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Div *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Mod *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Min *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Max *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const EQ *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const NE *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const LT *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const LE *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const GT *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const GE *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const And *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Or *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Not *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Select *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Load *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Ramp *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Broadcast *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Let *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const LetStmt *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const AssertStmt *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const ProducerConsumer *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Store *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Provide *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Allocate *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Free *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Realize *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Block *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Fork *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const IfThenElse *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Evaluate *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Call *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Variable *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const For *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Acquire *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const Shuffle *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Prefetch *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const HoistedStorage *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Stmt visit(const Atomic *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
+    Expr visit(const VectorReduce *op) override {
+        return static_cast<Derived *>(this)->visit_impl(op);
+    }
 };
 
 template<typename... Ts>
