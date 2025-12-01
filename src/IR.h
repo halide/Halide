@@ -23,57 +23,6 @@ namespace Internal {
 
 class Function;
 
-/** X-macro listing all IR node types with their kind (Expr or Stmt). */
-#define HALIDE_IR_NODE_X(X)   \
-    X(Expr, IntImm)           \
-    X(Expr, UIntImm)          \
-    X(Expr, FloatImm)         \
-    X(Expr, StringImm)        \
-    X(Expr, Cast)             \
-    X(Expr, Reinterpret)      \
-    X(Expr, Add)              \
-    X(Expr, Sub)              \
-    X(Expr, Mul)              \
-    X(Expr, Div)              \
-    X(Expr, Mod)              \
-    X(Expr, Min)              \
-    X(Expr, Max)              \
-    X(Expr, EQ)               \
-    X(Expr, NE)               \
-    X(Expr, LT)               \
-    X(Expr, LE)               \
-    X(Expr, GT)               \
-    X(Expr, GE)               \
-    X(Expr, And)              \
-    X(Expr, Or)               \
-    X(Expr, Not)              \
-    X(Expr, Select)           \
-    X(Expr, Load)             \
-    X(Expr, Ramp)             \
-    X(Expr, Broadcast)        \
-    X(Expr, Let)              \
-    X(Stmt, LetStmt)          \
-    X(Stmt, AssertStmt)       \
-    X(Stmt, ProducerConsumer) \
-    X(Stmt, Store)            \
-    X(Stmt, Provide)          \
-    X(Stmt, Allocate)         \
-    X(Stmt, Free)             \
-    X(Stmt, Realize)          \
-    X(Stmt, Block)            \
-    X(Stmt, Fork)             \
-    X(Stmt, IfThenElse)       \
-    X(Stmt, Evaluate)         \
-    X(Expr, Call)             \
-    X(Expr, Variable)         \
-    X(Stmt, For)              \
-    X(Stmt, Acquire)          \
-    X(Expr, Shuffle)          \
-    X(Stmt, Prefetch)         \
-    X(Stmt, HoistedStorage)   \
-    X(Stmt, Atomic)           \
-    X(Expr, VectorReduce)
-
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */
 
