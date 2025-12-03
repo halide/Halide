@@ -103,7 +103,6 @@ def test_basics():
     blur_x.compute_at(blur_y, x).vectorize(x, 8)
     blur_y.compile_jit()
 
-
 def test_basics2():
     input = hl.ImageParam(hl.Float(32), 3, "input")
     hl.Param(hl.Float(32), "r_sigma", 0.1)
@@ -597,6 +596,31 @@ def test_print_ir():
     p = hl.Pipeline()
     assert str(p) == "<halide.Pipeline Pipeline()>"
 
+def test_split_vars():
+    f = hl.Func("f")
+    (x, xo, xi) = hl.vars("x xo xi")
+    f[x] = x
+    r = hl.RDom([(0, 10), (0, 10)], "r")
+    f[x] += x + r.x + r.y
+
+    f.split(x, xo, xi, 8)
+
+    vars = f.split_vars()
+    assert len(vars) == 3
+    assert vars[0].name() == xi.name()
+    assert vars[1].name() == xo.name()
+    assert vars[2].name() == hl.Var.outermost().name()
+
+    (rxo, rxi) = (hl.RVar("rxo"), hl.RVar("rxi"))
+    f.update().split(r.x, rxo, rxi, 4)
+
+    vars = f.update().split_vars()
+    assert len(vars) == 5
+    assert isinstance(vars[0], hl.RVar) and vars[0].name() == rxi.name()
+    assert isinstance(vars[1], hl.RVar) and vars[1].name() == rxo.name()
+    assert isinstance(vars[2], hl.RVar) and vars[2].name() == r.y.name()
+    assert isinstance(vars[3], hl.Var) and vars[3].name() == x.name()
+    assert isinstance(vars[4], hl.Var) and vars[4].name() == hl.Var.outermost().name()
 
 if __name__ == "__main__":
     test_compiletime_error()
@@ -622,3 +646,4 @@ if __name__ == "__main__":
     test_implicit_update_by_int()
     test_implicit_update_by_float()
     test_print_ir()
+    test_split_vars()

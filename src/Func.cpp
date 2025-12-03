@@ -1878,7 +1878,7 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
 std::vector<VarOrRVar> Stage::split_vars() const {
     std::vector<VarOrRVar> result;
     for (const auto &d : definition.schedule().dims()) {
-        result.emplace_back(d.var, d.is_rvar());
+        result.emplace_back(split_string(d.var, ".").back(), d.is_rvar());
     }
     return result;
 }
@@ -2657,7 +2657,7 @@ std::vector<Var> Func::split_vars() const {
             << "The initial stage of Func " << name()
             << " unexpectedly has RVar " << d.var
             << "in the dims list. Initial stages aren't supposed to have RVars.";
-        result.emplace_back(d.var);
+        result.emplace_back(split_string(d.var, ".").back());
     }
     return result;
 }
