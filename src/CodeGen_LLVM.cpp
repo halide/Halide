@@ -4136,10 +4136,22 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
     } else if (op->is_concat()) {
         value = concat_vectors(vecs);
     } else {
+        auto can_divide_lanes = [this](int lanes, int factor) -> bool {
+            if (lanes % factor) {
+                return false;
+            }
+            if (effective_vscale == 0) {
+                return true;
+            } else {
+                int divided = lanes / factor;
+                return (divided % effective_vscale) == 0 && (divided / effective_vscale) > 1;
+            }
+        };
+
         // If the even-numbered indices equal the odd-numbered
         // indices, only generate one and then do a self-interleave.
         for (int f : {4, 3, 2}) {
-            bool self_interleave = (op->indices.size() % f) == 0;
+            bool self_interleave = can_divide_lanes(op->indices.size(), f);
             for (size_t i = 0; i < op->indices.size(); i++) {
                 self_interleave &= (op->indices[i] == op->indices[i - (i % f)]);
             }
@@ -4156,7 +4168,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
             // Check for an interleave of slices (i.e. an in-vector transpose)
             int step = op->type.lanes() / f;
-            bool interleave_of_slices = step != 1 && op->vectors.size() == 1 && (op->indices.size() % f) == 0;
+            bool interleave_of_slices = can_divide_lanes(op->indices.size(), f) && step != 1 && op->vectors.size() == 1;
             for (int i = 0; i < step; i++) {
                 for (int j = 0; j < f; j++) {
                     interleave_of_slices &= (op->indices[i * f + j] == j * step + i);
@@ -4177,7 +4189,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
         // on entire sub-vectors by reinterpreting them as a wider
         // type.
         for (int f : {8, 4, 2}) {
-            if (op->type.lanes() % f != 0) {
+            if (!can_divide_lanes(op->type.lanes(), f)) {
                 continue;
             }
 
@@ -4186,7 +4198,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             }
             bool contiguous = true;
             for (const Expr &vec : op->vectors) {
-                contiguous &= ((vec.type().lanes() % f) == 0);
+                contiguous &= can_divide_lanes(vec.type().lanes(), f);
             }
             for (size_t i = 0; i < op->indices.size(); i += f) {
                 contiguous &= (op->indices[i] % f) == 0;
