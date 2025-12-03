@@ -309,31 +309,6 @@ auto mutate_with(const T &ir, Lambdas &&...lambdas) {
     return LambdaMutator{std::forward<Lambdas>(lambdas)...}.mutate(ir);
 }
 
-/** A lambda-based IR mutator that accepts a single generic lambda that
- * handles all node types via if-constexpr. */
-template<typename Lambda>
-struct GenericLambdaMutator final : LambdaMutatorBase<GenericLambdaMutator<Lambda>> {
-    explicit GenericLambdaMutator(Lambda lambda)
-        : handler(std::move(lambda)) {
-    }
-
-private:
-    Lambda handler;
-
-    // Make LambdaMutatorBase a friend so it can call visit_impl
-    friend struct LambdaMutatorBase<GenericLambdaMutator>;
-
-    template<typename T>
-    auto visit_impl(const T *op) {
-        return handler(op, this);
-    }
-};
-
-template<typename T, typename Lambda>
-auto mutate_with_generic(const T &ir, Lambda &&lambda) {
-    return GenericLambdaMutator{std::forward<Lambda>(lambda)}.mutate(ir);
-}
-
 /** A helper function for mutator-like things to mutate regions */
 template<typename Mutator, typename... Args>
 std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&...args) {

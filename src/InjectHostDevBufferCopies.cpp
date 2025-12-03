@@ -592,7 +592,7 @@ class InjectBufferCopies : public IRMutator {
 
     Stmt inject_free_after_last_use(Stmt body, const Stmt &last_use, const Stmt &free_stmt) {
         bool success = false;
-        body = mutate_with_generic(
+        body = mutate_with(
             body,
             [&](const auto *op, auto *mut) {
                 if constexpr (std::is_convertible_v<decltype(op), Stmt>) {
