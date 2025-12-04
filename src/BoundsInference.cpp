@@ -34,39 +34,29 @@ bool var_name_match(const string &candidate, const string &var) {
     return (candidate == var) || Internal::ends_with(candidate, "." + var);
 }
 
-class DependsOnBoundsInference : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Variable *var) override {
-        if (ends_with(var->name, ".max") ||
-            ends_with(var->name, ".min")) {
-            result = true;
-        }
-    }
-
-    void visit(const Call *op) override {
-        if (op->name == Call::buffer_get_min ||
-            op->name == Call::buffer_get_max) {
-            result = true;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-public:
-    bool result = false;
-    DependsOnBoundsInference() = default;
-};
-
 bool depends_on_bounds_inference(const Expr &e) {
-    DependsOnBoundsInference d;
-    e.accept(&d);
-    return d.result;
+    bool result = false;
+    visit_with(
+        e,
+        [&](const Variable *var, auto *) {
+            if (ends_with(var->name, ".max") ||
+                ends_with(var->name, ".min")) {
+                result = true;
+            }  //
+        },
+        [&](const Call *op, auto *self) {
+            if (op->name == Call::buffer_get_min ||
+                op->name == Call::buffer_get_max) {
+                result = true;
+            } else {
+                self->visit_base(op);
+            }  //
+        });
+    return result;
 }
 
 /** Compute the bounds of the value of some variable defined by an
  * inner let stmt or for loop. E.g. for the stmt:
- *
  *
  * for x from 0 to 10:
  *  let y = x + 2;

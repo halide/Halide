@@ -117,14 +117,6 @@ public:
     Expr mutate(const Expr &e) override;
 };
 
-template<typename... Ts>
-struct LambdaOverloads : Ts... {
-    using Ts::operator()...;
-    explicit LambdaOverloads(Ts... ts)
-        : Ts(std::move(ts))... {
-    }
-};
-
 /** A lambda-based IR mutator that accepts multiple lambdas for different
  * node types. */
 template<typename... Lambdas>
@@ -298,8 +290,8 @@ protected:
     }
 };
 
-/** A lambda-based IR mutator that accepts multiple lambdas for different
- * node types. */
+/** A lambda-based IR mutator that accepts multiple lambdas for overloading
+ * the base mutate() method. */
 template<typename... Lambdas>
 struct LambdaMutatorGeneric final : IRMutator {
     explicit LambdaMutatorGeneric(Lambdas... lambdas)

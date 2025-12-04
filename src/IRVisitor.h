@@ -79,6 +79,185 @@ protected:
     virtual void visit(const VectorReduce *);
 };
 
+/** A lambda-based IR visitor that accepts multiple lambdas for different
+ * node types. */
+template<typename... Lambdas>
+struct LambdaVisitor final : IRVisitor {
+    explicit LambdaVisitor(Lambdas... lambdas)
+        : handlers(std::move(lambdas)...) {
+    }
+
+    /** Public helper to call the base visitor from lambdas. */
+    template<typename T>
+    void visit_base(const T *op) {
+        IRVisitor::visit(op);
+    }
+
+private:
+    LambdaOverloads<Lambdas...> handlers;
+
+    template<typename T>
+    auto visit_impl(const T *op) {
+        if constexpr (std::is_invocable_v<decltype(handlers), const T *, LambdaVisitor *>) {
+            return handlers(op, this);
+        } else {
+            return this->visit_base(op);
+        }
+    }
+
+protected:
+    void visit(const IntImm *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const UIntImm *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const FloatImm *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const StringImm *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Cast *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Reinterpret *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Add *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Sub *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Mul *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Div *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Mod *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Min *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Max *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const EQ *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const NE *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const LT *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const LE *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const GT *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const GE *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const And *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Or *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Not *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Select *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Load *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Ramp *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Broadcast *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Let *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const LetStmt *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const AssertStmt *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const ProducerConsumer *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Store *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Provide *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Allocate *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Free *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Realize *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Block *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Fork *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const IfThenElse *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Evaluate *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Call *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Variable *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const For *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Acquire *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Shuffle *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Prefetch *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const HoistedStorage *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const Atomic *op) override {
+        this->visit_impl(op);
+    }
+    void visit(const VectorReduce *op) override {
+        this->visit_impl(op);
+    }
+};
+
+template<typename T, typename... Lambdas>
+void visit_with(const T &ir, Lambdas &&...lambdas) {
+    LambdaVisitor visitor{std::forward<Lambdas>(lambdas)...};
+    ir.accept(&visitor);
+}
+
 /** A base class for algorithms that walk recursively over the IR
  * without visiting the same node twice. This is for passes that are
  * capable of interpreting the IR as a DAG instead of a tree. */

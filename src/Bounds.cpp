@@ -2744,23 +2744,13 @@ private:
     }
 
     vector<const Variable *> find_free_vars(const Expr &e) {
-        class FindFreeVars : public IRVisitor {
-            using IRVisitor::visit;
-            void visit(const Variable *op) override {
-                if (scope.contains(op->name)) {
-                    result.push_back(op);
-                }
+        vector<const Variable *> result;
+        visit_with(e, [&](const Variable *op, auto *) {
+            if (scope.contains(op->name)) {
+                result.push_back(op);
             }
-
-        public:
-            const Scope<Interval> &scope;
-            vector<const Variable *> result;
-            FindFreeVars(const Scope<Interval> &s)
-                : scope(s) {
-            }
-        } finder(scope);
-        e.accept(&finder);
-        return finder.result;
+        });
+        return result;
     }
 
     void visit(const IfThenElse *op) override {
