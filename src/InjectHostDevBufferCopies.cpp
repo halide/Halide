@@ -594,15 +594,13 @@ class InjectBufferCopies : public IRMutator {
         bool success = false;
         body = mutate_with(
             body,
-            [&](const auto *op, auto *mut) {
-                if constexpr (std::is_convertible_v<decltype(op), Stmt>) {
-                    if (Stmt(op).same_as(last_use)) {
-                        internal_assert(!success);
-                        success = true;
-                        return Block::make(last_use, free_stmt);
-                    }
+            [&](const Stmt &op, auto *self) {
+                if (op.same_as(last_use)) {
+                    internal_assert(!success);
+                    success = true;
+                    return Block::make(last_use, free_stmt);
                 }
-                return mut->visit_base(op);
+                return self->mutate_base(op);
             });
         internal_assert(success);
         return body;

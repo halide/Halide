@@ -126,35 +126,24 @@ Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
 
 namespace {
 
-class SubstituteExpr : public IRMutator {
-public:
-    Expr find, replacement;
-
-    using IRMutator::mutate;
-
-    Expr mutate(const Expr &e) override {
+template<typename T>
+auto substitute_impl(const Expr &find, const Expr &replacement, const T &ir) {
+    return mutate_with(ir, [&](const Expr &e, auto *self) {
         if (equal(e, find)) {
             return replacement;
-        } else {
-            return IRMutator::mutate(e);
         }
-    }
-};
+        return self->mutate_base(e);
+    });
+}
 
 }  // namespace
 
 Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
-    SubstituteExpr s;
-    s.find = find;
-    s.replacement = replacement;
-    return s.mutate(expr);
+    return substitute_impl(find, replacement, expr);
 }
 
 Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
-    SubstituteExpr s;
-    s.find = find;
-    s.replacement = replacement;
-    return s.mutate(stmt);
+    return substitute_impl(find, replacement, stmt);
 }
 
 namespace {

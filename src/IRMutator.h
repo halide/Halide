@@ -298,9 +298,53 @@ protected:
     }
 };
 
+/** A lambda-based IR mutator that accepts multiple lambdas for different
+ * node types. */
+template<typename... Lambdas>
+struct LambdaMutatorGeneric final : IRMutator {
+    explicit LambdaMutatorGeneric(Lambdas... lambdas)
+        : handlers(std::move(lambdas)...) {
+    }
+
+    /** Public helper to call the base mutator from lambdas. */
+    // Note: C++26 introduces variadic friends: https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2024/p2893r3.html
+    // So the mutate_base API could be replaced with:
+    //     friend Lambdas...;
+    template<typename T>
+    auto mutate_base(const T &op) {
+        return IRMutator::mutate(op);
+    }
+
+    Expr mutate(const Expr &e) override {
+        if constexpr (std::is_invocable_v<decltype(handlers), const Expr &, LambdaMutatorGeneric *>) {
+            return handlers(e, this);
+        } else {
+            return this->mutate_base(e);
+        }
+    }
+
+    Stmt mutate(const Stmt &e) override {
+        if constexpr (std::is_invocable_v<decltype(handlers), const Stmt &, LambdaMutatorGeneric *>) {
+            return handlers(e, this);
+        } else {
+            return this->mutate_base(e);
+        }
+    }
+
+private:
+    LambdaOverloads<Lambdas...> handlers;
+};
+
 template<typename T, typename... Lambdas>
 auto mutate_with(const T &ir, Lambdas &&...lambdas) {
-    return LambdaMutator{std::forward<Lambdas>(lambdas)...}.mutate(ir);
+    using Overloads = LambdaOverloads<Lambdas...>;
+    using Generic = LambdaMutatorGeneric<Overloads>;
+    if constexpr (std::is_invocable_v<Overloads, const Expr &, Generic *> ||
+                  std::is_invocable_v<Overloads, const Stmt &, Generic *>) {
+        return LambdaMutatorGeneric{std::forward<Lambdas>(lambdas)...}.mutate(ir);
+    } else {
+        return LambdaMutator{std::forward<Lambdas>(lambdas)...}.mutate(ir);
+    }
 }
 
 /** A helper function for mutator-like things to mutate regions */

@@ -1258,8 +1258,8 @@ Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substi
 
     // Replace all calls to functions listed in 'substitutions' with their wrappers.
     auto m = LambdaMutator{
-        [&](const Call *c, auto *mut) {
-            Expr expr = mut->visit_base(c);
+        [&](const Call *c, auto *self) {
+            Expr expr = self->visit_base(c);
             c = expr.as<Call>();
             internal_assert(c);
 
