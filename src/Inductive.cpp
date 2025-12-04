@@ -46,8 +46,8 @@ class BaseCaseSolver : public IRVisitor {
             }
             op->args[2].accept(this);
             condition_intervals = old_intervals;
-            for (size_t i = 0; i < vars.size(); i++) {
-                bounds.pop(vars[i]);
+            for (const auto &var : vars) {
+                bounds.pop(var);
             }
             nested_select -= 1;
         } else if (op->name == func) {
@@ -95,7 +95,7 @@ public:
 
 // anonymous namespace
 
-const Box expand_to_include_base_case(const vector<string> &vars, const Expr &RHS, const string &func, const Box &box_required) {
+Box expand_to_include_base_case(const vector<string> &vars, const Expr &RHS, const string &func, const Box &box_required) {
     Expr substed = substitute_in_all_lets(RHS);
     Box box2 = box_required;
     BaseCaseSolver b(vars, func, box_required.bounds);
@@ -109,11 +109,11 @@ const Box expand_to_include_base_case(const vector<string> &vars, const Expr &RH
     return box2;
 }
 
-const Box expand_to_include_base_case(const Function &fn, const Box &box_required, const int &pos) {
+Box expand_to_include_base_case(const Function &fn, const Box &box_required, const int &pos) {
     return expand_to_include_base_case(fn.args(), fn.values()[pos], fn.name(), box_required);
 }
 
-const Box expand_to_include_base_case(const Function &fn, const Box &box_required) {
+Box expand_to_include_base_case(const Function &fn, const Box &box_required) {
     Box b = expand_to_include_base_case(fn.args(), fn.values()[0], fn.name(), box_required);
     for (size_t pos = 1; pos < fn.values().size(); pos++) {
         Box b2 = expand_to_include_base_case(fn.args(), fn.values()[pos], fn.name(), box_required);

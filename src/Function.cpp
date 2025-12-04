@@ -207,9 +207,10 @@ struct CheckVars : public IRGraphVisitor {
     Scope<> defined_internally;
     const std::string name;
     bool unbound_reduction_vars_ok = false;
+    bool pure;
 
-    CheckVars(const std::string &n)
-        : name(n) {
+    CheckVars(const std::string &n, bool pure)
+        : name(n), pure(pure) {
     }
 
     using IRVisitor::visit;
@@ -222,20 +223,37 @@ struct CheckVars : public IRGraphVisitor {
 
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
-        /*
-        if (op->name == name && op->call_type == Call::Halide) {
-            for (size_t i = 0; i < op->args.size(); i++) {
-                const Variable *var = op->args[i].as<Variable>();
-                if (!pure_args[i].empty()) {
-                    user_assert(var && var->name == pure_args[i])
-                        << "In definition of Func \"" << name << "\":\n"
-                        << "All of a function's recursive references to itself"
-                        << " must contain the same pure variables in the same"
-                        << " places as on the left-hand-side.\n";
+        bool proper_func = (name == op->name || op->call_type != Call::Halide);
+        if (op->call_type == Call::Halide &&
+            op->func.defined() &&
+            op->name != name) {
+            Function func = Function(op->func);
+            proper_func = (name == op->name || func.has_pure_definition() || func.has_extern_definition());
+        }
+        if (pure) {
+            user_assert(proper_func)
+                << "In pure definition of Func \"" << name << "\":\n"
+                << "Can't call Func \"" << op->name
+                << "\" because it has not yet been defined,"
+                << " and it is not a recursive call.\n";
+        } else {
+            user_assert(proper_func)
+                << "In update definition of Func \"" << name << "\":\n"
+                << "Can't call Func \"" << op->name
+                << "\" because it has not yet been defined.\n";
+            if (op->name == name && op->call_type == Call::Halide) {
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    const Variable *var = op->args[i].as<Variable>();
+                    if (!pure_args[i].empty()) {
+                        user_assert(var && var->name == pure_args[i])
+                            << "In update definition of Func \"" << name << "\":\n"
+                            << "All of a function's recursive references to itself"
+                            << " in update definitions must contain the same pure"
+                            << " variables in the same places as on the left-hand-side.\n";
+                    }
                 }
             }
         }
-        */
     }
 
     void visit(const Variable *var) override {
@@ -564,7 +582,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     // Make sure all the vars in the value are either args or are
     // attached to some parameter
-    CheckVars check(name());
+    CheckVars check(name(), true);
     check.pure_args = args;
     for (const auto &value : values) {
         value.accept(&check);
@@ -769,7 +787,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values, con
     // pure args, in the reduction domain, or a parameter. Also checks
     // that recursive references to the function contain all the pure
     // vars in the LHS in the correct places.
-    CheckVars check(name());
+    CheckVars check(name(), false);
     check.pure_args = pure_args;
     for (const auto &arg : args) {
         arg.accept(&check);
