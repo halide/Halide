@@ -4964,17 +4964,13 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
     return vecs[0];
 }
 
-Value *CodeGen_LLVM::reverse_vector(llvm::Value *vec) {
-    if (effective_vscale > 0) {
-        return builder->CreateVectorReverse(vec);
-    } else {
-        const int lanes = get_vector_num_elements(vec->getType());
-        vector<int> indices(lanes);
-        for (int i = 0; i < lanes; i++) {
-            indices[i] = lanes - 1 - i;
-        }
-        return shuffle_vectors(vec, indices);
+Value *CodeGen_LLVM::reverse_vector(Value *vec) {
+    const int lanes = get_vector_num_elements(vec->getType());
+    vector<int> indices(lanes);
+    for (int i = 0; i < lanes; i++) {
+        indices[i] = lanes - 1 - i;
     }
+    return shuffle_vectors(vec, indices);
 }
 
 Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,

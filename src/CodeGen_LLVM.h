@@ -513,7 +513,7 @@ protected:
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
     /** Reverse elements in a vector */
-    llvm::Value *reverse_vector(llvm::Value *vec);
+    virtual llvm::Value *reverse_vector(llvm::Value *vec);
 
     /** Create an LLVM shuffle vectors instruction. Takes a combination of
      * fixed or scalable vectors as input, so long as the effective lengths match,
