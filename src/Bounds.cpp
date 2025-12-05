@@ -2408,27 +2408,15 @@ private:
         }
     }
 
-    class CountVars : public IRVisitor {
-        using IRVisitor::visit;
-
-        void visit(const Variable *var) override {
-            count++;
-        }
-
-    public:
-        int count = 0;
-        CountVars() = default;
-    };
-
     // We get better simplification if we directly substitute mins
     // and maxes in, but this can also cause combinatorial code
     // explosion. Here we manage this by only substituting in
     // reasonably-sized expressions. We determine the size by
     // counting the number of var nodes.
     bool is_small_enough_to_substitute(const Expr &e) {
-        CountVars c;
-        e.accept(&c);
-        return c.count < 10;
+        int count = 0;
+        visit_with(e, [&](auto *, const Variable *) { count++; });
+        return count < 10;
     }
 
     void push_var(const string &name) {
