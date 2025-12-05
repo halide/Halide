@@ -136,8 +136,8 @@ private:
 
     template<typename T>
     auto visit_impl(const T *op) {
-        if constexpr (std::is_invocable_v<decltype(handlers), const T *, LambdaMutator *>) {
-            return handlers(op, this);
+        if constexpr (std::is_invocable_v<decltype(handlers), LambdaMutator *, const T *>) {
+            return handlers(this, op);
         } else {
             return this->visit_base(op);
         }
@@ -308,16 +308,16 @@ struct LambdaMutatorGeneric final : IRMutator {
     }
 
     Expr mutate(const Expr &e) override {
-        if constexpr (std::is_invocable_v<decltype(handlers), const Expr &, LambdaMutatorGeneric *>) {
-            return handlers(e, this);
+        if constexpr (std::is_invocable_v<decltype(handlers), LambdaMutatorGeneric *, const Expr &>) {
+            return handlers(this, e);
         } else {
             return this->mutate_base(e);
         }
     }
 
     Stmt mutate(const Stmt &e) override {
-        if constexpr (std::is_invocable_v<decltype(handlers), const Stmt &, LambdaMutatorGeneric *>) {
-            return handlers(e, this);
+        if constexpr (std::is_invocable_v<decltype(handlers), LambdaMutatorGeneric *, const Stmt &>) {
+            return handlers(this, e);
         } else {
             return this->mutate_base(e);
         }
@@ -331,8 +331,8 @@ template<typename T, typename... Lambdas>
 auto mutate_with(const T &ir, Lambdas &&...lambdas) {
     using Overloads = LambdaOverloads<Lambdas...>;
     using Generic = LambdaMutatorGeneric<Overloads>;
-    if constexpr (std::is_invocable_v<Overloads, const Expr &, Generic *> ||
-                  std::is_invocable_v<Overloads, const Stmt &, Generic *>) {
+    if constexpr (std::is_invocable_v<Overloads, Generic *, const Expr &> ||
+                  std::is_invocable_v<Overloads, Generic *, const Stmt &>) {
         return LambdaMutatorGeneric{std::forward<Lambdas>(lambdas)...}.mutate(ir);
     } else {
         return LambdaMutator{std::forward<Lambdas>(lambdas)...}.mutate(ir);

@@ -128,7 +128,7 @@ namespace {
 
 template<typename T>
 auto substitute_impl(const Expr &find, const Expr &replacement, const T &ir) {
-    return mutate_with(ir, [&](const Expr &e, auto *self) {
+    return mutate_with(ir, [&](auto *self, const Expr &e) {
         if (equal(e, find)) {
             return replacement;
         }

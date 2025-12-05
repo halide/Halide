@@ -38,13 +38,13 @@ bool depends_on_bounds_inference(const Expr &e) {
     bool result = false;
     visit_with(
         e,
-        [&](const Variable *var, auto *) {
+        [&](auto *, const Variable *var) {
             if (ends_with(var->name, ".max") ||
                 ends_with(var->name, ".min")) {
                 result = true;
             }  //
         },
-        [&](const Call *op, auto *self) {
+        [&](auto *self, const Call *op) {
             if (op->name == Call::buffer_get_min ||
                 op->name == Call::buffer_get_max) {
                 result = true;

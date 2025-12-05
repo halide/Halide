@@ -594,7 +594,7 @@ class InjectBufferCopies : public IRMutator {
         bool success = false;
         body = mutate_with(
             body,
-            [&](const Stmt &op, auto *self) {
+            [&](auto *self, const Stmt &op) {
                 if (op.same_as(last_use)) {
                     internal_assert(!success);
                     success = true;

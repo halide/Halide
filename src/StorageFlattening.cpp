@@ -451,7 +451,7 @@ class HoistStorage : public IRMutator {
     static Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
         Expr result = mutate_with(
             e,
-            [&](const Variable *var, auto *self) -> Expr {
+            [&](auto *self, const Variable *var) -> Expr {
                 if (const Expr *value = scope.find(var->name)) {
                     // Mutate the expression, so lets can get replaced recursively.
                     Expr expr = self->mutate(*value);

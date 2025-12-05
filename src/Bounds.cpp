@@ -2745,7 +2745,7 @@ private:
 
     vector<const Variable *> find_free_vars(const Expr &e) {
         vector<const Variable *> result;
-        visit_with(e, [&](const Variable *op, auto *) {
+        visit_with(e, [&](auto *, const Variable *op) {
             if (scope.contains(op->name)) {
                 result.push_back(op);
             }

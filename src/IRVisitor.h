@@ -98,8 +98,8 @@ private:
 
     template<typename T>
     auto visit_impl(const T *op) {
-        if constexpr (std::is_invocable_v<decltype(handlers), const T *, LambdaVisitor *>) {
-            return handlers(op, this);
+        if constexpr (std::is_invocable_v<decltype(handlers), LambdaVisitor *, const T *>) {
+            return handlers(this, op);
         } else {
             return this->visit_base(op);
         }
