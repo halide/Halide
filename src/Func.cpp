@@ -1875,6 +1875,14 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     return *this;
 }
 
+std::vector<VarOrRVar> Stage::split_vars() const {
+    std::vector<VarOrRVar> result;
+    for (const auto &d : definition.schedule().dims()) {
+        result.emplace_back(split_string(d.var, ".").back(), d.is_rvar());
+    }
+    return result;
+}
+
 Stage &Stage::gpu_threads(const VarOrRVar &tx, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     set_dim_type(tx, ForType::GPUThread);
@@ -2639,6 +2647,19 @@ Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
     invalidate_cache();
     Stage(func, func.definition(), 0).reorder(vars);
     return *this;
+}
+
+std::vector<Var> Func::split_vars() const {
+    std::vector<Var> result;
+    for (const auto &d : func.definition().schedule().dims()) {
+        // Pure stages can't have RVars
+        internal_assert(!d.is_rvar())
+            << "The initial stage of Func " << name()
+            << " unexpectedly has RVar " << d.var
+            << "in the dims list. Initial stages aren't supposed to have RVars.";
+        result.emplace_back(split_string(d.var, ".").back());
+    }
+    return result;
 }
 
 Func &Func::gpu_threads(const VarOrRVar &tx, DeviceAPI device_api) {
