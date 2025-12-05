@@ -78,19 +78,48 @@ void load_vulkan() {
         debug(1) << "Vulkan support code already linked in...\n";
     } else {
         debug(1) << "Looking for Vulkan support code...\n";
+
+        const auto try_load = [](const char *libname) -> string {
+            debug(1) << "Trying " << libname << "... ";
+            string error;
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently(libname, &error);
+            debug(1) << (error.empty() ? "found!\n" : "not found.\n");
+            return error;
+        };
+
         string error;
-#if defined(__linux__)
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.so.1", &error);
-        user_assert(error.empty()) << "Could not find libvulkan.so.1\n";
-#elif defined(__APPLE__)
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.1.dylib", &error);
-        user_assert(error.empty()) << "Could not find libvulkan.1.dylib\n";
+
+        auto env_libname = get_env_variable("HL_VK_LOADER_LIB");
+        if (!env_libname.empty()) {
+            error = try_load(env_libname.c_str());
+        }
+
+        if (!error.empty()) {
+            const char *libnames[] = {
+#if defined(__APPLE__)
+                "libvulkan.dylib",
+                "libvulkan.1.dylib",
+                "/usr/local/lib/libvulkan.dylib",
+                "libMoltenVK.dylib",
+                "vulkan.framework/vulkan",
+                "MoltenVK.framework/MoltenVK"
 #elif defined(_WIN32)
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("vulkan-1.dll", &error);
-        user_assert(error.empty()) << "Could not find vulkan-1.dll\n";
+                "vulkan-1.dll",
 #else
-        internal_error << "JIT support for Vulkan only available on Linux, OS X and Windows!\n";
+                "libvulkan.so.1", 
+                "libvulkan.so",
 #endif
+            };
+
+            for (const char *libname : libnames) {
+                error = try_load(libname);
+                if (error.empty()) {
+                    break;
+                }
+            }
+        }
+        user_assert(error.empty()) << "Could not find a Vulkan loader library: " << error << "\n"
+                                << "(Try setting the env var HL_VK_LOADER_LIB to an explicit path to fix this.)\n";
     }
 }
 
