@@ -184,7 +184,6 @@ protected:
     bool codegen_dot_product_vector_reduce(const VectorReduce *, const Expr &);
     bool codegen_pairwise_vector_reduce(const VectorReduce *, const Expr &);
     bool codegen_across_vector_reduce(const VectorReduce *, const Expr &);
-    Value *reverse_vector(Value *vec) override;
     // @}
     Type upgrade_type_for_arithmetic(const Type &t) const override;
     Type upgrade_type_for_argument_passing(const Type &t) const override;
@@ -2419,13 +2418,6 @@ bool CodeGen_ARM::codegen_across_vector_reduce(const VectorReduce *op, const Exp
     }
 
     return false;
-}
-
-Value *CodeGen_ARM::reverse_vector(Value *vec) {
-    if (target_vscale() > 0) {
-        return builder->CreateVectorReverse(vec);
-    }
-    return CodeGen_Posix::reverse_vector(vec);
 }
 
 Type CodeGen_ARM::upgrade_type_for_arithmetic(const Type &t) const {
