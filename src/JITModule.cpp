@@ -106,7 +106,7 @@ void load_vulkan() {
 #elif defined(_WIN32)
                 "vulkan-1.dll",
 #else
-                "libvulkan.so.1", 
+                "libvulkan.so.1",
                 "libvulkan.so",
 #endif
             };
@@ -119,7 +119,7 @@ void load_vulkan() {
             }
         }
         user_assert(error.empty()) << "Could not find a Vulkan loader library: " << error << "\n"
-                                << "(Try setting the env var HL_VK_LOADER_LIB to an explicit path to fix this.)\n";
+                                   << "(Try setting the env var HL_VK_LOADER_LIB to an explicit path to fix this.)\n";
     }
 }
 

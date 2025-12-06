@@ -57,20 +57,20 @@ extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *n
         }
     }
 
-    if(!lib_vulkan) {
+    if (!lib_vulkan) {
         const char *lib_names[] = {
-    #ifdef WINDOWS
+#ifdef WINDOWS
             "vulkan-1.dll",
-    #else
-            "libvulkan.so.1", 
+#else
+            "libvulkan.so.1",
             "libvulkan.so",
             "libvulkan.dylib",
             "libvulkan.1.dylib",
-            "/usr/local/lib/libvulkan.dylib", // MacOS ldopen doesn't search here by default
+            "/usr/local/lib/libvulkan.dylib",  // MacOS ldopen doesn't search here by default
             "libMoltenVK.dylib",
-            "vulkan.framework/vulkan", // Search for local frameworks (eg for IOS apps)
+            "vulkan.framework/vulkan",  // Search for local frameworks (eg for IOS apps)
             "MoltenVK.framework/MoltenVK"
-    #endif
+#endif
         };
         for (auto &lib_name : lib_names) {
             lib_vulkan = halide_load_library(lib_name);
@@ -83,7 +83,7 @@ extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *n
         }
     }
 
-    if(!lib_vulkan) {
+    if (!lib_vulkan) {
         print(user_context) << "WARNING: Could not find a Vulkan loader library!\n"
                             << "(Try setting the env var HL_VK_LOADER_LIB to an explicit path to fix this.)\n";
         return nullptr;
