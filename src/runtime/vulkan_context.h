@@ -58,6 +58,43 @@ public:
             error = halide_error_code_device_interface_no_device;
             halide_error_no_device_interface(user_context);
         }
+        // If user overrode halide_vulkan_acquire_context and returned nullptr for allocator,
+        // create Halide's allocator for the provided device. User must override `halide_vulkan_export_memory_allocator`
+        // and make sure to propagate it back at the next call of `halide_vulkan_acquire_context` as he overrides it.
+        if (allocator == nullptr &&
+            instance != VK_NULL_HANDLE &&
+            device != VK_NULL_HANDLE &&
+            physical_device != VK_NULL_HANDLE) {
+#ifdef DEBUG_RUNTIME
+            // Initialize clock for debug timing - normally done in halide_vulkan_acquire_context
+            halide_start_clock(user_context);
+#endif
+            // make sure halide vulkan is loaded BEFORE creating allocator
+            debug(user_context) << "VulkanContext: Loading Vulkan function pointers for context override...\n";
+
+            vk_load_vulkan_loader_functions(user_context);
+            if (vkGetInstanceProcAddr == nullptr) {
+                debug(user_context) << "VulkanContext: Failed to load vkGetInstanceProcAddr from loader!\n";
+            } else {
+                debug(user_context) << "VulkanContext: vkGetInstanceProcAddr loaded successfully: " << (void *)vkGetInstanceProcAddr << "\n";
+                vk_load_vulkan_instance_functions(user_context, instance);
+                vk_load_vulkan_device_functions(user_context, device);
+            }
+
+            allocator = vk_create_memory_allocator(user_context, device, physical_device,
+                                                   halide_vulkan_get_allocation_callbacks(user_context));
+            if (allocator == nullptr) {
+                error = halide_error_code_out_of_memory;
+                debug(user_context) << "Vulkan: Failed to create memory allocator for device!\n";
+                return;
+            }
+            int result = halide_vulkan_export_memory_allocator(user_context, reinterpret_cast<halide_vulkan_memory_allocator *>(allocator));
+            if (result != halide_error_code_success) {
+                error = static_cast<halide_error_code_t>(result);
+                debug(user_context) << "Vulkan: Failed to export memory allocator for device!\n";
+                return;
+            }
+        }
         halide_debug_assert(user_context, allocator != nullptr);
         halide_debug_assert(user_context, instance != VK_NULL_HANDLE);
         halide_debug_assert(user_context, device != VK_NULL_HANDLE);
@@ -546,8 +583,8 @@ int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
 
     if (allocator != nullptr) {
         vk_destroy_shader_modules(user_context, allocator);
-        vk_destroy_memory_allocator(user_context, allocator);
         vk_destroy_debug_utils_messenger(user_context, instance, allocator, messenger);
+        vk_destroy_memory_allocator(user_context, allocator);
     }
 
     const VkAllocationCallbacks *alloc_callbacks = halide_vulkan_get_allocation_callbacks(user_context);
@@ -557,6 +594,20 @@ int vk_destroy_context(void *user_context, VulkanMemoryAllocator *allocator,
     if (instance != VK_NULL_HANDLE) {
         vk_destroy_instance(user_context, instance, alloc_callbacks);
     }
+    return halide_error_code_success;
+}
+
+// Clean up only Halide's internal resources for external context (leaves device/instance alone)
+int vk_release_memory_allocator(void *user_context, VulkanMemoryAllocator *allocator,
+                                VkInstance instance, VkDebugUtilsMessengerEXT messenger) {
+    debug(user_context) << "vk_release_memory_allocator (user_context: " << user_context << ")\n";
+    // Clean up only Halide's internal resources, not the device/instance we don't own
+    if (allocator != nullptr) {
+        vk_destroy_shader_modules(user_context, allocator);
+        vk_destroy_debug_utils_messenger(user_context, instance, allocator, messenger);
+        vk_destroy_memory_allocator(user_context, allocator);
+    }
+
     return halide_error_code_success;
 }
 
