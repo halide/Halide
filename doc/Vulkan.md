@@ -171,6 +171,12 @@ To modify the default behavior of the runtime, the following environment
 variables can be used to adjust the configuration of the Vulkan backend 
 at execution time:
 
+`HL_VK_LOADER_LIB=...` can be used to specify the full path and filename 
+of the Vulkan loader library (e.g. `/usr/local/lib64/libvulkan.so.1`). 
+This can be useful if you need to override the default search path,
+or if the loader is installed in a custom location.  If not set, the 
+runtime will search across a list of known paths.
+
 `HL_VK_LAYERS=...` will tell Halide to choose a suitable Vulkan instance
 that supports the given list of layers. If not set, `VK_INSTANCE_LAYERS=...` 
 will be used instead. If neither are present, Halide will use the first 
