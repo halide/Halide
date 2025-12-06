@@ -2101,12 +2101,7 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             Value *flipped = codegen(flipped_load);
 
-            vector<int> indices(ramp->lanes);
-            for (int i = 0; i < ramp->lanes; i++) {
-                indices[i] = ramp->lanes - 1 - i;
-            }
-
-            value = shuffle_vectors(flipped, indices);
+            value = reverse_vector(flipped);
         } else if (ramp) {
             // Gather without generating the indices as a vector
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
@@ -2487,14 +2482,10 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
                                     op->alignment, vpred, true, llvm_stride);
     } else if (ramp && stride && stride->value == -1) {
         debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
-        vector<int> indices(ramp->lanes);
-        for (int i = 0; i < ramp->lanes; i++) {
-            indices[i] = ramp->lanes - 1 - i;
-        }
 
         // Flip the predicate
         Value *vpred = codegen(op->predicate);
-        vpred = shuffle_vectors(vpred, indices);
+        vpred = reverse_vector(vpred);
 
         // Load the vector and then flip it in-place
         Expr flipped_base = ramp->base - ramp->lanes + 1;
@@ -2507,7 +2498,7 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
                                        op->param, const_true(op->type.lanes()), align);
 
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
-        value = shuffle_vectors(flipped, indices);
+        value = reverse_vector(flipped);
     } else {  // It's not dense vector load, we need to scalarize it
         Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
                                     op->param, const_true(op->type.lanes()), op->alignment);
@@ -4989,6 +4980,19 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
     }
 
     return vecs[0];
+}
+
+Value *CodeGen_LLVM::reverse_vector(llvm::Value *vec) {
+    if (effective_vscale > 0) {
+        return builder->CreateVectorReverse(vec);
+    } else {
+        const int lanes = get_vector_num_elements(vec->getType());
+        vector<int> indices(lanes);
+        for (int i = 0; i < lanes; i++) {
+            indices[i] = lanes - 1 - i;
+        }
+        return shuffle_vectors(vec, indices);
+    }
 }
 
 Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
