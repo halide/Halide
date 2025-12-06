@@ -590,28 +590,21 @@ class InjectBufferCopies : public IRMutator {
         }
     };
 
-    class FreeAfterLastUse : public IRMutator {
-        Stmt last_use;
-        Stmt free_stmt;
-
-    public:
+    Stmt inject_free_after_last_use(Stmt body, const Stmt &last_use, const Stmt &free_stmt) {
         bool success = false;
-        using IRMutator::mutate;
-
-        Stmt mutate(const Stmt &s) override {
-            if (s.same_as(last_use)) {
-                internal_assert(!success);
-                success = true;
-                return Block::make(last_use, free_stmt);
-            } else {
-                return IRMutator::mutate(s);
-            }
-        }
-
-        FreeAfterLastUse(Stmt s, Stmt f)
-            : last_use(std::move(s)), free_stmt(std::move(f)) {
-        }
-    };
+        body = mutate_with(
+            body,
+            [&](auto *self, const Stmt &op) {
+                if (op.same_as(last_use)) {
+                    internal_assert(!success);
+                    success = true;
+                    return Block::make(last_use, free_stmt);
+                }
+                return self->mutate_base(op);
+            });
+        internal_assert(success);
+        return body;
+    }
 
     Stmt visit(const Allocate *op) override {
         FindBufferUsage finder(op->name, DeviceAPI::Host);
@@ -650,9 +643,7 @@ class InjectBufferCopies : public IRMutator {
             body.accept(&last_use);
             if (last_use.last_use.defined()) {
                 Stmt device_free = call_extern_and_assert("halide_device_and_host_free", {buffer});
-                FreeAfterLastUse free_injecter(last_use.last_use, device_free);
-                body = free_injecter.mutate(body);
-                internal_assert(free_injecter.success);
+                body = inject_free_after_last_use(body, last_use.last_use, device_free);
             }
 
             Expr device_interface = make_device_interface_call(touching_device, op->memory_type);
@@ -674,9 +665,7 @@ class InjectBufferCopies : public IRMutator {
             body.accept(&last_use);
             if (last_use.last_use.defined()) {
                 Stmt device_free = call_extern_and_assert("halide_device_free", {buffer});
-                FreeAfterLastUse free_injecter(last_use.last_use, device_free);
-                body = free_injecter.mutate(body);
-                internal_assert(free_injecter.success);
+                body = inject_free_after_last_use(body, last_use.last_use, device_free);
             }
 
             Expr condition = op->condition;

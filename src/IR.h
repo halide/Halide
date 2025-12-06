@@ -23,6 +23,16 @@ namespace Internal {
 
 class Function;
 
+// The lambda-based IRVisitors and IRMutators use this helper to dispatch
+// to multiple lambdas via function overloading (of `operator()`).
+template<typename... Ts>
+struct LambdaOverloads : Ts... {
+    using Ts::operator()...;
+    explicit LambdaOverloads(Ts... ts)
+        : Ts(std::move(ts))... {
+    }
+};
+
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */
 

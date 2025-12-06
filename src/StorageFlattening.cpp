@@ -447,31 +447,19 @@ class HoistStorage : public IRMutator {
     vector<HoistedStorageData> hoisted_storages;
     map<string, int> hoisted_storages_map;
 
-    class ExpandExpr : public IRMutator {
-        using IRMutator::visit;
-        const Scope<Expr> &scope;
-
-        Expr visit(const Variable *var) override {
-            if (const Expr *e = scope.find(var->name)) {
-                // Mutate the expression, so lets can get replaced recursively.
-                Expr expr = mutate(*e);
-                debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
-                return expr;
-            } else {
-                return var;
-            }
-        }
-
-    public:
-        ExpandExpr(const Scope<Expr> &s)
-            : scope(s) {
-        }
-    };
-
     // Perform all the substitutions in a scope
-    Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
-        ExpandExpr ee(scope);
-        Expr result = ee.mutate(e);
+    static Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
+        Expr result = mutate_with(
+            e,
+            [&](auto *self, const Variable *var) -> Expr {
+                if (const Expr *value = scope.find(var->name)) {
+                    // Mutate the expression, so lets can get replaced recursively.
+                    Expr expr = self->mutate(*value);
+                    debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
+                    return expr;
+                }
+                return var;
+            });
         debug(4) << "Expanded " << e << " into " << result << "\n";
         return result;
     }
