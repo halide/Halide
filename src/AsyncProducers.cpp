@@ -35,7 +35,7 @@ protected:
         if (is_no_op(body)) {
             return body;
         } else {
-            return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+            return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 
@@ -752,11 +752,10 @@ class InjectRingBuffering : public IRMutator {
 
     struct Loop {
         std::string name;
-        Expr min;
         Expr extent;
 
-        Loop(std::string n, Expr m, Expr e)
-            : name(std::move(n)), min(std::move(m)), extent(std::move(e)) {
+        Loop(std::string n, Expr e)
+            : name(std::move(n)), extent(std::move(e)) {
         }
     };
 
@@ -778,8 +777,7 @@ class InjectRingBuffering : public IRMutator {
             int loop_index = hoist_storage_loop_index[op->name] + 1;
             Expr current_index = Variable::make(Int(32), loops[loop_index].name);
             while (++loop_index < (int)loops.size()) {
-                current_index = current_index *
-                                    (loops[loop_index].extent - loops[loop_index].min) +
+                current_index = current_index * loops[loop_index].extent +
                                 Variable::make(Int(32), loops[loop_index].name);
             }
             current_index = current_index % f.schedule().ring_buffer();
@@ -817,7 +815,7 @@ class InjectRingBuffering : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        loops.emplace_back(op->name, op->min, op->extent);
+        loops.emplace_back(op->name, op->extent());
         Stmt mutated = IRMutator::visit(op);
         loops.pop_back();
         return mutated;

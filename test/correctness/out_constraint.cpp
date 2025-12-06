@@ -26,9 +26,9 @@ private:
     using IRVisitor::visit;
 
     void visit(const For *op) override {
-        std::cout << "for(" << op->name << ", " << op->min << ", " << op->extent << ")\n";
+        std::cout << "for(" << op->name << ", " << op->min << ", " << op->max << ")\n";
         check_int(op->min, 0);
-        check_int(op->extent, size);
+        check_int(op->max, size - 1);
         ++count;
         IRVisitor::visit(op);
     }

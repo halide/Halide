@@ -83,17 +83,17 @@ public:
 
     Stmt visit(const For *op) override {
         Expr new_min = mutate(op->min);
-        Expr new_extent = mutate(op->extent);
+        Expr new_max = mutate(op->max);
         hidden.push(op->name);
         Stmt new_body = mutate(op->body);
         hidden.pop(op->name);
 
         if (new_min.same_as(op->min) &&
-            new_extent.same_as(op->extent) &&
+            new_max.same_as(op->max) &&
             new_body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, new_min, new_extent, op->for_type, op->partition_policy, op->device_api, new_body);
+            return For::make(op->name, new_min, new_max, op->for_type, op->partition_policy, op->device_api, new_body);
         }
     }
 };

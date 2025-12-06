@@ -16,7 +16,8 @@ class UnrollLoops : public IRMutator {
     Stmt visit(const For *for_loop) override {
         if (for_loop->for_type == ForType::Unrolled) {
             Stmt body = for_loop->body;
-            const IntImm *e = for_loop->extent.as<IntImm>();
+            Expr extent = simplify(for_loop->extent());
+            const IntImm *e = extent.as<IntImm>();
 
             internal_assert(e)
                 << "Loop over " << for_loop->name << " should have had a constant extent\n";

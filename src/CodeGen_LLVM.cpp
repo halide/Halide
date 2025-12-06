@@ -3713,7 +3713,7 @@ void CodeGen_LLVM::visit(const ProducerConsumer *op) {
 
 void CodeGen_LLVM::visit(const For *op) {
     Value *min = codegen(op->min);
-    Value *extent = codegen(op->extent);
+    Value *max = codegen(op->max);
     const Acquire *acquire = op->body.as<Acquire>();
 
     // TODO(zvookin): remove this after validating it doesn't happen
@@ -3723,8 +3723,6 @@ void CodeGen_LLVM::visit(const For *op) {
                        !expr_uses_var(acquire->count, op->name))));
 
     if (op->for_type == ForType::Serial) {
-
-        Value *max = builder->CreateNSWAdd(min, extent);
 
         BasicBlock *preheader_bb = builder->GetInsertBlock();
 
@@ -3736,8 +3734,8 @@ void CodeGen_LLVM::visit(const For *op) {
         BasicBlock *after_bb = BasicBlock::Create(
             *context, std::to_string(for_loop_id) + std::string("_end_for_") + op->name, function);
 
-        // If min < max, fall through to the loop bb
-        Value *enter_condition = builder->CreateICmpSLT(min, max);
+        // If min <= max, fall through to the loop bb
+        Value *enter_condition = builder->CreateICmpSLE(min, max);
         builder->CreateCondBr(enter_condition, loop_bb, after_bb, very_likely_branch);
         builder->SetInsertPoint(loop_bb);
 
@@ -3758,7 +3756,7 @@ void CodeGen_LLVM::visit(const For *op) {
         phi->addIncoming(next_var, builder->GetInsertBlock());
 
         // Maybe exit the loop
-        Value *end_condition = builder->CreateICmpNE(next_var, max);
+        Value *end_condition = builder->CreateICmpSLE(next_var, max);
         builder->CreateCondBr(end_condition, loop_bb, after_bb);
 
         builder->SetInsertPoint(after_bb);
