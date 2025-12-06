@@ -1365,7 +1365,7 @@ private:
     };
 
     bool is_float16_supported() const {
-        return (target.bits == 64) && target.has_feature(Target::ARMFp16);
+        return (target.bits == 64) && target.features_any_of({Target::ARMFp16, Target::SVE, Target::SVE2});
     }
 
     bool can_run_the_code;
