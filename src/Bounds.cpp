@@ -1994,29 +1994,6 @@ bool box_contains(const Box &outer, const Box &inner) {
 
 namespace {
 
-class FindInnermostVar : public IRVisitor {
-public:
-    const Scope<int> &vars_depth;
-    string innermost_var;
-
-    FindInnermostVar(const Scope<int> &vars_depth)
-        : vars_depth(vars_depth) {
-    }
-
-private:
-    using IRVisitor::visit;
-    int innermost_depth = -1;
-
-    void visit(const Variable *op) override {
-        if (const int *depth = vars_depth.find(op->name)) {
-            if (*depth > innermost_depth) {
-                innermost_var = op->name;
-                innermost_depth = *depth;
-            }
-        }
-    }
-};
-
 // Place innermost vars in an IfThenElse's condition as far to the left as possible.
 class SolveIfThenElse : public IRMutator {
     // Scope of variable names and their depths. Higher depth indicates
@@ -2075,10 +2052,19 @@ class SolveIfThenElse : public IRMutator {
         op = stmt.as<IfThenElse>();
         internal_assert(op);
 
-        FindInnermostVar find(vars_depth);
-        op->condition.accept(&find);
-        if (!find.innermost_var.empty()) {
-            Expr condition = solve_expression(op->condition, find.innermost_var).result;
+        string innermost_var;
+        int innermost_depth = -1;
+        visit_with(op->condition, [&](auto *, const Variable *var) {
+            if (const int *var_depth = vars_depth.find(var->name)) {
+                if (*var_depth > innermost_depth) {
+                    innermost_var = var->name;
+                    innermost_depth = *var_depth;
+                }
+            }
+        });
+
+        if (!innermost_var.empty()) {
+            Expr condition = solve_expression(op->condition, innermost_var).result;
             if (!condition.same_as(op->condition)) {
                 stmt = IfThenElse::make(condition, op->then_case, op->else_case);
             }
