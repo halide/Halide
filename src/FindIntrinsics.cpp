@@ -1624,27 +1624,24 @@ Expr lower_intrinsic(const Call *op) {
 }
 
 namespace {
-
-class LowerIntrinsics : public IRMutator {
-    using IRMutator::visit;
-
-    Expr visit(const Call *op) override {
+template<typename T>
+T lower_intrinsics_impl(const T &ir) {
+    return mutate_with(ir, [&](auto *self, const Call *op) {
         Expr lowered = lower_intrinsic(op);
         if (lowered.defined()) {
-            return mutate(lowered);
+            return self->mutate(lowered);
         }
-        return IRMutator::visit(op);
-    }
-};
-
+        return self->visit_base(op);
+    });
+}
 }  // namespace
 
 Expr lower_intrinsics(const Expr &e) {
-    return LowerIntrinsics().mutate(e);
+    return lower_intrinsics_impl(e);
 }
 
 Stmt lower_intrinsics(const Stmt &s) {
-    return LowerIntrinsics().mutate(s);
+    return lower_intrinsics_impl(s);
 }
 
 }  // namespace Internal
