@@ -1970,14 +1970,11 @@ Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
         llvm::Type *elt = get_vector_element_type(vecs[0]->getType());
         llvm::Type *ret_type = get_vector_type(elt, src_lanes * stride);
 
-        std::ostringstream instr;
-        instr << "llvm.vector.interleave"
-              << stride
-              << mangle_llvm_type(ret_type);
+        std::string instr = concat_strings("llvm.vector.interleave", stride, mangle_llvm_type(ret_type));
 
         std::vector<llvm::Type *> arg_types(stride, vecs[0]->getType());
         llvm::FunctionType *fn_type = FunctionType::get(ret_type, arg_types, false);
-        FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+        FunctionCallee fn = module->getOrInsertFunction(instr, fn_type);
 
         CallInst *interleave = builder->CreateCall(fn, vecs);
         return interleave;
@@ -2021,17 +2018,14 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
             dst_lanes % target_vscale() == 0 &&
             dst_lanes / target_vscale() > 1) {
 
-            std::ostringstream instr;
-            instr << "llvm.vector.deinterleave"
-                  << slice_stride
-                  << mangle_llvm_type(a->getType());
+            std::string instr = concat_strings("llvm.vector.deinterleave", slice_stride, mangle_llvm_type(a->getType()));
 
             // We cannot mix FixedVector and ScalableVector, so dst_type must be scalable
             llvm::Type *dst_type = get_vector_type(elt, dst_lanes / target_vscale(), VectorTypeConstraint::VScale);
             StructType *sret_type = StructType::get(*context, std::vector(slice_stride, dst_type));
             std::vector<llvm::Type *> arg_types{a->getType()};
             llvm::FunctionType *fn_type = FunctionType::get(sret_type, arg_types, false);
-            FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+            FunctionCallee fn = module->getOrInsertFunction(instr, fn_type);
 
             CallInst *deinterleave = builder->CreateCall(fn, {a});
             // extract one element out of the returned struct
