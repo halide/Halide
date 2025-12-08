@@ -1123,36 +1123,25 @@ protected:
 class SubstituteInWideningLets : public IRMutator {
     using IRMutator::visit;
 
-    bool widens(const Expr &e) {
-        class AllInputsNarrowerThan : public IRVisitor {
-            int bits;
-
-            using IRVisitor::visit;
-
-            void visit(const Variable *op) override {
+    static bool widens(const Expr &e) {
+        const int bits = e.type().bits();
+        bool result = true;
+        visit_with(
+            e,
+            [&](auto *, const Variable *op) {
                 result &= op->type.bits() < bits;
-            }
-
-            void visit(const Load *op) override {
+            },
+            [&](auto *, const Load *op) {
                 result &= op->type.bits() < bits;
-            }
-
-            void visit(const Call *op) override {
+            },
+            [&](auto *self, const Call *op) {
                 if (op->is_pure() && op->is_intrinsic()) {
-                    IRVisitor::visit(op);
+                    self->visit_base(op);
                 } else {
                     result &= op->type.bits() < bits;
                 }
-            }
-
-        public:
-            AllInputsNarrowerThan(Type t)
-                : bits(t.bits()) {
-            }
-            bool result = true;
-        } widens(e.type());
-        e.accept(&widens);
-        return widens.result;
+            });
+        return result;
     }
 
     Scope<Expr> replacements;
