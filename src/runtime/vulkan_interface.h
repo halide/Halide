@@ -57,6 +57,8 @@ extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *n
         }
     }
 
+    // First, attempt to find the versioned library (per the Vulkan API docs), otherwise
+    // fallback to unversioned libs, and known common paths
     if (!lib_vulkan) {
         const char *lib_names[] = {
 #ifdef WINDOWS
@@ -64,8 +66,8 @@ extern "C" WEAK void *halide_vulkan_get_symbol(void *user_context, const char *n
 #else
             "libvulkan.so.1",
             "libvulkan.so",
-            "libvulkan.dylib",
             "libvulkan.1.dylib",
+            "libvulkan.dylib",
             "/usr/local/lib/libvulkan.dylib",  // MacOS ldopen doesn't search here by default
             "libMoltenVK.dylib",
             "vulkan.framework/vulkan",  // Search for local frameworks (eg for IOS apps)

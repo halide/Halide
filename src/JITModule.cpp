@@ -94,11 +94,13 @@ void load_vulkan() {
             error = try_load(env_libname.c_str());
         }
 
+        // First, attempt to find the versioned library (per the Vulkan API docs), otherwise
+        // fallback to unversioned libs, and known common paths
         if (!error.empty()) {
             const char *libnames[] = {
 #if defined(__APPLE__)
-                "libvulkan.dylib",
                 "libvulkan.1.dylib",
+                "libvulkan.dylib",
                 "/usr/local/lib/libvulkan.dylib",
                 "libMoltenVK.dylib",
                 "vulkan.framework/vulkan",
