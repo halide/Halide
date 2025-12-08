@@ -707,8 +707,8 @@ class PartitionLoops : public IRMutator {
         Stmt prologue = MakeSimplifications(prologue_simps).mutate(body);
         Stmt epilogue = MakeSimplifications(epilogue_simps).mutate(body);
 
-        bool make_prologue = !equal(prologue, simpler_body);
-        bool make_epilogue = !equal(epilogue, simpler_body);
+        const bool make_prologue = !equal(prologue, simpler_body);
+        const bool make_epilogue = !equal(epilogue, simpler_body);
 
         // Recurse on the middle section.
         simpler_body = mutate(simpler_body);
@@ -721,10 +721,11 @@ class PartitionLoops : public IRMutator {
         }
 
         // Construct variables for the bounds of the simplified middle section
-        Expr min_steady = op->min, max_steady = op->max + 1;
+        const Expr original_max_plus_one = op->max + 1;
+        Expr min_steady = op->min, max_steady = original_max_plus_one;
         Expr prologue_val, epilogue_val;
-        string prologue_name = unique_name(op->name + ".prologue");
-        string epilogue_name = unique_name(op->name + ".epilogue");
+        const string prologue_name = unique_name(op->name + ".prologue");
+        const string epilogue_name = unique_name(op->name + ".epilogue");
 
         if (make_prologue) {
             // They'll simplify better if you put them in
@@ -735,7 +736,7 @@ class PartitionLoops : public IRMutator {
             min_vals.push_back(op->min);
             prologue_val = fold_left(min_vals, Max::make);
             // Stop the prologue from running past the end of the loop
-            prologue_val = min(prologue_val, op->max + 1);
+            prologue_val = min(prologue_val, original_max_plus_one);
             // prologue_val = print(prologue_val, prologue_name);
             min_steady = Variable::make(Int(32), prologue_name);
 
@@ -811,7 +812,7 @@ class PartitionLoops : public IRMutator {
             // epilogue_val = print(epilogue_val, op->name, "epilogue", op->min, op->max);
             stmt = LetStmt::make(epilogue_name, epilogue_val, stmt);
         } else {
-            epilogue_val = op->max + 1;
+            epilogue_val = original_max_plus_one;
         }
         if (make_prologue) {
             // Uncomment to include code that prints the prologue value
