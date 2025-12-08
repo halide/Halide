@@ -1061,7 +1061,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     }
 
     const Allocate *shared_alloc = nullptr;
-    std::string shared_name = "__shared";
+    shared_name = "__shared";
     visit_with(s, [&](auto *self, const Allocate *op) {
         if (op->memory_type == MemoryType::GPUShared) {
             internal_assert(shared_alloc == nullptr)
