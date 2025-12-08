@@ -387,7 +387,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         // host dirties from getting in between blocks of store stmts
         // that could be interleaved.
         bool has_loops = false;
-        visit_with(op, [&](const For *op) {
+        visit_with(op, [&](auto *, const For *op) {
             has_loops = true;
         });
         if (has_loops) {

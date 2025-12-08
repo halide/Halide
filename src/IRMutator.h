@@ -335,7 +335,11 @@ auto mutate_with(const T &ir, Lambdas &&...lambdas) {
                   std::is_invocable_v<Overloads, Generic *, const Stmt &>) {
         return LambdaMutatorGeneric{std::forward<Lambdas>(lambdas)...}.mutate(ir);
     } else {
-        return LambdaMutator{std::forward<Lambdas>(lambdas)...}.mutate(ir);
+        LambdaMutator mutator{std::forward<Lambdas>(lambdas)...};
+        constexpr bool all_take_two_args =
+            (std::is_invocable_v<Lambdas, decltype(&mutator), decltype(nullptr)> && ...);
+        static_assert(all_take_two_args);
+        return mutator.mutate(ir);
     }
 }
 
