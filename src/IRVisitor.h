@@ -252,10 +252,15 @@ protected:
     }
 };
 
-template<typename T, typename... Lambdas>
-void visit_with(const T &ir, Lambdas &&...lambdas) {
+template<typename... Lambdas>
+void visit_with(const IRNode *ir, Lambdas &&...lambdas) {
     LambdaVisitor visitor{std::forward<Lambdas>(lambdas)...};
-    ir.accept(&visitor);
+    ir->accept(&visitor);
+}
+
+template<typename... Lambdas>
+void visit_with(const IRHandle &ir, Lambdas &&...lambdas) {
+    visit_with(ir.get(), std::forward<Lambdas>(lambdas)...);
 }
 
 /** A base class for algorithms that walk recursively over the IR

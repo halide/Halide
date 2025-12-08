@@ -381,26 +381,16 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         return do_copies(op);
     }
 
-    // Check if a stmt has any for loops (and hence possible device
-    // transitions).
-    class HasLoops : public IRVisitor {
-        using IRVisitor::visit;
-        void visit(const For *op) override {
-            result = true;
-        }
-
-    public:
-        bool result = false;
-    };
-
     Stmt visit(const Block *op) override {
         // If both sides of the block have no loops (and hence no
         // device transitions), treat it as a single leaf. This stops
         // host dirties from getting in between blocks of store stmts
         // that could be interleaved.
-        HasLoops loops;
-        op->accept(&loops);
-        if (loops.result) {
+        bool has_loops = false;
+        visit_with(op, [&](const For *op) {
+            has_loops = true;
+        });
+        if (has_loops) {
             return IRMutator::visit(op);
         } else {
             return do_copies(op);

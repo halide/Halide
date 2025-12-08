@@ -139,19 +139,16 @@ Stmt Closure::unpack_from_struct(const Expr &e, const Stmt &s) const {
     Expr packed = pack_into_struct();
 
     // Make a prototype of the packed struct
-    class ReplaceCallArgsWithZero : public IRMutator {
-    public:
-        using IRMutator::mutate;
-        Expr mutate(const Expr &e) override {
-            if (!e.as<Call>()) {
-                return make_zero(e.type());
-            } else {
-                return IRMutator::mutate(e);
-            }
-        }
-    } replacer;
+    Expr prototype =
+        mutate_with(packed,
+                    [](auto *self, const Expr &e) {
+                        if (!e.as<Call>()) {
+                            return make_zero(e.type());
+                        } else {
+                            return self->mutate_base(e);
+                        }
+                    });
     string prototype_name = unique_name("closure_prototype");
-    Expr prototype = replacer.mutate(packed);
     Expr prototype_var = Variable::make(Handle(), prototype_name);
 
     const Call *c = packed.as<Call>();

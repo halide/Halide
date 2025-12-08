@@ -146,26 +146,12 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             // to schedule those Funcs as async too. Check for any consume nodes
             // where the producer has gone to the consumer side of the fork
             // node.
-            class FindBadConsumeNodes : public IRVisitor {
-                const std::set<string> &producers_dropped;
-                using IRVisitor::visit;
-
-                void visit(const ProducerConsumer *op) override {
-                    if (!op->is_producer && producers_dropped.count(op->name)) {
-                        found = op->name;
-                    }
+            visit_with(body, [&](auto *self, const ProducerConsumer *op) {
+                if (!op->is_producer && producers_dropped.count(op->name)) {
+                    bad_producer_nesting_error(op->name, func);
                 }
-
-            public:
-                string found;
-                FindBadConsumeNodes(const std::set<string> &p)
-                    : producers_dropped(p) {
-                }
-            } finder(producers_dropped);
-            body.accept(&finder);
-            if (!finder.found.empty()) {
-                bad_producer_nesting_error(finder.found, func);
-            }
+                self->visit_base(op);
+            });
 
             while (!sema.empty()) {
                 Expr release = Call::make(Int(32), "halide_semaphore_release", {sema.back(), 1}, Call::Extern);
