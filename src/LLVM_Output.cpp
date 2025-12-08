@@ -390,6 +390,14 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
 
     const auto &triple = llvm::Triple(module->getTargetTriple());
     pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(triple));
+#if LLVM_VERSION >= 220
+    pass_manager.add(new llvm::RuntimeLibraryInfoWrapper(
+        module->getTargetTriple(), target_machine->Options.ExceptionModel,
+        target_machine->Options.FloatABIType,
+        target_machine->Options.EABIVersion,
+        target_machine->Options.MCOptions.ABIName,
+        target_machine->Options.VecLib));
+#endif
 
     // Make sure things marked as always-inline get inlined
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());

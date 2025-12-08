@@ -92,6 +92,9 @@
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/RelLookupTableConverter.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
+#if LLVM_VERSION >= 220
+#include "llvm/Analysis/RuntimeLibcallInfo.h"
+#endif
 
 // IWYU pragma: end_exports
 
