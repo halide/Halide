@@ -972,8 +972,8 @@ class VectorSubs : public IRMutator {
             body = IfThenElse::make(likely(var <= max), body);
         }
 
-        Expr extent = simplify((max - min) + 1);
         if (op->for_type == ForType::Vectorized) {
+            Expr extent = simplify((max - min) + 1);
             const IntImm *extent_int = extent.as<IntImm>();
             internal_assert(extent_int)
                 << "Vectorized for loop extent should have been rewritten to a constant\n";
