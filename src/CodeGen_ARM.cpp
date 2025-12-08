@@ -50,6 +50,12 @@ Target complete_arm_target(Target t) {
         t.set_feature(Target::ARMv84a);
     }
 
+    auto add_implied_feature_if_supported = [](Target &t, Target::Feature super, Target::Feature implied) {
+        if (t.has_feature(super)) {
+            t.set_feature(implied);
+        }
+    };
+
     constexpr int num_arm_v8_features = 10;
     static const Target::Feature arm_v8_features[num_arm_v8_features] = {
         Target::ARMv89a,
@@ -65,9 +71,26 @@ Target complete_arm_target(Target t) {
     };
 
     for (int i = 0; i < num_arm_v8_features - 1; i++) {
-        if (t.has_feature(arm_v8_features[i])) {
-            t.set_feature(arm_v8_features[i + 1]);
-        }
+        add_implied_feature_if_supported(t,
+                                         arm_v8_features[i],
+                                         arm_v8_features[i + 1]);
+    }
+
+    static const Target::Feature features_with_fp16[] = {
+        Target::SVE,
+        Target::SVE2,
+    };
+
+    for (const auto &f : features_with_fp16) {
+        add_implied_feature_if_supported(t, f, Target::ARMFp16);
+    }
+
+    static const Target::Feature features_with_dotprod[] = {
+        Target::SVE2,
+    };
+
+    for (const auto &f : features_with_dotprod) {
+        add_implied_feature_if_supported(t, f, Target::ARMDotProd);
     }
 
     return t;
@@ -212,12 +235,9 @@ protected:
                !target.has_feature(Target::SVE2);
     }
 
-    bool has_feature_fp16() const {
-        return target.features_any_of({Target::ARMFp16, Target::SVE, Target::SVE2});
-    }
     bool is_float16_and_has_feature(const Type &t) const {
         // NOTE : t.is_float() returns true even in case of BFloat16. We don't include it for now.
-        return t.code() == Type::Float && t.bits() == 16 && has_feature_fp16();
+        return t.code() == Type::Float && t.bits() == 16 && target.has_feature(Target::ARMFp16);
     }
     bool supports_call_as_float16(const Call *op) const override;
 
@@ -1007,7 +1027,7 @@ void CodeGen_ARM::init_module() {
     }
 
     for (const ArmIntrinsic &intrin : intrinsic_defs) {
-        if ((intrin.flags & ArmIntrinsic::RequireFp16) && !has_feature_fp16()) {
+        if ((intrin.flags & ArmIntrinsic::RequireFp16) && !target.has_feature(Target::ARMFp16)) {
             continue;
         }
 
@@ -1262,8 +1282,7 @@ void CodeGen_ARM::visit(const Add *op) {
     }
 
     // SDOT, UDOT
-    if (op->type.is_vector() && op->type.is_int_or_uint() && op->type.bits() == 32 &&
-        target.features_any_of({Target::ARMDotProd, Target::SVE2})) {
+    if (op->type.is_vector() && target.has_feature(Target::ARMDotProd) && op->type.is_int_or_uint() && op->type.bits() == 32) {
         // Initial values.
         Expr init_i32 = Variable::make(Int(32, 0), "init");
         Expr init_u32 = Variable::make(UInt(32, 0), "init");
@@ -2060,7 +2079,7 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     }
 
-    if (has_feature_fp16()) {
+    if (target.has_feature(Target::ARMFp16)) {
         auto it = float16_transcendental_remapping.find(op->name);
         if (it != float16_transcendental_remapping.end()) {
             // This op doesn't have float16 native function.
@@ -2493,7 +2512,7 @@ int CodeGen_ARM::target_vscale() const {
 bool CodeGen_ARM::supports_call_as_float16(const Call *op) const {
     bool is_fp16_native = float16_native_funcs.find(op->name) != float16_native_funcs.end();
     bool is_fp16_transcendental = float16_transcendental_remapping.find(op->name) != float16_transcendental_remapping.end();
-    return has_feature_fp16() && (is_fp16_native || is_fp16_transcendental);
+    return target.has_feature(Target::ARMFp16) && (is_fp16_native || is_fp16_transcendental);
 }
 
 }  // namespace
