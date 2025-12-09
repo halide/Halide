@@ -352,6 +352,27 @@ std::string Stage::name() const {
 }
 
 namespace {
+struct CheckResult {
+    bool has_self_reference = false;
+    bool has_rvar = false;
+};
+
+CheckResult check_self_ref_and_rvar(const vector<Expr> &exprs, const string &func_name) {
+    CheckResult result;
+    for (const Expr &e : exprs) {
+        visit_with(
+            e,
+            [&](auto *, const Variable *op) {
+                result.has_rvar |= op->reduction_domain.defined();  //
+            },
+            [&](auto *self, const Call *op) {
+                result.has_self_reference |= (op->call_type == Call::Halide && op->name == func_name);
+                self->visit_base(op);
+            });
+    }
+    return result;
+}
+
 bool is_const_assignment(const string &func_name, const vector<Expr> &args, const vector<Expr> &values) {
     // Check if an update definition is a non-recursive and just
     // scatters a value that doesn't depend on the reduction
@@ -364,37 +385,11 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
     // never be races between two distinct values of the pure var by
     // construction (because the pure var must appear as one of the
     // args) e.g: f(g(r, x), x) = h(x);
-    class Checker : public IRVisitor {
-        using IRVisitor::visit;
-
-        void visit(const Variable *op) override {
-            has_rvar |= op->reduction_domain.defined();
-        }
-
-        void visit(const Call *op) override {
-            has_self_reference |= (op->call_type == Call::Halide && op->name == func_name);
-            IRVisitor::visit(op);
-        }
-
-        const string &func_name;
-
-    public:
-        Checker(const string &func_name)
-            : func_name(func_name) {
-        }
-
-        bool has_self_reference = false;
-        bool has_rvar = false;
-    } lhs_checker(func_name), rhs_checker(func_name);
-    for (const Expr &v : args) {
-        v.accept(&lhs_checker);
-    }
-    for (const Expr &v : values) {
-        v.accept(&rhs_checker);
-    }
-    return !(lhs_checker.has_self_reference ||
-             rhs_checker.has_self_reference ||
-             rhs_checker.has_rvar);
+    auto lhs_result = check_self_ref_and_rvar(args, func_name);
+    auto rhs_result = check_self_ref_and_rvar(values, func_name);
+    return !(lhs_result.has_self_reference ||
+             rhs_result.has_self_reference ||
+             rhs_result.has_rvar);
 }
 
 void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
@@ -574,47 +569,31 @@ std::string Stage::dump_argument_list() const {
 
 namespace {
 
-class SubstituteSelfReference : public IRMutator {
-    using IRMutator::visit;
-
-    const string func;
-    const Function substitute;
-    const vector<Var> new_args;
-
-    Expr visit(const Call *c) override {
-        Expr expr = IRMutator::visit(c);
-        c = expr.as<Call>();
-        internal_assert(c);
-
-        if ((c->call_type == Call::Halide) && (func == c->name)) {
-            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
-                     << "\"" << substitute.name() << "\"\n";
-            vector<Expr> args;
-            args.insert(args.end(), c->args.begin(), c->args.end());
-            args.insert(args.end(), new_args.begin(), new_args.end());
-            expr = Call::make(substitute, args, c->value_index);
-        }
-        return expr;
-    }
-
-public:
-    SubstituteSelfReference(const string &func, const Function &substitute,
-                            const vector<Var> &new_args)
-        : func(func), substitute(substitute), new_args(new_args) {
-        internal_assert(substitute.get_contents().defined());
-    }
-};
-
 /** Substitute all self-reference calls to 'func' with 'substitute' which
  * args (LHS) is the old args (LHS) plus 'new_args' in that order.
  * Expect this method to be called on the value (RHS) of an update definition. */
 vector<Expr> substitute_self_reference(const vector<Expr> &values, const string &func,
                                        const Function &substitute, const vector<Var> &new_args) {
-    SubstituteSelfReference subs(func, substitute, new_args);
+    internal_assert(substitute.get_contents().defined());
+
     vector<Expr> result;
     result.reserve(values.size());
     for (const auto &val : values) {
-        result.push_back(subs.mutate(val));
+        result.push_back(mutate_with(val, [&](auto *self, const Call *c) {
+            Expr expr = self->visit_base(c);
+            c = expr.as<Call>();
+            internal_assert(c);
+
+            if (c->call_type == Call::Halide && func == c->name) {
+                debug(4) << "...Replace call to Func \"" << c->name << "\" with "
+                         << "\"" << substitute.name() << "\"\n";
+                vector<Expr> args;
+                args.insert(args.end(), c->args.begin(), c->args.end());
+                args.insert(args.end(), new_args.begin(), new_args.end());
+                expr = Call::make(substitute, args, c->value_index);
+            }
+            return expr;
+        }));
     }
     return result;
 }

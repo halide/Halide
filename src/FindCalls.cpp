@@ -10,34 +10,31 @@ namespace Internal {
 
 namespace {
 
-/* Find all the internal halide calls in an expr */
-class FindCalls : public IRVisitor {
-public:
+struct CallInfo {
     std::map<std::string, Function> calls;
     std::vector<Function> order;
+};
 
-    using IRVisitor::visit;
-
-    void include_function(const Function &f) {
-        auto [it, inserted] = calls.emplace(f.name(), f);
-        if (inserted) {
-            order.push_back(f);
-        } else {
-            user_assert(it->second.same_as(f))
-                << "Can't compile a pipeline using multiple functions with same name: "
-                << f.name() << "\n";
-        }
-    }
-
-    void visit(const Call *call) override {
-        IRVisitor::visit(call);
-
+/* Find all the internal halide calls in an expr */
+template<typename T>
+CallInfo find_calls(const T &ir) {
+    CallInfo info;
+    visit_with(ir, [&](auto *self, const Call *call) {
+        self->visit_base(call);
         if (call->call_type == Call::Halide && call->func.defined()) {
             Function f(call->func);
-            include_function(f);
+            auto [it, inserted] = info.calls.emplace(f.name(), f);
+            if (inserted) {
+                info.order.push_back(f);
+            } else {
+                user_assert(it->second.same_as(f))
+                    << "Can't compile a pipeline using multiple functions with same name: "
+                    << f.name() << "\n";
+            }
         }
-    }
-};
+    });
+    return info;
+}
 
 void populate_environment_helper(const Function &f,
                                  std::map<std::string, Function> *env,
@@ -61,29 +58,28 @@ void populate_environment_helper(const Function &f,
         }
     };
 
-    FindCalls calls;
-    f.accept(&calls);
+    auto [f_calls, f_order] = find_calls(f);
     if (f.has_extern_definition()) {
         for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
-                insert_func(Function{arg.func}, &calls.calls, &calls.order);
+                insert_func(Function{arg.func}, &f_calls, &f_order);
             }
         }
     }
 
     if (include_wrappers) {
         for (const auto &it : f.schedule().wrappers()) {
-            insert_func(Function{it.second}, &calls.calls, &calls.order);
+            insert_func(Function{it.second}, &f_calls, &f_order);
         }
     }
 
     if (!recursive) {
-        for (const Function &g : calls.order) {
+        for (const Function &g : f_order) {
             insert_func(g, env, order);
         }
     } else {
         insert_func(f, env, order);
-        for (const Function &g : calls.order) {
+        for (const Function &g : f_order) {
             populate_environment_helper(g, env, order, recursive, include_wrappers);
         }
     }
