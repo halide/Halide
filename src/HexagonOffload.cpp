@@ -4,6 +4,7 @@
 #include "Closure.h"
 #include "Elf.h"
 #include "HexagonOffload.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "InjectHostDevBufferCopies.h"
@@ -745,10 +746,10 @@ class InjectHexagonRpc : public IRMutator {
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
         Stmt body;
-        if (is_const_one(loop->extent)) {
+        if (equal(loop->min, loop->max)) {
             body = LetStmt::make(loop->name, loop->min, loop->body);
         } else {
-            body = For::make(loop->name, loop->min, loop->extent, loop->for_type, loop->partition_policy,
+            body = For::make(loop->name, loop->min, loop->max, loop->for_type, loop->partition_policy,
                              DeviceAPI::None, loop->body);
         }
 

@@ -557,12 +557,12 @@ class HoistStorage : public IRMutator {
 
     Stmt visit(const For *op) override {
         Expr expanded_min = op->min;
-        Expr expanded_extent = op->extent;
+        Expr expanded_max = op->max;
         // Iterate from innermost outwards
         for (auto &storage : reverse_view(hoisted_storages)) {
             expanded_min = simplify(expand_expr(expanded_min, storage.scope));
-            expanded_extent = expand_expr(expanded_extent, storage.scope);
-            auto loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
+            expanded_max = expand_expr(expanded_max, storage.scope);
+            auto loop_bounds = Interval(expanded_min, expanded_max);
             storage.loop_vars.emplace_back(op->name, loop_bounds);
         }
 

@@ -2942,23 +2942,11 @@ private:
         TRACK_BOXES_TOUCHED_INFO("var:", op->name);
         if (consider_calls) {
             op->min.accept(this);
-            op->extent.accept(this);
+            op->max.accept(this);
         }
 
-        Expr min_val, max_val;
-        if (const Interval *in = scope.find(op->name + ".loop_min")) {
-            min_val = in->min;
-        } else {
-            min_val = bounds_of_expr_in_scope(op->min, scope, func_bounds).min;
-        }
-
-        if (const Interval *in = scope.find(op->name + ".loop_max")) {
-            max_val = in->max;
-        } else {
-            max_val = bounds_of_expr_in_scope(op->extent, scope, func_bounds).max;
-            max_val += bounds_of_expr_in_scope(op->min, scope, func_bounds).max;
-            max_val -= 1;
-        }
+        Expr min_val = bounds_of_expr_in_scope(op->min, scope, func_bounds).min;
+        Expr max_val = bounds_of_expr_in_scope(op->max, scope, func_bounds).max;
 
         push_var(op->name);
         {
@@ -3797,7 +3785,7 @@ void bounds_test() {
     Buffer<int32_t> in(10);
     in.set_name("input");
 
-    Stmt loop = For::make("x", 3, 10, ForType::Serial, Partition::Auto, DeviceAPI::Host,
+    Stmt loop = For::make("x", 3, 12, ForType::Serial, Partition::Auto, DeviceAPI::Host,
                           Provide::make("output",
                                         {Add::make(Call::make(in, input_site_1),
                                                    Call::make(in, input_site_2))},

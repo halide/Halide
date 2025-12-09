@@ -91,24 +91,23 @@ private:
 
         // If the min or extent are constants, print them. At this
         // stage they're all variables.
-        Expr min_val = op->min, extent_val = op->extent;
+        Expr min_val = op->min, max_val = op->max;
         const Variable *min_var = min_val.as<Variable>();
-        const Variable *extent_var = extent_val.as<Variable>();
+        const Variable *max_var = max_val.as<Variable>();
         if (min_var) {
             if (const Expr *e = constants.find(min_var->name)) {
                 min_val = *e;
             }
         }
 
-        if (extent_var) {
-            if (const Expr *e = constants.find(extent_var->name)) {
-                extent_val = *e;
+        if (max_var) {
+            if (const Expr *e = constants.find(max_var->name)) {
+                max_val = *e;
             }
         }
 
-        if (extent_val.defined() && is_const(extent_val) &&
+        if (max_val.defined() && is_const(max_val) &&
             min_val.defined() && is_const(min_val)) {
-            Expr max_val = simplify(min_val + extent_val - 1);
             out << " in [" << min_val << ", " << max_val << "]";
         }
 

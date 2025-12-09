@@ -363,7 +363,7 @@ private:
             if (uses_hvx) {
                 body = acquire_hvx_context(body, target);
                 body = substitute("uses_hvx", true, body);
-                Stmt new_for = For::make(op->name, op->min, op->extent, op->for_type,
+                Stmt new_for = For::make(op->name, op->min, op->max, op->for_type,
                                          op->partition_policy, op->device_api, body);
                 Stmt prolog =
                     IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
@@ -408,7 +408,7 @@ private:
                 //   vector code
                 //   halide_qurt_unlock
                 // }
-                s = For::make(op->name, op->min, op->extent, op->for_type,
+                s = For::make(op->name, op->min, op->max, op->for_type,
                               op->partition_policy, op->device_api, body);
             }
 

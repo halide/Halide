@@ -536,16 +536,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Box box = box_union(provided, required);
 
         Expr loop_var = Variable::make(Int(32), op->name);
-        Expr loop_min = Variable::make(Int(32), op->name + ".loop_min");
-        Expr loop_max = Variable::make(Int(32), op->name + ".loop_max");
 
         string dynamic_footprint;
 
         Scope<Interval> bounds;
-        bounds.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+        bounds.push(op->name, Interval(op->min, op->max));
 
         Scope<Interval> steady_bounds;
-        steady_bounds.push(op->name, Interval(simplify(op->min + 1), simplify(op->min + op->extent - 1)));
+        steady_bounds.push(op->name, Interval(simplify(op->min + 1), op->max));
 
         HasExternConsumer has_extern_consumer(func.name());
         body.accept(&has_extern_consumer);
@@ -735,7 +733,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             } else {
                 // The max of the extent over all values of the loop variable must be a constant
                 Scope<Interval> scope;
-                scope.push(op->name, Interval(loop_min, loop_max));
+                scope.push(op->name, Interval(op->min, op->max));
                 Expr max_extent = find_constant_bound(extent, Direction::Upper, scope);
                 scope.pop(op->name);
 
@@ -825,8 +823,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // On the first iteration, we need to acquire the extent of the region shared
                     // between the producer and consumer, and we need to release it on the last
                     // iteration.
-                    to_acquire = select(loop_var > loop_min, to_acquire, extent);
-                    to_release = select(loop_var < loop_max, to_release, extent);
+                    to_acquire = select(loop_var > op->min, to_acquire, extent);
+                    to_release = select(loop_var < op->max, to_release, extent);
 
                     // We may need dynamic assertions that a positive
                     // amount of the semaphore is acquired/released,
@@ -881,7 +879,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 // for further folding opportunities
                 // recursively.
             } else if (!body.same_as(op->body)) {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+                stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
                 break;
             } else {
                 stmt = op;
@@ -900,7 +898,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
         }
 
         if (func.schedule().async() && !dynamic_footprint.empty()) {

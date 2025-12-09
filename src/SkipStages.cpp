@@ -702,7 +702,7 @@ protected:
         if (body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, op->min, op->extent,
+            return For::make(op->name, op->min, op->max,
                              op->for_type, op->partition_policy, op->device_api, std::move(body));
         }
     }
