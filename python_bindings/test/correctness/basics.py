@@ -343,12 +343,22 @@ def test_typed_funcs():
     with assert_throws(hl.HalideError, "it is undefined"):
         assert f.dimensions() == 0
 
+    with assert_throws(hl.HalideError, "it is undefined"):
+        assert f[x, y].type() == hl.Int(32)
+
     f = hl.Func(hl.Int(32), 2, "f")
     assert not f.defined()
     assert f.type() == hl.Int(32)
     assert f.types() == [hl.Int(32)]
     assert f.outputs() == 1
     assert f.dimensions() == 2
+    assert f[x, y].type() == hl.Int(32)
+
+    with assert_throws(hl.HalideError, "has not yet been defined"):
+        # While we can ask for the type of f[x, y], because it's a
+        # typed Func, we still can't use it as an Expr
+        g = hl.Func("g")
+        g[x, y] = f[x, y]
 
     f = hl.Func([hl.Int(32), hl.Float(64)], 3, "f")
     assert not f.defined()
@@ -356,6 +366,7 @@ def test_typed_funcs():
         assert f.type() == hl.Int(32)
 
     assert f.types() == [hl.Int(32), hl.Float(64)]
+    assert f[x, y].types() == [hl.Int(32), hl.Float(64)]
     assert f.outputs() == 2
     assert f.dimensions() == 3
 
