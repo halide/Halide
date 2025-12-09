@@ -151,7 +151,7 @@ ALWAYS_INLINE size_t aligned_size(size_t offset, size_t size, size_t alignment) 
 ALWAYS_INLINE size_t conform_size(size_t offset, size_t size, size_t alignment, size_t nearest_multiple) {
     size_t adjusted_size = aligned_size(offset, size, alignment);
     adjusted_size = (alignment > adjusted_size) ? alignment : adjusted_size;
-    if (nearest_multiple > 0) {
+    if ((nearest_multiple > 0) && ((adjusted_size % nearest_multiple) != 0)) {
         size_t rounded_size = (((adjusted_size + nearest_multiple - 1) / nearest_multiple) * nearest_multiple);
         return rounded_size;
     } else {
