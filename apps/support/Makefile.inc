@@ -122,6 +122,8 @@ CXX-host-hvx ?= $(CXX)
 CXX-hexagon-32-qurt-hvx ?= hexagon-clang++
 CXX-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/aarch64-linux-android${ANDROID_API_VERSION}-clang++
 CXX-arm-64-android-arm_dot_prod ?= $(CXX-arm-64-android)
+CXX-arm-64-android-hvx ?= $(CXX-arm-64-android)
+CXX-arm-64-android-hvx_128 ?= $(CXX-arm-64-android)
 CXX-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi${ANDROID_API_VERSION}-clang++
 CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
 CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
@@ -132,6 +134,8 @@ CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android-arm_dot_prod ?= $(CXXFLAGS-arm-64-android)
+CXXFLAGS-arm-64-android-hvx ?= $(CXXFLAGS-arm-64-android)
+CXXFLAGS-arm-64-android-hvx_128 ?= $(CXXFLAGS-arm-64-android)
 CXXFLAGS-hexagon-32-qurt-hvx ?= -mv65 $(CXXFLAGS) -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/qurt -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/posix
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
@@ -144,6 +148,8 @@ AR-host-hvx ?= $(AR)
 AR-hexagon-32-qurt-hvx ?= ar
 AR-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/llvm-ar
 AR-arm-64-android-arm_dot_prod ?= $(AR-arm-64-android)
+AR-arm-64-android-hvx ?= $(AR-arm-64-android)
+AR-arm-64-android-hvx_128 ?= $(AR-arm-64-android)
 AR-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi-ar
 AR-arm-64-profile-android ?= $(AR-arm-64-android)
 AR-arm-32-profile-android ?= $(AR-arm-32-android)
@@ -158,6 +164,8 @@ LDFLAGS-hexagon-32-qurt-hvx =
 # of deployment. (Despite the name, this applies to libc++, not libstdc++)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie -static-libstdc++
 LDFLAGS-arm-64-android-arm_dot_prod ?= $(LDFLAGS-arm-64-android)
+LDFLAGS-arm-64-android-hvx ?= $(LDFLAGS-arm-64-android)
+LDFLAGS-arm-64-android-hvx_128 ?= $(LDFLAGS-arm-64-android)
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie -static-libstdc++
 
 # Put HL_TARGET variants of all of these last, to avoid conflict with the android variants
