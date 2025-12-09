@@ -444,7 +444,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto *const for_stmt = stmt.as<For>();
         const auto name_serialized = serialize_string(builder, for_stmt->name);
         const auto min_serialized = serialize_expr(builder, for_stmt->min);
-        const auto extent_serialized = serialize_expr(builder, for_stmt->extent);
+        const auto max_serialized = serialize_expr(builder, for_stmt->max);
         const Serialize::ForType for_type = serialize_for_type(for_stmt->for_type);
         const Serialize::Partition partition_policy = serialize_partition(for_stmt->partition_policy);
         const Serialize::DeviceAPI device_api = serialize_device_api(for_stmt->device_api);
@@ -452,7 +452,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         return std::make_pair(Serialize::Stmt::For,
                               Serialize::CreateFor(builder, name_serialized,
                                                    min_serialized.first, min_serialized.second,
-                                                   extent_serialized.first, extent_serialized.second,
+                                                   max_serialized.first, max_serialized.second,
                                                    for_type, partition_policy, device_api,
                                                    body_serialized.first, body_serialized.second)
                                   .Union());

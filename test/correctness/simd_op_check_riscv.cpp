@@ -138,6 +138,10 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckRISCV>(
         argc, argv,
         {
+            // IMPORTANT:
+            // When adding new targets here, make sure to also update
+            // can_run_code in simd_op_check.h to include any new features used.
+
             Target("riscv-64-linux-rvv-vector_bits_128"),
             Target("riscv-64-linux-rvv-vector_bits_512"),
         });

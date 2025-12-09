@@ -2408,27 +2408,15 @@ private:
         }
     }
 
-    class CountVars : public IRVisitor {
-        using IRVisitor::visit;
-
-        void visit(const Variable *var) override {
-            count++;
-        }
-
-    public:
-        int count = 0;
-        CountVars() = default;
-    };
-
     // We get better simplification if we directly substitute mins
     // and maxes in, but this can also cause combinatorial code
     // explosion. Here we manage this by only substituting in
     // reasonably-sized expressions. We determine the size by
     // counting the number of var nodes.
     bool is_small_enough_to_substitute(const Expr &e) {
-        CountVars c;
-        e.accept(&c);
-        return c.count < 10;
+        int count = 0;
+        visit_with(e, [&](auto *, const Variable *) { count++; });
+        return count < 10;
     }
 
     void push_var(const string &name) {
@@ -2744,23 +2732,13 @@ private:
     }
 
     vector<const Variable *> find_free_vars(const Expr &e) {
-        class FindFreeVars : public IRVisitor {
-            using IRVisitor::visit;
-            void visit(const Variable *op) override {
-                if (scope.contains(op->name)) {
-                    result.push_back(op);
-                }
+        vector<const Variable *> result;
+        visit_with(e, [&](auto *, const Variable *op) {
+            if (scope.contains(op->name)) {
+                result.push_back(op);
             }
-
-        public:
-            const Scope<Interval> &scope;
-            vector<const Variable *> result;
-            FindFreeVars(const Scope<Interval> &s)
-                : scope(s) {
-            }
-        } finder(scope);
-        e.accept(&finder);
-        return finder.result;
+        });
+        return result;
     }
 
     void visit(const IfThenElse *op) override {
@@ -2964,23 +2942,11 @@ private:
         TRACK_BOXES_TOUCHED_INFO("var:", op->name);
         if (consider_calls) {
             op->min.accept(this);
-            op->extent.accept(this);
+            op->max.accept(this);
         }
 
-        Expr min_val, max_val;
-        if (const Interval *in = scope.find(op->name + ".loop_min")) {
-            min_val = in->min;
-        } else {
-            min_val = bounds_of_expr_in_scope(op->min, scope, func_bounds).min;
-        }
-
-        if (const Interval *in = scope.find(op->name + ".loop_max")) {
-            max_val = in->max;
-        } else {
-            max_val = bounds_of_expr_in_scope(op->extent, scope, func_bounds).max;
-            max_val += bounds_of_expr_in_scope(op->min, scope, func_bounds).max;
-            max_val -= 1;
-        }
+        Expr min_val = bounds_of_expr_in_scope(op->min, scope, func_bounds).min;
+        Expr max_val = bounds_of_expr_in_scope(op->max, scope, func_bounds).max;
 
         push_var(op->name);
         {
@@ -3819,7 +3785,7 @@ void bounds_test() {
     Buffer<int32_t> in(10);
     in.set_name("input");
 
-    Stmt loop = For::make("x", 3, 10, ForType::Serial, Partition::Auto, DeviceAPI::Host,
+    Stmt loop = For::make("x", 3, 12, ForType::Serial, Partition::Auto, DeviceAPI::Host,
                           Provide::make("output",
                                         {Add::make(Call::make(in, input_site_1),
                                                    Call::make(in, input_site_2))},

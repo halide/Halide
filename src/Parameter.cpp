@@ -274,49 +274,27 @@ namespace {
 using namespace Halide::Internal;
 
 Expr remove_self_references(const Parameter &p, const Expr &e) {
-    class RemoveSelfReferences : public IRMutator {
-        using IRMutator::visit;
-
-        Expr visit(const Variable *var) override {
-            if (var->param.same_as(p)) {
-                internal_assert(starts_with(var->name, p.name() + "."));
-                return Variable::make(var->type, var->name);
-            } else {
-                internal_assert(!starts_with(var->name, p.name() + "."));
-            }
-            return var;
+    return mutate_with(e, [&](auto *self, const Variable *var) -> Expr {
+        if (var->param.same_as(p)) {
+            internal_assert(starts_with(var->name, p.name() + "."));
+            return Variable::make(var->type, var->name);
+        } else {
+            internal_assert(!starts_with(var->name, p.name() + "."));
         }
-
-    public:
-        const Parameter &p;
-        RemoveSelfReferences(const Parameter &p)
-            : p(p) {
-        }
-    } mutator{p};
-    return mutator.mutate(e);
+        return var;
+    });
 }
 
 Expr restore_self_references(const Parameter &p, const Expr &e) {
-    class RestoreSelfReferences : public IRMutator {
-        using IRMutator::visit;
-
-        Expr visit(const Variable *var) override {
-            if (!var->image.defined() &&
-                !var->param.defined() &&
-                !var->reduction_domain.defined() &&
-                Internal::starts_with(var->name, p.name() + ".")) {
-                return Internal::Variable::make(var->type, var->name, p);
-            }
-            return var;
+    return mutate_with(e, [&](auto *self, const Variable *var) -> Expr {
+        if (!var->image.defined() &&
+            !var->param.defined() &&
+            !var->reduction_domain.defined() &&
+            Internal::starts_with(var->name, p.name() + ".")) {
+            return Internal::Variable::make(var->type, var->name, p);
         }
-
-    public:
-        const Parameter &p;
-        RestoreSelfReferences(const Parameter &p)
-            : p(p) {
-        }
-    } mutator{p};
-    return mutator.mutate(e);
+        return var;
+    });
 }
 
 }  // namespace

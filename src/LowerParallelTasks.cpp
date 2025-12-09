@@ -270,9 +270,11 @@ struct LowerParallelTasks : public IRMutator {
                 std::string loop_min_name = unique_name('t');
                 std::string loop_extent_name = unique_name('t');
                 if (!t.loop_var.empty()) {
+                    Expr min = Variable::make(Int(32), loop_min_name);
+                    Expr extent = Variable::make(Int(32), loop_extent_name);
                     t.body = For::make(t.loop_var,
-                                       Variable::make(Int(32), loop_min_name),
-                                       Variable::make(Int(32), loop_extent_name),
+                                       min,
+                                       min + extent - 1,
                                        ForType::Serial,
                                        t.partition_policy,
                                        DeviceAPI::None,
@@ -380,7 +382,7 @@ struct LowerParallelTasks : public IRMutator {
             result.emplace_back(std::move(t));
         } else if (loop && loop->for_type == ForType::Parallel) {
             add_suffix(prefix, ".par_for." + loop->name);
-            ParallelTask t{loop->body, {}, loop->name, loop->min, loop->extent, const_false(), task_debug_name(prefix), loop->partition_policy};
+            ParallelTask t{loop->body, {}, loop->name, loop->min, loop->extent(), const_false(), task_debug_name(prefix), loop->partition_policy};
             result.emplace_back(std::move(t));
         } else if (loop &&
                    loop->for_type == ForType::Serial &&
@@ -389,7 +391,7 @@ struct LowerParallelTasks : public IRMutator {
             const Variable *v = acquire->semaphore.as<Variable>();
             internal_assert(v);
             add_suffix(prefix, ".for." + v->name);
-            ParallelTask t{loop->body, {}, loop->name, loop->min, loop->extent, const_true(), task_debug_name(prefix), loop->partition_policy};
+            ParallelTask t{loop->body, {}, loop->name, loop->min, loop->extent(), const_true(), task_debug_name(prefix), loop->partition_policy};
             while (acquire) {
                 t.semaphores.push_back({acquire->semaphore, acquire->count});
                 t.body = acquire->body;

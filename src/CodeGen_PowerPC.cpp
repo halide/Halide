@@ -51,7 +51,6 @@ struct PowerPCIntrinsic {
     Target::Feature feature = Target::FeatureEnd;
 };
 
-// clang-format off
 const PowerPCIntrinsic intrinsic_defs[] = {
     {"llvm.ppc.altivec.vminsb", Int(8, 16), "min", {Int(8, 16), Int(8, 16)}},
     {"llvm.ppc.altivec.vminub", UInt(8, 16), "min", {UInt(8, 16), UInt(8, 16)}},
@@ -96,7 +95,6 @@ const PowerPCIntrinsic intrinsic_defs[] = {
     {"llvm.ppc.altivec.vavgsw", Int(32, 4), "rounding_halving_add", {Int(32, 4), Int(32, 4)}},
     {"llvm.ppc.altivec.vavguw", UInt(32, 4), "rounding_halving_add", {UInt(32, 4), UInt(32, 4)}},
 };
-// clang-format on
 
 void CodeGen_PowerPC::init_module() {
     CodeGen_Posix::init_module();

@@ -46,6 +46,16 @@ def test_rdom():
     return 0
 
 
+def test_rdom_iter():
+    # Verify that RDom is iterable and yields RVars matching index access
+    r = hl.RDom([(0, 10), (0, 20)], "r")
+    it = list(r)
+    assert len(it) == len(r)
+    assert all(hasattr(v, "min") and hasattr(v, "extent") for v in it)
+    for i in range(len(r)):
+        assert str(it[i]) == str(r[i])
+
+
 def test_implicit_pure_definition():
     a = np.random.ranf((2, 3)).astype(np.float32)
     expected = a.sum(axis=1)
@@ -67,3 +77,4 @@ def test_implicit_pure_definition():
 if __name__ == "__main__":
     test_rdom()
     test_implicit_pure_definition()
+    test_rdom_iter()

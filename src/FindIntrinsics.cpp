@@ -734,7 +734,7 @@ protected:
             // We can't do everything we want here with rewrite rules alone. So, we rewrite them
             // to rounding_shifts with the widening still in place, and narrow it after the rewrite
             // succeeds.
-            // clang-format off
+
             if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_left(x, y), rounding_shift_left(x, y), is_x_wide_int_or_uint) ||
@@ -759,7 +759,6 @@ protected:
                     }
                 }
             }
-            // clang-format on
         }
 
         if (value.same_as(op->value)) {
@@ -892,7 +891,7 @@ protected:
         }
 
         if (no_overflow(op->type)) {
-            // clang-format off
+
             if (rewrite(halving_add(x + y, 1), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x, y + 1), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x + 1, y), rounding_halving_add(x, y)) ||
@@ -903,7 +902,6 @@ protected:
                 false) {
                 return mutate(rewrite.result);
             }
-            // clang-format on
         }
 
         // Move widening casts inside widening arithmetic outside the arithmetic,

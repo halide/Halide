@@ -55,6 +55,7 @@ ostream &operator<<(ostream &out, const Type &type) {
     }
     return out;
 }
+
 ostream &operator<<(ostream &stream, const Expr &ir) {
     if (!ir.defined()) {
         stream << "(undefined)";
@@ -63,6 +64,14 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
         p.print(ir);
     }
     return stream;
+}
+
+ostream &operator<<(ostream &stream, const Tuple &ir) {
+    stream << "(";
+    for (size_t i = 0; i < ir.size(); i++) {
+        stream << ir[i] << ", ";  // keep the trailing comma
+    }
+    return stream << ")";
 }
 
 ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
@@ -1131,7 +1140,7 @@ void IRPrinter::visit(const For *op) {
     stream << var(op->name) << paren(", ");
     print_no_parens(op->min);
     stream << paren(", ");
-    print_no_parens(op->extent);
+    print_no_parens(op->max);
     closef();
     stream << " ";
 

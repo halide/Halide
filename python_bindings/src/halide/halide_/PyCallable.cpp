@@ -109,13 +109,11 @@ public:
             } else {
                 argv[slot] = &scalar_storage[slot];
 
-                // clang-format off
-
-                #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE, FIELD)                \
-                    case halide_type_t(CODE, BITS).as_u32():                                \
-                        scalar_storage[slot].u.FIELD = cast_to<TYPE>(value);                \
-                        cci[slot] = Callable::make_scalar_qcci(halide_type_t(CODE, BITS));   \
-                        break;
+#define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE, FIELD)               \
+    case halide_type_t(CODE, BITS).as_u32():                               \
+        scalar_storage[slot].u.FIELD = cast_to<TYPE>(value);               \
+        cci[slot] = Callable::make_scalar_qcci(halide_type_t(CODE, BITS)); \
+        break;
 
                 switch (((halide_type_t)c_arg.type).element_of().as_u32()) {
                     HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float, f32)
@@ -134,9 +132,7 @@ public:
                     _halide_user_assert(0) << "Unsupported type in Callable argument list: " << c_arg.type << "\n";
                 }
 
-                #undef HALIDE_HANDLE_TYPE_DISPATCH
-
-                // clang-format on
+#undef HALIDE_HANDLE_TYPE_DISPATCH
             }
         };
 

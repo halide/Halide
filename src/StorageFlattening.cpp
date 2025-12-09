@@ -447,31 +447,19 @@ class HoistStorage : public IRMutator {
     vector<HoistedStorageData> hoisted_storages;
     map<string, int> hoisted_storages_map;
 
-    class ExpandExpr : public IRMutator {
-        using IRMutator::visit;
-        const Scope<Expr> &scope;
-
-        Expr visit(const Variable *var) override {
-            if (const Expr *e = scope.find(var->name)) {
-                // Mutate the expression, so lets can get replaced recursively.
-                Expr expr = mutate(*e);
-                debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
-                return expr;
-            } else {
-                return var;
-            }
-        }
-
-    public:
-        ExpandExpr(const Scope<Expr> &s)
-            : scope(s) {
-        }
-    };
-
     // Perform all the substitutions in a scope
-    Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
-        ExpandExpr ee(scope);
-        Expr result = ee.mutate(e);
+    static Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
+        Expr result = mutate_with(
+            e,
+            [&](auto *self, const Variable *var) -> Expr {
+                if (const Expr *value = scope.find(var->name)) {
+                    // Mutate the expression, so lets can get replaced recursively.
+                    Expr expr = self->mutate(*value);
+                    debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
+                    return expr;
+                }
+                return var;
+            });
         debug(4) << "Expanded " << e << " into " << result << "\n";
         return result;
     }
@@ -569,12 +557,12 @@ class HoistStorage : public IRMutator {
 
     Stmt visit(const For *op) override {
         Expr expanded_min = op->min;
-        Expr expanded_extent = op->extent;
+        Expr expanded_max = op->max;
         // Iterate from innermost outwards
         for (auto &storage : reverse_view(hoisted_storages)) {
             expanded_min = simplify(expand_expr(expanded_min, storage.scope));
-            expanded_extent = expand_expr(expanded_extent, storage.scope);
-            auto loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
+            expanded_max = expand_expr(expanded_max, storage.scope);
+            auto loop_bounds = Interval(expanded_min, expanded_max);
             storage.loop_vars.emplace_back(op->name, loop_bounds);
         }
 

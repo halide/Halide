@@ -19,6 +19,21 @@ void define_stage(py::module &m) {
             .def("rfactor", static_cast<Func (Stage::*)(const RVar &, const Var &)>(&Stage::rfactor),
                  py::arg("r"), py::arg("v"))
 
+            .def("split_vars", [](const Stage &stage) -> py::list {
+                auto vars = stage.split_vars();
+                py::list result;
+                // Return a mixed-type list of Var and RVar objects, instead of
+                // a list of VarOrRVar objects.
+                for (const auto &v : vars) {
+                    if (v.is_rvar) {
+                        result.append(py::cast(v.rvar));
+                    } else {
+                        result.append(py::cast(v.var));
+                    }
+                }
+                return result;
+            })
+
             .def("unscheduled", &Stage::unscheduled);
 
     py::implicitly_convertible<Func, Stage>();

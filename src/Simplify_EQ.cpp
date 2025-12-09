@@ -59,8 +59,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::eq(a, b), op->type, a.type());
 
-    // clang-format off
-    if (EVAL_IN_LAMBDA
+    if (EVAL_IN_LAMBDA  //
         (rewrite(x == x, true) ||
          rewrite(c0 == c1, fold(c0 == c1)) ||
          rewrite(min(x, y) == min(y, x), true) ||
@@ -197,7 +196,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
          rewrite(slice(x, c0, c1, c2) == slice(y, c0, c1, c2) + z,
                  slice(x - y, c0, c1, c2) == z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
          false) ||
-        (no_overflow(a.type()) && EVAL_IN_LAMBDA
+        (no_overflow(a.type()) && EVAL_IN_LAMBDA  //
          (rewrite(x * y == 0, (x == 0) || (y == 0)) ||
           rewrite(x * y == x, (x == 0) || (y == 1)) ||
           rewrite(x == x * y, (x == 0) || (y == 1)) ||
@@ -320,7 +319,6 @@ Expr Simplify::visit(const EQ *op, ExprInfo *info) {
         false) {
         return mutate(rewrite.result, info);
     }
-    // clang-format on
 
     if (a.same_as(op->a) && b.same_as(op->b)) {
         return op;

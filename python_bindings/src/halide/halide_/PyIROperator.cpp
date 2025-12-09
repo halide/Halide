@@ -18,6 +18,59 @@ namespace Halide {
 
 namespace PythonBindings {
 
+namespace {
+
+bool is_expr(const py::handle &obj) {
+    try {
+        (void)obj.cast<Expr>();  // Check if casting succeeds
+        return true;
+    } catch (const py::cast_error &) {
+        return false;
+    }
+}
+
+template<typename T>
+T cast_arg(const py::handle &arg) {
+    try {
+        return arg.cast<T>();
+    } catch (const py::cast_error &) {
+        _halide_user_error
+            << "select(): Expected " << py::str(py::type::of<T>().attr("__name__"))
+            << " but got " << py::str(arg.get_type().attr("__name__")) << ": "
+            << py::str(arg);
+    }
+}
+
+template<typename TCond, typename TVal>
+py::object py_select_reduce(const py::args &args) {
+    auto false_case = cast_arg<TVal>(args[args.size() - 1]);
+    for (size_t pos = args.size() - 1; pos >= 2; pos -= 2) {
+        auto true_case = cast_arg<TVal>(args[pos - 1]);
+        auto condition = cast_arg<TCond>(args[pos - 2]);
+        false_case = select(condition, true_case, false_case);
+    }
+    return py::cast(false_case);
+}
+
+py::object py_select(const py::args &args) {
+    if (args.size() < 3) {
+        throw py::value_error("select() must have at least 3 arguments");
+    }
+
+    if (args.size() % 2 != 1) {
+        throw py::value_error("select() must have an odd number of arguments");
+    }
+
+    if (is_expr(args[0])) {        // If the condition is an Expr, then ...
+        return is_expr(args[1]) ?  // ... we need to check the value's kind.
+                   py_select_reduce<Expr, Expr>(args) :
+                   py_select_reduce<Expr, Tuple>(args);
+    }
+    return py_select_reduce<Tuple, Tuple>(args);  // Otherwise, the value must be a tuple, too.
+}
+
+}  // namespace
+
 void define_operators(py::module &m) {
     m.def("max", [](const py::args &args) -> Expr {
         if (args.size() < 2) {
@@ -48,85 +101,7 @@ void define_operators(py::module &m) {
     m.def("abs", &abs);
     m.def("absd", &absd);
 
-    m.def("select", [](const py::args &args) -> py::object {
-        if (args.size() < 3) {
-            throw py::value_error("select() must have at least 3 arguments");
-        }
-        if ((args.size() % 2) == 0) {
-            throw py::value_error("select() must have an odd number of arguments");
-        }
-
-        // Tricky set of options here:
-        //
-        // - (Expr, Expr, Expr, [Expr, Expr...]) -> Expr
-        // - (Expr, Tuple, Tuple, [Tuple, Tuple...]) -> Tuple   [Tuples must be same arity]
-        // - (Tuple, Tuple, Tuple, [Tuple, Tuple...]) -> Tuple  [Tuples must be same arity]
-        //
-        // It's made trickier by the fact that it's hard to do a reliable "is-a" check for Tuple here,
-        // so we'll do the slow-but-reliable approach of just trying to cast to Tuple and catching
-        // exceptions.
-
-        std::string tuple_error_msg;
-        try {
-            int pos = (int)args.size() - 1;
-            Tuple false_value = args[pos--].cast<Tuple>();
-            bool has_tuple_cond = false;
-            bool has_expr_cond = false;
-            while (pos > 0) {
-                Tuple true_value = args[pos--].cast<Tuple>();
-                // Note that 'condition' can be either Expr or Tuple, but must be consistent across all
-                py::object py_cond = args[pos--];
-                Expr expr_cond;
-                Tuple tuple_cond(expr_cond);
-                try {
-                    tuple_cond = py_cond.cast<Tuple>();
-                    has_tuple_cond = true;
-                } catch (...) {
-                    expr_cond = py_cond.cast<Expr>();
-                    has_expr_cond = true;
-                }
-
-                if (has_tuple_cond && has_expr_cond) {
-                    // We don't want to throw an error here, since the catch(...) would catch it,
-                    // and it would be hard to distinguish from other errors. Just set the string here
-                    // and jump to the error reporter outside the catch.
-                    tuple_error_msg = "select() on Tuples may not mix Expr and Tuple for the condition elements.";
-                    goto handle_tuple_error;
-                }
-
-                if (expr_cond.defined()) {
-                    false_value = select(expr_cond, true_value, false_value);
-                } else {
-                    if (tuple_cond.size() != true_value.size() || true_value.size() != false_value.size()) {
-                        // We don't want to throw an error here, since the catch(...) would catch it,
-                        // and it would be hard to distinguish from other errors. Just set the string here
-                        // and jump to the error reporter outside the catch.
-                        tuple_error_msg = "select() on Tuples requires all Tuples to have identical sizes.";
-                        goto handle_tuple_error;
-                    }
-                    false_value = select(tuple_cond, true_value, false_value);
-                }
-            }
-            return to_python_tuple(false_value);
-
-        } catch (...) {
-            // fall thru and try the Expr case
-        }
-
-    handle_tuple_error:
-        if (!tuple_error_msg.empty()) {
-            _halide_user_assert(false) << tuple_error_msg;
-        }
-
-        int pos = (int)args.size() - 1;
-        Expr false_expr_value = args[pos--].cast<Expr>();
-        while (pos > 0) {
-            Expr true_expr_value = args[pos--].cast<Expr>();
-            Expr condition_expr = args[pos--].cast<Expr>();
-            false_expr_value = select(condition_expr, true_expr_value, false_expr_value);
-        }
-        return py::cast(false_expr_value);
-    });
+    m.def("select", py_select);
 
     m.def("mux", static_cast<Expr (*)(const Expr &, const std::vector<Expr> &)>(&mux));
     m.def("mux", static_cast<Expr (*)(const Expr &, const Tuple &)>(&mux));

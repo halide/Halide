@@ -57,6 +57,11 @@ void define_expr(py::module &m) {
                     o << "<undefined halide.Expr>";
                 }
                 return o.str();
+            })
+            .def("__str__", [](const Expr &e) -> std::string {
+                std::ostringstream o;
+                o << e;
+                return o.str();
             });
 
     add_binary_operators(expr_class);

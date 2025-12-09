@@ -7,7 +7,7 @@ file_identifier "HLDE";
 file_extension "hlpipe";
 
 enum SerializationVersionMajor: int {
-    Value = 18
+    Value = 21
 }
 enum SerializationVersionMinor: int {
     // 0 = Unstable
@@ -15,7 +15,7 @@ enum SerializationVersionMinor: int {
     Value = 0
 }
 enum SerializationVersionPatch: int {
-    Value = 1
+    Value = 0
 }
 
 // from src/IR.cpp
@@ -143,7 +143,7 @@ table ProducerConsumer {
 table For {
     name: string;
     min: Expr;
-    extent: Expr;
+    max: Expr;
     for_type: ForType;
     partition_policy: Partition;
     device_api: DeviceAPI;

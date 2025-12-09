@@ -702,6 +702,10 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckX86>(
         argc, argv,
         {
+            // IMPORTANT:
+            // When adding new targets here, make sure to also update
+            // can_run_code in simd_op_check.h to include any new features used.
+
             Target("x86-32-linux"),
             Target("x86-32-linux-sse41"),
             // Always turn on f16c when using avx. Sandy Bridge had avx without
@@ -718,6 +722,7 @@ int main(int argc, char **argv) {
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_zen5"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avxvnni-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
+
             // Can be enabled when AVX10 and APX support are stable in LLVM.
             // Target("x86-64-linux-avx10_1-vector_bits_256-x86apx"),
         });

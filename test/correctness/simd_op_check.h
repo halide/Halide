@@ -137,6 +137,9 @@ public:
                  Target::AVX512_KNL,
                  Target::AVX512_SapphireRapids,
                  Target::AVX512_Skylake,
+                 Target::AVX512_Zen4,
+                 Target::AVX512_Zen5,
+                 Target::AVXVNNI,
                  Target::F16C,
                  Target::FMA,
                  Target::FMA4,
@@ -324,6 +327,9 @@ public:
         // Include a scalar version
         Halide::Func f_scalar("scalar_" + name);
         f_scalar(x, y) = e;
+        // Make sure scalar result is computed independently to prevent it
+        // from being fused into error() by optimization which complicates floating point errors.
+        f_scalar.compute_root();
 
         if (has_inline_reduction.result) {
             // If there's an inline reduction, we want to vectorize it

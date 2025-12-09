@@ -325,30 +325,16 @@ template<typename T>
 T substitute_facts_impl(const T &t,
                         const std::set<Expr, IRDeepCompare> &truths,
                         const std::set<Expr, IRDeepCompare> &falsehoods) {
-    class Substitutor : public IRMutator {
-        const std::set<Expr, IRDeepCompare> &truths, &falsehoods;
-
-    public:
-        using IRMutator::mutate;
-        Expr mutate(const Expr &e) override {
-            if (!e.type().is_bool()) {
-                return IRMutator::mutate(e);
-            } else if (truths.count(e)) {
+    return mutate_with(t, [&](auto *self, const Expr &e) {
+        if (e.type().is_bool()) {
+            if (truths.count(e)) {
                 return make_one(e.type());
             } else if (falsehoods.count(e)) {
                 return make_zero(e.type());
-            } else {
-                return IRMutator::mutate(e);
             }
         }
-
-        Substitutor(const std::set<Expr, IRDeepCompare> &t,
-                    const std::set<Expr, IRDeepCompare> &f)
-            : truths(t), falsehoods(f) {
-        }
-    } substitutor(truths, falsehoods);
-
-    return substitutor.mutate(t);
+        return self->mutate_base(e);
+    });
 }
 }  // namespace
 

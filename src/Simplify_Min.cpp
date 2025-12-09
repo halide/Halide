@@ -66,15 +66,14 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
         return rewrite.result;
     }
 
-    // clang-format off
-    if (EVAL_IN_LAMBDA
+    if (EVAL_IN_LAMBDA  //
         (rewrite(min(x, x), a) ||
          rewrite(min(c0, c1), fold(min(c0, c1))) ||
          // Cases where one side dominates:
          rewrite(min(x, c0), b, is_min_value(c0)) ||
          rewrite(min(x, c0), a, is_max_value(c0)) ||
-         rewrite(min((x/c0)*c0, x), a, c0 > 0) ||
-         rewrite(min(x, (x/c0)*c0), b, c0 > 0) ||
+         rewrite(min((x / c0) * c0, x), a, c0 > 0) ||
+         rewrite(min(x, (x / c0) * c0), b, c0 > 0) ||
          rewrite(min(min(x, y), x), a) ||
          rewrite(min(min(x, y), y), a) ||
          rewrite(min(min(min(x, y), z), x), a) ||
@@ -118,20 +117,20 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
            rewrite(min(ramp(x, y, lanes), broadcast(z, lanes)), b,
                    can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
            // Compare x to a stair-step function in x
-           rewrite(min(((x + c0)/c1)*c1 + c2, x), b, c1 > 0 && c0 + c2 >= c1 - 1) ||
-           rewrite(min(x, ((x + c0)/c1)*c1 + c2), a, c1 > 0 && c0 + c2 >= c1 - 1) ||
-           rewrite(min(((x + c0)/c1)*c1 + c2, x), a, c1 > 0 && c0 + c2 <= 0) ||
-           rewrite(min(x, ((x + c0)/c1)*c1 + c2), b, c1 > 0 && c0 + c2 <= 0) ||
-           rewrite(min((x/c0)*c0, (x/c1)*c1 + c2), a, c2 >= c1 && c1 > 0 && c0 != 0) ||
+           rewrite(min(((x + c0) / c1) * c1 + c2, x), b, c1 > 0 && c0 + c2 >= c1 - 1) ||
+           rewrite(min(x, ((x + c0) / c1) * c1 + c2), a, c1 > 0 && c0 + c2 >= c1 - 1) ||
+           rewrite(min(((x + c0) / c1) * c1 + c2, x), a, c1 > 0 && c0 + c2 <= 0) ||
+           rewrite(min(x, ((x + c0) / c1) * c1 + c2), b, c1 > 0 && c0 + c2 <= 0) ||
+           rewrite(min((x / c0) * c0, (x / c1) * c1 + c2), a, c2 >= c1 && c1 > 0 && c0 != 0) ||
            // Special cases where c0 or c2 is zero
-           rewrite(min((x/c1)*c1 + c2, x), b, c1 > 0 && c2 >= c1 - 1) ||
-           rewrite(min(x, (x/c1)*c1 + c2), a, c1 > 0 && c2 >= c1 - 1) ||
-           rewrite(min(((x + c0)/c1)*c1, x), b, c1 > 0 && c0 >= c1 - 1) ||
-           rewrite(min(x, ((x + c0)/c1)*c1), a, c1 > 0 && c0 >= c1 - 1) ||
-           rewrite(min((x/c1)*c1 + c2, x), a, c1 > 0 && c2 <= 0) ||
-           rewrite(min(x, (x/c1)*c1 + c2), b, c1 > 0 && c2 <= 0) ||
-           rewrite(min(((x + c0)/c1)*c1, x), a, c1 > 0 && c0 <= 0) ||
-           rewrite(min(x, ((x + c0)/c1)*c1), b, c1 > 0 && c0 <= 0) ||
+           rewrite(min((x / c1) * c1 + c2, x), b, c1 > 0 && c2 >= c1 - 1) ||
+           rewrite(min(x, (x / c1) * c1 + c2), a, c1 > 0 && c2 >= c1 - 1) ||
+           rewrite(min(((x + c0) / c1) * c1, x), b, c1 > 0 && c0 >= c1 - 1) ||
+           rewrite(min(x, ((x + c0) / c1) * c1), a, c1 > 0 && c0 >= c1 - 1) ||
+           rewrite(min((x / c1) * c1 + c2, x), a, c1 > 0 && c2 <= 0) ||
+           rewrite(min(x, (x / c1) * c1 + c2), b, c1 > 0 && c2 <= 0) ||
+           rewrite(min(((x + c0) / c1) * c1, x), a, c1 > 0 && c0 <= 0) ||
+           rewrite(min(x, ((x + c0) / c1) * c1), b, c1 > 0 && c0 <= 0) ||
 
            rewrite(min(x, max(x, y) + c0), a, 0 <= c0) ||
            rewrite(min(x, max(y, x) + c0), a, 0 <= c0) ||
@@ -140,8 +139,8 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
            rewrite(min(max(x, y + c0), y), b, 0 <= c0) ||
 
            (no_overflow_int(op->type) &&
-            (rewrite(min(max(c0 - x, x), c1), b, 2*c1 <= c0 + 1) ||
-             rewrite(min(max(x, c0 - x), c1), b, 2*c1 <= c0 + 1))) ||
+            (rewrite(min(max(c0 - x, x), c1), b, 2 * c1 <= c0 + 1) ||
+             rewrite(min(max(x, c0 - x), c1), b, 2 * c1 <= c0 + 1))) ||
 
            false)))) {
         // One of the cancellation rules above may give us tighter bounds
@@ -155,10 +154,8 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
         }
         return rewrite.result;
     }
-    // clang-format on
 
-    // clang-format off
-    if (EVAL_IN_LAMBDA
+    if (EVAL_IN_LAMBDA  //
         (rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
          rewrite(min(min(x, c0), y), min(min(x, y), c0)) ||
          rewrite(min(min(x, y), min(x, z)), min(min(y, z), x)) ||
@@ -249,10 +246,10 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
            rewrite(min(y + x, x), min(y, 0) + x) ||
            rewrite(min(x + y, x), x + min(y, 0)) ||
 
-           rewrite(min((x*c0 + y)*c1, x*c2 + z), min(y*c1, z) + x*c2, c0 * c1 == c2) ||
-           rewrite(min((y + x*c0)*c1, x*c2 + z), min(y*c1, z) + x*c2, c0 * c1 == c2) ||
-           rewrite(min((x*c0 + y)*c1, z + x*c2), min(y*c1, z) + x*c2, c0 * c1 == c2) ||
-           rewrite(min((y + x*c0)*c1, z + x*c2), min(y*c1, z) + x*c2, c0 * c1 == c2) ||
+           rewrite(min((x * c0 + y) * c1, x * c2 + z), min(y * c1, z) + x * c2, c0 * c1 == c2) ||
+           rewrite(min((y + x * c0) * c1, x * c2 + z), min(y * c1, z) + x * c2, c0 * c1 == c2) ||
+           rewrite(min((x * c0 + y) * c1, z + x * c2), min(y * c1, z) + x * c2, c0 * c1 == c2) ||
+           rewrite(min((y + x * c0) * c1, z + x * c2), min(y * c1, z) + x * c2, c0 * c1 == c2) ||
 
            rewrite(min(min(x + y, z), x + w), min(x + min(y, w), z)) ||
            rewrite(min(min(z, x + y), x + w), min(x + min(y, w), z)) ||
@@ -317,23 +314,22 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
            rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))) ||
 
            // Required for nested GuardWithIf tilings
-           rewrite(min((min(((y + c0)/c1), x)*c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
-           rewrite(min((min(((y + c0)/c1), x)*c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
-           rewrite(min(min(((y + c0)/c1), x)*c1, y), min(x * c1, y), c1 > 0 && c1 <= c0 + 1) ||
+           rewrite(min((min(((y + c0) / c1), x) * c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
+           rewrite(min((min(((y + c0) / c1), x) * c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
+           rewrite(min(min(((y + c0) / c1), x) * c1, y), min(x * c1, y), c1 > 0 && c1 <= c0 + 1) ||
 
-           rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min(x/c1, ((x + c2)/c3)*c4), x/c1, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min(x/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min((x + c0)/c1, (x/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min((x + c0)/c1, (x/c3)*c4), (x/c3)*c4, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min(x/c1, (x/c3)*c4), (x/c3)*c4, c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min((x + c0) / c1, ((x + c2) / c3) * c4), (x + c0) / c1, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min((x + c0) / c1, ((x + c2) / c3) * c4), ((x + c2) / c3) * c4, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min(x / c1, ((x + c2) / c3) * c4), x / c1, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min(x / c1, ((x + c2) / c3) * c4), ((x + c2) / c3) * c4, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min((x + c0) / c1, (x / c3) * c4), (x + c0) / c1, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min((x + c0) / c1, (x / c3) * c4), (x / c3) * c4, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min(x / c1, (x / c3) * c4), (x / c3) * c4, c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
 
-           false )))) {
+           false)))) {
 
         return mutate(rewrite.result, info);
     }
-    // clang-format on
 
     if (a.same_as(op->a) && b.same_as(op->b)) {
         return op;

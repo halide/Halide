@@ -2,8 +2,14 @@
 #include "check_call_graphs.h"
 #include "test_sharding.h"
 
+#include <cmath>
 #include <cstdio>
 #include <map>
+
+// MSVC doesn't define these constants
+#if !defined(M_PI)
+#define M_PI 3.14159265358979323846264338327950288
+#endif
 
 namespace {
 
@@ -825,6 +831,52 @@ int argmin_rfactor_test() {
     return 0;
 }
 
+enum class ArgMaxVariant {
+    Explicit,
+    TupleSelect
+};
+
+template<ArgMaxVariant variant>
+int argmax_rfactor_test() {
+    using namespace ConciseCasts;
+    constexpr float pi = M_PI;
+
+    Func f{"f"};
+    Var x("x");
+    f(x) = sin(f32(x) / 8 * pi);  // argmax should be f(4) = 1.0
+    f.compute_root();
+
+    RDom r(0, 32);
+
+    Func g{"g"};
+    g() = Tuple(f.type().min(), r.x.min());
+    if constexpr (variant == ArgMaxVariant::Explicit) {
+        g() = Tuple(max(f(r), g()[0]), select(g()[0] < f(r), r, g()[1]));
+    } else {
+        static_assert(variant == ArgMaxVariant::TupleSelect);
+        g() = select(g()[0] < f(r), Tuple(f(r), r), g());
+    }
+
+    RVar ro("rxo"), ri("rxi");
+    g.update(0).split(r, ro, ri, 2);
+
+    Var u("u");
+    Func intm = g.update(0).rfactor(ro, u);
+    intm.compute_root();
+    intm.update(0).vectorize(u, 2);
+
+    Realization rn = g.realize();
+    Buffer<float> sch_val(rn[0]);
+    Buffer<int> sch_idx(rn[1]);
+
+    if (sch_val() != 1.0f || sch_idx() != 4) {
+        fprintf(stderr, "Expected argmax to be f(4) = 1.0, got f(%d) = %f\n", sch_idx(), sch_val());
+        return 1;
+    }
+
+    return 0;
+}
+
 int allocation_bound_test_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     // The schedule implies that f will be stored from 0 to 1
     if (e->event == 2 && std::string(e->func) == "f") {
@@ -1156,6 +1208,8 @@ int main(int argc, char **argv) {
         {"rfactor tile reorder test: checking output img correctness...", rfactor_tile_reorder_test},
         {"complex multiply rfactor test", complex_multiply_rfactor_test},
         {"argmin rfactor test", argmin_rfactor_test},
+        {"argmax rfactor test (explicit)", argmax_rfactor_test<ArgMaxVariant::Explicit>},
+        {"argmax rfactor test (tuple)", argmax_rfactor_test<ArgMaxVariant::TupleSelect>},
         {"inlined rfactor with disappearing rvar test", inlined_rfactor_with_disappearing_rvar_test},
         {"rfactor bounds tests", rfactor_precise_bounds_test},
         {"isnan max rfactor test (bitwise or)", isnan_max_rfactor_test<BitwiseOr>},

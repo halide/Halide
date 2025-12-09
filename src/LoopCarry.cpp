@@ -550,7 +550,7 @@ class LoopCarry : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        if (op->for_type == ForType::Serial && !is_const_one(op->extent)) {
+        if (op->for_type == ForType::Serial && !equal(op->min, op->max)) {
             Stmt stmt;
             Stmt body = mutate(op->body);
             LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);
@@ -558,7 +558,7 @@ class LoopCarry : public IRMutator {
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+                stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
             }
 
             // Inject the scratch buffer allocations.
@@ -567,7 +567,7 @@ class LoopCarry : public IRMutator {
                 stmt = Allocate::make(alloc.name, alloc.type, MemoryType::Stack, {alloc.size}, const_true(), stmt);
             }
             if (!carry.allocs.empty()) {
-                stmt = IfThenElse::make(op->extent > 0, stmt);
+                stmt = IfThenElse::make(op->min <= op->max, stmt);
             }
             return stmt;
         } else {

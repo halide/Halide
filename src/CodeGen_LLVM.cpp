@@ -1509,12 +1509,23 @@ void CodeGen_LLVM::visit(const Reinterpret *op) {
     Type dst = op->type;
     llvm::Type *llvm_dst = llvm_type_of(dst);
     value = codegen(op->value);
-    // Our `Reinterpret` expr directly maps to LLVM IR bitcast/ptrtoint/inttoptr
-    // instructions with no additional handling required:
-    // * bitcast between vectors and scalars is well-formed.
-    // * ptrtoint/inttoptr implicitly truncates/zero-extends the integer
-    //   to match the pointer size.
-    value = builder->CreateBitOrPointerCast(value, llvm_dst);
+
+    // Bitcast between ScalableVector and scalar is invalid in LLVM
+    if (isa<ScalableVectorType>(value->getType()) && dst.is_scalar()) {
+        value = scalable_to_fixed_vector_type(value);
+        value = builder->CreateBitOrPointerCast(value, llvm_dst);
+    } else if (isa<ScalableVectorType>(llvm_dst) && op->value.type().is_scalar()) {
+        llvm::Type *llvm_dst_fixed = get_vector_type(llvm_type_of(dst.element_of()), dst.lanes(), VectorTypeConstraint::Fixed);
+        value = builder->CreateBitOrPointerCast(value, llvm_dst_fixed);
+        value = fixed_to_scalable_vector_type(value);
+    } else {
+        // Our `Reinterpret` expr directly maps to LLVM IR bitcast/ptrtoint/inttoptr
+        // instructions with no additional handling required:
+        // * bitcast between vectors and scalars is well-formed.
+        // * ptrtoint/inttoptr implicitly truncates/zero-extends the integer
+        //   to match the pointer size.
+        value = builder->CreateBitOrPointerCast(value, llvm_dst);
+    }
 }
 
 void CodeGen_LLVM::visit(const Variable *op) {
@@ -2090,12 +2101,7 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             Value *flipped = codegen(flipped_load);
 
-            vector<int> indices(ramp->lanes);
-            for (int i = 0; i < ramp->lanes; i++) {
-                indices[i] = ramp->lanes - 1 - i;
-            }
-
-            value = shuffle_vectors(flipped, indices);
+            value = reverse_vector(flipped);
         } else if (ramp) {
             // Gather without generating the indices as a vector
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
@@ -2476,14 +2482,10 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
                                     op->alignment, vpred, true, llvm_stride);
     } else if (ramp && stride && stride->value == -1) {
         debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
-        vector<int> indices(ramp->lanes);
-        for (int i = 0; i < ramp->lanes; i++) {
-            indices[i] = ramp->lanes - 1 - i;
-        }
 
         // Flip the predicate
         Value *vpred = codegen(op->predicate);
-        vpred = shuffle_vectors(vpred, indices);
+        vpred = reverse_vector(vpred);
 
         // Load the vector and then flip it in-place
         Expr flipped_base = ramp->base - ramp->lanes + 1;
@@ -2496,7 +2498,7 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
                                        op->param, const_true(op->type.lanes()), align);
 
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
-        value = shuffle_vectors(flipped, indices);
+        value = reverse_vector(flipped);
     } else {  // It's not dense vector load, we need to scalarize it
         Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
                                     op->param, const_true(op->type.lanes()), op->alignment);
@@ -2872,8 +2874,15 @@ void CodeGen_LLVM::visit(const Call *op) {
             vector<llvm::Value *> args(op->args.size());
             vector<llvm::Type *> types(op->args.size());
             for (size_t i = 0; i < op->args.size(); i++) {
+                Expr e = op->args[i];
                 args[i] = codegen(op->args[i]);
-                types[i] = args[i]->getType();
+                if (e.type().is_vector() && isa<ScalableVectorType>(args[i]->getType())) {
+                    // Use FixedSizedVector type for now, due to the alignment limitation of llvm
+                    llvm::Type *elt = llvm_type_of(e.type().element_of());
+                    types[i] = get_vector_type(elt, e.type().lanes(), VectorTypeConstraint::Fixed);
+                } else {
+                    types[i] = args[i]->getType();
+                }
                 all_same_type &= (types[0] == types[i]);
             }
 
@@ -3333,11 +3342,30 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::concat_bits)) {
         value = codegen(lower_concat_bits(op));
     } else if (op->is_intrinsic(Call::get_runtime_vscale)) {
+        // This intrin function must be defined independently.
+        // Otherwise, vscale_range(n, n) attribute is added and llvm compiler optimize away the runtime call,
+        // which makes runtime assertion of vscale useless.
+        llvm::Function *fn = module->getFunction(op->name);
+        if (!fn) {
+            FunctionType *func_t = FunctionType::get(i32_t, {}, false);
+            fn = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, op->name, module.get());
+            llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", fn);
+            IRBuilderBase::InsertPoint here = builder->saveIP();
+            builder->SetInsertPoint(block);
 #if LLVM_VERSION >= 210
-        value = builder->CreateVScale(i32_t);
+            Value *ret = builder->CreateVScale(i32_t);
 #else
-        value = builder->CreateVScale(ConstantInt::get(i32_t, 1));
+            Value *ret = builder->CreateVScale(ConstantInt::get(i32_t, 1));
 #endif
+            builder->CreateRet(ret);
+
+            // To avoid vscale_range(n,n) added in CodeGen_Internal
+            fn->addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(*context, 1, 16));
+            fn->addFnAttr(llvm::Attribute::NoInline);
+            internal_assert(!verifyFunction(*fn, &llvm::errs()));
+            builder->restoreIP(here);
+        }
+        value = builder->CreateCall(fn, {});
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (!lowered.defined()) {
@@ -3685,7 +3713,7 @@ void CodeGen_LLVM::visit(const ProducerConsumer *op) {
 
 void CodeGen_LLVM::visit(const For *op) {
     Value *min = codegen(op->min);
-    Value *extent = codegen(op->extent);
+    Value *max = codegen(op->max);
     const Acquire *acquire = op->body.as<Acquire>();
 
     // TODO(zvookin): remove this after validating it doesn't happen
@@ -3695,8 +3723,6 @@ void CodeGen_LLVM::visit(const For *op) {
                        !expr_uses_var(acquire->count, op->name))));
 
     if (op->for_type == ForType::Serial) {
-
-        Value *max = builder->CreateNSWAdd(min, extent);
 
         BasicBlock *preheader_bb = builder->GetInsertBlock();
 
@@ -3708,8 +3734,8 @@ void CodeGen_LLVM::visit(const For *op) {
         BasicBlock *after_bb = BasicBlock::Create(
             *context, std::to_string(for_loop_id) + std::string("_end_for_") + op->name, function);
 
-        // If min < max, fall through to the loop bb
-        Value *enter_condition = builder->CreateICmpSLT(min, max);
+        // If min <= max, fall through to the loop bb
+        Value *enter_condition = builder->CreateICmpSLE(min, max);
         builder->CreateCondBr(enter_condition, loop_bb, after_bb, very_likely_branch);
         builder->SetInsertPoint(loop_bb);
 
@@ -3730,7 +3756,7 @@ void CodeGen_LLVM::visit(const For *op) {
         phi->addIncoming(next_var, builder->GetInsertBlock());
 
         // Maybe exit the loop
-        Value *end_condition = builder->CreateICmpNE(next_var, max);
+        Value *end_condition = builder->CreateICmpSLE(next_var, max);
         builder->CreateCondBr(end_condition, loop_bb, after_bb);
 
         builder->SetInsertPoint(after_bb);
@@ -4264,6 +4290,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
     if (output_lanes == 1) {
         const int input_lanes = val.type().lanes();
         const int input_bytes = input_lanes * val.type().bytes();
+        const int vscale = std::max(effective_vscale, 1);
         const bool llvm_has_intrinsic =
             // Must be one of these ops
             ((op->op == VectorReduce::Add ||
@@ -4272,20 +4299,15 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
               op->op == VectorReduce::Max) &&
              (use_llvm_vp_intrinsics ||
               // Must be a power of two lanes
-              ((input_lanes >= 2) &&
+              ((input_lanes >= 2 * vscale) &&
                ((input_lanes & (input_lanes - 1)) == 0) &&
                // int versions exist up to 1024 bits
                ((!op->type.is_float() && input_bytes <= 1024) ||
                 // float versions exist up to 16 lanes
-                input_lanes <= 16) &&
-               // As of the release of llvm 10, the 64-bit experimental total
-               // reductions don't seem to be done yet on arm.
-               (val.type().bits() != 64 ||
-                target.arch != Target::ARM))));
+                input_lanes <= 16 * vscale))));
 
         if (llvm_has_intrinsic) {
             const char *name = "<err>";
-            const int bits = op->type.bits();
             bool takes_initial_value = use_llvm_vp_intrinsics;
             Expr initial_value = init;
             if (op->type.is_float()) {
@@ -4365,7 +4387,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
                 std::stringstream build_name;
                 build_name << "llvm.vector.reduce.";
                 build_name << name;
-                build_name << ".v" << val.type().lanes() << (op->type.is_float() ? 'f' : 'i') << bits;
+                build_name << mangle_llvm_type(get_vector_type(llvm_type_of(elt), val.type().lanes()));
 
                 string intrin_name = build_name.str();
 
@@ -4494,7 +4516,11 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
     int align = native_vector_bits() / 8;
     const llvm::DataLayout &d = module->getDataLayout();
-    int allocated_size = n * (int)d.getTypeAllocSize(t);
+    TypeSize sizeof_t = d.getTypeAllocSize(t);
+    int allocated_size = n * sizeof_t.getKnownMinValue();
+    if (sizeof_t.isScalable() && effective_vscale > 0) {
+        allocated_size *= effective_vscale;
+    }
     if (t->isVectorTy() || n > 1) {
         ptr->setAlignment(llvm::Align(align));
     }
@@ -4952,6 +4978,19 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
     }
 
     return vecs[0];
+}
+
+Value *CodeGen_LLVM::reverse_vector(llvm::Value *vec) {
+    if (effective_vscale > 0) {
+        return builder->CreateVectorReverse(vec);
+    } else {
+        const int lanes = get_vector_num_elements(vec->getType());
+        vector<int> indices(lanes);
+        for (int i = 0; i < lanes; i++) {
+            indices[i] = lanes - 1 - i;
+        }
+        return shuffle_vectors(vec, indices);
+    }
 }
 
 Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,

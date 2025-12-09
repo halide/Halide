@@ -88,7 +88,7 @@ class UniquifyVariableNames : public IRMutator {
 
     Stmt visit(const For *op) override {
         Expr min = mutate(op->min);
-        Expr extent = mutate(op->extent);
+        Expr max = mutate(op->max);
         string new_name = make_new_name(op->name);
         Stmt body = mutate(op->body);
         renaming.pop(op->name);
@@ -96,10 +96,10 @@ class UniquifyVariableNames : public IRMutator {
         if (new_name == op->name &&
             body.same_as(op->body) &&
             min.same_as(op->min) &&
-            extent.same_as(op->extent)) {
+            max.same_as(op->max)) {
             return op;
         } else {
-            return For::make(new_name, min, extent, op->for_type, op->partition_policy, op->device_api, body);
+            return For::make(new_name, min, max, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 
@@ -153,7 +153,7 @@ class FindFreeVars : public IRVisitor {
 
     void visit(const For *op) override {
         op->min.accept(this);
-        op->extent.accept(this);
+        op->max.accept(this);
         {
             ScopedBinding<> bind(scope, op->name);
             op->body.accept(this);
