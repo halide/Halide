@@ -18,7 +18,9 @@ void define_func_ref(py::module &m) {
         py::class_<FuncRef>(m, "FuncRef")
             .def("__getitem__", &FuncRef::operator[])
             .def("size", &FuncRef::size)
-            .def("__len__", &FuncRef::size);
+            .def("__len__", &FuncRef::size)
+            .def("type", &FuncRef::type)
+            .def("types", &FuncRef::types);
     add_binary_operators(func_ref_class);
 }
 

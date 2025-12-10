@@ -586,6 +586,20 @@ public:
      * of a definition. Only works for single-output Funcs. */
     operator Expr() const;
 
+    /** Get the type(s) of the outputs of the Func to which this FuncRef refers.
+     *
+     * It is not legal to call type() unless the Func has non-Tuple elements.
+     *
+     * If the Func isn't yet defined, and was not specified with required types,
+     * a runtime error will occur.
+     *
+     * If the Func isn't yet defined, but *was* specified with required types,
+     * the requirements will be returned. */
+    // @{
+    const Type &type() const;
+    const std::vector<Type> &types() const;
+    // @}
+
     /** When a FuncRef refers to a function that provides multiple
      * outputs, you can access each output as an Expr using
      * operator[].
