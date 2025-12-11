@@ -50,6 +50,12 @@ Target complete_arm_target(Target t) {
         t.set_feature(Target::ARMv84a);
     }
 
+    auto add_implied_feature_if_supported = [](Target &t, Target::Feature super, Target::Feature implied) {
+        if (t.has_feature(super)) {
+            t.set_feature(implied);
+        }
+    };
+
     constexpr int num_arm_v8_features = 10;
     static const Target::Feature arm_v8_features[num_arm_v8_features] = {
         Target::ARMv89a,
@@ -65,9 +71,26 @@ Target complete_arm_target(Target t) {
     };
 
     for (int i = 0; i < num_arm_v8_features - 1; i++) {
-        if (t.has_feature(arm_v8_features[i])) {
-            t.set_feature(arm_v8_features[i + 1]);
-        }
+        add_implied_feature_if_supported(t,
+                                         arm_v8_features[i],
+                                         arm_v8_features[i + 1]);
+    }
+
+    static const Target::Feature features_with_fp16[] = {
+        Target::SVE,
+        Target::SVE2,
+    };
+
+    for (const auto &f : features_with_fp16) {
+        add_implied_feature_if_supported(t, f, Target::ARMFp16);
+    }
+
+    static const Target::Feature features_with_dotprod[] = {
+        Target::SVE2,
+    };
+
+    for (const auto &f : features_with_dotprod) {
+        add_implied_feature_if_supported(t, f, Target::ARMDotProd);
     }
 
     return t;
@@ -1006,7 +1029,7 @@ void CodeGen_ARM::init_module() {
     }
 
     for (const ArmIntrinsic &intrin : intrinsic_defs) {
-        if (intrin.flags & ArmIntrinsic::RequireFp16 && !target.has_feature(Target::ARMFp16)) {
+        if ((intrin.flags & ArmIntrinsic::RequireFp16) && !target.has_feature(Target::ARMFp16)) {
             continue;
         }
 
