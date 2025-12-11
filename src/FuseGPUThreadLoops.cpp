@@ -1521,44 +1521,6 @@ Stmt zero_gpu_loop_mins(const Stmt &s) {
 
 namespace {
 
-// Find the inner most GPU block of a statement.
-class FindInnermostGPUBlock : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const For *op) override {
-        if (op->for_type == ForType::GPUBlock) {
-            // Set the last found GPU block to found_gpu_block.
-            found_gpu_block = op;
-        }
-        IRVisitor::visit(op);
-    }
-
-public:
-    const For *found_gpu_block = nullptr;
-};
-
-// Given a condition and a loop, add the condition
-// to the loop body.
-class AddConditionToALoop : public IRMutator {
-    using IRMutator::visit;
-
-    Stmt visit(const For *op) override {
-        if (op != loop) {
-            return IRMutator::visit(op);
-        }
-
-        return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api,
-                         IfThenElse::make(condition, op->body, Stmt()));
-    }
-
-public:
-    AddConditionToALoop(const Expr &condition, const For *loop)
-        : condition(condition), loop(loop) {
-    }
-    const Expr &condition;
-    const For *loop;
-};
-
 // Push if statements between GPU blocks through all GPU blocks.
 // Throw error if the if statement has an else clause.
 class NormalizeIfStatements : public IRMutator {
@@ -1578,11 +1540,23 @@ class NormalizeIfStatements : public IRMutator {
         if (!inside_gpu_blocks) {
             return IRMutator::visit(op);
         }
-        FindInnermostGPUBlock find;
-        op->accept(&find);
-        if (find.found_gpu_block != nullptr) {
+        const For *innermost_gpu_block = nullptr;
+        visit_with(op, [&](auto *self, const For *loop) {
+            if (loop->for_type == ForType::GPUBlock) {
+                innermost_gpu_block = loop;
+            }
+            self->visit_base(loop);
+        });
+        if (innermost_gpu_block != nullptr) {
             internal_assert(!op->else_case.defined()) << "Found an if statement with else case between two GPU blocks.\n";
-            return AddConditionToALoop(op->condition, find.found_gpu_block).mutate(op->then_case);
+            // Add the condition to the loop body.
+            return mutate_with(op->then_case, [&](auto *self, const For *loop) {
+                if (loop != innermost_gpu_block) {
+                    return self->visit_base(op);
+                }
+                return For::make(loop->name, loop->min, loop->max, loop->for_type, loop->partition_policy, loop->device_api,
+                                 IfThenElse::make(op->condition, loop->body, Stmt()));
+            });
         }
         return IRMutator::visit(op);
     }
