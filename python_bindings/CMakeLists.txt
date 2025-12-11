@@ -44,7 +44,7 @@ cmake_dependent_option(
 # Development.Module and Development.Embed. We don't need the Embed
 # part, so only requesting Module avoids failures when Embed is not
 # available, as is the case in the manylinux Docker images.
-find_package(Python 3.9 REQUIRED Interpreter Development.Module)
+find_package(Python 3.10 REQUIRED Interpreter Development.Module)
 
 if (WITH_PYTHON_BINDINGS)
     find_package(pybind11 2.11.1 REQUIRED)

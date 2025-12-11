@@ -27,13 +27,8 @@
 #include "PyType.h"
 #include "PyVar.h"
 
-#if !defined(PYBIND11_VERSION_HEX) || PYBIND11_VERSION_HEX < 0x02060000
-#error "Halide requires PyBind 2.6+"
-#endif
-
-// Note: This check will be redundant when PyBind 2.10 becomes the minimum version.
-#if PY_VERSION_HEX < 0x03000000
-#error "We appear to be compiling against Python 2.x rather than 3.x, which is not supported."
+#if !defined(PYBIND11_VERSION_HEX) || PYBIND11_VERSION_HEX < 0x020B0000
+#error "Halide requires PyBind 2.11+"
 #endif
 
 #ifndef HALIDE_PYBIND_MODULE_NAME
