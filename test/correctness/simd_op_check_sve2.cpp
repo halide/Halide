@@ -678,6 +678,7 @@ private:
             {Int(8), in_i8}, {Int(16), in_i16}, {Int(32), in_i32}, {Int(64), in_i64}, {UInt(8), in_u8}, {UInt(16), in_u16}, {UInt(32), in_u32}, {UInt(64), in_u64}, {Float(16), in_f16}, {Float(32), in_f32}, {Float(64), in_f64}};
 
         const int base_vec_bits = has_sve() ? target.vector_bits : 128;
+        const int vscale = base_vec_bits / 128;
 
         for (const auto &[elt, in_im] : test_params) {
             const int bits = elt.bits();
@@ -689,8 +690,9 @@ private:
             // LD/ST       -       Load/Store
             for (int width = 64; width <= 64 * 4; width *= 2) {
                 const int total_lanes = width / bits;
-                const int instr_lanes = min(total_lanes, 128 / bits);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                const int vector_lanes = base_vec_bits / bits;
+                const int instr_lanes = min(total_lanes, vector_lanes);
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                 // In case of arm32, instruction selection looks inconsistent due to optimization by LLVM
                 AddTestFunctor add(*this, bits, total_lanes, target.bits == 64);
@@ -742,7 +744,7 @@ private:
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 2;
                 const int instr_lanes = min(vector_lanes, base_vec_bits / bits);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
@@ -766,7 +768,7 @@ private:
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 2;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
@@ -790,7 +792,7 @@ private:
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 3;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
@@ -815,7 +817,7 @@ private:
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 4;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
@@ -841,7 +843,7 @@ private:
                 for (int width = 64; width <= 64 * 4; width *= 2) {
                     const int total_lanes = width / bits;
                     const int instr_lanes = min(total_lanes, 128 / bits);
-                    if (instr_lanes < 2) continue;  // bail out scalar op
+                    if (instr_lanes < 2 || (total_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                     AddTestFunctor add(*this, bits, total_lanes);
                     Expr index = clamp(cast<int>(in_im(x)), 0, W - 1);
