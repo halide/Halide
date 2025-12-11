@@ -34,7 +34,7 @@ class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
     using Super = VariadicVisitor<Simplify, Expr, Stmt>;
 
 public:
-    Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai);
+    Simplify(const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai);
 
     struct ExprInfo {
         // We track constant integer bounds when they exist
@@ -352,8 +352,6 @@ public:
         return Super::dispatch(s);
     }
 #endif
-
-    bool remove_dead_code;
 
     // Returns true iff t is an integral type where overflow is undefined
     HALIDE_ALWAYS_INLINE

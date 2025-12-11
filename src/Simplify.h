@@ -22,12 +22,10 @@ namespace Internal {
  */
 // @{
 Stmt simplify(const Stmt &,
-              bool remove_dead_code = true,
               const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
               const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope(),
               const std::vector<Expr> &assumptions = std::vector<Expr>());
 Expr simplify(const Expr &,
-              bool remove_dead_code = true,
               const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
               const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope(),
               const std::vector<Expr> &assumptions = std::vector<Expr>());
