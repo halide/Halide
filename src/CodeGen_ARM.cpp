@@ -179,6 +179,8 @@ protected:
     void visit(const Call *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;
+    Value *interleave_vectors(const std::vector<Value *> &) override;
+    Value *shuffle_vectors(Value *a, Value *b, const std::vector<int> &indices) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
     bool codegen_dot_product_vector_reduce(const VectorReduce *, const Expr &);
     bool codegen_pairwise_vector_reduce(const VectorReduce *, const Expr &);
@@ -1942,10 +1944,98 @@ void CodeGen_ARM::visit(const Shuffle *op) {
         load->type.lanes() == stride * op->type.lanes()) {
 
         value = codegen_dense_vector_load(load, nullptr, /* slice_to_native */ false);
-        value = shuffle_vectors(value, op->indices);
+        value = CodeGen_Posix::shuffle_vectors(value, op->indices);
     } else {
         CodeGen_Posix::visit(op);
     }
+}
+
+Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
+    if (simd_intrinsics_disabled() || target_vscale() == 0 ||
+        vecs.size() < 2 ||
+        !is_scalable_vector(vecs[0])) {
+        return CodeGen_Posix::interleave_vectors(vecs);
+    }
+
+    // Lower into llvm.vector.interleave intrinsic
+    const std::set<int> supported_strides{2, 3, 4, 8};
+    const int stride = vecs.size();
+    const int src_lanes = get_vector_num_elements(vecs[0]->getType());
+
+    if (supported_strides.find(stride) != supported_strides.end() &&
+        is_power_of_two(src_lanes) &&
+        src_lanes % target_vscale() == 0 &&
+        src_lanes / target_vscale() > 1) {
+
+        llvm::Type *elt = get_vector_element_type(vecs[0]->getType());
+        llvm::Type *ret_type = get_vector_type(elt, src_lanes * stride);
+
+        std::string instr = concat_strings("llvm.vector.interleave", stride, mangle_llvm_type(ret_type));
+
+        std::vector<llvm::Type *> arg_types(stride, vecs[0]->getType());
+        llvm::FunctionType *fn_type = FunctionType::get(ret_type, arg_types, false);
+        FunctionCallee fn = module->getOrInsertFunction(instr, fn_type);
+
+        CallInst *interleave = builder->CreateCall(fn, vecs);
+        return interleave;
+    }
+
+    return CodeGen_Posix::interleave_vectors(vecs);
+};
+
+Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &indices) {
+    if (simd_intrinsics_disabled() || target_vscale() == 0 ||
+        !is_scalable_vector(a)) {
+        return CodeGen_Posix::shuffle_vectors(a, b, indices);
+    }
+
+    internal_assert(a->getType() == b->getType());
+
+    llvm::Type *elt = get_vector_element_type(a->getType());
+    const int src_lanes = get_vector_num_elements(a->getType());
+    const int dst_lanes = indices.size();
+
+    // Check if deinterleaved slice
+    {
+        // Get the stride of slice
+        int slice_stride = 0;
+        const int start_index = indices[0];
+        if (dst_lanes > 1) {
+            const int stride = indices[1] - start_index;
+            bool stride_equal = true;
+            for (int i = 2; i < dst_lanes; ++i) {
+                stride_equal &= (indices[i] == start_index + i * stride);
+            }
+            slice_stride = stride_equal ? stride : 0;
+        }
+
+        // Lower slice with stride into llvm.vector.deinterleave intrinsic
+        const std::set<int> supported_strides{2, 3, 4, 8};
+        if (supported_strides.find(slice_stride) != supported_strides.end() &&
+            dst_lanes * slice_stride == src_lanes &&
+            indices.front() < slice_stride &&  // Start position cannot be larger than stride
+            is_power_of_two(dst_lanes) &&
+            dst_lanes % target_vscale() == 0 &&
+            dst_lanes / target_vscale() > 1) {
+
+            std::string instr = concat_strings("llvm.vector.deinterleave", slice_stride, mangle_llvm_type(a->getType()));
+
+            // We cannot mix FixedVector and ScalableVector, so dst_type must be scalable
+            llvm::Type *dst_type = get_vector_type(elt, dst_lanes / target_vscale(), VectorTypeConstraint::VScale);
+            StructType *sret_type = StructType::get(*context, std::vector(slice_stride, dst_type));
+            std::vector<llvm::Type *> arg_types{a->getType()};
+            llvm::FunctionType *fn_type = FunctionType::get(sret_type, arg_types, false);
+            FunctionCallee fn = module->getOrInsertFunction(instr, fn_type);
+
+            CallInst *deinterleave = builder->CreateCall(fn, {a});
+            // extract one element out of the returned struct
+            Value *extracted = builder->CreateExtractValue(deinterleave, indices.front());
+
+            return extracted;
+        }
+    }
+
+    return CodeGen_Posix::shuffle_vectors(a, b, indices);
 }
 
 void CodeGen_ARM::visit(const Ramp *op) {
