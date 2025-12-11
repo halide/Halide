@@ -157,13 +157,8 @@ bool can_parallelize_rvar(const string &v,
     // Pull out common non-boolean terms
     hazard = common_subexpression_elimination(hazard);
     hazard = SubstituteInBooleanLets().mutate(hazard);
-    hazard = simplify(hazard, false, bounds);
+    hazard = simplify(hazard, bounds);
     debug(3) << "Simplified to: " << hazard << "\n";
-
-    // strip lets
-    while (const Let *l = hazard.as<Let>()) {
-        hazard = l->body;
-    }
 
     return is_const_zero(hazard);
 }

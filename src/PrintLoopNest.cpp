@@ -216,7 +216,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     s = allocation_bounds_inference(s, env, func_bounds);
     s = remove_undef(s);
     s = uniquify_variable_names(s);
-    s = simplify(s, false);
+    s = simplify(s);
 
     // Now convert that to pseudocode
     std::ostringstream sstr;

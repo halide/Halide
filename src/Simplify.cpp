@@ -15,8 +15,7 @@ using std::pair;
 using std::string;
 using std::vector;
 
-Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
-    : remove_dead_code(r) {
+Simplify::Simplify(const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) {
 
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
@@ -361,11 +360,11 @@ Simplify::ScopedFact::~ScopedFact() {
     }
 }
 
-Expr simplify(const Expr &e, bool remove_dead_let_stmts,
+Expr simplify(const Expr &e,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
-    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
     facts.reserve(assumptions.size());
     for (const Expr &a : assumptions) {
@@ -378,11 +377,11 @@ Expr simplify(const Expr &e, bool remove_dead_let_stmts,
     return result;
 }
 
-Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
+Stmt simplify(const Stmt &s,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
-    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
     facts.reserve(assumptions.size());
     for (const Expr &a : assumptions) {
@@ -416,7 +415,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
     Expr orig = e;
 
-    e = simplify(e, true, bounds);
+    e = simplify(e, bounds);
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
