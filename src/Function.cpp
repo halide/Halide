@@ -649,6 +649,22 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     for (size_t i = 0; i < args.size(); i++) {
         init_def_args[i] = Var(args[i]);
     }
+    
+    // If the function is inductive,
+    // the value and args might refer back to the
+    // function itself, introducing circular references and hence
+    // memory leaks. We need to break these cycles.
+    WeakenFunctionPtrs weakener(contents.get());
+    for (auto &arg : init_def_args) {
+        arg = weakener.mutate(arg);
+    }
+    for (auto &value : values) {
+        value = weakener.mutate(value);
+    }
+    if (check.reduction_domain.defined()) {
+        check.reduction_domain.set_predicate(
+            weakener.mutate(check.reduction_domain.predicate()));
+    }
 
     ReductionDomain rdom;
     contents->init_def = Definition(init_def_args, values, rdom, true);
