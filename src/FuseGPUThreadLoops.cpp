@@ -1484,39 +1484,34 @@ class FuseGPUThreadLoops : public IRMutator {
     }
 };
 
-class ZeroGPULoopMins : public IRMutator {
-    bool in_non_glsl_gpu = false;
-    using IRMutator::visit;
+}  // namespace
 
-    Stmt visit(const For *op) override {
+// Also used by InjectImageIntrinsics
+Stmt zero_gpu_loop_mins(const Stmt &s) {
+    bool in_non_glsl_gpu = false;
+    return mutate_with(s, [&](auto *self, const For *op) {
         ScopedValue<bool> old_in_non_glsl_gpu(in_non_glsl_gpu);
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
-                          (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
-                          (op->device_api == DeviceAPI::Metal) ||
-                          (op->device_api == DeviceAPI::D3D12Compute) ||
-                          (op->device_api == DeviceAPI::Vulkan);
+                          op->device_api == DeviceAPI::CUDA ||
+                          op->device_api == DeviceAPI::OpenCL ||
+                          op->device_api == DeviceAPI::Metal ||
+                          op->device_api == DeviceAPI::D3D12Compute ||
+                          op->device_api == DeviceAPI::Vulkan;
 
-        Stmt stmt = IRMutator::visit(op);
+        Stmt stmt = self->visit_base(op);
         if (is_gpu(op->for_type) && !is_const_zero(op->min)) {
             op = stmt.as<For>();
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, 0, simplify(op->max - op->min), op->for_type, op->partition_policy, op->device_api, body);
+            stmt = For::make(op->name,
+                             0, simplify(op->max - op->min),
+                             op->for_type, op->partition_policy, op->device_api,
+                             body);
         }
         return stmt;
-    }
-
-public:
-    ZeroGPULoopMins() = default;
-};
-
-}  // namespace
-
-// Also used by InjectImageIntrinsics
-Stmt zero_gpu_loop_mins(const Stmt &s) {
-    return ZeroGPULoopMins().mutate(s);
+    });
 }
 
 namespace {
@@ -1570,7 +1565,7 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
     // merge the predicate into the merged GPU thread.
     s = NormalizeIfStatements().mutate(s);
     s = FuseGPUThreadLoops().mutate(s);
-    s = ZeroGPULoopMins().mutate(s);
+    s = zero_gpu_loop_mins(s);
     return s;
 }
 
