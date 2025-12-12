@@ -142,6 +142,8 @@ Expr unstrictify_float(const Call *op) {
         return op->args[0] <= op->args[1];
     } else if (op->is_intrinsic(Call::strict_eq)) {
         return op->args[0] == op->args[1];
+    } else if (op->is_intrinsic(Call::strict_fma)) {
+        return op->args[0] * op->args[1] + op->args[2];
     } else {
         internal_error << "Missing lowering of strict float intrinsic: "
                        << Expr(op) << "\n";

@@ -2280,6 +2280,19 @@ Expr erf(const Expr &x) {
     return halide_erf(x);
 }
 
+Expr fma(const Expr &a, const Expr &b, const Expr &c) {
+    user_assert(a.type().is_float()) << "fma requires floating-point arguments.";
+    user_assert(a.type() == b.type() && a.type() == c.type())
+        << "All arguments to fma must have the same type.";
+
+    // TODO: Once we use LLVM's native bfloat type instead of treating them as
+    // ints, we should be able to remove this assert. Currently, it tries to
+    // codegen an integer fma.
+    user_assert(!a.type().is_bfloat()) << "fma does not yet support bfloat types.";
+
+    return Call::make(a.type(), Call::strict_fma, {a, b, c}, Call::PureIntrinsic);
+}
+
 Expr fast_pow(Expr x, Expr y) {
     if (auto i = as_const_int(y)) {
         return raise_to_integer_power(std::move(x), *i);
