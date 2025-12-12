@@ -84,9 +84,10 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
 // --------------------------------------------------------------------------
 uint32_t vk_get_requested_layers(void *user_context, StringTable &layer_table);
 uint32_t vk_get_required_instance_extensions(void *user_context, StringTable &ext_table);
+uint32_t vk_get_optional_instance_extensions(void *user_context, StringTable &ext_table);
 uint32_t vk_get_supported_instance_extensions(void *user_context, StringTable &ext_table);
-uint32_t vk_get_required_device_extensions(void *user_context, StringTable &ext_table);
-uint32_t vk_get_optional_device_extensions(void *user_context, StringTable &ext_table);
+uint32_t vk_get_required_device_extensions(void *user_context, uint32_t major_version, uint32_t minor_version, StringTable &ext_table);
+uint32_t vk_get_optional_device_extensions(void *user_context, uint32_t major_version, uint32_t minor_version, StringTable &ext_table);
 uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalDevice physical_device, StringTable &ext_table);
 bool vk_validate_required_extension_support(void *user_context,
                                             const StringTable &required_extensions,

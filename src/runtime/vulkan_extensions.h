@@ -137,14 +137,14 @@ uint32_t vk_get_requested_layers(void *user_context, StringTable &layer_table) {
 }
 
 uint32_t vk_get_required_instance_extensions(void *user_context, StringTable &ext_table) {
-    const char *required_ext_table[] = {VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME};
-    const uint32_t required_ext_count = sizeof(required_ext_table) / sizeof(required_ext_table[0]);
-    ext_table.fill(user_context, (const char **)required_ext_table, required_ext_count);
-    return required_ext_count;
+    // Don't require any instance extensions (unless there are features we can't query for later ...)
+    return 0;
 }
 
 uint32_t vk_get_optional_instance_extensions(void *user_context, StringTable &ext_table) {
-    const char *optional_ext_table[] = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME};
+    const char *optional_ext_table[] = {
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,  //< promoted to core in v1.1
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME};                      //< optional on all versions
     const uint32_t optional_ext_count = sizeof(optional_ext_table) / sizeof(optional_ext_table[0]);
     ext_table.fill(user_context, (const char **)optional_ext_table, optional_ext_count);
     return optional_ext_count;
@@ -191,24 +191,63 @@ uint32_t vk_get_supported_instance_extensions(void *user_context, StringTable &e
     return avail_ext_count;
 }
 
-uint32_t vk_get_required_device_extensions(void *user_context, StringTable &ext_table) {
-    const char *required_ext_table[] = {
-        VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
-        VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME};
-    const uint32_t required_ext_count = sizeof(required_ext_table) / sizeof(required_ext_table[0]);
-    ext_table.fill(user_context, (const char **)required_ext_table, required_ext_count);
+uint32_t vk_get_required_device_extensions(void *user_context, uint32_t major_version, uint32_t minor_version, StringTable &ext_table) {
+    // Only require device extensions that have *not* been promoted to the current major, minor version
+    // supported by the Vulkan device (since the extension string may be missing once it has been promoted)
+    const char *before_v1p1_ext_table[] = {
+        VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME};  // promoted to core in v1.1
+    const uint32_t before_v1p1_ext_count = sizeof(before_v1p1_ext_table) / sizeof(before_v1p1_ext_table[0]);
+
+    const char *before_v1p2_ext_table[] = {
+        before_v1p1_ext_table[0],
+        VK_KHR_8BIT_STORAGE_EXTENSION_NAME};  // promoted to core in v1.2
+    const uint32_t before_v1p2_ext_count = sizeof(before_v1p2_ext_table) / sizeof(before_v1p2_ext_table[0]);
+
+    uint32_t required_ext_count = 0;
+    if (major_version >= 1) {
+        if (minor_version < 1) {
+            ext_table.fill(user_context, (const char **)before_v1p1_ext_table, before_v1p1_ext_count);
+            required_ext_count = before_v1p1_ext_count;
+        } else if (minor_version < 2) {
+            ext_table.fill(user_context, (const char **)before_v1p2_ext_table, before_v1p2_ext_count);
+            required_ext_count = before_v1p2_ext_count;
+        }
+    }
     return required_ext_count;
 }
 
-uint32_t vk_get_optional_device_extensions(void *user_context, StringTable &ext_table) {
-    const char *optional_ext_table[] = {
-        "VK_KHR_portability_subset",  //< necessary for running under Molten (aka Vulkan on Mac)
-        VK_KHR_MAINTENANCE_5_EXTENSION_NAME,
-        VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
-        VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
-        VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME};
-    const uint32_t optional_ext_count = sizeof(optional_ext_table) / sizeof(optional_ext_table[0]);
-    ext_table.fill(user_context, (const char **)optional_ext_table, optional_ext_count);
+uint32_t vk_get_optional_device_extensions(void *user_context, uint32_t major_version, uint32_t minor_version, StringTable &ext_table) {
+    // Only add optional device extensions that have *not* been promoted to the current major, minor version
+    // supported by the Vulkan device (since the extension string may be missing once it has been promoted)
+    const char *before_v1p1_ext_table[] = {
+        VK_KHR_16BIT_STORAGE_EXTENSION_NAME};  //< promoted to core in v1.1
+    const uint32_t before_v1p1_ext_count = sizeof(before_v1p1_ext_table) / sizeof(before_v1p1_ext_table[0]);
+
+    const char *before_v1p2_ext_table[] = {
+        before_v1p1_ext_table[0],
+        "VK_KHR_portability_subset",                   //< requires v1.1, always optional, necessary for running under Molten (aka Vulkan on Mac)
+        VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,     //< promoted to core in v1.2
+        VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME};  //< promoted to core in v1.2
+    const uint32_t before_v1p2_ext_count = sizeof(before_v1p2_ext_table) / sizeof(before_v1p2_ext_table[0]);
+
+    const char *v1p3_ext_table[] = {
+        "VK_KHR_portability_subset",           //< requires v1.1, always optional, necessary for running under Molten (aka Vulkan on Mac)
+        VK_KHR_MAINTENANCE_5_EXTENSION_NAME};  //< requires v1.3
+    const uint32_t v1p3_ext_count = sizeof(v1p3_ext_table) / sizeof(v1p3_ext_table[0]);
+
+    uint32_t optional_ext_count = 0;
+    if (major_version >= 1) {
+        if (minor_version < 1) {
+            ext_table.fill(user_context, (const char **)before_v1p1_ext_table, before_v1p1_ext_count);
+            optional_ext_count = before_v1p1_ext_count;
+        } else if (minor_version < 2) {
+            ext_table.fill(user_context, (const char **)before_v1p2_ext_table, before_v1p2_ext_count);
+            optional_ext_count = before_v1p2_ext_count;
+        } else if (minor_version >= 3) {
+            ext_table.fill(user_context, (const char **)v1p3_ext_table, v1p3_ext_count);
+            optional_ext_count = v1p3_ext_count;
+        }
+    }
     return optional_ext_count;
 }
 
