@@ -388,14 +388,13 @@ public:
             check(arm32 ? "vmla.i16" : "mla", 4 * w, u16_1 + u16_2 * u16_3);
             check(arm32 ? "vmla.i32" : "mla", 2 * w, i32_1 + i32_2 * i32_3);
             check(arm32 ? "vmla.i32" : "mla", 2 * w, u32_1 + u32_2 * u32_3);
-            if (w == 1 || w == 2) {
-                // Older llvms don't always fuse this at non-native widths
-                check(arm32 ? "vmla.f32" : "fmla", 2 * w, f32_1 + f32_2 * f32_3);
-                check(arm32 ? "vmla.f32" : "fmla", 2 * w, fma(f32_1, f32_2, f32_3));
-            }
-            if (!arm32 && target.has_feature(Target::ARMFp16)) {
-                check("fmlal", 4 * w, f32_1 + widening_mul(f16_2, f16_3));
-                check("fmlal2", 8 * w, widening_mul(f16_1, f16_2) + f32_3);
+            if (!arm32) {
+                check("fmla", 2 * w, f32_1 * f32_2 + f32_3);
+                check("fmla", 2 * w, fma(f32_1, f32_2, f32_3));
+                if (target.has_feature(Target::ARMFp16)) {
+                    check("fmlal", 4 * w, f32_1 + widening_mul(f16_2, f16_3));
+                    check("fmlal2", 8 * w, widening_mul(f16_1, f16_2) + f32_3);
+                }
             }
 
             // VMLS     I, F    F, D    Multiply Subtract
@@ -405,12 +404,8 @@ public:
             check(arm32 ? "vmls.i16" : "mls", 4 * w, u16_1 - u16_2 * u16_3);
             check(arm32 ? "vmls.i32" : "mls", 2 * w, i32_1 - i32_2 * i32_3);
             check(arm32 ? "vmls.i32" : "mls", 2 * w, u32_1 - u32_2 * u32_3);
-            if (w == 1 || w == 2) {
-                // Older llvms don't always fuse this at non-native widths
-                // TODO: Re-enable this after fixing https://github.com/halide/Halide/issues/3477
-                // check(arm32 ? "vmls.f32" : "fmls", 2*w, f32_1 - f32_2*f32_3);
-                if (!arm32)
-                    check(arm32 ? "vmls.f32" : "fmls", 2 * w, f32_1 - f32_2 * f32_3);
+            if (!arm32) {
+                check("fmls", 2 * w, f32_1 - f32_2 * f32_3);
             }
 
             // VMLAL    I       -       Multiply Accumulate Long
