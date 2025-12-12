@@ -432,6 +432,8 @@ void check_algebra() {
     check((y + (x / 3 * 3)) + x % 3, x + y);
     check((y + (x / 3)) * 3 + x % 3, y * 3 + x);
 
+    check(x - (x / 2), (x + 1) / 2);
+    check((x / 3) - x, (x * -2) / 3);
     check(x / 2 + x % 2, (x + 1) / 2);
     check(x % 2 + x / 2, (x + 1) / 2);
     check(((x + 1) / 2) * 2 - x, x % 2);
