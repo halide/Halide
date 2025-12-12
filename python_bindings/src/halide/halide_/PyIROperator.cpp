@@ -126,6 +126,7 @@ void define_operators(py::module &m) {
     m.def("log", &log);
     m.def("pow", &pow);
     m.def("erf", &erf);
+    m.def("fma", &fma);
     m.def("fast_sin", &fast_sin);
     m.def("fast_cos", &fast_cos);
     m.def("fast_log", &fast_log);
