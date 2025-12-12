@@ -384,10 +384,12 @@ Expr Simplify::visit(const Sub *op, ExprInfo *info) {
          (no_overflow_int(op->type) && EVAL_IN_LAMBDA  //
           (rewrite(c0 - (c1 - x) / c2, (fold(c0 * c2 - c1 + c2 - 1) + x) / c2, c2 > 0) ||
            rewrite(c0 - (x + c1) / c2, (fold(c0 * c2 - c1 + c2 - 1) - x) / c2, c2 > 0) ||
+           rewrite(x - (x / c0), (x * fold(c0 - 1) + fold(c0 - 1)) / c0, c0 > 0) ||
            rewrite(x - (x + y) / c0, (x * fold(c0 - 1) - y + fold(c0 - 1)) / c0, c0 > 0) ||
            rewrite(x - (x - y) / c0, (x * fold(c0 - 1) + y + fold(c0 - 1)) / c0, c0 > 0) ||
            rewrite(x - (y + x) / c0, (x * fold(c0 - 1) - y + fold(c0 - 1)) / c0, c0 > 0) ||
            rewrite(x - (y - x) / c0, (x * fold(c0 + 1) - y + fold(c0 - 1)) / c0, c0 > 0) ||
+           rewrite((x / c0) - x, (x * fold(1 - c0)) / c0) ||
            rewrite((x + y) / c0 - x, (x * fold(1 - c0) + y) / c0) ||
            rewrite((y + x) / c0 - x, (y + x * fold(1 - c0)) / c0) ||
            rewrite((x - y) / c0 - x, (x * fold(1 - c0) - y) / c0) ||
