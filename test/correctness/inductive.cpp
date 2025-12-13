@@ -17,8 +17,6 @@ int simple_inductive_test() {
     Func g("g"), h("h");
     Var x("x"), y("y");
 
-    // g(x, y) = x + y;
-    // g(r.x, r.y) = g(r.x, r.y);
     g(x, y) = select(x <= 0, 0, g(max(0, x - 1), y) + x + y);
 
     h(x, y) = g(x + 5, y) / 4;
@@ -41,8 +39,6 @@ int reorder_test() {
 
     Var xi("xi"), xii("xii"), xo("xo");
 
-    // g(x, y) = x + y;
-    // g(r.x, r.y) = g(r.x, r.y);
     g(x, y) = select(x <= 0, 0, g(max(0, x - 1), y) + x + y);
 
     h(x, y) = g(x + 5, y) / 4;
@@ -84,10 +80,7 @@ int large_baseline() {
     Func g("g"), h("h");
     Var x("x"), y("y");
 
-    // g(x, y) = x + y;
-    // g(r.x, r.y) = g(r.x, r.y);
     g(x, y) = select(x <= 8, (y * x + x * (x + 1) / 2) - 1, g(x - 1, y) + x + y);
-
     h(x, y) = g(x + 5, y) / 4;
 
     g.compute_at(h, x).store_at(h, y);
@@ -106,8 +99,6 @@ int fibonacci() {
     Func g("g"), h("h");
     Var x("x"), y("y");
 
-    // g(x, y) = x + y;
-    // g(r.x, r.y) = g(r.x, r.y);
     g(x, y) = select(x <= 1, 1, g(x - 1, y) + g(x - 2, y));
     h(x, y) = g(x, y);
 
