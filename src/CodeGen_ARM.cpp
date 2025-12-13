@@ -1991,19 +1991,6 @@ void CodeGen_ARM::visit(const Shuffle *op) {
             value = insert_scalable_vector(padding, val_0, 0);
             return;
         }
-    } else if (op->is_broadcast()) {
-        // Undo simplification to avoid arbitrary-indexed shuffle
-        Expr equiv;
-        for (int f = 0; f < op->broadcast_factor(); ++f) {
-            if (equiv.defined()) {
-                equiv = Shuffle::make_concat({equiv, op->vectors[0]});
-            } else {
-                equiv = op->vectors[0];
-            }
-        }
-        equiv = common_subexpression_elimination(equiv);
-        value = codegen(equiv);
-        return;
     }
 
     CodeGen_Posix::visit(op);
