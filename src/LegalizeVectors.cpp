@@ -571,7 +571,7 @@ Stmt legalize_vectors_in_device_loop(const For *op) {
         debug(3) << "After simplify:\n"
                  << m5 << "\n";
     }
-    return For::make(op->name, op->min, op->extent, op->for_type,
+    return For::make(op->name, op->min, op->max, op->for_type,
                      op->partition_policy, op->device_api, m5);
 }
 
