@@ -649,7 +649,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     for (size_t i = 0; i < args.size(); i++) {
         init_def_args[i] = Var(args[i]);
     }
-    
+
     // If the function is inductive,
     // the value and args might refer back to the
     // function itself, introducing circular references and hence
