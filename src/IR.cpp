@@ -12,7 +12,7 @@ namespace Internal {
 
 Expr Cast::make(Type t, Expr v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
-    internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths\n";
+    internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths: " << v << " of type " << v.type() << " cannot be cast to " << t << "\n";
 
     Cast *node = new Cast;
     node->type = t;
@@ -281,7 +281,7 @@ Expr Ramp::make(Expr base, Expr stride, int lanes) {
 
 Expr Broadcast::make(Expr value, int lanes) {
     internal_assert(value.defined()) << "Broadcast of undefined\n";
-    internal_assert(lanes != 1) << "Broadcast of lanes 1\n";
+    internal_assert(lanes != 1) << "Broadcast over 1 lane is not a broadcast\n";
 
     Broadcast *node = new Broadcast;
     node->type = value.type().with_lanes(lanes * value.type().lanes());
