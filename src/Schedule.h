@@ -356,6 +356,11 @@ enum class DimType {
      * definitions you can even redundantly re-evaluate points. */
     PureVar = 0,
 
+    /** The dim originated from a Var in an inductively defined pure
+     * definition. InductiveVars cannot be reordered, parallelized,
+     * or vectorized. */
+    InductiveVar,
+
     /** The dim originated from an RVar. You can evaluate a Func at
      * distinct values of this RVar in any order (including in
      * parallel) over exactly the interval specified in the
@@ -464,6 +469,10 @@ struct Dim {
      * of the loops are algorithmically meaningful)? */
     bool is_rvar() const {
         return (dim_type == DimType::PureRVar) || (dim_type == DimType::ImpureRVar);
+    }
+
+    bool is_inductive() const {
+        return dim_type == DimType::InductiveVar;
     }
 
     /** Could multiple iterations of this loop happen at the same

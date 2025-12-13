@@ -1336,7 +1336,7 @@ protected:
         // none of the functions in a fused group can be inlined, so this will only
         // happen when we're lowering a single func.
         if (provide_name != funcs[0].name() &&
-            !funcs[0].is_pure() &&
+            (!funcs[0].is_pure() || funcs[0].is_inductive()) &&
             funcs[0].schedule().compute_level().is_inlined() &&
             function_is_used_in_stmt(funcs[0], provide_op)) {
 
@@ -2307,7 +2307,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     // will get lowered into compute_at innermost and thus can be treated
     // similarly as a non-inlined Func.
     if (store_at.is_inlined() && compute_at.is_inlined() && hoist_storage_at.is_inlined()) {
-        if (f.is_pure()) {
+        if (f.is_pure() && !f.is_inductive()) {
             validate_schedule_inlined_function(f);
         }
         return true;
@@ -2547,6 +2547,9 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const map<string, Function> &env,
                         const Target &target,
                         bool &any_memoized) {
+    for (const Function &o : outputs) {
+        user_assert(!o.is_inductive()) << "Function" << o.name() << " is an inductively defined output buffer, which is unsupported.\n";
+    }
     string root_var = LoopLevel::root().lock().to_string();
     Stmt s = For::make(root_var, 0, 0, ForType::Serial, Partition::Never, DeviceAPI::Host, Evaluate::make(0));
 
