@@ -16,10 +16,9 @@ struct CallInfo {
 };
 
 /* Find all the internal halide calls in an expr */
-template<typename T>
-CallInfo find_calls(const T &ir) {
+CallInfo find_calls(const Function &f) {
     CallInfo info;
-    visit_with(ir, [&](auto *self, const Call *call) {
+    visit_with(f, [&](auto *self, const Call *call) {
         self->visit_base(call);
         if (call->call_type == Call::Halide && call->func.defined()) {
             Function f(call->func);
