@@ -112,7 +112,7 @@ private:
 Stmt inject_marker(const Stmt &stmt, const string &func, const Stmt &last_use) {
     bool injected = false;
     return mutate_with(stmt, [&](auto *self, const Block *block) -> Stmt {
-        auto do_injection = [&](Stmt s) {
+        auto do_injection = [&](const Stmt &s) {
             if (injected) {
                 return s;
             }
