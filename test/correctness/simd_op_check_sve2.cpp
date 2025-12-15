@@ -63,7 +63,9 @@ public:
     void add_tests() override {
         check_arm_integer();
         check_arm_float();
-        check_arm_load_store();
+        if (Halide::Internal::get_llvm_version() >= 220) {
+            check_arm_load_store();
+        }
         check_arm_pairwise();
     }
 
