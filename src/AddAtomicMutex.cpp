@@ -13,7 +13,7 @@ namespace Internal {
 namespace {
 
 /** Collect names of all stores matching the producer name inside a statement. */
-Scope<void> collect_producer_store_names(Stmt s, const std::string &producer_name) {
+Scope<void> collect_producer_store_names(const Stmt &s, const std::string &producer_name) {
     Scope<void> store_names;
     visit_with(s, [&](auto *self, const Store *op) {
         self->visit_base(op);
@@ -27,7 +27,7 @@ Scope<void> collect_producer_store_names(Stmt s, const std::string &producer_nam
 
 /** Find Store inside of an Atomic node for the designated producer
  *  and return their indices. */
-Expr find_producer_store_index(Stmt s, const std::string &producer_name) {
+Expr find_producer_store_index(const Stmt &s, const std::string &producer_name) {
     Expr index;
     visit_with(
         s,
@@ -70,7 +70,7 @@ Expr find_producer_store_index(Stmt s, const std::string &producer_name) {
 /** Throws an assertion for cases where the indexing on left-hand-side of
  *  an atomic update references to itself.
  *  e.g. f(clamp(f(r), 0, 100)) = f(r) + 1 should be rejected. */
-bool check_atomic_validity(Stmt s) {
+bool check_atomic_validity(const Stmt &s) {
     bool any_atomic = false;
     visit_with(s, [&](auto *self, const Atomic *op) {
         any_atomic = true;
@@ -95,7 +95,7 @@ bool check_atomic_validity(Stmt s) {
  *  where the let binding contains the Store location. Use for checking whether
  *  we need a mutex lock for Atomic since some lowering pass before lifted a let
  *  binding from the Store node (currently only SplitTuple would do this). */
-bool find_atomic_let_bindings(Stmt s, const Scope<void> &store_names) {
+bool find_atomic_let_bindings(const Stmt &s, const Scope<void> &store_names) {
     bool found = false;
     std::string inside_store;
     Scope<Expr> let_bindings;
@@ -162,7 +162,7 @@ Stmt remove_unnecessary_mutex_use(const Stmt &s) {
 }
 
 /** Replace the indices in the Store nodes with the specified variable. */
-Stmt replace_store_index_with_var(Stmt s, const std::string &producer_name, Expr var) {
+Stmt replace_store_index_with_var(const Stmt &s, const std::string &producer_name, Expr var) {
     return mutate_with(s, [&](auto *self, const Store *op) {
         if (op->name == producer_name || starts_with(op->name, producer_name + ".")) {
             return Store::make(op->name, op->value, var, op->param, op->predicate, op->alignment);
@@ -190,7 +190,7 @@ Stmt allocate_mutex(const std::string &mutex_name, Expr extent, const Stmt &body
 }
 
 /** Add mutex allocation & lock & unlock if required. */
-Stmt inject_atomic_mutex(Stmt s, const std::vector<Function> &o) {
+Stmt inject_atomic_mutex(const Stmt &s, const std::vector<Function> &o) {
     // Maps from a producer name to a mutex name, for all encountered atomic
     // nodes.
     Scope<std::string> needs_mutex_allocation;
