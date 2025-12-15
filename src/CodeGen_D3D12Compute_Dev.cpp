@@ -1257,6 +1257,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 void CodeGen_D3D12Compute_Dev::init_module() {
     debug(2) << "D3D12Compute device codegen init_module\n";
 
+    // TODO: we could support strict float intrinsics with the precise qualifier
+    internal_assert(!any_strict_float)
+        << "strict float intrinsics not yet supported in d3d12compute backend";
+
     // wipe the internal kernel source
     src_stream.str("");
     src_stream.clear();

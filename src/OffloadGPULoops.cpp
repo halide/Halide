@@ -245,7 +245,7 @@ class InjectGpuOffload : public IRMutator {
     }
 
 public:
-    InjectGpuOffload(const Target &target)
+    InjectGpuOffload(const Target &target, bool any_strict_float)
         : target(target) {
         Target device_target = target;
         // For the GPU target we just want to pass the flags, to avoid the
@@ -266,10 +266,14 @@ public:
             cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(device_target);
         }
         if (target.has_feature(Target::Vulkan)) {
-            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(target);
+            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(device_target);
         }
         if (target.has_feature(Target::WebGPU)) {
             cgdev[DeviceAPI::WebGPU] = new_CodeGen_WebGPU_Dev(device_target);
+        }
+
+        for (auto &i : cgdev) {
+            i.second->set_any_strict_float(any_strict_float);
         }
 
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";
@@ -315,8 +319,8 @@ public:
 
 }  // namespace
 
-Stmt inject_gpu_offload(const Stmt &s, const Target &host_target) {
-    return InjectGpuOffload(host_target).inject(s);
+Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float) {
+    return InjectGpuOffload(host_target, any_strict_float).inject(s);
 }
 
 }  // namespace Internal

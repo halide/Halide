@@ -1123,7 +1123,7 @@ void CodeGen_OpenCL_Dev::init_module() {
     // This identifies the program as OpenCL C (as opposed to SPIR).
     src_stream << "/*OpenCL C " << target.to_string() << "*/\n";
 
-    src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
+    src_stream << "#pragma OPENCL FP_CONTRACT " << (any_strict_float ? "OFF\n" : "ON\n");
 
     // Write out the Halide math functions.
     src_stream << "inline float float_from_bits(unsigned int x) {return as_float(x);}\n"

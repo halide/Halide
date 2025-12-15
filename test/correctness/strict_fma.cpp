@@ -12,9 +12,18 @@ int test() {
     f(x) = fma(cast<T>(x), b, c);
     g(x) = strict_float(cast<T>(x) * b + c);
 
-    // Use a non-native vector width, to also test legalization
-    f.vectorize(x, 5);
-    g.vectorize(x, 5);
+    Target t = get_jit_target_from_environment();
+    if (std::is_same_v<T, float> &&
+        t.has_gpu_feature() &&
+        !t.has_feature(Target::Vulkan)) {  // TODO: Vulkan does not yet respect strict_float
+        Var xo{"xo"}, xi{"xi"};
+        f.gpu_tile(x, xo, xi, 32);
+        g.gpu_tile(x, xo, xi, 32);
+    } else {
+        // Use a non-native vector width, to also test legalization
+        f.vectorize(x, 5);
+        g.vectorize(x, 5);
+    }
 
     // b.set((T)8769132.122433244233);
     // c.set((T)2809.14123423413);
@@ -23,16 +32,39 @@ int test() {
     Buffer<T> with_fma = f.realize({1024});
     Buffer<T> without_fma = g.realize({1024});
 
+    with_fma.copy_to_host();
+    without_fma.copy_to_host();
+
     bool saw_error = false;
     for (int i = 0; i < with_fma.width(); i++) {
+
+        Bits fma_bits = Internal::reinterpret_bits<Bits>(with_fma(i));
+        Bits no_fma_bits = Internal::reinterpret_bits<Bits>(without_fma(i));
+
+        if constexpr (sizeof(T) >= 4) {
+            T correct_fma = std::fma((T)i, b.get(), c.get());
+
+            if (with_fma(i) != correct_fma) {
+                printf("fma result does not match std::fma:\n"
+                       "  fma(%d, %10.10g, %10.10g) = %10.10g (0x%llx)\n"
+                       "  but std::fma gives %10.10g (0x%llx)\n",
+                       i,
+                       (double)b.get(), (double)c.get(),
+                       (double)with_fma(i),
+                       (long long unsigned)fma_bits,
+                       (double)correct_fma,
+                       (long long unsigned)Internal::reinterpret_bits<Bits>(correct_fma));
+                return -1;
+            }
+        }
+
         if (with_fma(i) == without_fma(i)) {
             continue;
         }
 
         saw_error = true;
         // The rounding error, if any, ought to be 1 ULP
-        Bits fma_bits = Internal::reinterpret_bits<Bits>(with_fma(i));
-        Bits no_fma_bits = Internal::reinterpret_bits<Bits>(without_fma(i));
+        // printf("%llx %llx\n", (long long unsigned)fma_bits, (long long unsigned)no_fma_bits);
         if (fma_bits + 1 != no_fma_bits &&
             fma_bits - 1 != no_fma_bits) {
             printf("Difference greater than 1 ULP: %10.10g (0x%llx) vs %10.10g (0x%llx)!\n",

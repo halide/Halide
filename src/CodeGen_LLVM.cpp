@@ -3323,11 +3323,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         {
             ScopedValue<bool> old_in_strict_float(in_strict_float, true);
             if (op->is_intrinsic(Call::strict_fma)) {
-                // Redirect to an llvm fma intrinsic at some good width
-                const int native_lanes = target.natural_vector_size(op->type.element_of());
-                Type t = op->type.with_lanes(native_lanes);
-                std::string name = "llvm.fma" + mangle_llvm_type(llvm_type_of(t));
-                value = call_intrin(op->type, native_lanes, name, new_args);
+                std::string name = "llvm.fma" + mangle_llvm_type(llvm_type_of(op->type));
+                value = call_intrin(op->type, op->type.lanes(), name, new_args);
             } else {
                 // Lower to something other than a call node
                 Expr call = Call::make(op->type, op->name, new_args, op->call_type);

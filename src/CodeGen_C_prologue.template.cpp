@@ -258,6 +258,32 @@ inline T halide_cpp_min(const T &a, const T &b) {
 }
 
 template<typename T>
+inline T halide_cpp_fma(const T &a, const T &b, const T &c) {
+#if __has_builtin(__builtin_fma)
+    return __builtin_fma(a, b, c);
+#else
+    if (sizeof(T) == sizeof(float)) {
+        return fmaf(a, b, c);
+    } else {
+        return (T)fma((double)a, (double)b, (double)c);
+    }
+#endif
+}
+
+template<typename T>
+inline T halide_cpp_fmod(const T &a, const T &b) {
+#if __has_builtin(__builtin_fmod)
+    return __builtin_fmod(a, b);
+#else
+    if (sizeof(T) == sizeof(float)) {
+        return fmod(a, b);
+    } else {
+        return (T)fmod((double)a, (double)b);
+    }
+#endif
+}
+
+template<typename T>
 inline void halide_maybe_unused(const T &) {
 }
 

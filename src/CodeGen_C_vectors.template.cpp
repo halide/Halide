@@ -150,6 +150,22 @@ public:
         return r;
     }
 
+    static Vec fma(const Vec &a, const Vec &b, const Vec &c) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = ::halide_cpp_fma(a[i], b[i], c[i]);
+        }
+        return r;
+    }
+
+    static Vec fmod(const Vec &a, const Vec &b) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = ::halide_cpp_fmod(a[i], b[i]);
+        }
+        return r;
+    }
+
     static Mask logical_or(const Vec &a, const Vec &b) {
         CppVector<uint8_t, Lanes> r;
         for (size_t i = 0; i < Lanes; i++) {
@@ -732,6 +748,22 @@ public:
         }
         return r;
 #endif
+    }
+
+    static Vec fma(const Vec a, const Vec b, const Vec c) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = ::halide_cpp_fma(a[i], b[i], c[i]);
+        }
+        return r;
+    }
+
+    static Vec fmod(const Vec a, const Vec b) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            r[i] = ::halide_cpp_fmod(a[i], b[i]);
+        }
+        return r;
     }
 
     // The relational operators produce signed-int of same width as input; our codegen expects uint8.
