@@ -1484,80 +1484,37 @@ class FuseGPUThreadLoops : public IRMutator {
     }
 };
 
-class ZeroGPULoopMins : public IRMutator {
-    bool in_non_glsl_gpu = false;
-    using IRMutator::visit;
+}  // namespace
 
-    Stmt visit(const For *op) override {
+// Also used by InjectImageIntrinsics
+Stmt zero_gpu_loop_mins(const Stmt &s) {
+    bool in_non_glsl_gpu = false;
+    return mutate_with(s, [&](auto *self, const For *op) {
         ScopedValue<bool> old_in_non_glsl_gpu(in_non_glsl_gpu);
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
-                          (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
-                          (op->device_api == DeviceAPI::Metal) ||
-                          (op->device_api == DeviceAPI::D3D12Compute) ||
-                          (op->device_api == DeviceAPI::Vulkan);
+                          op->device_api == DeviceAPI::CUDA ||
+                          op->device_api == DeviceAPI::OpenCL ||
+                          op->device_api == DeviceAPI::Metal ||
+                          op->device_api == DeviceAPI::D3D12Compute ||
+                          op->device_api == DeviceAPI::Vulkan;
 
-        Stmt stmt = IRMutator::visit(op);
+        Stmt stmt = self->visit_base(op);
         if (is_gpu(op->for_type) && !is_const_zero(op->min)) {
             op = stmt.as<For>();
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, 0, simplify(op->max - op->min), op->for_type, op->partition_policy, op->device_api, body);
+            stmt = For::make(op->name,
+                             0, simplify(op->max - op->min),
+                             op->for_type, op->partition_policy, op->device_api,
+                             body);
         }
         return stmt;
-    }
-
-public:
-    ZeroGPULoopMins() = default;
-};
-
-}  // namespace
-
-// Also used by InjectImageIntrinsics
-Stmt zero_gpu_loop_mins(const Stmt &s) {
-    return ZeroGPULoopMins().mutate(s);
+    });
 }
 
 namespace {
-
-// Find the inner most GPU block of a statement.
-class FindInnermostGPUBlock : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const For *op) override {
-        if (op->for_type == ForType::GPUBlock) {
-            // Set the last found GPU block to found_gpu_block.
-            found_gpu_block = op;
-        }
-        IRVisitor::visit(op);
-    }
-
-public:
-    const For *found_gpu_block = nullptr;
-};
-
-// Given a condition and a loop, add the condition
-// to the loop body.
-class AddConditionToALoop : public IRMutator {
-    using IRMutator::visit;
-
-    Stmt visit(const For *op) override {
-        if (op != loop) {
-            return IRMutator::visit(op);
-        }
-
-        return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api,
-                         IfThenElse::make(condition, op->body, Stmt()));
-    }
-
-public:
-    AddConditionToALoop(const Expr &condition, const For *loop)
-        : condition(condition), loop(loop) {
-    }
-    const Expr &condition;
-    const For *loop;
-};
 
 // Push if statements between GPU blocks through all GPU blocks.
 // Throw error if the if statement has an else clause.
@@ -1578,11 +1535,23 @@ class NormalizeIfStatements : public IRMutator {
         if (!inside_gpu_blocks) {
             return IRMutator::visit(op);
         }
-        FindInnermostGPUBlock find;
-        op->accept(&find);
-        if (find.found_gpu_block != nullptr) {
+        const For *innermost_gpu_block = nullptr;
+        visit_with(op, [&](auto *self, const For *loop) {
+            if (loop->for_type == ForType::GPUBlock) {
+                innermost_gpu_block = loop;
+            }
+            self->visit_base(loop);
+        });
+        if (innermost_gpu_block != nullptr) {
             internal_assert(!op->else_case.defined()) << "Found an if statement with else case between two GPU blocks.\n";
-            return AddConditionToALoop(op->condition, find.found_gpu_block).mutate(op->then_case);
+            // Add the condition to the loop body.
+            return mutate_with(op->then_case, [&](auto *self, const For *loop) {
+                if (loop != innermost_gpu_block) {
+                    return self->visit_base(op);
+                }
+                return For::make(loop->name, loop->min, loop->max, loop->for_type, loop->partition_policy, loop->device_api,
+                                 IfThenElse::make(op->condition, loop->body, Stmt()));
+            });
         }
         return IRMutator::visit(op);
     }
@@ -1596,7 +1565,7 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
     // merge the predicate into the merged GPU thread.
     s = NormalizeIfStatements().mutate(s);
     s = FuseGPUThreadLoops().mutate(s);
-    s = ZeroGPULoopMins().mutate(s);
+    s = zero_gpu_loop_mins(s);
     return s;
 }
 
