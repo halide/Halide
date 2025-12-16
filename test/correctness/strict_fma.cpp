@@ -13,9 +13,25 @@ int test() {
     g(x) = strict_float(cast<T>(x) * b + c);
 
     Target t = get_jit_target_from_environment();
+    if (std::is_same_v<T, float16_t> &&
+        t.arch == Target::X86 &&
+        t.os == Target::Windows &&
+        t.bits == 32) {
+        // Don't try to resolve float16 math library functions on win-32. In
+        // theory LLVM is responsible for this, but at the time of writing
+        // (12/16/2025) it doesn't seem to work.
+        printf("Skipping float16 fma test on win-32\n");
+        return 0;
+    }
+
     if (std::is_same_v<T, float> &&
         t.has_gpu_feature() &&
-        !t.has_feature(Target::Vulkan)) {  // TODO: Vulkan does not yet respect strict_float
+        // Metal on x86 does not seem to respect strict float despite setting
+        // the appropriate pragma.
+        !(t.arch == Target::X86 && t.has_feature(Target::Metal)) &&
+        // TODO: Vulkan does not respect strict_float yet:
+        // https://github.com/halide/Halide/issues/7239
+        !t.has_feature(Target::Vulkan)) {
         Var xo{"xo"}, xi{"xi"};
         f.gpu_tile(x, xo, xi, 32);
         g.gpu_tile(x, xo, xi, 32);
