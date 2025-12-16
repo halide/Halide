@@ -63,9 +63,7 @@ public:
     void add_tests() override {
         check_arm_integer();
         check_arm_float();
-        if (Halide::Internal::get_llvm_version() >= 220) {
-            check_arm_load_store();
-        }
+        check_arm_load_store();
         check_arm_pairwise();
     }
 
@@ -690,7 +688,8 @@ private:
             }
 
             // LD/ST       -       Load/Store
-            for (int width = 64; width <= 64 * 4; width *= 2) {
+            for (float factor : {0.5f, 1.f, 2.f}) {
+                const int width = base_vec_bits * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = base_vec_bits / bits;
                 const int instr_lanes = min(total_lanes, vector_lanes);
@@ -709,6 +708,16 @@ private:
                         const bool allow_byte_ls = (width == target.vector_bits);
                         add({get_sve_ls_instr("ld1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
                         add({get_sve_ls_instr("st1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
+                    } else {
+                        if (width == 256 && vscale == 1) {
+                            // Optimized with load/store pair (two registers) instruction
+                            add({{"ldp", R"(q\d\d?)"}}, total_lanes, load_store_1);
+                            add({{"stp", R"(q\d\d?)"}}, total_lanes, load_store_1);
+                        } else {
+                            // There does not seem to be a simple rule to select ldr/str or ld1x/stx
+                            add("ld1_or_ldr", {{R"(ld(1.|r))", R"(z\d\d?)"}}, total_lanes, load_store_1);
+                            add("st1_or_str", {{R"(st(1.|r))", R"(z\d\d?)"}}, total_lanes, load_store_1);
+                        }
                     }
                 } else {
                     // vector register is not used for simple load/store
@@ -719,30 +728,33 @@ private:
             }
 
             // LDn       -       Structured Load strided elements
-            for (int stride = 2; stride <= 4; ++stride) {
+            if (Halide::Internal::get_llvm_version() >= 220) {
+                for (int stride = 2; stride <= 4; ++stride) {
 
-                for (int factor = 1; factor <= 4; factor *= 2) {
-                    const int vector_lanes = base_vec_bits * factor / bits;
+                    for (int factor : {1, 2, 4}) {
+                        const int vector_lanes = base_vec_bits * factor / bits;
 
-                    // In StageStridedLoads.cp (stride < r->lanes) is the condition for staging to happen
-                    // See https://github.com/halide/Halide/issues/8819
-                    if (vector_lanes <= stride) continue;
+                        // In StageStridedLoads.cpp (stride < r->lanes) is the condition for staging to happen
+                        // See https://github.com/halide/Halide/issues/8819
+                        if (vector_lanes <= stride) continue;
 
-                    AddTestFunctor add_ldn(*this, bits, vector_lanes);
+                        AddTestFunctor add_ldn(*this, bits, vector_lanes);
 
-                    Expr load_n = in_im(x * stride) + in_im(x * stride + stride - 1);
+                        Expr load_n = in_im(x * stride) + in_im(x * stride + stride - 1);
 
-                    const string ldn_str = "ld" + to_string(stride);
-                    if (has_sve()) {
-                        add_ldn({get_sve_ls_instr(ldn_str, bits)}, vector_lanes, load_n);
-                    } else {
-                        add_ldn(sel_op("v" + ldn_str + ".", ldn_str), load_n);
+                        const string ldn_str = "ld" + to_string(stride);
+                        if (has_sve()) {
+                            add_ldn({get_sve_ls_instr(ldn_str, bits)}, vector_lanes, load_n);
+                        } else {
+                            add_ldn(sel_op("v" + ldn_str + ".", ldn_str), load_n);
+                        }
                     }
                 }
             }
 
             // ST2       -       Store two-element structures
-            for (int width = base_vec_bits * 2; width <= base_vec_bits * 8; width *= 2) {
+            for (int factor : {1, 2}) {
+                const int width = base_vec_bits * 2 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 2;
                 const int instr_lanes = min(vector_lanes, base_vec_bits / bits);
@@ -766,7 +778,8 @@ private:
 
             // Also check when the two expressions interleaved have a common
             // subexpression, which results in a vector var being lifted out.
-            for (int width = base_vec_bits * 2; width <= base_vec_bits * 4; width *= 2) {
+            for (int factor : {1, 2}) {
+                const int width = base_vec_bits * 2 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 2;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
@@ -790,7 +803,8 @@ private:
             }
 
             // ST3       -       Store three-element structures
-            for (int width = base_vec_bits * 3; width <= base_vec_bits * 3 * 2; width *= 2) {
+            for (int factor : {1, 2}) {
+                const int width = base_vec_bits * 3 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 3;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
@@ -808,14 +822,17 @@ private:
                 Expr store_3 = tmp2(0, 0) + tmp2(0, 127);
 
                 if (has_sve()) {
-                    add_stn({get_sve_ls_instr("st3", bits)}, total_lanes, store_3);
+                    if (Halide::Internal::get_llvm_version() >= 220) {
+                        add_stn({get_sve_ls_instr("st3", bits)}, total_lanes, store_3);
+                    }
                 } else {
                     add_stn(sel_op("vst3.", "st3"), store_3);
                 }
             }
 
             // ST4       -       Store four-element structures
-            for (int width = base_vec_bits * 4; width <= base_vec_bits * 4 * 2; width *= 2) {
+            for (int factor : {1, 2}) {
+                const int width = base_vec_bits * 4 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 4;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
@@ -834,7 +851,9 @@ private:
                 Expr store_4 = tmp2(0, 0) + tmp2(0, 127);
 
                 if (has_sve()) {
-                    add_stn({get_sve_ls_instr("st4", bits)}, total_lanes, store_4);
+                    if (Halide::Internal::get_llvm_version() >= 220) {
+                        add_stn({get_sve_ls_instr("st4", bits)}, total_lanes, store_4);
+                    }
                 } else {
                     add_stn(sel_op("vst4.", "st4"), store_4);
                 }
@@ -1302,7 +1321,6 @@ private:
 
         auto ext = Internal::get_output_info(target);
         std::map<OutputFileType, std::string> outputs = {
-            {OutputFileType::stmt, file_name + ext.at(OutputFileType::stmt).extension},
             {OutputFileType::llvm_assembly, file_name + ext.at(OutputFileType::llvm_assembly).extension},
             {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
             {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
