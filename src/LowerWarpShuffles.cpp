@@ -76,8 +76,8 @@ Expr reduce_expr_helper(Expr e, const Expr &modulus) {
 }
 
 Expr reduce_expr(Expr e, const Expr &modulus, const Scope<Interval> &bounds) {
-    e = reduce_expr_helper(simplify(e, true, bounds), modulus);
-    if (is_const_one(simplify(e >= 0 && e < modulus, true, bounds))) {
+    e = reduce_expr_helper(simplify(e, bounds), modulus);
+    if (is_const_one(simplify(e >= 0 && e < modulus, bounds))) {
         return e;
     } else {
         return e % modulus;
@@ -285,7 +285,7 @@ public:
 
     // A version of can_prove which exploits the constant bounds we've been tracking
     bool can_prove(const Expr &e) {
-        return is_const_one(simplify(e, true, bounds));
+        return is_const_one(simplify(e, bounds));
     }
 
     Expr get_stride() {
@@ -411,7 +411,7 @@ class LowerWarpShuffles : public IRMutator {
                 // the number of lanes (rounded up).
                 Expr extent = op->extent();
                 Expr new_size = (alloc->extents[0] + extent - 1) / extent;
-                new_size = simplify(new_size, true, bounds);
+                new_size = simplify(new_size, bounds);
                 new_size = find_constant_bound(new_size, Direction::Upper, bounds);
                 auto sz = as_const_int(new_size);
                 user_assert(sz) << "Warp-level allocation with non-constant size: "
@@ -511,7 +511,7 @@ class LowerWarpShuffles : public IRMutator {
             // of the index and shifting the high bits down to cover
             // them. Reassembling the result into a flat address gives
             // the expression below.
-            Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), true, bounds);
+            Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), bounds);
             return Store::make(op->name, value, in_warp_idx, op->param, op->predicate, ModulusRemainder());
         } else {
             return IRMutator::visit(op);
@@ -536,7 +536,7 @@ class LowerWarpShuffles : public IRMutator {
                 // Load the right lanes from stripe number i
                 equiv = select(idx >= i, make_warp_load(type, name, make_const(idx.type(), i), lane), equiv);
             }
-            return simplify(equiv, true, bounds);
+            return simplify(equiv, bounds);
         }
 
         // Load the value to be shuffled
@@ -606,7 +606,7 @@ class LowerWarpShuffles : public IRMutator {
         } else if (expr_match((this_lane + wild) % wild, lane, result) &&
                    (bits = is_const_power_of_two_integer(result[1])) &&
                    *bits <= 5) {
-            result[0] = simplify(result[0] % result[1], true, bounds);
+            result[0] = simplify(result[0] % result[1], bounds);
             // Rotate. Mux a shuffle up and a shuffle down. Uses fewer
             // intermediate registers than using a general gather for
             // this.
@@ -617,7 +617,7 @@ class LowerWarpShuffles : public IRMutator {
                                  shfl_args({membermask, base_val, (1 << *bits) - result[0], 0}), Call::PureExtern);
             Expr cond = (this_lane >= (1 << *bits) - result[0]);
             Expr equiv = select(cond, up, down);
-            shuffled = simplify(equiv, true, bounds);
+            shuffled = simplify(equiv, bounds);
         } else {
             // The format of the mask is a pain. The high bits tell
             // you how large the a warp is for this instruction
@@ -647,10 +647,10 @@ class LowerWarpShuffles : public IRMutator {
             Expr stride = alloc->stride;
 
             // Break the index into lane and stripe components
-            Expr lane = simplify(reduce_expr(idx / stride, warp_size, bounds), true, bounds);
-            idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), true, bounds);
+            Expr lane = simplify(reduce_expr(idx / stride, warp_size, bounds), bounds);
+            idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), bounds);
             // We don't want the idx to depend on the lane var, so try to eliminate it
-            idx = simplify(solve_expression(idx, this_lane_name).result, true, bounds);
+            idx = simplify(solve_expression(idx, this_lane_name).result, bounds);
             return make_warp_load(op->type, op->name, idx, lane);
         } else {
             return IRMutator::visit(op);
