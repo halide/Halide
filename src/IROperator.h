@@ -979,10 +979,10 @@ Expr pow(Expr x, Expr y);
 Expr erf(const Expr &x);
 
 /** Fused multiply-add. fma(a, b, c) is equivalent to a * b + c, but only
- * rounded once at the end. Halide will turn a * b + c into an fma
- * automatically, except in strict_float contexts. This intrinsic only exists in
- * order to request a true fma inside a strict_float context. A true fma will be
- * emulated on targets without one. */
+ * rounded once at the end. For most targets, when not in a strict_float
+ * context, Halide will already generate fma instructions from a * b + c. This
+ * intrinsic's main purpose is to request a true fma inside a strict_float
+ * context. A true fma will be emulated on targets without one. */
 Expr fma(const Expr &, const Expr &, const Expr &);
 
 /** Fast vectorizable approximation to some trigonometric functions for

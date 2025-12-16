@@ -25,10 +25,9 @@ int test() {
         g.vectorize(x, 5);
     }
 
-    // b.set((T)8769132.122433244233);
-    // c.set((T)2809.14123423413);
     b.set((T)1.111111111);
     c.set((T)1.101010101);
+
     Buffer<T> with_fma = f.realize({1024});
     Buffer<T> without_fma = g.realize({1024});
 
@@ -63,8 +62,9 @@ int test() {
         }
 
         saw_error = true;
-        // The rounding error, if any, ought to be 1 ULP
-        // printf("%llx %llx\n", (long long unsigned)fma_bits, (long long unsigned)no_fma_bits);
+        // For the specific positive numbers picked above, the rounding error is
+        // at most 1 ULP. Note that it's possible to make much larger rounding
+        // errors if you introduce some catastrophic cancellation.
         if (fma_bits + 1 != no_fma_bits &&
             fma_bits - 1 != no_fma_bits) {
             printf("Difference greater than 1 ULP: %10.10g (0x%llx) vs %10.10g (0x%llx)!\n",
