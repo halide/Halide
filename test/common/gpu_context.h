@@ -229,23 +229,17 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
 
         WGPUDeviceDescriptor desc{};
         desc.nextInChain = nullptr;
-        desc.label.data = nullptr;
-        desc.label.length = ~(size_t)0;
+        desc.label = WGPU_STRING_VIEW_INIT;
         desc.requiredFeatureCount = 0;
         desc.requiredFeatures = nullptr;
         desc.requiredLimits = &requestedLimits;
-        desc.defaultQueue.nextInChain = nullptr;
-        desc.defaultQueue.label.data = nullptr;
-        desc.defaultQueue.label.length = ~(size_t)0;
+        desc.defaultQueue = WGPU_QUEUE_DESCRIPTOR_INIT;
         desc.deviceLostCallbackInfo.nextInChain = nullptr;
         desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
         desc.deviceLostCallbackInfo.callback = device_lost_callback;
         desc.deviceLostCallbackInfo.userdata1 = nullptr;
         desc.deviceLostCallbackInfo.userdata2 = nullptr;
-        desc.uncapturedErrorCallbackInfo.nextInChain = nullptr;
-        desc.uncapturedErrorCallbackInfo.callback = nullptr;
-        desc.uncapturedErrorCallbackInfo.userdata1 = nullptr;
-        desc.uncapturedErrorCallbackInfo.userdata2 = nullptr;
+        desc.uncapturedErrorCallbackInfo = WGPU_UNCAPTURED_ERROR_CALLBACK_INFO_INIT;
 
         auto request_device_callback = [](WGPURequestDeviceStatus status,
                                           WGPUDevice device,
@@ -262,8 +256,7 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
             constexpr int kStagingBufferSize = 4 * 1024 * 1024;
             WGPUBufferDescriptor buffer_desc{};
             buffer_desc.nextInChain = nullptr;
-            buffer_desc.label.data = nullptr;
-            buffer_desc.label.length = ~(size_t)0;
+            buffer_desc.label = WGPU_STRING_VIEW_INIT;
             buffer_desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
             buffer_desc.size = kStagingBufferSize;
             buffer_desc.mappedAtCreation = false;

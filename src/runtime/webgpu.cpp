@@ -325,23 +325,17 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
 
     WGPUDeviceDescriptor desc{};
     desc.nextInChain = nullptr;
-    desc.label.data = nullptr;
-    desc.label.length = ~(size_t)0;
+    desc.label = WGPU_STRING_VIEW_INIT;
     desc.requiredFeatureCount = 0;
     desc.requiredFeatures = nullptr;
     desc.requiredLimits = &requestedLimits;
-    desc.defaultQueue.nextInChain = nullptr;
-    desc.defaultQueue.label.data = nullptr;
-    desc.defaultQueue.label.length = ~(size_t)0;
+    desc.defaultQueue = WGPU_QUEUE_DESCRIPTOR_INIT;
     desc.deviceLostCallbackInfo.nextInChain = nullptr;
     desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
     desc.deviceLostCallbackInfo.callback = device_lost_callback;
     desc.deviceLostCallbackInfo.userdata1 = user_context;
     desc.deviceLostCallbackInfo.userdata2 = nullptr;
-    desc.uncapturedErrorCallbackInfo.nextInChain = nullptr;
-    desc.uncapturedErrorCallbackInfo.callback = nullptr;
-    desc.uncapturedErrorCallbackInfo.userdata1 = nullptr;
-    desc.uncapturedErrorCallbackInfo.userdata2 = nullptr;
+    desc.uncapturedErrorCallbackInfo = WGPU_UNCAPTURED_ERROR_CALLBACK_INFO_INIT;
 
     WGPURequestDeviceCallbackInfo callbackInfo{};
     callbackInfo.nextInChain = nullptr;
@@ -400,8 +394,7 @@ WEAK int create_webgpu_context(void *user_context) {
     constexpr int kStagingBufferSize = 4 * 1024 * 1024;
     WGPUBufferDescriptor buffer_desc{};
     buffer_desc.nextInChain = nullptr;
-    buffer_desc.label.data = nullptr;
-    buffer_desc.label.length = ~(size_t)0;
+    buffer_desc.label = WGPU_STRING_VIEW_INIT;
     buffer_desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
     buffer_desc.size = kStagingBufferSize;
     buffer_desc.mappedAtCreation = false;
@@ -445,8 +438,7 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
 
     WGPUBufferDescriptor desc{};
     desc.nextInChain = nullptr;
-    desc.label.data = nullptr;
-    desc.label.length = ~(size_t)0;
+    desc.label = WGPU_STRING_VIEW_INIT;
     desc.usage = WGPUBufferUsage_Storage |
                  WGPUBufferUsage_CopyDst |
                  WGPUBufferUsage_CopySrc;
@@ -896,15 +888,12 @@ WEAK int halide_webgpu_initialize_kernels(void *user_context, void **state_ptr, 
             [&]() -> WGPUShaderModule {
                 ErrorScope error_scope(user_context, context.device);
 
-                WGPUShaderSourceWGSL wgsl_desc{};
-                wgsl_desc.chain.next = nullptr;
-                wgsl_desc.chain.sType = WGPUSType_ShaderSourceWGSL;
+                WGPUShaderSourceWGSL wgsl_desc = WGPU_SHADER_SOURCE_WGSL_INIT;
                 wgsl_desc.code.data = src;
-                wgsl_desc.code.length = ~(size_t)0;
+                wgsl_desc.code.length = WGPU_STRLEN;
                 WGPUShaderModuleDescriptor desc{};
                 desc.nextInChain = (WGPUChainedStruct *)(&wgsl_desc);
-                desc.label.data = nullptr;
-                desc.label.length = ~(size_t)0;
+                desc.label = WGPU_STRING_VIEW_INIT;
                 WGPUShaderModule shader_module =
                     wgpuDeviceCreateShaderModule(context.device, &desc);
 
@@ -964,32 +953,31 @@ WEAK int halide_webgpu_run(void *user_context,
     WGPUConstantEntry overrides[4];
     overrides[0].nextInChain = nullptr;
     overrides[0].key.data = "wgsize_x";
-    overrides[0].key.length = ~(size_t)0;
+    overrides[0].key.length = WGPU_STRLEN;
     overrides[0].value = (double)threadsX;
     overrides[1].nextInChain = nullptr;
     overrides[1].key.data = "wgsize_y";
-    overrides[1].key.length = ~(size_t)0;
+    overrides[1].key.length = WGPU_STRLEN;
     overrides[1].value = (double)threadsY;
     overrides[2].nextInChain = nullptr;
     overrides[2].key.data = "wgsize_z";
-    overrides[2].key.length = ~(size_t)0;
+    overrides[2].key.length = WGPU_STRLEN;
     overrides[2].value = (double)threadsZ;
     overrides[3].nextInChain = nullptr;
     overrides[3].key.data = "workgroup_mem_bytes";
-    overrides[3].key.length = ~(size_t)0;
+    overrides[3].key.length = WGPU_STRLEN;
     overrides[3].value = (double)workgroup_mem_bytes;
     WGPUComputeState compute_state{};
     compute_state.nextInChain = nullptr;
     compute_state.module = shader_module;
     compute_state.entryPoint.data = entry_name;
-    compute_state.entryPoint.length = ~(size_t)0;
+    compute_state.entryPoint.length = WGPU_STRLEN;
     compute_state.constantCount = 4;
     compute_state.constants = overrides;
 
     WGPUComputePipelineDescriptor pipeline_desc{};
     pipeline_desc.nextInChain = nullptr;
-    pipeline_desc.label.data = nullptr;
-    pipeline_desc.label.length = ~(size_t)0;
+    pipeline_desc.label = WGPU_STRING_VIEW_INIT;
     pipeline_desc.layout = nullptr;
     pipeline_desc.compute = compute_state;
 
@@ -1048,8 +1036,7 @@ WEAK int halide_webgpu_run(void *user_context,
             wgpuComputePipelineGetBindGroupLayout(pipeline, 0);
         WGPUBindGroupDescriptor bindgroup_desc{};
         bindgroup_desc.nextInChain = nullptr;
-        bindgroup_desc.label.data = nullptr;
-        bindgroup_desc.label.length = ~(size_t)0;
+        bindgroup_desc.label = WGPU_STRING_VIEW_INIT;
         bindgroup_desc.layout = layout;
         bindgroup_desc.entryCount = num_buffers;
         bindgroup_desc.entries = bind_group_entries;
@@ -1065,8 +1052,7 @@ WEAK int halide_webgpu_run(void *user_context,
         // Create a uniform buffer for the non-buffer arguments.
         WGPUBufferDescriptor desc{};
         desc.nextInChain = nullptr;
-        desc.label.data = nullptr;
-        desc.label.length = ~(size_t)0;
+        desc.label = WGPU_STRING_VIEW_INIT;
         desc.usage = WGPUBufferUsage_Uniform;
         desc.size = uniform_size;
         desc.mappedAtCreation = true;
@@ -1163,8 +1149,7 @@ WEAK int halide_webgpu_run(void *user_context,
         entry.textureView = nullptr;
         WGPUBindGroupDescriptor bindgroup_desc{};
         bindgroup_desc.nextInChain = nullptr;
-        bindgroup_desc.label.data = nullptr;
-        bindgroup_desc.label.length = ~(size_t)0;
+        bindgroup_desc.label = WGPU_STRING_VIEW_INIT;
         bindgroup_desc.layout = layout;
         bindgroup_desc.entryCount = 1;
         bindgroup_desc.entries = &entry;

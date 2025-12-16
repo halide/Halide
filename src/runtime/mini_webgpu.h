@@ -68,9 +68,27 @@
 #define WGPU_NULLABLE
 #endif
 
+// BEGIN Halide-specific changes
+//
+// For the Halide runtime, we can't include these headers,
+// so we define NULL and SIZE_MAX here.
 // #include <stdint.h>
 // #include <stddef.h>
 // #include <math.h>
+
+#ifndef NULL
+#ifdef __cplusplus
+#define NULL nullptr
+#else
+#define NULL ((void*)0)
+#endif
+#endif
+
+#ifndef SIZE_MAX
+#define SIZE_MAX (~(size_t)0)
+#endif
+
+// END Halide-specific changes
 
 #define _wgpu_COMMA ,
 #if defined(__cplusplus)
