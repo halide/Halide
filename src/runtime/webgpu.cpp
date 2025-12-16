@@ -179,12 +179,10 @@ public:
 
         error_code = halide_error_code_success;
         
-        WGPUPopErrorScopeCallbackInfo callbackInfo{};
-        callbackInfo.nextInChain = nullptr;
+        WGPUPopErrorScopeCallbackInfo callbackInfo = WGPU_POP_ERROR_SCOPE_CALLBACK_INFO_INIT;
         callbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
         callbackInfo.callback = error_callback;
         callbackInfo.userdata1 = this;
-        callbackInfo.userdata2 = nullptr;
         
         wgpuDevicePopErrorScope(device, callbackInfo);
         wgpuDevicePopErrorScope(device, callbackInfo);
@@ -300,16 +298,12 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
     global_adapter = adapter;
 
     // Use the defaults for most limits.
-    WGPULimits requestedLimits{};
-    requestedLimits.nextInChain = nullptr;
-    memset(&requestedLimits, 0xFF, sizeof(WGPULimits));
-    requestedLimits.nextInChain = nullptr;
+    WGPULimits requestedLimits = WGPU_LIMITS_INIT;
 
     // TODO: Enable for Emscripten when wgpuAdapterGetLimits is supported.
     // See https://github.com/halide/Halide/issues/7248
 #if HALIDE_RUNTIME_WEBGPU_NATIVE_API
-    WGPULimits supportedLimits{};
-    supportedLimits.nextInChain = nullptr;
+    WGPULimits supportedLimits = WGPU_LIMITS_INIT;
     if (!wgpuAdapterGetLimits(adapter, &supportedLimits)) {
         debug(user_context) << "wgpuAdapterGetLimits failed\n";
     } else {

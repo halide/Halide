@@ -71,7 +71,7 @@
 // BEGIN Halide-specific changes
 //
 // For the Halide runtime, we can't include these headers,
-// so we define NULL and SIZE_MAX here.
+// so we define NULL, SIZE_MAX, and integer limit macros here.
 // #include <stdint.h>
 // #include <stddef.h>
 // #include <math.h>
@@ -86,6 +86,14 @@
 
 #ifndef SIZE_MAX
 #define SIZE_MAX (~(size_t)0)
+#endif
+
+#ifndef UINT32_MAX
+#define UINT32_MAX (~(uint32_t)0)
+#endif
+
+#ifndef UINT64_MAX
+#define UINT64_MAX (~(uint64_t)0)
 #endif
 
 // END Halide-specific changes

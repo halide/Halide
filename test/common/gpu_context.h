@@ -198,13 +198,12 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
         results->adapter = adapter;
 
         // Use the defaults for most limits.
-        WGPULimits requestedLimits{};
-        memset(&requestedLimits, 0xFF, sizeof(WGPULimits));
+        WGPULimits requestedLimits = WGPU_LIMITS_INIT;
 
         // TODO: Enable for Emscripten when wgpuAdapterGetLimits is supported.
         // See https://github.com/halide/Halide/issues/7248
 #ifdef WITH_DAWN_NATIVE
-        WGPULimits supportedLimits{};
+        WGPULimits supportedLimits = WGPU_LIMITS_INIT;
         if (wgpuAdapterGetLimits(adapter, &supportedLimits) != WGPUStatus_Success) {
             results->success = false;
             return;
