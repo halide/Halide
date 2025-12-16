@@ -2,10 +2,6 @@
 #define __has_attribute(x) 0
 #endif
 
-#if !defined(__has_builtin)
-#define __has_builtin(x) 0
-#endif
-
 namespace {
 
 // We can't use std::array because that has its own overload of operator<, etc,
