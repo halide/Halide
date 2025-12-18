@@ -346,7 +346,7 @@ uint16_t float_to_bfloat16(float f) {
 
 uint16_t float_to_bfloat16(double f) {
     // Coming from double is a little tricker. We first narrow to float and
-    // record if any magnitude was lost of gained in the process. If so we'll
+    // record if any magnitude was lost or gained in the process. If so we'll
     // use that to break ties instead of testing whether or not truncation would
     // return odd.
     float f32 = (float)f;

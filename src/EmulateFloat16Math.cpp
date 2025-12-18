@@ -20,32 +20,30 @@ Expr bfloat16_to_float32(Expr e) {
     return e;
 }
 
-Expr float32_to_bfloat16(Expr e) {
-    internal_assert(e.type().bits() == 32);
-    const int lanes = e.type().lanes();
-    e = strict_float(e);
-    e = reinterpret(UInt(32, lanes), e);
-    // We want to round ties to even, so before truncating either
-    // add 0x8000 (0.5) to odd numbers or 0x7fff (0.499999) to
-    // even numbers.
-    e += 0x7fff + ((e >> 16) & 1);
-    e = (e >> 16);
-    e = cast(UInt(16, lanes), e);
-    e = reinterpret(BFloat(16, lanes), e);
-    return e;
-}
-
-Expr float64_to_bfloat16(Expr e) {
-    internal_assert(e.type().bits() == 64);
+Expr float_to_bfloat16(Expr e) {
     const int lanes = e.type().lanes();
     e = strict_float(e);
 
+    Expr err;
     // First round to float and record any gain of loss of magnitude
-    Expr f = cast(Float(32, lanes), e);
-    Expr err = abs(e) - abs(f);
-    e = reinterpret(UInt(32, lanes), f);
-    // As above, but break ties using err, if non-zero
-    e += 0x7fff + (((err >= 0) & ((e >> 16) & 1)) | (err > 0));
+    if (e.type().bits() == 64) {
+        Expr f = cast(Float(32, lanes), e);
+        err = abs(e) - abs(f);
+        e = f;
+    } else {
+        internal_assert(e.type().bits() == 32);
+    }
+    e = reinterpret(UInt(32, lanes), e);
+
+    // We want to round ties to even, so if we have no error recorded above,
+    // before truncating either add 0x8000 (0.5) to odd numbers or 0x7fff
+    // (0.499999) to even numbers. If we have error, break ties using that
+    // instead.
+    Expr tie_breaker = (e >> 16) & 1;  // 1 when rounding down would go to odd
+    if (err.defined()) {
+        tie_breaker = ((err == 0) & tie_breaker) | (err > 0);
+    }
+    e += tie_breaker + 0x7fff;
     e = (e >> 16);
     e = cast(UInt(16, lanes), e);
     e = reinterpret(BFloat(16, lanes), e);
@@ -82,41 +80,64 @@ Expr float16_to_float32(Expr value) {
     return f32;
 }
 
-Expr float32_to_float16(Expr value) {
+Expr float_to_float16(Expr value) {
     // We're about the sniff the bits of a float, so we should
     // guard it with strict float to ensure we don't do things
     // like assume it can't be denormal.
     value = strict_float(value);
 
-    Type f32_t = Float(32, value.type().lanes());
+    const int src_bits = value.type().bits();
+
+    Type float_t = Float(src_bits, value.type().lanes());
     Type f16_t = Float(16, value.type().lanes());
-    Type u32_t = UInt(32, value.type().lanes());
+    Type bits_t = UInt(src_bits, value.type().lanes());
     Type u16_t = UInt(16, value.type().lanes());
 
-    Expr bits = reinterpret(u32_t, value);
+    Expr bits = reinterpret(bits_t, value);
 
     // Extract the sign bit
-    Expr sign = bits & make_const(u32_t, 0x80000000);
+    Expr sign = bits & make_const(bits_t, (uint64_t)1 << (src_bits - 1));
     bits = bits ^ sign;
 
     // Test the endpoints
-    Expr is_denorm = (bits < make_const(u32_t, 0x38800000));
-    Expr is_inf = (bits >= make_const(u32_t, 0x47800000));
-    Expr is_nan = (bits > make_const(u32_t, 0x7f800000));
+
+    // Smallest input representable as normal float16 (2^-14)
+    Expr two_to_the_minus_14 = src_bits == 32 ?
+                                   make_const(bits_t, 0x38800000) :
+                                   make_const(bits_t, (uint64_t)0x3f10000000000000ULL);
+    Expr is_denorm = bits < two_to_the_minus_14;
+
+    // Smallest input too big to represent as a float16 (2^16)
+    Expr two_to_the_16 = src_bits == 32 ?
+                             make_const(bits_t, 0x47800000) :
+                             make_const(bits_t, (uint64_t)0x40f0000000000000ULL);
+    Expr is_inf = bits >= two_to_the_16;
+
+    // Check if the input is a nan, which is anything bigger than an infinity bit pattern
+    Expr input_inf_bits = src_bits == 32 ?
+                              make_const(bits_t, 0x7f800000) :
+                              make_const(bits_t, (uint64_t)0x7ff0000000000000ULL);
+    Expr is_nan = bits > input_inf_bits;
 
     // Denorms are linearly spaced, so we can handle them
     // by scaling up the input as a float and using the
     // existing int-conversion rounding instructions.
-    Expr denorm_bits = cast(u16_t, strict_float(round(strict_float(reinterpret(f32_t, bits + 0x0c000000)))));
+    Expr two_to_the_24 = src_bits == 32 ?
+                             make_const(bits_t, 0x0c000000) :
+                             make_const(bits_t, (uint64_t)0x0180000000000000ULL);
+    Expr denorm_bits = cast(u16_t, strict_float(round(reinterpret(float_t, bits + two_to_the_24))));
     Expr inf_bits = make_const(u16_t, 0x7c00);
     Expr nan_bits = make_const(u16_t, 0x7fff);
 
     // We want to round to nearest even, so we add either
     // 0.5 if the integer part is odd, or 0.4999999 if the
     // integer part is even, then truncate.
-    bits += (bits >> 13) & 1;
-    bits += make_const(UInt(32), ((uint32_t)1 << (13 - 1)) - 1);
-    bits = cast(u16_t, bits >> 13);
+    const int float16_mantissa_bits = 10;
+    const int input_mantissa_bits = src_bits == 32 ? 23 : 52;
+    const int bits_lost = input_mantissa_bits - float16_mantissa_bits;
+    bits += (bits >> bits_lost) & 1;
+    bits += make_const(bits_t, ((uint64_t)1 << (bits_lost - 1)) - 1);
+    bits = cast(u16_t, bits >> bits_lost);
 
     // Rebias the exponent
     bits -= 0x4000;
@@ -127,56 +148,7 @@ Expr float32_to_float16(Expr value) {
                   is_nan, nan_bits,
                   cast(u16_t, bits));
     // Recover the sign bit
-    bits = bits | cast(u16_t, sign >> 16);
-    return common_subexpression_elimination(reinterpret(f16_t, bits));
-}
-
-Expr float64_to_float16(Expr value) {
-    value = strict_float(value);
-
-    Type f64_t = Float(64, value.type().lanes());
-    Type f16_t = Float(16, value.type().lanes());
-    Type u64_t = UInt(64, value.type().lanes());
-    Type u16_t = UInt(16, value.type().lanes());
-
-    Expr bits = reinterpret(u64_t, value);
-
-    // Extract the sign bit
-    Expr sign = bits & make_const(u64_t, (uint64_t)(0x8000000000000000ULL));
-    bits = bits ^ sign;
-
-    // Test the endpoints
-    Expr is_denorm = (bits < make_const(u64_t, (uint64_t)(0x3f10000000000000ULL)));
-    Expr is_inf = (bits >= make_const(u64_t, (uint64_t)(0x40f0000000000000ULL)));
-    Expr is_nan = (bits > make_const(u64_t, (uint64_t)(0x7ff0000000000000ULL)));
-
-    // Denorms are linearly spaced, so we can handle them by scaling up the
-    // input as a float or double by 2^24 and using the existing int-conversion
-    // rounding instructions. We can scale up by adding 24 to the exponent.
-    Expr denorm_bits = cast(u16_t, strict_float(round(strict_float(reinterpret(f64_t, bits + make_const(u64_t, (uint64_t)(0x0180000000000000ULL)))))));
-    Expr inf_bits = make_const(u16_t, 0x7c00);
-    Expr nan_bits = make_const(u16_t, 0x7fff);
-
-    // We want to round to nearest even, so we add either 0.5 if after
-    // truncation the last bit would be 1, or 0.4999999 if after truncation the
-    // last bit would be zero, then truncate.
-    bits += (bits >> 42) & 1;
-    bits += make_const(UInt(64), ((uint64_t)1 << (42 - 1)) - 1);
-    bits = bits >> 42;
-
-    // We no longer need the high bits
-    bits = cast(u16_t, bits);
-
-    // Rebias the exponent
-    bits -= 0x4000;
-    // Truncate the top bits of the exponent
-    bits = bits & 0x7fff;
-    bits = select(is_denorm, denorm_bits,
-                  is_inf, inf_bits,
-                  is_nan, nan_bits,
-                  cast(u16_t, bits));
-    // Recover the sign bit
-    bits = bits | cast(u16_t, sign >> 48);
+    bits = bits | cast(u16_t, sign >> (src_bits - 16));
     return common_subexpression_elimination(reinterpret(f16_t, bits));
 }
 
@@ -226,7 +198,7 @@ Expr lower_float16_transcendental_to_float32_equivalent(const Call *op) {
         Expr e = Call::make(t, it->second, new_args, op->call_type,
                             op->func, op->value_index, op->image, op->param);
         if (op->type.is_float()) {
-            e = float32_to_float16(e);
+            e = float_to_float16(e);
         }
         internal_assert(e.type() == op->type);
         return e;
@@ -254,17 +226,19 @@ Expr lower_float16_cast(const Cast *op) {
     if (dst.is_bfloat()) {
         internal_assert(dst.bits() == 16);
         if (src.bits() > 32) {
-            val = float64_to_bfloat16(cast(f64, val));
+            val = cast(f64, val);
         } else {
-            val = float32_to_bfloat16(cast(f32, val));
+            val = cast(f32, val);
         }
+        val = float_to_bfloat16(val);
     } else if (dst.is_float() && dst.bits() < 32) {
         internal_assert(dst.bits() == 16);
         if (src.bits() > 32) {
-            val = float64_to_float16(cast(f64, val));
+            val = cast(f64, val);
         } else {
-            val = float32_to_float16(cast(f32, val));
+            val = cast(f32, val);
         }
+        val = float_to_float16(val);
     }
 
     return cast(dst, val);

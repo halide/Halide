@@ -312,8 +312,6 @@ int run_test() {
                 float16_t to_odd = k_is_odd ? k : k_plus_eps;
                 float halfway = (float(k) + float(k_plus_eps)) / 2.f;
 
-                printf("float16 k_is_odd = %d\n", k_is_odd);
-
                 // We expect ties to round to even
                 assert(float16_t(halfway) == to_even);
                 // Now let's construct a case where it *should* have rounded to
