@@ -9,27 +9,46 @@ namespace Halide {
 namespace Internal {
 
 Expr bfloat16_to_float32(Expr e) {
+    const int lanes = e.type().lanes();
     if (e.type().is_bfloat()) {
         e = reinterpret(e.type().with_code(Type::UInt), e);
     }
-    e = cast(UInt(32, e.type().lanes()), e);
+    e = cast(UInt(32, lanes), e);
     e = e << 16;
-    e = reinterpret(Float(32, e.type().lanes()), e);
+    e = reinterpret(Float(32, lanes), e);
     e = strict_float(e);
     return e;
 }
 
 Expr float32_to_bfloat16(Expr e) {
     internal_assert(e.type().bits() == 32);
+    const int lanes = e.type().lanes();
     e = strict_float(e);
-    e = reinterpret(UInt(32, e.type().lanes()), e);
+    e = reinterpret(UInt(32, lanes), e);
     // We want to round ties to even, so before truncating either
     // add 0x8000 (0.5) to odd numbers or 0x7fff (0.499999) to
     // even numbers.
     e += 0x7fff + ((e >> 16) & 1);
     e = (e >> 16);
-    e = cast(UInt(16, e.type().lanes()), e);
-    e = reinterpret(BFloat(16, e.type().lanes()), e);
+    e = cast(UInt(16, lanes), e);
+    e = reinterpret(BFloat(16, lanes), e);
+    return e;
+}
+
+Expr float64_to_bfloat16(Expr e) {
+    internal_assert(e.type().bits() == 64);
+    const int lanes = e.type().lanes();
+    e = strict_float(e);
+
+    // First round to float and record any gain of loss of magnitude
+    Expr f = cast(Float(32, lanes), e);
+    Expr err = abs(e) - abs(f);
+    e = reinterpret(UInt(32, lanes), f);
+    // As above, but break ties using err, if non-zero
+    e += 0x7fff + (((err >= 0) & ((e >> 16) & 1)) | (err > 0));
+    e = (e >> 16);
+    e = cast(UInt(16, lanes), e);
+    e = reinterpret(BFloat(16, lanes), e);
     return e;
 }
 
@@ -96,10 +115,11 @@ Expr float32_to_float16(Expr value) {
     // 0.5 if the integer part is odd, or 0.4999999 if the
     // integer part is even, then truncate.
     bits += (bits >> 13) & 1;
-    bits += 0xfff;
-    bits = bits >> 13;
+    bits += make_const(UInt(32), ((uint32_t)1 << (13 - 1)) - 1);
+    bits = cast(u16_t, bits >> 13);
+
     // Rebias the exponent
-    bits -= 0x1c000;
+    bits -= 0x4000;
     // Truncate the top bits of the exponent
     bits = bits & 0x7fff;
     bits = select(is_denorm, denorm_bits,
@@ -108,6 +128,55 @@ Expr float32_to_float16(Expr value) {
                   cast(u16_t, bits));
     // Recover the sign bit
     bits = bits | cast(u16_t, sign >> 16);
+    return common_subexpression_elimination(reinterpret(f16_t, bits));
+}
+
+Expr float64_to_float16(Expr value) {
+    value = strict_float(value);
+
+    Type f64_t = Float(64, value.type().lanes());
+    Type f16_t = Float(16, value.type().lanes());
+    Type u64_t = UInt(64, value.type().lanes());
+    Type u16_t = UInt(16, value.type().lanes());
+
+    Expr bits = reinterpret(u64_t, value);
+
+    // Extract the sign bit
+    Expr sign = bits & make_const(u64_t, (uint64_t)(0x8000000000000000ULL));
+    bits = bits ^ sign;
+
+    // Test the endpoints
+    Expr is_denorm = (bits < make_const(u64_t, (uint64_t)(0x3f10000000000000ULL)));
+    Expr is_inf = (bits >= make_const(u64_t, (uint64_t)(0x40f0000000000000ULL)));
+    Expr is_nan = (bits > make_const(u64_t, (uint64_t)(0x7ff0000000000000ULL)));
+
+    // Denorms are linearly spaced, so we can handle them by scaling up the
+    // input as a float or double by 2^24 and using the existing int-conversion
+    // rounding instructions. We can scale up by adding 24 to the exponent.
+    Expr denorm_bits = cast(u16_t, strict_float(round(strict_float(reinterpret(f64_t, bits + make_const(u64_t, (uint64_t)(0x0180000000000000ULL)))))));
+    Expr inf_bits = make_const(u16_t, 0x7c00);
+    Expr nan_bits = make_const(u16_t, 0x7fff);
+
+    // We want to round to nearest even, so we add either 0.5 if after
+    // truncation the last bit would be 1, or 0.4999999 if after truncation the
+    // last bit would be zero, then truncate.
+    bits += (bits >> 42) & 1;
+    bits += make_const(UInt(64), ((uint64_t)1 << (42 - 1)) - 1);
+    bits = bits >> 42;
+
+    // We no longer need the high bits
+    bits = cast(u16_t, bits);
+
+    // Rebias the exponent
+    bits -= 0x4000;
+    // Truncate the top bits of the exponent
+    bits = bits & 0x7fff;
+    bits = select(is_denorm, denorm_bits,
+                  is_inf, inf_bits,
+                  is_nan, nan_bits,
+                  cast(u16_t, bits));
+    // Recover the sign bit
+    bits = bits | cast(u16_t, sign >> 48);
     return common_subexpression_elimination(reinterpret(f16_t, bits));
 }
 
@@ -171,6 +240,7 @@ Expr lower_float16_cast(const Cast *op) {
     Type src = op->value.type();
     Type dst = op->type;
     Type f32 = Float(32, dst.lanes());
+    Type f64 = Float(64, dst.lanes());
     Expr val = op->value;
 
     if (src.is_bfloat()) {
@@ -183,10 +253,18 @@ Expr lower_float16_cast(const Cast *op) {
 
     if (dst.is_bfloat()) {
         internal_assert(dst.bits() == 16);
-        val = float32_to_bfloat16(cast(f32, val));
+        if (src.bits() > 32) {
+            val = float64_to_bfloat16(cast(f64, val));
+        } else {
+            val = float32_to_bfloat16(cast(f32, val));
+        }
     } else if (dst.is_float() && dst.bits() < 32) {
         internal_assert(dst.bits() == 16);
-        val = float32_to_float16(cast(f32, val));
+        if (src.bits() > 32) {
+            val = float64_to_float16(cast(f64, val));
+        } else {
+            val = float32_to_float16(cast(f32, val));
+        }
     }
 
     return cast(dst, val);

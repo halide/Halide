@@ -32,6 +32,8 @@ struct float16_t {
     explicit float16_t(float value);
     explicit float16_t(double value);
     explicit float16_t(int value);
+    explicit float16_t(int64_t value);
+    explicit float16_t(uint64_t value);
     // @}
 
     /** Construct a float16_t with the bits initialised to 0. This represents
@@ -175,6 +177,8 @@ struct bfloat16_t {
     explicit bfloat16_t(float value);
     explicit bfloat16_t(double value);
     explicit bfloat16_t(int value);
+    explicit bfloat16_t(int64_t value);
+    explicit bfloat16_t(uint64_t value);
     // @}
 
     /** Construct a bfloat16_t with the bits initialised to 0. This represents
