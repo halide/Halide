@@ -626,6 +626,7 @@ struct Call : public ExprNode<Call> {
         // them as reals and ignoring the existence of nan and inf. Using these
         // intrinsics instead prevents any such optimizations.
         strict_add,
+        strict_cast,
         strict_div,
         strict_eq,
         strict_le,
@@ -792,6 +793,7 @@ struct Call : public ExprNode<Call> {
     bool is_strict_float_intrinsic() const {
         return is_intrinsic(
             {Call::strict_add,
+             Call::strict_cast,
              Call::strict_div,
              Call::strict_max,
              Call::strict_min,
