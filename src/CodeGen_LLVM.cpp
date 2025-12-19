@@ -3306,6 +3306,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         // Evaluate the args first outside the strict scope, as they may use
         // non-strict operations.
         std::vector<Expr> new_args(op->args.size());
+        std::vector<std::string> to_pop;
         for (size_t i = 0; i < op->args.size(); i++) {
             const Expr &arg = op->args[i];
             if (arg.as<Variable>() || is_const(arg)) {
@@ -3313,6 +3314,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             } else {
                 std::string name = unique_name('t');
                 sym_push(name, codegen(arg));
+                to_pop.push_back(name);
                 new_args[i] = Variable::make(arg.type(), name);
             }
         }
@@ -3320,8 +3322,27 @@ void CodeGen_LLVM::visit(const Call *op) {
         {
             ScopedValue<bool> old_in_strict_float(in_strict_float, true);
             if (op->is_intrinsic(Call::strict_fma)) {
-                std::string name = "llvm.fma" + mangle_llvm_type(llvm_type_of(op->type));
-                value = call_intrin(op->type, op->type.lanes(), name, new_args);
+                if (op->type.is_float() && op->type.bits() <= 16 &&
+                    upgrade_type_for_arithmetic(op->type) != op->type) {
+                    // For (b)float16 and below, doing the fma as a
+                    // double-precision fma is exact and is what llvm does. A
+                    // double has enough bits of precision such that the add in
+                    // the fma has no rounding error in the cases where the fma
+                    // is going to return a finite float16. We do this
+                    // legalization manually so that we can use our custom
+                    // vectorizable float16 casts instead of letting llvm call
+                    // library functions.
+                    Type wide_t = Float(64, op->type.lanes());
+                    for (Expr &e : new_args) {
+                        e = cast(wide_t, e);
+                    }
+                    Expr equiv = Call::make(wide_t, op->name, new_args, op->call_type);
+                    equiv = cast(op->type, equiv);
+                    value = codegen(equiv);
+                } else {
+                    std::string name = "llvm.fma" + mangle_llvm_type(llvm_type_of(op->type));
+                    value = call_intrin(op->type, op->type.lanes(), name, new_args);
+                }
             } else {
                 // Lower to something other than a call node
                 Expr call = Call::make(op->type, op->name, new_args, op->call_type);
@@ -3329,11 +3350,8 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
         }
 
-        for (size_t i = 0; i < op->args.size(); i++) {
-            const Expr &arg = op->args[i];
-            if (!arg.as<Variable>() && !is_const(arg)) {
-                sym_pop(new_args[i].as<Variable>()->name);
-            }
+        for (const auto &s : to_pop) {
+            sym_pop(s);
         }
 
     } else if (is_float16_transcendental(op) && !supports_call_as_float16(op)) {

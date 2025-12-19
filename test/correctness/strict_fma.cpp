@@ -13,16 +13,6 @@ int test() {
     g(x) = strict_float(cast<T>(x) * b + c);
 
     Target t = get_jit_target_from_environment();
-    if (std::is_same_v<T, float16_t> &&
-        t.arch == Target::X86 &&
-        t.os == Target::Windows &&
-        t.bits == 32) {
-        // Don't try to resolve float16 math library functions on win-32. In
-        // theory LLVM is responsible for this, but at the time of writing
-        // (12/16/2025) it doesn't seem to work.
-        printf("Skipping float16 fma test on win-32\n");
-        return 0;
-    }
 
     if (std::is_same_v<T, float> &&
         t.has_gpu_feature() &&
@@ -42,7 +32,7 @@ int test() {
     }
 
     b.set((T)1.111111111);
-    c.set((T)1.101010101);
+    c.set((T)1.0101010101);
 
     Buffer<T> with_fma = f.realize({1024});
     Buffer<T> without_fma = g.realize({1024});
@@ -58,7 +48,6 @@ int test() {
 
         if constexpr (sizeof(T) >= 4) {
             T correct_fma = std::fma((T)i, b.get(), c.get());
-
             if (with_fma(i) != correct_fma) {
                 printf("fma result does not match std::fma:\n"
                        "  fma(%d, %10.10g, %10.10g) = %10.10g (0x%llx)\n"
@@ -91,7 +80,10 @@ int test() {
     }
 
     if (!saw_error) {
-        printf("There should have occasionally been a 1 ULP difference between fma and non-fma results\n");
+        printf("There should have occasionally been a 1 ULP difference between fma "
+               "and non-fma results. strict_float may not be respected on this target.\n");
+        // Uncomment to inspect assembly
+        // g.compile_to_assembly("/dev/stdout", {b, c}, get_jit_target_from_environment());
         return -1;
     }
 
