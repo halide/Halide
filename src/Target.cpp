@@ -1359,17 +1359,28 @@ int Target::get_arm_v8_lower_bound() const {
 }
 
 bool Target::supports_type(const Type &t) const {
+    if (has_feature(Vulkan)) {
+        if (t.is_float() && t.bits() == 64) {
+            return has_feature(Target::VulkanFloat64);
+        } else if (t.is_float() && t.bits() == 16) {
+            return has_feature(Target::VulkanFloat16);
+        } else if (t.is_int_or_uint() && t.bits() == 64) {
+            return has_feature(Target::VulkanInt64);
+        } else if (t.is_int_or_uint() && t.bits() == 16) {
+            return has_feature(Target::VulkanInt16);
+        } else if (t.is_int_or_uint() && t.bits() == 8) {
+            return has_feature(Target::VulkanInt8);
+        }
+    }
     if (t.bits() == 64) {
         if (t.is_float()) {
             return (!has_feature(Metal) &&
                     !has_feature(D3D12Compute) &&
                     (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles)) &&
-                    (!has_feature(Vulkan) || has_feature(Target::VulkanFloat64)) &&
                     !has_feature(WebGPU));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(D3D12Compute) &&
-                    (!has_feature(Vulkan) || has_feature(Target::VulkanInt64)) &&
                     !has_feature(WebGPU));
         }
     }
