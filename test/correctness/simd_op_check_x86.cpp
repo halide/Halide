@@ -411,7 +411,9 @@ public:
             check(use_avx512 ? "vrsqrt*ps" : "vrsqrtps*ymm", 8, fast_inverse_sqrt(f32_1));
             check(use_avx512 ? "vrcp*ps" : "vrcpps*ymm", 8, fast_inverse(f32_1));
 
-            check(use_avx512 ? "kandw" : "vandps", 8, bool_1 & bool_2);
+            // Some llvm's don't use kandw, but instead predicate the computation of bool_2
+            // using the result of bool_1
+            // check(use_avx512 ? "kandw" : "vandps", 8, bool_1 & bool_2);
             check(use_avx512 ? "korw" : "vorps", 8, bool_1 | bool_2);
             check(use_avx512 ? "kxorw" : "vxorps", 8, bool_1 ^ bool_2);
 
