@@ -23,7 +23,7 @@ void check_is_sio(const Expr &e) {
 }
 
 void check(const Expr &a, const Expr &b, const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>()) {
-    Expr simpler = simplify(a, true, Scope<Interval>(), alignment);
+    Expr simpler = simplify(a, Scope<Interval>(), alignment);
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
@@ -50,7 +50,7 @@ void check(const Stmt &a, const Stmt &b) {
 }
 
 void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
-    Expr simpler = simplify(a, true, bi);
+    Expr simpler = simplify(a, bi);
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
@@ -432,6 +432,8 @@ void check_algebra() {
     check((y + (x / 3 * 3)) + x % 3, x + y);
     check((y + (x / 3)) * 3 + x % 3, y * 3 + x);
 
+    check(x - (x / 2), (x + 1) / 2);
+    check((x / 3) - x, (x * -2) / 3);
     check(x / 2 + x % 2, (x + 1) / 2);
     check(x % 2 + x / 2, (x + 1) / 2);
     check(((x + 1) / 2) * 2 - x, x % 2);
@@ -1967,9 +1969,9 @@ void check_overflow() {
                     scope.push("y", {neg_two_32, zero});
                 }
                 if (x_pos == y_pos) {
-                    internal_assert(!is_const(simplify((x * y) < two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x * y) < two_32, scope)));
                 } else {
-                    internal_assert(!is_const(simplify((x * y) > neg_two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x * y) > neg_two_32, scope)));
                 }
             }
             // Add/Sub
@@ -1986,13 +1988,13 @@ void check_overflow() {
                     scope.push("y", {min_64, zero});
                 }
                 if (x_pos && y_pos) {
-                    internal_assert(!is_const(simplify((x + y) < two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x + y) < two_32, scope)));
                 } else if (x_pos && !y_pos) {
-                    internal_assert(!is_const(simplify((x - y) < two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x - y) < two_32, scope)));
                 } else if (!x_pos && y_pos) {
-                    internal_assert(!is_const(simplify((x - y) > neg_two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x - y) > neg_two_32, scope)));
                 } else {
-                    internal_assert(!is_const(simplify((x + y) > neg_two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x + y) > neg_two_32, scope)));
                 }
             }
         }

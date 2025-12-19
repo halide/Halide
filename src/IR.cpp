@@ -678,6 +678,7 @@ const char *const intrinsic_op_names[] = {
     "sliding_window_marker",
     "sorted_avg",
     "strict_add",
+    "strict_cast",
     "strict_div",
     "strict_eq",
     "strict_fma",

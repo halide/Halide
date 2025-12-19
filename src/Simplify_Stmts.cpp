@@ -79,9 +79,13 @@ Stmt Simplify::visit(const IfThenElse *op) {
         else_case = Stmt();
     }
 
-    // Pull out common nodes, but only when the "late in lowering" flag is set. This
-    // avoids simplifying specializations before they have a chance to specialize.
-    if (remove_dead_code && equal(then_case, else_case)) {
+    // This code used to use the remove_dead_lets flag to not merge equal
+    // clauses on the grounds that they might be specializations that will
+    // simplify later. However, specializations should be simplified
+    // aggressively quite early in lowering. If in future there is a bug with
+    // specializations seemingly disappearing halfway through lowering, try
+    // disabling this.
+    if (equal(then_case, else_case)) {
         return then_case;
     }
     const Acquire *then_acquire = then_case.as<Acquire>();

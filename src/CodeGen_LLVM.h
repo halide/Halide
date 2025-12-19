@@ -523,6 +523,10 @@ protected:
     /** Shorthand for shuffling a single vector. */
     llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
 
+    bool is_power_of_two(int x) const;
+
+    bool is_scalable_vector(llvm::Value *v) const;
+
     /** Go looking for a vector version of a runtime function. Will
      * return the best match. Matches in the following order:
      *

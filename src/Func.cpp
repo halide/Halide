@@ -3352,6 +3352,32 @@ size_t FuncRef::size() const {
     return func.outputs();
 }
 
+const Type &FuncRef::type() const {
+    const auto &types =
+        (func.has_pure_definition() || func.has_extern_definition()) ?
+            func.output_types() :
+            func.required_types();
+    if (types.empty()) {
+        user_error << "Can't call type() on call to Func \"" << func.name()
+                   << "\" because it is undefined or has no type requirements.\n";
+    } else if (types.size() > 1) {
+        user_error << "Can't call type() on call to Func \"" << func.name()
+                   << "\" because it returns a Tuple.\n";
+    }
+    return types[0];
+}
+
+const std::vector<Type> &FuncRef::types() const {
+    const auto &types =
+        (func.has_pure_definition() || func.has_extern_definition()) ?
+            func.output_types() :
+            func.required_types();
+    user_assert(!types.empty())
+        << "Can't call types() on call to Func \"" << func.name()
+        << "\" because it is undefined or has no type requirements.\n";
+    return types;
+}
+
 bool FuncRef::equivalent_to(const FuncRef &other) const {
     if (!func.same_as(other.func) ||
         implicit_placeholder_pos != other.implicit_placeholder_pos ||

@@ -67,7 +67,6 @@ class BoundLoops : public IRMutator {
                 extent = remove_likelies(extent);
                 extent = substitute_in_all_lets(extent);
                 extent = simplify(extent,
-                                  true,
                                   Scope<Interval>::empty_scope(),
                                   Scope<ModulusRemainder>::empty_scope(),
                                   facts);
