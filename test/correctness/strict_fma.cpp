@@ -21,7 +21,10 @@ int test() {
         !(t.arch == Target::X86 && t.has_feature(Target::Metal)) &&
         // TODO: Vulkan does not respect strict_float yet:
         // https://github.com/halide/Halide/issues/7239
-        !t.has_feature(Target::Vulkan)) {
+        !t.has_feature(Target::Vulkan) &&
+        // WebGPU does not and may never respect strict_float. There's no way to
+        // ask for it in the language.
+        !t.has_feature(Target::WebGPU)) {
         Var xo{"xo"}, xi{"xi"};
         f.gpu_tile(x, xo, xi, 32);
         g.gpu_tile(x, xo, xi, 32);
