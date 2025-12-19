@@ -420,6 +420,12 @@ Target calculate_host_target() {
         const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma;  // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
             initial_features.push_back(Target::AVX2);
+            // avxvnni (note, not avx512vnni) result in eax
+            const uint32_t avxvnni = 1U << 4;
+            // TODO: port to family/model -based detection.
+            if ((info3[0] & avxvnni) == avxvnni) {
+                initial_features.push_back(Target::AVXVNNI);
+            }
         }
         if ((info2[1] & avx512) == avx512) {
             initial_features.push_back(Target::AVX512);
@@ -435,14 +441,9 @@ Target calculate_host_target() {
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
-                const uint32_t avxvnni = 1U << 4;     // avxvnni (note, not avx512vnni) result in eax
                 const uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, with cpuid(eax=7, ecx=1)
-                // TODO: port to family/model -based detection.
-                if ((info3[0] & avxvnni) == avxvnni) {
-                    initial_features.push_back(Target::AVXVNNI);
-                    if ((info3[0] & avx512bf16) == avx512bf16) {
-                        initial_features.push_back(Target::AVX512_SapphireRapids);
-                    }
+                if ((info3[0] & avx512bf16) == avx512bf16) {
+                    initial_features.push_back(Target::AVX512_SapphireRapids);
                 }
             }
         }
