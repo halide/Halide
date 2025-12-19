@@ -128,7 +128,7 @@ public:
         static_assert(sizeof(T) <= sizeof(halide_scalar_value_t));
         const auto sv = scalar_data_checked(type_of<T>());
         T t;
-        memcpy(&t, &sv.u.u64, sizeof(t));
+        memcpy((char *)(&t), &sv.u.u64, sizeof(t));
         return t;
     }
 

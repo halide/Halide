@@ -317,6 +317,7 @@ tests(GROUPS correctness
       store_in.cpp
       strict_float.cpp
       strict_float_bounds.cpp
+      strict_fma.cpp
       strided_load.cpp
       target.cpp
       target_query.cpp
