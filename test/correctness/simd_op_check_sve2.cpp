@@ -687,45 +687,13 @@ private:
                 continue;
             }
 
-            // LD/ST       -       Load/Store
-            for (float factor : {0.5f, 1.f, 2.f}) {
-                const int width = base_vec_bits * factor;
-                const int total_lanes = width / bits;
-                const int vector_lanes = base_vec_bits / bits;
-                const int instr_lanes = min(total_lanes, vector_lanes);
-                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
-
-                // In case of arm32, instruction selection looks inconsistent due to optimization by LLVM
-                AddTestFunctor add(*this, bits, total_lanes, target.bits == 64);
-                // NOTE: if the expr is too simple, LLVM might generate "bl memcpy"
-                Expr load_store_1 = in_im(x) * 3;
-
-                if (has_sve()) {
-                    // This pattern has changed with LLVM 21, see https://github.com/halide/Halide/issues/8584 for more
-                    // details.
-                    if (Halide::Internal::get_llvm_version() < 210) {
-                        // in native width, ld1b/st1b is used regardless of data type
-                        const bool allow_byte_ls = (width == target.vector_bits);
-                        add({get_sve_ls_instr("ld1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
-                        add({get_sve_ls_instr("st1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
-                    } else {
-                        if (width == 256 && vscale == 1) {
-                            // Optimized with load/store pair (two registers) instruction
-                            add({{"ldp", R"(q\d\d?)"}}, total_lanes, load_store_1);
-                            add({{"stp", R"(q\d\d?)"}}, total_lanes, load_store_1);
-                        } else {
-                            // There does not seem to be a simple rule to select ldr/str or ld1x/stx
-                            add("ld1_or_ldr", {{R"(ld(1.|r))", R"(z\d\d?)"}}, total_lanes, load_store_1);
-                            add("st1_or_str", {{R"(st(1.|r))", R"(z\d\d?)"}}, total_lanes, load_store_1);
-                        }
-                    }
-                } else {
-                    // vector register is not used for simple load/store
-                    string reg_prefix = (width <= 64) ? "d" : "q";
-                    add({{"st[rp]", reg_prefix + R"(\d\d?)"}}, total_lanes, load_store_1);
-                    add({{"ld[rp]", reg_prefix + R"(\d\d?)"}}, total_lanes, load_store_1);
-                }
-            }
+            // LD/ST       -       Load/Store scalar
+            // We skip scalar load/store test due to the following challenges.
+            // The rule by which LLVM selects instruction does not seem simple.
+            // For example, ld1, ldr, or ldp is used for instruction and z or q register is used for operand,
+            // depending on data type, vscale, what is performed before/after load, and LLVM version.
+            // The other thing is, load/store instruction appears in other place than we want to check,
+            // which makes it prone to false-positive detection as we only search strings line-by-line.
 
             // LDn       -       Structured Load strided elements
             if (Halide::Internal::get_llvm_version() >= 220) {
