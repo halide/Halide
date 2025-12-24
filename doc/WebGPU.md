@@ -120,9 +120,44 @@ The recommended method for updating `mini_webgpu.h` is to copy the
 `gen/include/dawn/webgpu.h` file from the Dawn build directory, then:
 - Restore the `// clang-format {off,on}` lines.
 - Comment out the `#include <std*>` lines.
-- Remove the `void` parameter from the `WGPUProc` declaration.
+- Include the following block to define things that would normally be defined in system headers:
+```
+// BEGIN Halide-specific changes
+//
+// For the Halide runtime, we can't include these headers,
+// so we define NULL, SIZE_MAX, and integer limit macros here.
+// #include <stdint.h>
+// #include <stddef.h>
+// #include <math.h>
 
-This guarantees a version of the WebGPU header that is compatible with Dawn.
-When the native API eventually stabilizes, it should be possible to obtain a
-header from the `webgpu-native` GitHub organization that will be compatible
-with Dawn, wgpu, and Emscripten.
+#ifndef NULL
+#ifdef __cplusplus
+#define NULL nullptr
+#else
+#define NULL ((void*)0)
+#endif
+#endif
+
+#ifndef SIZE_MAX
+#define SIZE_MAX (~(size_t)0)
+#endif
+
+#ifndef UINT32_MAX
+#define UINT32_MAX (~(uint32_t)0)
+#endif
+
+#ifndef UINT64_MAX
+#define UINT64_MAX (~(uint64_t)0)
+#endif
+
+// This _should_ be correct on all platforms we support, but needs checking.
+#ifndef UINT32_C
+#define UINT32_C(x) ((uint32_t)(x))
+#endif
+
+// END Halide-specific changes
+
+```
+
+This guarantees a version of the WebGPU header that is compatible with how
+Halide builds the runtime.

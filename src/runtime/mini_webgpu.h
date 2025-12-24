@@ -96,6 +96,11 @@
 #define UINT64_MAX (~(uint64_t)0)
 #endif
 
+// This _should_ be correct on all platforms we support, but needs checking.
+#ifndef UINT32_C
+#define UINT32_C(x) ((uint32_t)(x))
+#endif
+
 // END Halide-specific changes
 
 #define _wgpu_COMMA ,
