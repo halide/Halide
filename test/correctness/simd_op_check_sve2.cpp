@@ -855,7 +855,7 @@ private:
                     if (instr_lanes < 2 || (total_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                     AddTestFunctor add(*this, bits, total_lanes);
-                    Expr index = clamp(cast<int>(in_im(x)), 0, W - 1);
+                    Expr index = clamp(in_i32(x), 0, W - 1);
                     Func tmp;
                     tmp(x, y) = cast(elt, y);
                     tmp(x, index) = cast(elt, 1);
@@ -875,6 +875,38 @@ private:
                         add("whilelt", {get_ptrue_instr_with_constraint(bits, constraint)}, total_lanes, scatter);
                     }
                 }
+            }
+
+            // Gather load where index range is bounded within certain value. e.g. LUT
+            // In this case, Halide tries to tranform it into contiguous load + Call::dynamic_shuffle
+            // which is lowered to TBL instruction. (see OptimizeShuffles.cpp)
+            if (has_sve()) {
+                const int width = base_vec_bits;
+                const int total_lanes = width / bits;
+                const int instr_lanes = Instruction::get_instr_lanes(bits, total_lanes, target);
+                if (instr_lanes < 2 || (total_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
+
+                AddTestFunctor add(*this, bits, total_lanes);
+                const std::vector<std::pair<int, int>> index_min_max{
+                    {0, total_lanes - 1},
+                    {1, total_lanes},
+                    {0, total_lanes * 2 - 1},
+                };
+                for (auto &[index_min, index_max] : index_min_max) {
+                    Expr index = cast(Int(32), in_im(x));
+                    index = clamp(index, index_min, index_max);
+                    Expr look_up = in_im(index);
+
+                    add("tbl", look_up);
+                }
+
+                // Without clamped but bounded by the range of the data type of the input image (8bit)
+                Expr index = cast(Int(32), in_u8(x));  // 8 bit fixed
+                int factor = (1 << 8) / (total_lanes * 2);
+                index = index / factor;  // index should be within native_vector*2 range
+                Expr look_up = in_im(index);
+
+                add("tbl", look_up);
             }
         }
     }

@@ -2285,7 +2285,8 @@ public:
 Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment) {
     // Replace indirect and other complicated loads with
     // dynamic_shuffle (vlut) calls.
-    return optimize_shuffles(s, lut_alignment);
+    auto max_span_query = [](const Type &t) -> std::vector<int> { return {256}; };
+    return optimize_shuffles(s, lut_alignment, 1024, max_span_query, false);
 }
 
 Stmt scatter_gather_generator(Stmt s) {
