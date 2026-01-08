@@ -713,6 +713,7 @@ int main(int argc, char **argv) {
             // real reason to test avx without it.
             Target("x86-64-linux-sse41-avx-f16c-fma"),
             Target("x86-64-linux-sse41-avx-f16c-fma-avx2"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avxvnni"),
             // See above: don't test avx512 without extra features, the test
             // isn't yet set up to test it properly.
             // Target("x86-64-linux-sse41-avx-avx2-avx512"),
