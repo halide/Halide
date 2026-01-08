@@ -2294,6 +2294,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD_CONST(Func, dimensions)
+    HALIDE_FORWARD_METHOD(Func, dma)
     HALIDE_FORWARD_METHOD(Func, fold_storage)
     HALIDE_FORWARD_METHOD(Func, fuse)
     HALIDE_FORWARD_METHOD(Func, gpu)
