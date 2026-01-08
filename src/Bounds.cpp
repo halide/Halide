@@ -3265,7 +3265,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
             Interval result;
 
-            if (f.is_pure()) {
+            if (f.is_pure() && !f.is_inductive()) {
 
                 // Make a scope that says the args could be anything.
                 Scope<Interval> arg_scope;
