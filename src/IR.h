@@ -556,6 +556,23 @@ struct Call : public ExprNode<Call> {
         // of bits determined by the return type.
         extract_bits,
         extract_mask_element,
+
+        // Some fast math functions.
+        // @{
+        fast_acos,
+        fast_asin,
+        fast_atan,
+        fast_atan2,
+        fast_cos,
+        fast_exp,
+        fast_expm1,
+        fast_log,
+        fast_pow,
+        fast_sin,
+        fast_tan,
+        fast_tanh,
+        // @}
+
         get_user_context,
         gpu_thread_barrier,
         halving_add,
