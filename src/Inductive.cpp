@@ -57,7 +57,7 @@ class BaseCaseSolver : public IRVisitor {
             for (size_t position = 0; position < vars.size(); position++) {
                 const Expr inductive_expr = op->args[position];
                 const Expr new_v = Variable::make(inductive_expr.type(), vars[position]);
-                const Expr gets_lower = simplify(new_v - inductive_expr > 0, true, bounds);
+                const Expr gets_lower = simplify(new_v - inductive_expr > 0, bounds);
                 const Interval i_lower = solve_for_inner_interval(gets_lower, vars[position]);
 
                 Interval new_interval;
