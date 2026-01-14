@@ -29,4 +29,4 @@ RUN apt-get update && \
     ./llvm.sh 21 all && \
     apt-get install -y liblld-21-dev && \
     apt-get clean && \
-    rm -rf llvm.sh /var/lib/apt/lists/*
+    rm -rf llvm.sh /var/lib/apt/lists/* \
