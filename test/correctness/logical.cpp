@@ -13,6 +13,12 @@ Expr u16(Expr a) {
 
 int main(int argc, char **argv) {
 
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::Vulkan) && (!target.has_feature(Target::VulkanInt8))) {
+        printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
+        return 0;
+    }
+
     Buffer<uint8_t> input(128, 64);
 
     for (int y = 0; y < input.height(); y++) {
@@ -28,7 +34,6 @@ int main(int argc, char **argv) {
                              ((input(x, y) > 40) && (!(input(x, y) > 50))),
                          u8(255), u8(0));
 
-        Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
             f.vectorize(xi, 4);
@@ -62,7 +67,6 @@ int main(int argc, char **argv) {
                              ((input(x, y) > 40) && (!common_cond)),
                          u8(255), u8(0));
 
-        Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
             f.vectorize(xi, 4);
@@ -93,8 +97,6 @@ int main(int argc, char **argv) {
         Func f("f");
         f(x, y) = select(x < 10 || x > 20 || y < 10 || y > 20, 0, input(x, y));
 
-        Target target = get_jit_target_from_environment();
-
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
             f.vectorize(xi, 4);
@@ -124,7 +126,6 @@ int main(int argc, char **argv) {
         Expr ten = 10;
         f(x, y) = select(input(x, y) > ten, u8(255), u8(0));
 
-        Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
             f.vectorize(xi, 4);
@@ -177,7 +178,6 @@ int main(int argc, char **argv) {
             cpu.compute_root();
             gpu.compute_root();
 
-            Target target = get_jit_target_from_environment();
             if (target.has_feature(Target::OpenCL) && n == 16 && w == 32) {
                 // Workaround for https://github.com/halide/Halide/issues/2477
                 printf("Skipping uint%d -> uint%d for OpenCL\n", n, w);

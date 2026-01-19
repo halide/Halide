@@ -11,6 +11,11 @@ int main(int argc, char **argv) {
     interleaved(x, y) = select(x % 2 == 0, cast<uint16_t>(3), cast<uint16_t>(7));
 
     Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::Vulkan) && (!target.has_feature(Target::VulkanInt16))) {
+        printf("[SKIP] Skipping test for Vulkan ... missing support for Int16!\n");
+        return 0;
+    }
+
     if (target.has_gpu_feature()) {
         Var tx("tx"), ty("ty");
         interleaved.gpu_tile(x, y, tx, ty, 16, 16);

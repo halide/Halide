@@ -4,7 +4,8 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    const bool use_gpu = get_jit_target_from_environment().has_gpu_feature();
+    Target target = get_jit_target_from_environment();
+    const bool use_gpu = target.has_gpu_feature();
 
     // An internal Func that produces multiple values.
     {
@@ -93,7 +94,7 @@ int main(int argc, char **argv) {
     }
 
     // Now multiple output Funcs via inferred Realization
-    {
+    if (target.supports_type(halide_type_of<uint8_t>()) && target.supports_type(halide_type_of<int16_t>())) {
         Func f, g;
         Var x, xi;
         f(x) = cast<float>(100 * x);

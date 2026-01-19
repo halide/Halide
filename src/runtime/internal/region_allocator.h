@@ -74,7 +74,7 @@ private:
     BlockRegion *coalesce_block_regions(void *user_context, BlockRegion *region);
 
     // Returns true if the given region can be split to accomodate the given size
-    bool can_split(const BlockRegion *region, const MemoryRequest &request) const;
+    bool can_split(void *use_context, const BlockRegion *region, const MemoryRequest &request) const;
 
     // Splits the given block region into a smaller region to accomodate the given size, followed by empty space for the remaining
     BlockRegion *split_block_region(void *user_context, BlockRegion *region, const MemoryRequest &request);
@@ -195,7 +195,7 @@ MemoryRegion *RegionAllocator::reserve(void *user_context, const MemoryRequest &
         return nullptr;
     }
 
-    if (can_split(block_region, region_request)) {
+    if (can_split(user_context, block_region, region_request)) {
 #ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "RegionAllocator: Splitting region of size ( " << (int32_t)(block_region->memory.size) << ") "
                             << "to accomodate requested size (" << (int32_t)(region_request.size) << " bytes)";
@@ -443,8 +443,29 @@ BlockRegion *RegionAllocator::coalesce_block_regions(void *user_context, BlockRe
     return block_region;
 }
 
-bool RegionAllocator::can_split(const BlockRegion *block_region, const MemoryRequest &split_request) const {
-    return (block_region && (block_region->memory.size > split_request.size) && (block_region->usage_count == 0));
+bool RegionAllocator::can_split(void *user_context, const BlockRegion *block_region, const MemoryRequest &split_request) const {
+
+    // See if we can actually split the block region and create empty space big enough
+    if (block_region && (block_region->memory.size > split_request.size) && (block_region->usage_count == 0)) {
+
+        // We can only split if there's still room left after conforming the allocation request since the
+        // conform method may actually grow the requested size to accomodate alignment constraints
+        MemoryRequest test_request = split_request;
+        test_request.size = block_region->memory.size - test_request.size;
+        test_request.offset = block_region->memory.offset + test_request.size;
+        int error_code = conform(user_context, &test_request);
+        if (error_code) {
+#ifdef DEBUG_RUNTIME_INTERNAL
+            debug(nullptr) << "RegionAllocator: Failed to conform test request for splitting block region!\n";
+#endif
+            return false;
+        }
+
+        if ((block_region->memory.size - test_request.size) > 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion *block_region, const MemoryRequest &request) {
@@ -470,8 +491,9 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
 
 #ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "RegionAllocator: Splitting "
-                        << "current region (offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes) "
-                        << "to create empty region (offset=" << (int32_t)split_request.offset << " size=" << (int32_t)(split_request.size) << " bytes)";
+                        << "current region (offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes) into ...\n\t"
+                        << "existing region (offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size - split_request.size) << " bytes)\n\t"
+                        << "empty region    (offset=" << (int32_t)split_request.offset << " size=" << (int32_t)(split_request.size) << " bytes)\n";
 #endif
     BlockRegion *next_region = block_region->next_ptr;
     BlockRegion *empty_region = create_block_region(user_context, split_request);
@@ -484,6 +506,12 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
     empty_region->prev_ptr = block_region;
     block_region->next_ptr = empty_region;
     block_region->memory.size -= empty_region->memory.size;
+
+#ifdef DEBUG_RUNTIME_INTERNAL
+    debug(user_context) << "RegionAllocator: Split block region into ...\n\t"
+                        << "existing region (ptr=" << (void *)block_region << " prev_ptr=" << block_region->prev_ptr << " next_ptr=" << block_region->next_ptr << " offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes)\n\t"
+                        << "empty region    (ptr=" << (void *)empty_region << " prev_ptr=" << empty_region->prev_ptr << " next_ptr=" << empty_region->next_ptr << " offset=" << (int32_t)empty_region->memory.offset << " size=" << (int32_t)(empty_region->memory.size) << " bytes)\n";
+#endif
     return empty_region;
 }
 
@@ -605,8 +633,22 @@ int RegionAllocator::alloc_block_region(void *user_context, BlockRegion *block_r
 #endif
     halide_abort_if_false(user_context, allocators.region.allocate != nullptr);
     halide_abort_if_false(user_context, block_region->status == AllocationStatus::Available);
+
     int error_code = 0;
     MemoryRegion *memory_region = &(block_region->memory);
+    if (memory_region->size <= 0) {
+#ifdef DEBUG_RUNTIME_INTERNAL
+        debug(user_context) << "    skipping zero size region ("
+                            << "block_ptr=" << (void *)block_region->block_ptr << " "
+                            << "block_region=" << (void *)block_region << " "
+                            << "memory_offset=" << (uint32_t)(block_region->memory.offset) << " "
+                            << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
+                            << "block_reserved=" << (uint32_t)block->reserved << " "
+                            << ")\n";
+#endif
+        return error_code;
+    }
+
     if (memory_region->handle == nullptr) {
         error_code = allocators.region.allocate(user_context, memory_region);
         memory_region->is_owner = true;

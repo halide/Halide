@@ -4,8 +4,14 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
+    Target t = get_jit_target_from_environment();
+    if (!t.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+
+    if (t.has_feature(Target::Vulkan) && (!t.has_feature(Target::VulkanInt8))) {
+        printf("[SKIP] Skipping test for Vulkan ... missing Int8 support!\n");
         return 0;
     }
 
