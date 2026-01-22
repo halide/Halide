@@ -327,26 +327,6 @@ protected:
                                                         Evaluate::make(end_op_call))));
     }
 };
-
-class RemoveRealizeOverOutput : public IRMutator {
-    using IRMutator::visit;
-    const vector<Function> &outputs;
-
-    Stmt visit(const Realize *op) override {
-        for (const Function &f : outputs) {
-            if (op->name == f.name()) {
-                return mutate(op->body);
-            }
-        }
-        return IRMutator::visit(op);
-    }
-
-public:
-    RemoveRealizeOverOutput(const vector<Function> &o)
-        : outputs(o) {
-    }
-};
-
 }  // namespace
 
 Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
@@ -373,7 +353,14 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
     s = tracing.mutate(s);
 
     // Strip off the dummy realize blocks
-    s = RemoveRealizeOverOutput(outputs).mutate(s);
+    s = mutate_with(s, [&](auto *self, const Realize *op) {
+        for (const Function &f : outputs) {
+            if (op->name == f.name()) {
+                return self->mutate(op->body);
+            }
+        }
+        return self->visit_base(op);
+    });
 
     if (!s.same_as(original) || trace_pipeline || t.has_feature(Target::TracePipeline)) {
         // Add pipeline start and end events
