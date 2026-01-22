@@ -259,7 +259,7 @@ protected:
         // Throw a tracing call before and after the realize body
         TraceEventBuilder builder;
         builder.func = op->name;
-        builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
+        builder.parent_id = Variable::make(Int(32), call_stack + ".trace_id");
         builder.event = halide_trace_begin_realization;
         for (const auto &bound : op->bounds) {
             builder.coordinates.push_back(bound.min);
