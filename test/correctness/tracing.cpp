@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include <stdio.h>
 
 namespace {
 
@@ -14,7 +13,7 @@ struct event {
     int int_args[4];
     float value[4];
     // trace_tag can actually be arbitrarily long, but for testing
-    // purposes we'll keep it short, to avoid dynamic allocations
+    // purposes we'll keep it short to avoid dynamic allocations
     char trace_tag[64];
 };
 
@@ -41,12 +40,16 @@ void print_event(const event &e) {
 
     printf("%c.%d[", e.func, e.value_index);
     for (int i = 0; i < e.num_int_args; i++) {
-        if (i > 0) printf(", ");
+        if (i > 0) {
+            printf(", ");
+        }
         printf("%d", e.int_args[i]);
     }
     printf("] [");
     for (int i = 0; i < e.width; i++) {
-        if (i > 0) printf(", ");
+        if (i > 0) {
+            printf(", ");
+        }
         printf("%f", e.value[i]);
     }
     printf("] \"%s\"\n", e.trace_tag);
@@ -86,11 +89,11 @@ bool events_match(const event &a, const event &b) {
             !strcmp(a.trace_tag, b.trace_tag));
 }
 
-int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
+int my_trace(JITUserContext *, const halide_trace_event_t *ev) {
     assert(ev->dimensions <= 4 && ev->type.lanes <= 4);
 
     // Record this event in the trace array
-    event e = {0};
+    event e{};
     e.func = ev->func[0];
     e.parent_id = ev->parent_id;
     e.event_type = ev->event;
@@ -103,10 +106,10 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
         e.int_args[i] = ev->coordinates[i];
     }
     for (int i = 0; i < ev->type.lanes; i++) {
-        e.value[i] = ((const float *)(ev->value))[i];
+        e.value[i] = static_cast<const float *>(ev->value)[i];
     }
     if (ev->trace_tag) {
-        assert(strlen(ev->trace_tag) < sizeof(e.trace_tag));
+        internal_assert(strlen(ev->trace_tag) < sizeof(e.trace_tag));
         strcpy(e.trace_tag, ev->trace_tag);
     } else {
         e.trace_tag[0] = 0;
@@ -115,13 +118,17 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
     return n_trace;
 }
 
-bool check_trace_correct(event *correct_trace, int correct_trace_length) {
+bool check_trace_correct(const event *correct_trace, int correct_trace_length) {
     int n = n_trace > correct_trace_length ? n_trace : correct_trace_length;
     for (int i = 0; i < n; i++) {
-        event recorded = {0};
-        if (i < n_trace) recorded = trace[i];
-        event correct = {0};
-        if (i < correct_trace_length) correct = correct_trace[i];
+        event recorded{};
+        if (i < n_trace) {
+            recorded = trace[i];
+        }
+        event correct{};
+        if (i < correct_trace_length) {
+            correct = correct_trace[i];
+        }
 
         if (!events_match(recorded, correct)) {
             constexpr int radius_max = 2;
@@ -156,13 +163,17 @@ bool check_trace_correct(event *correct_trace, int correct_trace_length) {
                    "Correct trace:\n",
                    i);
             for (int j = 0; j < correct_trace_length; j++) {
-                if (j == i) printf(" ===> ");
+                if (j == i) {
+                    printf(" ===> ");
+                }
                 print_event(correct_trace[j]);
             }
             printf("-------------------------------\n"
                    "Trace encountered:\n");
             for (int j = 0; j < n_trace; j++) {
-                if (j == i) printf(" ===> ");
+                if (j == i) {
+                    printf(" ===> ");
+                }
                 print_event_source(trace[j]);
             }
             printf("-------------------------------\n");
@@ -274,8 +285,7 @@ int main(int argc, char **argv) {
         {102, 1, 9, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
     };
 
-    int correct_trace_length = sizeof(correct_trace) / sizeof(correct_trace[0]);
-    if (!check_trace_correct(correct_trace, correct_trace_length)) {
+    if (!check_trace_correct(correct_trace, std::size(correct_trace))) {
         return 1;
     }
 
