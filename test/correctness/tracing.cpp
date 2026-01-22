@@ -118,7 +118,8 @@ int my_trace(JITUserContext *, const halide_trace_event_t *ev) {
     return n_trace;
 }
 
-bool check_trace_correct(const event *correct_trace, int correct_trace_length) {
+bool check_trace_correct(const std::vector<event> &correct_trace) {
+    int correct_trace_length = correct_trace.size();
     int n = n_trace > correct_trace_length ? n_trace : correct_trace_length;
     for (int i = 0; i < n; i++) {
         event recorded{};
@@ -211,11 +212,11 @@ int main(int argc, char **argv) {
     f.realize({10}, get_jit_target_from_environment().with_feature(Target::TracePipeline));
 
     // The golden trace, recorded when this test was written
-    event correct_pipeline_trace[] = {
+    std::vector<event> correct_pipeline_trace = {
         {102, 0, 8, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {102, 1, 9, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
     };
-    if (!check_trace_correct(correct_pipeline_trace, 2)) {
+    if (!check_trace_correct(correct_pipeline_trace)) {
         return 1;
     }
 
@@ -236,7 +237,7 @@ int main(int argc, char **argv) {
     f.realize({10}, get_jit_target_from_environment());
 
     // The golden trace, recorded when this test was written
-    event correct_trace[] = {
+    std::vector<event> correct_trace = {
         {102, 0, 8, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {105, 1, 10, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, "func_type_and_dim: 1 2 32 1 1 0 10"},
         {103, 1, 10, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, "func_type_and_dim: 2 2 32 1 2 32 1 1 0 11"},
@@ -285,7 +286,7 @@ int main(int argc, char **argv) {
         {102, 1, 9, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
     };
 
-    if (!check_trace_correct(correct_trace, std::size(correct_trace))) {
+    if (!check_trace_correct(correct_trace)) {
         return 1;
     }
 
