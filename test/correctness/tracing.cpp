@@ -118,8 +118,8 @@ int my_trace(JITUserContext *, const halide_trace_event_t *ev) {
     return n_trace;
 }
 
-bool check_trace_correct(const std::vector<event> &correct_trace) {
-    const int n = n_trace > correct_trace.size() ? n_trace : correct_trace.size();
+bool check_trace_correct_impl(const event *correct_trace, int correct_trace_size) {
+    const int n = n_trace > correct_trace_size ? n_trace : correct_trace_size;
 
     for (int i = 0; i < n; i++) {
         event recorded{};
@@ -127,7 +127,7 @@ bool check_trace_correct(const std::vector<event> &correct_trace) {
             recorded = trace[i];
         }
         event correct{};
-        if (i < correct_trace.size()) {
+        if (i < correct_trace_size) {
             correct = correct_trace[i];
         }
 
@@ -146,7 +146,7 @@ bool check_trace_correct(const std::vector<event> &correct_trace) {
                     break;
                 }
 
-                if (i < correct_trace.size() - radius &&
+                if (i < correct_trace_size - radius &&
                     events_match(recorded, correct_trace[i + radius]) &&
                     recorded.event_type == 0 &&
                     correct.event_type == 0) {
@@ -163,7 +163,7 @@ bool check_trace_correct(const std::vector<event> &correct_trace) {
                    "-------------------------------\n"
                    "Correct trace:\n",
                    i);
-            for (int j = 0; j < correct_trace.size(); j++) {
+            for (int j = 0; j < correct_trace_size; j++) {
                 if (j == i) {
                     printf(" ===> ");
                 }
@@ -182,6 +182,11 @@ bool check_trace_correct(const std::vector<event> &correct_trace) {
         }
     }
     return true;
+}
+
+template<typename T>
+bool check_trace_correct(const T &correct_trace) {
+    return check_trace_correct_impl(correct_trace, std::size(correct_trace));
 }
 
 void reset_trace() {
@@ -212,7 +217,7 @@ int main(int argc, char **argv) {
     f.realize({10}, get_jit_target_from_environment().with_feature(Target::TracePipeline));
 
     // The golden trace, recorded when this test was written
-    std::vector<event> correct_pipeline_trace = {
+    static event correct_pipeline_trace[] = {
         {102, 0, 8, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {102, 1, 9, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
     };
@@ -237,7 +242,7 @@ int main(int argc, char **argv) {
     f.realize({10}, get_jit_target_from_environment());
 
     // The golden trace, recorded when this test was written
-    std::vector<event> correct_trace = {
+    static event correct_trace[] = {
         {102, 0, 8, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {105, 1, 10, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, "func_type_and_dim: 1 2 32 1 1 0 10"},
         {103, 1, 10, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, "func_type_and_dim: 2 2 32 1 2 32 1 1 0 11"},
