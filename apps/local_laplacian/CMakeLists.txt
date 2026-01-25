@@ -34,19 +34,6 @@ target_link_libraries(local_laplacian_process
                       local_laplacian
                       local_laplacian_auto_schedule)
 
-# Visualization
-add_halide_library(local_laplacian_viz FROM local_laplacian.generator
-                   GENERATOR local_laplacian
-                   FUNCTION_NAME local_laplacian
-                   FEATURES trace_all)
-
-add_executable(local_laplacian_process_viz process.cpp)
-target_link_libraries(local_laplacian_process_viz
-                      PRIVATE
-                      Halide::ImageIO
-                      local_laplacian_viz)
-target_compile_definitions(local_laplacian_process_viz PRIVATE NO_AUTO_SCHEDULE)
-
 # Test that the app actually works!
 set(IMAGE ${CMAKE_CURRENT_LIST_DIR}/../images/rgb.png)
 if (EXISTS ${IMAGE})
