@@ -568,6 +568,11 @@ inline int64_t next_power_of_two(int64_t x) {
     return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
 }
 
+/** Return whether or not an integer is a power of two. */
+inline bool is_power_of_two(int64_t x) {
+    return (x & (x - 1)) == 0;
+}
+
 template<typename T>
 inline T align_up(T x, int n) {
     return (x + n - 1) / n * n;

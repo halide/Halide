@@ -25,7 +25,7 @@ $(BIN)/%/filter: filter.cpp $(BIN)/%/iir_blur.a $(BIN)/%/iir_blur_auto_schedule.
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 $(BIN)/%/out.png: $(BIN)/%/filter
-	$< ../images/rgba.png $(BIN)/$*/out.png
+	$< ../images/rgb.png $(BIN)/$*/out.png
 
 clean:
 	rm -rf $(BIN)

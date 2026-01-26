@@ -38,17 +38,25 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
             // CPU schedule.
             // 8.2ms on an Intel i9-9960X using 16 threads
             // Split the transpose into tiles of rows. Parallelize over channels
-            // and strips (Halide supports nested parallelism).
-            Var xo, yo, t;
+            // and strips.
+            Var xo, yo, t, yi;
             transpose.compute_root()
                 .tile(x, y, xo, yo, x, y, vec, vec * 4)
+                .split(y, y, yi, vec)
+                .unroll(yi)
                 .vectorize(x)
-                .parallel(yo)
-                .parallel(c);
+                .fuse(yo, c, t)
+                .parallel(t);
+
+            blur.in(transpose)
+                .reorder_storage(y, x)
+                .compute_at(transpose, y)
+                .vectorize(x)
+                .unroll(y);
 
             // Run the filter on each row of tiles (which corresponds to a strip of
             // columns in the input).
-            blur.compute_at(transpose, yo);
+            blur.compute_at(transpose, t);
 
             // Vectorize computations within the strips.
             blur.update(0)
