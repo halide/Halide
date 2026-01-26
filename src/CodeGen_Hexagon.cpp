@@ -1643,7 +1643,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         vector<Value *> indices;
         Value *replicate_val = ConstantInt::get(i8_t, replicate);
         for (int i = 0; i < replicate; i++) {
-            Value *pos = ConstantInt::get(idx16->getType(), i);
+            Value *pos = get_splat(idx16_elems, ConstantInt::get(i16_t, i));
             indices.emplace_back(call_intrin(idx16->getType(),
                                              "halide.hexagon.add_mul.vh.vh.b",
                                              {pos, idx16, replicate_val}));
@@ -1725,7 +1725,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
             min_index = std::min(min_index, i);
             max_index = std::max(max_index, i);
         }
-        llvm_indices.push_back(ConstantInt::get(i16_t, i));
+        llvm_indices.push_back(ConstantInt::getSigned(i16_t, i));
     }
 
     // We use i16 indices because we can't support LUTs with more than
