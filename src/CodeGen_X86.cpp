@@ -982,7 +982,7 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
       Now let's consider the instructions we have available. These generally
       permute these bits. E.g. an instruction that interleaves two entire
-      vectors, applied to every pairs of vectors, would take the some vector bit
+      vectors, applied to pairs of vectors, would take the some vector bit
       and make it the lowest lane bit instead, shuffling the other bits upwards,
       with the highest-order within-vector bit taking the place of the vector
       bit (because we produce separate vectors for the low and high half of the
