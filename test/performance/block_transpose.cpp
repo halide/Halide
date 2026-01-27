@@ -7,108 +7,73 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-enum {
-    scalar_trans,
-    vec_y_trans,
-    vec_x_trans
+struct Result {
+    int type_size, block_width, block_height;
+    double bandwidth;
 };
 
-Buffer<uint16_t> test_transpose(int mode) {
-    Func input, block, block_transpose, output;
-    Var x, y;
+template<typename T>
+Result test_transpose(int block_width, int block_height, const Target &t) {
+    const int N = 256;
+    Buffer<T> in(N, N), out(N, N);
 
-    input(x, y) = cast<uint16_t>(x + y);
-    input.compute_root();
-
-    block(x, y) = input(x, y);
-    block_transpose(x, y) = block(y, x);
-    output(x, y) = block_transpose(x, y);
-
-    Var xi, yi;
-    output.tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
-
-    // Do 8 vectorized loads from the input.
-    block.compute_at(output, x).vectorize(x).unroll(y);
-
-    std::string algorithm;
-    switch (mode) {
-    case scalar_trans:
-        block_transpose.compute_at(output, x).unroll(x).unroll(y);
-        algorithm = "Scalar transpose";
-        output.compile_to_assembly(Internal::get_test_tmp_dir() + "scalar_transpose.s", std::vector<Argument>());
-        break;
-    case vec_y_trans:
-        block_transpose.compute_at(output, x).vectorize(y).unroll(x);
-        algorithm = "Transpose vectorized in y";
-        output.compile_to_assembly(Internal::get_test_tmp_dir() + "fast_transpose_y.s", std::vector<Argument>());
-        break;
-    case vec_x_trans:
-        block_transpose.compute_at(output, x).vectorize(x).unroll(y);
-        algorithm = "Transpose vectorized in x";
-        output.compile_to_assembly(Internal::get_test_tmp_dir() + "fast_transpose_x.s", std::vector<Argument>());
-        break;
+    for (int y = 0; y < N; y++) {
+        for (int x = 0; x < N; x++) {
+            in(x, y) = (T)(x + y * N);
+        }
     }
 
-    Buffer<uint16_t> result(1024, 1024);
-    output.compile_jit();
-
-    output.realize(result);
-
-    double t = benchmark([&]() {
-        output.realize(result);
-    });
-
-    std::cout << "Dummy Func version: " << algorithm << " bandwidth " << 1024 * 1024 / t << " byte/s.\n";
-    return result;
-}
-
-/* This illustrates how to achieve the same scheduling behavior using the 'in()'
- * directive as opposed to creating dummy Funcs as done in 'test_transpose()' */
-Buffer<uint16_t> test_transpose_wrap(int mode) {
     Func input, block_transpose, block, output;
     Var x, y;
 
-    input(x, y) = cast<uint16_t>(x + y);
-    input.compute_root();
+    input(x, y) = in(x, y);
 
     output(x, y) = input(y, x);
 
     Var xi, yi;
-    output.tile(x, y, xi, yi, 8, 8).vectorize(xi).unroll(yi);
+    output.tile(x, y, xi, yi, block_width, block_height, TailStrategy::RoundUp)
+        .vectorize(xi)
+        .unroll(yi);
 
-    // Do 8 vectorized loads from the input.
-    block_transpose = input.in(output).compute_at(output, x).vectorize(x).unroll(y);
+    // Do vectorized loads from the input.
+    input.in().compute_at(output, x).vectorize(x).unroll(y);
 
-    std::string algorithm;
-    switch (mode) {
-    case scalar_trans:
-        block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).unroll(x).unroll(y);
-        algorithm = "Scalar transpose";
-        output.compile_to_assembly(Internal::get_test_tmp_dir() + "scalar_transpose.s", std::vector<Argument>());
-        break;
-    case vec_y_trans:
-        block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).vectorize(y).unroll(x);
-        algorithm = "Transpose vectorized in y";
-        output.compile_to_assembly(Internal::get_test_tmp_dir() + "fast_transpose_y.s", std::vector<Argument>());
-        break;
-    case vec_x_trans:
-        block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).vectorize(x).unroll(y);
-        algorithm = "Transpose vectorized in x";
-        output.compile_to_assembly(Internal::get_test_tmp_dir() + "fast_transpose_x.s", std::vector<Argument>());
-        break;
-    }
+    // Transpose in registers
+    input.in().in().reorder_storage(y, x).compute_at(output, x).vectorize(x).unroll(y);
 
-    Buffer<uint16_t> result(1024, 1024);
+    // TODO: Should not be necessary, but prevents licm from doing something dumb.
+    output.output_buffer().dim(0).set_bounds(0, 256);
+
     output.compile_jit();
 
-    output.realize(result);
+    output.realize(out);
 
-    double t = benchmark([&]() {
-        output.realize(result);
+    double time = benchmark(10, 10, [&]() {
+        output.realize(out);
     });
 
-    std::cout << "Wrapper version: " << algorithm << " bandwidth " << 1024 * 1024 / t << " byte/s.\n";
-    return result;
+    for (int y = 0; y < N; y++) {
+        for (int x = 0; x < N; x++) {
+            T actual = out(x, y), correct = in(y, x);
+            if (actual != correct) {
+                std::cerr << "out(" << x << ", " << y << ") = "
+                          << actual << " instead of " << correct << "\n";
+                exit(1);
+            }
+        }
+    }
+
+    // Uncomment to dump asm for inspection
+    /*
+    output.compile_to_assembly(Internal::get_test_tmp_dir() + "transpose_uint" +
+                                   std::to_string(sizeof(T) * 8) + "_" +
+                                   std::to_string(block_width) + "x" +
+                                   std::to_string(block_height) + ".s",
+                               std::vector<Argument>{in}, "transpose", t);
+    */
+
+    return Result{(int)sizeof(T), block_width, block_height,
+                  out.size_in_bytes() / (1.0e9 * time)};
 }
 
 int main(int argc, char **argv) {
@@ -118,23 +83,48 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    test_transpose(scalar_trans);
-    test_transpose_wrap(scalar_trans);
-    test_transpose(vec_y_trans);
-    test_transpose_wrap(vec_y_trans);
+    // Set the target features to use for dumping to assembly
+    target.set_features({Target::NoRuntime, Target::NoAsserts, Target::NoBoundsQuery});
 
-    Buffer<uint16_t> im1 = test_transpose(vec_x_trans);
-    Buffer<uint16_t> im2 = test_transpose_wrap(vec_x_trans);
-
-    // Check correctness of the wrapper version
-    for (int y = 0; y < im2.height(); y++) {
-        for (int x = 0; x < im2.width(); x++) {
-            if (im2(x, y) != im1(x, y)) {
-                printf("wrapper(%d, %d) = %d instead of %d\n",
-                       x, y, im2(x, y), im1(x, y));
-                return 1;
+    std::cout << "Computing best tile sizes for each type\n";
+    std::vector<Result> results;
+    int limit = 64 * 64;
+    for (int bh : {1, 2, 4, 8, 16, 32, 64}) {
+        for (int bw : {1, 2, 4, 8, 16, 32, 64}) {
+            std::cout << "." << std::flush;
+            results.push_back(test_transpose<uint8_t>(bw, bh, target));
+            if (bw * bh <= limit / 2) {
+                results.push_back(test_transpose<uint16_t>(bw, bh, target));
+            }
+            if (bw * bh <= limit / 4) {
+                results.push_back(test_transpose<uint32_t>(bw, bh, target));
+            }
+            if (bw * bh <= limit / 8) {
+                results.push_back(test_transpose<uint64_t>(bw, bh, target));
             }
         }
+    }
+    std::cout << "\nbytes, tile width, tile height, bandwidth (GB/s):\n";
+
+    // Sort the results by bandwidth
+    std::sort(results.begin(), results.end(),
+              [](const Result &a, const Result &b) {
+                  return a.bandwidth > b.bandwidth;
+              });
+
+    // Print top n tile sizes for each type
+    for (int t : {1, 2, 4, 8}) {
+        int top_n = 5;
+        for (size_t i = 0; i < results.size() && top_n > 0; i++) {
+            if (results[i].type_size == t) {
+                std::cout << t << " "
+                          << results[i].block_width << " "
+                          << results[i].block_height << " "
+                          << results[i].bandwidth << "\n";
+                top_n--;
+            }
+        }
+        std::cout << "\n";
     }
 
     printf("Success!\n");
