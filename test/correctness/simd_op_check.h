@@ -132,6 +132,7 @@ public:
                  Target::ARMv89a,
                  Target::AVX,
                  Target::AVX2,
+                 Target::AVXVNNI,
                  Target::AVX512,
                  Target::AVX512_Cannonlake,
                  Target::AVX512_KNL,
