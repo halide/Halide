@@ -5,6 +5,7 @@
 #include <sstream>
 #include <utility>
 
+#include "ApproximationTables.h"
 #include "CSE.h"
 #include "ConstantBounds.h"
 #include "Debug.h"
@@ -741,7 +742,6 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
 
 // Fast math ops based on those from Syrah (http://github.com/boulos/syrah). Thanks, Solomon!
 
-namespace {
 // Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5
 void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent) {
     Type type = input.type();
@@ -771,7 +771,6 @@ void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent) {
 
     *reduced = reinterpret(type, blended);
 }
-}  // namespace
 
 Expr halide_log(const Expr &x_full) {
     Type type = x_full.type();
@@ -1344,108 +1343,80 @@ Expr rounding_mul_shift_right(Expr a, Expr b, int q) {
     return rounding_mul_shift_right(std::move(a), std::move(b), make_const(qt, q));
 }
 
-Expr fast_log(const Expr &x) {
-    user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
-
-    Expr reduced, exponent;
-    range_reduce_log(x, &reduced, &exponent);
-
-    Expr x1 = reduced - 1.0f;
-
-    float coeff[] = {
-        0.07640318789187280912f,
-        -0.16252961013874300811f,
-        0.20625219040645212387f,
-        -0.25110261010892864775f,
-        0.33320464908377461777f,
-        -0.49997513376789826101f,
-        1.0f,
-        0.0f};
-
-    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff) / sizeof(coeff[0]));
-    result = result + cast<float>(exponent) * logf(2);
-    result = common_subexpression_elimination(result);
-    return result;
-}
-
 namespace {
 
-// A vectorizable sine and cosine implementation. Based on syrah fast vector math
-// https://github.com/boulos/syrah/blob/master/src/include/syrah/FixedVectorMath.h#L55
-Expr fast_sin_cos(const Expr &x_full, bool is_sin) {
-    const float two_over_pi = 0.636619746685028076171875f;
-    const float pi_over_two = 1.57079637050628662109375f;
-    Expr scaled = x_full * two_over_pi;
-    Expr k_real = floor(scaled);
-    Expr k = cast<int>(k_real);
-    Expr k_mod4 = k % 4;
-    Expr sin_usecos = is_sin ? ((k_mod4 == 1) || (k_mod4 == 3)) : ((k_mod4 == 0) || (k_mod4 == 2));
-    Expr flip_sign = is_sin ? (k_mod4 > 1) : ((k_mod4 == 1) || (k_mod4 == 2));
-
-    // Reduce the angle modulo pi/2.
-    Expr x = x_full - k_real * pi_over_two;
-
-    const float sin_c2 = -0.16666667163372039794921875f;
-    const float sin_c4 = 8.333347737789154052734375e-3;
-    const float sin_c6 = -1.9842604524455964565277099609375e-4;
-    const float sin_c8 = 2.760012648650445044040679931640625e-6;
-    const float sin_c10 = -2.50293279435709337121807038784027099609375e-8;
-
-    const float cos_c2 = -0.5f;
-    const float cos_c4 = 4.166664183139801025390625e-2;
-    const float cos_c6 = -1.388833043165504932403564453125e-3;
-    const float cos_c8 = 2.47562347794882953166961669921875e-5;
-    const float cos_c10 = -2.59630184018533327616751194000244140625e-7;
-
-    Expr outside = select(sin_usecos, 1, x);
-    Expr c2 = select(sin_usecos, cos_c2, sin_c2);
-    Expr c4 = select(sin_usecos, cos_c4, sin_c4);
-    Expr c6 = select(sin_usecos, cos_c6, sin_c6);
-    Expr c8 = select(sin_usecos, cos_c8, sin_c8);
-    Expr c10 = select(sin_usecos, cos_c10, sin_c10);
-
-    Expr x2 = x * x;
-    Expr tri_func = outside * (x2 * (x2 * (x2 * (x2 * (x2 * c10 + c8) + c6) + c4) + c2) + 1);
-    return select(flip_sign, -tri_func, tri_func);
+Expr make_approximation_precision_info(ApproximationPrecision precision) {
+    return Call::make(type_of<ApproximationPrecision *>(), Call::make_struct, {
+                                                                                  Expr(precision.optimized_for),
+                                                                                  Expr(precision.constraint_max_ulp_error),
+                                                                                  Expr(precision.constraint_max_absolute_error),
+                                                                                  Expr(precision.force_halide_polynomial),
+                                                                              },
+                      Call::CallType::Intrinsic);
 }
 
 }  // namespace
 
-Expr fast_sin(const Expr &x_full) {
-    return fast_sin_cos(x_full, true);
+Expr fast_sin(const Expr &x, ApproximationPrecision precision) {
+    return Call::make(x.type(), Call::fast_sin, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
 }
 
-Expr fast_cos(const Expr &x_full) {
-    return fast_sin_cos(x_full, false);
+Expr fast_cos(const Expr &x, ApproximationPrecision precision) {
+    return Call::make(x.type(), Call::fast_cos, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
 }
 
-Expr fast_exp(const Expr &x_full) {
-    user_assert(x_full.type() == Float(32)) << "fast_exp only works for Float(32)";
+Expr fast_asin(const Expr &x, ApproximationPrecision precision) {
+    return Call::make(x.type(), Call::fast_asin, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
+}
 
-    Expr scaled = x_full / logf(2.0);
-    Expr k_real = floor(scaled);
-    Expr k = cast<int>(k_real);
-    Expr x = x_full - k_real * logf(2.0);
+Expr fast_acos(const Expr &x, ApproximationPrecision precision) {
+    return Call::make(x.type(), Call::fast_acos, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
+}
 
-    float coeff[] = {
-        0.01314350012789660196f,
-        0.03668965196652099192f,
-        0.16873890085469545053f,
-        0.49970514590562437052f,
-        1.0f,
-        1.0f};
-    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff) / sizeof(coeff[0]));
+Expr fast_atan(const Expr &x, ApproximationPrecision precision) {
+    return Call::make(x.type(), Call::fast_atan, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
+}
 
-    // Compute 2^k.
-    int fpbias = 127;
-    Expr biased = clamp(k + fpbias, 0, 255);
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision precision) {
+    user_assert(y.type() == x.type()) << "fast_atan2 should take two arguments of the same type.";
+    return Call::make(x.type(), Call::fast_atan2, {y, x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
+}
 
-    // Shift the bits up into the exponent field and reinterpret this
-    // thing as float.
-    Expr two_to_the_n = reinterpret<float>(biased << 23);
-    result *= two_to_the_n;
-    result = common_subexpression_elimination(result);
-    return result;
+Expr fast_tan(const Expr &x, ApproximationPrecision precision) {
+    return Call::make(x.type(), Call::fast_tan, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
+}
+
+Expr fast_exp(const Expr &x, ApproximationPrecision prec) {
+    user_assert(x.type() == Float(32)) << "fast_exp only works for Float(32)";
+    return Call::make(x.type(), Call::fast_exp, {x, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
+}
+
+Expr fast_expm1(const Expr &x, ApproximationPrecision prec) {
+    user_assert(x.type() == Float(32)) << "fast_expm1 only works for Float(32)";
+    return Call::make(x.type(), Call::fast_expm1, {x, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
+}
+
+Expr fast_log(const Expr &x, ApproximationPrecision prec) {
+    user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
+    return Call::make(x.type(), Call::fast_log, {x, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
+}
+
+Expr fast_pow(const Expr &x, const Expr &y, ApproximationPrecision prec) {
+    if (auto i = as_const_int(y)) {
+        return raise_to_integer_power(x, *i);
+    }
+
+    Expr x_float = x;
+    if (x_float.type().is_int_or_uint()) {
+        user_warning << "fast_pow(int, float) is deprecated. Please make sure to use a floating point type for argument x.";
+        x_float = cast<float>(x_float);
+    }
+    user_assert(x.type() == Float(32) && y.type() == Float(32)) << "fast_pow only works for Float(32)";
+    return Call::make(x_float.type(), Call::fast_pow, {x_float, y, make_approximation_precision_info(prec)}, Call::PureIntrinsic);
+}
+
+Expr fast_tanh(const Expr &x, ApproximationPrecision precision) {
+    return Call::make(x.type(), Call::fast_tanh, {x, make_approximation_precision_info(precision)}, Call::PureIntrinsic);
 }
 
 Expr print(const std::vector<Expr> &args) {
@@ -2280,16 +2251,6 @@ Expr erf(const Expr &x) {
     return halide_erf(x);
 }
 
-Expr fast_pow(Expr x, Expr y) {
-    if (auto i = as_const_int(y)) {
-        return raise_to_integer_power(std::move(x), *i);
-    }
-
-    x = cast<float>(std::move(x));
-    y = cast<float>(std::move(y));
-    return select(x == 0.0f, 0.0f, fast_exp(fast_log(x) * std::move(y)));
-}
-
 Expr fast_inverse(Expr x) {
     user_assert(x.defined()) << "fast_inverse of undefined Expr\n";
     Type t = x.type();
@@ -2716,6 +2677,29 @@ Expr likely_if_innermost(Expr e) {
 Expr strict_float(const Expr &e) {
     return strictify_float(e);
 }
+
+inline Expr strict_float_op(const Expr &a, const Expr &b, Call::IntrinsicOp op) {
+    user_assert(a.type() == b.type()) << "strict_float ops should be done on equal types.";
+    user_assert(a.type().is_float()) << "strict_float ops should be done on floating point types.";
+    return Call::make(a.type(), op, {a, b}, Call::CallType::PureIntrinsic);
+}
+
+#define impl_strict_op(x)                               \
+    Expr strict_##x(const Expr &a, const Expr &b) {     \
+        return strict_float_op(a, b, Call::strict_##x); \
+    }
+
+impl_strict_op(add);
+impl_strict_op(sub);
+impl_strict_op(div);
+impl_strict_op(mul);
+impl_strict_op(max);
+impl_strict_op(min);
+impl_strict_op(eq);
+impl_strict_op(le);
+impl_strict_op(lt);
+
+#undef impl_strict_op
 
 Expr undef(Type t) {
     return Call::make(t, Call::undef,
