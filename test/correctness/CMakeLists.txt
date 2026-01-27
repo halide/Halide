@@ -254,6 +254,7 @@ tests(GROUPS correctness
       plain_c_includes.c
       popc_clz_ctz_bounds.cpp
       predicated_store_load.cpp
+      predicated_store_load_single_lane.cpp
       prefetch.cpp
       print.cpp
       print_loop_nest.cpp
