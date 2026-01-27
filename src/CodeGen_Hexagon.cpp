@@ -1276,7 +1276,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 Value *packed = call_intrin_cast(
                     native2_ty,
                     INTRINSIC_128B(vdealvdd),
-                    {ab_i1, ab_i0, ConstantInt::get(i32_t, -element_bytes)});
+                    {ab_i1, ab_i0, ConstantInt::getSigned(i32_t, -element_bytes)});
                 llvm::Intrinsic::ID intrin = start == 0 ? INTRINSIC_128B(lo) : INTRINSIC_128B(hi);
                 ret_i = call_intrin_cast(native_ty, intrin, {packed});
             } else {
@@ -1593,6 +1593,8 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         if (generate_vdelta(indices, reverse, switches)) {
             vector<Constant *> control_elements(switches.size());
             for (int i = 0; i < (int)switches.size(); i++) {
+                internal_assert(switches[i] >= 0 && switches[i] <= 255)
+                    << "vdelta switch value " << switches[i] << " doesn't fit in 8 bits\n";
                 control_elements[i] = ConstantInt::get(i8_t, switches[i]);
             }
             Value *control = ConstantVector::get(control_elements);
@@ -1610,7 +1612,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 
 Value *CodeGen_Hexagon::create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
-    Constant *value = ConstantInt::get(scalar_ty, val);
+    Constant *value = ConstantInt::getSigned(scalar_ty, val);
     return get_splat(get_vector_num_elements(ty), value);
 }
 
@@ -1641,7 +1643,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         vector<Value *> indices;
         Value *replicate_val = ConstantInt::get(i8_t, replicate);
         for (int i = 0; i < replicate; i++) {
-            Value *pos = ConstantInt::get(idx16->getType(), i);
+            Value *pos = get_splat(idx16_elems, ConstantInt::get(i16_t, i));
             indices.emplace_back(call_intrin(idx16->getType(),
                                              "halide.hexagon.add_mul.vh.vh.b",
                                              {pos, idx16, replicate_val}));
@@ -1723,7 +1725,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
             min_index = std::min(min_index, i);
             max_index = std::max(max_index, i);
         }
-        llvm_indices.push_back(ConstantInt::get(i16_t, i));
+        llvm_indices.push_back(ConstantInt::getSigned(i16_t, i));
     }
 
     // We use i16 indices because we can't support LUTs with more than
