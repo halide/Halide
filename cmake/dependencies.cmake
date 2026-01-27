@@ -19,7 +19,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     wabt
     GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
-    GIT_TAG 3e826ecde1adfba5f88d10d361131405637e65a3 # 1.0.36
+    GIT_TAG ad75c5edcdff96d73c245b57fbc07607aaca9f95 # 1.0.39
     GIT_SHALLOW TRUE
     SYSTEM
 )
