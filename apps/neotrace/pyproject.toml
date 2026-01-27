@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "neotrace"
+version = "0.1.0"
+description = "Interactive trace visualization for Halide"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+    "PySide6>=6.5",
+    "graphviz>=0.20",
+    "halide",
+    "imageio[ffmpeg]>=2.31",
+    "numpy>=1.24",
+    "tqdm>=4.67.1",
+]
+
+[project.scripts]
+neotrace = "neotrace.__main__:main"
+
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.uv.sources]
+halide = { path = "../.." }
+
+[tool.hatch.build.targets.wheel]
+packages = ["neotrace"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.14.13",
+]
