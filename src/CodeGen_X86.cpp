@@ -982,8 +982,8 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
       Now let's consider the instructions we have available. These generally
       permute these bits. E.g. an instruction that interleaves two entire
-      vectors, applied to pairs of vectors, would take the some vector bit
-      and make it the lowest lane bit instead, shuffling the other bits upwards,
+      vectors, applied to pairs of vectors, would take the some vector bit and
+      make it the lowest lane bit instead, shuffling the other bits upwards,
       with the highest-order within-vector bit taking the place of the vector
       bit (because we produce separate vectors for the low and high half of the
       result. So if we used this instruction to push the highest vector bit
@@ -1239,6 +1239,7 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
     while ((size_t)vec_elements > elems_per_native_vec) {
         int cut = vec_elements / 2;
         std::vector<Value *> new_v;
+        new_v.reserve(v.size() * 2);
         for (auto *vec : v) {
             new_v.push_back(slice_vector(vec, 0, cut));
         }
@@ -1282,7 +1283,9 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
                 size_t j = i ^ step;
 
                 // Don't process vectors twice.
-                if (j < i) continue;
+                if (j < i) {
+                    continue;
+                }
 
                 // Just interleave the two vectors. Because we have fewer
                 // elements than one slice, unpckl/h is a straight interleave.
@@ -1411,7 +1414,9 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
         for (size_t idx = 0; idx < v.size(); idx++) {
             size_t j = idx ^ step;
-            if (j <= idx) continue;
+            if (j <= idx) {
+                continue;
+            }
             auto [lo, hi] = shufi(v[idx], v[j], false);
             v[idx] = lo;
             v[j] = hi;
@@ -1441,7 +1446,9 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
                 for (size_t idx = 0; idx < v.size(); idx++) {
                     size_t j = idx ^ step;
-                    if (j <= idx) continue;
+                    if (j <= idx) {
+                        continue;
+                    }
                     auto [lo, hi] = shufi(v[idx], v[j], true);
                     v[idx] = lo;
                     v[j] = hi;
@@ -1453,7 +1460,9 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
                 for (size_t idx = 0; idx < v.size(); idx++) {
                     size_t j = idx ^ step;
-                    if (j <= idx) continue;
+                    if (j <= idx) {
+                        continue;
+                    }
                     auto [lo, hi] = shufi(v[idx], v[j], false);
                     v[idx] = lo;
                     v[j] = hi;
@@ -1464,8 +1473,8 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
                    s_bits[1] == low_slice_bit) {
             // The slice bits are both there, but in the wrong order
             std::swap(s_bits[0], s_bits[1]);
-            for (size_t i = 0; i < v.size(); i++) {
-                v[i] = self_shufi(v[i]);
+            for (auto &vec : v) {
+                vec = self_shufi(vec);
             }
         }
 
