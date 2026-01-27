@@ -950,17 +950,17 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
       works poorly. Here we have a somewhat complex algorithm for generating
       better sequences of shuffle instructions for avx and avx-512.
 
-      Consider the location of one of the elements of one of the vectors. It
-      has a vector index, which says which vector it's in, and a vector lane
-      index, which gives the lane. x86 shuffles work in terms of 128-bit
-      subvectors, which we will call slices. So we'll decompose that lane index
-      into a slice index, to identify the 128-bit slice within a vector, and
-      the lane index within that slice. For avx the slice index is either zero
-      or one, and for avx-512 it's 0, 1, 2, or 3. Because we have limited
-      everything to be a power of two, we can write out these indices in
-      binary. We'll use v for the vector index, s for the slice index, and l
-      for the lane index. For an avx-512 interleave of 16 vectors of 32
-      elements each (i.e. uint16s), a location could thus be written as:
+      Consider the location of one of the elements of one of the vectors. It has
+      a vector index, which says which vector it's in, and a vector lane index,
+      which gives the lane. x86 shuffles work in terms of 128-bit subvectors,
+      which we will call slices. So we'll decompose that lane index into a slice
+      index, to identify the 128-bit slice within a vector, and the lane index
+      within that slice. For avx the slice index is either zero or one, and for
+      avx-512 it can be zero through three. Because we have limited everything
+      to be a power of two, we can write out these indices in binary. We'll use
+      v for the vector index, s for the slice index, and l for the lane
+      index. For an avx-512 interleave of 16 vectors of 32 elements each
+      (i.e. uint16s), a location could thus be written as:
 
       [l0 l1 l2] [s0 s1] [v0 v1 v2 v3]
 
@@ -982,7 +982,7 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
       Now let's consider the instructions we have available. These generally
       permute these bits. E.g. an instruction that interleaves two entire
-      vectors, applied to pairs of vectors, would take the some vector bit and
+      vectors, applied to pairs of vectors, would take the same vector bit and
       make it the lowest lane bit instead, shuffling the other bits upwards,
       with the highest-order within-vector bit taking the place of the vector
       bit (because we produce separate vectors for the low and high half of the
