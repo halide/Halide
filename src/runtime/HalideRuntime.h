@@ -642,20 +642,18 @@ struct halide_trace_event_t {
  *
  * halide_trace returns a unique ID which will be passed to future
  * events that "belong" to the earlier event as the parent id. The
- * ownership hierarchy looks like:
+ * ownership hierarchy follows the realization stack.
  *
  * begin_pipeline
- * +--trace_tag (if any)
- * +--trace_tag (if any)
+ * +--tag (if any)
+ * +--tag (if any)
  * ...
- * +--begin_realization
- * |  +--produce
- * |  |  +--load/store
- * |  |  +--end_produce
- * |  +--consume
- * |  |  +--load
- * |  |  +--end_consume
- * |  +--end_realization
+ * +--(begin_realization|produce|consume)
+ * |  +-- ... recursively more realizations/produces/consumes ...
+ * |      +-- load
+ * |      +-- store
+ * |      +-- ... recursively more end events ...
+ * |  +--(end_realization|end_produce|end_consume)
  * +--end_pipeline
  *
  * Threading means that ownership cannot be inferred from the ordering
@@ -664,8 +662,8 @@ struct halide_trace_event_t {
  * realization. Within a single production, the ordering of events is
  * meaningful.
  *
- * Note that all trace_tag events (if any) will occur just after the begin_pipeline
- * event, but before any begin_realization events. All trace_tags for a given Func
+ * Note that all tag events (if any) will occur just after the begin_pipeline
+ * event, but before any begin_realization events. All tags for a given Func
  * will be emitted in the order added.
  */
 // @}
