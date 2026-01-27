@@ -2325,6 +2325,12 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
                                                  {VPArg(slice_val, 0), VPArg(vec_ptr, 1, alignment)})) {
                 store = dyn_cast<Instruction>(value);
             } else {
+                if (!slice_val->getType()->isVectorTy()) {
+                    slice_val = create_broadcast(slice_val, 1);
+                }
+                if (!slice_mask->getType()->isVectorTy()) {
+                    slice_mask = create_broadcast(slice_mask, 1);
+                }
                 store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
             }
             add_tbaa_metadata(store, op->name, slice_index);
@@ -2444,6 +2450,9 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
                 load_inst = dyn_cast<Instruction>(value);
             } else {
                 if (slice_mask != nullptr) {
+                    if (!slice_mask->getType()->isVectorTy()) {
+                        slice_mask = create_broadcast(slice_mask, 1);
+                    }
                     load_inst = builder->CreateMaskedLoad(slice_type, vec_ptr, llvm::Align(align_bytes), slice_mask);
                 } else {
                     load_inst = builder->CreateAlignedLoad(slice_type, vec_ptr, llvm::Align(align_bytes));
