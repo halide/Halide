@@ -62,7 +62,6 @@ function(add_wasm_executable TARGET)
     if ("${Halide_TARGET}" MATCHES "webgpu")
         set(EMCC_FLAGS
             ${EMCC_FLAGS}
-            --post-js "${Halide_SOURCE_DIR}/tools/webgpu_post_run.js"
             --use-port=emdawnwebgpu
             -s ASYNCIFY
         )
