@@ -36,7 +36,7 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
     if (!skip_schedule) {
         if (!target.has_gpu_feature()) {
             // CPU schedule.
-            // 8.2ms on an Intel i9-9960X using 16 threads
+            // 9.7ms on an Intel i9-9960X at 3.1 GHz using 16 threads
             // Split the transpose into tiles of rows. Parallelize over channels
             // and strips.
             Var xo, yo, t, yi;
