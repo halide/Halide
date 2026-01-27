@@ -33,7 +33,7 @@ Halide can generate WebGPU code that can be integrated with WASM code using
 Emscripten.
 
 When invoking `emcc` to link Halide-generated objects, include these flags:
-`-s USE_WEBGPU=1 -s ASYNCIFY`.
+`--use-port=emdawnwebgpu -s ASYNCIFY`.
 
 Tests that use AOT compilation can be run using a native WebGPU implementation
 that has Node.js bindings, such as [Dawn](https://dawn.googlesource.com/dawn/).
