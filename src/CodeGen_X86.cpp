@@ -1233,6 +1233,23 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
         return optimization_fence(shuffle_vectors(a, a, indices));
     };
 
+    // A helper to iterate over all pairs of entries in v, separated by some
+    // power-of-two spacing.
+    auto for_all_pairs = [&](size_t log_step, auto fn) {
+        size_t step = 1 << log_step;
+        for (size_t i = 0; i < v.size(); i++) {
+            // Pair each vector with the one separated by the step.
+            size_t j = i ^ step;
+
+            // Don't process vectors twice.
+            if (j < i) {
+                continue;
+            }
+
+            fn(&v[i], &v[j]);
+        }
+    };
+
     // First, if the vectors are wider than native, that will manifest as too
     // many slice bits. Cut them into separate native vectors. This will not
     // create any instructions.
@@ -1275,18 +1292,9 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
             // The distance in the vecs array is the index of the corresponding
             // v bit we're pulling down.
-            int step = 1 << j;
             std::vector<Value *> new_v;
             new_v.reserve(v.size() / 2);
-            for (size_t i = 0; i < v.size(); i++) {
-                // Pair each vector with the one separated by the step.
-                size_t j = i ^ step;
-
-                // Don't process vectors twice.
-                if (j < i) {
-                    continue;
-                }
-
+            for_all_pairs(j, [&](auto *a, auto *b) {
                 // Just interleave the two vectors. Because we have fewer
                 // elements than one slice, unpckl/h is a straight interleave.
                 std::vector<int> indices;
@@ -1294,8 +1302,8 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
                     indices.push_back(k);
                     indices.push_back(vec_elements + k);
                 }
-                new_v.push_back(shuffle_vectors(v[i], v[j], indices));
-            }
+                new_v.push_back(shuffle_vectors(*a, *b, indices));
+            });
             v.swap(new_v);
             vec_elements *= 2;
             bit--;
@@ -1323,16 +1331,11 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
             v_bits.erase(v_it);
             s_bits.push_back(bit);
 
-            int step = 1 << j;
             std::vector<Value *> new_v;
             new_v.reserve(v.size() / 2);
-            for (size_t i = 0; i < v.size(); i++) {
-                size_t k = i ^ step;
-                if (k < i) {
-                    continue;
-                }
-                new_v.push_back(concat_vectors({v[i], v[k]}));
-            }
+            for_all_pairs(j, [&](auto *a, auto *b) {
+                new_v.push_back(concat_vectors({*a, *b}));
+            });
             v.swap(new_v);
             vec_elements *= 2;
         } else {
@@ -1354,16 +1357,11 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
                 l_bits.pop_back();
                 l_bits.insert(l_bits.begin(), b);
 
-                int step = 1 << j;
-                for (size_t i = 0; i < v.size(); i++) {
-                    size_t k = i ^ step;
-                    if (k < i) {
-                        continue;
-                    }
-                    auto [lo, hi] = unpck(v[i], v[k]);
-                    v[i] = lo;
-                    v[k] = hi;
-                }
+                for_all_pairs(j, [&](auto *a, auto *b) {
+                    auto [lo, hi] = unpck(*a, *b);
+                    *a = lo;
+                    *b = hi;
+                });
             }
         }
     }
@@ -1392,16 +1390,11 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
         l_bits.pop_back();
         l_bits.insert(l_bits.begin(), bit);
 
-        int step = 1 << j;
-        for (size_t i = 0; i < v.size(); i++) {
-            size_t k = i ^ step;
-            if (k < i) {
-                continue;
-            }
-            auto [lo, hi] = unpck(v[i], v[k]);
-            v[i] = lo;
-            v[k] = hi;
-        }
+        for_all_pairs(j, [&](auto *a, auto *b) {
+            auto [lo, hi] = unpck(*a, *b);
+            *a = lo;
+            *b = hi;
+        });
     }
 
     // They should be 0, 1, 2, 3...
@@ -1416,18 +1409,13 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
     auto ls_in_v = std::find(v_bits.begin(), v_bits.end(), low_slice_bit);
     if (ls_in_v != v_bits.end()) {
         int j = ls_in_v - v_bits.begin();
-        int step = 1 << j;
         std::swap(*ls_in_v, s_bits.back());
 
-        for (size_t i = 0; i < v.size(); i++) {
-            size_t k = i ^ step;
-            if (k < i) {
-                continue;
-            }
-            auto [lo, hi] = shufi(v[i], v[k], false);
-            v[i] = lo;
-            v[k] = hi;
-        }
+        for_all_pairs(j, [&](auto *a, auto *b) {
+            auto [lo, hi] = shufi(*a, *b, false);
+            *a = lo;
+            *b = hi;
+        });
     }
 
     // And then the high slice bit, if there is one
@@ -1440,7 +1428,6 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
             // be one of the slice bits. It can't be an l bit, because we've
             // already finalized them.
             int j = hs_in_v - v_bits.begin();
-            int step = 1 << j;
 
             if (!s_bits.empty() && s_bits.back() == low_slice_bit) {
                 // The low slice bit is currently occupying the high slice bit slot,
@@ -1451,29 +1438,22 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
                 s_bits.back() = *hs_in_v;
                 *hs_in_v = temp;
 
-                for (size_t i = 0; i < v.size(); i++) {
-                    size_t k = i ^ step;
-                    if (k < i) {
-                        continue;
-                    }
-                    auto [lo, hi] = shufi(v[i], v[k], true);
-                    v[i] = lo;
-                    v[k] = hi;
-                }
+                for_all_pairs(j, [&](auto *a, auto *b) {
+                    auto [lo, hi] = shufi(*a, *b, true);
+                    *a = lo;
+                    *b = hi;
+                });
+
             } else {
                 // The low slice bit must be already in place, so no crossover required.
                 internal_assert(s_bits[0] == low_slice_bit);
                 std::swap(*hs_in_v, s_bits.back());
 
-                for (size_t i = 0; i < v.size(); i++) {
-                    size_t k = i ^ step;
-                    if (k < i) {
-                        continue;
-                    }
-                    auto [lo, hi] = shufi(v[i], v[k], false);
-                    v[i] = lo;
-                    v[j] = hi;
-                }
+                for_all_pairs(j, [&](auto *a, auto *b) {
+                    auto [lo, hi] = shufi(*a, *b, false);
+                    *a = lo;
+                    *b = hi;
+                });
             }
         } else if (s_bits.size() == 2 &&
                    s_bits[0] == high_slice_bit &&
