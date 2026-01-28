@@ -1363,10 +1363,6 @@ void CodeGen_LLVM::codegen(const Stmt &s) {
     s.accept(this);
 }
 
-bool CodeGen_LLVM::is_power_of_two(int x) const {
-    return (x & (x - 1)) == 0;
-}
-
 Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
         return Float(32, t.lanes());
@@ -2192,6 +2188,17 @@ llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
 void CodeGen_LLVM::visit(const Broadcast *op) {
     Value *v = codegen(op->value);
     value = create_broadcast(v, op->lanes);
+}
+
+Value *CodeGen_LLVM::optimization_fence(Value *v) {
+    llvm::Type *t = v->getType();
+    internal_assert(!t->isScalableTy())
+        << "optimization_fence does not support scalable vectors yet";
+    const int bits = t->getPrimitiveSizeInBits();
+    llvm::Type *float_type = llvm_type_of(Float(64, bits / 64));
+    v = builder->CreateBitCast(v, float_type);
+    v = builder->CreateArithmeticFence(v, float_type);
+    return builder->CreateBitCast(v, t);
 }
 
 Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {

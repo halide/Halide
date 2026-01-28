@@ -1404,10 +1404,6 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
     return slice_vector(concat_vectors(result), 0, idx_elements);
 }
 
-bool is_power_of_two(int x) {
-    return (x & (x - 1)) == 0;
-}
-
 // vdelta and vrdelta are instructions that take an input vector and
 // pass it through a network made up of levels. Each element x at each
 // level i can either take the element from the previous level at the
