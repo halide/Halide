@@ -37,7 +37,8 @@ endif ()
 set_target_properties(Halide PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 ##
-# Lists of source files. Keep ALL lists sorted in alphabetical order.
+# Lists of source files. Keep ALL lists sorted in case-insensitive alphabetical order.
+# (neo)vim users can use ":sort i" in visual line mode.
 ##
 
 # The externally-visible header files that go into making Halide.h.
@@ -62,14 +63,12 @@ target_sources(
     Associativity.h
     AsyncProducers.h
     AutoScheduleUtils.h
-    BoundConstantExtentLoops.h
-    BoundSmallAllocations.h
     BoundaryConditions.h
+    BoundConstantExtentLoops.h
     Bounds.h
     BoundsInference.h
+    BoundSmallAllocations.h
     Buffer.h
-    CPlusPlusMangle.h
-    CSE.h
     Callable.h
     CanonicalizeGPUVars.h
     ClampUnsafeAccesses.h
@@ -81,8 +80,8 @@ target_sources(
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
     CodeGen_OpenCL_Dev.h
-    CodeGen_PTX_Dev.h
     CodeGen_Posix.h
+    CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
     CodeGen_Vulkan_Dev.h
@@ -91,6 +90,8 @@ target_sources(
     ConciseCasts.h
     ConstantBounds.h
     ConstantInterval.h
+    CPlusPlusMangle.h
+    CSE.h
     Debug.h
     DebugArguments.h
     DebugToFile.h
@@ -127,13 +128,6 @@ target_sources(
     Generator.h
     HexagonOffload.h
     HexagonOptimize.h
-    IR.h
-    IREquality.h
-    IRMatch.h
-    IRMutator.h
-    IROperator.h
-    IRPrinter.h
-    IRVisitor.h
     ImageParam.h
     InferArguments.h
     InjectHostDevBufferCopies.h
@@ -142,13 +136,20 @@ target_sources(
     IntegerDivisionTable.h
     Interval.h
     IntrusivePtr.h
+    IR.h
+    IREquality.h
+    IRMatch.h
+    IRMutator.h
+    IROperator.h
+    IRPrinter.h
+    IRVisitor.h
     JITModule.h
-    LICM.h
-    LLVM_Output.h
-    LLVM_Runtime_Linker.h
     Lambda.h
     LegalizeVectors.h
     Lerp.h
+    LICM.h
+    LLVM_Output.h
+    LLVM_Runtime_Linker.h
     LoopCarry.h
     LoopPartitioningDirective.h
     Lower.h
@@ -174,8 +175,8 @@ target_sources(
     PurifyIndexMath.h
     PythonExtensionGen.h
     Qualify.h
-    RDom.h
     Random.h
+    RDom.h
     Realization.h
     RealizationOrder.h
     RebaseLoopsToZero.h
@@ -242,9 +243,9 @@ target_sources(
     AsyncProducers.cpp
     AutoScheduleUtils.cpp
     BoundaryConditions.cpp
+    BoundConstantExtentLoops.cpp
     Bounds.cpp
     BoundsInference.cpp
-    BoundConstantExtentLoops.cpp
     BoundSmallAllocations.cpp
     Buffer.cpp
     Callable.cpp
@@ -270,9 +271,9 @@ target_sources(
     CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
-    CPlusPlusMangle.cpp
     ConstantBounds.cpp
     ConstantInterval.cpp
+    CPlusPlusMangle.cpp
     CSE.cpp
     Debug.cpp
     DebugArguments.cpp
@@ -366,7 +367,6 @@ target_sources(
     Simplify_Add.cpp
     Simplify_And.cpp
     Simplify_Call.cpp
-    Simplify_Reinterpret.cpp
     Simplify_Cast.cpp
     Simplify_Div.cpp
     Simplify_EQ.cpp
@@ -379,6 +379,7 @@ target_sources(
     Simplify_Mul.cpp
     Simplify_Not.cpp
     Simplify_Or.cpp
+    Simplify_Reinterpret.cpp
     Simplify_Select.cpp
     Simplify_Shuffle.cpp
     Simplify_Stmts.cpp
