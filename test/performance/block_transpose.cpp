@@ -56,7 +56,8 @@ Result test_transpose(int block_width, int block_height, const Target &t) {
         for (int x = 0; x < N; x++) {
             T actual = out(x, y), correct = in(y, x);
             if (actual != correct) {
-                std::cerr << "out(" << x << ", " << y << ") = "
+                std::cerr << "For block size (" << block_width << ", " << block_height << "): "
+                          << "out(" << x << ", " << y << ") = "
                           << actual << " instead of " << correct << "\n";
                 exit(1);
             }

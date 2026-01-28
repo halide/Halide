@@ -936,11 +936,13 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
     const size_t elems_per_slice = 128 / element_bits;
 
     // Only apply special x86 logic for power-of-two interleaves for avx and
-    // above (TODO: Could slice into native vectors and concat results even if
-    // not power of two)
+    // above where we're going to end up with multiple native vectors (TODO:
+    // Could slice into native vectors and concat results even if not power of
+    // two)
 
     if (!is_power_of_two(vec_elements) ||
-        !is_power_of_two(vecs.size())) {
+        !is_power_of_two(vecs.size()) ||
+        (vecs.size() * vec_elements * element_bits) <= (size_t)native_vector_bits()) {
         return CodeGen_Posix::interleave_vectors(vecs);
     }
 
@@ -1091,35 +1093,27 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
       [2 3 4] [5] [0 1]
 
-      There's no good concatenation we can do to make whole vectors. That 0 and 1
-      both need to end up as lanes bits, and we have no instructions that swap
-      slice bits with lanes bits. So we'll just have to run unpck instructions at
-      half-vector width to push that 4 into the vector bit range:
+      Let's concatenate adjacent pairs as before.
 
-      [1 2 3] [5] [0 4]
+      [2 3 4] [5 0] [1]
 
-      and now we can concatenate according to bit 4 to make whole vectors
+      Now we do one unpck
+
+      [1 2 3] [5 0] [4]
+
+      And we encounter a problem when it comes to the second one. The next bit
+      we want pull in is hiding in the slice bits, which unpck instructions
+      can't access. So at this point we use a shufi to push it back into the
+      vector bits, swapping 0 and 4.
 
       [1 2 3] [5 4] [0]
 
-      We then do one more unpck to pull the 0 down:
+      Now we can do the last unpck.
 
       [0 1 2] [5 4] [3]
 
-      Next, we need to make 3 a slice bit. We can use shufi to swap it with 4:
-
-      [0 1 2] [5 3] [4]
-
-      and then another shufi to rotate those three
-
-      [0 1 2] [3 4] [5]
-
-      and we're done.
-
-      Depending on how many of each bit we start with, we can also end up in
-      situations where everything is correct except the two slice bits are in
-      the wrong order, in which case we can use a shufi instruction with a
-      vector and itself to swap those two bits.
+      From here we can use two shufi instructions to fix up the vector and slice
+      bits.
 
       So there are many possible paths depending on the number of elements per
       vector, the number of elements per 128-bit slice of each vector, and the
@@ -1134,7 +1128,8 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
     // The number of 128-bit slices per vector is 2 for avx and 4 for avx512
     const int final_num_s_bits = ctz64(native_vector_bits() / 128);
-    internal_assert(final_num_s_bits == 1 || final_num_s_bits == 2) << native_vector_bits() << " " << final_num_s_bits << "\n";
+    internal_assert(final_num_s_bits == 1 || final_num_s_bits == 2)
+        << native_vector_bits() << " " << final_num_s_bits;
 
     const int num_v_bits = ctz64(v.size());
     const int num_s_bits = ((size_t)vec_elements <= elems_per_slice) ? 0 : ctz64(vec_elements / elems_per_slice);
@@ -1216,7 +1211,7 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
         }
         Value *lo = shuffle_vectors(a, b, lo_indices);
         Value *hi = shuffle_vectors(a, b, hi_indices);
-        return {optimization_fence(lo), optimization_fence(hi)};
+        return {lo, hi};
     };
 
     // A 2x2 transpose of slices within a single vector
@@ -1230,7 +1225,7 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
                 indices.push_back(i + j * (int)elems_per_slice);
             }
         }
-        return optimization_fence(shuffle_vectors(a, a, indices));
+        return shuffle_vectors(a, a, indices);
     };
 
     // A helper to iterate over all pairs of entries in v, separated by some
@@ -1326,64 +1321,64 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
         }
 
         auto v_it = std::find(v_bits.begin(), v_bits.end(), bit);
-        if (v_it != v_bits.end()) {
-            int j = v_it - v_bits.begin();
-            v_bits.erase(v_it);
-            s_bits.push_back(bit);
 
-            std::vector<Value *> new_v;
-            new_v.reserve(v.size() / 2);
-            for_all_pairs(j, [&](auto *a, auto *b) {
-                new_v.push_back(concat_vectors({*a, *b}));
-            });
-            v.swap(new_v);
-            vec_elements *= 2;
-        } else {
-            // Oh no, the bit we wanted to use isn't in v_bits, it's in l_bits.
-            // We'll do sub-width unpck instead with an appropriate v bit to try
-            // to push it out. This is in a while loop, so it will keep doing
-            // this until it pops out the top of the l bits and we identify it
-            // as a v bit.
-            if (std::find(l_bits.begin(), l_bits.end(), bit) != l_bits.end()) {
-                int b = l_bits[0] - 1;
-                auto vb_it = std::find(v_bits.begin(), v_bits.end(), b);
-                if (vb_it == v_bits.end()) {
-                    vb_it = v_bits.end() - 1;
-                    b = *vb_it;
-                }
-
-                int j = vb_it - v_bits.begin();
-                *vb_it = l_bits.back();
-                l_bits.pop_back();
-                l_bits.insert(l_bits.begin(), b);
-
-                for_all_pairs(j, [&](auto *a, auto *b) {
-                    auto [lo, hi] = unpck(*a, *b);
-                    *a = lo;
-                    *b = hi;
-                });
-            }
+        if (v_it == v_bits.end()) {
+            // Just concatenate according to the lowest vector bit.
+            v_it = v_bits.begin();
+            bit = *v_it;
         }
+
+        int j = v_it - v_bits.begin();
+        v_bits.erase(v_it);
+        s_bits.push_back(bit);
+
+        std::vector<Value *> new_v;
+        new_v.reserve(v.size() / 2);
+        for_all_pairs(j, [&](auto *a, auto *b) {
+            new_v.push_back(concat_vectors({*a, *b}));
+        });
+        v.swap(new_v);
+        vec_elements *= 2;
     }
 
-    // If only one vector is left, we just need to check if the slice bits are
-    // in the right order:
-    if (v_bits.empty()) {
-        internal_assert(v.size() == 1);
-        if (s_bits.size() == 2 && s_bits[0] > s_bits[1]) {
-            v[0] = self_shufi(v[0]);
-            std::swap(s_bits[0], s_bits[1]);
-        }
-        return v[0];
-    }
+    // There should be more than one vector left
+    internal_assert(v.size() > 1);
 
-    // Now we have at least two whole vectors. Next we finalize lane bits using
+    // Now we have at least two whole vectors. Next we try to finalize lane bits using
     // unpck instructions.
     while (l_bits[0] != 0) {
         int bit = std::min(l_bits[0], (int)ctz64(elems_per_slice)) - 1;
 
         auto vb_it = std::find(v_bits.begin(), v_bits.end(), bit);
-        internal_assert(vb_it != v_bits.end());
+
+        // internal_assert(vb_it != v_bits.end());
+        if (vb_it == v_bits.end()) {
+            // The next bit is not in vector bits. It must be hiding in the
+            // slice bits due to earlier concatenation. Move it into the v_bits
+            // with a shufi
+            if (s_bits.back() == bit) {
+                // It's the last (or sole) slice bit. Swap it with the first v bit
+                std::swap(s_bits.back(), v_bits[0]);
+                for_all_pairs(0, [&](auto *a, auto *b) {
+                    auto [lo, hi] = shufi(*a, *b, false);
+                    *a = lo;
+                    *b = hi;
+                });
+            } else {
+                internal_assert(s_bits.size() == 2 && s_bits[0] == bit);
+                // It's the low slice bit. We need shufi with crossover.
+                int v_bit = v_bits[0];
+                v_bits[0] = s_bits[0];
+                s_bits[0] = s_bits[1];
+                s_bits[1] = v_bit;
+                for_all_pairs(0, [&](auto *a, auto *b) {
+                    auto [lo, hi] = shufi(*a, *b, true);
+                    *a = lo;
+                    *b = hi;
+                });
+            }
+            vb_it = v_bits.begin();
+        }
 
         int j = vb_it - v_bits.begin();
         *vb_it = l_bits.back();
@@ -1397,14 +1392,15 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
         });
     }
 
-    // They should be 0, 1, 2, 3...
+    // Lane bits should now be 0, 1, 2, 3...
     for (int i = 0; i < (int)l_bits.size(); i++) {
         internal_assert(l_bits[i] == i);
     }
 
-    // Then we fix the slice bits with shufi instructions
+    // Time to fix the slice bits
 
-    // First the low slice bit
+    // First the low slice bit. If it's one of the v bits, move it to be the
+    // high slice bit with a shufi.
     int low_slice_bit = l_bits.size();
     auto ls_in_v = std::find(v_bits.begin(), v_bits.end(), low_slice_bit);
     if (ls_in_v != v_bits.end()) {
