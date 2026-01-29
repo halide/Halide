@@ -581,13 +581,6 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
-    if (op->is_intrinsic(Call::round)) {
-        value = call_overloaded_intrin(op->type, "round", op->args);
-        if (value) {
-            return;
-        }
-    }
-
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors beyond this point.
         CodeGen_Posix::visit(op);
