@@ -2847,6 +2847,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::round)) {
         value = call_overloaded_intrin(op->type, "roundeven", op->args);
         if (!value) {
+            debug(2) << "llvm.roundeven intrinsic not available (Is FP16 enabled?). Using fallback instead.\n";
             value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
         }
     } else if (op->is_intrinsic(Call::require)) {
