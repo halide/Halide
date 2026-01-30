@@ -2195,7 +2195,10 @@ Value *CodeGen_LLVM::optimization_fence(Value *v) {
     internal_assert(!t->isScalableTy())
         << "optimization_fence does not support scalable vectors yet";
     const int bits = t->getPrimitiveSizeInBits();
-    llvm::Type *float_type = llvm_type_of(Float(64, bits / 64));
+    if (bits % 16) {
+        return v;
+    }
+    llvm::Type *float_type = llvm_type_of(Float(16, bits / 16));
     v = builder->CreateBitCast(v, float_type);
     v = builder->CreateArithmeticFence(v, float_type);
     return builder->CreateBitCast(v, t);
@@ -2217,7 +2220,7 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
         for (int i = 0; i < vec_elements * 2; i++) {
             indices[i] = i % 2 == 0 ? i / 2 : i / 2 + vec_elements;
         }
-        return shuffle_vectors(a, b, indices);
+        return optimization_fence(shuffle_vectors(a, b, indices));
     } else {
         // Grab the even and odd elements of vecs.
         vector<Value *> even_vecs;
