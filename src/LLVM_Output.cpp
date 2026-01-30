@@ -351,6 +351,7 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
 
 void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
                llvm::CodeGenFileType file_type) {
+    // Make sure to run this with a large stack!
     debug(1) << "emit_file.Compiling to native code...\n";
 #if LLVM_VERSION >= 210
     debug(2) << "Target triple: " << module_in.getTargetTriple().str() << "\n";
@@ -443,11 +444,15 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
 }
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
-    emit_file(module, out, llvm::CodeGenFileType::ObjectFile);
+    Internal::run_with_large_stack([&]() {
+        emit_file(module, out, llvm::CodeGenFileType::ObjectFile);
+    });
 }
 
 void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
-    emit_file(module, out, llvm::CodeGenFileType::AssemblyFile);
+    Internal::run_with_large_stack([&]() {
+        emit_file(module, out, llvm::CodeGenFileType::AssemblyFile);
+    });
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream &out) {
