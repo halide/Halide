@@ -479,8 +479,11 @@ public:
         return 16;
     }
 
-    virtual bool use_multiple_threads() const {
-        return true;
+    int num_worker_threads() const {
+        if (std::string t = Halide::Internal::get_env_variable("HL_OP_CHECK_THREADS"); !t.empty()) {
+            return std::atoi(t.c_str());
+        }
+        return Halide::Tools::ThreadPool<void>::num_processors_online();
     }
 
     virtual bool test_all() {
@@ -493,10 +496,7 @@ public:
 
         Sharder sharder;
 
-        Halide::Tools::ThreadPool<TestResult> pool(
-            use_multiple_threads() ?
-                Halide::Tools::ThreadPool<TestResult>::num_processors_online() :
-                1);
+        Halide::Tools::ThreadPool<TestResult> pool(num_worker_threads());
         std::vector<std::future<TestResult>> futures;
 
         for (size_t t = 0; t < tasks.size(); t++) {
