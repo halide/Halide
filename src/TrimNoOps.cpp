@@ -125,12 +125,12 @@ class IsNoOp : public IRVisitor {
         condition = const_true();
         op->body.accept(this);
         Scope<Interval> varying;
-        varying.push(op->name, Interval(op->min, op->min + op->extent - 1));
+        varying.push(op->name, Interval(op->min, op->max));
         condition = simplify(common_subexpression_elimination(condition));
         debug(3) << "About to relax over " << op->name << " : " << condition << "\n";
         condition = and_condition_over_domain(condition, varying);
         debug(3) << "Relaxed: " << condition << "\n";
-        condition = make_and(old_condition, make_or(condition, simplify(op->extent <= 0)));
+        condition = make_and(old_condition, make_or(condition, simplify(op->max < op->min)));
     }
 
     void visit(const IfThenElse *op) override {
@@ -334,11 +334,11 @@ class SimplifyUsingBounds : public IRMutator {
     Stmt visit(const For *op) override {
         // Simplify the loop bounds.
         Expr min = mutate(op->min);
-        Expr extent = mutate(op->extent);
-        containing_loops.push_back({op->name, {min, min + extent - 1}});
+        Expr max = mutate(op->max);
+        containing_loops.push_back({op->name, {min, max}});
         Stmt body = mutate(op->body);
         containing_loops.pop_back();
-        return For::make(op->name, min, extent, op->for_type, op->partition_policy, op->device_api, body);
+        return For::make(op->name, min, max, op->for_type, op->partition_policy, op->device_api, body);
     }
 
 public:
@@ -366,7 +366,7 @@ class TrimNoOps : public IRMutator {
         IsNoOp is_no_op;
         body.accept(&is_no_op);
         debug(3) << "Condition is " << is_no_op.condition << "\n";
-        is_no_op.condition = simplify(simplify(common_subexpression_elimination(is_no_op.condition)));
+        is_no_op.condition = simplify(common_subexpression_elimination(is_no_op.condition));
 
         debug(3) << "Simplified condition is " << is_no_op.condition << "\n";
 
@@ -380,7 +380,7 @@ class TrimNoOps : public IRMutator {
             if (body.same_as(op->body)) {
                 return op;
             } else {
-                return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+                return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
             }
         }
 
@@ -393,7 +393,7 @@ class TrimNoOps : public IRMutator {
 
         if (i.is_everything()) {
             // Nope.
-            return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+            return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
         }
 
         if (i.is_empty()) {
@@ -414,29 +414,22 @@ class TrimNoOps : public IRMutator {
         Expr new_max_var = Variable::make(Int(32), new_max_name);
         Expr old_max_var = Variable::make(Int(32), old_max_name);
 
-        // Convert max to max-plus-one
-        if (i.has_upper_bound()) {
-            i.max = i.max + 1;
-        }
-
         // Truncate the loop bounds to the region over which it's not
         // a no-op.
-        Expr old_max = op->min + op->extent;
+        Expr old_max = op->max;
         Expr new_min, new_max;
         if (i.has_lower_bound()) {
-            new_min = clamp(i.min, op->min, old_max_var);
+            new_min = clamp(i.min, op->min, old_max_var + 1);
         } else {
             new_min = op->min;
         }
         if (i.has_upper_bound()) {
-            new_max = clamp(i.max, new_min_var, old_max_var);
+            new_max = clamp(i.max, new_min_var - 1, old_max_var);
         } else {
             new_max = old_max;
         }
 
-        Expr new_extent = new_max_var - new_min_var;
-
-        Stmt stmt = For::make(op->name, new_min_var, new_extent, op->for_type, op->partition_policy, op->device_api, body);
+        Stmt stmt = For::make(op->name, new_min_var, new_max_var, op->for_type, op->partition_policy, op->device_api, body);
         stmt = LetStmt::make(new_max_name, new_max, stmt);
         stmt = LetStmt::make(new_min_name, new_min, stmt);
         stmt = LetStmt::make(old_max_name, old_max, stmt);

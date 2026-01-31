@@ -668,8 +668,9 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f, const set<string> &in
         return {Cost()};
     }
 
-    vector<Cost> func_costs;
     size_t num_stages = f.updates().size() + 1;
+    vector<Cost> func_costs;
+    func_costs.reserve(num_stages);
     for (size_t s = 0; s < num_stages; s++) {
         func_costs.push_back(get_func_stage_cost(f, s, inlines));
     }

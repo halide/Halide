@@ -376,35 +376,15 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64");
             }
         } else {  // 64-bit
-#if LLVM_VERSION >= 190
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
             } else if (target.os == Target::OSX) {
-#if LLVM_VERSION >= 200
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-n32:64-S128-Fn32");
-#else
-                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128-Fn32");
-#endif
             } else if (target.os == Target::Windows) {
                 return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128-Fn32");
             } else {
-#if LLVM_VERSION >= 200
                 return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32");
-#else
-                return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32");
-#endif
             }
-#else
-            if (target.os == Target::IOS) {
-                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
-            } else if (target.os == Target::OSX) {
-                return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
-            } else if (target.os == Target::Windows) {
-                return llvm::DataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128");
-            } else {
-                return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128");
-            }
-#endif
         }
     } else if (target.arch == Target::POWERPC) {
         if (target.bits == 32) {
@@ -445,16 +425,15 @@ std::optional<llvm::VersionTuple> get_os_version_constraint(const llvm::Triple &
         return std::nullopt;
     }
 
+    // These version constraints track the minimum deployment targets
+    // supported by the latest Xcode version, which is currently 26.2.
+    // See the table here: https://developer.apple.com/support/xcode/
     if (triple.isMacOSX() && triple.isX86()) {
-        // At time of writing (January 2025), this is one version prior
-        // to the oldest version still supported by Apple.
-        return llvm::VersionTuple(12, 0, 0);
+        return llvm::VersionTuple(11, 0, 0);
     }
 
     if (triple.isiOS()) {
-        // At time of writing (January 2025), this is one version prior
-        // to the oldest version still supported by Apple.
-        return llvm::VersionTuple(17, 0, 0);
+        return llvm::VersionTuple(15, 0, 0);
     }
 
     llvm::VersionTuple t = triple.getMinimumSupportedOSVersion();

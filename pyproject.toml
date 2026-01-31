@@ -141,7 +141,7 @@ ignore = [
 github_url = "https://github.com/halide/Halide/"
 
 [tool.tbump.version]
-current = "21.0.0"
+current = "22.0.0"
 regex = '(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)'
 
 [tool.tbump.git]

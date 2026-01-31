@@ -277,7 +277,7 @@ constexpr size_t kExtraMallocSlop = 32;
 
 std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_name) {
     static std::mutex link_lock;
-    std::lock_guard<std::mutex> lock(link_lock);
+    std::scoped_lock lock(link_lock);
 
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> fn_module;
@@ -385,11 +385,10 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
 // variants *will* be instantiated (increasing code size), so this approach
 // should only be used when strictly necessary.
 
-// clang-format off
 template<template<typename> class Functor, typename... Args>
-auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
+auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
-#define HANDLE_CASE(CODE, BITS, TYPE)  \
+#define HANDLE_CASE(CODE, BITS, TYPE)        \
     case halide_type_t(CODE, BITS).as_u32(): \
         return Functor<TYPE>()(std::forward<Args>(args)...);
 
@@ -416,7 +415,6 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> declty
 
 #undef HANDLE_CASE
 }
-// clang-format on
 
 // -----------------------
 // extern callback helper code
@@ -2118,23 +2116,21 @@ void add_extern_callbacks(const Local<Context> &context,
 
 #endif  // WITH_V8
 
-// clang-format off
-
 #if WITH_WABT
 using HostCallbackMap = std::unordered_map<std::string, wabt::interp::HostFunc::Callback>;
 
-#define DEFINE_CALLBACK(f)                { #f, wabt_jit_##f##_callback },
-#define DEFINE_POSIX_MATH_CALLBACK(t, f)  { #f, wabt_posix_math_1<t, ::f> },
-#define DEFINE_POSIX_MATH_CALLBACK2(t, f) { #f, wabt_posix_math_2<t, ::f> },
+#define DEFINE_CALLBACK(f) {#f, wabt_jit_##f##_callback}
+#define DEFINE_POSIX_MATH_CALLBACK(t, f) {#f, wabt_posix_math_1<t, ::f>}
+#define DEFINE_POSIX_MATH_CALLBACK2(t, f) {#f, wabt_posix_math_2<t, ::f>}
 
 #endif
 
 #ifdef WITH_V8
 using HostCallbackMap = std::unordered_map<std::string, FunctionCallback>;
 
-#define DEFINE_CALLBACK(f)                { #f, wasm_jit_##f##_callback },
-#define DEFINE_POSIX_MATH_CALLBACK(t, f)  { #f, wasm_jit_posix_math_callback<t, ::f> },
-#define DEFINE_POSIX_MATH_CALLBACK2(t, f)  { #f, wasm_jit_posix_math2_callback<t, ::f> },
+#define DEFINE_CALLBACK(f) {#f, wasm_jit_##f##_callback}
+#define DEFINE_POSIX_MATH_CALLBACK(t, f) {#f, wasm_jit_posix_math_callback<t, ::f>}
+#define DEFINE_POSIX_MATH_CALLBACK2(t, f) {#f, wasm_jit_posix_math2_callback<t, ::f>}
 #endif
 
 const HostCallbackMap &get_host_callback_map() {
@@ -2142,69 +2138,68 @@ const HostCallbackMap &get_host_callback_map() {
     static HostCallbackMap m = {
         // General runtime functions.
 
-        DEFINE_CALLBACK(__cxa_atexit)
-        DEFINE_CALLBACK(__extendhfsf2)
-        DEFINE_CALLBACK(__truncsfhf2)
-        DEFINE_CALLBACK(abort)
-        DEFINE_CALLBACK(fclose)
-        DEFINE_CALLBACK(fileno)
-        DEFINE_CALLBACK(fopen)
-        DEFINE_CALLBACK(free)
-        DEFINE_CALLBACK(fwrite)
-        DEFINE_CALLBACK(getenv)
-        DEFINE_CALLBACK(halide_error)
-        DEFINE_CALLBACK(halide_print)
-        DEFINE_CALLBACK(halide_trace_helper)
-        DEFINE_CALLBACK(malloc)
-        DEFINE_CALLBACK(memcmp)
-        DEFINE_CALLBACK(memcpy)
-        DEFINE_CALLBACK(memmove)
-        DEFINE_CALLBACK(memset)
-        DEFINE_CALLBACK(strlen)
-        DEFINE_CALLBACK(write)
+        DEFINE_CALLBACK(__cxa_atexit),
+        DEFINE_CALLBACK(__extendhfsf2),
+        DEFINE_CALLBACK(__truncsfhf2),
+        DEFINE_CALLBACK(abort),
+        DEFINE_CALLBACK(fclose),
+        DEFINE_CALLBACK(fileno),
+        DEFINE_CALLBACK(fopen),
+        DEFINE_CALLBACK(free),
+        DEFINE_CALLBACK(fwrite),
+        DEFINE_CALLBACK(getenv),
+        DEFINE_CALLBACK(halide_error),
+        DEFINE_CALLBACK(halide_print),
+        DEFINE_CALLBACK(halide_trace_helper),
+        DEFINE_CALLBACK(malloc),
+        DEFINE_CALLBACK(memcmp),
+        DEFINE_CALLBACK(memcpy),
+        DEFINE_CALLBACK(memmove),
+        DEFINE_CALLBACK(memset),
+        DEFINE_CALLBACK(strlen),
+        DEFINE_CALLBACK(write),
 
         // Posix math.
-        DEFINE_POSIX_MATH_CALLBACK(double, acos)
-        DEFINE_POSIX_MATH_CALLBACK(double, acosh)
-        DEFINE_POSIX_MATH_CALLBACK(double, asin)
-        DEFINE_POSIX_MATH_CALLBACK(double, asinh)
-        DEFINE_POSIX_MATH_CALLBACK(double, atan)
-        DEFINE_POSIX_MATH_CALLBACK(double, atanh)
-        DEFINE_POSIX_MATH_CALLBACK(double, cos)
-        DEFINE_POSIX_MATH_CALLBACK(double, cosh)
-        DEFINE_POSIX_MATH_CALLBACK(double, exp)
-        DEFINE_POSIX_MATH_CALLBACK(double, log)
-        DEFINE_POSIX_MATH_CALLBACK(double, round)
-        DEFINE_POSIX_MATH_CALLBACK(double, sin)
-        DEFINE_POSIX_MATH_CALLBACK(double, sinh)
-        DEFINE_POSIX_MATH_CALLBACK(double, tan)
-        DEFINE_POSIX_MATH_CALLBACK(double, tanh)
+        DEFINE_POSIX_MATH_CALLBACK(double, acos),
+        DEFINE_POSIX_MATH_CALLBACK(double, acosh),
+        DEFINE_POSIX_MATH_CALLBACK(double, asin),
+        DEFINE_POSIX_MATH_CALLBACK(double, asinh),
+        DEFINE_POSIX_MATH_CALLBACK(double, atan),
+        DEFINE_POSIX_MATH_CALLBACK(double, atanh),
+        DEFINE_POSIX_MATH_CALLBACK(double, cos),
+        DEFINE_POSIX_MATH_CALLBACK(double, cosh),
+        DEFINE_POSIX_MATH_CALLBACK(double, exp),
+        DEFINE_POSIX_MATH_CALLBACK(double, log),
+        DEFINE_POSIX_MATH_CALLBACK(double, round),
+        DEFINE_POSIX_MATH_CALLBACK(double, sin),
+        DEFINE_POSIX_MATH_CALLBACK(double, sinh),
+        DEFINE_POSIX_MATH_CALLBACK(double, tan),
+        DEFINE_POSIX_MATH_CALLBACK(double, tanh),
 
-        DEFINE_POSIX_MATH_CALLBACK(float, acosf)
-        DEFINE_POSIX_MATH_CALLBACK(float, acoshf)
-        DEFINE_POSIX_MATH_CALLBACK(float, asinf)
-        DEFINE_POSIX_MATH_CALLBACK(float, asinhf)
-        DEFINE_POSIX_MATH_CALLBACK(float, atanf)
-        DEFINE_POSIX_MATH_CALLBACK(float, atanhf)
-        DEFINE_POSIX_MATH_CALLBACK(float, cosf)
-        DEFINE_POSIX_MATH_CALLBACK(float, coshf)
-        DEFINE_POSIX_MATH_CALLBACK(float, expf)
-        DEFINE_POSIX_MATH_CALLBACK(float, logf)
-        DEFINE_POSIX_MATH_CALLBACK(float, roundf)
-        DEFINE_POSIX_MATH_CALLBACK(float, sinf)
-        DEFINE_POSIX_MATH_CALLBACK(float, sinhf)
-        DEFINE_POSIX_MATH_CALLBACK(float, tanf)
-        DEFINE_POSIX_MATH_CALLBACK(float, tanhf)
+        DEFINE_POSIX_MATH_CALLBACK(float, acosf),
+        DEFINE_POSIX_MATH_CALLBACK(float, acoshf),
+        DEFINE_POSIX_MATH_CALLBACK(float, asinf),
+        DEFINE_POSIX_MATH_CALLBACK(float, asinhf),
+        DEFINE_POSIX_MATH_CALLBACK(float, atanf),
+        DEFINE_POSIX_MATH_CALLBACK(float, atanhf),
+        DEFINE_POSIX_MATH_CALLBACK(float, cosf),
+        DEFINE_POSIX_MATH_CALLBACK(float, coshf),
+        DEFINE_POSIX_MATH_CALLBACK(float, expf),
+        DEFINE_POSIX_MATH_CALLBACK(float, logf),
+        DEFINE_POSIX_MATH_CALLBACK(float, roundf),
+        DEFINE_POSIX_MATH_CALLBACK(float, sinf),
+        DEFINE_POSIX_MATH_CALLBACK(float, sinhf),
+        DEFINE_POSIX_MATH_CALLBACK(float, tanf),
+        DEFINE_POSIX_MATH_CALLBACK(float, tanhf),
 
-        DEFINE_POSIX_MATH_CALLBACK2(float, atan2f)
-        DEFINE_POSIX_MATH_CALLBACK2(double, atan2)
-        DEFINE_POSIX_MATH_CALLBACK2(float, fminf)
-        DEFINE_POSIX_MATH_CALLBACK2(double, fmin)
-        DEFINE_POSIX_MATH_CALLBACK2(float, fmaxf)
-        DEFINE_POSIX_MATH_CALLBACK2(double, fmax)
-        DEFINE_POSIX_MATH_CALLBACK2(float, powf)
-        DEFINE_POSIX_MATH_CALLBACK2(double, pow)
-    };
+        DEFINE_POSIX_MATH_CALLBACK2(float, atan2f),
+        DEFINE_POSIX_MATH_CALLBACK2(double, atan2),
+        DEFINE_POSIX_MATH_CALLBACK2(float, fminf),
+        DEFINE_POSIX_MATH_CALLBACK2(double, fmin),
+        DEFINE_POSIX_MATH_CALLBACK2(float, fmaxf),
+        DEFINE_POSIX_MATH_CALLBACK2(double, fmax),
+        DEFINE_POSIX_MATH_CALLBACK2(float, powf),
+        DEFINE_POSIX_MATH_CALLBACK2(double, pow)};
 
     return m;
 }
@@ -2214,8 +2209,6 @@ const HostCallbackMap &get_host_callback_map() {
 #undef DEFINE_CALLBACK
 #undef DEFINE_POSIX_MATH_CALLBACK
 #undef DEFINE_POSIX_MATH_CALLBACK2
-
-// clang-format on
 
 #endif  // WITH_WABT || WITH_V8
 
@@ -2259,22 +2252,22 @@ struct WasmModuleContents {
     ~WasmModuleContents() = default;
 };
 
-// clang-format off
 WasmModuleContents::WasmModuleContents(
     const Module &halide_module,
     const std::vector<Argument> &arguments,
     const std::string &fn_name,
     const std::map<std::string, Halide::JITExtern> &jit_externs,
     const std::vector<JITModule> &extern_deps)
-    : target(halide_module.target())
-      , arguments(arguments)
-      , jit_externs(jit_externs)
-      , extern_deps(extern_deps)
-      , trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps))
+    : target(halide_module.target()),  //
+      arguments(arguments),            //
+      jit_externs(jit_externs),        //
+      extern_deps(extern_deps),        //
+      trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps))
 #if WITH_WABT
-      , store(wabt::interp::Store(calc_features(halide_module.target())))
+      ,
+      store(wabt::interp::Store(calc_features(halide_module.target())))
 #endif
-// clang-format on
+
 {
 
 #if WITH_WABT || WITH_V8

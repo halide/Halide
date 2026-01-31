@@ -367,6 +367,7 @@ private:
     void visit(const Call *op) override {
         IRVisitor::visit(op);
         std::vector<const IRNode *> args;
+        args.reserve(op->args.size());
         for (const auto &arg : op->args) {
             args.push_back(arg.get());
         }
@@ -385,6 +386,7 @@ private:
     void visit(const Shuffle *op) override {
         IRVisitor::visit(op);
         std::vector<const IRNode *> args;
+        args.reserve(op->vectors.size());
         for (const auto &arg : op->vectors) {
             args.push_back(arg.get());
         }
@@ -422,8 +424,8 @@ private:
         // The cost of a loop-node essentially depends on its iteration
         // count. The cost model currently ignores such costs.
         IRVisitor::visit(op);
-        set_compute_costs(op, 0, {op->min.get(), op->extent.get(), op->body.get()}, {op->min.get(), op->extent.get()});
-        set_data_costs(op, 0, {op->min.get(), op->extent.get(), op->body.get()}, {op->min.get(), op->extent.get()});
+        set_compute_costs(op, 0, {op->min.get(), op->max.get(), op->body.get()}, {op->min.get(), op->max.get()});
+        set_data_costs(op, 0, {op->min.get(), op->max.get(), op->body.get()}, {op->min.get(), op->max.get()});
     }
 
     void visit(const Acquire *op) override {
@@ -441,6 +443,7 @@ private:
     void visit(const Provide *op) override {
         IRVisitor::visit(op);
         std::vector<const IRNode *> args;
+        args.reserve(op->values.size() + op->args.size() + 1);
         for (const auto &arg : op->values) {
             args.push_back(arg.get());
         }
@@ -456,6 +459,7 @@ private:
         // We do not model allocation/de-allocation costs
         IRVisitor::visit(op);
         std::vector<const IRNode *> args_inline;
+        args_inline.reserve(op->extents.size() + 2);
         for (const auto &arg : op->extents) {
             args_inline.push_back(arg.get());
         }
@@ -957,6 +961,7 @@ public:
                     }
                 }
                 operands_str += ";";
+                // NOLINTNEXTLINE(performance-inefficient-string-concatenation)
                 line = line.substr(0, idx + 2) + operands_str;
             }
 
@@ -1689,7 +1694,7 @@ private:
         print_html_element("span", "matched", ", ");
         print(op->min);
         print_html_element("span", "matched", ", ");
-        print(op->extent);
+        print(op->max);
         print_html_element("span", "matched", ")");
 
         // Open code block to hold function body

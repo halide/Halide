@@ -963,6 +963,7 @@ Pipeline::make_externs_jit_module(const Target &target,
             free_standing_jit_externs.add_symbol_for_export(iter.first, pipeline_contents.jit_cache.jit_module.entrypoint_symbol());
             void *address = pipeline_contents.jit_cache.jit_module.entrypoint_symbol().address;
             std::vector<Type> arg_types;
+            arg_types.reserve(pipeline_contents.inferred_args.size() + pipeline_contents.outputs.size());
             // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
                 // TODO: it's not clear whether arg.arg.type is correct for

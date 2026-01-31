@@ -1,6 +1,7 @@
 #ifndef HALIDE_ERROR_H
 #define HALIDE_ERROR_H
 
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 
@@ -47,7 +48,8 @@ private:
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
 struct HALIDE_EXPORT_SYMBOL RuntimeError final : Error {
-    static constexpr auto error_name = "Runtime error";
+    static constexpr auto verbose_name = "Runtime error";
+    static constexpr int verbose_debug_level = 1;
 
     explicit RuntimeError(const char *msg);
     explicit RuntimeError(const std::string &msg);
@@ -56,7 +58,8 @@ struct HALIDE_EXPORT_SYMBOL RuntimeError final : Error {
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to a user error. */
 struct HALIDE_EXPORT_SYMBOL CompileError final : Error {
-    static constexpr auto error_name = "User error";
+    static constexpr auto verbose_name = "User error";
+    static constexpr int verbose_debug_level = 1;
 
     explicit CompileError(const char *msg);
     explicit CompileError(const std::string &msg);
@@ -66,7 +69,8 @@ struct HALIDE_EXPORT_SYMBOL CompileError final : Error {
  * attributes to an internal compiler bug, or to an invalid use of
  * Halide's internals. */
 struct HALIDE_EXPORT_SYMBOL InternalError final : Error {
-    static constexpr auto error_name = "Internal error";
+    static constexpr auto verbose_name = "Internal error";
+    static constexpr int verbose_debug_level = 0;  // Always print location/condition info
 
     explicit InternalError(const char *msg);
     explicit InternalError(const std::string &msg);
@@ -122,38 +126,42 @@ namespace Internal {
 void issue_warning(const char *warning);
 
 template<typename T>
-struct ReportBase {
+class ReportBase {
+    struct Contents {
+        std::ostringstream msg{};
+        bool finalized{false};
+    };
+    std::unique_ptr<Contents> contents = std::make_unique<Contents>();
+
+public:
     template<typename S>
     HALIDE_ALWAYS_INLINE T &operator<<(const S &x) {
-        msg << x;
+        contents->msg << x;
         return *static_cast<T *>(this);
     }
 
     HALIDE_ALWAYS_INLINE operator bool() const {
-        return !finalized;
+        return !contents->finalized;
     }
 
 protected:
-    std::ostringstream msg{};
-    bool finalized{false};
-
     // This function is called as part of issue() below. We can't use a
     // virtual function because issue() needs to be marked [[noreturn]]
     // for errors and be left alone for warnings (i.e., they have
     // different signatures).
     std::string finalize_message() {
-        if (!msg.str().empty() && msg.str().back() != '\n') {
-            msg << "\n";
+        if (!contents->msg.str().empty() && contents->msg.str().back() != '\n') {
+            contents->msg << "\n";
         }
-        finalized = true;
-        return msg.str();
+        contents->finalized = true;
+        return contents->msg.str();
     }
 
-    T &init(const char *file, const char *function, const int line, const char *condition_string, const char *prefix) {
-        if (debug_is_active_impl(1, file, function, line)) {
-            msg << prefix << " at " << file << ":" << line << ' ';
+    T &init(const char *file, const char *function, const int line, const char *condition_string) {
+        if (debug_is_active_impl(T::verbose_debug_level, file, function, line)) {
+            contents->msg << T::verbose_name << " at " << file << ":" << line << '\n';
             if (condition_string) {
-                msg << "Condition failed: " << condition_string << ' ';
+                contents->msg << "Condition failed: " << condition_string << '\n';
             }
         }
         return *static_cast<T *>(this);
@@ -162,8 +170,11 @@ protected:
 
 template<typename Exception>
 struct ErrorReport final : ReportBase<ErrorReport<Exception>> {
+    static constexpr auto verbose_name = Exception::verbose_name;
+    static constexpr int verbose_debug_level = Exception::verbose_debug_level;
+
     ErrorReport &init(const char *file, const char *function, const int line, const char *condition_string) {
-        return ReportBase<ErrorReport>::init(file, function, line, condition_string, Exception::error_name) << "Error: ";
+        return ReportBase<ErrorReport>::init(file, function, line, condition_string) << "Error: ";
     }
 
     [[noreturn]] void issue() noexcept(false) {
@@ -172,8 +183,11 @@ struct ErrorReport final : ReportBase<ErrorReport<Exception>> {
 };
 
 struct WarningReport final : ReportBase<WarningReport> {
+    static constexpr auto verbose_name = "Warning";
+    static constexpr int verbose_debug_level = 1;
+
     WarningReport &init(const char *file, const char *function, const int line, const char *condition_string) {
-        return ReportBase::init(file, function, line, condition_string, "Warning") << "Warning: ";
+        return ReportBase::init(file, function, line, condition_string) << "Warning: ";
     }
 
     void issue() {

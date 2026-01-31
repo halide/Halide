@@ -102,14 +102,17 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
 
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
-        Expr a = mutate(op->args[0], nullptr);
+        ExprInfo a_info, b_info;
+        Expr a = mutate(op->args[0], &a_info);
         // TODO: When simplifying b, it would be nice to specify the min/max useful bounds, so
         // stronger simplifications could occur. For example, x >> min(-i8, 0) should be simplified
         // to x >> -max(i8, 0) and then x << max(i8, 0). This isn't safe because -i8 can overflow.
-        ExprInfo b_info;
         Expr b = mutate(op->args[1], &b_info);
 
         if (is_const_zero(b)) {
+            if (info) {
+                *info = a_info;
+            }
             return a;
         }
 
@@ -180,12 +183,17 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         Expr a = mutate(op->args[0], &a_info);
         Expr b = mutate(op->args[1], &b_info);
 
+        if (should_commute(a, b)) {
+            std::swap(a, b);
+            std::swap(a_info, b_info);
+        }
+
         Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
         if (unbroadcast.defined()) {
             return mutate(unbroadcast, info);
         }
 
-        if (info && (op->type.is_int() || op->type.is_uint())) {
+        if (info && op->type.is_int_or_uint()) {
             auto bits_known = a_info.to_bits_known(op->type) & b_info.to_bits_known(op->type);
             info->from_bits_known(bits_known, op->type);
             if (bits_known.all_bits_known()) {
@@ -204,14 +212,16 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         } else if (ib &&
                    !b.type().is_max(*ib) &&
                    is_const_power_of_two_integer(*ib + 1)) {
-            return Mod::make(a, make_const(a.type(), *ib + 1, nullptr));
-        } else if (ub && b.type().is_max(*ub)) {
-            return a;
-        } else if (ib && *ib == -1) {
+            return mutate(Mod::make(a, make_const(a.type(), *ib + 1, nullptr)), info);
+        } else if ((ub && b.type().is_max(*ub)) ||
+                   (ib && *ib == -1)) {
+            if (info) {
+                *info = a_info;
+            }
             return a;
         } else if (ub &&
                    is_const_power_of_two_integer(*ub + 1)) {
-            return Mod::make(a, make_const(a.type(), *ub + 1, nullptr));
+            return mutate(Mod::make(a, make_const(a.type(), *ub + 1, nullptr)), info);
         } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
             return op;
         } else {
@@ -222,12 +232,17 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         Expr a = mutate(op->args[0], &a_info);
         Expr b = mutate(op->args[1], &b_info);
 
+        if (should_commute(a, b)) {
+            std::swap(a, b);
+            std::swap(a_info, b_info);
+        }
+
         Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
         if (unbroadcast.defined()) {
             return mutate(unbroadcast, info);
         }
 
-        if (info && (op->type.is_int() || op->type.is_uint())) {
+        if (info && op->type.is_int_or_uint()) {
             auto bits_known = a_info.to_bits_known(op->type) | b_info.to_bits_known(op->type);
             info->from_bits_known(bits_known, op->type);
             if (bits_known.all_bits_known()) {
@@ -241,6 +256,12 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return make_const(op->type, *ia | *ib, info);
         } else if (ua && ub) {
             return make_const(op->type, *ua | *ub, info);
+        } else if ((ub && *ub == 0) ||
+                   (ib && *ib == 0)) {
+            if (info) {
+                *info = a_info;
+            }
+            return a;
         } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
             return op;
         } else {
@@ -255,12 +276,12 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return mutate(unbroadcast, info);
         }
 
-        if (info && (op->type.is_int() || op->type.is_uint())) {
+        if (info && op->type.is_int_or_uint()) {
             // We could compute bits known here, but for the purpose of bounds
             // and alignment, it's more precise to treat ~x as an all-ones bit
             // pattern minus x. We get more information that way than just
             // counting the leading zeros or ones.
-            Expr e = mutate(make_const(op->type, (int64_t)(-1), nullptr) - op->args[0], info);
+            Expr e = mutate(make_const(op->type, (int64_t)(-1), nullptr) - a, info);
             // If the result of this happens to be a constant, we may as well
             // return it. This is redundant with the constant folding below, but
             // the constant folding below still needs to happen when info is
@@ -284,12 +305,17 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         Expr a = mutate(op->args[0], &a_info);
         Expr b = mutate(op->args[1], &b_info);
 
+        if (should_commute(a, b)) {
+            std::swap(a, b);
+            std::swap(a_info, b_info);
+        }
+
         Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
         if (unbroadcast.defined()) {
             return mutate(unbroadcast, info);
         }
 
-        if (info && (op->type.is_int() || op->type.is_uint())) {
+        if (info && op->type.is_int_or_uint()) {
             auto bits_known = a_info.to_bits_known(op->type) ^ b_info.to_bits_known(op->type);
             info->from_bits_known(bits_known, op->type);
         }
@@ -300,6 +326,12 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return make_const(op->type, *ia ^ *ib, info);
         } else if (ua && ub) {
             return make_const(op->type, *ua ^ *ub, info);
+        } else if ((ub && *ub == 0) ||
+                   (ib && *ib == 0)) {
+            if (info) {
+                *info = a_info;
+            }
+            return a;
         } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
             return op;
         } else {
@@ -309,15 +341,26 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
         // Constant evaluate abs(x).
         ExprInfo a_info;
         Expr a = mutate(op->args[0], &a_info);
+        ModulusRemainder negative_alignment = ModulusRemainder{0, 0} - a_info.alignment;
 
         Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
         if (unbroadcast.defined()) {
             return mutate(unbroadcast, info);
         }
 
+        ExprInfo abs_info;
+        abs_info.bounds = abs(a_info.bounds);
+        abs_info.alignment = ModulusRemainder::unify(a_info.alignment, negative_alignment);
+        abs_info.cast_to(op->type);
+        abs_info.trim_bounds_using_alignment();
+
         if (info) {
-            info->bounds = abs(a_info.bounds);
-            info->cast_to(op->type);
+            *info = abs_info;
+        }
+
+        if (abs_info.bounds.is_single_point()) {
+            // The arg could have been something like select(x, -30, 30), or ramp(-30, 60, 2)
+            return make_const(op->type, abs_info.bounds.min, info);
         }
 
         Type ta = a.type();
@@ -328,6 +371,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             return make_const(op->type, *ia, info);
         } else if (ta.is_uint()) {
             // abs(uint) is a no-op.
+            if (info) {
+                *info = a_info;
+            }
             return a;
         } else if (auto fa = as_const_float(a)) {
             if (*fa < 0) {
@@ -335,8 +381,12 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
             }
             return make_const(a.type(), *fa, info);
         } else if (a.type().is_int() && a_info.bounds >= 0) {
-            return cast(op->type, a);
+            return mutate(cast(op->type, a), info);
         } else if (a.type().is_int() && a_info.bounds <= 0) {
+            if (info) {
+                // Preserve alignment info
+                info->alignment = negative_alignment;
+            }
             return cast(op->type, -a);
         } else if (a.same_as(op->args[0])) {
             return op;
@@ -540,6 +590,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *info) {
 
         if (arg_info.bounds >= lower_info.bounds &&
             arg_info.bounds <= upper_info.bounds) {
+            if (info) {
+                *info = arg_info;
+            }
             return arg;
         } else if (b_arg && b_lower && b_upper) {
             // Move broadcasts outwards

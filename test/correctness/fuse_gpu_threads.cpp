@@ -9,9 +9,9 @@ class CheckThreadExtent : public IRVisitor {
         if (op->for_type == ForType::GPUThread) {
             // Assert the min and extent to be 0 and 16 for this particular test case
             auto min = as_const_int(op->min);
-            auto extent = as_const_int(op->extent);
+            auto max = as_const_int(op->max);
             assert(min && (*min == 0));
-            assert(extent && (*extent == 16));
+            assert(max && (*max == 15));
         }
         IRVisitor::visit(op);
     }

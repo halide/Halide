@@ -1,22 +1,26 @@
 cmake_minimum_required(VERSION 3.28)
 
+# TODO: remove this after updating build bots.
+if (CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+    if (NOT DEFINED VCPKG_OVERLAY_PORTS)
+        set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/cmake/vcpkg")
+    endif ()
+
+    if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
+        set(VCPKG_MANIFEST_FEATURES developer)
+    endif ()
+
+    # vcpkg and FetchContent are incompatible
+    set(Halide_USE_FETCHCONTENT OFF)
+endif ()
+
 option(Halide_USE_FETCHCONTENT "When Halide is top-level, use FetchContent for build-time dependencies." ON)
 if (Halide_USE_FETCHCONTENT)
     list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES "${CMAKE_CURRENT_LIST_DIR}/cmake/dependencies.cmake")
 endif ()
 
-# TODO: remove this after updating build bots.
-if (NOT DEFINED VCPKG_OVERLAY_PORTS)
-    set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/cmake/vcpkg")
-endif ()
-
-# TODO: remove this after updating build bots.
-if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
-    set(VCPKG_MANIFEST_FEATURES developer)
-endif ()
-
 project(Halide
-        VERSION 21.0.0
+        VERSION 22.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
@@ -200,7 +204,7 @@ option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread fla
 find_package(Threads REQUIRED)
 
 ## LLVM
-find_package(Halide_LLVM 18...99 REQUIRED  # Use 99 to fake a minimum-only constraint
+find_package(Halide_LLVM 20...99 REQUIRED  # Use 99 to fake a minimum-only constraint
              COMPONENTS WebAssembly X86
              OPTIONAL_COMPONENTS AArch64 ARM Hexagon NVPTX PowerPC RISCV)
 

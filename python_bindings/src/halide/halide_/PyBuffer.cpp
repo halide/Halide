@@ -39,6 +39,7 @@ std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
         return {};
     }
     std::vector<halide_dimension_t> s;
+    s.reserve(b.dimensions());
     for (int i = 0; i < b.dimensions(); ++i) {
         s.push_back(b.raw_buffer()->dim[i]);
     }
@@ -378,8 +379,8 @@ void define_buffer(py::module &m) {
                 },
                 py::arg("type"), py::arg("sizes"), py::arg("name") = "")
 
-            .def_static("make_scalar", (Buffer<>(*)(Type, const std::string &))Buffer<>::make_scalar, py::arg("type"), py::arg("name") = "")
-            .def_static("make_interleaved", (Buffer<>(*)(Type, int, int, int, const std::string &))Buffer<>::make_interleaved, py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
+            .def_static("make_scalar", static_cast<Buffer<> (*)(Type, const std::string &)>(Buffer<>::make_scalar), py::arg("type"), py::arg("name") = "")
+            .def_static("make_interleaved", static_cast<Buffer<> (*)(Type, int, int, int, const std::string &)>(Buffer<>::make_interleaved), py::arg("type"), py::arg("width"), py::arg("height"), py::arg("channels"), py::arg("name") = "")
             .def_static(  //
                 "make_with_shape_of", [](const Buffer<> &buffer, const std::string &name) -> Buffer<> {
                     return Buffer<>::make_with_shape_of(buffer, nullptr, nullptr, name);  //
@@ -389,23 +390,23 @@ void define_buffer(py::module &m) {
             .def("set_name", &Buffer<>::set_name)
             .def("name", &Buffer<>::name)
 
-            .def("same_as", (bool(Buffer<>::*)(const Buffer<> &other) const) & Buffer<>::same_as, py::arg("other"))
+            .def("same_as", static_cast<bool (Buffer<>::*)(const Buffer<> &other) const>(&Buffer<>::same_as), py::arg("other"))
             .def("defined", &Buffer<>::defined)
 
             .def("type", &Buffer<>::type)
-            .def("channels", (int(Buffer<>::*)() const) & Buffer<>::channels)
-            .def("dimensions", (int(Buffer<>::*)() const) & Buffer<>::dimensions)
-            .def("width", (int(Buffer<>::*)() const) & Buffer<>::width)
-            .def("height", (int(Buffer<>::*)() const) & Buffer<>::height)
-            .def("top", (int(Buffer<>::*)() const) & Buffer<>::top)
-            .def("bottom", (int(Buffer<>::*)() const) & Buffer<>::bottom)
-            .def("left", (int(Buffer<>::*)() const) & Buffer<>::left)
-            .def("right", (int(Buffer<>::*)() const) & Buffer<>::right)
-            .def("number_of_elements", (size_t(Buffer<>::*)() const)&Buffer<>::number_of_elements)
-            .def("size_in_bytes", (size_t(Buffer<>::*)() const)&Buffer<>::size_in_bytes)
-            .def("has_device_allocation", (bool(Buffer<>::*)() const) & Buffer<>::has_device_allocation)
-            .def("host_dirty", (bool(Buffer<>::*)() const) & Buffer<>::host_dirty)
-            .def("device_dirty", (bool(Buffer<>::*)() const) & Buffer<>::device_dirty)
+            .def("channels", static_cast<int (Buffer<>::*)() const>(&Buffer<>::channels))
+            .def("dimensions", static_cast<int (Buffer<>::*)() const>(&Buffer<>::dimensions))
+            .def("width", static_cast<int (Buffer<>::*)() const>(&Buffer<>::width))
+            .def("height", static_cast<int (Buffer<>::*)() const>(&Buffer<>::height))
+            .def("top", static_cast<int (Buffer<>::*)() const>(&Buffer<>::top))
+            .def("bottom", static_cast<int (Buffer<>::*)() const>(&Buffer<>::bottom))
+            .def("left", static_cast<int (Buffer<>::*)() const>(&Buffer<>::left))
+            .def("right", static_cast<int (Buffer<>::*)() const>(&Buffer<>::right))
+            .def("number_of_elements", static_cast<size_t (Buffer<>::*)() const>(&Buffer<>::number_of_elements))
+            .def("size_in_bytes", static_cast<size_t (Buffer<>::*)() const>(&Buffer<>::size_in_bytes))
+            .def("has_device_allocation", static_cast<bool (Buffer<>::*)() const>(&Buffer<>::has_device_allocation))
+            .def("host_dirty", static_cast<bool (Buffer<>::*)() const>(&Buffer<>::host_dirty))
+            .def("device_dirty", static_cast<bool (Buffer<>::*)() const>(&Buffer<>::device_dirty))
 
             .def("set_host_dirty",  //
                  [](Buffer<> &b, bool dirty) -> void {
@@ -423,19 +424,20 @@ void define_buffer(py::module &m) {
             .def("reverse_axes", [](Buffer<> &b) -> Buffer<> {
                 const int d = b.dimensions();
                 std::vector<int> order;
+                order.reserve(b.dimensions());
                 for (int i = 0; i < b.dimensions(); i++) {
                     order.push_back(d - i - 1);
                 }
                 return b.transposed(order);  //
             })
 
-            .def("add_dimension", (void(Buffer<>::*)()) & Buffer<>::add_dimension)
+            .def("add_dimension", static_cast<void (Buffer<>::*)()>(&Buffer<>::add_dimension))
 
             .def("allocate", [](Buffer<> &b) -> void {
                 b.allocate(nullptr, nullptr);  //
             })
-            .def("deallocate", (void(Buffer<>::*)()) & Buffer<>::deallocate)
-            .def("device_deallocate", (void(Buffer<>::*)()) & Buffer<>::device_deallocate)
+            .def("deallocate", static_cast<void (Buffer<>::*)()>(&Buffer<>::deallocate))
+            .def("device_deallocate", static_cast<void (Buffer<>::*)()>(&Buffer<>::device_deallocate))
 
             .def("crop",  //
                  [](Buffer<> &b, int d, int min, int extent) -> void {

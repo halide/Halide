@@ -79,9 +79,13 @@ Stmt Simplify::visit(const IfThenElse *op) {
         else_case = Stmt();
     }
 
-    // Pull out common nodes, but only when the "late in lowering" flag is set. This
-    // avoids simplifying specializations before they have a chance to specialize.
-    if (remove_dead_code && equal(then_case, else_case)) {
+    // This code used to use the remove_dead_lets flag to not merge equal
+    // clauses on the grounds that they might be specializations that will
+    // simplify later. However, specializations should be simplified
+    // aggressively quite early in lowering. If in future there is a bug with
+    // specializations seemingly disappearing halfway through lowering, try
+    // disabling this.
+    if (equal(then_case, else_case)) {
         return then_case;
     }
     const Acquire *then_acquire = then_case.as<Acquire>();
@@ -145,7 +149,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
                            then_case);
     } else if (then_for &&
                !else_case.defined() &&
-               equal(unwrapped_condition, 0 < then_for->extent)) {
+               equal(unwrapped_condition, then_for->min <= then_for->max)) {
         // This guard is redundant
         return then_case;
     } else if (then_if &&
@@ -203,21 +207,21 @@ Stmt Simplify::visit(const AssertStmt *op) {
 }
 
 Stmt Simplify::visit(const For *op) {
-    ExprInfo min_info, extent_info;
+    ExprInfo min_info, max_info;
     Expr new_min = mutate(op->min, &min_info);
     if (in_unreachable) {
         return Evaluate::make(new_min);
     }
-    Expr new_extent = mutate(op->extent, &extent_info);
+    Expr new_max = mutate(op->max, &max_info);
     if (in_unreachable) {
-        return Evaluate::make(new_extent);
+        return Evaluate::make(new_max);
     }
 
     ScopedValue<bool> old_in_vector_loop(in_vector_loop,
                                          (in_vector_loop ||
                                           op->for_type == ForType::Vectorized));
 
-    Expr extent_positive = mutate(0 < new_extent, nullptr);
+    Expr extent_positive = mutate(new_min <= new_max, nullptr);
     if (is_const_zero(extent_positive)) {
         // This loop never runs
         return Evaluate::make(0);
@@ -229,8 +233,8 @@ Stmt Simplify::visit(const For *op) {
     // at least one, so we can throw a max around the extent bounds.
 
     loop_var_info.bounds =
-        ConstantInterval::make_union(min_info.bounds,
-                                     min_info.bounds + max(extent_info.bounds, 1) - 1);
+        ConstantInterval::make_union(min(min_info.bounds, max_info.bounds),
+                                     max(min_info.bounds, max_info.bounds));
     Stmt new_body;
     {
         ScopedBinding<ExprInfo> bind_if((loop_var_info.bounds.max_defined ||
@@ -244,10 +248,8 @@ Stmt Simplify::visit(const For *op) {
 
         // The loop variable will never exceed the loop bound.
         Expr loop_var = Variable::make(Int(32), op->name);
-        Expr new_max = mutate(new_min + new_extent, nullptr);
-        ScopedFact fact_loop_var_less_than_extent = scoped_truth(loop_var < new_max);
-
-        ScopedFact fact_loop_var_ge_than_min = scoped_truth(new_min <= loop_var);
+        ScopedFact fact_loop_var_le_max = scoped_truth(loop_var <= new_max);
+        ScopedFact fact_loop_var_ge_min = scoped_truth(new_min <= loop_var);
 
         new_body = mutate(op->body);
     }
@@ -258,38 +260,45 @@ Stmt Simplify::visit(const For *op) {
         // extent is greater than zero, then the code *outside* the loop must be
         // unreachable too, because if it weren't, it'd run the unreachable body
         // at least once.
-        in_unreachable = extent_info.bounds > 0;
+        in_unreachable = max_info.bounds >= min_info.bounds;
         return Evaluate::make(0);
     }
 
     if (const Acquire *acquire = new_body.as<Acquire>()) {
         if (is_no_op(acquire->body)) {
             // Rewrite iterated no-op acquires as a single acquire.
-            return Acquire::make(acquire->semaphore, mutate(acquire->count * new_extent, nullptr), acquire->body);
+            return Acquire::make(acquire->semaphore, mutate(acquire->count * ((new_max - new_min) + 1), nullptr), acquire->body);
         }
     }
 
     if (is_no_op(new_body)) {
         return new_body;
-    } else if (extent_info.bounds <= 0) {
+    } else if (max_info.bounds < min_info.bounds) {
         return Evaluate::make(0);
-    } else if (extent_info.bounds <= 1 &&
+    } else if (equal(new_min, new_max) &&
+               op->device_api == DeviceAPI::None) {
+        // Loop body runs exactly once
+        return mutate(LetStmt::make(op->name, new_min, new_body));
+    } else if (max_info.bounds <= min_info.bounds &&
                op->device_api == DeviceAPI::None) {
         // Loop body runs at most once
         Stmt s = LetStmt::make(op->name, new_min, new_body);
-        if (extent_info.bounds.contains(0)) {
+        if (!(max_info.bounds >= min_info.bounds)) {
             // Loop body might not run at all
-            s = IfThenElse::make(0 < new_extent, s);
+            s = IfThenElse::make(new_min <= new_max, s);
         }
         return mutate(s);
-    } else if (!stmt_uses_var(new_body, op->name) && !is_const_zero(op->min)) {
-        return For::make(op->name, make_zero(Int(32)), new_extent, op->for_type, op->partition_policy, op->device_api, new_body);
+    } else if (Expr shifted_max;
+               !stmt_uses_var(new_body, op->name) &&
+               !is_const_zero(new_min) &&
+               is_const(shifted_max = mutate((new_max - new_min), nullptr))) {
+        return For::make(op->name, make_zero(Int(32)), shifted_max, op->for_type, op->partition_policy, op->device_api, new_body);
     } else if (op->min.same_as(new_min) &&
-               op->extent.same_as(new_extent) &&
+               op->max.same_as(new_max) &&
                op->body.same_as(new_body)) {
         return op;
     } else {
-        return For::make(op->name, new_min, new_extent, op->for_type, op->partition_policy, op->device_api, new_body);
+        return For::make(op->name, new_min, new_max, op->for_type, op->partition_policy, op->device_api, new_body);
     }
 }
 

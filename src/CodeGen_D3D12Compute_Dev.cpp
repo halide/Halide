@@ -1181,7 +1181,8 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             // generation time, emit code such that it can be patched some point
             // later when calling D3DCompile() / halide_d3d12compute_run()
             numthreads[index] = 0;  // <-- 0 indicates 'undetermined'
-            const IntImm *int_limit = loop->extent.as<IntImm>();
+            Expr extent = simplify(loop->extent());
+            const IntImm *int_limit = extent.as<IntImm>();
             if (nullptr != int_limit) {
                 numthreads[index] = int_limit->value;
                 user_assert(numthreads[index] > 0) << "For D3D12Compute, 'numthreads[" << index << "]' values must be greater than zero.\n";

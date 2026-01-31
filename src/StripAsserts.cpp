@@ -10,39 +10,34 @@ namespace Internal {
 namespace {
 
 bool may_discard(const Expr &e) {
-    class MayDiscard : public IRVisitor {
-        using IRVisitor::visit;
+    bool result = true;
+    // Extern calls that are side-effecty in the sense that you can't
+    // move them around in the IR, but we're free to discard because
+    // they're just getters.
+    static const std::set<std::string> discardable{
+        Call::buffer_get_dimensions,
+        Call::buffer_get_min,
+        Call::buffer_get_extent,
+        Call::buffer_get_stride,
+        Call::buffer_get_max,
+        Call::buffer_get_host,
+        Call::buffer_get_device,
+        Call::buffer_get_device_interface,
+        Call::buffer_get_shape,
+        Call::buffer_get_host_dirty,
+        Call::buffer_get_device_dirty,
+        Call::buffer_get_type};
 
-        void visit(const Call *op) override {
-            // Extern calls that are side-effecty in the sense that you can't
-            // move them around in the IR, but we're free to discard because
-            // they're just getters.
-            static const std::set<std::string> discardable{
-                Call::buffer_get_dimensions,
-                Call::buffer_get_min,
-                Call::buffer_get_extent,
-                Call::buffer_get_stride,
-                Call::buffer_get_max,
-                Call::buffer_get_host,
-                Call::buffer_get_device,
-                Call::buffer_get_device_interface,
-                Call::buffer_get_shape,
-                Call::buffer_get_host_dirty,
-                Call::buffer_get_device_dirty,
-                Call::buffer_get_type};
-
-            if (!(op->is_pure() ||
-                  discardable.count(op->name))) {
-                result = false;
-            }
+    visit_with(e, [&](auto *self, const Call *op) {
+        if (!(op->is_pure() ||
+              discardable.count(op->name))) {
+            result = false;
+        } else {
+            self->visit_base(op);
         }
+    });
 
-    public:
-        bool result = true;
-    } d;
-    e.accept(&d);
-
-    return d.result;
+    return result;
 }
 
 class StripAsserts : public IRMutator {

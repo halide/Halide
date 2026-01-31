@@ -162,6 +162,22 @@ define weak_odr <8 x half> @fast_inverse_sqrt_f16x8(<8 x half> %x) nounwind alwa
        ret <8 x half> %result
 }
 
+; Widening FMA ops.
+
+declare <4 x float> @llvm.aarch64.neon.fmlal.v4f32.v8f16(<4 x float>, <8 x half>, <8 x half>) nounwind readnone
+declare <4 x float> @llvm.aarch64.neon.fmlal2.v4f32.v8f16(<4 x float>, <8 x half>, <8 x half>) nounwind readnone
+
+define weak_odr <8 x float> @fmlal_f32x8(<8 x float> %a, <8 x half> %b, <8 x half> %c) nounwind alwaysinline {
+    %a_low = shufflevector <8 x float> %a, <8 x float> poison, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+    %a_high = shufflevector <8 x float> %a, <8 x float> poison, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
+
+    %result_low = call <4 x float> @llvm.aarch64.neon.fmlal.v4f32.v8f16(<4 x float> %a_low, <8 x half> %b, <8 x half> %c)
+    %result_high = call <4 x float> @llvm.aarch64.neon.fmlal2.v4f32.v8f16(<4 x float> %a_high, <8 x half> %b, <8 x half> %c)
+
+    %result = shufflevector <4 x float> %result_low, <4 x float> %result_high, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+    ret <8 x float> %result
+}
+
 declare <vscale x 4 x float> @llvm.aarch64.sve.frecpe.x.nxv4f32(<vscale x 4 x float> %x) nounwind readnone;
 declare <vscale x 4 x float> @llvm.aarch64.sve.frsqrte.x.nxv4f32(<vscale x 4 x float> %x) nounwind readnone;
 declare <vscale x 4 x float> @llvm.aarch64.sve.frecps.x.nxv4f32(<vscale x 4 x float> %x, <vscale x 4 x float> %y) nounwind readnone;

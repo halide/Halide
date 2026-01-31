@@ -29,7 +29,7 @@ class Param {
     struct DynamicParamType;
 
     /** T unless T is (const) void, in which case pointer-to-useless-type.` */
-    using not_void_T = typename std::conditional<std::is_void<T>::value, DynamicParamType *, T>::type;
+    using not_void_T = std::conditional_t<std::is_void_v<T>, DynamicParamType *, T>;
 
     void check_name() const {
         user_assert(param.name() != "__user_context")
@@ -45,7 +45,7 @@ class Param {
 
 public:
     /** True if the Halide type is not void (or const void). */
-    static constexpr bool has_static_type = !std::is_void<T>::value;
+    static constexpr bool has_static_type = !std::is_void_v<T>;
 
     /** Get the Halide type of T. Callers should not use the result if
      * has_static_halide_type is false. */
@@ -88,7 +88,7 @@ public:
 
     /** Construct a scalar parameter of type T an initial value of
      * 'val'. Only triggers for non-pointer types. */
-    template<typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
+    template<typename T2 = T, std::enable_if_t<!std::is_pointer_v<T2>> * = nullptr>
     explicit Param(not_void_T val)
         : param(type_of<T>(), false, 0, Internal::unique_name('p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
@@ -124,7 +124,7 @@ public:
     }
 
     /** Construct a Param<void> from any other Param. */
-    template<typename OTHER_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
+    template<typename OTHER_TYPE, typename T2 = T, std::enable_if_t<std::is_void_v<T2>> * = nullptr>
     Param(const Param<OTHER_TYPE> &other)
         : param(other.param) {
         // empty
@@ -132,7 +132,7 @@ public:
 
     /** Construct a Param<non-void> from a Param with matching type.
      * (Do the check at runtime so that we can assign from Param<void> if the types are compatible.) */
-    template<typename OTHER_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
+    template<typename OTHER_TYPE, typename T2 = T, std::enable_if_t<!std::is_void_v<T2>> * = nullptr>
     Param(const Param<OTHER_TYPE> &other)
         : param(other.param) {
         user_assert(other.type() == type_of<T>())
@@ -140,7 +140,7 @@ public:
     }
 
     /** Copy a Param<void> from any other Param. */
-    template<typename OTHER_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
+    template<typename OTHER_TYPE, typename T2 = T, std::enable_if_t<std::is_void_v<T2>> * = nullptr>
     Param<T> &operator=(const Param<OTHER_TYPE> &other) {
         param = other.param;
         return *this;
@@ -148,7 +148,7 @@ public:
 
     /** Copy a Param<non-void> from a Param with matching type.
      * (Do the check at runtime so that we can assign from Param<void> if the types are compatible.) */
-    template<typename OTHER_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
+    template<typename OTHER_TYPE, typename T2 = T, std::enable_if_t<!std::is_void_v<T2>> * = nullptr>
     Param<T> &operator=(const Param<OTHER_TYPE> &other) {
         user_assert(other.type() == type_of<T>())
             << "Param<" << type_of<T>() << "> cannot be copied from a Param with type " << other.type();
@@ -172,23 +172,22 @@ public:
         Asserts if type is not losslessly-convertible to Parameter's type. */
     template<typename SOME_TYPE>
     HALIDE_NO_USER_CODE_INLINE void set(const SOME_TYPE &val) {
-        if constexpr (!std::is_void<T>::value) {
+        if constexpr (!std::is_void_v<T>) {
             user_assert(Internal::IsRoundtrippable<T>::value(val))
                 << "The value " << val << " cannot be losslessly converted to type " << type();
             param.set_scalar<T>(val);
         } else {
-            // clang-format off
 
             // Specialized version for when T = void (thus the type is only known at runtime,
             // not compiletime). Note that this actually works fine for all Params; we specialize
             // it just to reduce code size for the common case of T != void.
 
-            #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
-                case halide_type_t(CODE, BITS).as_u32():                                              \
-                    user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
-                        << "The value " << val << " cannot be losslessly converted to type " << type; \
-                    param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val));                   \
-                    break;
+#define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
+    case halide_type_t(CODE, BITS).as_u32():                                              \
+        user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
+            << "The value " << val << " cannot be losslessly converted to type " << type; \
+        param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val));                   \
+        break;
 
             const Type type = param.type();
             switch (((halide_type_t)type).element_of().as_u32()) {
@@ -208,9 +207,7 @@ public:
                 internal_error << "Unsupported type in Param::set<" << type << ">\n";
             }
 
-            #undef HALIDE_HANDLE_TYPE_DISPATCH
-
-            // clang-format on
+#undef HALIDE_HANDLE_TYPE_DISPATCH
         }
     }
 
@@ -252,23 +249,22 @@ public:
 
     template<typename SOME_TYPE>
     HALIDE_NO_USER_CODE_INLINE void set_estimate(const SOME_TYPE &val) {
-        if constexpr (!std::is_void<T>::value) {
+        if constexpr (!std::is_void_v<T>) {
             user_assert(Internal::IsRoundtrippable<T>::value(val))
                 << "The value " << val << " cannot be losslessly converted to type " << type();
             param.set_estimate(Expr(val));
         } else {
-            // clang-format off
 
             // Specialized version for when T = void (thus the type is only known at runtime,
             // not compiletime). Note that this actually works fine for all Params; we specialize
             // it just to reduce code size for the common case of T != void.
 
-            #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
-                case halide_type_t(CODE, BITS).as_u32():                                              \
-                    user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
-                        << "The value " << val << " cannot be losslessly converted to type " << type; \
-                    param.set_estimate(Expr(Internal::StaticCast<TYPE>::value(val)));                   \
-                    break;
+#define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
+    case halide_type_t(CODE, BITS).as_u32():                                              \
+        user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
+            << "The value " << val << " cannot be losslessly converted to type " << type; \
+        param.set_estimate(Expr(Internal::StaticCast<TYPE>::value(val)));                 \
+        break;
 
             const Type type = param.type();
             switch (((halide_type_t)type).element_of().as_u32()) {
@@ -288,9 +284,7 @@ public:
                 internal_error << "Unsupported type in Param::set<" << type << ">\n";
             }
 
-            #undef HALIDE_HANDLE_TYPE_DISPATCH
-
-            // clang-format on
+#undef HALIDE_HANDLE_TYPE_DISPATCH
         }
     }
 

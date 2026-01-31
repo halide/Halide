@@ -64,6 +64,7 @@ Func constant_exterior(const Func &source, const Tuple &value,
     Func bounded("constant_exterior");
     if (value.as_vector().size() > 1) {
         std::vector<Expr> def;
+        def.reserve(value.as_vector().size());
         for (size_t i = 0; i < value.as_vector().size(); i++) {
             def.push_back(select(out_of_bounds, value[i], likely(repeat_edge(source, bounds)(args)[i])));
         }

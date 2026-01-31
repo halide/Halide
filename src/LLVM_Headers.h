@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 180
+#if LLVM_VERSION >= 200
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 18.0 or newer"
+#error "Compiling Halide requires LLVM 20.0 or newer"
 #endif
 
 // No msvc warnings from llvm headers please
@@ -85,9 +85,6 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/AlwaysInliner.h>
 #include <llvm/Transforms/IPO/Inliner.h>
-#if LLVM_VERSION < 200
-#include <llvm/Transforms/Instrumentation.h>
-#endif
 #include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
 #include <llvm/Transforms/Instrumentation/SanitizerCoverage.h>
 #include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
@@ -95,6 +92,9 @@
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/RelLookupTableConverter.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
+#if LLVM_VERSION >= 220
+#include "llvm/Analysis/RuntimeLibcallInfo.h"
+#endif
 
 // IWYU pragma: end_exports
 

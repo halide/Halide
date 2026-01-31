@@ -105,7 +105,7 @@ set(RUNTIME_CPP
     windows_yield
     write_debug_image
     x86_cpu_features
-    )
+)
 
 set(RUNTIME_LL
     aarch64
@@ -123,13 +123,13 @@ set(RUNTIME_LL
     x86_avx2
     x86_avx512
     x86_sse41
-    )
+)
 
 set(RUNTIME_BC
     compute_20
     compute_30
     compute_35
-    )
+)
 
 set(RUNTIME_HEADER_FILES
     HalideBuffer.h
@@ -145,7 +145,7 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeQurt.h
     HalideRuntimeVulkan.h
     HalideRuntimeWebGPU.h
-    )
+)
 
 # Need to create an object library for this because CMake
 # doesn't support using target_sources on a target declared
@@ -153,6 +153,9 @@ set(RUNTIME_HEADER_FILES
 # by add_custom_command, as is the case in this directory.
 add_library(Halide_initmod OBJECT)
 add_library(Halide::initmod ALIAS Halide_initmod)
+
+# All these are binary2cpp-generated files, so no need to export compile commands for them.
+set_target_properties(Halide_initmod PROPERTIES EXPORT_COMPILE_COMMANDS NO)
 
 # Note: ensure that these flags match the flags in the Makefile.
 # Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
@@ -186,11 +189,6 @@ set(RUNTIME_CXX_FLAGS
     -isystem "${VulkanHeaders_INCLUDE_DIR}"
 )
 
-Halide_feature(
-    Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF
-    ADVANCED
-)
-
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         # -fpic needs special treatment; see below on windows 64bits
@@ -210,7 +208,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                 else ()
                     set(TARGET "x86_64-unknown-windows-unknown")
                 endif ()
-            # Windows on ARM
+                # Windows on ARM
             elseif (i MATCHES "windows_.*_arm$")
                 if (j EQUAL 32 AND "ARM" IN_LIST Halide_LLVM_COMPONENTS)
                     set(TARGET "arm-unknown-windows-unknown")
@@ -219,8 +217,8 @@ foreach (i IN LISTS RUNTIME_CPP)
                 else ()
                     continue()
                 endif ()
-            # Windows Generic
-            else()
+                # Windows Generic
+            else ()
                 if (j EQUAL 32)
                     # TODO(marcos): generic code won't hold for ARM32... If ARM32 support becomes necessary,
                     # all windows-related runtime modules will have to be wrapped in windows_*_arm.cpp files
@@ -233,7 +231,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                     # TODO: was le64 here, not sure if this is correct or not
                     set(TARGET "x86_64-unknown-windows-unknown")
                 endif ()
-            endif()
+            endif ()
         elseif (i MATCHES "webgpu")
             if (j EQUAL 32)
                 # wasm32 will fail for some i386 builds, but i386 won't
@@ -241,7 +239,7 @@ foreach (i IN LISTS RUNTIME_CPP)
             else ()
                 set(TARGET "wasm64-unknown-unknown-unknown")
             endif ()
-        else()
+        else ()
             # don't be fooled: these are just generic 32/64-bit targets for our purposes here
             if (j EQUAL 32)
                 # wasm32 will fail for some i386 builds, but i386 won't
@@ -254,10 +252,10 @@ foreach (i IN LISTS RUNTIME_CPP)
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 
         set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DBITS_${j}
-                            -DHALIDE_VERSION=${Halide_VERSION} 
-                            -DHALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
-                            -DHALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
-                            -DHALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
+            -DHALIDE_VERSION=${Halide_VERSION}
+            -DHALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
+            -DHALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
+            -DHALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
 
         set(RUNTIME_DEFINES_debug -g -DDEBUG_RUNTIME ${RUNTIME_DEFINES})
 
@@ -270,20 +268,15 @@ foreach (i IN LISTS RUNTIME_CPP)
 
             set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S -MD -MF "${basename}.d")
 
-            if (Halide_CLANG_TIDY_BUILD)
-                # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
-                # that it can use for tidy-checking. (This branch should never be taken by 'normal'
-                # compilations.)
-                add_library(${basename} STATIC "${SOURCE}")
-                target_compile_options(${basename} PRIVATE ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} -m${j} -target ${TARGET})
-                target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
-            else()
-                add_custom_command(OUTPUT "${LL}"
-                                   COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
-                                   DEPENDS $<TARGET_NAME:clang> "${SOURCE}"
-                                   DEPFILE "${basename}.d"
-                                   VERBATIM)
-            endif()
+            if (CMAKE_EXPORT_COMPILE_COMMANDS)
+                list(PREPEND clang_flags -MJ "${basename}.json")
+            endif ()
+
+            add_custom_command(OUTPUT "${LL}"
+                               COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
+                               DEPENDS $<TARGET_NAME:clang> "${SOURCE}"
+                               DEPFILE "${basename}.d"
+                               VERBATIM)
 
             add_custom_command(OUTPUT "${BC}"
                                COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL}" -o "${BC}"
@@ -364,9 +357,8 @@ target_sources(Halide_Runtime
 
 Halide_feature(
     Halide_BUILD_HEXAGON_REMOTE_RUNTIME "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF
-    DEPENDS NOT Halide_CLANG_TIDY_BUILD
     ADVANCED
 )
 if (Halide_BUILD_HEXAGON_REMOTE_RUNTIME)
-  add_subdirectory(hexagon_remote)
+    add_subdirectory(hexagon_remote)
 endif ()
