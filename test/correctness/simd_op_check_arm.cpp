@@ -881,7 +881,9 @@ public:
             // VFRINTN
             if (target.bits == 64) {
                 // LLVM doesn't want to emit vfrintn on arm-32
-                check(arm32 ? "vfrintn.f16" : "frintn", 8 * w, round(f16_1));
+                if (target.has_feature(Target::ARMFp16)) {
+                    check(arm32 ? "vfrintn.f16" : "frintn", 8 * w, round(f16_1));
+                }
                 check(arm32 ? "vfrintn.f32" : "frintn", 4 * w, round(f32_1));
                 check(arm32 ? "vfrintn.f64" : "frintn", 2 * w, round(f64_1));
             }
