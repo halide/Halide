@@ -2104,12 +2104,8 @@ void CodeGen_ARM::visit(const Call *op) {
         // llvm's roundeven intrinsic reliably lowers to the correct
         // instructions on aarch64, but despite having the same instruction
         // available, it doesn't seem to work for arm-32.
-        if (target.bits == 64) {
-            value = call_overloaded_intrin(op->type, "round", op->args);
-            if (value) {
-                return;
-            }
-        } else {
+        if (target.bits == 32) {
+            // So let's call the fallback to make sure it's vectorizable.
             value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
             return;
         }
