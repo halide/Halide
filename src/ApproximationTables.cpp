@@ -1,5 +1,7 @@
 #include "ApproximationTables.h"
 
+#include <sstream>
+
 namespace Halide {
 namespace Internal {
 
@@ -10,6 +12,7 @@ using OO = ApproximationPrecision::OptimizationObjective;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 
 // clang-format off
+// NOLINTBEGIN
 // Generate this table with:
 //   python3 tools/polynomial_optimizer.py atan --order 1 2 3 4 5 6 7 8 --loss mulpe --formula
 const std::vector<Approximation> table_atan = {
@@ -859,7 +862,7 @@ const std::vector<Approximation> table_log = {
 };
 
 // clang-format on
-
+// NOLINTEND
 const Approximation *find_best_approximation(const char *name, const std::vector<Approximation> &table,
                                              ApproximationPrecision precision, Type type) {
     // We will find the approximation that is as fast as possible, while satisfying the constraints.
@@ -979,17 +982,20 @@ const Approximation *find_best_approximation(const char *name, const std::vector
     }
     const Approximation::Metrics &best_metrics = best->*metrics_ptr;
 
-    auto warn = user_warning;
-    warn << "Could not find an approximation for fast_" << name << " that satisfies constraints:";
-    if (precision.force_halide_polynomial > int(best->p.size())) {
-        warn << " [NumTerms " << best->p.size() << " < requested " << precision.force_halide_polynomial << "]";
-    }
-    if (precision.constraint_max_absolute_error > 0.0 && best_metrics.mae > precision.constraint_max_absolute_error) {
-        warn << " [MAE " << best_metrics.mae << " > requested " << precision.constraint_max_absolute_error << "]";
-    }
-    if (precision.constraint_max_ulp_error > 0.0 && best_metrics.mulpe > precision.constraint_max_ulp_error) {
-        warn << " [MULPE " << best_metrics.mulpe << " > requested " << precision.constraint_max_ulp_error << "]";
-    }
+    user_warning << [&] {
+        std::stringstream ss;
+        ss << "Could not find an approximation for fast_" << name << " that satisfies constraints:";
+        if (precision.force_halide_polynomial > int(best->p.size())) {
+            ss << " [NumTerms " << best->p.size() << " < requested " << precision.force_halide_polynomial << "]";
+        }
+        if (precision.constraint_max_absolute_error > 0.0 && best_metrics.mae > precision.constraint_max_absolute_error) {
+            ss << " [MAE " << best_metrics.mae << " > requested " << precision.constraint_max_absolute_error << "]";
+        }
+        if (precision.constraint_max_ulp_error > 0.0 && best_metrics.mulpe > precision.constraint_max_ulp_error) {
+            ss << " [MULPE " << best_metrics.mulpe << " > requested " << precision.constraint_max_ulp_error << "]";
+        }
+        return ss.str();
+    }();
     return best;
 }
 
