@@ -13,6 +13,10 @@ on:
       - '.github/workflows/testing-make.yml'
       - 'Makefile'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build_make:
     name: Makefile build (${{ matrix.os }})
