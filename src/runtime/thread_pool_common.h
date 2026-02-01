@@ -253,6 +253,27 @@ WEAK void dump_job_state() {
 
 WEAK void worker_thread(void *);
 
+WEAK void worker_thread_stall(work *owned_job) {
+    work_queue.owners_sleeping++;
+    owned_job->owner_is_sleeping = true;
+    work_queue.wake_owners.wait(&work_queue.mutex);
+    owned_job->owner_is_sleeping = false;
+    work_queue.owners_sleeping--;
+}
+
+WEAK void worker_thread_idle() {
+    work_queue.workers_sleeping++;
+    if (work_queue.a_team_size > work_queue.target_a_team_size) {
+        // Transition to B team
+        work_queue.a_team_size--;
+        work_queue.wake_b_team.wait(&work_queue.mutex);
+        work_queue.a_team_size++;
+    } else {
+        work_queue.wake_a_team.wait(&work_queue.mutex);
+    }
+    work_queue.workers_sleeping--;
+}
+
 WEAK void worker_thread_already_locked(work *owned_job) {
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
         work *job = work_queue.jobs;
@@ -330,23 +351,13 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
         if (!job) {
             // There is no runnable job. Go to sleep.
+            // The "stall" and "idle" function calls are not strictly necessary
+            // and could be inlined here, but having symbols for these situations
+            // is very informative when profiling.
             if (owned_job) {
-                work_queue.owners_sleeping++;
-                owned_job->owner_is_sleeping = true;
-                work_queue.wake_owners.wait(&work_queue.mutex);
-                owned_job->owner_is_sleeping = false;
-                work_queue.owners_sleeping--;
+                worker_thread_stall(owned_job);
             } else {
-                work_queue.workers_sleeping++;
-                if (work_queue.a_team_size > work_queue.target_a_team_size) {
-                    // Transition to B team
-                    work_queue.a_team_size--;
-                    work_queue.wake_b_team.wait(&work_queue.mutex);
-                    work_queue.a_team_size++;
-                } else {
-                    work_queue.wake_a_team.wait(&work_queue.mutex);
-                }
-                work_queue.workers_sleeping--;
+                worker_thread_idle();
             }
             continue;
         }

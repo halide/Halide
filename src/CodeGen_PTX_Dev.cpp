@@ -465,7 +465,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
     // TODO: Support rewriting to arbitrary calls in IRMatch and use that instead
     // of expr_match here. That would probably allow avoiding the redundant swapping
     // operands logic.
-    // clang-format off
     static const Pattern patterns[] = {
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_i8x)), "dp4a"},
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_u8x)), "dp4a"},
@@ -480,7 +479,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
         {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
     };
-    // clang-format on
 
     const int input_lanes = op->value.type().lanes();
     const int factor = input_lanes / op->type.lanes();
@@ -604,17 +602,19 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
-    llvm::Triple triple(module->getTargetTriple());
-
-    // Allocate target machine
-
+    // Allocate target machine (similar to code in CodeGen_Internal.cpp make_target_machine)
     std::string err_str;
-    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(triple.str(), err_str);
-    internal_assert(llvm_target) << err_str << "\n";
+    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(
+        module->getTargetTriple(),
+        err_str);
+    auto triple = llvm::Triple(module->getTargetTriple());
+    internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
     options.AllowFPOpFusion = FPOpFusion::Fast;
+#if LLVM_VERSION < 210
     options.UnsafeFPMath = true;
+#endif
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
@@ -697,11 +697,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     using OptimizationLevel = llvm::OptimizationLevel;
     OptimizationLevel level = OptimizationLevel::O3;
 
-#if LLVM_VERSION < 190
-    target_machine->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
-#else
     target_machine->registerPassBuilderCallbacks(pb);
-#endif
 
     mpm = pb.buildPerModuleDefaultPipeline(level);
     mpm.run(*module, mam);

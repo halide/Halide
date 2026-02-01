@@ -278,16 +278,11 @@ class LICM : public IRMutator {
             }
 
             // Track the set of variables used by the inner loop
-            class CollectVars : public IRVisitor {
-                using IRVisitor::visit;
-                void visit(const Variable *op) override {
-                    vars.insert(op->name);
-                }
-
-            public:
-                set<string> vars;
-            } vars;
-            new_stmt.accept(&vars);
+            set<string> vars;
+            LambdaVisitor collect_var([&](auto *, const Variable *op) {
+                vars.insert(op->name);
+            });
+            new_stmt.accept(&collect_var);
 
             // Now consider substituting back in each use
             const Call *call = dummy_call.as<Call>();
@@ -300,10 +295,10 @@ class LICM : public IRMutator {
                         continue;
                     }
                     Expr e = call->args[i];
-                    if (cost(e, vars.vars) <= 1) {
+                    if (cost(e, vars) <= 1) {
                         // Just subs it back in - computing it is as cheap
                         // as loading it.
-                        e.accept(&vars);
+                        e.accept(&collect_var);
                         new_stmt = substitute(names[i], e, new_stmt);
                         names[i].clear();
                         exprs[i] = Expr();
@@ -318,7 +313,7 @@ class LICM : public IRMutator {
             const For *loop = new_stmt.as<For>();
             internal_assert(loop);
 
-            new_stmt = For::make(loop->name, loop->min, loop->extent,
+            new_stmt = For::make(loop->name, loop->min, loop->max,
                                  loop->for_type, loop->partition_policy, loop->device_api, mutate(loop->body));
 
             // Wrap lets for the lifted invariants
@@ -563,7 +558,7 @@ class HoistIfStatements : public IRMutator {
             if (!i->else_case.defined() &&
                 is_pure(i->condition) &&
                 !expr_uses_var(i->condition, op->name)) {
-                Stmt s = For::make(op->name, op->min, op->extent,
+                Stmt s = For::make(op->name, op->min, op->max,
                                    op->for_type, op->partition_policy, op->device_api, i->then_case);
                 return IfThenElse::make(i->condition, s);
             }
@@ -571,7 +566,7 @@ class HoistIfStatements : public IRMutator {
         if (body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, op->min, op->extent,
+            return For::make(op->name, op->min, op->max,
                              op->for_type, op->partition_policy, op->device_api, body);
         }
     }

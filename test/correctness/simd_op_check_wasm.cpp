@@ -13,7 +13,7 @@ namespace {
 
 class SimdOpCheckWASM : public SimdOpCheckTest {
 public:
-    SimdOpCheckWASM(Target t, int w = 768, int h = 128)
+    SimdOpCheckWASM(Target t, int w = 768, int h = 1)
         : SimdOpCheckTest(t, w, h) {
         use_wasm_simd128 = target.has_feature(Target::WasmSimd128);
         use_wasm_sign_ext = !target.has_feature(Target::WasmMvpOnly);
@@ -74,19 +74,20 @@ public:
         }
 
         if (use_wasm_simd128) {
-            for (int w = 1; w <= 4; w <<= 1) {
+            for (int w = 1; w <= 2; w <<= 1) {
                 // create arbitrary 16-byte constant
                 check("v128.const", 16 * w, u8_1 * u8(42 + x));
 
-                // Create vector with identical lanes
-                // (Note that later LLVMs will use 64-bit constants for some smaller splats)
-                check("i8x16.splat", 16 * w, u8_1 * u8(42));
-                // LLVM13 likes to emit all of these as v128.const
-                check("v128.const", 8 * w, u16_1 * u16(42));
-                check("v128.const", 4 * w, u32_1 * u32(42));
-                check("v128.const", 2 * w, u64_1 * u64(42));
-                check("v128.const", 8 * w, f32_1 * f32(42));
-                check("v128.const", 4 * w, f64_1 * f64(42));
+                // Create vector splat (broadcast) by doing a non-vectorizable
+                // scalar operation (integer division by a non-constant) and
+                // combining it with a vector.
+                check("i8x16.splat", 16 * w, u8_1 * (in_u8(2) / in_u8(3)));
+                check("i16x8.splat", 8 * w, u16_1 * (in_u16(2) / in_u16(3)));
+                check("i32x4.splat", 4 * w, u32_1 * (in_u32(2) / in_u32(3)));
+                check("i64x2.splat", 2 * w, u64_1 * (in_u64(2) / in_u64(3)));
+                // For floats we'll use a transcendental call
+                check("f32x4.splat", 4 * w, f32_1 * sin(in_f32(1)));
+                check("f64x2.splat", 4 * w, f64_1 * sin(in_f64(1)));
 
                 // Extract lane as a scalar (extract_lane)
                 // Replace lane value (replace_lane)
@@ -141,21 +142,19 @@ public:
                 check("i64x2.neg", 2 * w, -i64_1);
 
                 // Extended (widening) integer multiplication
-                if (w > 1) {
-                    // Need a register wider than 128 bits for us to generate these
-                    check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
-                    check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
-                    check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
-                    check("i16x8.extmul_low_i8x16_u", 8 * w, u16(u8_1) * u8_2);
-                    check("i32x4.extmul_low_i16x8_u", 4 * w, u32(u16_1) * u16_2);
-                    check("i64x2.extmul_low_i32x4_u", 2 * w, u64(u32_1) * u32_2);
-                    check("i16x8.extmul_high_i8x16_s", 8 * w, i16(i8_1) * i8_2);
-                    check("i32x4.extmul_high_i16x8_s", 4 * w, i32(i16_1) * i16_2);
-                    check("i64x2.extmul_high_i32x4_s", 2 * w, i64(i32_1) * i32_2);
-                    check("i16x8.extmul_high_i8x16_u", 8 * w, u16(u8_1) * u8_2);
-                    check("i32x4.extmul_high_i16x8_u", 4 * w, u32(u16_1) * u16_2);
-                    check("i64x2.extmul_high_i32x4_u", 2 * w, u64(u32_1) * u32_2);
-                }
+                // Need a register wider than 128 bits for us to generate these
+                check("i16x8.extmul_low_i8x16_s", 16 * w, i16(i8_1) * i8_2);
+                check("i32x4.extmul_low_i16x8_s", 8 * w, i32(i16_1) * i16_2);
+                check("i64x2.extmul_low_i32x4_s", 4 * w, i64(i32_1) * i32_2);
+                check("i16x8.extmul_low_i8x16_u", 16 * w, u16(u8_1) * u8_2);
+                check("i32x4.extmul_low_i16x8_u", 8 * w, u32(u16_1) * u16_2);
+                check("i64x2.extmul_low_i32x4_u", 4 * w, u64(u32_1) * u32_2);
+                check("i16x8.extmul_high_i8x16_s", 16 * w, i16(i8_1) * i8_2);
+                check("i32x4.extmul_high_i16x8_s", 8 * w, i32(i16_1) * i16_2);
+                check("i64x2.extmul_high_i32x4_s", 4 * w, i64(i32_1) * i32_2);
+                check("i16x8.extmul_high_i8x16_u", 16 * w, u16(u8_1) * u8_2);
+                check("i32x4.extmul_high_i16x8_u", 8 * w, u32(u16_1) * u16_2);
+                check("i64x2.extmul_high_i32x4_u", 4 * w, u64(u32_1) * u32_2);
 
                 // Extended pairwise integer addition
                 for (int f : {2, 4}) {
@@ -387,11 +386,11 @@ public:
                 // check("v128.load32_zero", 2 * w, in_u32(0));
                 // check("v128.load64_zero", 2 * w, in_u64(0));
 
-                // Load vector with identical lanes generates *.splat.
-                check("i8x16.splat", 16 * w, in_u8(0));
-                check("i16x8.splat", 8 * w, in_u16(0));
-                check("i32x4.splat", 4 * w, in_u32(0));
-                check("i64x2.splat", 2 * w, in_u64(0));
+                // Load vector with identical lanes generates load*_splat.
+                check("v128.load8_splat", 16 * w, in_u8(0));
+                check("v128.load16_splat", 8 * w, in_u16(0));
+                check("v128.load32_splat", 4 * w, in_u32(0));
+                check("v128.load64_splat", 2 * w, in_u64(0));
 
                 // Load Lane
                 // TODO: does Halide have any idiom that obviously generates these?
@@ -546,6 +545,10 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckWASM>(
         argc, argv,
         {
+            // IMPORTANT:
+            // When adding new targets here, make sure to also update
+            // can_run_code in simd_op_check.h to include any new features used.
+
             Target("wasm-32-wasmrt"),
             Target("wasm-32-wasmrt-wasm_simd128"),
             Target("wasm-32-wasmrt-wasm_mvponly"),

@@ -57,6 +57,14 @@ using std::vector;
 
 namespace {
 
+#if defined(__aarch64__)
+__attribute__((target("+sve"))) int get_sve_vector_length() {
+    register int result asm("w0");
+    __asm__("cntb %x0, all, mul #8" : "=r"(result));
+    return result;
+}
+#endif
+
 #if defined(_M_IX86) || defined(_M_AMD64)
 
 void cpuid(int info[4], int infoType, int extra) {
@@ -232,6 +240,7 @@ Target calculate_host_target() {
 #else
 #if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC)
     Target::Arch arch = Target::ARM;
+    bool has_scalable_vector = false;
 
 #ifdef __APPLE__
     if (is_armv7s()) {
@@ -259,12 +268,15 @@ Target calculate_host_target() {
         initial_features.push_back(Target::ARMFp16);
     }
 
-    if (hwcaps & HWCAP_SVE) {
-        initial_features.push_back(Target::SVE);
-    }
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (hwcaps & HWCAP_SVE) {
+    //     initial_features.push_back(Target::SVE);
+    //     has_scalable_vector = true;
+    // }
 
     if (hwcaps2 & HWCAP2_SVE2) {
         initial_features.push_back(Target::SVE2);
+        has_scalable_vector = true;
     }
 #endif
 
@@ -284,10 +296,18 @@ Target calculate_host_target() {
         initial_features.push_back(Target::ARMDotProd);
     }
 
-    if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
-        initial_features.push_back(Target::SVE);
-    }
+    // TODO: https://github.com/halide/Halide/issues/8872
+    // if (IsProcessorFeaturePresent(PF_ARM_SVE_INSTRUCTIONS_AVAILABLE)) {
+    //     initial_features.push_back(Target::SVE);
+    //     has_scalable_vector = true;
+    // }
 
+#endif
+
+#if defined(__aarch64__)
+    if (has_scalable_vector) {
+        vector_bits = get_sve_vector_length();
+    }
 #endif
 
 #else
@@ -646,6 +666,7 @@ bool lookup_processor(const std::string &tok, Target::Processor &result) {
 const std::map<std::string, Target::Feature> feature_name_map = {
     {"jit", Target::JIT},
     {"debug", Target::Debug},
+    {"enable_backtraces", Target::EnableBacktraces},
     {"no_asserts", Target::NoAsserts},
     {"no_bounds_query", Target::NoBoundsQuery},
     {"sse41", Target::SSE41},
@@ -744,6 +765,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"semihosting", Target::Semihosting},
     {"avx10_1", Target::AVX10_1},
     {"x86apx", Target::X86APX},
+    {"simulator", Target::Simulator},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -1133,7 +1155,7 @@ std::string Target::to_string() const {
     // Use has_feature() multiple times (rather than features_any_of())
     // to avoid constructing a temporary vector for this rather-common call.
     if (has_feature(Target::TraceLoads) && has_feature(Target::TraceStores) && has_feature(Target::TraceRealizations)) {
-        result = Internal::replace_all(result, "trace_loads-trace_realizations-trace_stores", "trace_all");
+        result = Internal::replace_all(std::move(result), "trace_loads-trace_realizations-trace_stores", "trace_all");
     }
     if (vector_bits != 0) {
         result += "-vector_bits_" + std::to_string(vector_bits);
@@ -1546,8 +1568,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
-    // clang-format off
-    const std::array<Feature, 33> union_features = {{
+    const std::vector<Feature> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
@@ -1589,10 +1610,8 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         ARMv88a,
         ARMv89a,
     }};
-    // clang-format on
 
-    // clang-format off
-    const std::array<Feature, 16> intersection_features = {{
+    const std::vector<Feature> intersection_features = {{
         ARMv7s,
         AVX,
         AVX2,
@@ -1610,12 +1629,11 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         SSE41,
         VSX,
     }};
-    // clang-format on
 
-    // clang-format off
-    const std::array<Feature, 9> matching_features = {{
+    const std::vector<Feature> matching_features = {{
         ASAN,
         Debug,
+        EnableBacktraces,
         HexagonDma,
         HVX,
         MSAN,
@@ -1623,8 +1641,8 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         TSAN,
         WasmThreads,
         SanitizerCoverage,
+        Simulator,
     }};
-    // clang-format on
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;

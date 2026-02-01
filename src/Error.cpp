@@ -150,13 +150,6 @@ template<typename T>
     }
 
 #ifdef HALIDE_WITH_EXCEPTIONS
-    if (std::uncaught_exceptions() > 0) {
-        // This should never happen - evaluating one of the arguments to the
-        // error message would have to throw an exception. Nonetheless, in
-        // case it does, preserve the exception already in flight and suppress
-        // this one.
-        std::rethrow_exception(std::current_exception());
-    }
     throw e;
 #else
     std::cerr << e.what() << std::flush;

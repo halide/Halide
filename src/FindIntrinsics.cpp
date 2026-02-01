@@ -597,6 +597,9 @@ protected:
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
+            auto is_y_same_int = op->type.is_int() && is_int(y, bits);
+            auto is_y_same_uint = op->type.is_uint() && is_uint(y, bits);
+            auto is_y_same_int_or_uint = is_y_same_int || is_y_same_uint;
             auto x_y_same_sign = (is_int(x) && is_int(y)) || (is_uint(x) && is_uint(y));
 
             if (
@@ -662,9 +665,9 @@ protected:
                         rounding_halving_add(x, y),
                         is_x_same_int_or_uint) ||
 
-                rewrite(halving_add(widening_add(x, 1), y),
+                rewrite(halving_add(widening_add(x, 1), cast(op->type, y)),
                         rounding_halving_add(x, y),
-                        is_x_same_int_or_uint) ||
+                        is_x_same_int_or_uint && is_y_same_int_or_uint) ||
 
                 rewrite(rounding_shift_right(widening_add(x, y), 1),
                         rounding_halving_add(x, y),
@@ -731,7 +734,7 @@ protected:
             // We can't do everything we want here with rewrite rules alone. So, we rewrite them
             // to rounding_shifts with the widening still in place, and narrow it after the rewrite
             // succeeds.
-            // clang-format off
+
             if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_left(x, y), rounding_shift_left(x, y), is_x_wide_int_or_uint) ||
@@ -756,7 +759,6 @@ protected:
                     }
                 }
             }
-            // clang-format on
         }
 
         if (value.same_as(op->value)) {
@@ -889,7 +891,7 @@ protected:
         }
 
         if (no_overflow(op->type)) {
-            // clang-format off
+
             if (rewrite(halving_add(x + y, 1), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x, y + 1), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x + 1, y), rounding_halving_add(x, y)) ||
@@ -900,7 +902,6 @@ protected:
                 false) {
                 return mutate(rewrite.result);
             }
-            // clang-format on
         }
 
         // Move widening casts inside widening arithmetic outside the arithmetic,

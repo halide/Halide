@@ -137,6 +137,9 @@ public:
                  Target::AVX512_KNL,
                  Target::AVX512_SapphireRapids,
                  Target::AVX512_Skylake,
+                 Target::AVX512_Zen4,
+                 Target::AVX512_Zen5,
+                 Target::AVXVNNI,
                  Target::F16C,
                  Target::FMA,
                  Target::FMA4,
@@ -161,7 +164,7 @@ public:
                                    int vector_width,
                                    const std::vector<Argument> &arg_types,
                                    std::ostringstream &error_msg) {
-        std::string fn_name = "test_" + name;
+        std::string fn_name = "test_" + name + "_vecwidth" + std::to_string(vector_width);
         std::string file_name = output_directory + fn_name;
 
         auto ext = Internal::get_output_info(target);
@@ -169,6 +172,7 @@ public:
             {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
             {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
             {OutputFileType::assembly, file_name + ".s"},
+            {OutputFileType::llvm_assembly, file_name + ".ll"},
         };
         error.compile_to(outputs, arg_types, fn_name, target);
 
@@ -268,7 +272,7 @@ public:
             p.dim(0).set_min((p.dim(0).min() / alignment) * alignment);
         }
 
-        const std::vector<Argument> arg_types(image_params.begin(), image_params.end());
+        std::vector<Argument> arg_types(image_params.begin(), image_params.end());
 
         class HookUpImageParams : public Internal::IRMutator {
             using Internal::IRMutator::visit;
@@ -316,7 +320,7 @@ public:
         e.accept(&has_inline_reduction);
 
         // Define a vectorized Halide::Func that uses the pattern.
-        Halide::Func f(name);
+        Halide::Func f(name + "_vecwidth" + std::to_string(vector_width));
         f(x, y) = e;
         f.bound(x, 0, W).vectorize(x, vector_width);
         f.compute_root();
@@ -324,6 +328,9 @@ public:
         // Include a scalar version
         Halide::Func f_scalar("scalar_" + name);
         f_scalar(x, y) = e;
+        // Make sure scalar result is computed independently to prevent it
+        // from being fused into error() by optimization which complicates floating point errors.
+        f_scalar.compute_root();
 
         if (has_inline_reduction.result) {
             // If there's an inline reduction, we want to vectorize it
@@ -343,8 +350,15 @@ public:
                 .vectorize(xi);
         }
 
+        // We'll check over H rows, but we won't let the pipeline know H
+        // statically, as that can trigger some simplifications that change
+        // instruction selection.
+        Param<int> rows;
+        rows.set(H);
+        arg_types.push_back(rows);
+
         // The output to the pipeline is the maximum absolute difference as a double.
-        RDom r_check(0, W, 0, H);
+        RDom r_check(0, W, 0, rows);
         Halide::Func error("error_" + name);
         error() = Halide::cast<double>(maximum(absd(f(r_check.x, r_check.y), f_scalar(r_check.x, r_check.y))));
 
@@ -357,11 +371,13 @@ public:
             // Make some unallocated input buffers
             std::vector<Runtime::Buffer<>> inputs(image_params.size());
 
-            std::vector<Argument> args(image_params.size());
-            for (size_t i = 0; i < args.size(); i++) {
+            std::vector<Argument> args(image_params.size() + 1);
+            for (size_t i = 0; i < image_params.size(); i++) {
                 args[i] = image_params[i];
                 inputs[i] = Runtime::Buffer<>(args[i].type, nullptr, 0);
             }
+            args.back() = rows;
+
             auto callable = error.compile_to_callable(args, run_target);
 
             Runtime::Buffer<double> output = Runtime::Buffer<double>::make_scalar();
@@ -372,7 +388,7 @@ public:
             (void)callable(inputs[0], inputs[1], inputs[2], inputs[3],
                            inputs[4], inputs[5], inputs[6], inputs[7],
                            inputs[8], inputs[9], inputs[10], inputs[11],
-                           output);
+                           H, output);
 
             std::mt19937 rng;
             rng.seed(rng_seed);
@@ -392,14 +408,18 @@ public:
                         inputs[i].as<double>().for_each_value([&](double &f) { f = (rng() & 0xfff) / 8.0 - 0xff; });
                     } else if (t == Float(16)) {
                         inputs[i].as<float16_t>().for_each_value([&](float16_t &f) { f = float16_t((rng() & 0xff) / 8.0f - 0xf); });
+                    } else if (t == BFloat(16)) {
+                        inputs[i].as<bfloat16_t>().for_each_value([&](bfloat16_t &f) { f = bfloat16_t((rng() & 0xff) / 8.0f - 0xf); });
                     } else {
-                        // Random bits is fine
+                        assert(t.is_int_or_uint());
+                        // Random bits is fine, but in the 32-bit int case we
+                        // never use the top four bits, to avoid signed integer
+                        // overflow.
+                        const uint32_t mask = (t == Int(32)) ? 0x0fffffffU : 0xffffffffU;
                         for (uint32_t *ptr = (uint32_t *)inputs[i].data();
                              ptr != (uint32_t *)inputs[i].data() + inputs[i].size_in_bytes() / 4;
                              ptr++) {
-                            // Never use the top four bits, to avoid
-                            // signed integer overflow.
-                            *ptr = ((uint32_t)rng()) & 0x0fffffff;
+                            *ptr = ((uint32_t)rng()) & mask;
                         }
                     }
                 }
@@ -409,7 +429,7 @@ public:
             (void)callable(inputs[0], inputs[1], inputs[2], inputs[3],
                            inputs[4], inputs[5], inputs[6], inputs[7],
                            inputs[8], inputs[9], inputs[10], inputs[11],
-                           output);
+                           H, output);
 
             double e = output(0);
             // Use a very loose tolerance for floating point tests. The
@@ -452,15 +472,18 @@ public:
         // settings.
         if (!wildcard_match(filter, op)) return;
 
-        tasks.emplace_back(Task{op, name, vector_width, e});
+        tasks.emplace_back(Task{op, name, vector_width, std::move(e)});
     }
     virtual void add_tests() = 0;
     virtual int image_param_alignment() {
         return 16;
     }
 
-    virtual bool use_multiple_threads() const {
-        return true;
+    int num_worker_threads() const {
+        if (std::string t = Halide::Internal::get_env_variable("HL_OP_CHECK_THREADS"); !t.empty()) {
+            return std::atoi(t.c_str());
+        }
+        return Halide::Tools::ThreadPool<void>::num_processors_online();
     }
 
     virtual bool test_all() {
@@ -473,10 +496,7 @@ public:
 
         Sharder sharder;
 
-        Halide::Tools::ThreadPool<TestResult> pool(
-            use_multiple_threads() ?
-                Halide::Tools::ThreadPool<TestResult>::num_processors_online() :
-                1);
+        Halide::Tools::ThreadPool<TestResult> pool(num_worker_threads());
         std::vector<std::future<TestResult>> futures;
 
         for (size_t t = 0; t < tasks.size(); t++) {

@@ -464,6 +464,7 @@ int main(int argc, char **argv) {
 
     // Iterate through the pipelines
     vector<std::unique_ptr<DefaultCostModel>> tpp;
+    tpp.reserve(kModels);
     Internal::Autoscheduler::Statistics stats;
     for (int i = 0; i < kModels; i++) {
         tpp.emplace_back(make_default_cost_model(stats, flags.initial_weights_path, flags.weights_out_path, flags.randomize_weights || flags.reset_weights));

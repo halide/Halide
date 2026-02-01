@@ -588,21 +588,33 @@ std::optional<std::string> get_md_string(llvm::Metadata *value) {
     }
     return std::nullopt;
 }
+
+bool get_modflag_bool(const llvm::Module &mod, const char *flag, bool or_default = false) {
+    return get_md_bool(mod.getModuleFlag(flag)).value_or(or_default);
+}
+
+int get_modflag_int(const llvm::Module &mod, const char *flag, int or_default = 0) {
+    return get_md_int(mod.getModuleFlag(flag)).value_or(or_default);
+}
+
+std::string get_modflag_string(const llvm::Module &mod, const char *flag, const std::string &or_default = {}) {
+    return get_md_string(mod.getModuleFlag(flag)).value_or(or_default);
+}
+
 }  // namespace
 
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options) {
-    bool use_soft_float_abi =
-        get_md_bool(module.getModuleFlag("halide_use_soft_float_abi")).value_or(false);
-    std::string mabi =
-        get_md_string(module.getModuleFlag("halide_mabi")).value_or(std::string{});
+    bool use_soft_float_abi = get_modflag_bool(module, "halide_use_soft_float_abi");
+    std::string mabi = get_modflag_string(module, "halide_mabi");
 
     // FIXME: can this be migrated into `set_function_attributes_from_halide_target_options()`?
-    bool per_instruction_fast_math_flags =
-        get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags")).value_or(false);
+    bool per_instruction_fast_math_flags = get_modflag_bool(module, "halide_per_instruction_fast_math_flags");
 
     options = llvm::TargetOptions();
     options.AllowFPOpFusion = per_instruction_fast_math_flags ? llvm::FPOpFusion::Strict : llvm::FPOpFusion::Fast;
+#if LLVM_VERSION < 210
     options.UnsafeFPMath = !per_instruction_fast_math_flags;
+#endif
     options.NoInfsFPMath = !per_instruction_fast_math_flags;
     options.NoNaNsFPMath = !per_instruction_fast_math_flags;
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
@@ -610,13 +622,8 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.GuaranteedTailCallOpt = false;
     options.FunctionSections = true;
     options.UseInitArray = true;
-    options.FloatABIType =
-        use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
-#if LLVM_VERSION >= 190
+    options.FloatABIType = use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     options.MCOptions.X86RelaxRelocations = false;
-#else
-    options.RelaxELFRelocations = false;
-#endif
     options.MCOptions.ABIName = mabi;
 }
 
@@ -627,7 +634,8 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
 
     // Clone bool metadata
     for (const char *s : {"halide_use_soft_float_abi",
-                          "halide_use_pic"}) {
+                          "halide_use_pic",
+                          "halide_enable_backtraces"}) {
         if (auto md = get_md_bool(from.getModuleFlag(s))) {
             to.addModuleFlag(llvm::Module::Warning, s, *md ? 1 : 0);
         }
@@ -658,17 +666,12 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     llvm::TargetOptions options;
     get_target_options(module, options);
 
-    bool use_pic =
-        get_md_bool(module.getModuleFlag("halide_use_pic")).value_or(true);
-
-    bool use_large_code_model =
-        get_md_bool(module.getModuleFlag("halide_use_large_code_model")).value_or(false);
+    bool use_pic = get_modflag_bool(module, "halide_use_pic", true);
+    bool use_large_code_model = get_modflag_bool(module, "halide_use_large_code_model");
 
     // Get module mcpu_target and mattrs.
-    std::string mcpu_target =
-        get_md_string(module.getModuleFlag("halide_mcpu_target")).value_or(std::string{});
-    std::string mattrs =
-        get_md_string(module.getModuleFlag("halide_mattrs")).value_or(std::string{});
+    std::string mcpu_target = get_modflag_string(module, "halide_mcpu_target");
+    std::string mattrs = get_modflag_string(module, "halide_mattrs");
 
     auto *tm = llvm_target->createTargetMachine(
 #if LLVM_VERSION >= 210
@@ -688,18 +691,19 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     llvm::Module &module = *fn.getParent();
 
-    std::string mcpu_target =
-        get_md_string(module.getModuleFlag("halide_mcpu_target")).value_or(std::string{});
-    std::string mcpu_tune =
-        get_md_string(module.getModuleFlag("halide_mcpu_tune")).value_or(std::string{});
-    std::string mattrs =
-        get_md_string(module.getModuleFlag("halide_mattrs")).value_or(std::string{});
-    int64_t vscale_range =
-        get_md_int(module.getModuleFlag("halide_effective_vscale")).value_or(0);
+    std::string mcpu_target = get_modflag_string(module, "halide_mcpu_target");
+    std::string mcpu_tune = get_modflag_string(module, "halide_mcpu_tune");
+    std::string mattrs = get_modflag_string(module, "halide_mattrs");
+    int64_t vscale_range = get_modflag_int(module, "halide_effective_vscale");
+    bool enable_bt = get_modflag_int(module, "halide_enable_backtraces");
 
     fn.addFnAttr("target-cpu", mcpu_target);
     fn.addFnAttr("tune-cpu", mcpu_tune);
     fn.addFnAttr("target-features", mattrs);
+    if (enable_bt) {
+        fn.addFnAttr("frame-pointer", "all");
+        fn.setUWTableKind(llvm::UWTableKind::Default);
+    }
 
     // Halide-generated IR is not exception-safe.
     // No exception should unwind out of Halide functions.
@@ -715,8 +719,9 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     // inaccurate even for us.
     fn.addFnAttr("reciprocal-estimates", "none");
 
-    // If a fixed vscale is asserted, add it as an attribute on the function.
-    if (vscale_range != 0) {
+    // If a fixed vscale is asserted, add it as an attribute on the function
+    // except for those which already have vscale_range for some purpose
+    if (vscale_range != 0 && !fn.hasFnAttribute(llvm::Attribute::VScaleRange)) {
         fn.addFnAttr(llvm::Attribute::getWithVScaleRangeArgs(
             module.getContext(), vscale_range, vscale_range));
     }

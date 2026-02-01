@@ -68,6 +68,10 @@ else ()
                        lesson_10_halide.py.cpp
                        lesson_10_halide.o)
 
+    # TODO: the EXCLUDE_FROM_ALL above is a bit of a hack - even a normal build won't
+    #   prepare this file for linting. Disable export of compile commands for this target.
+    set_target_properties(lesson_10_halide PROPERTIES EXPORT_COMPILE_COMMANDS OFF)
+
     target_link_libraries(lesson_10_halide PRIVATE Halide::Runtime)
 
     # Undocumented function in HalideGeneratorHelpers. Do not call in external code.

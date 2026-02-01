@@ -78,19 +78,50 @@ void load_vulkan() {
         debug(1) << "Vulkan support code already linked in...\n";
     } else {
         debug(1) << "Looking for Vulkan support code...\n";
+
+        const auto try_load = [](const char *libname) -> string {
+            debug(1) << "Trying " << libname << "... ";
+            string error;
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently(libname, &error);
+            debug(1) << (error.empty() ? "found!\n" : "not found.\n");
+            return error;
+        };
+
         string error;
-#if defined(__linux__)
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.so.1", &error);
-        user_assert(error.empty()) << "Could not find libvulkan.so.1\n";
-#elif defined(__APPLE__)
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.1.dylib", &error);
-        user_assert(error.empty()) << "Could not find libvulkan.1.dylib\n";
+
+        auto env_libname = get_env_variable("HL_VK_LOADER_LIB");
+        if (!env_libname.empty()) {
+            error = try_load(env_libname.c_str());
+        }
+
+        // First, attempt to find the versioned library (per the Vulkan API docs), otherwise
+        // fallback to unversioned libs, and known common paths
+        if (!error.empty()) {
+            const char *libnames[] = {
+#if defined(__APPLE__)
+                "libvulkan.1.dylib",
+                "libvulkan.dylib",
+                "/usr/local/lib/libvulkan.dylib",
+                "libMoltenVK.dylib",
+                "vulkan.framework/vulkan",
+                "MoltenVK.framework/MoltenVK"
 #elif defined(_WIN32)
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("vulkan-1.dll", &error);
-        user_assert(error.empty()) << "Could not find vulkan-1.dll\n";
+                "vulkan-1.dll",
 #else
-        internal_error << "JIT support for Vulkan only available on Linux, OS X and Windows!\n";
+                "libvulkan.so.1",
+                "libvulkan.so",
 #endif
+            };
+
+            for (const char *libname : libnames) {
+                error = try_load(libname);
+                if (error.empty()) {
+                    break;
+                }
+            }
+        }
+        user_assert(error.empty()) << "Could not find a Vulkan loader library: " << error << "\n"
+                                   << "(Try setting the env var HL_VK_LOADER_LIB to an explicit path to fix this.)\n";
     }
 }
 
@@ -1000,7 +1031,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * JITSharedRuntime::release_all is called, the global state is reset
  * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     std::vector<JITModule> result;
 
@@ -1074,7 +1105,7 @@ void JITSharedRuntime::populate_jit_handlers(JITUserContext *jit_user_context, c
 }
 
 void JITSharedRuntime::release_all() {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     for (int i = MaxRuntimeKind; i > 0; i--) {
         shared_runtimes((RuntimeKind)(i - 1)) = JITModule();
@@ -1090,7 +1121,7 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
 }
 
 void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
 
     if (size != default_cache_size) {
         default_cache_size = size;
@@ -1099,22 +1130,22 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
 }
 
 void JITSharedRuntime::memoization_cache_evict(uint64_t eviction_key) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).memoization_cache_evict(eviction_key);
 }
 
 void JITSharedRuntime::reuse_device_allocations(bool b) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).reuse_device_allocations(b);
 }
 
 int JITSharedRuntime::get_num_threads() {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).get_num_threads();
 }
 
 int JITSharedRuntime::set_num_threads(int n) {
-    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    std::scoped_lock lock(shared_runtimes_mutex);
     return shared_runtimes(MainShared).set_num_threads(n);
 }
 

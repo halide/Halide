@@ -9,7 +9,10 @@ namespace Internal {
 
 // Conversion routines to and from float cribbed from Christian Rau's
 // half library (half.sourceforge.net)
-uint16_t float_to_float16(float value) {
+template<typename T>
+uint16_t float_to_float16(T value) {
+    static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>,
+                  "float_to_float16 only supports float and double types");
     // Start by copying over the sign bit
     uint16_t bits = std::signbit(value) << 15;
 
@@ -40,14 +43,14 @@ uint16_t float_to_float16(float value) {
 
     // We've normalized value as much as possible. Put the integer
     // portion of it into the mantissa.
-    float ival;
-    float frac = std::modf(value, &ival);
+    T ival;
+    T frac = std::modf(value, &ival);
     bits += (uint16_t)(std::abs((int)ival));
 
     // Now consider the fractional part. We round to nearest with ties
     // going to even.
     frac = std::abs(frac);
-    bits += (frac > 0.5f) | ((frac == 0.5f) & bits);
+    bits += (frac > T(0.5)) | ((frac == T(0.5)) & bits);
 
     return bits;
 }
@@ -341,6 +344,19 @@ uint16_t float_to_bfloat16(float f) {
     return ret >> 16;
 }
 
+uint16_t float_to_bfloat16(double f) {
+    // Coming from double is a little tricker. We first narrow to float and
+    // record if any magnitude was lost or gained in the process. If so we'll
+    // use that to break ties instead of testing whether or not truncation would
+    // return odd.
+    float f32 = (float)f;
+    const double err = std::abs(f) - (double)std::abs(f32);
+    uint32_t ret;
+    memcpy(&ret, &f32, sizeof(float));
+    ret += 0x7fff + (((err >= 0) & ((ret >> 16) & 1)) | (err > 0));
+    return ret >> 16;
+}
+
 float bfloat16_to_float(uint16_t b) {
     // Assume little-endian floats
     uint16_t bits[2] = {0, b};
@@ -362,7 +378,17 @@ float16_t::float16_t(double value)
 }
 
 float16_t::float16_t(int value)
-    : data(float_to_float16(value)) {
+    : data(float_to_float16((float)value)) {
+    // integers of any size that map to finite float16s are all representable as
+    // float, so we can go via the float conversion method.
+}
+
+float16_t::float16_t(int64_t value)
+    : data(float_to_float16((float)value)) {
+}
+
+float16_t::float16_t(uint64_t value)
+    : data(float_to_float16((float)value)) {
 }
 
 float16_t::operator float() const {
@@ -464,7 +490,15 @@ bfloat16_t::bfloat16_t(double value)
 }
 
 bfloat16_t::bfloat16_t(int value)
-    : data(float_to_bfloat16(value)) {
+    : data(float_to_bfloat16((double)value)) {
+}
+
+bfloat16_t::bfloat16_t(int64_t value)
+    : data(float_to_bfloat16((double)value)) {
+}
+
+bfloat16_t::bfloat16_t(uint64_t value)
+    : data(float_to_bfloat16((double)value)) {
 }
 
 bfloat16_t::operator float() const {

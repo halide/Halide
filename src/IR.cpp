@@ -342,20 +342,20 @@ Stmt ProducerConsumer::make_consume(const std::string &name, Stmt body) {
 }
 
 Stmt For::make(const std::string &name,
-               Expr min, Expr extent,
+               Expr min, Expr max,
                ForType for_type, Partition partition_policy,
                DeviceAPI device_api,
                Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";
-    internal_assert(extent.defined()) << "For of undefined\n";
+    internal_assert(max.defined()) << "For of undefined\n";
     internal_assert(min.type() == Int(32)) << "For with non-integer min\n";
-    internal_assert(extent.type() == Int(32)) << "For with non-integer extent\n";
+    internal_assert(max.type() == Int(32)) << "For with non-integer max\n";
     internal_assert(body.defined()) << "For of undefined\n";
 
     For *node = new For;
     node->name = name;
     node->min = std::move(min);
-    node->extent = std::move(extent);
+    node->max = std::move(max);
     node->for_type = for_type;
     node->partition_policy = partition_policy;
     node->device_api = device_api;
@@ -690,6 +690,7 @@ const char *const intrinsic_op_names[] = {
     "sliding_window_marker",
     "sorted_avg",
     "strict_add",
+    "strict_cast",
     "strict_div",
     "strict_eq",
     "strict_le",
@@ -860,6 +861,7 @@ Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {
     }
 
     std::vector<int> indices;
+    indices.reserve(size);
     for (int i = 0; i < size; i++) {
         indices.push_back(begin + i * stride);
     }

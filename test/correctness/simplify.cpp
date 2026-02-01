@@ -23,7 +23,7 @@ void check_is_sio(const Expr &e) {
 }
 
 void check(const Expr &a, const Expr &b, const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>()) {
-    Expr simpler = simplify(a, true, Scope<Interval>(), alignment);
+    Expr simpler = simplify(a, Scope<Interval>(), alignment);
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
@@ -50,7 +50,7 @@ void check(const Stmt &a, const Stmt &b) {
 }
 
 void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
-    Expr simpler = simplify(a, true, bi);
+    Expr simpler = simplify(a, bi);
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
@@ -432,6 +432,8 @@ void check_algebra() {
     check((y + (x / 3 * 3)) + x % 3, x + y);
     check((y + (x / 3)) * 3 + x % 3, y * 3 + x);
 
+    check(x - (x / 2), (x + 1) / 2);
+    check((x / 3) - x, (x * -2) / 3);
     check(x / 2 + x % 2, (x + 1) / 2);
     check(x % 2 + x / 2, (x + 1) / 2);
     check(((x + 1) / 2) * 2 - x, x % 2);
@@ -542,7 +544,7 @@ void check_algebra() {
     check(select(x > 4, x * 9 + 1, y * 6 - 2) % 3 == 1, const_true());
     check(max(32, x * 4) % 16 < 13, const_true());  // After the %16 the max value is 12, not 15, due to alignment
 
-    Expr complex_cond = ((10 < y) && (y % 17 == 4) && (y < 30) && (x == y * 16 + 3));
+    Expr complex_cond = ((10 < y) && (y % 17 == 4) && (y < 30) && (y * 16 + 3 == x));
     // The condition is enough to imply that y == 21, x == 339
     check(require(complex_cond, select(x % 2 == 0, 1237, y)),
           require(complex_cond, 21));
@@ -582,12 +584,16 @@ void check_vectors() {
     check(max(broadcast(41, 2), broadcast(x, 2) % ramp(-8, -33, 2)),
           broadcast(41, 2));
 
-    check(ramp(0, 1, 4) == broadcast(2, 4),
-          ramp(-2, 1, 4) == broadcast(0, 4));
-
     check(ramp(broadcast(0, 6), broadcast(6, 6), 4) + broadcast(ramp(0, 1, 3), 8) +
               broadcast(ramp(broadcast(0, 3), broadcast(3, 3), 2), 4),
           ramp(0, 1, 24));
+
+    check(ramp(ramp(cast<uint8_t>(x), cast<uint8_t>(1), 4), cast(UInt(8, 4), 4), 3),
+          ramp(cast<uint8_t>(x), cast<uint8_t>(1), 12));
+
+    // Ramp-combining should also work in the presence of well-defined overflow
+    check(ramp(ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 4), cast(UInt(8, 4), -4), 3),
+          ramp(cast<uint8_t>(x), cast<uint8_t>(-1), 12));
 
     // Any linear combination of simple ramps and broadcasts should
     // reduce to a single ramp or broadcast.
@@ -1330,7 +1336,7 @@ void check_boolean() {
 
     check(x == x, t);
     check(x == (x + 1), f);
-    check(x - 2 == y + 3, x == y + 5);
+    check(x - 2 == y + 3, y + 5 == x);
     check(x + y == y + z, x == z);
     check(y + x == y + z, x == z);
     check(x + y == z + y, x == z);
@@ -1339,7 +1345,7 @@ void check_boolean() {
     check(x * 0 == y * 0, t);
     check(x == x + y, y == 0);
     check(x + y == x, y == 0);
-    check(100 - x == 99 - y, y == x + (-1));
+    check(100 - x == 99 - y, y + 1 == x);
 
     check(x < x, f);
     check(x < (x + 1), t);
@@ -1490,6 +1496,17 @@ void check_boolean() {
     check(x <= y || x > y, t);
     check(x < y && x >= y, f);
     check(x <= y && x > y, f);
+
+    // Check an expression can be cancelled against a buried version of itself or its negation
+    check(x < y && (b1 && (b2 && y <= x)), f);
+    check(x < y && (b1 && (b2 && x < y)), ((x < y) && b2) && b1);
+    check(x < y && (b1 || (b2 || y <= x)), (b1 || b2) && (x < y));
+    check(x < y && (b1 || (b2 || x < y)), x < y);
+
+    check(x == y && (b1 && (b2 && y != x)), f);
+    check(x == y && (b1 && (b2 && x == y)), ((x == y) && b2) && b1);
+    check(x == y && (b1 || (b2 || x != y)), (b1 || b2) && (x == y));
+    check(x == y && (b1 || (b2 || x == y)), x == y);
 
     check(x <= max(x, y), t);
     check(x < min(x, y), f);
@@ -1721,10 +1738,10 @@ void check_boolean() {
     // A for loop is also an if statement that the extent is greater than zero
     Stmt body = AssertStmt::make(y == z, y);
     Stmt loop = For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body);
-    check(IfThenElse::make(0 < x, loop), loop);
+    check(IfThenElse::make(0 <= x, loop), loop);
 
-    // A for loop where the extent is exactly one is just the body
-    check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
+    // A for loop where the min equals the max is just the body
+    check(IfThenElse::make(x == 0, loop), IfThenElse::make(x == 0, body));
 
     // Check we can learn from conditions on variables
     check(IfThenElse::make(x < 5, not_no_op(min(x, 17))),
@@ -1952,9 +1969,9 @@ void check_overflow() {
                     scope.push("y", {neg_two_32, zero});
                 }
                 if (x_pos == y_pos) {
-                    internal_assert(!is_const(simplify((x * y) < two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x * y) < two_32, scope)));
                 } else {
-                    internal_assert(!is_const(simplify((x * y) > neg_two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x * y) > neg_two_32, scope)));
                 }
             }
             // Add/Sub
@@ -1971,13 +1988,13 @@ void check_overflow() {
                     scope.push("y", {min_64, zero});
                 }
                 if (x_pos && y_pos) {
-                    internal_assert(!is_const(simplify((x + y) < two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x + y) < two_32, scope)));
                 } else if (x_pos && !y_pos) {
-                    internal_assert(!is_const(simplify((x - y) < two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x - y) < two_32, scope)));
                 } else if (!x_pos && y_pos) {
-                    internal_assert(!is_const(simplify((x - y) > neg_two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x - y) > neg_two_32, scope)));
                 } else {
-                    internal_assert(!is_const(simplify((x + y) > neg_two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x + y) > neg_two_32, scope)));
                 }
             }
         }
@@ -2404,7 +2421,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        Stmt body = AssertStmt::make(x > 0, y);
+        Stmt body = AssertStmt::make(x >= 0, y);
         check(For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body),
               Evaluate::make(0));
     }

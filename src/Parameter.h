@@ -219,6 +219,12 @@ public:
 
     void store_in(MemoryType memory_type);
     MemoryType memory_type() const;
+
+    void trace_loads();
+    bool is_tracing_loads() const;
+
+    void add_trace_tag(const std::string &trace_tag);
+    std::vector<std::string> get_trace_tags() const;
 };
 
 namespace Internal {

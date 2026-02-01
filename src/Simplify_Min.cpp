@@ -4,14 +4,25 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Min *op, ExprInfo *info) {
-    ExprInfo a_info, b_info;
+    ExprInfo min_info, a_info, b_info;
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
+    if (op->type.is_int_or_uint()) {
+        min_info.bounds = min(a_info.bounds, b_info.bounds);
+        min_info.alignment = ModulusRemainder::unify(a_info.alignment, b_info.alignment);
+        min_info.trim_bounds_using_alignment();
+    }
+
     if (info) {
-        info->bounds = min(a_info.bounds, b_info.bounds);
-        info->alignment = ModulusRemainder::unify(a_info.alignment, b_info.alignment);
-        info->trim_bounds_using_alignment();
+        *info = min_info;
+    }
+
+    if (min_info.bounds.is_single_point()) {
+        // This is possible when, for example, the smallest number in the type
+        // that satisfies the alignment of the left-hand-side is greater than
+        // the max value of the right-hand-side.
+        return make_const(op->type, min_info.bounds.min, nullptr);
     }
 
     // Early out when the bounds tells us one side or the other is smaller
@@ -27,9 +38,16 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
 
     // Early out when the bounds tells us one side or the other is smaller
     if (a_info.bounds >= b_info.bounds) {
+        if (info) {
+            // We lost information when we unioned the alignment, so revert to the info for b.
+            *info = b_info;
+        }
         return strip_likely(b);
     }
     if (b_info.bounds >= a_info.bounds) {
+        if (info) {
+            *info = a_info;
+        }
         return strip_likely(a);
     }
 
@@ -42,17 +60,20 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
     int lanes = op->type.lanes();
     auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type);
 
-    // clang-format off
-    if (EVAL_IN_LAMBDA
-        (rewrite(min(x, x), x) ||
+    if (rewrite(min(IRMatcher::Overflow(), x), a) ||
+        rewrite(min(x, IRMatcher::Overflow()), b)) {
+        clear_expr_info(info);
+        return rewrite.result;
+    }
+
+    if (EVAL_IN_LAMBDA  //
+        (rewrite(min(x, x), a) ||
          rewrite(min(c0, c1), fold(min(c0, c1))) ||
-         rewrite(min(IRMatcher::Overflow(), x), a) ||
-         rewrite(min(x, IRMatcher::Overflow()), b) ||
          // Cases where one side dominates:
          rewrite(min(x, c0), b, is_min_value(c0)) ||
-         rewrite(min(x, c0), x, is_max_value(c0)) ||
-         rewrite(min((x/c0)*c0, x), a, c0 > 0) ||
-         rewrite(min(x, (x/c0)*c0), b, c0 > 0) ||
+         rewrite(min(x, c0), a, is_max_value(c0)) ||
+         rewrite(min((x / c0) * c0, x), a, c0 > 0) ||
+         rewrite(min(x, (x / c0) * c0), b, c0 > 0) ||
          rewrite(min(min(x, y), x), a) ||
          rewrite(min(min(x, y), y), a) ||
          rewrite(min(min(min(x, y), z), x), a) ||
@@ -85,11 +106,6 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
          rewrite(min(max(x, y), min(z, x)), b) ||
          rewrite(min(max(x, y), min(z, y)), b) ||
 
-         rewrite(min(select(x, min(z, y), w), y), min(select(x, z, w), y)) ||
-         rewrite(min(select(x, min(z, y), w), z), min(select(x, y, w), z)) ||
-         rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
-         rewrite(min(select(x, w, min(z, y)), z), min(select(x, w, y), z)) ||
-
          rewrite(min(likely(x), x), b) ||
          rewrite(min(x, likely(x)), a) ||
          rewrite(min(likely_if_innermost(x), x), b) ||
@@ -101,38 +117,45 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
            rewrite(min(ramp(x, y, lanes), broadcast(z, lanes)), b,
                    can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||
            // Compare x to a stair-step function in x
-           rewrite(min(((x + c0)/c1)*c1 + c2, x), b, c1 > 0 && c0 + c2 >= c1 - 1) ||
-           rewrite(min(x, ((x + c0)/c1)*c1 + c2), a, c1 > 0 && c0 + c2 >= c1 - 1) ||
-           rewrite(min(((x + c0)/c1)*c1 + c2, x), a, c1 > 0 && c0 + c2 <= 0) ||
-           rewrite(min(x, ((x + c0)/c1)*c1 + c2), b, c1 > 0 && c0 + c2 <= 0) ||
-           rewrite(min((x/c0)*c0, (x/c1)*c1 + c2), a, c2 >= c1 && c1 > 0 && c0 != 0) ||
+           rewrite(min(((x + c0) / c1) * c1 + c2, x), b, c1 > 0 && c0 + c2 >= c1 - 1) ||
+           rewrite(min(x, ((x + c0) / c1) * c1 + c2), a, c1 > 0 && c0 + c2 >= c1 - 1) ||
+           rewrite(min(((x + c0) / c1) * c1 + c2, x), a, c1 > 0 && c0 + c2 <= 0) ||
+           rewrite(min(x, ((x + c0) / c1) * c1 + c2), b, c1 > 0 && c0 + c2 <= 0) ||
+           rewrite(min((x / c0) * c0, (x / c1) * c1 + c2), a, c2 >= c1 && c1 > 0 && c0 != 0) ||
            // Special cases where c0 or c2 is zero
-           rewrite(min((x/c1)*c1 + c2, x), b, c1 > 0 && c2 >= c1 - 1) ||
-           rewrite(min(x, (x/c1)*c1 + c2), a, c1 > 0 && c2 >= c1 - 1) ||
-           rewrite(min(((x + c0)/c1)*c1, x), b, c1 > 0 && c0 >= c1 - 1) ||
-           rewrite(min(x, ((x + c0)/c1)*c1), a, c1 > 0 && c0 >= c1 - 1) ||
-           rewrite(min((x/c1)*c1 + c2, x), a, c1 > 0 && c2 <= 0) ||
-           rewrite(min(x, (x/c1)*c1 + c2), b, c1 > 0 && c2 <= 0) ||
-           rewrite(min(((x + c0)/c1)*c1, x), a, c1 > 0 && c0 <= 0) ||
-           rewrite(min(x, ((x + c0)/c1)*c1), b, c1 > 0 && c0 <= 0) ||
+           rewrite(min((x / c1) * c1 + c2, x), b, c1 > 0 && c2 >= c1 - 1) ||
+           rewrite(min(x, (x / c1) * c1 + c2), a, c1 > 0 && c2 >= c1 - 1) ||
+           rewrite(min(((x + c0) / c1) * c1, x), b, c1 > 0 && c0 >= c1 - 1) ||
+           rewrite(min(x, ((x + c0) / c1) * c1), a, c1 > 0 && c0 >= c1 - 1) ||
+           rewrite(min((x / c1) * c1 + c2, x), a, c1 > 0 && c2 <= 0) ||
+           rewrite(min(x, (x / c1) * c1 + c2), b, c1 > 0 && c2 <= 0) ||
+           rewrite(min(((x + c0) / c1) * c1, x), a, c1 > 0 && c0 <= 0) ||
+           rewrite(min(x, ((x + c0) / c1) * c1), b, c1 > 0 && c0 <= 0) ||
 
            rewrite(min(x, max(x, y) + c0), a, 0 <= c0) ||
            rewrite(min(x, max(y, x) + c0), a, 0 <= c0) ||
            rewrite(min(max(x, y) + c0, x), b, 0 <= c0) ||
            rewrite(min(max(x, y) + c0, y), b, 0 <= c0) ||
-           rewrite(min(max(x, y + c0), y), y, c0 > 0) ||
+           rewrite(min(max(x, y + c0), y), b, 0 <= c0) ||
 
            (no_overflow_int(op->type) &&
-            (rewrite(min(max(c0 - x, x), c1), b, 2*c1 <= c0 + 1) ||
-             rewrite(min(max(x, c0 - x), c1), b, 2*c1 <= c0 + 1))) ||
+            (rewrite(min(max(c0 - x, x), c1), b, 2 * c1 <= c0 + 1) ||
+             rewrite(min(max(x, c0 - x), c1), b, 2 * c1 <= c0 + 1))) ||
 
            false)))) {
+        // One of the cancellation rules above may give us tighter bounds
+        // than just applying min to two constant intervals.
+        if (info) {
+            if (rewrite.result.same_as(a)) {
+                info->intersect(a_info);
+            } else if (rewrite.result.same_as(b)) {
+                info->intersect(b_info);
+            }
+        }
         return rewrite.result;
     }
-    // clang-format on
 
-    // clang-format off
-    if (EVAL_IN_LAMBDA
+    if (EVAL_IN_LAMBDA  //
         (rewrite(min(min(x, c0), c1), min(x, fold(min(c0, c1)))) ||
          rewrite(min(min(x, c0), y), min(min(x, y), c0)) ||
          rewrite(min(min(x, y), min(x, z)), min(min(y, z), x)) ||
@@ -180,6 +203,10 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
          rewrite(min(z, select(x, y, max(z, w))), select(x, min(z, y), z)) ||
 
          rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
+         rewrite(min(select(x, min(z, y), w), y), min(select(x, z, w), y)) ||
+         rewrite(min(select(x, min(z, y), w), z), min(select(x, y, w), z)) ||
+         rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
+         rewrite(min(select(x, w, min(z, y)), z), min(select(x, w, y), z)) ||
 
          // Hoist shuffles. The Shuffle visitor wants to sink
          // extract_elements to the leaves, and those count as degenerate
@@ -219,10 +246,10 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
            rewrite(min(y + x, x), min(y, 0) + x) ||
            rewrite(min(x + y, x), x + min(y, 0)) ||
 
-           rewrite(min((x*c0 + y)*c1, x*c2 + z), min(y*c1, z) + x*c2, c0 * c1 == c2) ||
-           rewrite(min((y + x*c0)*c1, x*c2 + z), min(y*c1, z) + x*c2, c0 * c1 == c2) ||
-           rewrite(min((x*c0 + y)*c1, z + x*c2), min(y*c1, z) + x*c2, c0 * c1 == c2) ||
-           rewrite(min((y + x*c0)*c1, z + x*c2), min(y*c1, z) + x*c2, c0 * c1 == c2) ||
+           rewrite(min((x * c0 + y) * c1, x * c2 + z), min(y * c1, z) + x * c2, c0 * c1 == c2) ||
+           rewrite(min((y + x * c0) * c1, x * c2 + z), min(y * c1, z) + x * c2, c0 * c1 == c2) ||
+           rewrite(min((x * c0 + y) * c1, z + x * c2), min(y * c1, z) + x * c2, c0 * c1 == c2) ||
+           rewrite(min((y + x * c0) * c1, z + x * c2), min(y * c1, z) + x * c2, c0 * c1 == c2) ||
 
            rewrite(min(min(x + y, z), x + w), min(x + min(y, w), z)) ||
            rewrite(min(min(z, x + y), x + w), min(x + min(y, w), z)) ||
@@ -287,23 +314,22 @@ Expr Simplify::visit(const Min *op, ExprInfo *info) {
            rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))) ||
 
            // Required for nested GuardWithIf tilings
-           rewrite(min((min(((y + c0)/c1), x)*c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
-           rewrite(min((min(((y + c0)/c1), x)*c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
-           rewrite(min(min(((y + c0)/c1), x)*c1, y), min(x * c1, y), c1 > 0 && c1 <= c0 + 1) ||
+           rewrite(min((min(((y + c0) / c1), x) * c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
+           rewrite(min((min(((y + c0) / c1), x) * c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
+           rewrite(min(min(((y + c0) / c1), x) * c1, y), min(x * c1, y), c1 > 0 && c1 <= c0 + 1) ||
 
-           rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min(x/c1, ((x + c2)/c3)*c4), x/c1, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min(x/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min((x + c0)/c1, (x/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min((x + c0)/c1, (x/c3)*c4), (x/c3)*c4, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
-           rewrite(min(x/c1, (x/c3)*c4), (x/c3)*c4, c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min((x + c0) / c1, ((x + c2) / c3) * c4), (x + c0) / c1, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min((x + c0) / c1, ((x + c2) / c3) * c4), ((x + c2) / c3) * c4, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min(x / c1, ((x + c2) / c3) * c4), x / c1, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min(x / c1, ((x + c2) / c3) * c4), ((x + c2) / c3) * c4, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min((x + c0) / c1, (x / c3) * c4), (x + c0) / c1, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min((x + c0) / c1, (x / c3) * c4), (x / c3) * c4, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+           rewrite(min(x / c1, (x / c3) * c4), (x / c3) * c4, c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
 
-           false )))) {
+           false)))) {
 
         return mutate(rewrite.result, info);
     }
-    // clang-format on
 
     if (a.same_as(op->a) && b.same_as(op->b)) {
         return op;

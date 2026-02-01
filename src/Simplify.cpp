@@ -15,8 +15,7 @@ using std::pair;
 using std::string;
 using std::vector;
 
-Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
-    : remove_dead_code(r) {
+Simplify::Simplify(const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) {
 
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
@@ -325,30 +324,16 @@ template<typename T>
 T substitute_facts_impl(const T &t,
                         const std::set<Expr, IRDeepCompare> &truths,
                         const std::set<Expr, IRDeepCompare> &falsehoods) {
-    class Substitutor : public IRMutator {
-        const std::set<Expr, IRDeepCompare> &truths, &falsehoods;
-
-    public:
-        using IRMutator::mutate;
-        Expr mutate(const Expr &e) override {
-            if (!e.type().is_bool()) {
-                return IRMutator::mutate(e);
-            } else if (truths.count(e)) {
+    return mutate_with(t, [&](auto *self, const Expr &e) {
+        if (e.type().is_bool()) {
+            if (truths.count(e)) {
                 return make_one(e.type());
             } else if (falsehoods.count(e)) {
                 return make_zero(e.type());
-            } else {
-                return IRMutator::mutate(e);
             }
         }
-
-        Substitutor(const std::set<Expr, IRDeepCompare> &t,
-                    const std::set<Expr, IRDeepCompare> &f)
-            : truths(t), falsehoods(f) {
-        }
-    } substitutor(truths, falsehoods);
-
-    return substitutor.mutate(t);
+        return self->mutate_base(e);
+    });
 }
 }  // namespace
 
@@ -375,12 +360,13 @@ Simplify::ScopedFact::~ScopedFact() {
     }
 }
 
-Expr simplify(const Expr &e, bool remove_dead_let_stmts,
+Expr simplify(const Expr &e,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
-    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
+    facts.reserve(assumptions.size());
     for (const Expr &a : assumptions) {
         facts.push_back(m.scoped_truth(a));
     }
@@ -391,12 +377,13 @@ Expr simplify(const Expr &e, bool remove_dead_let_stmts,
     return result;
 }
 
-Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
+Stmt simplify(const Stmt &s,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
-    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
+    facts.reserve(assumptions.size());
     for (const Expr &a : assumptions) {
         facts.push_back(m.scoped_truth(a));
     }
@@ -428,7 +415,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
     Expr orig = e;
 
-    e = simplify(e, true, bounds);
+    e = simplify(e, bounds);
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses
@@ -524,53 +511,49 @@ Simplify::ExprInfo::BitsKnown Simplify::ExprInfo::to_bits_known(const Type &type
             // the alignment analysis catches constants at the same time as
             // bounds analysis does.
             return (uint64_t)-1;
+        } else if ((int64_t)x < 0) {
+            // There are no leading zeros, but we can't shift left by 64
+            return (uint64_t)0;
         }
         return (uint64_t)(-1) << (64 - clz64(x));
     };
 
-    auto leading_ones_mask = [=](uint64_t x) {
-        return leading_zeros_mask(~x);
-    };
-
-    // The bounds and the type tell us a bunch of high bits are zero or one
-    if (type.is_uint()) {
-        // Narrow uints are always zero-extended.
-        if (type.bits() < 64) {
-            result.mask |= (uint64_t)(-1) << type.bits();
-        }
-        // A lower bound might tell us that there are some leading ones, and an
-        // upper bound might tell us that there are some leading
-        // zeros. Unfortunately we'll never learn about leading ones, because to
-        // know that there's a leading one from the bounds would require knowing
-        // that the min is at least 2^63, and ConstantInterval can't represent
-        // mins that large.
-        if (bounds.max_defined) {
-            result.mask |= leading_zeros_mask(bounds.max);
-        }
+    if (bounds.min_defined && bounds.max_defined) {
+        // Any leading bits in common between the min and the max are known.
+        result.mask |= leading_zeros_mask(bounds.min ^ bounds.max);
+        result.value |= bounds.min & result.mask;
     } else {
-        internal_assert(type.is_int());
-        // A mask which is 1 for the sign bit and above.
-        uint64_t sign_bit_and_above = (uint64_t)(-1) << (type.bits() - 1);
-        if (bounds >= 0) {
-            // We know this int is positive, so the sign bit and above are zero.
-            result.mask |= sign_bit_and_above;
+        // If we only have a bound on one side, we may still be able to infer
+        // something about high bits.
+
+        // The bounds and the type tell us a bunch of high bits are zero or one
+        if (type.is_uint()) {
+            // Narrow uints are always zero-extended.
+            if (type.bits() < 64) {
+                result.mask |= (uint64_t)(-1) << type.bits();
+            }
+
+            // A lower bound might tell us that there are some leading ones, and an
+            // upper bound might tell us that there are some leading
+            // zeros. Unfortunately we'll never learn about leading ones, because to
+            // know that there's a leading one from the bounds would require knowing
+            // that the min is at least 2^63, and ConstantInterval can't represent
+            // mins that large.
             if (bounds.max_defined) {
-                // We also have an upper bound, so there may be more zero bits,
-                // depending on how many leading zeros there are in the upper
-                // bound.
                 result.mask |= leading_zeros_mask(bounds.max);
             }
-        } else if (bounds < 0) {
-            // This int is negative, so the sign bit and above are one.
-            result.mask |= sign_bit_and_above;
-            result.value |= sign_bit_and_above;
-            if (bounds.min_defined) {
-                // We have a lower bound, so there may be more leading one bits,
-                // depending on how many leading ones there are in the lower
-                // bound.
-                uint64_t leading_ones = leading_ones_mask(bounds.min);
-                result.mask |= leading_ones;
-                result.value |= leading_ones;
+
+        } else {
+            internal_assert(type.is_int());
+            // A mask which is 1 for the sign bit and above.
+            uint64_t sign_bit_and_above = (uint64_t)(-1) << (type.bits() - 1);
+            if (bounds >= 0) {
+                // We know this int is positive, so the sign bit and above are zero.
+                result.mask |= sign_bit_and_above;
+            } else if (bounds < 0) {
+                // This int is negative, so the sign bit and above are one.
+                result.mask |= sign_bit_and_above;
+                result.value |= sign_bit_and_above;
             }
         }
     }

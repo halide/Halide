@@ -455,13 +455,13 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const And *op) {
         internal_assert(a.type() == b.type());
         string sa = print_expr(a);
         string sb = print_expr(b);
-        string rhs = print_type(t) + "(";
+        std::ostringstream rhs;
+        rhs << print_type(t) << "(";
         for (int i = 0; i < t.lanes(); i++) {
-            const string si = std::to_string(i);
-            rhs += sa + "[" + si + "] & " + sb + "[" + si + "], ";
+            rhs << sa << "[" << i << "] & " << sb << "[" << i << "], ";
         }
-        rhs += ")";
-        print_assignment(t, rhs);
+        rhs << ")";
+        print_assignment(t, rhs.str());
     }
 }
 
@@ -644,11 +644,11 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
             << "Can only use serial loops inside WebGPU shaders\n";
 
         string id_min = print_expr(loop->min);
-        string id_extent = print_expr(loop->extent);
+        string id_max = print_expr(loop->max);
         string id_counter = print_name(loop->name);
         stream << get_indent() << "for (var "
                << id_counter << " = " << id_min << "; "
-               << id_counter << " < " << id_min << " + " << id_extent << "; "
+               << id_counter << " <= " << id_max << "; "
                // TODO: Use increment statement when supported by Chromium.
                << id_counter << " = " << id_counter << " + 1)\n";
         open_scope();
@@ -732,13 +732,13 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
             string rhs;
             if (buffers_with_emulated_accesses.count(op->name)) {
                 if (bits == 32) {
-                    rhs = "bitcast<" + print_type(result_type) +
-                          ">(atomicLoad(&" + name + "[" + idx_i + "]))";
+                    rhs = concat_strings("bitcast<", print_type(result_type),
+                                         ">(atomicLoad(&", name, "[", idx_i, "]))");
                 } else {
                     rhs = emulate_narrow_load(idx_i);
                 }
             } else {
-                rhs = name + "[" + idx_i + "]";
+                rhs = concat_strings(name, "[", idx_i, "]");
             }
             stream << cast_if_needed(rhs) << ";\n";
         }
@@ -766,13 +766,13 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Or *op) {
         internal_assert(a.type() == b.type());
         string sa = print_expr(a);
         string sb = print_expr(b);
-        string rhs = print_type(t) + "(";
+        std::ostringstream rhs;
+        rhs << print_type(t) << "(";
         for (int i = 0; i < t.lanes(); i++) {
-            const string si = std::to_string(i);
-            rhs += sa + "[" + si + "] | " + sb + "[" + si + "], ";
+            rhs << sa << "[" << i << "] | " << sb << "[" << i << "], ";
         }
-        rhs += ")";
-        print_assignment(t, rhs);
+        rhs << ")";
+        print_assignment(t, rhs.str());
     }
 }
 

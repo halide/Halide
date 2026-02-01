@@ -126,7 +126,7 @@ void prepare_py_array_input(
         input_shape.push_back(ndarray.shape(i));
     }
     // Make sure the input is contiguous.
-    int stride = ndarray.itemsize();
+    int stride = ndarray.request().itemsize;
     for (int i = rank - 1; i >= 0; --i) {
         if (stride != ndarray.strides(i)) {
             throw std::invalid_argument(
@@ -543,6 +543,11 @@ void print_lowered_statement(const HalideModel &pipeline) {
 }  // namespace
 
 PYBIND11_MODULE(model_cpp, m) {
+    if (const auto autoscheduler = Halide::Internal::get_env_variable("MODEL_AUTOSCHEDULER");
+        !autoscheduler.empty()) {
+        Halide::load_plugin(autoscheduler);
+    }
+
     py::class_<HalideModel>(m, "HalideModel");
 
     py::enum_<IOLayout>(m, "Layout")

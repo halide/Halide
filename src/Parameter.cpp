@@ -21,6 +21,8 @@ struct ParameterContents {
     Expr scalar_default, scalar_min, scalar_max, scalar_estimate;
     const bool is_buffer;
     MemoryType memory_type = MemoryType::Auto;
+    bool trace_loads{false};
+    std::vector<std::string> trace_tags;
 
     ParameterContents(Type t, bool b, int d, const std::string &n)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()),
@@ -272,49 +274,27 @@ namespace {
 using namespace Halide::Internal;
 
 Expr remove_self_references(const Parameter &p, const Expr &e) {
-    class RemoveSelfReferences : public IRMutator {
-        using IRMutator::visit;
-
-        Expr visit(const Variable *var) override {
-            if (var->param.same_as(p)) {
-                internal_assert(starts_with(var->name, p.name() + "."));
-                return Variable::make(var->type, var->name);
-            } else {
-                internal_assert(!starts_with(var->name, p.name() + "."));
-            }
-            return var;
+    return mutate_with(e, [&](auto *self, const Variable *var) -> Expr {
+        if (var->param.same_as(p)) {
+            internal_assert(starts_with(var->name, p.name() + "."));
+            return Variable::make(var->type, var->name);
+        } else {
+            internal_assert(!starts_with(var->name, p.name() + "."));
         }
-
-    public:
-        const Parameter &p;
-        RemoveSelfReferences(const Parameter &p)
-            : p(p) {
-        }
-    } mutator{p};
-    return mutator.mutate(e);
+        return var;
+    });
 }
 
 Expr restore_self_references(const Parameter &p, const Expr &e) {
-    class RestoreSelfReferences : public IRMutator {
-        using IRMutator::visit;
-
-        Expr visit(const Variable *var) override {
-            if (!var->image.defined() &&
-                !var->param.defined() &&
-                !var->reduction_domain.defined() &&
-                Internal::starts_with(var->name, p.name() + ".")) {
-                return Internal::Variable::make(var->type, var->name, p);
-            }
-            return var;
+    return mutate_with(e, [&](auto *self, const Variable *var) -> Expr {
+        if (!var->image.defined() &&
+            !var->param.defined() &&
+            !var->reduction_domain.defined() &&
+            Internal::starts_with(var->name, p.name() + ".")) {
+            return Internal::Variable::make(var->type, var->name, p);
         }
-
-    public:
-        const Parameter &p;
-        RestoreSelfReferences(const Parameter &p)
-            : p(p) {
-        }
-    } mutator{p};
-    return mutator.mutate(e);
+        return var;
+    });
 }
 
 }  // namespace
@@ -492,6 +472,22 @@ void Parameter::store_in(MemoryType memory_type) {
 MemoryType Parameter::memory_type() const {
     // check_is_buffer();
     return contents->memory_type;
+}
+
+void Parameter::trace_loads() {
+    contents->trace_loads = true;
+}
+
+bool Parameter::is_tracing_loads() const {
+    return contents->trace_loads;
+}
+
+void Parameter::add_trace_tag(const std::string &trace_tag) {
+    contents->trace_tags.push_back(trace_tag);
+}
+
+std::vector<std::string> Parameter::get_trace_tags() const {
+    return contents->trace_tags;
 }
 
 namespace Internal {

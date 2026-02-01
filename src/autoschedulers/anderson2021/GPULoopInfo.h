@@ -10,7 +10,7 @@
 #include <memory>
 #include <vector>
 
-#include "Halide.h"
+#include "HalidePlugin.h"
 #include "ThreadInfo.h"
 
 namespace Halide {

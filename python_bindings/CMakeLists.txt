@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(Halide_Python VERSION 20.0.0)
+project(Halide_Python VERSION 22.0.0)
 
 if (PROJECT_IS_TOP_LEVEL)
     enable_testing()

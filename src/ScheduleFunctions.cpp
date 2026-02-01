@@ -418,8 +418,8 @@ Stmt build_loop_nest(
             internal_assert(container.type == Container::For);
             const Dim &dim = stage_s.dims()[container.dim_idx];
             Expr min = Variable::make(Int(32), container.name + ".loop_min");
-            Expr extent = Variable::make(Int(32), container.name + ".loop_extent");
-            stmt = For::make(container.name, min, extent, dim.for_type, dim.partition_policy, dim.device_api, stmt);
+            Expr max = Variable::make(Int(32), container.name + ".loop_max");
+            stmt = For::make(container.name, min, max, dim.for_type, dim.partition_policy, dim.device_api, stmt);
         }
     }
 
@@ -437,17 +437,18 @@ Stmt build_loop_nest(
         string o = prefix + Var::outermost().name();
         stmt = LetStmt::make(o + ".loop_min", 0, stmt);
         stmt = LetStmt::make(o + ".loop_max", 0, stmt);
-        stmt = LetStmt::make(o + ".loop_extent", 1, stmt);
     }
 
-    // Define the loop mins and extents in terms of the mins and maxs produced by bounds inference
+    // Define the loop mins and extents in terms of the mins and maxs produced
+    // by bounds inference. These are simple new_var = old_var lets, but we
+    // can't just substitute because there are shadowed copies of .min/.max and
+    // the loop_min and loop_max must be in terms of the .min/.max at *this*
+    // loop level.
+
     for (const std::string &i : dims) {
         string var = prefix + i;
         Expr max = Variable::make(Int(32), var + ".max");
         Expr min = Variable::make(Int(32), var + ".min");  // Inject instance name here? (compute instance names during lowering)
-        stmt = LetStmt::make(var + ".loop_extent",
-                             (max + 1) - min,
-                             stmt);
         stmt = LetStmt::make(var + ".loop_min", min, stmt);
         stmt = LetStmt::make(var + ".loop_max", max, stmt);
     }
@@ -460,7 +461,6 @@ Stmt build_loop_nest(
         Expr rmax = Variable::make(Int(32), p + ".max");
         stmt = LetStmt::make(p + ".loop_min", rmin, stmt);
         stmt = LetStmt::make(p + ".loop_max", rmax, stmt);
-        stmt = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, stmt);
     }
 
     return stmt;
@@ -983,7 +983,7 @@ private:
         } else {
             return For::make(for_loop->name,
                              for_loop->min,
-                             for_loop->extent,
+                             for_loop->max,
                              for_loop->for_type,
                              for_loop->partition_policy,
                              for_loop->device_api,
@@ -1013,23 +1013,19 @@ Stmt inject_stmt(Stmt root, Stmt injected, const LoopLevel &level) {
 class CollectBounds : public IRVisitor {
 public:
     template<typename T>
-    static map<string, Expr> collect_bounds(const T &node) {
+    static map<string, Interval> collect_bounds(const T &node) {
         CollectBounds bounds;
         node.accept(&bounds);
         return bounds.bounds;
     }
 
 private:
-    map<string, Expr> bounds;
+    map<string, Interval> bounds;
 
     using IRVisitor::visit;
 
-    void visit(const LetStmt *op) override {
-        if (ends_with(op->name, ".loop_min") ||
-            ends_with(op->name, ".loop_max") ||
-            ends_with(op->name, ".loop_extent")) {
-            bounds.emplace(op->name, Variable::make(Int(32), op->name));
-        }
+    void visit(const For *op) override {
+        bounds.emplace(op->name, Interval{op->min, op->max});
         IRVisitor::visit(op);
     }
 };
@@ -1047,71 +1043,50 @@ string fused_name(const string &var) {
 // The bounds of every loop exist in 'replacements' should be replaced. The
 // loop is also renamed by adding '.fused' in the original name before the
 // variable name.
-Stmt substitute_fused_bounds(Stmt s, const map<string, Expr> &replacements) {
+Stmt substitute_fused_bounds(Stmt s, const map<string, Interval> &replacements) {
     if (!s.defined() || replacements.empty()) {
         return s;
     }
 
     class SubstituteFusedBounds : public IRMutator {
-        const map<string, Expr> &replacements;
+        const map<string, Interval> &replacements;
 
         using IRMutator::visit;
 
         Stmt visit(const For *op) override {
-            const auto *min_var = op->min.as<Variable>();
-            const auto *extent_var = op->extent.as<Variable>();
-            if (min_var && extent_var) {
-                Expr min_val, extent_val;
-                {
-                    const auto &it = replacements.find(min_var->name);
-                    if (it != replacements.end()) {
-                        min_val = it->second;
-                    }
-                }
-                {
-                    const auto &it = replacements.find(extent_var->name);
-                    if (it != replacements.end()) {
-                        extent_val = it->second;
-                    }
-                }
-                if (!min_val.defined() || !extent_val.defined()) {
-                    return IRMutator::visit(op);
-                }
-
-                Stmt body = mutate(op->body);
-
-                string new_var = fused_name(op->name);
-
-                ForType for_type = op->for_type;
-                DeviceAPI device_api = op->device_api;
-                if (is_const_one(extent_val)) {
-                    // This is the child loop of a fused group. The real loop of the
-                    // fused group is the loop of the parent function of the fused
-                    // group. This child loop is just a scheduling point, and should
-                    // never be a device transition, so we rewrite it to be a simple
-                    // serial loop of extent 1."
-                    for_type = ForType::Serial;
-                    device_api = DeviceAPI::None;
-                }
-
-                Stmt stmt = For::make(new_var, Variable::make(Int(32), new_var + ".loop_min"),
-                                      Variable::make(Int(32), new_var + ".loop_extent"),
-                                      for_type, op->partition_policy, device_api, body);
-
-                // Add let stmts defining the bound of the renamed for-loop.
-                stmt = LetStmt::make(new_var + ".loop_min", min_val, stmt);
-                stmt = LetStmt::make(new_var + ".loop_max", simplify(min_val + extent_val - 1), stmt);
-                stmt = LetStmt::make(new_var + ".loop_extent", extent_val, stmt);
-                // Replace any reference to the old loop name with the new one.
-                stmt = substitute(op->name, Variable::make(Int(32), new_var), stmt);
-                return stmt;
-            } else {
+            auto it = replacements.find(op->name);
+            if (it == replacements.end()) {
                 return IRMutator::visit(op);
             }
+            const Interval &i = it->second;
+
+            Stmt body = mutate(op->body);
+
+            string new_var = fused_name(op->name);
+
+            ForType for_type = op->for_type;
+            DeviceAPI device_api = op->device_api;
+            if (equal(i.min, i.max)) {
+                // This is the child loop of a fused group. The real loop of the
+                // fused group is the loop of the parent function of the fused
+                // group. This child loop is just a scheduling point, and should
+                // never be a device transition, so we rewrite it to be a simple
+                // serial loop of extent 1."
+                for_type = ForType::Serial;
+                device_api = DeviceAPI::None;
+            }
+
+            Stmt stmt = For::make(new_var, i.min, i.max,
+                                  for_type, op->partition_policy,
+                                  device_api, body);
+
+            // Replace any reference to the old loop name with the new one.
+            stmt = substitute(op->name, Variable::make(Int(32), new_var), stmt);
+            return stmt;
         }
 
     public:
-        explicit SubstituteFusedBounds(const map<string, Expr> &r)
+        explicit SubstituteFusedBounds(const map<string, Interval> &r)
             : replacements(r) {
         }
     } subs(replacements);
@@ -1143,7 +1118,7 @@ Stmt add_loop_var_aliases(Stmt s, const map<string, set<string>> &loop_var_alias
                 body = LetStmt::make(alias, var, body);
             }
 
-            return For::make(op->name, op->min, op->extent, op->for_type,
+            return For::make(op->name, op->min, op->max, op->for_type,
                              op->partition_policy, op->device_api, std::move(body));
         }
 
@@ -1171,7 +1146,7 @@ class ShiftLoopNest : public IRMutator {
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + iter->second;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
         }
         return stmt;
     }
@@ -1310,14 +1285,14 @@ protected:
                     _found_store_levels_for_funcs.insert(funcs[i].name());
                 }
             }
-            for (size_t i = 0; i < funcs.size(); i++) {
-                if (funcs[i].schedule().hoist_storage_level().match(for_loop->name)) {
-                    debug(3) << "Found hoist storage level for " << funcs[i].name() << " at " << for_loop->name << "\n";
-                    if (funcs[i].schedule().hoist_storage_level() != funcs[i].schedule().store_level()) {
-                        body = HoistedStorage::make(funcs[i].name(), body);
+            for (const auto &func : funcs) {
+                if (func.schedule().hoist_storage_level().match(for_loop->name)) {
+                    debug(3) << "Found hoist storage level for " << func.name() << " at " << for_loop->name << "\n";
+                    if (func.schedule().hoist_storage_level() != func.schedule().store_level()) {
+                        body = HoistedStorage::make(func.name(), body);
                     } else {
                     }
-                    _found_hoist_storage_levels_for_funcs.insert(funcs[i].name());
+                    _found_hoist_storage_levels_for_funcs.insert(func.name());
                 }
             }
         }
@@ -1347,7 +1322,7 @@ protected:
         } else {
             return For::make(for_loop->name,
                              for_loop->min,
-                             for_loop->extent,
+                             for_loop->max,
                              for_loop->for_type,
                              for_loop->partition_policy,
                              for_loop->device_api,
@@ -1414,9 +1389,10 @@ private:
             const string &name = func.name();
             const vector<string> &func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
-                const string &arg = func_args[i];
-                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
-                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
+                string min_name = concat_strings(name, ".", func_args[i], ".min_realized");
+                string extent_name = concat_strings(name, ".", func_args[i], ".extent_realized");
+                Expr min = Variable::make(Int(32), min_name);
+                Expr extent = Variable::make(Int(32), extent_name);
                 bounds.emplace_back(min, extent);
             }
 
@@ -1442,7 +1418,7 @@ private:
     // Compute the shift factor required to align iteration of
     // a function stage with its fused parent loop nest.
     void compute_shift_factor(const Function &f, const string &prefix, const Definition &def,
-                              map<string, Expr> &bounds, map<string, Expr> &shifts) {
+                              map<string, Interval> &bounds, map<string, Expr> &shifts) {
         if (!def.defined()) {
             return;
         }
@@ -1495,29 +1471,28 @@ private:
             internal_assert(parent_var_index >= 0);
             string parent_var = parent_dims[parent_var_index].var;
 
-            auto it_min = bounds.find(prefix + var + ".loop_min");
-            auto it_max = bounds.find(prefix + var + ".loop_max");
-            internal_assert((it_min != bounds.end()) && (it_max != bounds.end()));
+            auto it = bounds.find(prefix + var);
+            internal_assert(it != bounds.end());
 
             if (iter->second == LoopAlignStrategy::AlignStart) {
-                auto parent_min = bounds.find(parent_prefix + parent_var + ".loop_min");
+                auto parent_min = bounds.find(parent_prefix + parent_var);
                 internal_assert(parent_min != bounds.end());
-                shift_val = parent_min->second - it_min->second;
+                shift_val = parent_min->second.min - it->second.min;
             } else {
-                auto parent_max = bounds.find(parent_prefix + parent_var + ".loop_max");
+                auto parent_max = bounds.find(parent_prefix + parent_var);
                 internal_assert(parent_max != bounds.end());
-                shift_val = parent_max->second - it_max->second;
+                shift_val = parent_max->second.max - it->second.max;
             }
 
             internal_assert(shift_val.defined());
             shifts.emplace(prefix + var, simplify(-shift_val));
-            it_min->second = simplify(shift_val + it_min->second);
-            it_max->second = simplify(shift_val + it_max->second);
+            it->second.min = simplify(shift_val + it->second.min);
+            it->second.max = simplify(shift_val + it->second.max);
         }
     }
 
     Stmt build_produce_definition(const Function &f, const string &prefix, const Definition &def, bool is_update,
-                                  map<string, Expr> &replacements,
+                                  map<string, Interval> &replacements,
                                   vector<pair<string, Expr>> &add_lets,
                                   map<string, set<string>> &aliases) {
         const vector<Dim> &dims = def.schedule().dims();  // From inner to outer
@@ -1555,9 +1530,7 @@ private:
                 internal_assert(dim2_idx < (int)dims_2.size());
                 string var = pair.func_2 + ".s" + std::to_string(pair.stage_2) + "." + dims_2[dim2_idx].var;
 
-                replacements.emplace(var + ".loop_extent", make_const(Int(32), 1));
-                replacements.emplace(var + ".loop_min", val);
-                replacements.emplace(var + ".loop_max", val);
+                replacements.emplace(var, Interval::single_point(val));
 
                 string var_fused = fused_name(var_orig);
                 aliases[var_fused].emplace(std::move(var_orig));
@@ -1615,8 +1588,8 @@ private:
     // realized in the group) with union of the bounds of the fused group.
     Stmt replace_parent_bound_with_union_bound(const string &func, int stage,
                                                const Definition &def, Stmt produce,
-                                               const map<string, Expr> &bounds,
-                                               map<string, Expr> &replacements) {
+                                               const map<string, Interval> &bounds,
+                                               map<string, Interval> &replacements) {
 
         if (def.schedule().fused_pairs().empty()) {
             return produce;
@@ -1649,33 +1622,20 @@ private:
 
                 string var_2 = pair.func_2 + ".s" + std::to_string(pair.stage_2) +
                                "." + dims_2[dim2_idx].var;
-                internal_assert(bounds.count(var_2 + ".loop_min"));
-                internal_assert(bounds.count(var_2 + ".loop_max"));
-                internal_assert(bounds.count(var_2 + ".loop_extent"));
-                Expr min_2 = bounds.find(var_2 + ".loop_min")->second;
-                Expr max_2 = bounds.find(var_2 + ".loop_max")->second;
-                Expr extent_2 = bounds.find(var_2 + ".loop_extent")->second;
 
-                internal_assert(bounds.count(var_1 + ".loop_min"));
-                internal_assert(bounds.count(var_1 + ".loop_max"));
-                internal_assert(bounds.count(var_1 + ".loop_extent"));
+                Interval i_1;
+                Interval i_2 = bounds.find(var_2)->second;
 
-                Expr min_1, max_1;
-                const auto &it = replacements.find(var_1 + ".loop_min");
+                const auto &it = replacements.find(var_1);
                 if (it == replacements.end()) {
-                    min_1 = bounds.find(var_1 + ".loop_min")->second;
-                    max_1 = bounds.find(var_1 + ".loop_max")->second;
+                    i_1 = bounds.find(var_1)->second;
                 } else {
-                    min_1 = replacements.find(var_1 + ".loop_min")->second;
-                    max_1 = replacements.find(var_1 + ".loop_max")->second;
+                    i_1 = it->second;
                 }
 
                 // Extent is computed from min/max, so we don't find() it earlier.
-                replacements[var_1 + ".loop_min"] = simplify(min(min_1, min_2));
-                replacements[var_1 + ".loop_max"] = simplify(max(max_1, max_2));
-                replacements[var_1 + ".loop_extent"] =
-                    simplify((replacements[var_1 + ".loop_max"] + 1) -
-                             replacements[var_1 + ".loop_min"]);
+                replacements[var_1] = Interval{simplify(min(i_1.min, i_2.min)),
+                                               simplify(max(i_1.max, i_2.max))};
             }
         }
 
@@ -1689,8 +1649,8 @@ private:
     }
 
     Stmt replace_parent_bound_with_union_bound(const Function &f, Stmt produce,
-                                               const map<string, Expr> &bounds) {
-        map<string, Expr> replacements;
+                                               const map<string, Interval> &bounds) {
+        map<string, Interval> replacements;
 
         int stage = 0;
         produce = replace_parent_bound_with_union_bound(f.name(), stage++, f.definition(), produce, bounds, replacements);
@@ -1827,7 +1787,7 @@ private:
 
         // Build the loops.
         Stmt producer;
-        map<string, Expr> replacements;
+        map<string, Interval> replacements;
         vector<pair<string, Expr>> add_lets;
         map<string, set<string>> aliases;
 
@@ -1953,7 +1913,7 @@ private:
         sites.push_back({f->is_parallel(), is_gpu_block, loop_level});
 
         f->min.accept(this);
-        f->extent.accept(this);
+        f->max.accept(this);
         f->body.accept(this);
 
         sites.pop_back();
@@ -2210,6 +2170,17 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     for (size_t i = 0; i < definitions.size(); i++) {
         for (const Specialization &s : definitions[i].specializations()) {
             definitions.push_back(s.definition);
+        }
+    }
+
+    if (f.has_extern_definition()) {
+        const auto api = f.extern_function_device_api();
+        if (!target.supports_device_api(api)) {
+            user_error << "Func " << f.name() << " has an extern definition that "
+                       << "may leave the output with a dirty " << api << " device allocation,"
+                       << " but no compatible target feature is enabled in target "
+                       << target.to_string() << ", so the pipeline would not be able to "
+                       << "copy back the result.";
         }
     }
 
@@ -2544,7 +2515,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
 
     Stmt visit(const For *op) override {
         if (ends_with(op->name, ".__outermost") &&
-            is_const_one(simplify(op->extent)) &&
+            can_prove(op->min == op->max) &&
             op->device_api == DeviceAPI::None) {
             return mutate(substitute(op->name, op->min, op->body));
         } else {
@@ -2553,8 +2524,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        if (ends_with(op->name, ".__outermost.loop_extent") ||
-            ends_with(op->name, ".__outermost.loop_min") ||
+        if (ends_with(op->name, ".__outermost.loop_min") ||
             ends_with(op->name, ".__outermost.loop_max")) {
             return mutate(substitute(op->name, simplify(op->value), op->body));
         } else {
@@ -2578,7 +2548,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized) {
     string root_var = LoopLevel::root().lock().to_string();
-    Stmt s = For::make(root_var, 0, 1, ForType::Serial, Partition::Never, DeviceAPI::Host, Evaluate::make(0));
+    Stmt s = For::make(root_var, 0, 0, ForType::Serial, Partition::Never, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
 

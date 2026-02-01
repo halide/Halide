@@ -1712,6 +1712,7 @@ void CodeGen_C::visit(const Call *op) {
 
             // Get the args
             vector<string> values;
+            values.reserve(op->args.size());
             for (const auto &arg : op->args) {
                 values.push_back(print_expr(arg));
             }
@@ -1745,6 +1746,7 @@ void CodeGen_C::visit(const Call *op) {
 
             // Get the args
             vector<string> values;
+            values.reserve(op->args.size());
             for (const auto &arg : op->args) {
                 values.push_back(print_expr(arg));
             }
@@ -2283,7 +2285,7 @@ void CodeGen_C::visit(const Atomic *op) {
 
 void CodeGen_C::visit(const For *op) {
     string id_min = print_expr(op->min);
-    string id_extent = print_expr(op->extent);
+    string id_max = print_expr(op->max);
 
     if (op->for_type == ForType::Parallel) {
         stream << get_indent() << "#pragma omp parallel for\n";
@@ -2297,8 +2299,7 @@ void CodeGen_C::visit(const For *op) {
            << " = " << id_min
            << "; "
            << print_name(op->name)
-           << " < " << id_min
-           << " + " << id_extent
+           << " <= " << id_max
            << "; "
            << print_name(op->name)
            << "++)\n";
@@ -2383,9 +2384,9 @@ void CodeGen_C::visit(const Allocate *op) {
                 string new_size_id_rhs;
                 string next_extent = print_expr(op->extents[i]);
                 if (i > 1) {
-                    new_size_id_rhs = "(" + size_id + " > ((int64_t(1) << 31) - 1)) ? " + size_id + " : (" + size_id + " * " + next_extent + ")";
+                    new_size_id_rhs = concat_strings("(", size_id, " > ((int64_t(1) << 31) - 1)) ? ", size_id, " : (", size_id, " * ", next_extent, ")");
                 } else {
-                    new_size_id_rhs = size_id + " * " + next_extent;
+                    new_size_id_rhs = concat_strings(size_id, " * ", next_extent);
                 }
                 size_id = print_assignment(Int(64), new_size_id_rhs);
             }
@@ -2532,6 +2533,7 @@ void CodeGen_C::visit(const Shuffle *op) {
     }
 
     std::vector<string> vecs;
+    vecs.reserve(op->vectors.size());
     for (const Expr &v : op->vectors) {
         vecs.push_back(print_expr(v));
     }

@@ -378,21 +378,15 @@ protected:
 
     // Is an Expr safe to lift into a .used or .loaded condition.
     bool may_lift(const Expr &e) {
-        class MayLift : public IRVisitor {
-            using IRVisitor::visit;
-            void visit(const Call *op) override {
-                if (!op->is_pure() && op->call_type != Call::Halide) {
-                    result = false;
-                } else {
-                    IRVisitor::visit(op);
-                }
+        bool result = true;
+        visit_with(e, [&](auto *self, const Call *op) {
+            if (!op->is_pure() && op->call_type != Call::Halide) {
+                result = false;
+            } else {
+                self->visit_base(op);
             }
-
-        public:
-            bool result = true;
-        } v;
-        e.accept(&v);
-        return v.result;
+        });
+        return result;
     }
 
     // Come up with an upper bound for the truth value of an expression with the
@@ -411,30 +405,17 @@ protected:
     // Come up with an upper bound for the truth value of an expression with any
     // calls to the given func eliminated.
     Expr relax_over_calls(const Expr &e, const std::string &func) {
-        class ReplaceCalls : public IRMutator {
-            const std::string &func;
-
-            using IRMutator::visit;
-
-            Expr visit(const Call *op) override {
-                if (op->call_type == Call::Halide && op->name == func) {
-                    return cast(op->type, var);
-                }
-                return IRMutator::visit(op);
-            }
-
-        public:
-            const std::string var_name;
-            const Expr var;
-
-            ReplaceCalls(const std::string &func)
-                : func(func),
-                  var_name(unique_name('t')),
-                  var(Variable::make(Int(32), var_name)) {
-            }
-        } replacer(func);
-
-        return relax_over_var(replacer.mutate(e), replacer.var_name);
+        const std::string var_name = unique_name('t');
+        const Expr var = Variable::make(Int(32), var_name);
+        Expr relaxed =
+            mutate_with(e,
+                        [&](auto *self, const Call *op) {
+                            if (op->call_type == Call::Halide && op->name == func) {
+                                return cast(op->type, var);
+                            }
+                            return self->visit_base(op);
+                        });
+        return relax_over_var(relaxed, var_name);
     }
 
     Expr visit(const Select *op) override {
@@ -533,7 +514,7 @@ protected:
                 body = T::make(op->name, op->value, std::move(body));
                 changed = true;
             }
-        } else if (std::is_same<T, LetStmt>::value) {
+        } else if (std::is_same_v<T, LetStmt>) {
             auto new_body = mutate(body);
             changed = !new_body.same_as(body);
             body = std::move(new_body);
@@ -721,7 +702,7 @@ protected:
         if (body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, op->min, op->extent,
+            return For::make(op->name, op->min, op->max,
                              op->for_type, op->partition_policy, op->device_api, std::move(body));
         }
     }

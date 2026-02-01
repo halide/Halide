@@ -1098,26 +1098,19 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
         }
     }
 
-    class FindShared : public IRVisitor {
-        using IRVisitor::visit;
-        void visit(const Allocate *op) override {
-            if (op->memory_type == MemoryType::GPUShared) {
-                internal_assert(alloc == nullptr)
-                    << "Found multiple shared allocations in opencl kernel\n";
-                alloc = op;
-            }
+    const Allocate *shared_alloc = nullptr;
+    shared_name = "__shared";
+    visit_with(s, [&](auto *self, const Allocate *op) {
+        if (op->memory_type == MemoryType::GPUShared) {
+            internal_assert(shared_alloc == nullptr)
+                << "Found multiple shared allocations in metal kernel\n";
+            shared_alloc = op;
+            shared_name = op->name;
         }
+        // Recurse just to make sure there aren't multiple nested shared allocs
+        self->visit_base(op);
+    });
 
-    public:
-        const Allocate *alloc = nullptr;
-    } find_shared;
-    s.accept(&find_shared);
-
-    if (find_shared.alloc) {
-        shared_name = find_shared.alloc->name;
-    } else {
-        shared_name = "__shared";
-    }
     // Note that int16 below is an int32x16, not an int16_t. The type
     // is chosen to be large to maximize alignment.
     stream << ",\n"

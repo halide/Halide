@@ -13,9 +13,8 @@
 
 #include <vector>
 
-#include "Errors.h"
 #include "Featurization.h"
-#include "Halide.h"
+#include "HalidePlugin.h"
 
 namespace Halide {
 namespace Internal {

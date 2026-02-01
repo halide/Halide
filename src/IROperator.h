@@ -345,12 +345,15 @@ Expr unwrap_tags(const Expr &e);
 
 template<typename T>
 struct is_printable_arg {
-    static constexpr bool value = std::is_convertible<T, const char *>::value ||
-                                  std::is_convertible<T, Halide::Expr>::value;
+    static constexpr bool value = std::is_convertible_v<T, const char *> ||
+                                  std::is_convertible_v<T, Halide::Expr>;
 };
 
 template<typename... Args>
 struct all_are_printable_args : meta_and<is_printable_arg<Args>...> {};
+
+template<typename... Args>
+inline constexpr bool all_are_printable_args_v = all_are_printable_args<Args...>::value;
 
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
@@ -674,7 +677,7 @@ inline Expr max(Expr a, float b) {
  * The expressions are folded from right ie. max(.., max(.., ..)).
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type * = nullptr>
+         std::enable_if_t<Internal::all_are_convertible<Expr, Rest...>::value> * = nullptr>
 inline Expr max(A &&a, B &&b, C &&c, Rest &&...rest) {
     return max(std::forward<A>(a), max(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
@@ -709,7 +712,7 @@ inline Expr min(Expr a, float b) {
  * The expressions are folded from right ie. min(.., min(.., ..)).
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type * = nullptr>
+         std::enable_if_t<Internal::all_are_convertible<Expr, Rest...>::value> * = nullptr>
 inline Expr min(A &&a, B &&b, C &&c, Rest &&...rest) {
     return min(std::forward<A>(a), min(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
@@ -814,7 +817,7 @@ Expr select(Expr condition, Expr true_value, Expr false_value);
  * to the first value for which the condition is true. Returns the
  * final value if all conditions are false. */
 template<typename... Args,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type * = nullptr>
+         std::enable_if_t<Internal::all_are_convertible<Expr, Args...>::value> * = nullptr>
 inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
     return select(std::move(c0), std::move(v0), select(std::move(c1), std::move(v1), std::forward<Args>(args)...));
 }
@@ -1704,7 +1707,7 @@ f(scatter(3, 5)) = f(select(p, gather(5, 3), gather(3, 5)));
 f(select(p, scatter(3, 5, 5), scatter(1, 2, 3))) = f(select(p, gather(5, 3, 3), gather(2, 3, 1)));
 \endcode
 *
-* Note that in the p == true case, we redudantly load from 3 and write
+* Note that in the p == true case, we redundantly load from 3 and write
 * to 5 twice.
 */
 //@{

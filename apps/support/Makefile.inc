@@ -175,7 +175,7 @@ GENERATOR_DEPS_STATIC ?= $(LIB_HALIDE_STATIC) $(HALIDE_DISTRIB_PATH)/include/Hal
 
 # Generators which use autoscheduler plugin need to specify the linker where to find libHalide.so required by the plugin.
 LIBHALIDE_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
-LIBHALIDE_LDFLAGS_STATIC ?= $(LIB_HALIDE_STATIC) $(LDFLAGS)
+LIBHALIDE_LDFLAGS_STATIC ?= $(LIB_HALIDE_STATIC) $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Autoschedulers. Mullapudi2016 is currently the default, because it's fast.
 AUTOSCHEDULER ?= mullapudi2016
@@ -188,8 +188,15 @@ LIBHALIDE_LDFLAGS +=  -Wl,--no-as-needed -lautoschedule_$(AUTOSCHEDULER) -Wl,--a
 endif
 endif
 
-LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
-LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
+
+# Find libjpeg and libpng. The code to set IMAGE_IO_LIBS is duplicated
+# in the root Makefile and any changes here should be repeated there.
+
+LIBPNG_LIBS_DEFAULT = $(shell pkg-config libpng --libs)
+LIBPNG_CXX_FLAGS ?= $(shell pkg-config libpng --cflags)
+LIBJPEG_LIBS ?= $(shell pkg-config libjpeg --libs)
+LIBJPEG_CXX_FLAGS ?= $(shell pkg-config libjpeg --cflags)
+
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
 ifneq (,$(findstring -m32,$(CXX)))
 ifneq (,$(findstring x86_64,$(LIBPNG_LIBS_DEFAULT)))
@@ -197,17 +204,6 @@ LIBPNG_LIBS ?= -lpng
 endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
-
-# Workaround brew Cellar path for libpng-config output.
-LIBJPEG_LINKER_PATH ?= $(shell echo $(LIBPNG_LIBS_DEFAULT) | sed -e'/-L.*[/][Cc]ellar[/]libpng/!d;s=\(.*\)/[Cc]ellar/libpng/.*=\1/lib=')
-LIBJPEG_LIBS ?= $(LIBJPEG_LINKER_PATH) -ljpeg
-
-# There's no libjpeg-config, unfortunately. We should look for
-# jpeglib.h one directory level up from png.h . Also handle
-# Mac OS brew installs where libpng-config returns paths
-# into the PNG cellar.
-LIBPNG_INCLUDE_DIRS = $(filter -I%,$(LIBPNG_CXX_FLAGS))
-LIBJPEG_CXX_FLAGS ?= $(shell echo $(LIBPNG_INCLUDE_DIRS) | sed -e'/[Cc]ellar[/]libpng/!s=\(.*\)=\1/..=;s=\(.*\)/[Cc]ellar/libpng/.*=\1/include=')
 
 IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
@@ -259,4 +255,3 @@ $(BIN)/%.run: $(BIN)/%.rungen
 .PHONY: %.benchmark
 %.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
 	@$^ --benchmarks=all --estimate_all --parsable_output
-

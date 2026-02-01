@@ -239,11 +239,15 @@ void StubEmitter::emit_inputs_struct() {
     };
     std::vector<InInfo> in_info;
     for (auto *input : inputs) {
-        std::string c_type = input->get_c_type();
+        std::stringstream c_type;
         if (input->is_array()) {
-            c_type = "std::vector<" + c_type + ">";
+            c_type << "std::vector<";
         }
-        in_info.push_back({c_type, input->name()});
+        c_type << input->get_c_type();
+        if (input->is_array()) {
+            c_type << ">";
+        }
+        in_info.push_back({c_type.str(), input->name()});
     }
 
     const std::string name = "Inputs";
@@ -305,17 +309,22 @@ void StubEmitter::emit() {
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         const bool is_func = (c_type == "Func");
-        std::string getter = "generator->output_func(\"" + output->name() + "\")";
+        std::stringstream getter;
+
         if (!is_func) {
-            getter = c_type + "::to_output_buffers(" + getter + ", generator)";
+            getter << c_type << "::to_output_buffers(";
+        }
+        getter << "generator->output_func(\"" << output->name() << "\")";
+        if (!is_func) {
+            getter << ", generator)";
         }
         if (!output->is_array()) {
-            getter = getter + ".at(0)";
+            getter << ".at(0)";
         }
 
         out_info.push_back({output->name(),
                             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-                            getter});
+                            getter.str()});
         if (c_type != "Func") {
             all_outputs_are_func = false;
         }
@@ -767,6 +776,7 @@ gengen
 
     const auto build_targets = [](const std::vector<std::string> &target_strings) {
         std::vector<Target> targets;
+        targets.reserve(target_strings.size());
         for (const auto &s : target_strings) {
             targets.emplace_back(s);
         }
@@ -861,11 +871,12 @@ gengen
         args.compiler_logger_factory =
             [obfuscate_compiler_logging, &args](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
             // rebuild generator_args from the map so that they are always canonical
-            std::string generator_args_string, autoscheduler_name;
+            std::stringstream generator_args_string;
+            std::string autoscheduler_name;
             std::string sep;
             for (const auto &it : args.generator_params) {
                 std::string quote = it.second.find(' ') != std::string::npos ? "\\\"" : "";
-                generator_args_string += sep + it.first + "=" + quote + it.second + quote;
+                generator_args_string << sep << it.first << "=" << quote << it.second << quote;
                 sep = " ";
                 if (it.first == "autoscheduler") {
                     autoscheduler_name = it.second;
@@ -876,7 +887,7 @@ gengen
                 obfuscate_compiler_logging ? "" : args.function_name,
                 obfuscate_compiler_logging ? "" : autoscheduler_name,
                 obfuscate_compiler_logging ? Target() : target,
-                obfuscate_compiler_logging ? "" : generator_args_string,
+                obfuscate_compiler_logging ? "" : generator_args_string.str(),
                 obfuscate_compiler_logging));
             return t;
         };
@@ -1194,7 +1205,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
                                          GeneratorFactory generator_factory) {
     user_assert(is_valid_name(name)) << "Invalid Generator name: " << name;
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     internal_assert(registry.factories.find(name) == registry.factories.end())
         << "Duplicate Generator name: " << name;
     registry.factories[name] = std::move(generator_factory);
@@ -1203,7 +1214,7 @@ void GeneratorRegistry::register_factory(const std::string &name,
 /* static */
 void GeneratorRegistry::unregister_factory(const std::string &name) {
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     internal_assert(registry.factories.find(name) != registry.factories.end())
         << "Generator not found: " << name;
     registry.factories.erase(name);
@@ -1213,7 +1224,7 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
 AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
                                                const GeneratorContext &context) {
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     auto it = registry.factories.find(name);
     if (it == registry.factories.end()) {
         return nullptr;
@@ -1228,7 +1239,7 @@ AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
 /* static */
 std::vector<std::string> GeneratorRegistry::enumerate() {
     GeneratorRegistry &registry = get_registry();
-    std::lock_guard<std::mutex> lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     std::vector<std::string> result;
     result.reserve(registry.factories.size());
     for (const auto &i : registry.factories) {
@@ -1720,6 +1731,15 @@ void GIOBase::set_type(const Type &type) {
     types_ = {type};
 }
 
+// Conceptually related to the method above, but attached to the
+// GeneratorOutputBase subclass instead of GIOBase because currently input
+// buffers can't be tuples.
+void GeneratorOutputBase::set_type(const std::vector<Type> &types) {
+    generator->check_exact_phase(GeneratorBase::ConfigureCalled);
+    user_assert(!gio_types_defined()) << "set_type() may only be called on an Input or Output that has no type specified.";
+    types_ = types;
+}
+
 void GIOBase::set_dimensions(int dims) {
     generator->check_exact_phase(GeneratorBase::ConfigureCalled);
     user_assert(!dims_defined()) << "set_dimensions() may only be called on an Input or Output that has no dimensionality specified.";
@@ -2187,14 +2207,14 @@ void generator_test() {
 
         Tester tester_instance;
 
-        static_assert(std::is_same<decltype(tester_instance.expr_array_input[0]), const Expr &>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.expr_array_output[0]), const Expr &>::value, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.expr_array_input[0]), const Expr &>, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.expr_array_output[0]), const Expr &>, "type mismatch");
 
-        static_assert(std::is_same<decltype(tester_instance.func_array_input[0]), const Func &>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.func_array_output[0]), Func &>::value, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.func_array_input[0]), const Func &>, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.func_array_output[0]), Func &>, "type mismatch");
 
-        static_assert(std::is_same<decltype(tester_instance.buffer_array_input[0]), ImageParam>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), Func>::value, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.buffer_array_input[0]), ImageParam>, "type mismatch");
+        static_assert(std::is_same_v<decltype(tester_instance.buffer_array_output[0]), Func>, "type mismatch");
     }
 
     class GPTester : public Generator<GPTester> {

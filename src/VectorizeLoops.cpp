@@ -353,7 +353,7 @@ class SerializeLoops : public IRMutator {
 
     Stmt visit(const For *op) override {
         if (op->for_type == ForType::Vectorized) {
-            return For::make(op->name, op->min, op->extent,
+            return For::make(op->name, op->min, op->max,
                              ForType::Serial, op->partition_policy, op->device_api, mutate(op->body));
         }
 
@@ -950,7 +950,7 @@ class VectorSubs : public IRMutator {
         ForType for_type = op->for_type;
 
         Expr min = mutate(op->min);
-        Expr extent = mutate(op->extent);
+        Expr max = mutate(op->max);
 
         Stmt body = op->body;
 
@@ -958,21 +958,22 @@ class VectorSubs : public IRMutator {
             // Rebase the loop to zero and try again
             Expr var = Variable::make(Int(32), op->name);
             Stmt body = substitute(op->name, var + op->min, op->body);
-            Stmt transformed = For::make(op->name, 0, op->extent, for_type, op->partition_policy, op->device_api, body);
+            Stmt transformed = For::make(op->name, 0, simplify(op->max - op->min), for_type, op->partition_policy, op->device_api, body);
             return mutate(transformed);
         }
 
-        if (extent.type().is_vector()) {
+        if (max.type().is_vector()) {
             // We'll iterate up to the max over the lanes, but
             // inject an if statement inside the loop that stops
             // each lane from going too far.
 
-            extent = bounds_of_lanes(extent).max;
+            max = bounds_of_lanes(max).max;
             Expr var = Variable::make(Int(32), op->name);
-            body = IfThenElse::make(likely(var < op->min + op->extent), body);
+            body = IfThenElse::make(likely(var <= max), body);
         }
 
         if (op->for_type == ForType::Vectorized) {
+            Expr extent = simplify((max - min) + 1);
             const IntImm *extent_int = extent.as<IntImm>();
             internal_assert(extent_int)
                 << "Vectorized for loop extent should have been rewritten to a constant\n";
@@ -980,20 +981,24 @@ class VectorSubs : public IRMutator {
                 user_error << "Loop over " << op->name
                            << " has extent " << extent
                            << ". Can only vectorize loops over a "
-                           << "constant extent > 1\n";
+                           << "constant extent > 1\n"
+                           << "Original min: " << op->min << "\n"
+                           << "Original max: " << op->max << "\n"
+                           << "Mutated min: " << min << "\n"
+                           << "Mutated max: " << max << "\n";
             }
 
             vectorized_vars.push_back({op->name, min, (int)extent_int->value});
             update_replacements();
             // Go over lets which were vectorized in the order of their occurrence and update
             // them according to the current loop level.
-            for (auto let = containing_lets.begin(); let != containing_lets.end(); let++) {
+            for (const auto &[var, val] : containing_lets) {
                 // Skip if this var wasn't vectorized.
-                if (!scope.contains(let->first)) {
+                if (!scope.contains(var)) {
                     continue;
                 }
-                string vectorized_name = get_widened_var_name(let->first);
-                Expr vectorized_value = mutate(scope.get(let->first));
+                string vectorized_name = get_widened_var_name(var);
+                Expr vectorized_value = mutate(scope.get(var));
                 vector_scope.push(vectorized_name, vectorized_value);
             }
 
@@ -1022,18 +1027,20 @@ class VectorSubs : public IRMutator {
             body = mutate(body);
 
             if (min.same_as(op->min) &&
-                extent.same_as(op->extent) &&
+                max.same_as(op->max) &&
                 body.same_as(op->body) &&
                 for_type == op->for_type) {
                 return op;
             } else {
-                return For::make(op->name, min, extent, for_type, op->partition_policy, op->device_api, body);
+                return For::make(op->name, min, max, for_type, op->partition_policy, op->device_api, body);
             }
         }
     }
 
     Stmt visit(const Allocate *op) override {
         vector<Expr> new_extents;
+        new_extents.reserve(vectorized_vars.size() + op->extents.size());
+
         Expr new_expr;
 
         // The new expanded dimensions are innermost.
@@ -1316,7 +1323,8 @@ class VectorSubs : public IRMutator {
 
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
             s = For::make(vectorized_vars[ix].name, vectorized_vars[ix].min,
-                          vectorized_vars[ix].lanes, ForType::Serial, Partition::Auto, DeviceAPI::None, s);
+                          vectorized_vars[ix].min + vectorized_vars[ix].lanes - 1,
+                          ForType::Serial, Partition::Auto, DeviceAPI::None, s);
         }
 
         return s;
@@ -1579,10 +1587,11 @@ class VectorizeLoops : public IRMutator {
     Stmt visit(const For *for_loop) override {
         Stmt stmt;
         if (for_loop->for_type == ForType::Vectorized) {
-            const IntImm *extent = for_loop->extent.as<IntImm>();
+            Expr loop_extent = simplify(for_loop->extent());
+            const IntImm *extent = loop_extent.as<IntImm>();
             if (!extent || extent->value <= 1) {
                 user_error << "Loop over " << for_loop->name
-                           << " has extent " << for_loop->extent
+                           << " has extent " << loop_extent
                            << ". Can only vectorize loops over a "
                            << "constant extent > 1\n";
             }

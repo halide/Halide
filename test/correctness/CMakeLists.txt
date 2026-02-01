@@ -11,6 +11,7 @@ tests(GROUPS correctness
       async_order.cpp
       autodiff.cpp
       bad_likely.cpp
+      bad_partition_always_throws.cpp
       bit_counting.cpp
       bits_known.cpp
       bitwise_ops.cpp
@@ -30,6 +31,7 @@ tests(GROUPS correctness
       bounds_of_func.cpp
       bounds_of_monotonic_math.cpp
       bounds_of_multiply.cpp
+      bounds_of_pure_intrinsics.cpp
       bounds_of_split.cpp
       bounds_query.cpp
       bounds_query_respects_specialize_fail.cpp
@@ -51,6 +53,7 @@ tests(GROUPS correctness
       compile_to_bitcode.cpp
       compile_to_lowered_stmt.cpp
       compile_to_multitarget.cpp
+      compute_at_innermost.cpp
       compute_at_reordered_update_stage.cpp
       compute_at_split_rvar.cpp
       compute_inside_guard.cpp
@@ -93,6 +96,7 @@ tests(GROUPS correctness
       early_out.cpp
       embed_bitcode.cpp
       erf.cpp
+      error_macro_unreachable.cpp
       exception.cpp
       explicit_inline_reductions.cpp
       extern_bounds_inference.cpp
@@ -218,6 +222,7 @@ tests(GROUPS correctness
       many_updates.cpp
       math.cpp
       median3x3.cpp
+      metal_precompiled_shaders.cpp
       memoize_cloned.cpp
       min_extent.cpp
       mod.cpp
@@ -455,3 +460,19 @@ set_target_properties(correctness_async
                       correctness_sliding_window
                       correctness_storage_folding
                       PROPERTIES ENABLE_EXPORTS TRUE)
+
+# Tests which are internally parallelized should not be run at the
+# same time as other tests, or they may time out
+
+set_tests_properties(correctness_mul_div_mod
+                     correctness_simd_op_check_arm
+                     correctness_simd_op_check_hvx
+                     correctness_simd_op_check_powerpc
+                     correctness_simd_op_check_riscv
+                     correctness_simd_op_check_sve2
+                     correctness_simd_op_check_wasm
+                     correctness_simd_op_check_x86
+                     correctness_vector_cast
+                     correctness_vector_math
+                     correctness_vector_reductions
+                     PROPERTIES RUN_SERIAL TRUE)

@@ -21,11 +21,11 @@
 #include "Halide.h"
 
 // We'll also include stdio for printf.
-#include <stdio.h>
+#include <cstdio>
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+int main() {
     // First we'll declare some Vars to use below.
     Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
 

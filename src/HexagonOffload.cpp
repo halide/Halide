@@ -4,6 +4,7 @@
 #include "Closure.h"
 #include "Elf.h"
 #include "HexagonOffload.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "InjectHostDevBufferCopies.h"
@@ -607,10 +608,12 @@ public:
         }
 
         static const uint8_t hexagon_plt1[] = {
+            // clang-format off
             0x00, 0x40, 0x00, 0x00,  // { immext (#0) (Relocation:R_HEX_B32_PCREL_X)
             0x0e, 0xc0, 0x49, 0x6a,  //   r14 = add (pc, ##GOTn@PCREL) }  (Relocation:R_HEX_6_PCREL_X)
             0x1c, 0xc0, 0x8e, 0x91,  //   r28 = memw (r14)
             0x00, 0xc0, 0x9c, 0x52,  //   jumpr r28
+            // clang-format on
         };
 
         debug(2) << "Adding PLT entry for symbol " << sym.get_name() << "\n";
@@ -743,10 +746,10 @@ class InjectHexagonRpc : public IRMutator {
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
         Stmt body;
-        if (is_const_one(loop->extent)) {
+        if (equal(loop->min, loop->max)) {
             body = LetStmt::make(loop->name, loop->min, loop->body);
         } else {
-            body = For::make(loop->name, loop->min, loop->extent, loop->for_type, loop->partition_policy,
+            body = For::make(loop->name, loop->min, loop->max, loop->for_type, loop->partition_policy,
                              DeviceAPI::None, loop->body);
         }
 

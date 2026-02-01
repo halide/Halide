@@ -114,7 +114,7 @@ protected:
     }
 
     void visit(const For *op) override {
-        if (can_prove(op->extent > 0)) {
+        if (can_prove(op->min <= op->max)) {
             // The loop body definitely runs
             IRVisitor::visit(op);
         } else {

@@ -91,7 +91,8 @@ HALIDE_MUST_USE_RESULT bool reduce_expr_modulo(const Expr &e, int64_t modulus, i
 
 void modulus_remainder_test();
 
-/** The greatest common divisor of two integers */
+/** The greatest common divisor of two integers. Returns a positive result,
+ * unless both args are INT64_MIN. */
 int64_t gcd(int64_t, int64_t);
 
 /** The least common multiple of two integers */

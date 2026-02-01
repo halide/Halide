@@ -20,11 +20,13 @@ set(tests
     extern.py
     float_precision_test.py
     iroperator.py
+    memoize.py
     multi_method_module_test.py
     multipass_constraints.py
     pystub.py
     rdom.py
     realize_warnings.py
+    serialization.py
     target.py
     tuple_select.py
     type.py

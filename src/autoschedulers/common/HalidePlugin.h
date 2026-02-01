@@ -4,8 +4,6 @@
 #define HALIDE_KEEP_MACROS
 #include "Halide.h"
 
-#include "Errors.h"
-
 #define REGISTER_AUTOSCHEDULER(NAME)                                  \
     struct HALIDE_EXPORT Register##NAME {                             \
         Register##NAME() {                                            \

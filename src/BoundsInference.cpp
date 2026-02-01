@@ -34,39 +34,29 @@ bool var_name_match(const string &candidate, const string &var) {
     return (candidate == var) || Internal::ends_with(candidate, "." + var);
 }
 
-class DependsOnBoundsInference : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Variable *var) override {
-        if (ends_with(var->name, ".max") ||
-            ends_with(var->name, ".min")) {
-            result = true;
-        }
-    }
-
-    void visit(const Call *op) override {
-        if (op->name == Call::buffer_get_min ||
-            op->name == Call::buffer_get_max) {
-            result = true;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-public:
-    bool result = false;
-    DependsOnBoundsInference() = default;
-};
-
 bool depends_on_bounds_inference(const Expr &e) {
-    DependsOnBoundsInference d;
-    e.accept(&d);
-    return d.result;
+    bool result = false;
+    visit_with(
+        e,
+        [&](auto *, const Variable *var) {
+            if (ends_with(var->name, ".max") ||
+                ends_with(var->name, ".min")) {
+                result = true;
+            }  //
+        },
+        [&](auto *self, const Call *op) {
+            if (op->name == Call::buffer_get_min ||
+                op->name == Call::buffer_get_max) {
+                result = true;
+            } else {
+                self->visit_base(op);
+            }  //
+        });
+    return result;
 }
 
 /** Compute the bounds of the value of some variable defined by an
  * inner let stmt or for loop. E.g. for the stmt:
- *
  *
  * for x from 0 to 10:
  *  let y = x + 2;
@@ -114,10 +104,7 @@ private:
     }
 
     void visit(const For *op) override {
-        // At this stage of lowering, loop_min and loop_max
-        // conveniently exist in scope.
-        Interval in(Variable::make(Int(32), op->name + ".loop_min"),
-                    Variable::make(Int(32), op->name + ".loop_max"));
+        Interval in(op->min, op->max);
 
         if (op->name == var) {
             result = in;
@@ -1308,7 +1295,7 @@ public:
             }
         }
 
-        return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+        return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
     }
 
     Scope<> let_vars_in_scope;
@@ -1346,6 +1333,7 @@ Stmt bounds_inference(Stmt s,
     vector<vector<Function>> fused_func_groups;
     for (const vector<string> &group : fused_groups) {
         vector<Function> fs;
+        fs.reserve(group.size());
         for (const string &fname : group) {
             fs.push_back(env.find(fname)->second);
         }
@@ -1391,7 +1379,7 @@ Stmt bounds_inference(Stmt s,
     s = Block::make(Evaluate::make(marker), s);
 
     // Add a synthetic outermost loop to act as 'root'.
-    s = For::make("<outermost>", 0, 1, ForType::Serial, Partition::Never, DeviceAPI::None, s);
+    s = For::make("<outermost>", 0, 0, ForType::Serial, Partition::Never, DeviceAPI::None, s);
 
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
                         outputs, func_bounds, target)
