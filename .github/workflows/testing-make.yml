@@ -1,0 +1,58 @@
+name: Makefile testing
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    paths:
+      - '**.h'
+      - '**.c'
+      - '**.cpp'
+      - '.github/workflows/testing-make.yml'
+      - 'Makefile'
+
+jobs:
+  build_make:
+    name: Makefile build (${{ matrix.os }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - macos-15-intel
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+        if: runner.os == 'Linux'
+
+      - name: Install dependencies
+        run: brew install llvm@21 lld@21 libjpeg-turbo libpng pkg-config protobuf
+        if: runner.os == 'macOS'
+
+      - name: Build tests
+        run: make -j$(nproc) build_tests
+
+      - run: make test_internal
+        continue-on-error: true
+
+      - run: make test_correctness
+        continue-on-error: true
+
+      - run: make test_generator
+        continue-on-error: true
+
+      - run: make test_error
+        continue-on-error: true
+
+      - run: make test_warning
+        continue-on-error: true
+
+      - run: make test_apps
+        continue-on-error: true
+
+      - run: make test_tutorial
+        continue-on-error: true
