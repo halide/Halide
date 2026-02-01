@@ -16,13 +16,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-24.04
-            bits: 64
-          - os: ubuntu-24.04
-            bits: 32
-          - os: macos-15
-          - os: macos-15-intel
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - macos-15-intel
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -34,6 +31,14 @@ jobs:
 
       - name: Install dependencies
         run: brew install llvm@21 lld@21 libjpeg-turbo libpng pkgconf protobuf
+        if: runner.os == 'macOS'
+
+      - name: Set up environment
+        run: "true" # TODO
+        if: runner.os == 'Linux'
+
+      - name: Set up environment
+        run: echo "LLVM_CONFIG=$(brew --prefix llvm)/bin/llvm-config" >> $GITHUB_ENV
         if: runner.os == 'macOS'
 
       - name: Build tests
