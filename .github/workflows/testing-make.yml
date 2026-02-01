@@ -1,4 +1,4 @@
-name: Makefile testing
+name: Makefile
 
 env:
   LLVM_VERSION: '21'
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build_make:
-    name: Makefile build (${{ matrix.os }})
+    name: build on ${{ matrix.os }}
 
     strategy:
       fail-fast: false
