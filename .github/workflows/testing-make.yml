@@ -16,10 +16,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-15
-          - macos-15-intel
+        include:
+          - os: ubuntu-24.04
+            bits: 64
+          - os: ubuntu-24.04
+            bits: 32
+          - os: macos-15
+          - os: macos-15-intel
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -30,11 +33,11 @@ jobs:
         if: runner.os == 'Linux'
 
       - name: Install dependencies
-        run: brew install llvm@21 lld@21 libjpeg-turbo libpng pkg-config protobuf
+        run: brew install llvm@21 lld@21 libjpeg-turbo libpng pkgconf protobuf
         if: runner.os == 'macOS'
 
       - name: Build tests
-        run: make -j$(nproc) build_tests
+        run: make -j$(getconf _NPROCESSORS_ONLN) build_tests
 
       - run: make test_internal
         continue-on-error: true
