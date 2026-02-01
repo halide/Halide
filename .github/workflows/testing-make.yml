@@ -35,25 +35,24 @@ jobs:
 
       - name: Install dependencies
         run: |
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
-          echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-$LLVM_VERSION main" | sudo tee /etc/apt/sources.list.d/llvm-$LLVM_VERSION.list
-          sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config \
-            llvm-$LLVM_VERSION-dev clang-$LLVM_VERSION lld-$LLVM_VERSION liblld-$LLVM_VERSION-dev \
-            libpng-dev libjpeg-turbo8-dev
-        if: runner.os == 'Linux'
-
-      - name: Install dependencies
-        run: brew install llvm@$LLVM_VERSION lld@$LLVM_VERSION libjpeg-turbo libpng pkgconf protobuf
-        if: runner.os == 'macOS'
-
-      - name: Set up environment
-        run: echo "LLVM_CONFIG=llvm-config-$LLVM_VERSION" >> "$GITHUB_ENV"
-        if: runner.os == 'Linux'
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+            echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-$LLVM_VERSION main" | sudo tee /etc/apt/sources.list.d/llvm-$LLVM_VERSION.list
+            sudo apt-get update
+            sudo apt-get install -y \
+              build-essential pkg-config libpng-dev libjpeg-turbo8-dev \
+              llvm-$LLVM_VERSION-dev clang-$LLVM_VERSION lld-$LLVM_VERSION liblld-$LLVM_VERSION-dev
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew install llvm@$LLVM_VERSION lld@$LLVM_VERSION libjpeg-turbo libpng pkgconf protobuf
+          fi
 
       - name: Set up environment
-        run: echo "LLVM_CONFIG=$(brew --prefix llvm@$LLVM_VERSION)/bin/llvm-config" >> $GITHUB_ENV
-        if: runner.os == 'macOS'
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            echo "LLVM_CONFIG=llvm-config-$LLVM_VERSION" >> "$GITHUB_ENV"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            echo "LLVM_CONFIG=$(brew --prefix llvm@$LLVM_VERSION)/bin/llvm-config" >> "$GITHUB_ENV"
+          fi
 
       - name: Build tests
         run: make -j$(getconf _NPROCESSORS_ONLN) build_tests
