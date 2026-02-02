@@ -47,7 +47,7 @@ pillow==11.3.0
     # via imageio
 pluggy==1.6.0
     # via pytest
-protobuf==6.31.1
+protobuf==6.33.5
     # via onnx
 pybind11==3.0.0
 pygments==2.19.2
