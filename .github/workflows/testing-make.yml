@@ -6,12 +6,6 @@ env:
 on:
   pull_request:
     types: [ opened, synchronize, reopened ]
-    paths:
-      - '**.h'
-      - '**.c'
-      - '**.cpp'
-      - '.github/workflows/testing-make.yml'
-      - 'Makefile'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
