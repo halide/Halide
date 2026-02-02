@@ -1351,7 +1351,12 @@ void CodeGen_C::visit(const Mod *op) {
         string arg0 = print_expr(op->a);
         string arg1 = print_expr(op->b);
         ostringstream rhs;
-        rhs << "fmod(" << arg0 << ", " << arg1 << ")";
+        if (op->type.is_scalar()) {
+            rhs << "::halide_cpp_fmod(";
+        } else {
+            rhs << print_type(op->type) << "_ops::fmod(";
+        }
+        rhs << arg0 << ", " << arg1 << ")";
         print_assignment(op->type, rhs.str());
     } else {
         visit_binop(op->type, op->a, op->b, "%");
@@ -1845,8 +1850,24 @@ void CodeGen_C::visit(const Call *op) {
             << " + " << print_expr(base_offset) << "), /*rw*/0, /*locality*/0), 0)";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
+    } else if (op->is_intrinsic(Call::strict_fma)) {
+        internal_assert(op->args.size() == 3)
+            << "Wrong number of args for strict_fma: " << op->args.size();
+        if (op->type.is_scalar()) {
+            rhs << "::halide_cpp_fma("
+                << print_expr(op->args[0]) << ", "
+                << print_expr(op->args[1]) << ", "
+                << print_expr(op->args[2]) << ")";
+        } else {
+            rhs << print_type(op->type) << "_ops::fma("
+                << print_expr(op->args[0]) << ", "
+                << print_expr(op->args[1]) << ", "
+                << print_expr(op->args[2]) << ")";
+        }
     } else if (op->is_strict_float_intrinsic()) {
-        // This depends on the generated C++ being compiled without -ffast-math
+        // This depends on the generated C++ being compiled without
+        // -ffast-math. Note that this would not be correct for strict_fma, so
+        // we handle it separately above.
         Expr equiv = unstrictify_float(op);
         rhs << print_expr(equiv);
     } else if (op->is_intrinsic()) {

@@ -834,6 +834,7 @@ void CodeGen_Metal_Dev::init_module() {
 
     // Write out the Halide math functions.
     src_stream << "#pragma clang diagnostic ignored \"-Wunused-function\"\n"
+               << "#pragma METAL fp math_mode(" << (any_strict_float ? "safe)\n" : "fast)\n")
                << "#include <metal_stdlib>\n"
                << "using namespace metal;\n"  // Seems like the right way to go.
                << "namespace {\n"
