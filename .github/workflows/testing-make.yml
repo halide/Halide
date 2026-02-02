@@ -43,13 +43,13 @@ jobs:
       - name: Set up environment
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
-            echo "LLVM_CONFIG=llvm-config-$LLVM_VERSION" >> "$GITHUB_ENV"
+            echo "LLVM_CONFIG=llvm-config-$LLVM_VERSION" | tee -a "$GITHUB_ENV"
           elif [ "$RUNNER_OS" = "macOS" ]; then
-            echo "LLVM_CONFIG=$(brew --prefix llvm@$LLVM_VERSION)/bin/llvm-config" >> "$GITHUB_ENV"
+            echo "LLVM_CONFIG=$(brew --prefix llvm@$LLVM_VERSION)/bin/llvm-config" | tee -a "$GITHUB_ENV"
           fi
+          echo "MAKEFLAGS=-j $(getconf _NPROCESSORS_ONLN)" | tee -a "$GITHUB_ENV"
 
-      - name: Build tests
-        run: make -j$(getconf _NPROCESSORS_ONLN) build_tests
+      - run: make build_tests
 
       - run: make test_internal
         continue-on-error: true
