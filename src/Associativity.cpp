@@ -102,8 +102,14 @@ bool associative_op_pattern_match(const Expr &e,
         << "Expr has type " << e.type() << ", while pattern has type " << op.type() << "\n";
     map<string, Expr> result;
     if (expr_match(op, e, result)) {
-        debug(5) << "Found associative ops for " << e << " -> " << op
-                 << ", y_part: " << result["y0"] << "\n";
+        debug(5) << "Found associative ops for " << e << " -> " << op << ":\n"
+                 << [&] {
+                        std::stringstream ss;
+                        for (const auto &[var, val] : result) {
+                            ss << "  " << var << " -> " << val << "\n";
+                        }
+                        return ss.str();
+                    }();
 
         for (size_t i = 0; i < x_names.size(); ++i) {
             const auto &iter = result.find("x" + std::to_string(i));
