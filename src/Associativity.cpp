@@ -269,23 +269,12 @@ bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_
 // all vertices that are reachable from a given vertex. If a subgraph is fully
 // contained in another subgraph, remove it from the final output.
 vector<set<int>> compute_subgraphs(vector<set<int>> dependencies) {
-    // Find all transitive dependencies and add them to the graph
-    // TODO(psuriana): there might be a better way to find all the transitive dependencies
-    bool change = true;
-    while (change) {
-        change = false;
+    // Compute the transitive closure using Warshall's algorithm.
+    for (size_t k = 0; k < dependencies.size(); ++k) {
         for (size_t i = 0; i < dependencies.size(); ++i) {
-            for (size_t j = 0; j < dependencies.size(); ++j) {
-                if (i == j) {
-                    continue;
-                }
-                if (dependencies[i].count(j)) {
-                    for (const auto &idx : dependencies[j]) {
-                        if (dependencies[i].count(idx) == 0) {
-                            dependencies[i].insert(idx);
-                            change = true;
-                        }
-                    }
+            if (dependencies[i].count(k)) {
+                for (int j : dependencies[k]) {
+                    dependencies[i].insert(j);
                 }
             }
         }
