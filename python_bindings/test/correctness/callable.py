@@ -4,12 +4,6 @@ import numpy as np
 from simplepy_generator import SimplePy
 import simplecpp_pystub  # noqa: F401 - needed for create_callable_from_generator("simplecpp") to work
 
-import sys
-
-print("Search paths (sys.path):")
-for path in sys.path:
-    print(path)
-
 
 def test_callable():
     p_int16 = hl.Param(hl.Int(16), 42)
@@ -162,16 +156,14 @@ def test_simple(callable_factory):
     except hl.HalideError as e:
         assert (
             "Argument buffer_input was not specified by either positional or keyword argument."
-            in str(e))
+            in str(e)
+        )
     else:
         assert False, "Did not see expected exception!"
 
     try:
         # Arg specified by pos + kw
-        simple(b_in,
-               buffer_input=b_in,
-               float_arg=float_in,
-               simple_output=b_out)
+        simple(b_in, buffer_input=b_in, float_arg=float_in, simple_output=b_out)
     except hl.HalideError as e:
         assert "Argument buffer_input specified multiple times." in str(e)
     else:
@@ -207,7 +199,7 @@ def test_callable_buffer_conventions():
 
         output_extents = hl.Buffer(hl.Int(32), [3])
         output_strides = hl.Buffer(hl.Int(32), [3])
-
+        
         # C-contiguous input reverses dimensions.
         # Note that numpy defaults to `order='C'`.
         input_c = np.zeros((16, 12, 3), dtype=np.int32, order='C')
@@ -235,9 +227,7 @@ def test_callable_buffer_conventions():
         try:
             echo_dims_callable(input_noncontig, output_extents, output_strides)
         except hl.HalideError as e:
-            assert str(
-                e
-            ) == "Invalid buffer: only C or F contiguous buffers are supported"
+            assert "Invalid buffer: only C or F contiguous buffers are supported" in str(e)
         else:
             assert False, "Did not see expected exception!"
 
