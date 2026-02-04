@@ -265,9 +265,13 @@ bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_
                       x_parts, exprs, assoc_op);
 }
 
-// Given dependencies of each tuple element, compute the set of subgraphs:
-// all vertices that are reachable from a given vertex. If a subgraph is fully
-// contained in another subgraph, remove it from the final output.
+bool is_subset_of(const std::set<int> &a, const std::set<int> &b) {
+    return std::includes(b.begin(), b.end(), a.begin(), a.end());
+}
+
+// Compute the dependency subgraphs for a tuple reduction. First closes the
+// dependency relation transitively, then returns only the earliest (by index)
+// maximal dependency sets, clearing any set contained in a dominating one.
 vector<set<int>> compute_subgraphs(vector<set<int>> dependencies) {
     // Compute the transitive closure using Warshall's algorithm.
     for (size_t k = 0; k < dependencies.size(); ++k) {
@@ -280,31 +284,25 @@ vector<set<int>> compute_subgraphs(vector<set<int>> dependencies) {
         }
     }
 
+    // Keep only maximal dependency sets. A set is removed if another
+    // set strictly contains it or is identical but has a lower index.
     vector<set<int>> subgraphs(dependencies.size());
     for (size_t i = 0; i < dependencies.size(); ++i) {
-        // Check if the current subgraph is a subset of another
-        const auto &current = dependencies[i];
-        if (current.empty()) {
+        if (dependencies[i].empty()) {
             continue;
         }
-        bool should_remove = false;
+        bool is_maximal = true;
         for (size_t j = 0; j < dependencies.size(); ++j) {
-            const auto &other = dependencies[j];
-            if ((i == j) || (current.size() > other.size()) || (j < i && subgraphs[i].empty())) {
-                continue;
-            }
-            vector<int> diff;
-            // Compute the vertices in the current set that are not contained in the other
-            std::set_difference(current.begin(), current.end(), other.begin(), other.end(),
-                                std::inserter(diff, diff.begin()));
-            if (diff.empty()) {
-                // 'current' is fully contained in 'other'
-                should_remove = true;
+            const bool can_dominate =
+                (dependencies[j].size() > dependencies[i].size()) ||
+                (dependencies[j].size() == dependencies[i].size() && j < i);
+            if (can_dominate && is_subset_of(dependencies[i], dependencies[j])) {
+                is_maximal = false;
                 break;
             }
         }
-        if (!should_remove) {
-            subgraphs[i] = current;
+        if (is_maximal) {
+            subgraphs[i] = dependencies[i];
         }
     }
     return subgraphs;
