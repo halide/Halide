@@ -336,19 +336,6 @@ const vector<AssociativePattern> &get_ops_table_helper(const vector<Type> &types
     return table_it->second;
 }
 
-std::string print_types(const vector<Type> &types) {
-    std::ostringstream stream;
-    stream << "{";
-    for (size_t i = 0; i < types.size(); ++i) {
-        if (i > 0) {
-            stream << ", ";
-        }
-        stream << types[i];
-    }
-    stream << "}";
-    return stream.str();
-}
-
 }  // anonymous namespace
 
 const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
