@@ -265,7 +265,11 @@ bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_
                       x_parts, exprs, assoc_op);
 }
 
-void add_transitive_dependencies(vector<set<int>> &dependencies) {
+// Given dependencies of each tuple element, compute the set of subgraphs:
+// all vertices that are reachable from a given vertex. If a subgraph is fully
+// contained in another subgraph, remove it from the final output.
+vector<set<int>> compute_subgraphs(vector<set<int>> dependencies) {
+    // Find all transitive dependencies and add them to the graph
     // TODO(psuriana): there might be a better way to find all the transitive dependencies
     bool change = true;
     while (change) {
@@ -286,12 +290,7 @@ void add_transitive_dependencies(vector<set<int>> &dependencies) {
             }
         }
     }
-}
 
-// Given dependencies of each tuple element, compute the set of subgraphs:
-// all vertices that are reachable from a given vertex. If a subgraph is fully
-// contained in another subgraph, remove it from the final output.
-vector<set<int>> compute_subgraphs(vector<set<int>> dependencies) {
     vector<set<int>> subgraphs(dependencies.size());
     for (size_t i = 0; i < dependencies.size(); ++i) {
         // Check if the current subgraph is a subset of another
@@ -376,8 +375,6 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
     vector<set<int>> subgraphs;
     if (!all_independent) {
         debug(5) << "There are cross-dependencies. Need to prove associativity in bulk.\n";
-        // Find all transitive dependencies and add them to the graph
-        add_transitive_dependencies(dependencies);
         // Decompose the tuple into subgraphs and solve for each separately
         subgraphs = compute_subgraphs(dependencies);
     } else {
