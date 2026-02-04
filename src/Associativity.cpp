@@ -228,7 +228,7 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 }
 
 // Return a pair of booleans indicating if an operator is associative.
-// 'assoc_op' contains the the equivalent associative binary/unary operator
+// 'assoc_op' contains the equivalent associative binary/unary operator
 // for that operator. If the operator is non-associative, 'assoc_op' is not valid.
 bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_x_names,
                             const vector<string> &op_y_names, const vector<Expr> &x_parts,
@@ -239,7 +239,7 @@ bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_
             // An update that just assigns some value is not associative,
             // because there's no good identity. An identity is necessary
             // because things like rfactor will combine the identity with
-            // partially-computed values and expect it to do nothing. For an
+            // partially computed values and expect it to do nothing. For an
             // example, see https://github.com/halide/Halide/issues/7893
             return false;
         } else if (equal(exprs[0], Variable::make(t, op_x_names[0]))) {
@@ -356,8 +356,8 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
         }
         x_parts[idx] = csr.x_part;
         dependencies[idx] = csr.x_dependencies;
-        // Add dependency on itself (regardless whether it actually depends on
-        // its previous values) for the purpose of computing the subgraph
+        // Add a dependency on itself (regardless of whether it actually
+        // depends on its previous values) to compute the subgraph
         dependencies[idx].insert(idx);
 
         exprs[idx] = common_subexpression_elimination(exprs[idx]);
