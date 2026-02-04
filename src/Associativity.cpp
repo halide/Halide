@@ -18,7 +18,6 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::pair;
 using std::set;
 using std::string;
 using std::vector;
@@ -187,7 +186,6 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
             continue;
         }
 
-        vector<pair<Expr, Expr>> replacement;  // find -> replacement
         for (size_t index = 0; index < op_y_names.size(); ++index) {
             const auto &y_iter = pattern_match.find("y" + std::to_string(index));
             if (y_iter == pattern_match.end()) {
@@ -202,20 +200,25 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 
             assoc_op.xs[index] = {op_x_names[index], x_parts[index]};
             assoc_op.ys[index] = {op_y_names[index], y_part};
-            replacement.emplace_back(y_part, Variable::make(y_part.type(), op_y_names[index]));
         }
         if (!matched) {
             continue;
         }
-        for (size_t index = 0; index < exprs.size(); ++index) {
-            Expr e = exprs[index];
-            // Order of substitution matters, e.g. in the argmin case, _y_0 -> g(rx)[0]
-            // and _y_1 -> rx. If we substitute the 2nd element rx first, substitution
-            // of g(rx)[0] will fail.
-            for (const auto &iter : replacement) {
-                e = substitute(iter.first, iter.second, e);
+        // Build the concrete ops by renaming the pattern's abstract
+        // wildcard variables (x0, y0, k0, ...) to the actual variable
+        // names used in the expressions.
+        map<string, Expr> replacement;
+        for (size_t index = 0; index < op_x_names.size(); ++index) {
+            replacement["x" + std::to_string(index)] = Variable::make(exprs[index].type(), op_x_names[index]);
+            replacement["y" + std::to_string(index)] = Variable::make(exprs[index].type(), op_y_names[index]);
+        }
+        for (const auto &[wildcard, identity] : pattern_match) {
+            if (wildcard[0] == 'k') {
+                replacement[wildcard] = identity;
             }
-            assoc_op.pattern.ops[index] = e;
+        }
+        for (size_t index = 0; index < pattern.ops.size(); ++index) {
+            assoc_op.pattern.ops[index] = substitute(replacement, pattern.ops[index]);
             assoc_op.pattern.identities[index] = pattern.identities[index];
         }
         assoc_op.pattern.is_commutative = pattern.is_commutative;
