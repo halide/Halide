@@ -42,11 +42,11 @@ Full releases may be installed with `pip` like so:
 $ pip install halide
 ```
 
-Every commit to `main` is published to Test PyPI as a development version and
-these may be installed with a few extra flags:
+Every commit to `main` is published to a private PyPI index as a development
+version and these may be installed with a few extra flags:
 
 ```shell
-$ pip install halide --pre --extra-index-url https://test.pypi.org/simple
+$ pip install halide --pre --extra-index-url https://pypi.halide-lang.org/simple
 ```
 
 Currently, we provide wheels for: Windows x86-64, macOS x86-64, macOS arm64, and
