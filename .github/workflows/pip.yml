@@ -246,6 +246,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         if: github.event_name == 'push' && github.ref_name == 'main'
         with:
+          user: upload
           password: ${{ secrets.HALIDE_PYPI_PASSWORD }}
           repository-url: https://pypi.halide-lang.org/legacy/
 
