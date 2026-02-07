@@ -1,6 +1,9 @@
 #include "PyGenerator.h"
 
+#include <optional>
 #include <pybind11/embed.h>
+#include <string>
+#include <vector>
 
 namespace Halide {
 namespace PythonBindings {
@@ -126,6 +129,43 @@ public:
     }
 };
 
+// Returns a vector of mutable char * pointers corresponding to each string in `strs`.
+// `strs` must outlive the input and the pointers are not stable if the std::strings are mutated.
+// Arg (pun intended), this is all because generate_filter_main wants a mutable char **argv.
+std::vector<char *> get_mutable_c_strs(const std::vector<std::string> &strs) {
+    std::vector<char *> c_strs;
+    c_strs.reserve(strs.size());
+    for (const auto &s : strs) {
+        c_strs.push_back(const_cast<char *>(s.c_str()));
+    }
+    return c_strs;
+}
+
+// PyBind11 treats `const std::optional<std::vector<std::string>> &` as an argument
+// that can be a list of strings or None.
+void main_impl(const std::optional<std::vector<std::string>> &argv) {
+    // If the caller passed in args, use them.
+    // Otherwise, parse them from sys.argv.
+    // We need to make a copy in either case because of how PyBind11 translates
+    // the input list to a optional vector of strings.
+    std::vector<std::string> argv_copy;
+    if (argv.has_value()) {
+        argv_copy = *argv;
+    } else {
+        py::object py_sys_argv = py::module_::import("sys").attr("argv");
+        argv_copy = args_to_vector<std::string>(py_sys_argv);
+    }
+
+    std::vector<char *> mutable_argv = get_mutable_c_strs(argv_copy);
+    const int result = Halide::Internal::generate_filter_main((int)mutable_argv.size(), mutable_argv.data(), PyGeneratorFactoryProvider());
+    if (result != 0) {
+        // Some paths in generate_filter_main() will fail with user_error or similar (which throws an exception
+        // due to how libHalide is built for Python), but some paths just return an error code. For consistency,
+        // handle both by throwing a C++ exception, which pybind11 turns into a Python exception.
+        throw std::runtime_error("Generator failed: " + std::to_string(result));
+    }
+}
+
 }  // namespace
 
 void define_generator(py::module &m) {
@@ -165,22 +205,7 @@ void define_generator(py::module &m) {
                 return o.str();
             });
 
-    m.def("main", []() -> void {
-        py::object argv_object = py::module_::import("sys").attr("argv");
-        std::vector<std::string> argv_vector = args_to_vector<std::string>(argv_object);
-        std::vector<char *> argv;
-        argv.reserve(argv_vector.size());
-        for (auto &s : argv_vector) {
-            argv.push_back(const_cast<char *>(s.c_str()));
-        }
-        int result = Halide::Internal::generate_filter_main((int)argv.size(), argv.data(), PyGeneratorFactoryProvider());
-        if (result != 0) {
-            // Some paths in generate_filter_main() will fail with user_error or similar (which throws an exception
-            // due to how libHalide is built for python), but some paths just return an error code, so
-            // be sure to handle both.
-            throw std::runtime_error("Generator failed: " + std::to_string(result));
-        }
-    });
+    m.def("main", &main_impl, py::arg("argv") = py::none());
 
     m.def("_unique_name", []() -> std::string {
         return ::Halide::Internal::unique_name('p');
