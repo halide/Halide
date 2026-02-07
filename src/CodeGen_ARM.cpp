@@ -1001,8 +1001,8 @@ void CodeGen_ARM::init_module() {
     // TODO: https://github.com/halide/Halide/issues/8872
     // if (target.features_any_of({Target::SVE, Target::SVE2})) {
     if (target.has_feature(Target::SVE2)) {
-        user_assert(target.vector_bits != 0) << "For SVE/SVE2 support, target_vector_bits=<size> must be set in target.\n";
-        user_assert((target.vector_bits % 128) == 0) << "For SVE/SVE2 support, target_vector_bits must be a multiple of 128.\n";
+        user_assert(target.vector_bits != 0) << "For SVE/SVE2 support, Target::vector_bits must be set. For generator target strings, add \"vector_bits_<bits>\".\n";
+        user_assert((target.vector_bits % 128) == 0) << "For SVE/SVE2 support, Target::vector_bits must be a multiple of 128.\n";
     } else if (target.has_feature(Target::SVE)) {
         user_warning << "Halide does not support SVE for now. Use SVE2 if your target device supports it.\n";
     }
