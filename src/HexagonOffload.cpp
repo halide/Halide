@@ -1101,11 +1101,8 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         write_entire_file(input.pathname(), shared_object);
 
         debug(1) << "Signing tool: (" << signer << ")\n";
-        std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
-        int result = system(cmd.c_str());
-        internal_assert(result == 0)
-            << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
-            << " for cmd (" << cmd << ")";
+        int result = run_process({signer, input.pathname(), output.pathname()});
+        internal_assert(result == 0) << "HL_HEXAGON_CODE_SIGNER failed: result = " << result;
 
         shared_object = read_entire_file(output.pathname());
     }
