@@ -17,22 +17,18 @@ imageio==2.37.2
     # via halide
 iniconfig==2.3.0
     # via pytest
-ml-dtypes==0.5.4
-    # via onnx
 ninja==1.11.1.4
 numpy==2.2.6 ; python_full_version < '3.11'
     # via
     #   halide
     #   imageio
-    #   ml-dtypes
     #   onnx
 numpy==2.4.2 ; python_full_version >= '3.11'
     # via
     #   halide
     #   imageio
-    #   ml-dtypes
     #   onnx
-onnx==1.20.1
+onnx==1.18.0
 packaging==26.0
     # via
     #   pytest
