@@ -43,7 +43,7 @@ packaging==25.0
     #   setuptools-scm
 pathspec==0.12.1
     # via scikit-build-core
-pillow==11.3.0
+pillow==12.1.1
     # via imageio
 pluggy==1.6.0
     # via pytest
