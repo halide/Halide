@@ -73,7 +73,9 @@ apps = [
 ]
 tools = [
     "cmake>=3.28",
-    "ninja>=1.11",
+    # 1.13.0 uses LF in .rsp files, breaking MSVC link.exe.
+    # See: https://github.com/ninja-build/ninja/pull/2616
+    "ninja>=1.11,!=1.13.0",
     "ruff>=0.12",
     "tbump>=6.11",
 ]
@@ -87,6 +89,7 @@ Repository = "https://github.com/halide/Halide.git"
 
 [tool.scikit-build]
 cmake.version = ">=3.28"
+ninja.version = ">=1.11,!=1.13.0"
 wheel.install-dir = "halide"
 sdist.include = ["dependencies/"]
 sdist.exclude = [".github/", "apps/", "test/", "tutorial/", "dependencies/update-*.sh"]

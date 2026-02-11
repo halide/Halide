@@ -2,80 +2,74 @@
 #    uv export --all-groups --no-hashes --no-emit-project -o requirements.txt
 cli-ui==0.19.0
     # via tbump
-cmake==4.1.0
+cmake==4.2.1
 colorama==0.4.6
     # via
     #   cli-ui
     #   pytest
 docopt==0.6.2
     # via tbump
-exceptiongroup==1.3.0 ; python_full_version < '3.11'
+exceptiongroup==1.3.1 ; python_full_version < '3.11'
     # via
     #   pytest
     #   scikit-build-core
-imageio==2.37.0
+imageio==2.37.2
     # via halide
-importlib-metadata==8.7.0 ; python_full_version < '3.10'
-    # via setuptools-scm
-iniconfig==2.1.0
+iniconfig==2.3.0
     # via pytest
-ninja==1.13.0
-numpy==2.0.2 ; python_full_version < '3.10'
+ml-dtypes==0.5.4
+    # via onnx
+ninja==1.11.1.4
+numpy==2.2.6 ; python_full_version < '3.11'
     # via
     #   halide
     #   imageio
+    #   ml-dtypes
     #   onnx
-numpy==2.2.6 ; python_full_version == '3.10.*'
+numpy==2.4.2 ; python_full_version >= '3.11'
     # via
     #   halide
     #   imageio
+    #   ml-dtypes
     #   onnx
-numpy==2.3.2 ; python_full_version >= '3.11'
-    # via
-    #   halide
-    #   imageio
-    #   onnx
-onnx==1.18.0
-packaging==25.0
+onnx==1.20.1
+packaging==26.0
     # via
     #   pytest
     #   scikit-build-core
     #   setuptools-scm
-pathspec==0.12.1
+pathspec==1.0.4
     # via scikit-build-core
-pillow==11.3.0
+pillow==12.1.1
     # via imageio
 pluggy==1.6.0
     # via pytest
-protobuf==6.31.1
+protobuf==6.33.5
     # via onnx
-pybind11==3.0.0
+pybind11==3.0.1
 pygments==2.19.2
     # via pytest
-pytest==8.4.1
-ruff==0.12.8
-schema==0.7.7
+pytest==9.0.2
+ruff==0.15.0
+schema==0.7.8
     # via tbump
-scikit-build-core==0.11.5
-setuptools==80.9.0
+scikit-build-core==0.11.6
+setuptools==82.0.0
     # via setuptools-scm
-setuptools-scm==8.3.1
+setuptools-scm==9.2.2
 tabulate==0.9.0
     # via cli-ui
 tbump==6.11.0
-tomli==2.2.1 ; python_full_version < '3.11'
+tomli==2.4.0 ; python_full_version < '3.11'
     # via
     #   pytest
     #   scikit-build-core
     #   setuptools-scm
 tomlkit==0.11.8
     # via tbump
-typing-extensions==4.14.1
+typing-extensions==4.15.0
     # via
     #   exceptiongroup
     #   onnx
-    #   setuptools-scm
 unidecode==1.4.0
     # via cli-ui
-zipp==3.23.0 ; python_full_version < '3.10'
-    # via importlib-metadata
