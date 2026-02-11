@@ -1,6 +1,7 @@
 # Halide Bindings for Python
 
 <!-- TOC -->
+
 * [Halide Bindings for Python](#halide-bindings-for-python)
   * [Acquiring the Python bindings](#acquiring-the-python-bindings)
   * [Building the Python bindings](#building-the-python-bindings)
@@ -29,6 +30,7 @@
       * [Notable Differences Between C++ and Python Generators](#notable-differences-between-c-and-python-generators)
   * [Keeping Up To Date](#keeping-up-to-date)
   * [License](#license)
+
 <!-- TOC -->
 
 Halide provides Python bindings for most of its public API. Python 3.10 (or
@@ -72,27 +74,35 @@ bindings require Halide to be built with RTTI and exceptions **enabled**, which
 in turn requires LLVM to be built with RTTI, but this is not the default for
 LLVM.
 
-### Using CMake directly
-
 Before configuring with CMake, you should ensure you have prerequisite packages
 installed in your local Python environment. The best way to get set up is to use
-a virtual environment:
+a virtual environment with `uv`:
 
 ```shell
-$ python3 -m venv venv
-$ . venv/bin/activate
-$ python3 -m pip install -U pip "setuptools[core]" wheel
-$ python3 -m pip install -r requirements.txt
+$ uv sync --no-install-project
 ```
 
-Or, if using `uv` the following command is equivalent:
+If you don't have LLVM installed already, you can try using the same ones the
+buildbots use by adding `--group ci-llvm-<VERSION>` to the `uv sync` command,
+where `<VERSION>` is the LLVM major version number (e.g. `23`) or `main`.
+
+If you install `ci-llvm-*`, you can set `Halide_LLVM_ROOT=$(halide-llvm 
+--prefix)` in your environment.
+
+Ensure you have `flatbuffers` and `wabt` installed, too.
+
+### Using wheel infrastructure
+
+When using `uv`, this entire workflow can be run via:
 
 ```shell
-uv venv --python 3.12  # for example
-uv pip install -r requirements.txt
+$ uv pip install . --no-build-isolation
 ```
 
-Then build and install Halide:
+### Using CMake directly
+
+Assuming dependencies are available, you can build the Python bindings directly
+with CMake:
 
 ```shell
 $ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -106,40 +116,6 @@ package:
 ```shell
 $ export PYTHONPATH="$PWD/.local/lib/python3/site-packages"
 ```
-
-### Using wheel infrastructure
-
-You can also follow the same procedure that we use to build the published
-wheels. First, create a virtual environment as before, but omit
-`requirements.txt`
-
-```shell
-$ python3 -m venv venv
-$ . venv/bin/activate
-$ python3 -m pip install -U pip "setuptools[core]" wheel
-```
-
-Next, ensure you have installed Halide's dependencies to locations where CMake
-can find them, given your environment. The variables `Halide_LLVM_ROOT`,
-`flatbuffers_ROOT`, and `wabt_ROOT` specify locations for the relevant packages
-directly. If they are all installed to a common prefix, you can add it to the
-environment variable `CMAKE_PREFIX_PATH`.
-
-Then it should be as simple as:
-
-```shell
-$ pip install .
-```
-
-When using `uv`, this entire workflow can be run via
-
-```shell
-$ uv sync
-```
-
-If you need a different Python version, you can add `--python 3.xy` to this 
-command. If you wish to install compatible build tools into the venv (e.g. 
-CMake, ninja), rather than use your system tools, pass `--group tools` here.
 
 ## Documentation and Examples
 
@@ -538,9 +514,9 @@ add_halide_python_extension_library(my_extension
 This compiles the Generator code in `logical_op_generator.py` with the
 registered name `logical_op_generator` to produce the target `xor_filter`, and
 then wraps the compiled output with a Python extension. The result will be a
-shared library of the form `<target>.<soabi>.so`, where `<soabi>` describes 
-the specific Python version and platform (e.g., `cpython-310-darwin` for 
-Python 3.10 on OSX.)
+shared library of the form `<target>.<soabi>.so`, where `<soabi>` describes the
+specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10
+on OSX.)
 
 Note that you can combine multiple Halide libraries into a single Python module;
 this is convenient for packaging, but also because all the libraries in a single

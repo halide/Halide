@@ -230,11 +230,11 @@ necessary, it is convenient to install Python system-wide on Windows (i.e.
 `C:\Program Files`) because CMake looks at standard paths and registry keys.
 This removes the need to manually set the `PATH`.
 
-Once Python is installed, you can install the Python module dependencies either
-globally or in a [virtual environment][venv] by running
+Once Python is installed, you can install the Python module dependencies in 
+a [virtual environment][venv] by running
 
 ```shell
-$ python -m pip install -r requirements.txt
+$ uv sync
 ```
 
 from the root of the repository.
@@ -271,12 +271,11 @@ $ sudo apt install clang-tools lld llvm-dev libclang-dev liblld-dev \
 ### Python
 
 When running the Python package, you will need to install additional
-dependencies. These are tabulated in `requirements.txt` and may be installed
-with:
+dependencies. These are tabulated as constraints in `pyproject.toml` and
+resolved to specific versions in `uv.lock`. They may be installed by running:
 
 ```shell
-$ python -m pip install -U pip "setuptools[core]" wheel
-$ python -m pip install -r requirements.txt
+$ uv sync --no-install-project
 ```
 
 # Building Halide
