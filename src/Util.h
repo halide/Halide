@@ -371,10 +371,11 @@ public:
     TemporaryFile &operator=(TemporaryFile &&) = delete;
 };
 
-/** Run an executable with the given arguments, without going through the
- * shell. The first element of args should be the program name/path.
- * Returns the exit code of the process, or -1 if the process could
- * not be started. */
+/** Run an executable with the given arguments without going through
+ * the shell. The first element of args should be the program name/path.
+ * If a name without a path-separator is given, it will be searched for
+ * in the PATH. Returns the exit code of the process, or -1 if the process
+ * could not be started. */
 int run_process(std::vector<std::string> args);
 
 /** Routines to test if math would overflow for signed integers with
