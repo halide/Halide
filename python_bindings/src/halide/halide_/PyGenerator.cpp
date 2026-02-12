@@ -1,6 +1,5 @@
 #include "PyGenerator.h"
 
-#include <optional>
 #include <pybind11/embed.h>
 #include <string>
 #include <vector>
@@ -129,7 +128,7 @@ public:
     }
 };
 
-// Returns a vector of mutable char * corresponding to each string in `strs`.
+// Returns a vector of mutable char * pointers corresponding to each string in `strs`.
 // `strs` must outlive the input and the pointers are not stable if the std::strings are mutated.
 // Arg (pun intended), this is all because generate_filter_main wants a mutable char **argv.
 std::vector<char *> get_mutable_c_strs(const std::vector<std::string> &strs) {
@@ -142,9 +141,8 @@ std::vector<char *> get_mutable_c_strs(const std::vector<std::string> &strs) {
 }
 
 void generate_filter_main(const std::vector<std::string> &argv) {
-    // std::vector<char *> mutable_argv = get_mutable_c_strs(argv);
-    // const int result = Halide::Internal::generate_filter_main((int)mutable_argv.size(), mutable_argv.data(), PyGeneratorFactoryProvider());
-    const int result = Halide::Internal::generate_filter_main((int)argv.size(), argv.data(), PyGeneratorFactoryProvider());
+    std::vector<char *> mutable_argv = get_mutable_c_strs(argv_copy);
+    const int result = Halide::Internal::generate_filter_main((int)mutable_argv.size(), mutable_argv.data(), PyGeneratorFactoryProvider());
     if (result != 0) {
         // Some paths in generate_filter_main() will fail with user_error or similar (which throws an exception
         // due to how libHalide is built for Python), but some paths just return an error code. For consistency,
