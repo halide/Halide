@@ -2211,6 +2211,8 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
     }
     int vec_elements = get_vector_num_elements(vecs[0]->getType());
 
+    int factor = gcd(vec_elements, (int)vecs.size());
+
     if (vecs.size() == 1) {
         return vecs[0];
     } else if (vecs.size() == 2) {
@@ -2221,57 +2223,97 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
             indices[i] = i % 2 == 0 ? i / 2 : i / 2 + vec_elements;
         }
         return optimization_fence(shuffle_vectors(a, b, indices));
+    } else if (factor == 1) {
+        // The number of vectors and the vector length is
+        // coprime. (E.g. interleaving an odd number of vectors of some
+        // power-of-two length). Use the algorithm from "A Decomposition for
+        // In-place Matrix Transposition" by Catanzaro et al.
+        std::vector<Value *> v = vecs;
+
+        // Using unary shuffles, get each element into the right ultimate
+        // lane. This works out without collisions because the number of vectors
+        // and the length of each vector is coprime.
+        const int num_vecs = (int)v.size();
+        std::vector<int> shuffle(vec_elements);
+        for (int i = 0; i < num_vecs; i++) {
+            for (int j = 0; j < vec_elements; j++) {
+                int k = j * num_vecs + i;
+                shuffle[k % vec_elements] = j;
+            }
+            v[i] = shuffle_vectors(v[i], v[i], shuffle);
+        }
+
+        // We intentionally don't put an optimization fence after the unary
+        // shuffles, because some architectures have a two-way shuffle, so it
+        // helps to fuse the unary shuffle into the first layer of two-way
+        // blends below.
+
+        // Now we need to transfer the elements across the vectors. If we
+        // reorder the vectors, this becomes a rotation across the vectors of a
+        // different amount per lane.
+        std::vector<Value *> new_v(v.size());
+        for (int i = 0; i < num_vecs; i++) {
+            int j = (i * vec_elements) % num_vecs;
+            new_v[i] = v[j];
+        }
+        v.swap(new_v);
+
+        std::vector<int> rotation(vec_elements, 0);
+        for (int i = 0; i < vec_elements; i++) {
+            int k = (i * num_vecs) % vec_elements;
+            rotation[k] = (i * num_vecs) / vec_elements;
+        }
+        internal_assert(rotation[0] == 0);
+
+        // We'll handle each bit of the rotation one at a time with a two-way
+        // shuffle.
+        int d = 1;
+        while (d < num_vecs) {
+
+            for (int i = 0; i < vec_elements; i++) {
+                shuffle[i] = ((rotation[i] & d) == 0) ? i : (i + vec_elements);
+            }
+
+            for (int i = 0; i < num_vecs; i++) {
+                int j = (i + num_vecs - d) % num_vecs;
+                new_v[i] = shuffle_vectors(v[i], v[j], shuffle);
+            }
+
+            v.swap(new_v);
+
+            d *= 2;
+        }
+
+        return concat_vectors(v);
+
     } else {
-        // Grab the even and odd elements of vecs.
-        vector<Value *> even_vecs;
-        vector<Value *> odd_vecs;
+        // The number of vectors shares a factor with the length of the
+        // vectors. Pick some large factor of the number of vectors, interleave
+        // in separate groups, and then interleave the results.
+        const int n = (int)vecs.size();
+        int f = 1;
+        for (int i = 2; i < n; i++) {
+            if (n % i == 0) {
+                f = i;
+                break;
+            }
+        }
+
+        internal_assert(f > 1 && f < n);
+
+        vector<vector<Value *>> groups(f);
         for (size_t i = 0; i < vecs.size(); i++) {
-            if (i % 2 == 0) {
-                even_vecs.push_back(vecs[i]);
-            } else {
-                odd_vecs.push_back(vecs[i]);
-            }
+            groups[i % f].push_back(vecs[i]);
         }
 
-        // If the number of vecs is odd, save the last one for later.
-        Value *last = nullptr;
-        if (even_vecs.size() > odd_vecs.size()) {
-            last = even_vecs.back();
-            even_vecs.pop_back();
+        // Interleave each group
+        vector<Value *> interleaved(f);
+        for (int i = 0; i < f; i++) {
+            interleaved[i] = optimization_fence(interleave_vectors(groups[i]));
         }
-        internal_assert(even_vecs.size() == odd_vecs.size());
 
-        // Interleave the even and odd parts.
-        Value *even = interleave_vectors(even_vecs);
-        Value *odd = interleave_vectors(odd_vecs);
-
-        if (last) {
-            int result_elements = vec_elements * vecs.size();
-
-            // Interleave even and odd, leaving a space for the last element.
-            vector<int> indices(result_elements, -1);
-            for (int i = 0, idx = 0; i < result_elements; i++) {
-                if (i % vecs.size() < vecs.size() - 1) {
-                    indices[i] = idx % 2 == 0 ? idx / 2 : idx / 2 + vec_elements * even_vecs.size();
-                    idx++;
-                }
-            }
-            Value *even_odd = shuffle_vectors(even, odd, indices);
-
-            // Interleave the last vector into the result.
-            last = slice_vector(last, 0, result_elements);
-            for (int i = 0; i < result_elements; i++) {
-                if (i % vecs.size() < vecs.size() - 1) {
-                    indices[i] = i;
-                } else {
-                    indices[i] = i / vecs.size() + result_elements;
-                }
-            }
-
-            return shuffle_vectors(even_odd, last, indices);
-        } else {
-            return interleave_vectors({even, odd});
-        }
+        // Interleave the result
+        return interleave_vectors(interleaved);
     }
 }
 
