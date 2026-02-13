@@ -17,16 +17,6 @@ using Halide::Parameter;
 using Halide::Internal::ArgInfoDirection;
 using Halide::Internal::ArgInfoKind;
 
-template<typename T>
-std::map<std::string, T> dict_to_map(const py::dict &dict) {
-    _halide_user_assert(!dict.is(py::none()));
-    std::map<std::string, T> m;
-    for (auto it : dict) {
-        m[it.first.cast<std::string>()] = it.second.cast<T>();
-    }
-    return m;
-}
-
 class PyGeneratorBase : public AbstractGenerator {
     // The name declared in the Python function's decorator
     const std::string name_;
@@ -128,29 +118,6 @@ public:
     }
 };
 
-// Returns a vector of mutable char * pointers corresponding to each string in `strs`.
-// `strs` must outlive the input and the pointers are not stable if the std::strings are mutated.
-// Arg (pun intended), this is all because generate_filter_main wants a mutable char **argv.
-std::vector<char *> get_mutable_c_strs(const std::vector<std::string> &strs) {
-    std::vector<char *> c_strs;
-    c_strs.reserve(strs.size());
-    for (const auto &s : strs) {
-        c_strs.push_back(const_cast<char *>(s.c_str()));
-    }
-    return c_strs;
-}
-
-void generate_filter_main(const std::vector<std::string> &argv) {
-    std::vector<char *> mutable_argv = get_mutable_c_strs(argv_copy);
-    const int result = Halide::Internal::generate_filter_main((int)mutable_argv.size(), mutable_argv.data(), PyGeneratorFactoryProvider());
-    if (result != 0) {
-        // Some paths in generate_filter_main() will fail with user_error or similar (which throws an exception
-        // due to how libHalide is built for Python), but some paths just return an error code. For consistency,
-        // handle both by throwing a C++ exception, which pybind11 turns into a Python exception.
-        throw std::runtime_error("Generator failed: " + std::to_string(result));
-    }
-}
-
 }  // namespace
 
 void define_generator(py::module &m) {
@@ -190,7 +157,20 @@ void define_generator(py::module &m) {
                 return o.str();
             });
 
-    m.def("_generate_filter_main", &generate_filter_main, py::arg("argv"));
+    m.def("_generate_filter_main", [](const std::vector<std::string> &argv) -> void {
+        std::vector<char *> mutable_argv;
+        mutable_argv.reserve(argv.size());
+        for (auto &s : argv) {
+            mutable_argv.push_back(const_cast<char *>(s.c_str()));
+        }
+        int result = Halide::Internal::generate_filter_main((int)mutable_argv.size(), mutable_argv.data(), PyGeneratorFactoryProvider());
+        if (result != 0) {
+            // Some paths in generate_filter_main() will fail with user_error or similar (which throws an exception
+            // due to how libHalide is built for Python), but some paths just return an error code. For consistency,
+            // handle both by throwing a C++ exception, which PyBind11 turns into a Python exception.
+            throw std::runtime_error("Generator failed: " + std::to_string(result));
+        },
+        &generate_filter_main, py::arg("argv"));
 
     m.def("_unique_name", []() -> std::string {
         return ::Halide::Internal::unique_name('p');
