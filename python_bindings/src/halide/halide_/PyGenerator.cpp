@@ -170,7 +170,6 @@ void define_generator(py::module &m) {
                   // handle both by throwing a C++ exception, which PyBind11 turns into a Python exception.
                   throw std::runtime_error("Generator failed: " + std::to_string(result));
               } }, py::arg("argv"));
-    //, py::arg("argv"));
 
     m.def("_unique_name", []() -> std::string {
         return ::Halide::Internal::unique_name('p');
