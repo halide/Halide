@@ -158,19 +158,19 @@ void define_generator(py::module &m) {
             });
 
     m.def("_generate_filter_main", [](const std::vector<std::string> &argv) -> void {
-        std::vector<char *> mutable_argv;
-        mutable_argv.reserve(argv.size());
-        for (auto &s : argv) {
-            mutable_argv.push_back(const_cast<char *>(s.c_str()));
-        }
-        int result = Halide::Internal::generate_filter_main((int)mutable_argv.size(), mutable_argv.data(), PyGeneratorFactoryProvider());
-        if (result != 0) {
-            // Some paths in generate_filter_main() will fail with user_error or similar (which throws an exception
-            // due to how libHalide is built for Python), but some paths just return an error code. For consistency,
-            // handle both by throwing a C++ exception, which PyBind11 turns into a Python exception.
-            throw std::runtime_error("Generator failed: " + std::to_string(result));
-        },
-        &generate_filter_main, py::arg("argv"));
+              std::vector<char *> mutable_argv;
+              mutable_argv.reserve(argv.size());
+              for (auto &s : argv) {
+                  mutable_argv.push_back(const_cast<char *>(s.c_str()));
+              }
+              const int result = Halide::Internal::generate_filter_main((int)mutable_argv.size(), mutable_argv.data(), PyGeneratorFactoryProvider());
+              if (result != 0) {
+                  // Some paths in generate_filter_main() will fail with user_error or similar (which throws an exception
+                  // due to how libHalide is built for Python), but some paths just return an error code. For consistency,
+                  // handle both by throwing a C++ exception, which PyBind11 turns into a Python exception.
+                  throw std::runtime_error("Generator failed: " + std::to_string(result));
+              } }, py::arg("argv"));
+    //, py::arg("argv"));
 
     m.def("_unique_name", []() -> std::string {
         return ::Halide::Internal::unique_name('p');
