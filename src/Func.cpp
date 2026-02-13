@@ -612,6 +612,7 @@ vector<Expr> substitute_self_reference(const vector<Expr> &values, const string 
                                        const Function &substitute, const vector<Var> &new_args) {
     SubstituteSelfReference subs(func, substitute, new_args);
     vector<Expr> result;
+    result.reserve(values.size());
     for (const auto &val : values) {
         result.push_back(subs.mutate(val));
     }
@@ -1107,8 +1108,8 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
         if (dim_match(dims[i], VarOrRVar(old, exact))) {
             found = true;
             old_name = dims[i].var;
-            inner_name = old_name + "." + inner;
-            outer_name = old_name + "." + outer;
+            inner_name = concat_strings(old_name, ".", inner);
+            outer_name = concat_strings(old_name, ".", outer);
             dims.insert(dims.begin() + i, dims[i]);
             dims[i].var = inner_name;
             dims[i + 1].var = outer_name;
@@ -1785,6 +1786,7 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
                    const std::vector<Expr> &factors,
                    TailStrategy tail) {
     std::vector<TailStrategy> tails;
+    tails.reserve(previous.size());
     for (unsigned int i = 0; i < previous.size(); i++) {
         tails.push_back(tail);
     }

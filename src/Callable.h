@@ -117,13 +117,13 @@ private:
 
     template<typename T>
     static constexpr QuickCallCheckInfo make_qcci() {
-        using T0 = typename std::remove_const<typename std::remove_reference<T>::type>::type;
-        if constexpr (std::is_same<T0, JITUserContext *>::value) {
+        using T0 = std::remove_const_t<std::remove_reference_t<T>>;
+        if constexpr (std::is_same_v<T0, JITUserContext *>) {
             return make_ucon_qcci();
         } else if constexpr (Internal::IsHalideBuffer<T0>::value) {
             // Don't bother checking type-and-dimensions here (the callee will do that)
             return make_buffer_qcci();
-        } else if constexpr (std::is_arithmetic<T0>::value || std::is_pointer<T0>::value) {
+        } else if constexpr (std::is_arithmetic_v<T0> || std::is_pointer_v<T0>) {
             return make_scalar_qcci(halide_type_of<T0>());
         } else {
             // static_assert(false) will fail all the time, even inside constexpr,
@@ -187,11 +187,11 @@ private:
 
     template<typename T>
     static constexpr FullCallCheckInfo make_fcci() {
-        using T0 = typename std::remove_const<typename std::remove_reference<T>::type>::type;
+        using T0 = std::remove_const_t<std::remove_reference_t<T>>;
         if constexpr (Internal::IsHalideBuffer<T0>::value) {
             using TypeAndDims = Internal::HalideBufferStaticTypeAndDims<T0>;
             return make_buffer_fcci(TypeAndDims::type(), TypeAndDims::dims());
-        } else if constexpr (std::is_arithmetic<T0>::value || std::is_pointer<T0>::value) {
+        } else if constexpr (std::is_arithmetic_v<T0> || std::is_pointer_v<T0>) {
             return make_scalar_fcci(halide_type_of<T0>());
         } else {
             // static_assert(false) will fail all the time, even inside constexpr,

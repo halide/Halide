@@ -40,7 +40,7 @@ template<>
 struct all_ints_and_optional_name<> : std::true_type {};
 
 template<typename T,
-         typename = typename std::enable_if<!std::is_convertible<T, std::string>::value>::type>
+         typename = std::enable_if_t<!std::is_convertible_v<T, std::string>>>
 std::string get_name_from_end_of_parameter_pack(T &&) {
     return "";
 }
@@ -80,7 +80,7 @@ std::vector<int> get_shape_from_start_of_parameter_pack(Args &&...args) {
 }
 
 template<typename T, typename T2>
-using add_const_if_T_is_const = typename std::conditional<std::is_const<T>::value, const T2, T2>::type;
+using add_const_if_T_is_const = std::conditional_t<std::is_const_v<T>, const T2, T2>;
 
 // Helpers to produce the name of a Buffer element type (a Halide
 // scalar type, or void, possibly with const). Useful for an error
@@ -98,10 +98,10 @@ inline void buffer_type_name_non_const<void>(std::ostream &s) {
 template<typename T>
 std::string buffer_type_name() {
     std::ostringstream oss;
-    if (std::is_const<T>::value) {
+    if (std::is_const_v<T>) {
         oss << "const ";
     }
-    buffer_type_name_non_const<typename std::remove_const<T>::type>(oss);
+    buffer_type_name_non_const<std::remove_const_t<T>>(oss);
     return oss.str();
 }
 
@@ -129,12 +129,11 @@ class Buffer {
     static void assert_can_convert_from(const Buffer<T2, D2> &other) {
         if (!other.defined()) {
             // Avoid UB of deferencing offset of a null contents ptr
-            static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
+            static_assert(!std::is_const_v<T2> || std::is_const_v<T>,
                           "Can't convert from a Buffer<const T> to a Buffer<T>");
-            static_assert(std::is_same<typename std::remove_const<T>::type,
-                                       typename std::remove_const<T2>::type>::value ||
-                              std::is_void<T>::value ||
-                              std::is_void<T2>::value,
+            static_assert(std::is_same_v<std::remove_const_t<T>, std::remove_const_t<T2>> ||
+                              std::is_void_v<T> ||
+                              std::is_void_v<T2>,
                           "type mismatch constructing Buffer");
             static_assert(Dims == AnyDims || D2 == AnyDims || Dims == D2,
                           "Can't convert from a Buffer with static dimensionality to a Buffer with different static dimensionality");
@@ -208,7 +207,7 @@ public:
      */
     // @{
     template<typename... Args,
-             typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
+             typename = std::enable_if_t<Internal::all_ints_and_optional_name<Args...>::value>>
     explicit Buffer(Type t,
                     int first, Args... rest)
         : Buffer(Runtime::Buffer<T, Dims>(t, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
@@ -221,7 +220,7 @@ public:
     }
 
     template<typename... Args,
-             typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
+             typename = std::enable_if_t<Internal::all_ints_and_optional_name<Args...>::value>>
     explicit Buffer(int first, const Args &...rest)
         : Buffer(Runtime::Buffer<T, Dims>(Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                  Internal::get_name_from_end_of_parameter_pack(rest...)) {
@@ -258,7 +257,7 @@ public:
     }
 
     template<typename... Args,
-             typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
+             typename = std::enable_if_t<Internal::all_ints_and_optional_name<Args...>::value>>
     explicit Buffer(Type t,
                     Internal::add_const_if_T_is_const<T, void> *data,
                     int first, Args &&...rest)
@@ -267,7 +266,7 @@ public:
     }
 
     template<typename... Args,
-             typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
+             typename = std::enable_if_t<Internal::all_ints_and_optional_name<Args...>::value>>
     explicit Buffer(Type t,
                     Internal::add_const_if_T_is_const<T, void> *data,
                     const std::vector<int> &sizes,
@@ -276,7 +275,7 @@ public:
     }
 
     template<typename... Args,
-             typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
+             typename = std::enable_if_t<Internal::all_ints_and_optional_name<Args...>::value>>
     explicit Buffer(T *data,
                     int first, Args &&...rest)
         : Buffer(Runtime::Buffer<T, Dims>(data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
@@ -449,6 +448,7 @@ public:
     HALIDE_BUFFER_FORWARD_CONST(contains)
     HALIDE_BUFFER_FORWARD(crop)
     HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(crop, std::vector<std::pair<int, int>>)
+    HALIDE_BUFFER_FORWARD_CONST(cropped)
     HALIDE_BUFFER_FORWARD(slice)
     HALIDE_BUFFER_FORWARD_CONST(sliced)
     HALIDE_BUFFER_FORWARD(embed)
@@ -456,6 +456,7 @@ public:
     HALIDE_BUFFER_FORWARD(set_min)
     HALIDE_BUFFER_FORWARD(translate)
     HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(translate, std::vector<int>)
+    HALIDE_BUFFER_FORWARD_CONST(translated)
     HALIDE_BUFFER_FORWARD(transpose)
     HALIDE_BUFFER_FORWARD_CONST(transposed)
     HALIDE_BUFFER_FORWARD(add_dimension)
@@ -581,13 +582,13 @@ public:
      * given symbolic coordinate. */
     // @{
     template<typename... Args>
-    const Expr operator()(const Expr &first, Args... rest) const {  // NOLINT
+    const Expr operator()(const Expr &first, const Args &...rest) const {  // NOLINT(readability-const-return-type)
         std::vector<Expr> args = {first, rest...};
         return (*this)(args);
     }
 
     template<typename... Args>
-    const Expr operator()(const std::vector<Expr> &args) const {  // NOLINT
+    const Expr operator()(const std::vector<Expr> &args) const {  // NOLINT(readability-const-return-type)
         return buffer_accessor(Buffer<>(*this), args);
     }
     // @}

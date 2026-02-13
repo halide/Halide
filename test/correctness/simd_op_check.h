@@ -268,7 +268,7 @@ public:
             p.dim(0).set_min((p.dim(0).min() / alignment) * alignment);
         }
 
-        const std::vector<Argument> arg_types(image_params.begin(), image_params.end());
+        std::vector<Argument> arg_types(image_params.begin(), image_params.end());
 
         class HookUpImageParams : public Internal::IRMutator {
             using Internal::IRMutator::visit;
@@ -343,8 +343,15 @@ public:
                 .vectorize(xi);
         }
 
+        // We'll check over H rows, but we won't let the pipeline know H
+        // statically, as that can trigger some simplifications that change
+        // instruction selection.
+        Param<int> rows;
+        rows.set(H);
+        arg_types.push_back(rows);
+
         // The output to the pipeline is the maximum absolute difference as a double.
-        RDom r_check(0, W, 0, H);
+        RDom r_check(0, W, 0, rows);
         Halide::Func error("error_" + name);
         error() = Halide::cast<double>(maximum(absd(f(r_check.x, r_check.y), f_scalar(r_check.x, r_check.y))));
 
@@ -357,11 +364,13 @@ public:
             // Make some unallocated input buffers
             std::vector<Runtime::Buffer<>> inputs(image_params.size());
 
-            std::vector<Argument> args(image_params.size());
-            for (size_t i = 0; i < args.size(); i++) {
+            std::vector<Argument> args(image_params.size() + 1);
+            for (size_t i = 0; i < image_params.size(); i++) {
                 args[i] = image_params[i];
                 inputs[i] = Runtime::Buffer<>(args[i].type, nullptr, 0);
             }
+            args.back() = rows;
+
             auto callable = error.compile_to_callable(args, run_target);
 
             Runtime::Buffer<double> output = Runtime::Buffer<double>::make_scalar();
@@ -372,7 +381,7 @@ public:
             (void)callable(inputs[0], inputs[1], inputs[2], inputs[3],
                            inputs[4], inputs[5], inputs[6], inputs[7],
                            inputs[8], inputs[9], inputs[10], inputs[11],
-                           output);
+                           H, output);
 
             std::mt19937 rng;
             rng.seed(rng_seed);
@@ -409,7 +418,7 @@ public:
             (void)callable(inputs[0], inputs[1], inputs[2], inputs[3],
                            inputs[4], inputs[5], inputs[6], inputs[7],
                            inputs[8], inputs[9], inputs[10], inputs[11],
-                           output);
+                           H, output);
 
             double e = output(0);
             // Use a very loose tolerance for floating point tests. The

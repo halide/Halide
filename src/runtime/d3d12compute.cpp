@@ -110,6 +110,7 @@ struct trace : public PrinterBase {
     }
 };
 
+// NOLINTBEGIN(bugprone-macro-parentheses)
 #define TRACEPRINT(msg) trace() << msg;
 #define TRACELEVEL(level, msg) \
     if (level <= HALIDE_D3D12_TRACE_LEVEL) TRACEPRINT(msg);
@@ -119,6 +120,7 @@ struct trace : public PrinterBase {
 #define TRACEERROR(msg) TRACELEVEL(-2, "ERROR: " << msg);
 #define TRACEWARN(msg) TRACELEVEL(-1, "WARNING: " << msg);
 #define TRACEINFO(msg) TRACELEVEL(0, msg);
+// NOLINTEND(bugprone-macro-parentheses)
 
 #ifdef HALIDE_D3D12_TRACE_TIME
 #define TRACETIME_CHECKPOINT() halide_current_time_ns(user_context)
@@ -966,6 +968,7 @@ WEAK void D3D12LoadDependencies(void *user_context) {
 
     // Windows x64 follows the LLP64 integer type convention:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
+    // NOLINTBEGIN(misc-redundant-expression)
     static_assert(sizeof(BOOL) == (32 / 8));      // BOOL      must be  32 bits
     static_assert(sizeof(CHAR) == (8 / 8));       // CHAR      must be   8 bits
     static_assert(sizeof(SHORT) == (16 / 8));     // SHORT     must be  16 bits
@@ -979,8 +982,10 @@ WEAK void D3D12LoadDependencies(void *user_context) {
     static_assert(sizeof(INT) == (32 / 8));       // INT       must be  32 bits
     static_assert(sizeof(UINT) == (32 / 8));      // UINT      must be  32 bits
     static_assert(sizeof(IID) == (128 / 8));      // COM GUIDs must be 128 bits
+    // NOLINTEND(misc-redundant-expression)
 
     // Paranoid checks (I am not taking any chances...)
+    // NOLINTBEGIN(misc-redundant-expression)
     static_assert(sizeof(INT8) == (8 / 8));
     static_assert(sizeof(INT16) == (16 / 8));
     static_assert(sizeof(INT32) == (32 / 8));
@@ -994,6 +999,7 @@ WEAK void D3D12LoadDependencies(void *user_context) {
 #else
     static_assert(sizeof(SIZE_T) == (32 / 8));
 #endif
+    // NOLINTEND(misc-redundant-expression)
 }
 
 #if HALIDE_D3D12_PIX

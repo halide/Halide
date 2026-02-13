@@ -1185,24 +1185,14 @@ void CodeGen_LLVM::optimize_module() {
         // Add a pass that converts lookup tables to relative lookup tables to make them PIC-friendly.
         // See https://bugs.llvm.org/show_bug.cgi?id=45244
         pb.registerOptimizerLastEPCallback(
-#if LLVM_VERSION >= 200
-            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
-#else
-            [&](ModulePassManager &mpm, OptimizationLevel)
-#endif
-            {
+            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase) {
                 mpm.addPass(RelLookupTableConverterPass());
             });
     }
 
     if (get_target().has_feature(Target::SanitizerCoverage)) {
         pb.registerOptimizerLastEPCallback(
-#if LLVM_VERSION >= 200
-            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
-#else
-            [&](ModulePassManager &mpm, OptimizationLevel)
-#endif
-            {
+            [&](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase) {
                 SanitizerCoverageOptions sanitizercoverage_options;
                 // Mirror what -fsanitize=fuzzer-no-link would enable.
                 // See https://github.com/halide/Halide/issues/6528
@@ -1237,12 +1227,7 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::TSAN)) {
         pb.registerOptimizerLastEPCallback(
-#if LLVM_VERSION >= 200
-            [](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase)
-#else
-            [](ModulePassManager &mpm, OptimizationLevel)
-#endif
-            {
+            [](ModulePassManager &mpm, OptimizationLevel, ThinOrFullLTOPhase) {
                 mpm.addPass(
                     createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
             });
@@ -1272,11 +1257,7 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (tm) {
-#if LLVM_VERSION < 190
-        tm->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
-#else
         tm->registerPassBuilderCallbacks(pb);
-#endif
     }
 
     mpm = pb.buildPerModuleDefaultPipeline(level);
@@ -1548,13 +1529,13 @@ bool CodeGen_LLVM::try_to_fold_vector_reduce(const Expr &a, Expr b) {
         b = a;
     }
     if (red &&
-        ((std::is_same<Op, Add>::value && red->op == VectorReduce::Add) ||
-         (std::is_same<Op, Min>::value && red->op == VectorReduce::Min) ||
-         (std::is_same<Op, Max>::value && red->op == VectorReduce::Max) ||
-         (std::is_same<Op, Mul>::value && red->op == VectorReduce::Mul) ||
-         (std::is_same<Op, And>::value && red->op == VectorReduce::And) ||
-         (std::is_same<Op, Or>::value && red->op == VectorReduce::Or) ||
-         (std::is_same<Op, Call>::value && red->op == VectorReduce::SaturatingAdd))) {
+        ((std::is_same_v<Op, Add> && red->op == VectorReduce::Add) ||
+         (std::is_same_v<Op, Min> && red->op == VectorReduce::Min) ||
+         (std::is_same_v<Op, Max> && red->op == VectorReduce::Max) ||
+         (std::is_same_v<Op, Mul> && red->op == VectorReduce::Mul) ||
+         (std::is_same_v<Op, And> && red->op == VectorReduce::And) ||
+         (std::is_same_v<Op, Or> && red->op == VectorReduce::Or) ||
+         (std::is_same_v<Op, Call> && red->op == VectorReduce::SaturatingAdd))) {
         codegen_vector_reduce(red, b);
         return true;
     }
@@ -1966,18 +1947,6 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     if (promote_indices() && d.getPointerSize() == 8) {
         index = promote_64(index);
     }
-
-    // Peel off a constant offset as a second GEP. This helps LLVM's
-    // aliasing analysis, especially for backends that do address
-    // computation in 32 bits but use 64-bit pointers.
-    if (const Add *add = index.as<Add>()) {
-        if (auto offset = as_const_int(add->b)) {
-            Value *base = codegen_buffer_pointer(base_address, type, add->a);
-            Value *off = codegen(make_const(Int(8 * d.getPointerSize()), *offset));
-            return CreateInBoundsGEP(builder.get(), llvm_type_of(type), base, off);
-        }
-    }
-
     return codegen_buffer_pointer(base_address, type, codegen(index));
 }
 
@@ -2820,11 +2789,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type *> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
-#if LLVM_VERSION >= 200
         llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(), llvm::Intrinsic::ctpop, arg_type);
-#else
-        llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::ctpop, arg_type);
-#endif
         Value *a = codegen(op->args[0]);
         CallInst *call = builder->CreateCall(fn, a);
         value = call;
@@ -2833,15 +2798,9 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         std::vector<llvm::Type *> arg_type(1);
         arg_type[0] = llvm_type_of(op->args[0].type());
-#if LLVM_VERSION >= 200
         llvm::Function *fn = llvm::Intrinsic::getOrInsertDeclaration(module.get(),
                                                                      (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
                                                                      arg_type);
-#else
-        llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(),
-                                                             (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
-                                                             arg_type);
-#endif
         llvm::Value *is_const_zero_poison = llvm::ConstantInt::getFalse(*context);
         llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_poison};
         CallInst *call = builder->CreateCall(fn, args);
@@ -3469,6 +3428,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             std::vector<std::string> namespaces;
             name = extract_namespaces(op->name, namespaces);
             std::vector<ExternFuncArgument> mangle_args;
+            mangle_args.reserve(op->args.size());
             for (const auto &arg : op->args) {
                 mangle_args.emplace_back(arg);
             }
@@ -4113,6 +4073,7 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
 
 void CodeGen_LLVM::visit(const Shuffle *op) {
     vector<Value *> vecs;
+    vecs.reserve(op->vectors.size());
     for (const Expr &e : op->vectors) {
         vecs.push_back(codegen(e));
     }
@@ -4170,6 +4131,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             if (interleave_of_slices) {
                 value = codegen(op->vectors[0]);
                 vector<Value *> slices;
+                slices.reserve(f);
                 for (int i = 0; i < f; i++) {
                     slices.push_back(slice_vector(value, i * step, step));
                 }
@@ -4418,6 +4380,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
                 // call will assume that the args should scalarize.
                 if (!module->getFunction(intrin_name)) {
                     vector<llvm::Type *> arg_types;
+                    arg_types.reserve(args.size());
                     for (const Expr &e : args) {
                         arg_types.push_back(llvm_type_of(e.type()));
                     }

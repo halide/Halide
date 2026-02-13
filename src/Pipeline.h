@@ -130,7 +130,7 @@ public:
             : buf(dst.raw_buffer()) {
         }
         template<typename T, int Dims, typename... Args,
-                 typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
+                 typename = std::enable_if_t<Internal::all_are_convertible<Buffer<>, Args...>::value>>
         RealizationArg(Buffer<T, Dims> &a, Args &&...args)
             : buffer_list(std::make_unique<std::vector<Buffer<>>>(std::initializer_list<Buffer<>>{a, std::forward<Args>(args)...})) {
         }
@@ -483,7 +483,7 @@ public:
     void add_requirement(const Expr &condition, const std::vector<Expr> &error_args);
 
     template<typename... Args,
-             typename = typename std::enable_if<Internal::all_are_printable_args<Args...>::value>::type>
+             typename = std::enable_if_t<Internal::all_are_printable_args<Args...>::value>>
     HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
         std::vector<Expr> collected_args;
         Internal::collect_print_args(collected_args, std::forward<Args>(error_args)...);
@@ -517,7 +517,7 @@ public:
     template<typename RT, typename... Args>
     explicit ExternSignature(RT (*f)(Args... args))
         : ret_type_(type_of<RT>()),
-          is_void_return_(std::is_void<RT>::value),
+          is_void_return_(std::is_void_v<RT>),
           arg_types_({type_of<Args>()...}) {
     }
 

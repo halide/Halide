@@ -533,7 +533,7 @@ protected:
                 body = T::make(op->name, op->value, std::move(body));
                 changed = true;
             }
-        } else if (std::is_same<T, LetStmt>::value) {
+        } else if (std::is_same_v<T, LetStmt>) {
             auto new_body = mutate(body);
             changed = !new_body.same_as(body);
             body = std::move(new_body);

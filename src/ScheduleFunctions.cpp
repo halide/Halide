@@ -1310,14 +1310,14 @@ protected:
                     _found_store_levels_for_funcs.insert(funcs[i].name());
                 }
             }
-            for (size_t i = 0; i < funcs.size(); i++) {
-                if (funcs[i].schedule().hoist_storage_level().match(for_loop->name)) {
-                    debug(3) << "Found hoist storage level for " << funcs[i].name() << " at " << for_loop->name << "\n";
-                    if (funcs[i].schedule().hoist_storage_level() != funcs[i].schedule().store_level()) {
-                        body = HoistedStorage::make(funcs[i].name(), body);
+            for (const auto &func : funcs) {
+                if (func.schedule().hoist_storage_level().match(for_loop->name)) {
+                    debug(3) << "Found hoist storage level for " << func.name() << " at " << for_loop->name << "\n";
+                    if (func.schedule().hoist_storage_level() != func.schedule().store_level()) {
+                        body = HoistedStorage::make(func.name(), body);
                     } else {
                     }
-                    _found_hoist_storage_levels_for_funcs.insert(funcs[i].name());
+                    _found_hoist_storage_levels_for_funcs.insert(func.name());
                 }
             }
         }
@@ -1414,9 +1414,10 @@ private:
             const string &name = func.name();
             const vector<string> &func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
-                const string &arg = func_args[i];
-                Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
-                Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
+                string min_name = concat_strings(name, ".", func_args[i], ".min_realized");
+                string extent_name = concat_strings(name, ".", func_args[i], ".extent_realized");
+                Expr min = Variable::make(Int(32), min_name);
+                Expr extent = Variable::make(Int(32), extent_name);
                 bounds.emplace_back(min, extent);
             }
 
@@ -2210,6 +2211,17 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     for (size_t i = 0; i < definitions.size(); i++) {
         for (const Specialization &s : definitions[i].specializations()) {
             definitions.push_back(s.definition);
+        }
+    }
+
+    if (f.has_extern_definition()) {
+        const auto api = f.extern_function_device_api();
+        if (!target.supports_device_api(api)) {
+            user_error << "Func " << f.name() << " has an extern definition that "
+                       << "may leave the output with a dirty " << api << " device allocation,"
+                       << " but no compatible target feature is enabled in target "
+                       << target.to_string() << ", so the pipeline would not be able to "
+                       << "copy back the result.";
         }
     }
 

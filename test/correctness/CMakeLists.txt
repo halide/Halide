@@ -95,6 +95,7 @@ tests(GROUPS correctness
       early_out.cpp
       embed_bitcode.cpp
       erf.cpp
+      error_macro_unreachable.cpp
       exception.cpp
       explicit_inline_reductions.cpp
       extern_bounds_inference.cpp
@@ -456,3 +457,19 @@ set_target_properties(correctness_async
                       correctness_sliding_window
                       correctness_storage_folding
                       PROPERTIES ENABLE_EXPORTS TRUE)
+
+# Tests which are internally parallelized should not be run at the
+# same time as other tests, or they may time out
+
+set_tests_properties(correctness_mul_div_mod
+                     correctness_simd_op_check_arm
+                     correctness_simd_op_check_hvx
+                     correctness_simd_op_check_powerpc
+                     correctness_simd_op_check_riscv
+                     correctness_simd_op_check_sve2
+                     correctness_simd_op_check_wasm
+                     correctness_simd_op_check_x86
+                     correctness_vector_cast
+                     correctness_vector_math
+                     correctness_vector_reductions
+                     PROPERTIES RUN_SERIAL TRUE)

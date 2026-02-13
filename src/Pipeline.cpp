@@ -499,7 +499,11 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     for (const Function &f : contents->outputs) {
         user_assert(f.has_pure_definition() || f.has_extern_definition())
-            << "Can't compile Pipeline with undefined output Func: " << f.name() << ".\n";
+            << "Can't compile Pipeline with undefined output Func: " << f.name() << ".";
+        user_assert(!f.schedule().memoized())
+            << "Can't compile Pipeline with memoized output Func: " << f.name() << ". "
+            << "Memoization is valid only on intermediate Funcs because it takes "
+            << "control of buffer allocation.";
     }
 
     string new_fn_name(fn_name);
@@ -959,6 +963,7 @@ Pipeline::make_externs_jit_module(const Target &target,
             free_standing_jit_externs.add_symbol_for_export(iter.first, pipeline_contents.jit_cache.jit_module.entrypoint_symbol());
             void *address = pipeline_contents.jit_cache.jit_module.entrypoint_symbol().address;
             std::vector<Type> arg_types;
+            arg_types.reserve(pipeline_contents.inferred_args.size() + pipeline_contents.outputs.size());
             // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
                 // TODO: it's not clear whether arg.arg.type is correct for

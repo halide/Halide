@@ -300,7 +300,10 @@ private:
 
     string thread_id_var_name, num_threads_var_name;
 
-    bool may_merge_allocs_of_different_type;
+    const bool may_merge_allocs_of_different_type =
+        device_api != DeviceAPI::D3D12Compute &&
+        device_api != DeviceAPI::Vulkan &&
+        device_api != DeviceAPI::WebGPU;
 
     // A loop on the host used to compute the shared memory size
     Stmt host_side_preamble;
@@ -1030,10 +1033,7 @@ public:
     ExtractSharedAndHeapAllocations(DeviceAPI d)
         : device_api(d),
           thread_id_var_name(unique_name('t')),
-          num_threads_var_name(unique_name('t')),
-          may_merge_allocs_of_different_type(device_api != DeviceAPI::D3D12Compute &&
-                                             device_api != DeviceAPI::Vulkan &&
-                                             device_api != DeviceAPI::WebGPU) {
+          num_threads_var_name(unique_name('t')) {
     }
 };  // namespace Internal
 

@@ -565,6 +565,7 @@ if (WITH_SERIALIZATION)
         VERBATIM
     )
     add_custom_target(generate_fb_header DEPENDS "${fb_header}")
+    add_dependencies(Halide generate_fb_header)
 
     target_sources(
         Halide

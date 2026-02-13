@@ -23,7 +23,7 @@
 // our CMake build, so that we ensure that the in-build metadata (eg soversion)
 // matches, but keeping the canonical version here makes it easier to keep
 // downstream build systems (eg Blaze/Bazel) properly in sync with the source.
-#define HALIDE_VERSION_MAJOR 20
+#define HALIDE_VERSION_MAJOR 22
 #define HALIDE_VERSION_MINOR 0
 #define HALIDE_VERSION_PATCH 0
 
@@ -1471,6 +1471,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_semihosting,            ///< Used together with Target::NoOS for the baremetal target built with semihosting library and run with semihosting mode where minimum I/O communication with a host PC is available.
     halide_target_feature_avx10_1,                ///< Intel AVX10 version 1 support. vector_bits is used to indicate width.
     halide_target_feature_x86_apx,                ///< Intel x86 APX support. Covers initial set of features released as APX: egpr,push2pop2,ppx,ndd .
+    halide_target_feature_simulator,              ///< Target is for a simulator environment. Currently only applies to iOS.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 

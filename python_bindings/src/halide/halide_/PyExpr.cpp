@@ -17,7 +17,6 @@ void define_expr(py::module &m) {
                               ") cannot be converted to a bool. "
                               "If this error occurs using the 'and'/'or' keywords, "
                               "consider using the '&'/'|' operators instead.");
-        return false;
     };
 
     auto expr_class =
@@ -77,6 +76,12 @@ void define_expr(py::module &m) {
     py::implicitly_convertible<RDom, Expr>();
     py::implicitly_convertible<RVar, Expr>();
     py::implicitly_convertible<Var, Expr>();
+
+    auto eviction_key_class =
+        py::class_<EvictionKey>(m, "EvictionKey")
+            .def(py::init<Expr>());
+
+    py::implicitly_convertible<Expr, EvictionKey>();
 
     auto range_class =
         py::class_<Range>(m, "Range")

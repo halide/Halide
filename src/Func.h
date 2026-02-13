@@ -382,21 +382,21 @@ public:
     Stage &reorder(const std::vector<VarOrRVar> &vars);
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>
     reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
     }
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>
     never_partition(const VarOrRVar &x, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
         return never_partition(collected_args);
     }
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>
     always_partition(const VarOrRVar &x, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
         return always_partition(collected_args);
@@ -1233,7 +1233,7 @@ public:
     FuncRef operator()(std::vector<Var>) const;
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRef>::type
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Var, Args...>::value, FuncRef>
     operator()(Args &&...args) const {
         std::vector<Var> collected_args{std::forward<Args>(args)...};
         return this->operator()(collected_args);
@@ -1250,7 +1250,7 @@ public:
     FuncRef operator()(std::vector<Expr>) const;
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>::type
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>
     operator()(const Expr &x, Args &&...args) const {
         std::vector<Expr> collected_args{x, std::forward<Args>(args)...};
         return (*this)(collected_args);
@@ -1475,7 +1475,7 @@ public:
 
     /** Set the loop partition policy to Never for some number of Vars and RVars. */
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>
     never_partition(const VarOrRVar &x, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
         return never_partition(collected_args);
@@ -1492,7 +1492,7 @@ public:
 
     /** Set the loop partition policy to Always for some number of Vars and RVars. */
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>
     always_partition(const VarOrRVar &x, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
         return always_partition(collected_args);
@@ -1596,7 +1596,7 @@ public:
     Func &reorder(const std::vector<VarOrRVar> &vars);
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>
     reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
@@ -2072,7 +2072,7 @@ public:
 
     Func &reorder_storage(const Var &x, const Var &y);
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
+    HALIDE_NO_USER_CODE_INLINE std::enable_if_t<Internal::all_are_convertible<Var, Args...>::value, Func &>
     reorder_storage(const Var &x, const Var &y, Args &&...args) {
         std::vector<Var> collected_args{x, y, std::forward<Args>(args)...};
         return reorder_storage(collected_args);
@@ -2259,6 +2259,11 @@ public:
      * to remove memoized entries using this eviction key from the
      * cache. Memoized computations that do not provide an eviction
      * key will never be evicted by this mechanism.
+     *
+     * It is invalid to memoize the output of a Pipeline; attempting
+     * to do so will issue an error. To cache an entire pipeline,
+     * either implement a caching mechanism outside of Halide or
+     * explicitly copy out of the cache with another output Func.
      */
     Func &memoize(const EvictionKey &eviction_key = EvictionKey());
 
@@ -2615,7 +2620,7 @@ namespace Internal {
 
 template<typename Last>
 inline void check_types(const Tuple &t, int idx) {
-    using T = typename std::remove_pointer<typename std::remove_reference<Last>::type>::type;
+    using T = std::remove_pointer_t<std::remove_reference_t<Last>>;
     user_assert(t[idx].type() == type_of<T>())
         << "Can't evaluate expression "
         << t[idx] << " of type " << t[idx].type()
@@ -2630,7 +2635,7 @@ inline void check_types(const Tuple &t, int idx) {
 
 template<typename Last>
 inline void assign_results(Realization &r, int idx, Last last) {
-    using T = typename std::remove_pointer<typename std::remove_reference<Last>::type>::type;
+    using T = std::remove_pointer_t<std::remove_reference_t<Last>>;
     *last = Buffer<T>(r[idx])();
 }
 

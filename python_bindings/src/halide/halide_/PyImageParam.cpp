@@ -19,7 +19,7 @@ void define_image_param(py::module &m) {
             .def("set_stride", &Dimension::set_stride, py::arg("stride"))
             .def("set_bounds", &Dimension::set_bounds, py::arg("min"), py::arg("extent"))
             .def("set_estimate", &Dimension::set_estimate, py::arg("min"), py::arg("extent"))
-            .def("dim", (Dimension(Dimension::*)(int))&Dimension::dim, py::arg("dimension"), py::keep_alive<0, 1>());
+            .def("dim", &Dimension::dim, py::arg("dimension"), py::keep_alive<0, 1>());
 
     auto output_image_param_class =
         py::class_<OutputImageParam>(m, "OutputImageParam")
@@ -27,7 +27,7 @@ void define_image_param(py::module &m) {
             .def("name", &OutputImageParam::name)
             .def("type", &OutputImageParam::type)
             .def("defined", &OutputImageParam::defined)
-            .def("dim", (Dimension(OutputImageParam::*)(int))&OutputImageParam::dim, py::arg("dimension"), py::keep_alive<0, 1>())
+            .def("dim", static_cast<Dimension (OutputImageParam::*)(int)>(&OutputImageParam::dim), py::arg("dimension"), py::keep_alive<0, 1>())
             .def("host_alignment", &OutputImageParam::host_alignment)
             .def("set_estimates", &OutputImageParam::set_estimates, py::arg("estimates"))
             .def("set_host_alignment", &OutputImageParam::set_host_alignment)
@@ -73,9 +73,9 @@ void define_image_param(py::module &m) {
             .def("__getitem__", [](ImageParam &im, const std::vector<Var> &args) -> Expr {
                 return im(args);
             })
-            .def("in_", (Func(ImageParam::*)(const Func &))&ImageParam::in)
-            .def("in_", (Func(ImageParam::*)(const std::vector<Func> &))&ImageParam::in)
-            .def("in_", (Func(ImageParam::*)())&ImageParam::in)
+            .def("in_", static_cast<Func (ImageParam::*)(const Func &)>(&ImageParam::in))
+            .def("in_", static_cast<Func (ImageParam::*)(const std::vector<Func> &)>(&ImageParam::in))
+            .def("in_", static_cast<Func (ImageParam::*)()>(&ImageParam::in))
             .def("trace_loads", &ImageParam::trace_loads)
 
             .def("__repr__", [](const ImageParam &im) -> std::string {

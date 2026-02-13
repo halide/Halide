@@ -137,7 +137,7 @@ struct AllInts<> : std::true_type {};
 
 template<typename T, typename... Args>
 struct AllInts<T, Args...> {
-    static const bool value = std::is_convertible<T, int>::value && AllInts<Args...>::value;
+    static const bool value = std::is_convertible_v<T, int> && AllInts<Args...>::value;
 };
 
 // Floats and doubles are technically implicitly int-convertible, but
@@ -241,26 +241,26 @@ class Buffer {
     mutable DeviceRefCount *dev_ref_count = nullptr;
 
     /** True if T is of type void or const void */
-    static const bool T_is_void = std::is_same<typename std::remove_const<T>::type, void>::value;
+    static const bool T_is_void = std::is_same_v<std::remove_const_t<T>, void>;
 
     /** A type function that adds a const qualifier if T is a const type. */
     template<typename T2>
-    using add_const_if_T_is_const = typename std::conditional<std::is_const<T>::value, const T2, T2>::type;
+    using add_const_if_T_is_const = std::conditional_t<std::is_const_v<T>, const T2, T2>;
 
     /** T unless T is (const) void, in which case (const)
      * uint8_t. Useful for providing return types for operator() */
-    using not_void_T = typename std::conditional<T_is_void,
-                                                 add_const_if_T_is_const<uint8_t>,
-                                                 T>::type;
+    using not_void_T = std::conditional_t<T_is_void,
+                                          add_const_if_T_is_const<uint8_t>,
+                                          T>;
 
     /** T with constness removed. Useful for return type of copy(). */
-    using not_const_T = typename std::remove_const<T>::type;
+    using not_const_T = std::remove_const_t<T>;
 
     /** The type the elements are stored as. Equal to not_void_T
      * unless T is a pointer, in which case uint64_t. Halide stores
      * all pointer types as uint64s internally, even on 32-bit
      * systems. */
-    using storage_T = typename std::conditional<std::is_pointer<T>::value, uint64_t, not_void_T>::type;
+    using storage_T = std::conditional_t<std::is_pointer_v<T>, uint64_t, not_void_T>;
 
 public:
     /** True if the Halide type is not void (or const void). */
@@ -269,7 +269,7 @@ public:
     /** Get the Halide type of T. Callers should not use the result if
      * has_static_halide_type is false. */
     static constexpr halide_type_t static_halide_type() {
-        return halide_type_of<typename std::remove_cv<not_void_T>::type>();
+        return halide_type_of<std::remove_cv_t<not_void_T>>();
     }
 
     /** Does this Buffer own the host memory it refers to? */
@@ -499,7 +499,7 @@ private:
 
     template<typename T2>
     static halide_type_t scalar_type_of_array(const T2 &) {
-        return halide_type_of<typename std::remove_cv<T2>::type>();
+        return halide_type_of<std::remove_cv_t<T2>>();
     }
 
     /** Crop a single dimension without handling device allocation. */
@@ -720,10 +720,9 @@ public:
 private:
     template<typename T2, int D2, int S2>
     static void static_assert_can_convert_from() {
-        static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
+        static_assert((!std::is_const_v<T2> || std::is_const_v<T>),
                       "Can't convert from a Buffer<const T> to a Buffer<T>");
-        static_assert(std::is_same<typename std::remove_const<T>::type,
-                                   typename std::remove_const<T2>::type>::value ||
+        static_assert(std::is_same_v<std::remove_const_t<T>, std::remove_const_t<T2>> ||
                           T_is_void || Buffer<T2, D2, S2>::T_is_void,
                       "type mismatch constructing Buffer");
         static_assert(Dims == AnyDims || D2 == AnyDims || Dims == D2,
@@ -978,7 +977,7 @@ public:
      * don't know statically what type the elements are. Pass zeros
      * to make a buffer suitable for bounds query calls. */
     template<typename... Args,
-             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+             typename = std::enable_if_t<AllInts<Args...>::value>>
     Buffer(halide_type_t t, int first, Args... rest) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
@@ -1015,7 +1014,7 @@ public:
     }
 
     template<typename... Args,
-             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+             typename = std::enable_if_t<AllInts<Args...>::value>>
     Buffer(int first, int second, Args... rest) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
@@ -1092,7 +1091,7 @@ public:
      * zero. Does not take ownership of the data and does not set the
      * host_dirty flag. */
     template<typename... Args,
-             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+             typename = std::enable_if_t<AllInts<Args...>::value>>
     explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args &&...rest) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
@@ -1109,11 +1108,11 @@ public:
      * dense row-major packing and a min coordinate of zero. Does not
      * take ownership of the data and does not set the host_dirty flag. */
     template<typename... Args,
-             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+             typename = std::enable_if_t<AllInts<Args...>::value>>
     explicit Buffer(T *data, int first, Args &&...rest) {
         int extents[] = {first, (int)rest...};
         buf.type = static_halide_type();
-        buf.host = (uint8_t *)const_cast<typename std::remove_const<T>::type *>(data);
+        buf.host = (uint8_t *)const_cast<std::remove_const_t<T> *>(data);
         constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
         make_static_shape_storage<buf_dimensions>();
         initialize_shape(extents);
@@ -1125,7 +1124,7 @@ public:
      * host_dirty flag. */
     explicit Buffer(T *data, const std::vector<int> &sizes) {
         buf.type = static_halide_type();
-        buf.host = (uint8_t *)const_cast<typename std::remove_const<T>::type *>(data);
+        buf.host = (uint8_t *)const_cast<std::remove_const_t<T> *>(data);
         make_shape_storage((int)sizes.size());
         initialize_shape(sizes);
     }
@@ -1172,7 +1171,7 @@ public:
      * data and does not set the host_dirty flag. */
     explicit Buffer(T *data, int d, const halide_dimension_t *shape) {
         buf.type = static_halide_type();
-        buf.host = (uint8_t *)const_cast<typename std::remove_const<T>::type *>(data);
+        buf.host = (uint8_t *)const_cast<std::remove_const_t<T> *>(data);
         make_shape_storage(d);
         for (int i = 0; i < d; i++) {
             buf.dim[i] = shape[i];
@@ -1254,27 +1253,27 @@ public:
      * to recapitulate the type argument. */
     // @{
     HALIDE_ALWAYS_INLINE
-    Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> &as_const() & {
+    Buffer<std::add_const_t<T>, Dims, InClassDimStorage> &as_const() & {
         // Note that we can skip the assert_can_convert_from(), since T -> const T
         // conversion is always legal.
-        return *((Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> *)this);
+        return *reinterpret_cast<Buffer<std::add_const_t<T>, Dims, InClassDimStorage> *>(this);
     }
 
     HALIDE_ALWAYS_INLINE
-    const Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> &as_const() const & {
-        return *((const Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> *)this);
+    const Buffer<std::add_const_t<T>, Dims, InClassDimStorage> &as_const() const & {
+        return *reinterpret_cast<const Buffer<std::add_const_t<T>, Dims, InClassDimStorage> *>(this);
     }
 
     HALIDE_ALWAYS_INLINE
-    Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> as_const() && {
-        return *((Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> *)this);
+    Buffer<std::add_const_t<T>, Dims, InClassDimStorage> as_const() && {
+        return *reinterpret_cast<Buffer<std::add_const_t<T>, Dims, InClassDimStorage> *>(this);
     }
     // @}
 
     /** Add some syntactic sugar to allow autoconversion from Buffer<T> to Buffer<const T>& when
      * passing arguments */
-    template<typename T2 = T, typename = typename std::enable_if<!std::is_const<T2>::value>::type>
-    operator Buffer<typename std::add_const<T2>::type, Dims, InClassDimStorage> &() & {
+    template<typename T2 = T, typename = std::enable_if_t<!std::is_const_v<T2>>>
+    operator Buffer<std::add_const_t<T2>, Dims, InClassDimStorage> &() & {
         return as_const();
     }
 
@@ -1282,9 +1281,9 @@ public:
      * passing arguments */
     template<typename TVoid,
              typename T2 = T,
-             typename = typename std::enable_if<std::is_same<TVoid, void>::value &&
-                                                !std::is_void<T2>::value &&
-                                                !std::is_const<T2>::value>::type>
+             typename = std::enable_if_t<std::is_same_v<TVoid, void> &&
+                                         !std::is_void_v<T2> &&
+                                         !std::is_const_v<T2>>>
     operator Buffer<TVoid, Dims, InClassDimStorage> &() & {
         return as<TVoid, Dims>();
     }
@@ -1293,9 +1292,9 @@ public:
      * passing arguments */
     template<typename TVoid,
              typename T2 = T,
-             typename = typename std::enable_if<std::is_same<TVoid, void>::value &&
-                                                !std::is_void<T2>::value &&
-                                                std::is_const<T2>::value>::type>
+             typename = std::enable_if_t<std::is_same_v<TVoid, void> &&
+                                         !std::is_void_v<T2> &&
+                                         std::is_const_v<T2>>>
     operator Buffer<const TVoid, Dims, InClassDimStorage> &() & {
         return as<const TVoid, Dims>();
     }
@@ -1413,7 +1412,7 @@ public:
      */
     template<typename T2, int D2, int S2>
     void copy_from(Buffer<T2, D2, S2> src) {
-        static_assert(!std::is_const<T>::value, "Cannot call copy_from() on a Buffer<const T>");
+        static_assert(!std::is_const_v<T>, "Cannot call copy_from() on a Buffer<const T>");
         assert(!device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.");
         assert(!src.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
 
@@ -2004,7 +2003,7 @@ public:
         // Note that src is taken by value because its dims are mutated
         // in-place by the helper. Do not change to taking it by reference.
         static_assert(Dims == D2 || Dims == AnyDims);
-        const halide_type_t dst_type = T_is_void ? src.type() : halide_type_of<typename std::remove_cv<not_void_T>::type>();
+        const halide_type_t dst_type = T_is_void ? src.type() : halide_type_of<std::remove_cv_t<not_void_T>>();
         return Buffer<>::make_with_shape_of_helper(dst_type, src.dimensions(), src.buf.dim,
                                                    allocate_fn, deallocate_fn);
     }
@@ -2112,7 +2111,7 @@ public:
      */
     //@{
     template<typename... Args,
-             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+             typename = std::enable_if_t<AllInts<Args...>::value>>
     HALIDE_ALWAYS_INLINE const not_void_T &operator()(int first, Args... rest) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
@@ -2142,7 +2141,7 @@ public:
     }
 
     template<typename... Args,
-             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+             typename = std::enable_if_t<AllInts<Args...>::value>>
     HALIDE_ALWAYS_INLINE not_void_T &operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
@@ -2409,17 +2408,17 @@ private:
      * std::enable_if. */
     template<int d,
              typename Fn,
-             typename = typename std::enable_if<(d >= 0)>::type>
+             typename = std::enable_if_t<(d >= 0)>>
     HALIDE_ALWAYS_INLINE static void for_each_element_array_helper(int, const for_each_element_task_dim *t, Fn &&f, int *pos) {
         for (pos[d] = t[d].min; pos[d] <= t[d].max; pos[d]++) {
-            for_each_element_array_helper<d - 1>(0, t, std::forward<Fn>(f), pos);
+            for_each_element_array_helper<d - 1>(0, t, f, pos);
         }
     }
 
     /** Base case for recursion above. */
     template<int d,
              typename Fn,
-             typename = typename std::enable_if<(d < 0)>::type>
+             typename = std::enable_if_t<(d < 0)>>
     HALIDE_ALWAYS_INLINE static void for_each_element_array_helper(double, const for_each_element_task_dim *t, Fn &&f, int *pos) {
         f(pos);
     }
@@ -2446,7 +2445,7 @@ private:
             for_each_element_array_helper<3, Fn>(0, t, std::forward<Fn>(f), pos);
         } else {
             for (pos[d] = t[d].min; pos[d] <= t[d].max; pos[d]++) {
-                for_each_element_array(d - 1, t, std::forward<Fn>(f), pos);
+                for_each_element_array(d - 1, t, f, pos);
             }
         }
     }
@@ -2581,7 +2580,7 @@ public:
      * for_each_element, but it should return the value that should be
      * stored to the coordinate corresponding to the arguments. */
     template<typename Fn,
-             typename = typename std::enable_if<!std::is_arithmetic<typename std::decay<Fn>::type>::value>::type>
+             typename = std::enable_if_t<!std::is_arithmetic_v<std::decay_t<Fn>>>>
     Buffer<T, Dims, InClassDimStorage> &fill(Fn &&f) {
         // We'll go via for_each_element. We need a variadic wrapper lambda.
         FillHelper<Fn> wrapper(std::forward<Fn>(f), this);

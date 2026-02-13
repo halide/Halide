@@ -215,7 +215,7 @@ void define_func(py::module &m) {
             .def("async_", &Func::async)
             .def("ring_buffer", &Func::ring_buffer)
             .def("bound_storage", &Func::bound_storage)
-            .def("memoize", &Func::memoize)
+            .def("memoize", &Func::memoize, py::arg("eviction_key") = EvictionKey())
             .def("compute_inline", &Func::compute_inline)
             .def("compute_root", &Func::compute_root)
             .def("store_root", &Func::store_root)
@@ -351,20 +351,20 @@ void define_func(py::module &m) {
             .def("is_extern", &Func::is_extern)
             .def("extern_function_name", &Func::extern_function_name)
 
-            .def("define_extern",                                                                                                                                                                    //
-                 (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, const std::vector<Var> &, NameMangling, DeviceAPI)) & Func::define_extern,  //
+            .def("define_extern",                                                                                                                                                                                //
+                 static_cast<void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, const std::vector<Var> &, NameMangling, DeviceAPI)>(&Func::define_extern),  //
                  py::arg("function_name"), py::arg("params"), py::arg("types"), py::arg("arguments"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
-            .def("define_extern",                                                                                                                          //
-                 (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, int, NameMangling, DeviceAPI)) & Func::define_extern,  //
+            .def("define_extern",                                                                                                                                      //
+                 static_cast<void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, int, NameMangling, DeviceAPI)>(&Func::define_extern),  //
                  py::arg("function_name"), py::arg("params"), py::arg("type"), py::arg("dimensionality"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
-            .def("define_extern",                                                                                                                                               //
-                 (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, int, NameMangling, DeviceAPI)) & Func::define_extern,  //
+            .def("define_extern",                                                                                                                                                           //
+                 static_cast<void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, int, NameMangling, DeviceAPI)>(&Func::define_extern),  //
                  py::arg("function_name"), py::arg("params"), py::arg("types"), py::arg("dimensionality"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
-            .def("define_extern",                                                                                                                                               //
-                 (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, const std::vector<Var> &, NameMangling, DeviceAPI)) & Func::define_extern,  //
+            .def("define_extern",                                                                                                                                                           //
+                 static_cast<void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, const std::vector<Var> &, NameMangling, DeviceAPI)>(&Func::define_extern),  //
                  py::arg("function_name"), py::arg("params"), py::arg("type"), py::arg("arguments"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
             .def("output_buffer", &Func::output_buffer)
@@ -404,12 +404,12 @@ void define_func(py::module &m) {
                  },
                  py::arg("dst"), py::arg("target") = Target())
 
-            .def("in_", (Func(Func::*)(const Func &))&Func::in, py::arg("f"))
-            .def("in_", (Func(Func::*)(const std::vector<Func> &fs))&Func::in, py::arg("fs"))
-            .def("in_", (Func(Func::*)())&Func::in)
+            .def("in_", static_cast<Func (Func::*)(const Func &)>(&Func::in), py::arg("f"))
+            .def("in_", static_cast<Func (Func::*)(const std::vector<Func> &fs)>(&Func::in), py::arg("fs"))
+            .def("in_", static_cast<Func (Func::*)()>(&Func::in))
 
-            .def("clone_in", (Func(Func::*)(const Func &))&Func::clone_in, py::arg("f"))
-            .def("clone_in", (Func(Func::*)(const std::vector<Func> &fs))&Func::clone_in, py::arg("fs"))
+            .def("clone_in", static_cast<Func (Func::*)(const Func &)>(&Func::clone_in), py::arg("f"))
+            .def("clone_in", static_cast<Func (Func::*)(const std::vector<Func> &fs)>(&Func::clone_in), py::arg("fs"))
 
             .def("copy_to_device", &Func::copy_to_device, py::arg("device_api") = DeviceAPI::Default_GPU)
             .def("copy_to_host", &Func::copy_to_host)

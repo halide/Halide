@@ -21,6 +21,8 @@ struct ParameterContents {
     Expr scalar_default, scalar_min, scalar_max, scalar_estimate;
     const bool is_buffer;
     MemoryType memory_type = MemoryType::Auto;
+    bool trace_loads{false};
+    std::vector<std::string> trace_tags;
 
     ParameterContents(Type t, bool b, int d, const std::string &n)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()),
@@ -492,6 +494,22 @@ void Parameter::store_in(MemoryType memory_type) {
 MemoryType Parameter::memory_type() const {
     // check_is_buffer();
     return contents->memory_type;
+}
+
+void Parameter::trace_loads() {
+    contents->trace_loads = true;
+}
+
+bool Parameter::is_tracing_loads() const {
+    return contents->trace_loads;
+}
+
+void Parameter::add_trace_tag(const std::string &trace_tag) {
+    contents->trace_tags.push_back(trace_tag);
+}
+
+std::vector<std::string> Parameter::get_trace_tags() const {
+    return contents->trace_tags;
 }
 
 namespace Internal {

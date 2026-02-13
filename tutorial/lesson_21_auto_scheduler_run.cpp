@@ -15,19 +15,24 @@
 #include "HalideBuffer.h"
 #include "halide_benchmark.h"
 
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <random>
 
-int main(int argc, char **argv) {
+int main() {
     // Let's declare and initialize the input images
     Halide::Runtime::Buffer<float> input(1024, 1024, 3);
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> dis(0.0f, 1.0f);
 
     for (int c = 0; c < input.channels(); ++c) {
         for (int y = 0; y < input.height(); ++y) {
             for (int x = 0; x < input.width(); ++x) {
-                input(x, y, c) = rand();
+                input(x, y, c) = dis(gen);
             }
         }
     }

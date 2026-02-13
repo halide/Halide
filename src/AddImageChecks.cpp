@@ -221,16 +221,12 @@ Stmt add_image_checks_inner(Stmt s,
         const string &name = buf.first;
 
         for (int i = 0; i < buf.second.dimensions; i++) {
-            string dim = std::to_string(i);
-
-            Expr min_required = Variable::make(Int(32), name + ".min." + dim + ".required");
-            replace_with_required[name + ".min." + dim] = min_required;
-
-            Expr extent_required = Variable::make(Int(32), name + ".extent." + dim + ".required");
-            replace_with_required[name + ".extent." + dim] = simplify(extent_required);
-
-            Expr stride_required = Variable::make(Int(32), name + ".stride." + dim + ".required");
-            replace_with_required[name + ".stride." + dim] = stride_required;
+            string min_name = concat_strings(name, ".min.", i);
+            string extent_name = concat_strings(name, ".extent.", i);
+            string stride_name = concat_strings(name, ".stride.", i);
+            replace_with_required[min_name] = Variable::make(Int(32), min_name + ".required");
+            replace_with_required[extent_name] = simplify(Variable::make(Int(32), extent_name + ".required"));
+            replace_with_required[stride_name] = Variable::make(Int(32), stride_name + ".required");
         }
     }
 
@@ -373,9 +369,9 @@ Stmt add_image_checks_inner(Stmt s,
 
         for (int j = 0; j < dimensions; j++) {
             string dim = std::to_string(j);
-            string actual_min_name = name + ".min." + dim;
-            string actual_extent_name = name + ".extent." + dim;
-            string actual_stride_name = name + ".stride." + dim;
+            string actual_min_name = concat_strings(name, ".min.", dim);
+            string actual_extent_name = concat_strings(name, ".extent.", dim);
+            string actual_stride_name = concat_strings(name, ".stride.", dim);
             Expr actual_min = Variable::make(Int(32), actual_min_name, image, param, rdom);
             Expr actual_extent = Variable::make(Int(32), actual_extent_name, image, param, rdom);
             Expr actual_stride = Variable::make(Int(32), actual_stride_name, image, param, rdom);
@@ -394,8 +390,9 @@ Stmt add_image_checks_inner(Stmt s,
                 extent_required = select(touched.used, extent_required, actual_extent);
             }
 
-            string min_required_name = name + ".min." + dim + ".required";
-            string extent_required_name = name + ".extent." + dim + ".required";
+            string min_required_name = actual_min_name + ".required";
+            string extent_required_name = actual_extent_name + ".required";
+            string stride_required_name = actual_stride_name + ".required";
 
             Expr min_required_var = Variable::make(Int(32), min_required_name);
             Expr extent_required_var = Variable::make(Int(32), extent_required_name);
@@ -428,11 +425,12 @@ Stmt add_image_checks_inner(Stmt s,
             if (j == 0) {
                 stride_required = 1;
             } else {
-                string last_dim = std::to_string(j - 1);
-                stride_required = (Variable::make(Int(32), name + ".stride." + last_dim + ".required") *
-                                   Variable::make(Int(32), name + ".extent." + last_dim + ".required"));
+                string last_stride_required_name = concat_strings(name, ".stride.", j - 1, ".required");
+                string last_extent_required_name = concat_strings(name, ".extent.", j - 1, ".required");
+                stride_required = Variable::make(Int(32), last_stride_required_name) *
+                                  Variable::make(Int(32), last_extent_required_name);
             }
-            lets_required.emplace_back(name + ".stride." + dim + ".required", stride_required);
+            lets_required.emplace_back(stride_required_name, stride_required);
 
             // On 32-bit systems, insert checks to make sure the total
             // size of all input and output buffers is <= 2^31 - 1.
@@ -451,14 +449,15 @@ Stmt add_image_checks_inner(Stmt s,
 
             // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
             if (!is_secondary_output_buffer) {
+                const string total_extent_name = concat_strings(name, ".total_extent.", dim);
                 if (j == 0) {
-                    lets_overflow.emplace_back(name + ".total_extent." + dim, cast<int64_t>(actual_extent));
+                    lets_overflow.emplace_back(total_extent_name, cast<int64_t>(actual_extent));
                 } else {
                     max_size = cast<int64_t>(max_size);
-                    Expr last_dim = Variable::make(Int(64), name + ".total_extent." + std::to_string(j - 1));
+                    Expr last_dim = Variable::make(Int(64), concat_strings(name, ".total_extent.", j - 1));
                     Expr this_dim = actual_extent * last_dim;
-                    Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
-                    lets_overflow.emplace_back(name + ".total_extent." + dim, this_dim);
+                    Expr this_dim_var = Variable::make(Int(64), total_extent_name);
+                    lets_overflow.emplace_back(total_extent_name, this_dim);
                     Expr error = Call::make(Int(32), "halide_error_buffer_extents_too_large",
                                             {name, this_dim_var, max_size}, Call::Extern);
                     Stmt check = AssertStmt::make(this_dim_var <= max_size, error);
@@ -482,10 +481,12 @@ Stmt add_image_checks_inner(Stmt s,
         builder.type = type;
         builder.dimensions = dimensions;
         for (int i = 0; i < dimensions; i++) {
-            string dim = std::to_string(i);
-            builder.mins.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
-            builder.extents.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
-            builder.strides.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
+            std::string min_proposed = concat_strings(name, ".min.", i, ".proposed");
+            std::string extent_proposed = concat_strings(name, ".extent.", i, ".proposed");
+            std::string stride_proposed = concat_strings(name, ".stride.", i, ".proposed");
+            builder.mins.push_back(Variable::make(Int(32), min_proposed));
+            builder.extents.push_back(Variable::make(Int(32), extent_proposed));
+            builder.strides.push_back(Variable::make(Int(32), stride_proposed));
         }
         Stmt rewrite = Evaluate::make(builder.build());
 
@@ -495,10 +496,9 @@ Stmt add_image_checks_inner(Stmt s,
         // Build the constraints tests and proposed sizes.
         vector<pair<Expr, Expr>> constraints;
         for (int i = 0; i < dimensions; i++) {
-            string dim = std::to_string(i);
-            string min_name = name + ".min." + dim;
-            string stride_name = name + ".stride." + dim;
-            string extent_name = name + ".extent." + dim;
+            string min_name = concat_strings(name, ".min.", i);
+            string stride_name = concat_strings(name, ".stride.", i);
+            string extent_name = concat_strings(name, ".extent.", i);
 
             Expr stride_constrained, extent_constrained, min_constrained;
 
@@ -532,14 +532,14 @@ Stmt add_image_checks_inner(Stmt s,
                     stride_constrained = image.dim(i).stride();
                 }
 
-                std::string min0_name = buffer_name + ".0.min." + dim;
+                std::string min0_name = concat_strings(buffer_name, ".0.min.", i);
                 if (replace_with_constrained.count(min0_name) > 0) {
                     min_constrained = replace_with_constrained[min0_name];
                 } else {
                     min_constrained = Variable::make(Int(32), min0_name);
                 }
 
-                std::string extent0_name = buffer_name + ".0.extent." + dim;
+                std::string extent0_name = concat_strings(buffer_name, ".0.extent.", i);
                 if (replace_with_constrained.count(extent0_name) > 0) {
                     extent_constrained = replace_with_constrained[extent0_name];
                 } else {

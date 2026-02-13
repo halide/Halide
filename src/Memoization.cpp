@@ -17,11 +17,16 @@ namespace Internal {
 namespace {
 
 class FindParameterDependencies : public IRGraphVisitor {
+    std::set<Function, Function::Compare> visited_functions;
+
 public:
     FindParameterDependencies() = default;
     ~FindParameterDependencies() override = default;
 
     void visit_function(const Function &function) {
+        if (const auto [_, inserted] = visited_functions.insert(function); !inserted) {
+            return;
+        }
         function.accept(this);
 
         if (function.has_extern_definition()) {
@@ -392,7 +397,7 @@ private:
             builder.dimensions = f.dimensions();
             std::string max_stage_num = std::to_string(f.updates().size());
             for (const std::string &arg : f.args()) {
-                std::string prefix = op->name + ".s" + max_stage_num + "." + arg;
+                std::string prefix = concat_strings(op->name, ".s", max_stage_num, ".", arg);
                 Expr min = Variable::make(Int(32), prefix + ".min");
                 Expr max = Variable::make(Int(32), prefix + ".max");
                 builder.mins.push_back(min);
