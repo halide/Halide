@@ -80,6 +80,17 @@ tools = [
     "tbump>=6.11",
 ]
 
+ci-base = [
+    { include-group = "dev" },
+    { include-group = "apps" },
+    { include-group = "tools" },
+]
+
+ci-llvm-main = [{ include-group = "ci-base" }, "halide-llvm==23.0.0.dev0+g80f627e6"]
+ci-llvm-22 = [{ include-group = "ci-base" }, "halide-llvm==22.1.0rc3"]
+ci-llvm-21 = [{ include-group = "ci-base" }, "halide-llvm==21.1.8"]
+ci-llvm-20 = [{ include-group = "ci-base" }, "halide-llvm==20.1.8"]
+
 [project.urls]
 Homepage = "https://halide-lang.org"
 Documentation = "https://github.com/halide/Halide/blob/main/doc/Python.md"
@@ -175,3 +186,21 @@ search = "#define HALIDE_VERSION_MINOR {current_version}"
 src = "src/runtime/HalideRuntime.h"
 version_template = "{patch}"
 search = "#define HALIDE_VERSION_PATCH {current_version}"
+
+[tool.uv]
+conflicts = [
+    [
+        { group = "ci-llvm-main" },
+        { group = "ci-llvm-22" },
+        { group = "ci-llvm-21" },
+        { group = "ci-llvm-20" },
+    ],
+]
+
+[tool.uv.sources]
+halide-llvm = { index = "halide" }
+
+[[tool.uv.index]]
+name = "halide"
+url = "https://pypi.halide-lang.org/simple"
+explicit = true
