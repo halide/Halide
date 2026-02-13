@@ -1145,6 +1145,10 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckARM>(
         argc, argv,
         {
+            // IMPORTANT:
+            // When adding new targets here, make sure to also update
+            // can_run_code in simd_op_check.h to include any new features used.
+
             Target("arm-32-linux"),
             Target("arm-64-linux"),
             Target("arm-64-linux-arm_dot_prod"),

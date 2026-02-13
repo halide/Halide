@@ -526,7 +526,7 @@ void cse_test() {
         check(e, correct);
     }
 
-    debug(0) << "common_subexpression_elimination test passed\n";
+    std::cout << "common_subexpression_elimination test passed\n";
 }
 
 }  // namespace Internal

@@ -4,14 +4,13 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Mod *op, ExprInfo *info) {
-    ExprInfo a_info, b_info;
+    ExprInfo a_info, b_info, mod_info;
     Expr a = mutate(op->a, &a_info);
     Expr b = mutate(op->b, &b_info);
 
     // We always combine bounds here, even if not requested, because
     // we can use them to simplify down to a constant if the bounds
     // are tight enough.
-    ExprInfo mod_info;
     if (op->type.is_int_or_uint()) {
         mod_info.bounds = a_info.bounds % b_info.bounds;
         mod_info.alignment = a_info.alignment % b_info.alignment;
@@ -23,33 +22,36 @@ Expr Simplify::visit(const Mod *op, ExprInfo *info) {
         *info = mod_info;
     }
 
-    if (a_info.bounds >= 0 && a_info.bounds < b_info.bounds) {
-        return a;
+    if (mod_info.bounds.is_single_point()) {
+        return make_const(op->type, mod_info.bounds.min, nullptr);
     }
 
-    if (mod_info.bounds.is_single_point()) {
-        // We don't pass info as the last arg here because we've already set
-        // info to be the constant above. No need to do it again.
-        return make_const(op->type, mod_info.bounds.min, nullptr);
+    if (a_info.bounds >= 0 && a_info.bounds < b_info.bounds) {
+        if (info) {
+            // info should already have the correct bounds, but we lost
+            // information about alignment above.
+            *info = a_info;
+        }
+        return a;
     }
 
     int lanes = op->type.lanes();
     auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b), op->type);
 
-    if (rewrite(c0 % c1, fold(c0 % c1)) ||
-        rewrite(IRMatcher::Overflow() % x, a) ||
-        rewrite(x % IRMatcher::Overflow(), b) ||
-        rewrite(0 % x, 0) ||
-        rewrite(x % x, 0) ||
-        rewrite(x % 0, 0) ||
-        (!op->type.is_float() &&
-         rewrite(x % 1, 0))) {
+    if (rewrite(IRMatcher::Overflow() % x, a) ||
+        rewrite(x % IRMatcher::Overflow(), b)) {
         return rewrite.result;
     }
 
     // clang-format off
     if (EVAL_IN_LAMBDA
-        (rewrite(broadcast(x, c0) % broadcast(y, c0), broadcast(x % y, c0)) ||
+        (
+         rewrite(c0 % c1, fold(c0 % c1)) ||
+         rewrite(0 % x, 0) ||
+         rewrite(x % x, 0) ||
+         rewrite(x % 0, 0) ||
+         (!op->type.is_float() && rewrite(x % 1, 0)) ||
+         rewrite(broadcast(x, c0) % broadcast(y, c0), broadcast(x % y, c0)) ||
          (no_overflow_int(op->type) &&
           (rewrite((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
            rewrite((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||

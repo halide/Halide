@@ -2098,6 +2098,13 @@ void CodeGen_Hexagon::visit(const Select *op) {
         value = codegen(Call::make(op->type, Call::if_then_else,
                                    {b->value, op->true_value, op->false_value},
                                    Call::PureIntrinsic));
+    } else if (op->type.is_vector() && op->type.is_bool()) {
+        // Lower selects on bools to bit math
+        std::string cond_name = unique_name('c');
+        Expr cond = Variable::make(op->condition.type(), cond_name);
+        Expr equiv = Let::make(cond_name, op->condition,
+                               (op->true_value & cond) | (op->false_value & ~cond));
+        value = codegen(equiv);
     } else {
         CodeGen_Posix::visit(op);
     }

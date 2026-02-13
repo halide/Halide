@@ -391,7 +391,7 @@ std::ostream &operator<<(std::ostream &s, const WildConstFloat<i> &c) {
     return s;
 }
 
-// Matches and binds to any constant Expr. Does not support constant-folding.
+// Matches and binds to any constant Expr.
 template<int i>
 struct WildConst {
     struct pattern_tag {};
@@ -777,6 +777,7 @@ struct CmpOp {
             b.make_folded_const(val_b, ty, state);
             ty.lanes |= l;
         }
+
         switch (ty.code) {
         case halide_type_int:
             val.u.u64 = constant_fold_cmp_op<Op>(val_a.u.i64, val_b.u.i64);
@@ -1663,6 +1664,66 @@ HALIDE_ALWAYS_INLINE auto not_op(A &&a) -> decltype(IRMatcher::operator!(a)) {
 template<typename A>
 inline std::ostream &operator<<(std::ostream &s, const NotOp<A> &op) {
     s << "!(" << op.a << ")";
+    return s;
+}
+
+// The simplified negation of some already-bound boolean wildcard. So if x
+// matched to v < 3, this will bind to 3 <= v. If x matched to v == 3, this will
+// bind to v != 3, etc. Will also bind to !x.
+template<int i>
+struct SimplifiedNegateOp {
+    struct pattern_tag {};
+
+    constexpr static uint32_t binds = 0;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::EQ;
+    constexpr static IRNodeType max_node_type = IRNodeType::Not;
+    constexpr static bool canonical = true;
+    constexpr static bool foldable = false;
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+        static_assert(bound & Wild<i>::binds, "neg must be applied to an already-bound expr");
+        const BaseExprNode &b = *state.get_binding(i);
+
+        switch (b.node_type) {
+        case IRNodeType::EQ:
+            return (e.node_type == IRNodeType::NE &&
+                    ((equal(*((const NE &)e).a.get(), *((const EQ &)b).a.get()) &&
+                      equal(*((const NE &)e).b.get(), *((const EQ &)b).b.get())) ||
+                     (equal(*((const NE &)e).a.get(), *((const EQ &)b).b.get()) &&
+                      equal(*((const NE &)e).b.get(), *((const EQ &)b).a.get()))));
+        case IRNodeType::NE:
+            return (e.node_type == IRNodeType::EQ &&
+                    ((equal(*((const EQ &)e).a.get(), *((const NE &)b).a.get()) &&
+                      equal(*((const EQ &)e).b.get(), *((const NE &)b).b.get())) ||
+                     (equal(*((const EQ &)e).a.get(), *((const NE &)b).b.get()) &&
+                      equal(*((const EQ &)e).b.get(), *((const NE &)b).a.get()))));
+        case IRNodeType::LT:
+            return (e.node_type == IRNodeType::LE &&
+                    equal(*((const LE &)e).a.get(), *((const LT &)b).b.get()) &&
+                    equal(*((const LE &)e).b.get(), *((const LT &)b).a.get()));
+        case IRNodeType::LE:
+            return (e.node_type == IRNodeType::LT &&
+                    equal(*((const LT &)e).a.get(), *((const LE &)b).b.get()) &&
+                    equal(*((const LT &)e).b.get(), *((const LE &)b).a.get()));
+        case IRNodeType::Not:
+            return equal(e, *((const Not &)b).a.get());
+        default:
+            return (e.node_type == IRNodeType::Not &&
+                    equal(*((const Not &)e).a.get(), b));
+        }
+    }
+};
+
+template<int i>
+HALIDE_ALWAYS_INLINE auto neg(const Wild<i> &a) -> SimplifiedNegateOp<i> {
+    return SimplifiedNegateOp<i>();
+}
+
+template<int i>
+inline std::ostream &operator<<(std::ostream &s, const SimplifiedNegateOp<i> &op) {
+    s << "neg(" << Wild<i>{} << ")";
     return s;
 }
 

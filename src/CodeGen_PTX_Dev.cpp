@@ -604,17 +604,19 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
-    llvm::Triple triple(module->getTargetTriple());
-
-    // Allocate target machine
-
+    // Allocate target machine (similar to code in CodeGen_Internal.cpp make_target_machine)
     std::string err_str;
-    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(triple.str(), err_str);
-    internal_assert(llvm_target) << err_str << "\n";
+    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(
+        module->getTargetTriple(),
+        err_str);
+    auto triple = llvm::Triple(module->getTargetTriple());
+    internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
     options.AllowFPOpFusion = FPOpFusion::Fast;
+#if LLVM_VERSION < 210
     options.UnsafeFPMath = true;
+#endif
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;

@@ -1148,18 +1148,100 @@ private:
         op->value.accept(this);
     }
 
-    void visit(const Call *op) override {
-        TRACK_BOUNDS_INTERVAL;
-        TRACK_BOUNDS_INFO("name:", op->name);
+    // Replace a PureIntrinsic with another Expr with the same bounds. Only used
+    // in cases where if the expression turns out to be unvarying, we want to
+    // preserve the original expression in the bounds.
+    Expr lower_intrinsic(const Call *op) {
 
-        // Tags are hints that don't affect the results of the expression, and
-        // can be very deeply nested. The bounds of this call are *always*
-        // exactly that of its first argument, so short circuit it here.
-        if (op->is_tag()) {
-            internal_assert(op->args.size() == 1);
-            op->args[0].accept(this);
-            return;
+        if (op->is_strict_float_intrinsic()) {
+            // We'll just unstrictify it to do the analysis. This is
+            // dubious. Constructing a bounds expression that uses non-strict
+            // operations might get simplified during bounds analysis (we call
+            // simplify above!) to something approximate, resulting in an
+            // out-of-bounds read. See https://github.com/halide/Halide/issues/8646
+            return unstrictify_float(op);
+        } else if (op->args.size() == 1) {
+            if (op->is_intrinsic(Call::saturating_cast)) {
+                return lower_saturating_cast(op->type, op->args[0]);
+            } else if (op->type.is_int() && op->is_intrinsic(Call::count_leading_zeros)) {
+                // clz treats signed and unsigned ints the same way;
+                // cast all ints to uint to simplify this.
+                Type uint_type = op->type.with_code(halide_type_uint);
+                return cast(op->type, count_leading_zeros(cast(uint_type, op->args[0])));
+            }
+        } else if (op->args.size() == 2) {
+            const bool widen_0 = can_widen(op->args[0]), widen_1 = can_widen(op->args[1]);
+            if (op->is_intrinsic(Call::absd) && op->type.is_float()) {
+                return abs(op->args[0] - op->args[1]);
+            } else if (op->is_intrinsic(Call::return_second)) {
+                return op->args[1];
+            } else if (op->is_intrinsic(Call::if_then_else)) {
+                // Probably more conservative than necessary
+                return op->args[1];
+            } else if (op->is_intrinsic(Call::rounding_shift_right)) {
+                // TODO: uses bitwise ops we may not handle well
+                return lower_rounding_shift_right(op->args[0], op->args[1]);
+            } else if (op->is_intrinsic(Call::rounding_shift_left)) {
+                // TODO: uses bitwise ops we may not handle well
+                return lower_rounding_shift_left(op->args[0], op->args[1]);
+            } else if (op->is_intrinsic(Call::sorted_avg)) {
+                return lower_sorted_avg(op->args[0], op->args[1]);
+            } else if (op->is_intrinsic(Call::shift_left) &&
+                       is_const(op->args[1]) &&
+                       !is_const_one(op->args[0]) &&
+                       !(op->type.is_int() && op->type.bits() >= 32)) {
+                // We can normalize to multiplication.
+                // The !is_const_one check prevents infinite recursion if the
+                // constant-folding call fails.
+                return op->args[0] * simplify(make_const(op->type, 1) << op->args[1]);
+            } else if (widen_0 && op->is_intrinsic(Call::widening_shift_left)) {
+                return lower_widening_shift_left(op->args[0], op->args[1]);
+            } else if (widen_0 && op->is_intrinsic(Call::widening_shift_right)) {
+                return lower_widening_shift_right(op->args[0], op->args[1]);
+            } else if (widen_1 && op->is_intrinsic(Call::widen_right_add)) {
+                return lower_widen_right_add(op->args[0], op->args[1]);
+            } else if (widen_1 && op->is_intrinsic(Call::widen_right_mul)) {
+                return lower_widen_right_mul(op->args[0], op->args[1]);
+            } else if (widen_1 && op->is_intrinsic(Call::widen_right_sub)) {
+                return lower_widen_right_sub(op->args[0], op->args[1]);
+            } else if (widen_0 && widen_1) {
+                if (op->is_intrinsic(Call::widening_add)) {
+                    return lower_widening_add(op->args[0], op->args[1]);
+                } else if (op->is_intrinsic(Call::widening_mul)) {
+                    return lower_widening_mul(op->args[0], op->args[1]);
+                } else if (op->is_intrinsic(Call::widening_sub)) {
+                    return lower_widening_sub(op->args[0], op->args[1]);
+                } else if (op->is_intrinsic(Call::saturating_add)) {
+                    return narrow(clamp(widen(op->args[0]) + widen(op->args[1]),
+                                        op->type.min(), op->type.max()));
+                } else if (op->is_intrinsic(Call::saturating_sub)) {
+                    return narrow(clamp(widen(op->args[0]) - widen(op->args[1]),
+                                        op->type.min(), op->type.max()));
+                } else if (op->is_intrinsic(Call::halving_add)) {
+                    return narrow((widen(op->args[0]) + widen(op->args[1])) / 2);
+                } else if (op->is_intrinsic(Call::rounding_halving_add)) {
+                    return narrow((widen(op->args[0]) + widen(op->args[1]) + 1) / 2);
+                } else if (op->is_intrinsic(Call::halving_sub)) {
+                    return narrow((widen(op->args[0]) - widen(op->args[1])) / 2);
+                }
+            }
+        } else if (op->args.size() == 3) {
+            if (op->is_intrinsic(Call::if_then_else)) {
+                // Probably more conservative than necessary
+                return Select::make(op->args[0], op->args[1], op->args[2]);
+            } else if (can_widen_all(op->args)) {
+                if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
+                    return saturating_narrow(rounding_shift_right(widening_mul(op->args[0], op->args[1]), op->args[2]));
+                } else if (op->is_intrinsic(Call::mul_shift_right)) {
+                    return saturating_narrow(widening_mul(op->args[0], op->args[1]) >> op->args[2]);
+                }
+            }
         }
+
+        return Expr();
+    }
+
+    void bounds_of_call(const Call *op) {
 
         // For call nodes, we want to only evaluate the bounds of each arg once, but
         // lazily because for many functions we don't need them at all. This class
@@ -1195,13 +1277,11 @@ private:
             return;
         }
 
-        // A helper which converts a call with single-point args into the same
-        // call applied to those args. For some types of Call node if the args
-        // are const we can return the call of those args for pure
-        // functions. For other types of Call, the same call in two
-        // different places might produce different results (e.g. during the
-        // update step of a reduction), so we can't move around call nodes.
-        auto handle_const_arg_call = [&]() {
+        // If it's pure and all the args are unvarying, just return the call.
+        if (!const_bound &&
+            (op->call_type == Call::PureExtern ||
+             op->call_type == Call::PureIntrinsic ||
+             op->call_type == Call::Image)) {
             std::vector<Expr> new_args(op->args.size());
             bool const_args = true;
             for (size_t i = 0; i < op->args.size() && const_args; i++) {
@@ -1216,45 +1296,18 @@ private:
                 Expr call = Call::make(t, op->name, new_args, op->call_type,
                                        op->func, op->value_index, op->image, op->param);
                 interval = Interval::single_point(call);
-                return true;
-            } else {
-                return false;
+                return;
             }
-        };
-
-        if (!const_bound &&
-            (op->call_type == Call::PureExtern ||
-             op->call_type == Call::Image) &&
-            handle_const_arg_call()) {
-
-            // PureIntrinsics could also be handled here, but they may be
-            // lowered by the code below into different forms, so to avoid
-            // exponential complexity we handle those later.
-            return;
-
-            // else fall thru and continue
         }
 
-        // If we lower a call expr into another form, we want to keep the
-        // original form if it turns out to have been a const. This helper
-        // accomplishes that, and also treats undefined Exprs as being unbounded
-        // as a convenience for things that may or may not be able to be
-        // lowered.
-        const auto handle_lowered_expr_bounds = [this, t, op](const Expr &e) -> void {
-            if (e.defined()) {
-                e.accept(this);
-                if (interval.is_single_point(e)) {
-                    // It was unvarying, so just return the original unlowered form.
-                    interval = Interval::single_point(op);
-                }
-            } else {
-                // Just use the bounds of the type
-                this->bounds_of_type(t);
-            }
-        };
-
-        if (op->is_intrinsic(Call::abs)) {
-            Interval a = arg_bounds.get(0);
+        // Bounds rules for specific call ops
+        if (op->is_tag() ||
+            op->is_intrinsic(Call::memoize_expr)) {
+            interval = arg_bounds.get(0);
+        } else if (op->is_intrinsic(Call::require)) {
+            interval = arg_bounds.get(1);
+        } else if (op->is_intrinsic(Call::abs)) {
+            const Interval &a = arg_bounds.get(0);
 
             if (a.is_bounded()) {
                 if (equal(a.min, a.max)) {
@@ -1264,9 +1317,8 @@ private:
                     interval.max = Cast::make(t, Max::make(-a.min, a.max));
                 } else {
                     interval.min = Cast::make(t, Max::make(a.min, -Min::make(make_zero(a.min.type()), a.max)));
-                    a.min = Call::make(t, Call::abs, {a.min}, Call::PureIntrinsic);
-                    a.max = Call::make(t, Call::abs, {a.max}, Call::PureIntrinsic);
-                    interval.max = Max::make(a.min, a.max);
+                    interval.max = Max::make(Call::make(t, Call::abs, {a.min}, Call::PureIntrinsic),
+                                             Call::make(t, Call::abs, {a.max}, Call::PureIntrinsic));
                 }
             } else {
                 if (a.has_lower_bound()) {
@@ -1282,37 +1334,24 @@ private:
                 interval.max = Interval::pos_inf();
             }
         } else if (op->is_intrinsic(Call::absd)) {
-            internal_assert(!t.is_handle());
-            if (t.is_float()) {
-                Expr e = abs(op->args[0] - op->args[1]);
-                handle_lowered_expr_bounds(e);
-            } else {
-                // absd() for int types will always produce a uint result
-                internal_assert(t.is_uint());
-                Interval a_interval = arg_bounds.get(0);
-                Interval b_interval = arg_bounds.get(1);
-                if (a_interval.is_bounded() && b_interval.is_bounded()) {
-                    interval.min = make_zero(t);
-                    interval.max = max(absd(a_interval.max, b_interval.min), absd(a_interval.min, b_interval.max));
-                } else {
-                    bounds_of_type(t);
-                }
-            }
-        } else if (op->is_intrinsic(Call::saturating_cast)) {
-            internal_assert(op->args.size() == 1);
+            internal_assert(t.is_int_or_uint());
 
-            Expr e = lower_saturating_cast(op->type, op->args[0]);
-            handle_lowered_expr_bounds(e);
+            // absd() for int types will always produce a uint result
+            internal_assert(t.is_uint());
+            const Interval &a_interval = arg_bounds.get(0);
+            const Interval &b_interval = arg_bounds.get(1);
+            if (a_interval.is_bounded() && b_interval.is_bounded()) {
+                interval.min = make_zero(t);
+                interval.max = max(absd(a_interval.max, b_interval.min), absd(a_interval.min, b_interval.max));
+            } else {
+                bounds_of_type(t);
+            }
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
-            // Unlike an explicit clamp, we are also permitted to
-            // assume the upper bound is greater than the lower bound.
-            Interval lower = arg_bounds.get(1);
-            Interval upper = arg_bounds.get(2);
-            interval = arg_bounds.get(0);
+            const Interval &i = arg_bounds.get(0);
 
             if (op->is_intrinsic(Call::promise_clamped) &&
-                interval.is_single_point()) {
+                i.is_single_point()) {
                 // It's not safe to lift a promise_clamped
                 // intrinsic. They make a claim that holds true at
                 // that specific point in the IR. But if it's a single
@@ -1324,8 +1363,11 @@ private:
                 return;
             }
 
+            const Interval &lower = arg_bounds.get(1);
+            const Interval &upper = arg_bounds.get(2);
+
             if (op->is_intrinsic(Call::unsafe_promise_clamped) &&
-                interval.is_single_point(op->args[0]) &&
+                i.is_single_point(op->args[0]) &&
                 lower.is_single_point(op->args[1]) &&
                 upper.is_single_point(op->args[2])) {
                 // It *is* safe to lift an
@@ -1339,28 +1381,19 @@ private:
                 return;
             }
 
-            interval.min = Interval::make_max(interval.min, lower.min);
-            interval.max = Interval::make_min(interval.max, upper.max);
-        } else if (op->is_intrinsic(Call::return_second)) {
-            internal_assert(op->args.size() == 2);
-            interval = arg_bounds.get(1);
-        } else if (op->is_intrinsic(Call::if_then_else)) {
-            internal_assert(op->args.size() == 2 || op->args.size() == 3);
-            // Probably more conservative than necessary
-            Expr false_value = op->args.size() == 2 ? op->args[1] : op->args[2];
-            Expr equivalent_select = Select::make(op->args[0], op->args[1], false_value);
-            handle_lowered_expr_bounds(equivalent_select);
-        } else if (op->is_intrinsic(Call::require)) {
-            internal_assert(op->args.size() == 3);
-            interval = arg_bounds.get(1);
+            // Unlike an explicit clamp, we are also permitted to
+            // assume the upper bound is greater than the lower bound.
+            interval.min = Interval::make_max(i.min, lower.min);
+            interval.max = Interval::make_min(i.max, upper.max);
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right) ||
                    op->is_intrinsic(Call::bitwise_xor) ||
                    op->is_intrinsic(Call::bitwise_and) ||
                    op->is_intrinsic(Call::bitwise_or)) {
-            Expr a = op->args[0], b = op->args[1];
-            Interval a_interval = arg_bounds.get(0);
-            Interval b_interval = arg_bounds.get(1);
+            const Expr &a = op->args[0];
+            const Expr &b = op->args[1];
+            const Interval &a_interval = arg_bounds.get(0);
+            const Interval &b_interval = arg_bounds.get(1);
             if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
                 interval = Interval::single_point(op);
             } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
@@ -1369,65 +1402,59 @@ private:
                 bounds_of_type(t);
                 // For some of these intrinsics applied to integer
                 // types we can go a little further.
-                if (t.is_int() || t.is_uint()) {
-                    if (op->is_intrinsic(Call::shift_left)) {
-                        if (t.is_int() && t.bits() >= 32) {
-                            // Overflow is UB
-                            if (a_interval.has_lower_bound() &&
-                                b_interval.has_lower_bound() &&
-                                can_prove(b_interval.min >= 0 &&
-                                          b_interval.min < t.bits())) {
-                                interval.min = a_interval.min << b_interval.min;
-                            } else if (a_interval.has_lower_bound() &&
-                                       b_interval.has_lower_bound() &&
-                                       !b_interval.min.type().is_uint() &&
-                                       (a_interval.min.type().is_uint() ||
-                                        can_prove(a_interval.min >= 0)) &&
-                                       can_prove(b_interval.min < 0 &&
-                                                 b_interval.min > -t.bits())) {
-                                interval.min = a_interval.min >> abs(b_interval.min);
-                            } else if (a_interval.has_lower_bound() &&
-                                       a_interval.min.type().is_int() &&
-                                       can_prove(a_interval.min < 0) &&
-                                       b_interval.has_upper_bound()) {
-                                // If a can be negative, then we split a_interval into
-                                // two ranges, [a.min, 0) and [0, a.max]. Note that the
-                                // second range may not exist, if a's range is fully
-                                // negative, but that doesn't matter - a positive value
-                                // cannot be shifted to produce a negative, so the min
-                                // of the operation is produced in the negative range.
-                                if (!b_interval.max.type().is_uint() &&
-                                    can_prove(b_interval.max <= 0)) {
-                                    // If b is strictly non-positive, then the magnitude can only decrease.
-                                    interval.min = a_interval.min;
-                                } else {
-                                    // If b could be positive, then the magnitude might increase.
-                                    interval.min = min(a_interval.min, a_interval.min << b_interval.max);
-                                }
-                            } else if (a_interval.has_lower_bound() &&
-                                       (a_interval.min.type().is_uint() ||
-                                        can_prove(a_interval.min >= 0))) {
-                                // A positive value shifted cannot change sign.
-                                interval.min = make_zero(t);
+                if (t.is_int_or_uint()) {
+                    if (op->is_intrinsic(Call::shift_left) && t.is_int() && t.bits() >= 32) {
+                        // Overflow is UB
+                        if (a_interval.has_lower_bound() &&
+                            b_interval.has_lower_bound() &&
+                            can_prove(b_interval.min >= 0 &&
+                                      b_interval.min < t.bits())) {
+                            interval.min = a_interval.min << b_interval.min;
+                        } else if (a_interval.has_lower_bound() &&
+                                   b_interval.has_lower_bound() &&
+                                   !b_interval.min.type().is_uint() &&
+                                   (a_interval.min.type().is_uint() ||
+                                    can_prove(a_interval.min >= 0)) &&
+                                   can_prove(b_interval.min < 0 &&
+                                             b_interval.min > -t.bits())) {
+                            interval.min = a_interval.min >> abs(b_interval.min);
+                        } else if (a_interval.has_lower_bound() &&
+                                   a_interval.min.type().is_int() &&
+                                   can_prove(a_interval.min < 0) &&
+                                   b_interval.has_upper_bound()) {
+                            // If a can be negative, then we split a_interval into
+                            // two ranges, [a.min, 0) and [0, a.max]. Note that the
+                            // second range may not exist, if a's range is fully
+                            // negative, but that doesn't matter - a positive value
+                            // cannot be shifted to produce a negative, so the min
+                            // of the operation is produced in the negative range.
+                            if (!b_interval.max.type().is_uint() &&
+                                can_prove(b_interval.max <= 0)) {
+                                // If b is strictly non-positive, then the magnitude can only decrease.
+                                interval.min = a_interval.min;
+                            } else {
+                                // If b could be positive, then the magnitude might increase.
+                                interval.min = min(a_interval.min, a_interval.min << b_interval.max);
                             }
-                            // TODO: Are there any other cases we can handle for interval.min?
+                        } else if (a_interval.has_lower_bound() &&
+                                   (a_interval.min.type().is_uint() ||
+                                    can_prove(a_interval.min >= 0))) {
+                            // A positive value shifted cannot change sign.
+                            interval.min = make_zero(t);
+                        }
+                        // TODO: Are there any other cases we can handle for interval.min?
 
-                            if (a_interval.has_upper_bound() &&
-                                b_interval.has_upper_bound() &&
-                                can_prove(b_interval.max >= 0 &&
-                                          b_interval.max < t.bits())) {
-                                interval.max = a_interval.max << b_interval.max;
-                            } else if (a_interval.has_upper_bound() &&
-                                       b_interval.has_upper_bound() &&
-                                       !b_interval.max.type().is_uint() &&
-                                       can_prove(b_interval.max < 0 &&
-                                                 b_interval.max > -t.bits())) {
-                                interval.max = a_interval.max >> abs(b_interval.max);
-                            }
-                        } else if (is_const(b)) {
-                            // We can normalize to multiplication
-                            Expr e = a * (make_const(t, 1) << b);
-                            handle_lowered_expr_bounds(e);
+                        if (a_interval.has_upper_bound() &&
+                            b_interval.has_upper_bound() &&
+                            can_prove(b_interval.max >= 0 &&
+                                      b_interval.max < t.bits())) {
+                            interval.max = a_interval.max << b_interval.max;
+                        } else if (a_interval.has_upper_bound() &&
+                                   b_interval.has_upper_bound() &&
+                                   !b_interval.max.type().is_uint() &&
+                                   can_prove(b_interval.max < 0 &&
+                                             b_interval.max > -t.bits())) {
+                            interval.max = a_interval.max >> abs(b_interval.max);
                         }
                     } else if (op->is_intrinsic(Call::shift_right)) {
                         // Only try to improve on bounds-of-type if we can prove 0 <= b < t.bits,
@@ -1518,7 +1545,7 @@ private:
             // In 2's complement bitwise not inverts the ordering of
             // the space, without causing overflow (unlike negation),
             // so bitwise not is monotonic decreasing.
-            Interval a_interval = arg_bounds.get(0);
+            const Interval &a_interval = arg_bounds.get(0);
             if (a_interval.is_single_point(op->args[0])) {
                 interval = Interval::single_point(op);
             } else if (a_interval.is_single_point()) {
@@ -1555,23 +1582,19 @@ private:
             internal_assert(op->args.size() == 1);
             const Type &t = op->type.element_of();
             Expr min = make_zero(t);
+            // These ops return at most the number of bits in the type
             Expr max = make_const(t, op->args[0].type().bits());
             if (op->is_intrinsic(Call::count_leading_zeros)) {
-                // clz treats signed and unsigned ints the same way;
-                // cast all ints to uint to simplify this.
-                cast(op->type.with_code(halide_type_uint), op->args[0]).accept(this);
-                Interval a = interval;
-                if (a.has_lower_bound()) {
-                    max = cast(t, count_leading_zeros(a.min));
+                // Count leading zeros is monotonic
+                const Interval &i = arg_bounds.get(0);
+                if (i.has_lower_bound()) {
+                    max = cast(t, count_leading_zeros(interval.min));
                 }
-                if (a.has_upper_bound()) {
-                    min = cast(t, count_leading_zeros(a.max));
+                if (i.has_upper_bound()) {
+                    min = cast(t, count_leading_zeros(interval.max));
                 }
             }
             interval = Interval(min, max);
-        } else if (op->is_intrinsic(Call::memoize_expr)) {
-            internal_assert(!op->args.empty());
-            interval = arg_bounds.get(0);
         } else if (op->is_intrinsic(Call::scatter_gather)) {
             // Take the union of the args
             Interval result = Interval::nothing();
@@ -1586,126 +1609,32 @@ private:
                 result.include(arg_bounds.get(i));
             }
             interval = result;
-        } else if (op->is_intrinsic(Call::widen_right_add)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen(op->args[1]) ?
-                         lower_widen_right_add(op->args[0], op->args[1]) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::widen_right_mul)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen(op->args[1]) ?
-                         lower_widen_right_mul(op->args[0], op->args[1]) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::widen_right_sub)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen(op->args[1]) ?
-                         lower_widen_right_sub(op->args[0], op->args[1]) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::widening_add)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen_all(op->args) ?
-                         lower_widening_add(op->args[0], op->args[1]) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::widening_mul)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen_all(op->args) ?
-                         lower_widening_mul(op->args[0], op->args[1]) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::widening_sub)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen_all(op->args) ?
-                         lower_widening_sub(op->args[0], op->args[1]) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::saturating_add)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen_all(op->args) ?
-                         narrow(clamp(widen(op->args[0]) + widen(op->args[1]), t.min(), t.max())) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::saturating_sub)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen_all(op->args) ?
-                         narrow(clamp(widen(op->args[0]) - widen(op->args[1]), t.min(), t.max())) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::widening_shift_left)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen(op->args[0]) ?
-                         lower_widening_shift_left(op->args[0], op->args[1]) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::widening_shift_right)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen(op->args[0]) ?
-                         lower_widening_shift_right(op->args[0], op->args[1]) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::rounding_shift_right)) {
-            internal_assert(op->args.size() == 2);
-            // TODO: uses bitwise ops we may not handle well
-            handle_lowered_expr_bounds(lower_rounding_shift_right(op->args[0], op->args[1]));
-        } else if (op->is_intrinsic(Call::rounding_shift_left)) {
-            internal_assert(op->args.size() == 2);
-            // TODO: uses bitwise ops we may not handle well
-            handle_lowered_expr_bounds(lower_rounding_shift_left(op->args[0], op->args[1]));
-        } else if (op->is_intrinsic(Call::halving_add)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen_all(op->args) ?
-                         narrow((widen(op->args[0]) + widen(op->args[1])) / 2) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::halving_sub)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen_all(op->args) ?
-                         narrow((widen(op->args[0]) - widen(op->args[1])) / 2) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::rounding_halving_add)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = can_widen_all(op->args) ?
-                         narrow((widen(op->args[0]) + widen(op->args[1]) + 1) / 2) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
-            internal_assert(op->args.size() == 3);
-            Expr e = can_widen_all(op->args) ?
-                         saturating_narrow(rounding_shift_right(widening_mul(op->args[0], op->args[1]), op->args[2])) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::mul_shift_right)) {
-            internal_assert(op->args.size() == 3);
-            Expr e = can_widen_all(op->args) ?
-                         saturating_narrow(widening_mul(op->args[0], op->args[1]) >> op->args[2]) :
-                         Expr();
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::sorted_avg)) {
-            internal_assert(op->args.size() == 2);
-            Expr e = lower_sorted_avg(op->args[0], op->args[1]);
-            handle_lowered_expr_bounds(e);
-        } else if (op->is_strict_float_intrinsic()) {
-            // We'll just unstrictify it to do the analysis. This is
-            // dubious. Constructing a bounds expression that uses non-strict
-            // operations might get simplified during bounds analysis (we call
-            // simplify above!) to something approximate, resulting in an
-            // out-of-bounds read. See https://github.com/halide/Halide/issues/8646
-            Expr e = unstrictify_float(op);
-            handle_lowered_expr_bounds(e);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
-        } else if (!const_bound &&
-                   op->call_type == Call::PureIntrinsic && handle_const_arg_call()) {
-            // It was some other pure intrinsic that we don't lower. If the args
-            // are const we can just preserve it.
         } else {
-            // Just use the bounds of the type
-            bounds_of_type(t);
+            // We don't have a special rule for this call. Note that in this
+            // case, the bounds of the args are never computed.
+            bounds_of_type(op->type);
         }
+    }
+
+    void visit(const Call *op) override {
+        TRACK_BOUNDS_INTERVAL;
+        TRACK_BOUNDS_INFO("name:", op->name);
+
+        if (op->is_intrinsic()) {
+            Expr lowered = lower_intrinsic(op);
+            if (lowered.defined()) {
+                lowered.accept(this);
+                if (interval.is_single_point(lowered)) {
+                    // It was unvarying, so just return the original unlowered form.
+                    interval = Interval::single_point(op);
+                }
+                return;
+            }
+        }
+
+        bounds_of_call(op);
     }
 
     void visit(const Let *op) override {
