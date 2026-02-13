@@ -884,10 +884,16 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
         string metalir = tmpfile + ".ir";
         string metallib = tmpfile + "lib";
 
-        int ret = run_process({metal_compiler, "-c", "-o", metalir, tmpfile});
+        auto cc_cmd = split_string(metal_compiler, " ");
+        cc_cmd.insert(cc_cmd.end(), {"-c", "-o", metalir, tmpfile});
+
+        int ret = run_process(std::move(cc_cmd));
         user_assert(ret == 0) << "Metal compiler set, but failed to compile Metal source to Metal IR.\n";
 
-        ret = run_process({metal_linker, "-o", metallib, metalir});
+        auto ld_cmd = split_string(metal_linker, " ");
+        ld_cmd.insert(ld_cmd.end(), {"-o", metallib, metalir});
+
+        ret = run_process(std::move(ld_cmd));
         user_assert(ret == 0) << "Metal linker set, but failed to compile Metal IR to Metal library.\n";
 
         // Read the metallib into a buffer.
