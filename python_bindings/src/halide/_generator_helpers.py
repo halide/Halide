@@ -865,12 +865,8 @@ def alias(**kwargs):
 
 
 def generator(name: str = ""):
-    # This code relies on dicts preserving key-insertion order, which is only
-    # guaranteed for all Python implementations as of v3.7.
-    _check(sys.version_info >= (3, 7), "Halide Generators require Python 3.7 or later.")
-
     def generator_impl(cls):
-        n = name if name else _fqname(cls)
+        n = name or _fqname(cls)
         _check_generator_name_in_use(n)
         _check(isclass(cls), "@generator can only be used on classes.")
         # Allow (but don't require) explicit inheritance from hl.Generator;
