@@ -474,6 +474,14 @@ public:
     }
     // @}
 
+    /** Get the Vars and RVars of this definition, from innermost out, with
+     * splits applied. This represents all the potentially-valid compute_at
+     * sites for this Stage. The RVars returned will be symbolic and not tied to
+     * a particular reduction domain, like the naked RVar objects used as split
+     * outputs. Note that this list by default will end with the sentinel
+     * Var::outermost. */
+    std::vector<VarOrRVar> split_vars() const;
+
     /** Assert that this stage has intentionally been given no schedule, and
      * suppress the warning about unscheduled update definitions that would
      * otherwise fire. This counts as a schedule, so calling this twice on the
@@ -577,6 +585,20 @@ public:
     /** Use this as a call to the function, and not the left-hand-side
      * of a definition. Only works for single-output Funcs. */
     operator Expr() const;
+
+    /** Get the type(s) of the outputs of the Func to which this FuncRef refers.
+     *
+     * It is not legal to call type() unless the Func has non-Tuple elements.
+     *
+     * If the Func isn't yet defined, and was not specified with required types,
+     * a runtime error will occur.
+     *
+     * If the Func isn't yet defined, but *was* specified with required types,
+     * the requirements will be returned. */
+    // @{
+    const Type &type() const;
+    const std::vector<Type> &types() const;
+    // @}
 
     /** When a FuncRef refers to a function that provides multiple
      * outputs, you can access each output as an Expr using
@@ -1601,6 +1623,12 @@ public:
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
     }
+
+    /** Get the Vars of the pure definition, with splits applied. This
+     * represents all the potentially-valid compute_at sites for this stage of
+     * this Func. Note that this, by default, will end with the sentinel
+     * Var::outermost. */
+    std::vector<Var> split_vars() const;
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
     Func &rename(const VarOrRVar &old_name, const VarOrRVar &new_name);

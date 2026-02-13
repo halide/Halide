@@ -15,6 +15,7 @@
 #include "IRPrinter.h"
 #include "InjectHostDevBufferCopies.h"
 #include "OffloadGPULoops.h"
+#include "Simplify.h"
 #include "Util.h"
 
 namespace Halide {
@@ -55,10 +56,10 @@ private:
 
         for (int i = 0; i < 3; i++) {
             if (ends_with(op->name, gpu_thread_name(i))) {
-                num_threads[i] = op->extent;
+                num_threads[i] = simplify(op->extent());
             }
             if (ends_with(op->name, gpu_block_name(i))) {
-                num_blocks[i] = op->extent;
+                num_blocks[i] = simplify(op->extent());
             }
         }
 
@@ -244,7 +245,7 @@ class InjectGpuOffload : public IRMutator {
     }
 
 public:
-    InjectGpuOffload(const Target &target)
+    InjectGpuOffload(const Target &target, bool any_strict_float)
         : target(target) {
         Target device_target = target;
         // For the GPU target we just want to pass the flags, to avoid the
@@ -253,7 +254,7 @@ public:
         device_target.os = Target::OSUnknown;
         device_target.arch = Target::ArchUnknown;
         if (target.has_feature(Target::CUDA)) {
-            cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target);
+            cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target, any_strict_float);
         }
         if (target.has_feature(Target::OpenCL)) {
             cgdev[DeviceAPI::OpenCL] = new_CodeGen_OpenCL_Dev(device_target);
@@ -314,8 +315,8 @@ public:
 
 }  // namespace
 
-Stmt inject_gpu_offload(const Stmt &s, const Target &host_target) {
-    return InjectGpuOffload(host_target).inject(s);
+Stmt inject_gpu_offload(const Stmt &s, const Target &host_target, bool any_strict_float) {
+    return InjectGpuOffload(host_target, any_strict_float).inject(s);
 }
 
 }  // namespace Internal

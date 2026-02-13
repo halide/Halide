@@ -197,6 +197,8 @@ void define_func(py::module &m) {
             .def("type", &Func::type)
             .def("types", &Func::types)
 
+            .def("split_vars", &Func::split_vars)
+
             .def("bound", &Func::bound, py::arg("var"), py::arg("min"), py::arg("extent"))
 
             .def("reorder_storage", (Func & (Func::*)(const std::vector<Var> &)) & Func::reorder_storage, py::arg("dims"))

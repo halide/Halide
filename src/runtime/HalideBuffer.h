@@ -68,55 +68,53 @@ static_assert(((HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT & (HALIDE_RUNTIME_BUF
 // we found supports the former but not the latter.)
 #ifndef HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
 
-// clang-format off
 #ifdef _WIN32
 
-    // Windows (regardless of which compiler) doesn't implement aligned_alloc(),
-    // even in C++17 mode, and has stated they probably never will, as the issue
-    // is in the incompatibility that free() needs to be able to free both pointers
-    // returned by malloc() and aligned_alloc(). So, always default it off here.
-    #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+// Windows (regardless of which compiler) doesn't implement aligned_alloc(),
+// even in C++17 mode, and has stated they probably never will, as the issue
+// is in the incompatibility that free() needs to be able to free both pointers
+// returned by malloc() and aligned_alloc(). So, always default it off here.
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
 
 #elif defined(__ANDROID_API__) && __ANDROID_API__ < 28
 
-    // Android doesn't provide aligned_alloc until API 28
-    #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+// Android doesn't provide aligned_alloc until API 28
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
 
 #elif defined(__APPLE__)
 
-    #if TARGET_OS_OSX && (__MAC_OS_X_VERSION_MIN_REQUIRED < __MAC_10_15)
+#if TARGET_OS_OSX && (__MAC_OS_X_VERSION_MIN_REQUIRED < __MAC_10_15)
 
-        // macOS doesn't provide aligned_alloc until 10.15
-        #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+// macOS doesn't provide aligned_alloc until 10.15
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
 
-    #elif TARGET_OS_IPHONE && (__IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_14_0)
+#elif TARGET_OS_IPHONE && (__IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_14_0)
 
-        // iOS doesn't provide aligned_alloc until 14.0
-        #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
-
-    #else
-
-        // Assume it's ok on all other Apple targets
-        #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
-
-    #endif
+// iOS doesn't provide aligned_alloc until 14.0
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
 
 #else
 
-    #if defined(__GLIBCXX__) && !defined(_GLIBCXX_HAVE_ALIGNED_ALLOC)
-
-        // ARM GNU-A baremetal compiler doesn't provide aligned_alloc as of 12.2
-        #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
-
-    #else
-
-        // Not Windows, Android, or Apple: just assume it's ok
-        #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
-
-    #endif
+// Assume it's ok on all other Apple targets
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
 
 #endif
-// clang-format on
+
+#else
+
+#if defined(__GLIBCXX__) && !defined(_GLIBCXX_HAVE_ALIGNED_ALLOC)
+
+// ARM GNU-A baremetal compiler doesn't provide aligned_alloc as of 12.2
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+
+#else
+
+// Not Windows, Android, or Apple: just assume it's ok
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
+
+#endif
+
+#endif
 
 #endif  // HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
 

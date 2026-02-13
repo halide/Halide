@@ -80,6 +80,7 @@ tests(GROUPS error
       memoize_redefine_eviction_key.cpp
       metal_threads_too_large.cpp
       metal_vector_too_large.cpp
+      mismatch_runtime_vscale.cpp
       missing_args.cpp
       no_default_device.cpp
       nonexistent_update_stage.cpp

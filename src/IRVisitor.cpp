@@ -167,7 +167,7 @@ void IRVisitor::visit(const ProducerConsumer *op) {
 
 void IRVisitor::visit(const For *op) {
     op->min.accept(this);
-    op->extent.accept(this);
+    op->max.accept(this);
     op->body.accept(this);
 }
 
@@ -443,7 +443,7 @@ void IRGraphVisitor::visit(const ProducerConsumer *op) {
 
 void IRGraphVisitor::visit(const For *op) {
     include(op->min);
-    include(op->extent);
+    include(op->max);
     include(op->body);
 }
 

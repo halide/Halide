@@ -424,8 +424,8 @@ private:
         // The cost of a loop-node essentially depends on its iteration
         // count. The cost model currently ignores such costs.
         IRVisitor::visit(op);
-        set_compute_costs(op, 0, {op->min.get(), op->extent.get(), op->body.get()}, {op->min.get(), op->extent.get()});
-        set_data_costs(op, 0, {op->min.get(), op->extent.get(), op->body.get()}, {op->min.get(), op->extent.get()});
+        set_compute_costs(op, 0, {op->min.get(), op->max.get(), op->body.get()}, {op->min.get(), op->max.get()});
+        set_data_costs(op, 0, {op->min.get(), op->max.get(), op->body.get()}, {op->min.get(), op->max.get()});
     }
 
     void visit(const Acquire *op) override {
@@ -1694,7 +1694,7 @@ private:
         print_html_element("span", "matched", ", ");
         print(op->min);
         print_html_element("span", "matched", ", ");
-        print(op->extent);
+        print(op->max);
         print_html_element("span", "matched", ")");
 
         // Open code block to hold function body

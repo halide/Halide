@@ -23,7 +23,7 @@ void check_is_sio(const Expr &e) {
 }
 
 void check(const Expr &a, const Expr &b, const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>()) {
-    Expr simpler = simplify(a, true, Scope<Interval>(), alignment);
+    Expr simpler = simplify(a, Scope<Interval>(), alignment);
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
@@ -50,7 +50,7 @@ void check(const Stmt &a, const Stmt &b) {
 }
 
 void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
-    Expr simpler = simplify(a, true, bi);
+    Expr simpler = simplify(a, bi);
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
@@ -432,6 +432,8 @@ void check_algebra() {
     check((y + (x / 3 * 3)) + x % 3, x + y);
     check((y + (x / 3)) * 3 + x % 3, y * 3 + x);
 
+    check(x - (x / 2), (x + 1) / 2);
+    check((x / 3) - x, (x * -2) / 3);
     check(x / 2 + x % 2, (x + 1) / 2);
     check(x % 2 + x / 2, (x + 1) / 2);
     check(((x + 1) / 2) * 2 - x, x % 2);
@@ -1736,10 +1738,10 @@ void check_boolean() {
     // A for loop is also an if statement that the extent is greater than zero
     Stmt body = AssertStmt::make(y == z, y);
     Stmt loop = For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body);
-    check(IfThenElse::make(0 < x, loop), loop);
+    check(IfThenElse::make(0 <= x, loop), loop);
 
-    // A for loop where the extent is exactly one is just the body
-    check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
+    // A for loop where the min equals the max is just the body
+    check(IfThenElse::make(x == 0, loop), IfThenElse::make(x == 0, body));
 
     // Check we can learn from conditions on variables
     check(IfThenElse::make(x < 5, not_no_op(min(x, 17))),
@@ -1967,9 +1969,9 @@ void check_overflow() {
                     scope.push("y", {neg_two_32, zero});
                 }
                 if (x_pos == y_pos) {
-                    internal_assert(!is_const(simplify((x * y) < two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x * y) < two_32, scope)));
                 } else {
-                    internal_assert(!is_const(simplify((x * y) > neg_two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x * y) > neg_two_32, scope)));
                 }
             }
             // Add/Sub
@@ -1986,13 +1988,13 @@ void check_overflow() {
                     scope.push("y", {min_64, zero});
                 }
                 if (x_pos && y_pos) {
-                    internal_assert(!is_const(simplify((x + y) < two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x + y) < two_32, scope)));
                 } else if (x_pos && !y_pos) {
-                    internal_assert(!is_const(simplify((x - y) < two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x - y) < two_32, scope)));
                 } else if (!x_pos && y_pos) {
-                    internal_assert(!is_const(simplify((x - y) > neg_two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x - y) > neg_two_32, scope)));
                 } else {
-                    internal_assert(!is_const(simplify((x + y) > neg_two_32, true, scope)));
+                    internal_assert(!is_const(simplify((x + y) > neg_two_32, scope)));
                 }
             }
         }
@@ -2419,7 +2421,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        Stmt body = AssertStmt::make(x > 0, y);
+        Stmt body = AssertStmt::make(x >= 0, y);
         check(For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body),
               Evaluate::make(0));
     }

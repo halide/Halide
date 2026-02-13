@@ -15,8 +15,7 @@ using std::pair;
 using std::string;
 using std::vector;
 
-Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
-    : remove_dead_code(r) {
+Simplify::Simplify(const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) {
 
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
@@ -325,30 +324,16 @@ template<typename T>
 T substitute_facts_impl(const T &t,
                         const std::set<Expr, IRDeepCompare> &truths,
                         const std::set<Expr, IRDeepCompare> &falsehoods) {
-    class Substitutor : public IRMutator {
-        const std::set<Expr, IRDeepCompare> &truths, &falsehoods;
-
-    public:
-        using IRMutator::mutate;
-        Expr mutate(const Expr &e) override {
-            if (!e.type().is_bool()) {
-                return IRMutator::mutate(e);
-            } else if (truths.count(e)) {
+    return mutate_with(t, [&](auto *self, const Expr &e) {
+        if (e.type().is_bool()) {
+            if (truths.count(e)) {
                 return make_one(e.type());
             } else if (falsehoods.count(e)) {
                 return make_zero(e.type());
-            } else {
-                return IRMutator::mutate(e);
             }
         }
-
-        Substitutor(const std::set<Expr, IRDeepCompare> &t,
-                    const std::set<Expr, IRDeepCompare> &f)
-            : truths(t), falsehoods(f) {
-        }
-    } substitutor(truths, falsehoods);
-
-    return substitutor.mutate(t);
+        return self->mutate_base(e);
+    });
 }
 }  // namespace
 
@@ -375,11 +360,11 @@ Simplify::ScopedFact::~ScopedFact() {
     }
 }
 
-Expr simplify(const Expr &e, bool remove_dead_let_stmts,
+Expr simplify(const Expr &e,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
-    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
     facts.reserve(assumptions.size());
     for (const Expr &a : assumptions) {
@@ -392,11 +377,11 @@ Expr simplify(const Expr &e, bool remove_dead_let_stmts,
     return result;
 }
 
-Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
+Stmt simplify(const Stmt &s,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment,
               const std::vector<Expr> &assumptions) {
-    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Simplify m(&bounds, &alignment);
     std::vector<Simplify::ScopedFact> facts;
     facts.reserve(assumptions.size());
     for (const Expr &a : assumptions) {
@@ -430,7 +415,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
 
     Expr orig = e;
 
-    e = simplify(e, true, bounds);
+    e = simplify(e, bounds);
 
     // Take a closer look at all failed proof attempts to hunt for
     // simplifier weaknesses

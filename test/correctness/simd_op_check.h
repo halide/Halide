@@ -164,7 +164,7 @@ public:
                                    int vector_width,
                                    const std::vector<Argument> &arg_types,
                                    std::ostringstream &error_msg) {
-        std::string fn_name = "test_" + name;
+        std::string fn_name = "test_" + name + "_vecwidth" + std::to_string(vector_width);
         std::string file_name = output_directory + fn_name;
 
         auto ext = Internal::get_output_info(target);
@@ -172,6 +172,7 @@ public:
             {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
             {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
             {OutputFileType::assembly, file_name + ".s"},
+            {OutputFileType::llvm_assembly, file_name + ".ll"},
         };
         error.compile_to(outputs, arg_types, fn_name, target);
 
@@ -319,7 +320,7 @@ public:
         e.accept(&has_inline_reduction);
 
         // Define a vectorized Halide::Func that uses the pattern.
-        Halide::Func f(name);
+        Halide::Func f(name + "_vecwidth" + std::to_string(vector_width));
         f(x, y) = e;
         f.bound(x, 0, W).vectorize(x, vector_width);
         f.compute_root();
@@ -327,6 +328,9 @@ public:
         // Include a scalar version
         Halide::Func f_scalar("scalar_" + name);
         f_scalar(x, y) = e;
+        // Make sure scalar result is computed independently to prevent it
+        // from being fused into error() by optimization which complicates floating point errors.
+        f_scalar.compute_root();
 
         if (has_inline_reduction.result) {
             // If there's an inline reduction, we want to vectorize it
@@ -474,15 +478,18 @@ public:
         // settings.
         if (!wildcard_match(filter, op)) return;
 
-        tasks.emplace_back(Task{op, name, vector_width, e});
+        tasks.emplace_back(Task{op, name, vector_width, std::move(e)});
     }
     virtual void add_tests() = 0;
     virtual int image_param_alignment() {
         return 16;
     }
 
-    virtual bool use_multiple_threads() const {
-        return true;
+    int num_worker_threads() const {
+        if (std::string t = Halide::Internal::get_env_variable("HL_OP_CHECK_THREADS"); !t.empty()) {
+            return std::atoi(t.c_str());
+        }
+        return Halide::Tools::ThreadPool<void>::num_processors_online();
     }
 
     virtual bool test_all() {
@@ -495,10 +502,7 @@ public:
 
         Sharder sharder;
 
-        Halide::Tools::ThreadPool<TestResult> pool(
-            use_multiple_threads() ?
-                Halide::Tools::ThreadPool<TestResult>::num_processors_online() :
-                1);
+        Halide::Tools::ThreadPool<TestResult> pool(num_worker_threads());
         std::vector<std::future<TestResult>> futures;
 
         for (size_t t = 0; t < tasks.size(); t++) {

@@ -214,7 +214,7 @@ bool unpack_buffer(PyObject *py_obj,
         return false;
     }
 
-    memset(&halide_buf, 0, sizeof(halide_buf));
+    halide_buf = {};
     needs_device_free = true;
     if (!py_buf.format) {
         halide_buf.type.code = halide_type_uint;

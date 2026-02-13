@@ -25,10 +25,8 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::or_op(a, b), op->type);
 
-    // clang-format off
-
     // Cases that fold to a constant
-    if (EVAL_IN_LAMBDA
+    if (EVAL_IN_LAMBDA  //
         (rewrite(x || true, true) ||
          rewrite(true || x, true) ||
          rewrite(x || neg(x), true) ||
@@ -74,7 +72,7 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
     }
 
     // Cases that fold to one of the args
-    if (EVAL_IN_LAMBDA
+    if (EVAL_IN_LAMBDA  //
         (rewrite(x || false, a) ||
 
          rewrite(x || x, a) ||
@@ -131,9 +129,8 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
         return rewrite.result;
     }
 
-
     // Cases that need remutation
-    if (EVAL_IN_LAMBDA
+    if (EVAL_IN_LAMBDA  //
         (rewrite(broadcast(x, c0) || broadcast(y, c0), broadcast(x || y, c0)) ||
          rewrite((x || broadcast(y, c0)) || broadcast(z, c0), x || broadcast(y || z, c0)) ||
          rewrite((broadcast(x, c0) || y) || broadcast(z, c0), broadcast(x || z, c0) || y) ||
@@ -264,8 +261,6 @@ Expr Simplify::visit(const Or *op, ExprInfo *info) {
 
         return mutate(rewrite.result, info);
     }
-
-    // clang-format on
 
     if (a.same_as(op->a) &&
         b.same_as(op->b)) {
