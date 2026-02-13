@@ -17,12 +17,12 @@ in Python without C++.
 
 Halide requires C++17 (or later) to use.
 
-For more detail about what Halide is, see <https://halide-lang.org>.
+For more detail about what Halide is, see https://halide-lang.org.
 
-For API documentation see <https://halide-lang.org/docs>.
+For API documentation see https://halide-lang.org/docs.
 
 For some example code, read through the tutorials online
-at <https://halide-lang.org/tutorials>. The corresponding code is in the
+at https://halide-lang.org/tutorials. The corresponding code is in the
 `tutorials/` directory. Larger examples are in the `apps/` directory.
 
 If you've acquired a full source distribution and want to build Halide, see the
@@ -39,14 +39,14 @@ the easiest way to get a binary build of Halide.
 Full releases may be installed with `pip` like so:
 
 ```shell
-pip install halide
+$ pip install halide
 ```
 
-Every commit to `main` is published to Test PyPI as a development version and
-these may be installed with a few extra flags:
+Every commit to `main` is published to a private PyPI index as a development
+version and these may be installed with a few extra flags:
 
 ```shell
-pip install halide --pre --extra-index-url https://test.pypi.org/simple
+$ pip install halide --pre --extra-index-url https://pypi.halide-lang.org/simple
 ```
 
 Currently, we provide wheels for: Windows x86-64, macOS x86-64, macOS arm64, and
@@ -59,7 +59,7 @@ installed it in. On Windows, you will need to add the virtual environment root
 directory to `CMAKE_PREFIX_PATH`. This can be done by running
 `set CMAKE_PREFIX_PATH=%VIRTUAL_ENV%` in `cmd`.
 
-Other build systems can find the Halide root path by running `python -c
+Other build systems can find the Halide root path by running `python -c 
 "import halide; print(halide.install_dir())"`.
 
 ## Homebrew
@@ -68,13 +68,13 @@ Alternatively, if you use macOS, you can install Halide via
 [Homebrew](https://brew.sh/) like so:
 
 ```
-brew install halide
+$ brew install halide
 ```
 
 ## Binary tarballs
 
 The latest version of Halide can always be found on GitHub
-at <https://github.com/halide/Halide/releases>
+at https://github.com/halide/Halide/releases
 
 We provide binary releases for many popular platforms and architectures,
 including 32/64-bit x86 Windows, 64-bit x86/ARM macOS, and 32/64-bit x86/ARM
@@ -86,10 +86,10 @@ need to adjust compiler options accordingly if you're using an older XCode which
 does not default to libc++.
 
 We use a recent Ubuntu LTS to build the Linux releases; if your distribution is
-too old, it might not have the requisite glibc.
+too old, it might not have the requisite glibc. 
 
 Nightly builds of Halide and the LLVM versions we use in CI are also available
-at <https://buildbot.halide-lang.org/>
+at https://buildbot.halide-lang.org/
 
 ## Vcpkg
 
@@ -97,13 +97,13 @@ If you use [vcpkg](https://github.com/microsoft/vcpkg) to manage dependencies,
 you can install Halide via:
 
 ```
-vcpkg install halide:x64-windows # or x64-linux/x64-osx
+$ vcpkg install halide:x64-windows # or x64-linux/x64-osx
 ```
 
 One caveat: vcpkg installs only the minimum Halide backends required to compile
 code for the active platform. If you want to include all the backends, you
 should install `halide[target-all]:x64-windows` instead. Note that since this
-will build LLVM, it will take a *lot* of disk space (up to 100GB).
+will build LLVM, it will take a _lot_ of disk space (up to 100GB).
 
 ## Other package managers
 
@@ -118,7 +118,7 @@ you have experience publishing packages we would be happy to work with you!
 
 There are two sets of platform requirements relevant to Halide: those required
 to run the compiler library in either JIT or AOT mode, and those required to run
-the *binary outputs* of the AOT compiler.
+the _binary outputs_ of the AOT compiler.
 
 These are the **tested** host toolchain and platform combinations for building
 and running the Halide compiler library.
@@ -137,7 +137,7 @@ MSVC. We do not actively test these scenarios, however, so your mileage may
 vary.
 
 Beyond these, we are willing to support (by accepting PRs for) platform and
-toolchain combinations that still receive *active, first-party, public support*
+toolchain combinations that still receive _active, first-party, public support_
 from their original vendors. For instance, at time of writing, this excludes
 Windows 7 and includes Ubuntu 18.04 LTS.
 
@@ -158,14 +158,14 @@ It is simplest to get a binary release of LLVM on macOS by using
 Linux, the [LLVM APT repo](https://apt.llvm.org) is best; use the provided
 installation script. We know of no suitable official binary releases for
 Windows, however the ones we use in CI can usually be found at
-<https://buildbot.halide-lang.org>, along with tarballs for our other tested
+https://buildbot.halide-lang.org, along with tarballs for our other tested
 platforms. See [the section on Windows](#windows) below for further advice.
 
 If your OS does not have packages for LLVM, or you want more control over the
 configuration, you can build it yourself. First check it out from GitHub:
 
 ```shell
-git clone --depth 1 --branch llvmorg-21.1.1 https://github.com/llvm/llvm-project.git
+$ git clone --depth 1 --branch llvmorg-21.1.1 https://github.com/llvm/llvm-project.git
 ```
 
 (LLVM 21.1.1 is the most recent released LLVM at the time of writing. For
@@ -202,8 +202,8 @@ parallelism. If you choose to omit `-G Ninja`, Makefiles will be generated
 instead. In this case, enable parallelism with `cmake --build build -j NNN`
 where `NNN` is the number of parallel jobs, i.e. the number of CPUs you have.
 
-Note that you *must* add `clang` and `lld` to `LLVM_ENABLE_PROJECTS` and
-`WebAssembly` and `X86` *must* be included in `LLVM_TARGETS_TO_BUILD`.
+Note that you _must_ add `clang` and `lld` to `LLVM_ENABLE_PROJECTS` and
+`WebAssembly` and `X86` _must_ be included in `LLVM_TARGETS_TO_BUILD`.
 `LLVM_ENABLE_RUNTIMES=compiler-rt` is only required to build the fuzz tests, and
 `clang-tools-extra` is only necessary if you plan to contribute code to Halide
 (so that you can run `clang-tidy` on your pull requests). You can disable
@@ -223,7 +223,7 @@ Follow the above instructions to build LLVM or acquire a suitable binary
 release. Then change directory to the Halide repository and run:
 
 ```shell
-$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DHalide_LLVM_ROOT=$LLVM_ROOT
+$ cmake -G Ninja  -S . -B build -DCMAKE_BUILD_TYPE=Release -DHalide_LLVM_ROOT=$LLVM_ROOT
 $ cmake --build build
 ```
 
@@ -274,7 +274,7 @@ to build. You can manually delete the build trees afterward, but vcpkg will not
 do this automatically.
 
 See [BuildingHalideWithCMake.md](./doc/BuildingHalideWithCMake.md#vcpkg-presets)
-for directions to use Vcpkg for everything *except* LLVM.
+for directions to use Vcpkg for everything _except_ LLVM.
 
 #### Building Halide
 
@@ -352,9 +352,9 @@ must add two flags to Halide's CMake configure command line. First, disable LLVM
 with `-DVCPKG_OVERLAY_PORTS=cmake/vcpkg`. Second, point CMake to our newly built
 Halide with `-DHalide_LLVM_ROOT=D:/llvm-install`.
 
-#### If all else fails
+#### If all else fails...
 
-Do what the buildbots do: <https://buildbot.halide-lang.org/master/#/builders>
+Do what the buildbots do: https://buildbot.halide-lang.org/master/#/builders
 
 If the row that best matches your system is red, then maybe things aren't just
 broken for you. If it's green, then you can click through to the latest build
@@ -377,14 +377,14 @@ want to use a different LLVM, such as a custom-built one following the
 instructions above, set the following environment variable:
 
 ```shell
-export LLVM_CONFIG="$LLVM_ROOT/bin/llvm-config"
+$ export LLVM_CONFIG="$LLVM_ROOT/bin/llvm-config"
 ```
 
 Now you should be able to just run `make` in the root directory of the Halide
 source tree. `make run_tests` will run the JIT test suite, and `make test_apps`
 will make sure all the apps compile and run (but won't check their output).
 
-When building the tests, you can set the AOT compilation target with the
+When building the tests, you can set the AOT compilation target with the 
 `HL_TARGET` environment variable.
 
 ### Building Halide out-of-tree with make
@@ -392,10 +392,10 @@ When building the tests, you can set the AOT compilation target with the
 If you wish to build Halide in a separate directory, you can do that like so:
 
 ```shell
-cd ..
-mkdir halide_build
-cd halide_build
-make -f ../Halide/Makefile
+$ cd ..
+$ mkdir halide_build
+$ cd halide_build
+$ make -f ../Halide/Makefile
 ```
 
 # Some useful environment variables

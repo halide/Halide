@@ -63,13 +63,13 @@ We recommend installing CMake using [pipx] to avoid package conflicts and
 redundant installations. After installing pipx, run:
 
 ```shell
-pipx install cmake
+$ pipx install cmake
 ```
 
 Alternatively, you can use a normal virtual environment:
 
 ```shell
-python -m pip install cmake
+$ python -m pip install cmake
 ```
 
 If you don't want Python to manage your CMake installation, you can either
@@ -84,7 +84,6 @@ On Windows, there are two primary methods for installing an up-to-date CMake:
 
 1. You can get CMake through the Visual Studio 2022 installer.
 2. You can use Windows's built-in package manager, [winget][winget]:
-
    ```shell
    winget install Kitware.CMake
    ```
@@ -97,7 +96,7 @@ Microsoft's [documentation][vs-cmake-docs] for more details.
 [Homebrew] keeps its [CMake package][brew-cmake] up to date. Simply run:
 
 ```shell
-brew install cmake
+$ brew install cmake
 ```
 
 ## Ubuntu Linux
@@ -149,7 +148,7 @@ building the core pieces of Halide.
 | [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                     |
 | [wabt]        | `==1.0.36`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
 | [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | Difficult to build. See [WebAssembly.md]            |
-| [Python]      | `>=3.9`            | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
+| [Python]      | `>=3.10`           | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 | [pybind11]    | `~=2.11.1`         | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 
 Halide maintains the following compatibility policy with LLVM: Halide version
@@ -220,7 +219,7 @@ To build the documentation, you will need to install [Doxygen]. This can be done
 either from the [Doxygen website][doxygen-download] or through [winget][winget]:
 
 ```shell
-winget install DimitriVanHeesch.Doxygen
+$ winget install DimitriVanHeesch.Doxygen
 ```
 
 To build the Python bindings, you will need to install Python 3. This should be
@@ -231,11 +230,11 @@ necessary, it is convenient to install Python system-wide on Windows (i.e.
 `C:\Program Files`) because CMake looks at standard paths and registry keys.
 This removes the need to manually set the `PATH`.
 
-Once Python is installed, you can install the Python module dependencies either
-globally or in a [virtual environment][venv] by running
+Once Python is installed, you can install the Python module dependencies in 
+a [virtual environment][venv] by running
 
 ```shell
-python -m pip install -r requirements.txt
+$ uv sync
 ```
 
 from the root of the repository.
@@ -245,13 +244,14 @@ from the root of the repository.
 On macOS, it is possible to install all dependencies via [Homebrew][homebrew]:
 
 ```shell
-brew install clang-format lld llvm flatbuffers wabt python pybind11 doxygen eigen libpng libjpeg-turbo openblas
+$ brew install llvm flatbuffers wabt python pybind11 doxygen eigen libpng libjpeg-turbo openblas
 ```
 
-To ensure that CMake can find LLVM, set the following cache variable:
+The `llvm` package includes `clang`, `clang-format`, and `lld`, too. To ensure
+CMake can find LLVM, set the following cache variable:
 
 ```shell
-cmake ... -DHalide_LLVM_ROOT=/opt/homebrew/opt/llvm
+$ cmake ... -DHalide_ROOT=/opt/homebrew/opt/llvm
 ```
 
 Or use the `macOS` CMake preset, which does this for you.
@@ -271,12 +271,11 @@ $ sudo apt install clang-tools lld llvm-dev libclang-dev liblld-dev \
 ### Python
 
 When running the Python package, you will need to install additional
-dependencies. These are tabulated in `requirements.txt` and may be installed
-with:
+dependencies. These are tabulated as constraints in `pyproject.toml` and
+resolved to specific versions in `uv.lock`. They may be installed by running:
 
 ```shell
-python -m pip install -U pip "setuptools[core]" wheel
-python -m pip install -r requirements.txt
+$ uv sync --no-install-project
 ```
 
 # Building Halide
@@ -299,16 +298,16 @@ You should either open the correct Developer Command Prompt directly or run the
 following:
 
 ```shell
-"C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
-"C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64_x86
-"C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64_arm
+$ "C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
+$ "C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64_x86
+$ "C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64_arm
 ```
 
 Then, assuming that vcpkg is installed to `D:\vcpkg`, simply run:
 
 ```shell
-cmake -G Ninja -S . -B build --toolchain D:\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
-cmake --build .\build
+$ cmake -G Ninja -S . -B build --toolchain D:\vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
+$ cmake --build .\build
 ```
 
 Valid values of [`CMAKE_BUILD_TYPE`][cmake_build_type] are `Debug`,
@@ -351,8 +350,8 @@ The instructions here are straightforward. Assuming your environment is set up
 correctly, just run:
 
 ```shell
-cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+$ cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
+$ cmake --build build
 ```
 
 If you omit `-G Ninja`, a Makefile-based generator will likely be used instead.
@@ -368,11 +367,11 @@ convenient. The following CMake preset commands correspond to the longer ones
 above.
 
 ```shell
-cmake --preset=win64    # VS 2022 generator, 64-bit build, vcpkg deps
-cmake --preset=win32    # VS 2022 generator, 32-bit build, vcpkg deps
-cmake --preset=macOS    # Ninja generator, macOS host build, Homebrew deps
-cmake --preset=debug    # Debug mode, any single-config generator / compiler
-cmake --preset=release  # Release mode, any single-config generator / compiler
+$ cmake --preset=win64    # VS 2022 generator, 64-bit build, vcpkg deps
+$ cmake --preset=win32    # VS 2022 generator, 32-bit build, vcpkg deps
+$ cmake --preset=macOS    # Ninja generator, macOS host build, Homebrew deps
+$ cmake --preset=debug    # Debug mode, any single-config generator / compiler
+$ cmake --preset=release  # Release mode, any single-config generator / compiler
 ```
 
 ### Vcpkg presets
@@ -481,15 +480,15 @@ separate project. On any platform, this means running the
 single-configuration generator (like Ninja), run either:
 
 ```shell
-cmake --install ./build --prefix /path/to/Halide-install
-cmake --install .\build --prefix X:\path\to\Halide-install
+$ cmake --install ./build --prefix /path/to/Halide-install
+$ cmake --install .\build --prefix X:\path\to\Halide-install
 ```
 
 For a multi-configuration generator (like Visual Studio) run:
 
 ```shell
-cmake --install ./build --prefix /path/to/Halide-install --config Release
-cmake --install .\build --prefix X:\path\to\Halide-install --config Release
+$ cmake --install ./build --prefix /path/to/Halide-install --config Release
+$ cmake --install .\build --prefix X:\path\to\Halide-install --config Release
 ```
 
 Of course, make sure that you build the corresponding config before attempting
