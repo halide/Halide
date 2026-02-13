@@ -756,11 +756,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu_target() + " " + ptx.pathname() + " -o " + sass.pathname();
-        if (system(cmd.c_str()) == 0) {
-            cmd = "nvdisasm " + sass.pathname();
-            int ret = system(cmd.c_str());
-            (void)ret;  // Don't care if it fails
+        if (run_process({"ptxas", "--gpu-name", mcpu_target(), ptx.pathname(), "-o", sass.pathname()}) == 0) {
+            (void)run_process({"nvdisasm", sass.pathname()});  // Don't care if it fails
         }
 
         // Note: It works to embed the contents of the .sass file in
