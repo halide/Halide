@@ -18,7 +18,6 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::pair;
 using std::set;
 using std::string;
 using std::vector;
@@ -103,8 +102,14 @@ bool associative_op_pattern_match(const Expr &e,
         << "Expr has type " << e.type() << ", while pattern has type " << op.type() << "\n";
     map<string, Expr> result;
     if (expr_match(op, e, result)) {
-        debug(5) << "Found associative ops for " << e << " -> " << op
-                 << ", y_part: " << result["y0"] << "\n";
+        debug(5) << "Found associative ops for " << e << " -> " << op << ":\n"
+                 << [&] {
+                        std::stringstream ss;
+                        for (const auto &[var, val] : result) {
+                            ss << "  " << var << " -> " << val << "\n";
+                        }
+                        return ss.str();
+                    }();
 
         for (size_t i = 0; i < x_names.size(); ++i) {
             const auto &iter = result.find("x" + std::to_string(i));
@@ -187,7 +192,6 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
             continue;
         }
 
-        vector<pair<Expr, Expr>> replacement;  // find -> replacement
         for (size_t index = 0; index < op_y_names.size(); ++index) {
             const auto &y_iter = pattern_match.find("y" + std::to_string(index));
             if (y_iter == pattern_match.end()) {
@@ -202,20 +206,25 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 
             assoc_op.xs[index] = {op_x_names[index], x_parts[index]};
             assoc_op.ys[index] = {op_y_names[index], y_part};
-            replacement.emplace_back(y_part, Variable::make(y_part.type(), op_y_names[index]));
         }
         if (!matched) {
             continue;
         }
-        for (size_t index = 0; index < exprs.size(); ++index) {
-            Expr e = exprs[index];
-            // Order of substitution matters, e.g. in the argmin case, _y_0 -> g(rx)[0]
-            // and _y_1 -> rx. If we substitute the 2nd element rx first, substitution
-            // of g(rx)[0] will fail.
-            for (const auto &iter : replacement) {
-                e = substitute(iter.first, iter.second, e);
+        // Build the concrete ops by renaming the pattern's abstract
+        // wildcard variables (x0, y0, k0, ...) to the actual variable
+        // names used in the expressions.
+        map<string, Expr> replacement;
+        for (size_t index = 0; index < op_x_names.size(); ++index) {
+            replacement["x" + std::to_string(index)] = Variable::make(exprs[index].type(), op_x_names[index]);
+            replacement["y" + std::to_string(index)] = Variable::make(exprs[index].type(), op_y_names[index]);
+        }
+        for (const auto &[wildcard, identity] : pattern_match) {
+            if (wildcard[0] == 'k') {
+                replacement[wildcard] = identity;
             }
-            assoc_op.pattern.ops[index] = e;
+        }
+        for (size_t index = 0; index < pattern.ops.size(); ++index) {
+            assoc_op.pattern.ops[index] = substitute(replacement, pattern.ops[index]);
             assoc_op.pattern.identities[index] = pattern.identities[index];
         }
         assoc_op.pattern.is_commutative = pattern.is_commutative;
@@ -225,7 +234,7 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 }
 
 // Return a pair of booleans indicating if an operator is associative.
-// 'assoc_op' contains the the equivalent associative binary/unary operator
+// 'assoc_op' contains the equivalent associative binary/unary operator
 // for that operator. If the operator is non-associative, 'assoc_op' is not valid.
 bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_x_names,
                             const vector<string> &op_y_names, const vector<Expr> &x_parts,
@@ -236,7 +245,7 @@ bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_
             // An update that just assigns some value is not associative,
             // because there's no good identity. An identity is necessary
             // because things like rfactor will combine the identity with
-            // partially-computed values and expect it to do nothing. For an
+            // partially computed values and expect it to do nothing. For an
             // example, see https://github.com/halide/Halide/issues/7893
             return false;
         } else if (equal(exprs[0], Variable::make(t, op_x_names[0]))) {
@@ -256,58 +265,44 @@ bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_
                       x_parts, exprs, assoc_op);
 }
 
-void add_transitive_dependencies(vector<set<int>> &dependencies) {
-    // TODO(psuriana): there might be a better way to find all the transitive dependencies
-    bool change = true;
-    while (change) {
-        change = false;
+bool is_subset_of(const std::set<int> &a, const std::set<int> &b) {
+    return std::includes(b.begin(), b.end(), a.begin(), a.end());
+}
+
+// Compute the dependency subgraphs for a tuple reduction. First closes the
+// dependency relation transitively, then returns only the earliest (by index)
+// maximal dependency sets, clearing any set contained in a dominating one.
+vector<set<int>> compute_subgraphs(vector<set<int>> dependencies) {
+    // Compute the transitive closure using Warshall's algorithm.
+    for (size_t k = 0; k < dependencies.size(); ++k) {
         for (size_t i = 0; i < dependencies.size(); ++i) {
-            for (size_t j = 0; j < dependencies.size(); ++j) {
-                if (i == j) {
-                    continue;
-                }
-                if (dependencies[i].count(j)) {
-                    for (const auto &idx : dependencies[j]) {
-                        if (dependencies[i].count(idx) == 0) {
-                            dependencies[i].insert(idx);
-                            change = true;
-                        }
-                    }
+            if (dependencies[i].count(k)) {
+                for (int j : dependencies[k]) {
+                    dependencies[i].insert(j);
                 }
             }
         }
     }
-}
 
-// Given dependencies of each tuple element, compute the set of subgraphs:
-// all vertices that are reachable from a given vertex. If a subgraph is fully
-// contained in another subgraph, remove it from the final output.
-vector<set<int>> compute_subgraphs(vector<set<int>> dependencies) {
+    // Keep only maximal dependency sets. A set is removed if another
+    // set strictly contains it or is identical but has a lower index.
     vector<set<int>> subgraphs(dependencies.size());
     for (size_t i = 0; i < dependencies.size(); ++i) {
-        // Check if the current subgraph is a subset of another
-        const auto &current = dependencies[i];
-        if (current.empty()) {
+        if (dependencies[i].empty()) {
             continue;
         }
-        bool should_remove = false;
+        bool is_maximal = true;
         for (size_t j = 0; j < dependencies.size(); ++j) {
-            const auto &other = dependencies[j];
-            if ((i == j) || (current.size() > other.size()) || (j < i && subgraphs[i].empty())) {
-                continue;
-            }
-            vector<int> diff;
-            // Compute the vertices in the current set that are not contained in the other
-            std::set_difference(current.begin(), current.end(), other.begin(), other.end(),
-                                std::inserter(diff, diff.begin()));
-            if (diff.empty()) {
-                // 'current' is fully contained in 'other'
-                should_remove = true;
+            const bool can_dominate =
+                (dependencies[j].size() > dependencies[i].size()) ||
+                (dependencies[j].size() == dependencies[i].size() && j < i);
+            if (can_dominate && is_subset_of(dependencies[i], dependencies[j])) {
+                is_maximal = false;
                 break;
             }
         }
-        if (!should_remove) {
-            subgraphs[i] = current;
+        if (is_maximal) {
+            subgraphs[i] = dependencies[i];
         }
     }
     return subgraphs;
@@ -353,8 +348,8 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
         }
         x_parts[idx] = csr.x_part;
         dependencies[idx] = csr.x_dependencies;
-        // Add dependency on itself (regardless whether it actually depends on
-        // its previous values) for the purpose of computing the subgraph
+        // Add a dependency on itself (regardless of whether it actually
+        // depends on its previous values) to compute the subgraph
         dependencies[idx].insert(idx);
 
         exprs[idx] = common_subexpression_elimination(exprs[idx]);
@@ -367,8 +362,6 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
     vector<set<int>> subgraphs;
     if (!all_independent) {
         debug(5) << "There are cross-dependencies. Need to prove associativity in bulk.\n";
-        // Find all transitive dependencies and add them to the graph
-        add_transitive_dependencies(dependencies);
         // Decompose the tuple into subgraphs and solve for each separately
         subgraphs = compute_subgraphs(dependencies);
     } else {

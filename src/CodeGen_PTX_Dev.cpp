@@ -38,7 +38,7 @@ namespace {
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
 public:
     /** Create a PTX device code generator. */
-    CodeGen_PTX_Dev(const Target &host);
+    CodeGen_PTX_Dev(const Target &host, bool any_strict_float);
     ~CodeGen_PTX_Dev() override;
 
     void add_kernel(Stmt stmt,
@@ -105,8 +105,9 @@ protected:
     bool supports_atomic_add(const Type &t) const override;
 };
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host)
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host, bool any_strict_float)
     : CodeGen_LLVM(host) {
+    this->any_strict_float = any_strict_float;
     context = new llvm::LLVMContext();
 }
 
@@ -465,7 +466,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
     // TODO: Support rewriting to arbitrary calls in IRMatch and use that instead
     // of expr_match here. That would probably allow avoiding the redundant swapping
     // operands logic.
-    // clang-format off
     static const Pattern patterns[] = {
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_i8x)), "dp4a"},
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x, wild_u8x)), "dp4a"},
@@ -480,7 +480,6 @@ void CodeGen_PTX_Dev::codegen_vector_reduce(const VectorReduce *op, const Expr &
         {VectorReduce::Add, 4, widening_mul(wild_i16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
         {VectorReduce::Add, 4, widening_mul(wild_u16x, wild_u16x), "dp2a", Pattern::SwapOps | Pattern::NarrowOp1},
     };
-    // clang-format on
 
     const int input_lanes = op->value.type().lanes();
     const int factor = input_lanes / op->type.lanes();
@@ -604,18 +603,22 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
-    llvm::Triple triple(module->getTargetTriple());
-
-    // Allocate target machine
-
+    // Allocate target machine (similar to code in CodeGen_Internal.cpp make_target_machine)
     std::string err_str;
-    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(triple.str(), err_str);
-    internal_assert(llvm_target) << err_str << "\n";
+    const llvm::Target *llvm_target = TargetRegistry::lookupTarget(
+        module->getTargetTriple(),
+        err_str);
+    auto triple = llvm::Triple(module->getTargetTriple());
+    internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     TargetOptions options;
     options.AllowFPOpFusion = FPOpFusion::Fast;
+#if LLVM_VERSION < 210
     options.UnsafeFPMath = true;
+#endif
+#if LLVM_VERSION < 230
     options.NoInfsFPMath = true;
+#endif
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
     options.NoZerosInBSS = false;
@@ -753,11 +756,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu_target() + " " + ptx.pathname() + " -o " + sass.pathname();
-        if (system(cmd.c_str()) == 0) {
-            cmd = "nvdisasm " + sass.pathname();
-            int ret = system(cmd.c_str());
-            (void)ret;  // Don't care if it fails
+        if (run_process({"ptxas", "--gpu-name", mcpu_target(), ptx.pathname(), "-o", sass.pathname()}) == 0) {
+            (void)run_process({"nvdisasm", sass.pathname()});  // Don't care if it fails
         }
 
         // Note: It works to embed the contents of the .sass file in
@@ -819,13 +819,13 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
-    return std::make_unique<CodeGen_PTX_Dev>(target);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target, bool any_strict_float) {
+    return std::make_unique<CodeGen_PTX_Dev>(target, any_strict_float);
 }
 
 #else  // WITH_PTX
 
-std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target, bool /*any_strict_float*/) {
     user_error << "PTX not enabled for this build of Halide.\n";
     return nullptr;
 }

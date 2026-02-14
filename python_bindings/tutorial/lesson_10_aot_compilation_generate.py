@@ -17,7 +17,7 @@
 
 # This will generate a file lesson_10_halide.py.cpp that still needs
 # to be compiled. Use
-#    make make test_tutorial_lesson_10_aot_compilation_run
+#    make test_tutorial_lesson_10_aot_compilation_run
 # to generate and run a Python module called "lesson_10_halide".
 
 # The benefits of this approach are that the final program:

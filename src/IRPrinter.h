@@ -26,6 +26,10 @@ namespace Halide {
  * human-readable form */
 std::ostream &operator<<(std::ostream &stream, const Expr &);
 
+/** Emit a tuple on an output stream (such as std::cout) in
+ * human-readable form */
+std::ostream &operator<<(std::ostream &stream, const Tuple &);
+
 /** Emit a halide type on an output stream (such as std::cout) in
  * human-readable form */
 std::ostream &operator<<(std::ostream &stream, const Type &);

@@ -708,15 +708,14 @@ pair<ReductionDomain, SubstitutionMap> project_rdom(const vector<Dim> &dims, con
     for (const auto &[var, min, extent] : rdom.domain()) {
         add_let(bounds_projection, var + ".loop_min", min);
         add_let(bounds_projection, var + ".loop_max", min + extent - 1);
-        add_let(bounds_projection, var + ".loop_extent", extent);
     }
 
     // Build the new RDom from the bounds_projection.
     vector<ReductionVariable> new_rvars;
     for (const Dim &dim : dims) {
         const Expr new_min = simplify(bounds_projection.at(dim.var + ".loop_min"));
-        const Expr new_extent = simplify(bounds_projection.at(dim.var + ".loop_extent"));
-        new_rvars.push_back(ReductionVariable{dequalify(dim.var), new_min, new_extent});
+        const Expr new_max = simplify(bounds_projection.at(dim.var + ".loop_max"));
+        new_rvars.push_back(ReductionVariable{dequalify(dim.var), new_min, (new_max - new_min) + 1});
     }
     ReductionDomain new_rdom{new_rvars};
     new_rdom.where(rdom.predicate());
@@ -1875,6 +1874,14 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     return *this;
 }
 
+std::vector<VarOrRVar> Stage::split_vars() const {
+    std::vector<VarOrRVar> result;
+    for (const auto &d : definition.schedule().dims()) {
+        result.emplace_back(split_string(d.var, ".").back(), d.is_rvar());
+    }
+    return result;
+}
+
 Stage &Stage::gpu_threads(const VarOrRVar &tx, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     set_dim_type(tx, ForType::GPUThread);
@@ -2641,6 +2648,19 @@ Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
     return *this;
 }
 
+std::vector<Var> Func::split_vars() const {
+    std::vector<Var> result;
+    for (const auto &d : func.definition().schedule().dims()) {
+        // Pure stages can't have RVars
+        internal_assert(!d.is_rvar())
+            << "The initial stage of Func " << name()
+            << " unexpectedly has RVar " << d.var
+            << "in the dims list. Initial stages aren't supposed to have RVars.";
+        result.emplace_back(split_string(d.var, ".").back());
+    }
+    return result;
+}
+
 Func &Func::gpu_threads(const VarOrRVar &tx, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func, func.definition(), 0).gpu_threads(tx, device_api);
@@ -3330,6 +3350,32 @@ FuncTupleElementRef FuncRef::operator[](int i) const {
 
 size_t FuncRef::size() const {
     return func.outputs();
+}
+
+const Type &FuncRef::type() const {
+    const auto &types =
+        (func.has_pure_definition() || func.has_extern_definition()) ?
+            func.output_types() :
+            func.required_types();
+    if (types.empty()) {
+        user_error << "Can't call type() on call to Func \"" << func.name()
+                   << "\" because it is undefined or has no type requirements.\n";
+    } else if (types.size() > 1) {
+        user_error << "Can't call type() on call to Func \"" << func.name()
+                   << "\" because it returns a Tuple.\n";
+    }
+    return types[0];
+}
+
+const std::vector<Type> &FuncRef::types() const {
+    const auto &types =
+        (func.has_pure_definition() || func.has_extern_definition()) ?
+            func.output_types() :
+            func.required_types();
+    user_assert(!types.empty())
+        << "Can't call types() on call to Func \"" << func.name()
+        << "\" because it is undefined or has no type requirements.\n";
+    return types;
 }
 
 bool FuncRef::equivalent_to(const FuncRef &other) const {

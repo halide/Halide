@@ -426,7 +426,7 @@ struct Comparer {
                 cmp(&For::device_api);
                 cmp(&For::partition_policy);
                 cmp(&For::min);
-                cmp(&For::extent);
+                cmp(&For::max);
                 cmp(&For::body);
                 break;
             case IRNodeType::Acquire:
@@ -608,7 +608,7 @@ void ir_equality_test() {
     e2 = e2 * e2 + e2;
     check_not_equal(e1, e2);
 
-    debug(0) << "ir_equality_test passed\n";
+    std::cout << "ir_equality_test passed\n";
 }
 
 }  // namespace Internal

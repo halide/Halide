@@ -371,6 +371,13 @@ public:
     TemporaryFile &operator=(TemporaryFile &&) = delete;
 };
 
+/** Run an executable with the given arguments without going through
+ * the shell. The first element of args should be the program name/path.
+ * If a name without a path-separator is given, it will be searched for
+ * in the PATH. Returns the exit code of the process, or -1 if the process
+ * could not be started. */
+int run_process(std::vector<std::string> args);
+
 /** Routines to test if math would overflow for signed integers with
  * the given number of bits. */
 // @{
@@ -539,9 +546,9 @@ void set_compiler_stack_size(size_t);
 constexpr size_t default_compiler_stack_size = 32 * 1024 * 1024;
 
 /** Return how much stack size the compiler should use for calls that
- * go through run_with_large_stack below. Currently that's lowering
- * and codegen. If no call to set_compiler_stack_size has been made,
- * this checks the value of the environment variable
+ * go through run_with_large_stack below. Currently that's lowering,
+ * codegen, and JIT compilation. If no call to set_compiler_stack_size
+ * has been made, this checks the value of the environment variable
  * HL_COMPILER_STACK_SIZE. If that's unset, it returns
  * default_compiler_stack_size, defined above. */
 size_t get_compiler_stack_size();

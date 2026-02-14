@@ -355,8 +355,8 @@ private:
         if (!min.defined()) {
             return Stmt();
         }
-        Expr extent = mutate(op->extent);
-        if (!extent.defined()) {
+        Expr max = mutate(op->max);
+        if (!max.defined()) {
             return Stmt();
         }
         Stmt body = mutate(op->body);
@@ -364,11 +364,11 @@ private:
             return Stmt();
         }
         if (min.same_as(op->min) &&
-            extent.same_as(op->extent) &&
+            max.same_as(op->max) &&
             body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(op->name, min, extent, op->for_type, op->partition_policy, op->device_api, body);
+            return For::make(op->name, min, max, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 

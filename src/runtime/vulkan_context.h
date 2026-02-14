@@ -327,13 +327,23 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
                      VkPhysicalDevice *physical_device, uint32_t *queue_family_index, const VkAllocationCallbacks *alloc_callbacks) {
     debug(user_context) << " vk_create_device (user_context=" << user_context << ")\n";
 
+    // Get the API version to determine what device features are valid to search for
+    VkPhysicalDeviceProperties device_properties = {0};
+    debug(user_context) << "  querying for device properties ...\n";
+    vkGetPhysicalDeviceProperties(*physical_device, &device_properties);
+    uint32_t major_version = VK_API_VERSION_MAJOR(device_properties.apiVersion);
+    uint32_t minor_version = VK_API_VERSION_MINOR(device_properties.apiVersion);
+    bool has_capability_v11 = (major_version >= 1) && (minor_version >= 1);  // supports >= v1.1
+    bool has_capability_v12 = (major_version >= 1) && (minor_version >= 2);  // supports >= v1.2
+    debug(user_context) << "  found device compute capability v" << major_version << "." << minor_version << " ...\n";
+
     debug(user_context) << "  checking for required device extensions ...\n";
     StringTable required_device_extensions;
-    vk_get_required_device_extensions(user_context, required_device_extensions);
+    vk_get_required_device_extensions(user_context, major_version, minor_version, required_device_extensions);
 
     debug(user_context) << "  checking for optional device extensions ...\n";
     StringTable optional_device_extensions;
-    vk_get_optional_device_extensions(user_context, optional_device_extensions);
+    vk_get_optional_device_extensions(user_context, major_version, minor_version, optional_device_extensions);
 
     debug(user_context) << "  validating supported device extensions ...\n";
     StringTable supported_device_extensions;
@@ -368,16 +378,6 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         1,
         &queue_priority,
     };
-
-    // Get the API version to determine what device features are valid to search for
-    VkPhysicalDeviceProperties device_properties = {0};
-    debug(user_context) << "  querying for device properties ...\n";
-    vkGetPhysicalDeviceProperties(*physical_device, &device_properties);
-    uint32_t major_version = VK_API_VERSION_MAJOR(device_properties.apiVersion);
-    uint32_t minor_version = VK_API_VERSION_MINOR(device_properties.apiVersion);
-    bool has_capability_v11 = (major_version >= 1) && (minor_version >= 1);  // supports >= v1.1
-    bool has_capability_v12 = (major_version >= 1) && (minor_version >= 2);  // supports >= v1.2
-    debug(user_context) << "  found device compute capability v" << major_version << "." << minor_version << " ...\n";
 
     // Get the device features so that all supported features are enabled when device is created
     VkPhysicalDeviceFeatures device_features = {};

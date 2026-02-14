@@ -4,6 +4,27 @@ set -e
 
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
+##
+
+# We standardize a common LLVM/Clang version for this script.
+# Note that this is totally independent of the version of LLVM that you
+# are using to build Halide itself. If you don't have the right version
+# installed, you can usually install what you need easily via:
+#
+#   sudo apt-get install llvm-X clang-X libclang-X-dev clang-tidy-X
+#   export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-X
+#
+# On macOS:
+#
+#   brew install llvm@X
+#   export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@X
+#
+# Where X matches the EXPECTED_VERSION below.
+
+EXPECTED_VERSION=21
+
+##
+
 usage() { echo "Usage: $0 [-j MAX_PROCESS_COUNT] [-f]" 1>&2; exit 1; }
 
 get_thread_count () {
@@ -13,8 +34,10 @@ get_thread_count () {
 
 if [ "$(uname)" == "Darwin" ]; then
   patch_file () { sed -i '' -E "$@"; }
+  _DEFAULT_LLVM_LOCATION="/opt/homebrew/opt/llvm@$EXPECTED_VERSION"
 else
   patch_file () { sed -i -E "$@"; }
+  _DEFAULT_LLVM_LOCATION="/usr/lib/llvm-$EXPECTED_VERSION"
 fi
 
 J=$(get_thread_count)
@@ -41,32 +64,22 @@ if [ -n "${FIX}" ]; then
     echo "Operating in -fix mode!"
 fi
 
-# We are currently standardized on using LLVM/Clang 21 for this script.
-# Note that this is totally independent of the version of LLVM that you
-# are using to build Halide itself. If you don't have LLVM21 installed,
-# you can usually install what you need easily via:
-#
-# sudo apt-get install llvm-21 clang-21 libclang-21-dev clang-tidy-21
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-21
-#
-# On macOS:
-#
-# brew install llvm@21
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/opt/homebrew/opt/llvm@21
-
 if [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ]; then
-  echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script."
-  exit
+    if [ -d "${_DEFAULT_LLVM_LOCATION}" ]; then
+        CLANG_TIDY_LLVM_INSTALL_DIR="${_DEFAULT_LLVM_LOCATION}"
+    else
+        echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script."
+        exit
+    fi
 fi
 
 echo "CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}"
 
 VERSION=$("${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy" --version)
-if [[ ${VERSION} =~ .*version\ 21.* ]]
-then
-    echo "clang-tidy version 21 found."
+if [[ ${VERSION} =~ .*version\ $EXPECTED_VERSION.* ]]; then
+    echo "clang-tidy version $EXPECTED_VERSION found."
 else
-    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 21 install!"
+    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM $EXPECTED_VERSION install!"
     exit 1
 fi
 
@@ -94,10 +107,11 @@ if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
   SDKROOT="$(xcrun --show-sdk-path)"
   # TOOLCHAINROOT="$(xcrun --show-toolchain-path)"
   TOOLCHAINROOT="$(cd "$(dirname "$(xcrun --find clang)")"/../.. && pwd)"
+  RCDIR="$(xcrun clang -print-resource-dir)"
   cat > "${CLANG_TIDY_BUILD_DIR}/toolchain.cmake" << EOF
 set(CMAKE_SYSROOT "${SDKROOT}")
 set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES
-    "${TOOLCHAINROOT}/usr/lib/clang/17/include"
+    "${RCDIR}/include"
     "${SDKROOT}/usr/include"
     "${TOOLCHAINROOT}/usr/include"
     "${SDKROOT}/System/Library/Frameworks"

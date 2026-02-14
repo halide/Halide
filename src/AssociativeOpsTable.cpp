@@ -177,12 +177,20 @@ void populate_ops_table_double_general_mul(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_double_general_max(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
+    // Argmax
+    table.push_back({{max(x0, y0), select(x0 > y0, x1, y1)}, {tmin_0, zero_1}, true});
+    table.push_back({{max(x0, y0), select(x0 >= y0, x1, y1)}, {tmin_0, zero_1}, true});
     table.push_back({{max(x0, y0), select(y0 < x0, x1, y1)}, {tmin_0, zero_1}, true});
+    table.push_back({{max(x0, y0), select(y0 <= x0, x1, y1)}, {tmin_0, zero_1}, true});
 }
 
 void populate_ops_table_double_general_min(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
+    // Argmin
     table.push_back({{min(x0, y0), select(x0 < y0, x1, y1)}, {tmax_0, zero_1}, true});
+    table.push_back({{min(x0, y0), select(x0 <= y0, x1, y1)}, {tmax_0, zero_1}, true});
+    table.push_back({{min(x0, y0), select(y0 > x0, x1, y1)}, {tmax_0, zero_1}, true});
+    table.push_back({{min(x0, y0), select(y0 >= x0, x1, y1)}, {tmax_0, zero_1}, true});
 }
 
 void populate_ops_table_double_general_sub(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -195,6 +203,16 @@ void populate_ops_table_double_general_sub(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_double_general_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
+    // Argmax with index as first tuple element
+    table.push_back({{select(x1 > y1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(x1 >= y1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(y1 < x1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(y1 <= x1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    // Argmin with index as first tuple element
+    table.push_back({{select(x1 < y1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(x1 <= y1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(y1 > x1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(y1 >= x1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
 }
 
 void populate_ops_table_single_uint1_and(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -318,19 +336,6 @@ const vector<AssociativePattern> &get_ops_table_helper(const vector<Type> &types
     return table_it->second;
 }
 
-std::string print_types(const vector<Type> &types) {
-    std::ostringstream stream;
-    stream << "{";
-    for (size_t i = 0; i < types.size(); ++i) {
-        if (i > 0) {
-            stream << ", ";
-        }
-        stream << types[i];
-    }
-    stream << "}";
-    return stream.str();
-}
-
 }  // anonymous namespace
 
 const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
@@ -348,21 +353,21 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
         types[i] = exprs[i].type();
     }
 
-    {
+    const vector<AssociativePattern> &table = [&]() -> decltype(auto) {
         // get_ops_table_helper() lazily initializes the table, so ensure
         // that multiple threads can't try to do so at the same time.
         static std::mutex ops_table_lock;
         std::scoped_lock lock_guard(ops_table_lock);
 
-        const vector<AssociativePattern> &table = get_ops_table_helper(types, exprs[0].node_type(), exprs.size());
-        debug(7) << "Table size: " << table.size() << "\n";
-        for (const auto &p : table) {
-            debug(7) << p;
-        }
-        return table;
+        return get_ops_table_helper(types, exprs[0].node_type(), exprs.size());
+    }();
+
+    debug(5) << "Table size: " << table.size() << "\n";
+    for (const auto &p : table) {
+        debug(5) << p;
     }
-    debug(5) << "Returning empty table\n";
-    return empty;
+
+    return table;
 }
 
 }  // namespace Internal

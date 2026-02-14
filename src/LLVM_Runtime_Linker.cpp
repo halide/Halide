@@ -425,16 +425,15 @@ std::optional<llvm::VersionTuple> get_os_version_constraint(const llvm::Triple &
         return std::nullopt;
     }
 
+    // These version constraints track the minimum deployment targets
+    // supported by the latest Xcode version, which is currently 26.2.
+    // See the table here: https://developer.apple.com/support/xcode/
     if (triple.isMacOSX() && triple.isX86()) {
-        // At time of writing (January 2025), this is one version prior
-        // to the oldest version still supported by Apple.
-        return llvm::VersionTuple(12, 0, 0);
+        return llvm::VersionTuple(11, 0, 0);
     }
 
     if (triple.isiOS()) {
-        // At time of writing (January 2025), this is one version prior
-        // to the oldest version still supported by Apple.
-        return llvm::VersionTuple(17, 0, 0);
+        return llvm::VersionTuple(15, 0, 0);
     }
 
     llvm::VersionTuple t = triple.getMinimumSupportedOSVersion();

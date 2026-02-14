@@ -363,7 +363,7 @@ private:
             if (uses_hvx) {
                 body = acquire_hvx_context(body, target);
                 body = substitute("uses_hvx", true, body);
-                Stmt new_for = For::make(op->name, op->min, op->extent, op->for_type,
+                Stmt new_for = For::make(op->name, op->min, op->max, op->for_type,
                                          op->partition_policy, op->device_api, body);
                 Stmt prolog =
                     IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
@@ -408,7 +408,7 @@ private:
                 //   vector code
                 //   halide_qurt_unlock
                 // }
-                s = For::make(op->name, op->min, op->extent, op->for_type,
+                s = For::make(op->name, op->min, op->max, op->for_type,
                               op->partition_policy, op->device_api, body);
             }
 
@@ -581,7 +581,6 @@ halide_type_t u8v2 = u8v1.with_lanes(u8v1.lanes * 2);
 halide_type_t u16v2 = u16v1.with_lanes(u16v1.lanes * 2);
 halide_type_t u32v2 = u32v1.with_lanes(u32v1.lanes * 2);
 
-// clang-format off
 #define INTRINSIC_128B(id) llvm::Intrinsic::hexagon_V6_##id##_128B
 const HvxIntrinsic intrinsic_wrappers[] = {
     // Zero/sign extension:
@@ -689,7 +688,7 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vavghrnd), i16v1, "avg_rnd.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vavgwrnd), i32v1, "avg_rnd.vw.vw", {i32v1, i32v1}},
 
-     // This one is weird: i8_sat((u8 - u8)/2). It both saturates and averages.
+    // This one is weird: i8_sat((u8 - u8)/2). It both saturates and averages.
     {INTRINSIC_128B(vnavgub), i8v1, "navg.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vnavgb), i8v1, "navg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
     {INTRINSIC_128B(vnavgh), i16v1, "navg.vh.vh", {i16v1, i16v1}},
@@ -841,7 +840,6 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vnormamth), u16v1, "cls.vh", {u16v1}},
     {INTRINSIC_128B(vnormamtw), u32v1, "cls.vw", {u32v1}},
 };
-// clang-format on
 
 // TODO: Many variants of the above functions are missing. They
 // need to be implemented in the runtime module, or via
@@ -1278,7 +1276,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 Value *packed = call_intrin_cast(
                     native2_ty,
                     INTRINSIC_128B(vdealvdd),
-                    {ab_i1, ab_i0, ConstantInt::get(i32_t, -element_bytes)});
+                    {ab_i1, ab_i0, ConstantInt::getSigned(i32_t, -element_bytes)});
                 llvm::Intrinsic::ID intrin = start == 0 ? INTRINSIC_128B(lo) : INTRINSIC_128B(hi);
                 ret_i = call_intrin_cast(native_ty, intrin, {packed});
             } else {
@@ -1595,6 +1593,8 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         if (generate_vdelta(indices, reverse, switches)) {
             vector<Constant *> control_elements(switches.size());
             for (int i = 0; i < (int)switches.size(); i++) {
+                internal_assert(switches[i] >= 0 && switches[i] <= 255)
+                    << "vdelta switch value " << switches[i] << " doesn't fit in 8 bits\n";
                 control_elements[i] = ConstantInt::get(i8_t, switches[i]);
             }
             Value *control = ConstantVector::get(control_elements);
@@ -1612,7 +1612,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 
 Value *CodeGen_Hexagon::create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
-    Constant *value = ConstantInt::get(scalar_ty, val);
+    Constant *value = ConstantInt::getSigned(scalar_ty, val);
     return get_splat(get_vector_num_elements(ty), value);
 }
 
@@ -1643,7 +1643,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
         vector<Value *> indices;
         Value *replicate_val = ConstantInt::get(i8_t, replicate);
         for (int i = 0; i < replicate; i++) {
-            Value *pos = ConstantInt::get(idx16->getType(), i);
+            Value *pos = get_splat(idx16_elems, ConstantInt::get(i16_t, i));
             indices.emplace_back(call_intrin(idx16->getType(),
                                              "halide.hexagon.add_mul.vh.vh.b",
                                              {pos, idx16, replicate_val}));
@@ -1725,7 +1725,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
             min_index = std::min(min_index, i);
             max_index = std::max(max_index, i);
         }
-        llvm_indices.push_back(ConstantInt::get(i16_t, i));
+        llvm_indices.push_back(ConstantInt::getSigned(i16_t, i));
     }
 
     // We use i16 indices because we can't support LUTs with more than
@@ -2098,6 +2098,13 @@ void CodeGen_Hexagon::visit(const Select *op) {
         value = codegen(Call::make(op->type, Call::if_then_else,
                                    {b->value, op->true_value, op->false_value},
                                    Call::PureIntrinsic));
+    } else if (op->type.is_vector() && op->type.is_bool()) {
+        // Lower selects on bools to bit math
+        std::string cond_name = unique_name('c');
+        Expr cond = Variable::make(op->condition.type(), cond_name);
+        Expr equiv = Let::make(cond_name, op->condition,
+                               (op->true_value & cond) | (op->false_value & ~cond));
+        value = codegen(equiv);
     } else {
         CodeGen_Posix::visit(op);
     }

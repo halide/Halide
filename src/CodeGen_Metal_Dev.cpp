@@ -8,6 +8,7 @@
 #include "CodeGen_Metal_Dev.h"
 #include "Debug.h"
 #include "IROperator.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,6 +17,17 @@ using std::ostringstream;
 using std::sort;
 using std::string;
 using std::vector;
+
+// Storage for Metal compilation tools
+namespace {
+struct MetalTools {
+    std::string compiler;
+    std::string linker;
+};
+
+MetalTools metal_tools;
+
+}  // namespace
 
 namespace {
 
@@ -762,26 +774,19 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
         }
     }
 
-    class FindShared : public IRVisitor {
-        using IRVisitor::visit;
-        void visit(const Allocate *op) override {
-            if (op->memory_type == MemoryType::GPUShared) {
-                internal_assert(alloc == nullptr)
-                    << "Found multiple shared allocations in metal kernel\n";
-                alloc = op;
-            }
+    const Allocate *shared_alloc = nullptr;
+    shared_name = "__shared";
+    visit_with(s, [&](auto *self, const Allocate *op) {
+        if (op->memory_type == MemoryType::GPUShared) {
+            internal_assert(shared_alloc == nullptr)
+                << "Found multiple shared allocations in metal kernel\n";
+            shared_alloc = op;
+            shared_name = op->name;
         }
+        // Recurse just to make sure there aren't multiple nested shared allocs
+        self->visit_base(op);
+    });
 
-    public:
-        const Allocate *alloc = nullptr;
-    } find_shared;
-    s.accept(&find_shared);
-
-    if (find_shared.alloc) {
-        shared_name = find_shared.alloc->name;
-    } else {
-        shared_name = "__shared";
-    }
     // Note that int4 below is an int32x4, not an int4_t. The type
     // is chosen to be large to maximize alignment.
     stream << ",\n"
@@ -863,8 +868,41 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
     string str = src_stream.str();
     debug(1) << "Metal kernel:\n"
              << str << "\n";
+
     vector<char> buffer(str.begin(), str.end());
-    buffer.push_back(0);
+
+    auto metal_compiler = get_metal_compiler();
+    auto metal_linker = get_metal_linker();
+    if (!metal_compiler.empty() && !metal_linker.empty()) {
+        // The user has specified the Metal compiler and linker to use via set_metal_compiler_and_linker(),
+        // so instead of embedding the shader as a string, we will embed it as a metallib
+        // Write the source to a temporary file.
+        auto tmpfile = file_make_temp("metal", ".metal");
+        write_entire_file(tmpfile, buffer);
+
+        // Compile the Metal source to a metallib.
+        string metalir = tmpfile + ".ir";
+        string metallib = tmpfile + "lib";
+
+        auto cc_cmd = split_string(metal_compiler, " ");
+        cc_cmd.insert(cc_cmd.end(), {"-c", "-o", metalir, tmpfile});
+
+        int ret = run_process(std::move(cc_cmd));
+        user_assert(ret == 0) << "Metal compiler set, but failed to compile Metal source to Metal IR.\n";
+
+        auto ld_cmd = split_string(metal_linker, " ");
+        ld_cmd.insert(ld_cmd.end(), {"-o", metallib, metalir});
+
+        ret = run_process(std::move(ld_cmd));
+        user_assert(ret == 0) << "Metal linker set, but failed to compile Metal IR to Metal library.\n";
+
+        // Read the metallib into a buffer.
+        buffer = read_entire_file(metallib);
+        debug(2) << "Metallib size: " << buffer.size() << "\n";
+    } else {
+        buffer.push_back(0);
+    }
+
     return buffer;
 }
 
@@ -886,5 +924,20 @@ std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Metal_Dev(const Target &target) {
     return std::make_unique<CodeGen_Metal_Dev>(target);
 }
 
+std::string get_metal_compiler() {
+    return metal_tools.compiler;
+}
+
+std::string get_metal_linker() {
+    return metal_tools.linker;
+}
+
 }  // namespace Internal
+
+void set_metal_compiler_and_linker(const std::string &compiler_path,
+                                   const std::string &linker_path) {
+    Internal::metal_tools.compiler = compiler_path;
+    Internal::metal_tools.linker = linker_path;
+}
+
 }  // namespace Halide

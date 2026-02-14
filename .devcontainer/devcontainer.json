@@ -1,0 +1,36 @@
+// Default Ubuntu-based DevContainer Template.
+// For more customization options, see https://containers.dev/implementors/json_reference
+// Also note this file is "JSON with Comments" (JSONC).
+{
+  "name": "Halide",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    "--userns=keep-id",
+    "--security-opt",
+    "label=disable"
+  ],
+  "customizations": {
+    "jetbrains": {
+      "backend": "CLion",
+      "settings": {
+        // IDE settings can be added via “Show context actions”|“Add currently modified settings from IDE”.
+        // A complete list of supported settings is also available through auto-completion
+      },
+      "plugins": [
+        // A set of plugin IDs.
+        // Plugin ID can be found on the corresponding plugin’s page at https://plugins.jetbrains.com.
+      ]
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/git": {},
+    "ghcr.io/devcontainers/features/common-utils": {
+      "installZsh": false
+    }
+  },
+  // Comment out to connect as the root user.
+  "remoteUser": "ubuntu",
+  "containerUser": "root"
+}

@@ -1052,40 +1052,34 @@ Expr strided_ramp_base(const Expr &e, int stride) {
 namespace {
 
 // Replace a specified list of intrinsics with their first arg.
-class RemoveIntrinsics : public IRMutator {
-    using IRMutator::visit;
-    const std::initializer_list<Call::IntrinsicOp> &ops;
-
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(ops)) {
-            return mutate(op->args[0]);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-public:
-    RemoveIntrinsics(const std::initializer_list<Call::IntrinsicOp> &ops)
-        : ops(ops) {
-    }
-};
+template<typename T>
+T remove_intrinsics(const T &e, const std::initializer_list<Call::IntrinsicOp> &ops) {
+    return mutate_with(
+        e,
+        [&](auto *self, const Call *op) {
+            if (op->is_intrinsic(ops)) {
+                return self->mutate(op->args[0]);
+            }
+            return self->visit_base(op);
+        });
+}
 
 }  // namespace
 
 Expr remove_likelies(const Expr &e) {
-    return RemoveIntrinsics({Call::likely, Call::likely_if_innermost}).mutate(e);
+    return remove_intrinsics(e, {Call::likely, Call::likely_if_innermost});
 }
 
 Stmt remove_likelies(const Stmt &s) {
-    return RemoveIntrinsics({Call::likely, Call::likely_if_innermost}).mutate(s);
+    return remove_intrinsics(s, {Call::likely, Call::likely_if_innermost});
 }
 
 Expr remove_promises(const Expr &e) {
-    return RemoveIntrinsics({Call::promise_clamped, Call::unsafe_promise_clamped}).mutate(e);
+    return remove_intrinsics(e, {Call::promise_clamped, Call::unsafe_promise_clamped});
 }
 
 Stmt remove_promises(const Stmt &s) {
-    return RemoveIntrinsics({Call::promise_clamped, Call::unsafe_promise_clamped}).mutate(s);
+    return remove_intrinsics(s, {Call::promise_clamped, Call::unsafe_promise_clamped});
 }
 
 Expr unwrap_tags(const Expr &e) {
@@ -1162,6 +1156,20 @@ Expr widening_add(Expr a, Expr b) {
 
 Expr widening_mul(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "widening_mul of undefined Expr\n";
+    // Promote float to int if lossless
+    if (a.type().is_float() && b.type().is_int_or_uint()) {
+        Expr float_b = lossless_cast(a.type(), b);
+        user_assert(float_b.defined())
+            << "widening_mul: cannot promote RHS of type " << b.type() << " to " << a.type() << ".\n"
+            << "Please use an explicit cast.\n";
+        b = float_b;
+    } else if (b.type().is_float() && a.type().is_int_or_uint()) {
+        Expr float_a = lossless_cast(b.type(), a);
+        user_assert(float_a.defined())
+            << "widening_mul: cannot promote LHS of type " << a.type() << " to " << b.type() << ".\n"
+            << "Please use an explicit cast.\n";
+        a = float_a;
+    }
     // Widening multiplies can have different signs.
     match_bits(a, b);
     match_lanes(a, b);

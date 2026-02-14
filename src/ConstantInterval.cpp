@@ -456,6 +456,10 @@ ConstantInterval operator%(const ConstantInterval &a, const ConstantInterval &b)
     result.min_defined = true;
     result.min = 0;
 
+    if (a.is_single_point() && b.is_single_point()) {
+        return ConstantInterval::single_point(mod_imp(a.min, b.min));
+    }
+
     // Mod by produces a result between 0
     // and max(0, abs(modulus) - 1). However, if b is unbounded in
     // either direction, abs(modulus) could be arbitrarily

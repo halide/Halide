@@ -4,6 +4,7 @@
 #include "Closure.h"
 #include "Elf.h"
 #include "HexagonOffload.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "InjectHostDevBufferCopies.h"
@@ -745,10 +746,10 @@ class InjectHexagonRpc : public IRMutator {
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
         Stmt body;
-        if (is_const_one(loop->extent)) {
+        if (equal(loop->min, loop->max)) {
             body = LetStmt::make(loop->name, loop->min, loop->body);
         } else {
-            body = For::make(loop->name, loop->min, loop->extent, loop->for_type, loop->partition_policy,
+            body = For::make(loop->name, loop->min, loop->max, loop->for_type, loop->partition_policy,
                              DeviceAPI::None, loop->body);
         }
 
@@ -1099,12 +1100,11 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         write_entire_file(input.pathname(), shared_object);
 
-        debug(1) << "Signing tool: (" << signer << ")\n";
-        std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
-        int result = system(cmd.c_str());
-        internal_assert(result == 0)
-            << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
-            << " for cmd (" << cmd << ")";
+        auto sign_cmd = split_string(signer, " ");
+        sign_cmd.insert(sign_cmd.end(), {input.pathname(), output.pathname()});
+
+        int result = run_process(std::move(sign_cmd));
+        internal_assert(result == 0) << "HL_HEXAGON_CODE_SIGNER failed: result = " << result;
 
         shared_object = read_entire_file(output.pathname());
     }

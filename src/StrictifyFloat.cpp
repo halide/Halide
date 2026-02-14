@@ -83,6 +83,16 @@ class Strictify : public IRMutator {
             return IRMutator::visit(op);
         }
     }
+
+    Expr visit(const Cast *op) override {
+        if (op->value.type().is_float() &&
+            op->type.is_float()) {
+            return Call::make(op->type, Call::strict_cast,
+                              {mutate(op->value)}, Call::PureIntrinsic);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
 };
 
 const std::set<std::string> strict_externs = {
@@ -142,6 +152,8 @@ Expr unstrictify_float(const Call *op) {
         return op->args[0] <= op->args[1];
     } else if (op->is_intrinsic(Call::strict_eq)) {
         return op->args[0] == op->args[1];
+    } else if (op->is_intrinsic(Call::strict_cast)) {
+        return cast(op->type, op->args[0]);
     } else {
         internal_error << "Missing lowering of strict float intrinsic: "
                        << Expr(op) << "\n";

@@ -118,6 +118,33 @@ struct TestArgs {
     }
 };
 
+// For D3D12Compute, we lower directly to HLSL's pow function if the base is provably positive.
+// This test ensures that lowering is correct.
+void test_pow_positive() {
+    printf("Testing pow(x, y) where x > 0\n");
+    TestArgs<float> args(256, 0.0f, 10.0f);
+    Func test_pow_positive("test_pow_positive");
+    Var x("x"), xi("xi");
+    test_pow_positive(x) = pow(1.5f, args.data(x));
+
+    Target target = get_jit_target_from_environment();
+    if (target.has_gpu_feature()) {
+        test_pow_positive.gpu_tile(x, xi, 16);
+    } else if (target.has_feature(Target::HVX)) {
+        test_pow_positive.hexagon();
+    }
+    Buffer<float> result = test_pow_positive.realize({args.data.extent(0)}, target);
+    for (int i = 0; i < args.data.extent(0); i++) {
+        float c_result = pow(1.5f, args.data(i));
+        if (!relatively_equal(c_result, result(i), target)) {
+            fprintf(stderr, "For pow(1.5f, %.20f) == %.20f from C and %.20f from %s.\n",
+                    (double)args.data(i), (double)c_result, (double)result(i),
+                    target.to_string().c_str());
+            num_errors++;
+        }
+    }
+}
+
 // Using macros to expand name as both a C function and an Expr fragment.
 // It may well be possible to do this without macros, but that is left
 // for another day.
@@ -184,54 +211,50 @@ struct TestArgs {
         }                                                                                                  \
     }
 
-// clang-format off
+#define fun_1_float_types(name)     \
+    fun_1(float, float, name, name) \
+        fun_1(double, double, name, name)
 
-#define fun_1_float_types(name)       \
-    fun_1(float, float, name, name)   \
-    fun_1(double, double, name, name)
+#define fun_2_float_types(name)     \
+    fun_2(float, float, name, name) \
+        fun_2(double, double, name, name)
 
-#define fun_2_float_types(name)       \
-    fun_2(float, float, name, name)   \
-    fun_2(double, double, name, name)
+fun_1_float_types(sqrt);
+fun_1_float_types(sin);
+fun_1_float_types(cos);
+fun_1_float_types(exp);
+fun_1_float_types(log);
+fun_1_float_types(floor);
+fun_1_float_types(ceil);
+fun_1_float_types(trunc);
+fun_1_float_types(asin);
+fun_1_float_types(acos);
+fun_1_float_types(tan);
+fun_1_float_types(atan);
+fun_1_float_types(sinh);
+fun_1_float_types(cosh);
+fun_1_float_types(tanh);
+fun_1_float_types(asinh);
+fun_1_float_types(acosh);
+fun_1_float_types(atanh);
+fun_1_float_types(round);
 
-fun_1_float_types(sqrt)
-fun_1_float_types(sin)
-fun_1_float_types(cos)
-fun_1_float_types(exp)
-fun_1_float_types(log)
-fun_1_float_types(floor)
-fun_1_float_types(ceil)
-fun_1_float_types(trunc)
-fun_1_float_types(asin)
-fun_1_float_types(acos)
-fun_1_float_types(tan)
-fun_1_float_types(atan)
-fun_1_float_types(sinh)
-fun_1_float_types(cosh)
-fun_1_float_types(tanh)
-fun_1_float_types(asinh)
-fun_1_float_types(acosh)
-fun_1_float_types(atanh)
-fun_1_float_types(round)
+fun_2_float_types(pow);
+fun_2_float_types(atan2);
 
-fun_2_float_types(pow)
-fun_2_float_types(atan2)
+fun_1(float, float, abs, fabsf);
+fun_1(double, double, abs, fabs);
+fun_1(uint8_t, int8_t, abs, abs);
+fun_1(uint16_t, int16_t, abs, abs);
+fun_1(uint32_t, int32_t, abs, abs);
 
-fun_1(float, float, abs, fabsf)
-fun_1(double, double, abs, fabs)
-fun_1(uint8_t, int8_t, abs, abs)
-fun_1(uint16_t, int16_t, abs, abs)
-fun_1(uint32_t, int32_t, abs, abs)
-
-fun_2_float_types(absd)
-fun_2(uint8_t, int8_t, absd, absd)
-fun_2(uint16_t, int16_t, absd, absd)
-fun_2(uint32_t, int32_t, absd, absd)
-fun_2(uint8_t, uint8_t, absd, absd)
-fun_2(uint16_t, uint16_t, absd, absd)
-fun_2(uint32_t, uint32_t, absd, absd)
-
-// clang-format on
+fun_2_float_types(absd);
+fun_2(uint8_t, int8_t, absd, absd);
+fun_2(uint16_t, int16_t, absd, absd);
+fun_2(uint32_t, int32_t, absd, absd);
+fun_2(uint8_t, uint8_t, absd, absd);
+fun_2(uint16_t, uint16_t, absd, absd);
+fun_2(uint32_t, uint32_t, absd, absd);
 
 // Note this test is more oriented toward making sure the paths
 // through to math functions all work on a given target rather
@@ -299,6 +322,7 @@ int main(int argc, char **argv) {
     call_1_float_types(trunc, 256, -25, 25);
 
     call_2_float_types(pow, 256, -10.0, 10.0, -4.0f, 4.0f);
+    test_pow_positive();
 
     const int8_t int8_min = std::numeric_limits<int8_t>::min();
     const int16_t int16_min = std::numeric_limits<int16_t>::min();

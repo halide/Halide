@@ -133,7 +133,6 @@ struct x86Intrinsic {
     };
 };
 
-// clang-format off
 const x86Intrinsic intrinsic_defs[] = {
     // AVX2/SSSE3 LLVM intrinsics for pabs fail in JIT. The integer wrappers
     // just call `llvm.abs` (which requires a second argument).
@@ -295,17 +294,16 @@ const x86Intrinsic intrinsic_defs[] = {
     {"tileloadd64_i8", Int(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
     {"tileloadd64_i8", UInt(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
     {"tileloadd64_bf16", BFloat(16, 512), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
-    {"tdpbssd", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), Int(8, 1024), Int(8, 1024)},  Target::AVX512_SapphireRapids},
+    {"tdpbssd", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), Int(8, 1024), Int(8, 1024)}, Target::AVX512_SapphireRapids},
     {"tdpbsud", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), Int(8, 1024), UInt(8, 1024)}, Target::AVX512_SapphireRapids},
     {"tdpbusd", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), UInt(8, 1024), Int(8, 1024)}, Target::AVX512_SapphireRapids},
     {"tdpbuud", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), UInt(8, 1024), UInt(8, 1024)}, Target::AVX512_SapphireRapids},
     {"tdpbf16ps", Float(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Float(32, 256), BFloat(16, 512), BFloat(16, 512)}, Target::AVX512_SapphireRapids},
-    {"tilezero_i32", Int(32, 256), "tile_zero", {Int(16), Int(16)},  Target::AVX512_SapphireRapids},
+    {"tilezero_i32", Int(32, 256), "tile_zero", {Int(16), Int(16)}, Target::AVX512_SapphireRapids},
     {"tilezero_f32", Float(32, 256), "tile_zero", {Int(16), Int(16)}, Target::AVX512_SapphireRapids},
     {"tilestored64_i32", Int(32), "tile_store", {Int(16), Int(16), Handle(), Int(64), Int(64), Int(32, 256)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
     {"tilestored64_f32", Int(32), "tile_store", {Int(16), Int(16), Handle(), Int(64), Int(64), Float(32, 256)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
 };
-// clang-format on
 
 void CodeGen_X86::init_module() {
     CodeGen_Posix::init_module();
@@ -526,7 +524,8 @@ void CodeGen_X86::visit(const Cast *op) {
     if (target.has_feature(Target::F16C) &&
         dst.code() == Type::Float &&
         src.code() == Type::Float &&
-        (dst.bits() == 16 || src.bits() == 16)) {
+        (dst.bits() == 16 || src.bits() == 16) &&
+        src.bits() <= 32) {  // Don't use for narrowing casts from double - it results in a libm call
         // Node we use code() == Type::Float instead of is_float(), because we
         // don't want to catch bfloat casts.
 
@@ -549,7 +548,6 @@ void CodeGen_X86::visit(const Cast *op) {
         Expr pattern;
     };
 
-    // clang-format off
     static Pattern patterns[] = {
         // This isn't rounding_mul_shift_right(i16, i16, 15) because it doesn't
         // saturate the result.
@@ -557,7 +555,6 @@ void CodeGen_X86::visit(const Cast *op) {
 
         {"f32_to_bf16", bf16(wild_f32x_)},
     };
-    // clang-format on
 
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
@@ -584,13 +581,6 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
-    if (op->is_intrinsic(Call::round)) {
-        value = call_overloaded_intrin(op->type, "round", op->args);
-        if (value) {
-            return;
-        }
-    }
-
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors beyond this point.
         CodeGen_Posix::visit(op);
@@ -783,7 +773,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             SingleArg = 1 << 2,
         };
     };
-    // clang-format off
+
     // These patterns are roughly sorted "best to worst", in case there are two
     // patterns that match the expression.
     static const Pattern patterns[] = {
@@ -819,7 +809,6 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         {VectorReduce::Add, 8, u64(absd(wild_u8x_, wild_u8x_)), "sum_of_absolute_differences", {}},
 
     };
-    // clang-format on
 
     std::vector<Expr> matches;
     for (const Pattern &p : patterns) {
@@ -1151,11 +1140,11 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
     // type if we can.
     int vec_bits = t.lanes() * t.bits();
     int natural_vec_bits = target.natural_vector_size(t) * t.bits();
-    // clang-format off
+
     int slice_bits = ((vec_bits > 256 && natural_vec_bits > 256) ? 512 :
                       (vec_bits > 128 && natural_vec_bits > 128) ? 256 :
                                                                    128);
-    // clang-format on
+
     return slice_bits / t.bits();
 }
 
