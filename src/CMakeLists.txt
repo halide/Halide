@@ -85,6 +85,7 @@ target_sources(
     CodeGen_Targets.h
     CodeGen_Vulkan_Dev.h
     CodeGen_WebGPU_Dev.h
+    CodeGen_Xtensa.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -129,6 +130,7 @@ target_sources(
     HexagonOptimize.h
     ImageParam.h
     InferArguments.h
+    InjectDmaTransfer.h
     InjectHostDevBufferCopies.h
     Inline.h
     InlineReductions.h
@@ -220,6 +222,7 @@ target_sources(
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
+    XtensaOptimize.h
 )
 
 # The sources that go into libHalide. For the sake of IDE support, headers that
@@ -268,6 +271,7 @@ target_sources(
     CodeGen_WebAssembly.cpp
     CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
+    CodeGen_Xtensa.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
     ConstantBounds.cpp
@@ -306,6 +310,7 @@ target_sources(
     HexagonOptimize.cpp
     ImageParam.cpp
     InferArguments.cpp
+    InjectDmaTransfer.cpp
     InjectHostDevBufferCopies.cpp
     Inline.cpp
     InlineReductions.cpp
@@ -412,11 +417,14 @@ target_sources(
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
+    XtensaOptimize.cpp
 )
 
 set(C_TEMPLATE_FILES
     CodeGen_C_prologue
     CodeGen_C_vectors
+    CodeGen_Xtensa_prologue
+    CodeGen_Xtensa_vectors
 )
 
 set(HTML_TEMPLATE_FILES

@@ -292,6 +292,7 @@ tests(GROUPS correctness
       simd_op_check_sve2.cpp
       simd_op_check_wasm.cpp
       simd_op_check_x86.cpp
+      simd_op_check_xtensa.cpp
       simplified_away_embedded_image.cpp
       simplify.cpp
       skip_stages.cpp
