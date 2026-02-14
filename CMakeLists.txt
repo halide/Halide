@@ -46,7 +46,6 @@ include(CheckCXXSymbolExists)
 
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
-include(BundleStatic)
 include(HalideFeatures)
 include(HalideGeneratorHelpers)
 include(HalidePackageConfigHelpers)
@@ -227,14 +226,9 @@ find_package(PNG)
 ##
 # Optional features. These settings are defined early so that subdirectories see a consistent view
 
-Halide_feature(Halide_BUNDLE_STATIC "Bundle Halide's static dependencies" OFF ADVANCED
-               DEPENDS NOT BUILD_SHARED_LIBS)
-
 Halide_feature(Halide_ENABLE_EXCEPTIONS "Enable exceptions in Halide" ON)
 Halide_feature(Halide_ENABLE_RTTI "Enable RTTI in Halide" ON
                DEPENDS LLVM_ENABLE_RTTI)
-Halide_feature(Halide_BUNDLE_STATIC "Bundle Halide's static dependencies" OFF ADVANCED
-               DEPENDS NOT BUILD_SHARED_LIBS)
 
 Halide_feature(WITH_AUTOSCHEDULERS "Build the Halide autoschedulers" ON
                DEPENDS BUILD_SHARED_LIBS)

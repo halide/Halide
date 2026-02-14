@@ -419,7 +419,6 @@ compiled.
 | Option                                   | Default               | Description                                                                                       |
 |------------------------------------------|-----------------------|---------------------------------------------------------------------------------------------------|
 | [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.              |
-| `Halide_BUNDLE_STATIC`                   | `OFF`                 | When building Halide as a static library, merge static library dependencies into libHalide.a.     |
 | `Halide_LLVM_SHARED_LIBS`                | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                     |
 | `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                   |
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                            |
