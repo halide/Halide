@@ -588,7 +588,7 @@ if (MSVC AND Halide_WASM_BACKEND STREQUAL "wabt")
 endif ()
 
 if (Halide_WASM_BACKEND STREQUAL "wabt")
-    find_package(wabt 1.0.36 REQUIRED)
+    find_package(wabt 1.0.39 REQUIRED)
     _Halide_pkgdep(wabt)
 
     if (Halide_USE_FETCHCONTENT AND NOT BUILD_SHARED_LIBS)

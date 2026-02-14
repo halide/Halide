@@ -146,7 +146,7 @@ building the core pieces of Halide.
 | [Clang]       | `==LLVM`           | _always_                   |                                                     |
 | [LLD]         | `==LLVM`           | _always_                   |                                                     |
 | [flatbuffers] | `~=23.5.26`        | `WITH_SERIALIZATION=ON`    |                                                     |
-| [wabt]        | `==1.0.36`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
+| [wabt]        | `==1.0.39`         | `Halide_WASM_BACKEND=wabt` | Does not have a stable API; exact version required. |
 | [V8]          | trunk              | `Halide_WASM_BACKEND=V8`   | Difficult to build. See [WebAssembly.md]            |
 | [Python]      | `>=3.10`           | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
 | [pybind11]    | `~=2.11.1`         | `WITH_PYTHON_BINDINGS=ON`  |                                                     |
