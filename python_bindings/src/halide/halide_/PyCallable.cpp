@@ -48,8 +48,8 @@ T cast_to(const py::handle &h) {
 }
 
 void is_any_contiguous(const py::buffer_info &info, bool &c_contig, bool &f_contig) {
-    ssize_t c_stride = info.itemsize;
-    ssize_t f_stride = info.itemsize;
+    py::ssize_t c_stride = info.itemsize;
+    py::ssize_t f_stride = info.itemsize;
     c_contig = true;
     f_contig = true;
 
