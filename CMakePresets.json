@@ -30,8 +30,7 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_MANIFEST_FEATURES": "developer",
-        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg",
-        "Halide_USE_FETCHCONTENT": false
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg"
       }
     },
     {

@@ -142,9 +142,11 @@ There are also several functions that are disallowed for other reasons:
 | `site_name`                     | Privacy: do not want leak host name information                                   | Provide a cache variable, generate a unique name.                              |
 | `variable_watch`                | Debugging helper                                                                  | None. Not needed in production.                                                |
 
-Do not introduce any dependencies via [`find_package`][find_package]
-without broader approval. Importantly, never introduce a new use of
-`FetchContent`; prefer to add dependencies to `vcpkg.json`.
+Do not introduce any dependencies without broader approval.
+
+When introducing a new dependency, always use [`find_package`][find_package]
+rather than `FetchContent`. This might entail adding an overlay port to Halide's
+`cmake/vcpkg` directory.
 
 ## Prohibited variables list
 
