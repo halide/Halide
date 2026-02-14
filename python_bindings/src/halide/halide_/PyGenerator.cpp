@@ -165,11 +165,14 @@ void define_generator(py::module &m) {
                   mutable_argv.push_back(const_cast<char *>(s.c_str()));
               }
               mutable_argv.push_back(nullptr);
-              const int result = Halide::Internal::generate_filter_main((int)mutable_argv.size() - 1, mutable_argv.data(), PyGeneratorFactoryProvider());
+              const int result = Halide::Internal::generate_filter_main(
+                  (int)mutable_argv.size() - 1, mutable_argv.data(), PyGeneratorFactoryProvider());
               if (result != 0) {
-                  // Some paths in generate_filter_main() will fail with user_error or similar (which throws an exception
-                  // due to how libHalide is built for Python), but some paths just return an error code. For consistency,
-                  // handle both by throwing a C++ exception, which PyBind11 turns into a Python exception.
+                  // Some paths in generate_filter_main() will fail with user_error
+                  // or similar (which throws an exception due to how libHalide is
+                  // built for Python), but other paths just return an error code.
+                  // For consistency, handle both by throwing a C++ exception, which
+                  // PyBind11 turns into a Python exception.
                   throw std::runtime_error("Generator failed: " + std::to_string(result));
               }  //
           },
