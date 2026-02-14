@@ -32,13 +32,6 @@ Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pybufferinfo_to_halidebuffer
     return Halide::Runtime::Buffer<T, Dims, InClassDimStorage>(t, info.ptr, (int)info.ndim, dims);
 }
 
-template<typename T = void,
-         int Dims = AnyDims,
-         int InClassDimStorage = (Dims == AnyDims ? 4 : std::max(Dims, 1))>
-Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pybuffer_to_halidebuffer(const py::buffer &pyb, bool writable, bool reverse_axes) {
-    return pybufferinfo_to_halidebuffer(pyb.request(writable), reverse_axes);
-}
-
 }  // namespace PythonBindings
 }  // namespace Halide
 
