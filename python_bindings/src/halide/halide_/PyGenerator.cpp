@@ -159,6 +159,10 @@ void define_generator(py::module &m) {
 
     m.def("_generate_filter_main",  //
           [](const std::vector<std::string> &arguments) -> void {
+              if (arguments.empty()) {
+                  throw std::invalid_argument("No arguments provided to _generate_filter_main");
+              }
+
               // POSIX requires argv to be mutable and null-terminated
               std::vector<char *> argv;
               argv.reserve(arguments.size() + 1);
@@ -168,7 +172,7 @@ void define_generator(py::module &m) {
               argv.push_back(nullptr);
 
               const int result = Halide::Internal::generate_filter_main(
-                  (int)argv.size() - 1, argv.data(), PyGeneratorFactoryProvider());
+                  static_cast<int>(argv.size()) - 1, argv.data(), PyGeneratorFactoryProvider());
               if (result != 0) {
                   // Some paths in generate_filter_main() will fail with user_error
                   // or similar (which throws an exception due to how libHalide is
