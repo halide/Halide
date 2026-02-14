@@ -159,6 +159,7 @@ void define_generator(py::module &m) {
 
     m.def("_generate_filter_main",  //
           [](const std::vector<std::string> &arguments) -> void {
+              // POSIX requires argv to be mutable and null-terminated
               std::vector<char *> argv;
               argv.reserve(arguments.size() + 1);
               for (const auto &s : arguments) {
