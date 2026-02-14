@@ -9,14 +9,6 @@ if (CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
     if (NOT DEFINED VCPKG_MANIFEST_FEATURES)
         set(VCPKG_MANIFEST_FEATURES developer)
     endif ()
-
-    # vcpkg and FetchContent are incompatible
-    set(Halide_USE_FETCHCONTENT OFF)
-endif ()
-
-option(Halide_USE_FETCHCONTENT "When Halide is top-level, use FetchContent for build-time dependencies." ON)
-if (Halide_USE_FETCHCONTENT)
-    list(APPEND CMAKE_PROJECT_TOP_LEVEL_INCLUDES "${CMAKE_CURRENT_LIST_DIR}/cmake/dependencies.cmake")
 endif ()
 
 project(Halide

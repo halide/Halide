@@ -501,10 +501,9 @@ install it into the currently active Python environment.
 
 However, this comes with a few caveats:
 
-1. `Halide_USE_FETCHCONTENT` is disabled, so the environment must be prepared
-   for CMake to find its dependencies. This is easiest to do by setting either
-   `CMAKE_PREFIX_PATH` to pre-built dependencies or by setting
-   `CMAKE_TOOLCHAIN_FILE` to vcpkg.
+1. The environment must be prepared for CMake to find its dependencies. This is
+   easiest to do by setting either `CMAKE_PREFIX_PATH` to pre-built dependencies
+   or by setting `CMAKE_TOOLCHAIN_FILE` to vcpkg.
 2. The build settings are fixed, meaning that `wabt` is required on non-Windows
    systems, `flatbuffers` is always required, and the Python bindings must be
    built.
