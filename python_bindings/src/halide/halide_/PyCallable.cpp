@@ -47,11 +47,11 @@ T cast_to(const py::handle &h) {
     }
 }
 
-void is_any_contiguous(const py::buffer_info &info, bool &c_contig, bool &f_contig) {
+std::pair<bool, bool> is_any_contiguous(const py::buffer_info &info) {
     py::ssize_t c_stride = info.itemsize;
     py::ssize_t f_stride = info.itemsize;
-    c_contig = true;
-    f_contig = true;
+    bool c_contig = true;
+    bool f_contig = true;
 
     for (size_t i = 0; i < info.ndim; ++i) {
         size_t c_idx = info.ndim - 1 - i;
@@ -65,6 +65,8 @@ void is_any_contiguous(const py::buffer_info &info, bool &c_contig, bool &f_cont
         }
         f_stride *= info.shape[i];
     }
+
+    return {c_contig, f_contig};
 }
 
 }  // namespace
@@ -116,9 +118,7 @@ public:
                     const bool writable = c_arg.is_output();
 
                     const py::buffer_info value_buffer_info = py_buffer_value.request(writable);
-                    bool c_contig;
-                    bool f_contig;
-                    is_any_contiguous(value_buffer_info, c_contig, f_contig);
+                    auto [c_contig, f_contig] = is_any_contiguous(value_buffer_info);
 
                     if (!c_contig && !f_contig) {
                         throw Halide::Error("Invalid buffer: only C or F contiguous buffers are supported");
