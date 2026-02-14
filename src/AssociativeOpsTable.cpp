@@ -203,6 +203,16 @@ void populate_ops_table_double_general_sub(const vector<Type> &types, vector<Ass
 
 void populate_ops_table_double_general_select(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_double(types);
+    // Argmax with index as first tuple element
+    table.push_back({{select(x1 > y1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(x1 >= y1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(y1 < x1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    table.push_back({{select(y1 <= x1, x0, y0), max(x1, y1)}, {zero_0, tmin_1}, true});
+    // Argmin with index as first tuple element
+    table.push_back({{select(x1 < y1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(x1 <= y1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(y1 > x1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
+    table.push_back({{select(y1 >= x1, x0, y0), min(x1, y1)}, {zero_0, tmax_1}, true});
 }
 
 void populate_ops_table_single_uint1_and(const vector<Type> &types, vector<AssociativePattern> &table) {
@@ -324,19 +334,6 @@ const vector<AssociativePattern> &get_ops_table_helper(const vector<Type> &types
         return table;
     }
     return table_it->second;
-}
-
-std::string print_types(const vector<Type> &types) {
-    std::ostringstream stream;
-    stream << "{";
-    for (size_t i = 0; i < types.size(); ++i) {
-        if (i > 0) {
-            stream << ", ";
-        }
-        stream << types[i];
-    }
-    stream << "}";
-    return stream.str();
 }
 
 }  // anonymous namespace

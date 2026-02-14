@@ -831,12 +831,70 @@ int argmin_rfactor_test() {
     return 0;
 }
 
+enum class InlineReductionVariant {
+    ArgMin,
+    ArgMax,
+};
+
+template<InlineReductionVariant variant>
+int inline_reductions_test() {
+    using namespace ConciseCasts;
+    constexpr float pi = M_PI;
+
+    Func f{"f"};
+    Var x("x");
+    f(x) = sin(f32(x) / 8 * pi);  // argmax should be f(4) = 1.0, argmin should be f(12) = -10.0
+    f.compute_root();
+
+    RDom r(0, 32);
+
+    Func g{"reduction"};
+    Func output{"g"};
+
+    if constexpr (variant == InlineReductionVariant::ArgMin) {
+        output() = argmin(f(r), g);
+    } else {
+        output() = argmax(f(r), g);
+    }
+
+    RVar ro("rxo"), ri("rxi");
+    g.update(0).split(r, ro, ri, 2);
+
+    Var u("u");
+    Func intm = g.update(0).rfactor(ro, u);
+    intm.compute_root();
+    intm.update(0).vectorize(u, 2);
+
+    Realization rn = output.realize();
+    Buffer<int> sch_idx(rn[0]);
+    Buffer<float> sch_val(rn[1]);
+
+    if constexpr (variant == InlineReductionVariant::ArgMin) {
+        if (sch_val() != -1.0f || sch_idx() != 12) {
+            fprintf(stderr, "Expected argmin to be f(12) = -1.0, got f(%d) = %f\n", sch_idx(), sch_val());
+            return 1;
+        }
+    } else {
+        if (sch_val() != 1.0f || sch_idx() != 4) {
+            fprintf(stderr, "Expected argmax to be f(4) = 1.0, got f(%d) = %f\n", sch_idx(), sch_val());
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 enum class ArgMaxVariant {
     Explicit,
     TupleSelect
 };
 
-template<ArgMaxVariant variant>
+enum class ArgMaxTupleOrder {
+    IndexFirst,
+    ValueFirst,
+};
+
+template<ArgMaxVariant variant, ArgMaxTupleOrder order>
 int argmax_rfactor_test() {
     using namespace ConciseCasts;
     constexpr float pi = M_PI;
@@ -849,12 +907,29 @@ int argmax_rfactor_test() {
     RDom r(0, 32);
 
     Func g{"g"};
-    g() = Tuple(f.type().min(), r.x.min());
+
+    int value_tup = order == ArgMaxTupleOrder::ValueFirst ? 0 : 1;
+    int index_tup = order == ArgMaxTupleOrder::ValueFirst ? 1 : 0;
+
+    if constexpr (order == ArgMaxTupleOrder::ValueFirst) {
+        g() = Tuple(f.type().min(), r.x.min());
+    } else {
+        g() = Tuple(r.x.min(), f.type().min());
+    }
+
     if constexpr (variant == ArgMaxVariant::Explicit) {
-        g() = Tuple(max(f(r), g()[0]), select(g()[0] < f(r), r, g()[1]));
+        if constexpr (order == ArgMaxTupleOrder::ValueFirst) {
+            g() = Tuple(max(f(r), g()[value_tup]), select(g()[value_tup] < f(r), r, g()[index_tup]));
+        } else {
+            g() = Tuple(select(g()[value_tup] < f(r), r, g()[index_tup]), max(f(r), g()[value_tup]));
+        }
     } else {
         static_assert(variant == ArgMaxVariant::TupleSelect);
-        g() = select(g()[0] < f(r), Tuple(f(r), r), g());
+        if constexpr (order == ArgMaxTupleOrder::ValueFirst) {
+            g() = select(g()[value_tup] < f(r), Tuple(f(r), r), g());
+        } else {
+            g() = select(g()[value_tup] < f(r), Tuple(r, f(r)), g());
+        }
     }
 
     RVar ro("rxo"), ri("rxi");
@@ -866,8 +941,8 @@ int argmax_rfactor_test() {
     intm.update(0).vectorize(u, 2);
 
     Realization rn = g.realize();
-    Buffer<float> sch_val(rn[0]);
-    Buffer<int> sch_idx(rn[1]);
+    Buffer<float> sch_val(rn[value_tup]);
+    Buffer<int> sch_idx(rn[index_tup]);
 
     if (sch_val() != 1.0f || sch_idx() != 4) {
         fprintf(stderr, "Expected argmax to be f(4) = 1.0, got f(%d) = %f\n", sch_idx(), sch_val());
@@ -1208,8 +1283,12 @@ int main(int argc, char **argv) {
         {"rfactor tile reorder test: checking output img correctness...", rfactor_tile_reorder_test},
         {"complex multiply rfactor test", complex_multiply_rfactor_test},
         {"argmin rfactor test", argmin_rfactor_test},
-        {"argmax rfactor test (explicit)", argmax_rfactor_test<ArgMaxVariant::Explicit>},
-        {"argmax rfactor test (tuple)", argmax_rfactor_test<ArgMaxVariant::TupleSelect>},
+        {"inline reductions test (argmin)", inline_reductions_test<InlineReductionVariant::ArgMin>},
+        {"inline reductions test (argmax)", inline_reductions_test<InlineReductionVariant::ArgMax>},
+        {"argmax rfactor test (explicit, index first)", argmax_rfactor_test<ArgMaxVariant::Explicit, ArgMaxTupleOrder::IndexFirst>},
+        {"argmax rfactor test (tuple, index first)", argmax_rfactor_test<ArgMaxVariant::TupleSelect, ArgMaxTupleOrder::IndexFirst>},
+        {"argmax rfactor test (explicit, value first)", argmax_rfactor_test<ArgMaxVariant::Explicit, ArgMaxTupleOrder::ValueFirst>},
+        {"argmax rfactor test (tuple, value first)", argmax_rfactor_test<ArgMaxVariant::TupleSelect, ArgMaxTupleOrder::ValueFirst>},
         {"inlined rfactor with disappearing rvar test", inlined_rfactor_with_disappearing_rvar_test},
         {"rfactor bounds tests", rfactor_precise_bounds_test},
         {"isnan max rfactor test (bitwise or)", isnan_max_rfactor_test<BitwiseOr>},
