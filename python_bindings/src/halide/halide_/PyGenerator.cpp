@@ -158,15 +158,16 @@ void define_generator(py::module &m) {
             });
 
     m.def("_generate_filter_main",  //
-          [](const std::vector<std::string> &argv) -> void {
-              std::vector<char *> mutable_argv;
-              mutable_argv.reserve(argv.size() + 1);
-              for (auto &s : argv) {
-                  mutable_argv.push_back(const_cast<char *>(s.c_str()));
+          [](const std::vector<std::string> &arguments) -> void {
+              std::vector<char *> argv;
+              argv.reserve(arguments.size() + 1);
+              for (const auto &s : arguments) {
+                  argv.push_back(const_cast<char *>(s.c_str()));
               }
-              mutable_argv.push_back(nullptr);
+              argv.push_back(nullptr);
+
               const int result = Halide::Internal::generate_filter_main(
-                  (int)mutable_argv.size() - 1, mutable_argv.data(), PyGeneratorFactoryProvider());
+                  (int)argv.size() - 1, argv.data(), PyGeneratorFactoryProvider());
               if (result != 0) {
                   // Some paths in generate_filter_main() will fail with user_error
                   // or similar (which throws an exception due to how libHalide is
