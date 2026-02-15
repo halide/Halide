@@ -1,0 +1,62 @@
+name: Upgrade halide-llvm
+
+on:
+  schedule:
+    - cron: "0 6 * * *"  # Daily at 1am EST / 2am EDT
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Upgrade halide-llvm
+        run: uv lock -P halide-llvm
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet uv.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+            # Extract new resolved versions from the diff
+            VERSIONS=$(git diff uv.lock \
+              | grep '^+.*name = "halide-llvm", version' \
+              | sed 's/.*version = "\([^"]*\)".*/\1/' \
+              | tr '\n' ',' | sed 's/,/, /g; s/, $//')
+            echo "versions=$VERSIONS" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="automated/upgrade-halide-llvm"
+          TITLE="Upgrade halide-llvm to ${{ steps.diff.outputs.versions }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add uv.lock
+          git commit -m "$TITLE"
+          git push -u origin "$BRANCH" --force-with-lease
+
+          # Update existing PR or create a new one
+          if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$BRANCH" --title "$TITLE"
+          else
+            gh pr create \
+              --title "$TITLE" \
+              --body "Automated upgrade via \`uv lock -P halide-llvm\`." \
+              --head "$BRANCH"
+          fi
