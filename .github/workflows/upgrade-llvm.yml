@@ -49,12 +49,15 @@ jobs:
           git checkout -B "$BRANCH"
           git add uv.lock
           git commit -m "$TITLE"
-          git push -u origin "$BRANCH" --force-with-lease
 
           # Update existing PR or create a new one
           if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -q OPEN; then
-            gh pr edit "$BRANCH" --title "$TITLE"
+            git push -u origin "$BRANCH" --force-with-lease \
+              && gh pr edit "$BRANCH" --title "$TITLE"
           else
+            # Delete stale remote branch (e.g. leftover from a merged PR)
+            git push origin --delete "$BRANCH" 2>/dev/null || true
+            git push -u origin "$BRANCH"
             gh pr create \
               --title "$TITLE" \
               --body "Automated upgrade via \`uv lock -P halide-llvm\`." \
