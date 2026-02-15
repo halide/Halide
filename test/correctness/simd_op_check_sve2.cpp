@@ -677,6 +677,9 @@ private:
         vector<tuple<Type, CastFuncTy>> test_params = {
             {Int(8), in_i8}, {Int(16), in_i16}, {Int(32), in_i32}, {Int(64), in_i64}, {UInt(8), in_u8}, {UInt(16), in_u16}, {UInt(32), in_u32}, {UInt(64), in_u64}, {Float(16), in_f16}, {Float(32), in_f32}, {Float(64), in_f64}};
 
+        const int base_vec_bits = has_sve() ? target.vector_bits : 128;
+        const int vscale = base_vec_bits / 128;
+
         for (const auto &[elt, in_im] : test_params) {
             const int bits = elt.bits();
             if ((elt == Float(16) && !is_float16_supported()) ||
@@ -684,43 +687,47 @@ private:
                 continue;
             }
 
-            // LD/ST       -       Load/Store
-            for (int width = 64; width <= 64 * 4; width *= 2) {
-                const int total_lanes = width / bits;
-                const int instr_lanes = min(total_lanes, 128 / bits);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+            // LD/ST       -       Load/Store scalar
+            // We skip scalar load/store test due to the following challenges.
+            // The rule by which LLVM selects instruction does not seem simple.
+            // For example, ld1, ldr, or ldp is used for instruction and z or q register is used for operand,
+            // depending on data type, vscale, what is performed before/after load, and LLVM version.
+            // The other thing is, load/store instruction appears in other place than we want to check,
+            // which makes it prone to false-positive detection as we only search strings line-by-line.
 
-                // In case of arm32, instruction selection looks inconsistent due to optimization by LLVM
-                AddTestFunctor add(*this, bits, total_lanes, target.bits == 64);
-                // NOTE: if the expr is too simple, LLVM might generate "bl memcpy"
-                Expr load_store_1 = in_im(x) * 3;
+            // LDn       -       Structured Load strided elements
+            if (Halide::Internal::get_llvm_version() >= 220) {
+                for (int stride = 2; stride <= 4; ++stride) {
 
-                if (has_sve()) {
-                    // This pattern has changed with LLVM 21, see https://github.com/halide/Halide/issues/8584 for more
-                    // details.
-                    if (Halide::Internal::get_llvm_version() < 210) {
-                        // in native width, ld1b/st1b is used regardless of data type
-                        const bool allow_byte_ls = (width == target.vector_bits);
-                        add({get_sve_ls_instr("ld1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
-                        add({get_sve_ls_instr("st1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
+                    for (int factor : {1, 2, 4}) {
+                        const int vector_lanes = base_vec_bits * factor / bits;
+
+                        // In StageStridedLoads.cpp (stride < r->lanes) is the condition for staging to happen
+                        // See https://github.com/halide/Halide/issues/8819
+                        if (vector_lanes <= stride) continue;
+
+                        AddTestFunctor add_ldn(*this, bits, vector_lanes);
+
+                        Expr load_n = in_im(x * stride) + in_im(x * stride + stride - 1);
+
+                        const string ldn_str = "ld" + to_string(stride);
+                        if (has_sve()) {
+                            add_ldn({get_sve_ls_instr(ldn_str, bits)}, vector_lanes, load_n);
+                        } else {
+                            add_ldn(sel_op("v" + ldn_str + ".", ldn_str), load_n);
+                        }
                     }
-                } else {
-                    // vector register is not used for simple load/store
-                    string reg_prefix = (width <= 64) ? "d" : "q";
-                    add({{"st[rp]", reg_prefix + R"(\d\d?)"}}, total_lanes, load_store_1);
-                    add({{"ld[rp]", reg_prefix + R"(\d\d?)"}}, total_lanes, load_store_1);
                 }
             }
 
-            // LD2/ST2       -       Load/Store two-element structures
-            int base_vec_bits = has_sve() ? target.vector_bits : 128;
-            for (int width = base_vec_bits; width <= base_vec_bits * 4; width *= 2) {
+            // ST2       -       Store two-element structures
+            for (int factor : {1, 2}) {
+                const int width = base_vec_bits * 2 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 2;
                 const int instr_lanes = min(vector_lanes, base_vec_bits / bits);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
-                AddTestFunctor add_ldn(*this, bits, vector_lanes);
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
                 Func tmp1, tmp2;
@@ -728,28 +735,23 @@ private:
                 tmp1.compute_root();
                 tmp2(x, y) = select(x % 2 == 0, tmp1(x / 2), tmp1(x / 2 + 16));
                 tmp2.compute_root().vectorize(x, total_lanes);
-                Expr load_2 = in_im(x * 2) + in_im(x * 2 + 1);
                 Expr store_2 = tmp2(0, 0) + tmp2(0, 127);
 
                 if (has_sve()) {
-                    // TODO(inssue needed): Added strided load support.
-#if 0
-                    add_ldn({get_sve_ls_instr("ld2", bits)}, vector_lanes, load_2);
-#endif
                     add_stn({get_sve_ls_instr("st2", bits)}, total_lanes, store_2);
                 } else {
-                    add_ldn(sel_op("vld2.", "ld2"), load_2);
                     add_stn(sel_op("vst2.", "st2"), store_2);
                 }
             }
 
             // Also check when the two expressions interleaved have a common
             // subexpression, which results in a vector var being lifted out.
-            for (int width = base_vec_bits; width <= base_vec_bits * 4; width *= 2) {
+            for (int factor : {1, 2}) {
+                const int width = base_vec_bits * 2 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 2;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
@@ -768,14 +770,14 @@ private:
                 }
             }
 
-            // LD3/ST3       -       Store three-element structures
-            for (int width = 192; width <= 192 * 4; width *= 2) {
+            // ST3       -       Store three-element structures
+            for (int factor : {1, 2}) {
+                const int width = base_vec_bits * 3 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 3;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
-                AddTestFunctor add_ldn(*this, bits, vector_lanes);
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
                 Func tmp1, tmp2;
@@ -785,29 +787,25 @@ private:
                                     x % 3 == 1, tmp1(x / 3 + 16),
                                     tmp1(x / 3 + 32));
                 tmp2.compute_root().vectorize(x, total_lanes);
-                Expr load_3 = in_im(x * 3) + in_im(x * 3 + 1) + in_im(x * 3 + 2);
                 Expr store_3 = tmp2(0, 0) + tmp2(0, 127);
 
                 if (has_sve()) {
-                    // TODO(issue needed): Added strided load support.
-#if 0
-                    add_ldn({get_sve_ls_instr("ld3", bits)}, vector_lanes, load_3);
-                    add_stn({get_sve_ls_instr("st3", bits)}, total_lanes, store_3);
-#endif
+                    if (Halide::Internal::get_llvm_version() >= 220) {
+                        add_stn({get_sve_ls_instr("st3", bits)}, total_lanes, store_3);
+                    }
                 } else {
-                    add_ldn(sel_op("vld3.", "ld3"), load_3);
                     add_stn(sel_op("vst3.", "st3"), store_3);
                 }
             }
 
-            // LD4/ST4       -       Store four-element structures
-            for (int width = 256; width <= 256 * 4; width *= 2) {
+            // ST4       -       Store four-element structures
+            for (int factor : {1, 2}) {
+                const int width = base_vec_bits * 4 * factor;
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 4;
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
-                if (instr_lanes < 2) continue;  // bail out scalar op
+                if (instr_lanes < 2 || (vector_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
-                AddTestFunctor add_ldn(*this, bits, vector_lanes);
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
 
                 Func tmp1, tmp2;
@@ -818,17 +816,13 @@ private:
                                     x % 4 == 2, tmp1(x / 4 + 32),
                                     tmp1(x / 4 + 48));
                 tmp2.compute_root().vectorize(x, total_lanes);
-                Expr load_4 = in_im(x * 4) + in_im(x * 4 + 1) + in_im(x * 4 + 2) + in_im(x * 4 + 3);
                 Expr store_4 = tmp2(0, 0) + tmp2(0, 127);
 
                 if (has_sve()) {
-                    // TODO(issue needed): Added strided load support.
-#if 0
-                    add_ldn({get_sve_ls_instr("ld4", bits)}, vector_lanes, load_4);
-                    add_stn({get_sve_ls_instr("st4", bits)}, total_lanes, store_4);
-#endif
+                    if (Halide::Internal::get_llvm_version() >= 220) {
+                        add_stn({get_sve_ls_instr("st4", bits)}, total_lanes, store_4);
+                    }
                 } else {
-                    add_ldn(sel_op("vld4.", "ld4"), load_4);
                     add_stn(sel_op("vst4.", "st4"), store_4);
                 }
             }
@@ -838,7 +832,7 @@ private:
                 for (int width = 64; width <= 64 * 4; width *= 2) {
                     const int total_lanes = width / bits;
                     const int instr_lanes = min(total_lanes, 128 / bits);
-                    if (instr_lanes < 2) continue;  // bail out scalar op
+                    if (instr_lanes < 2 || (total_lanes / vscale < 2)) continue;  // bail out scalar and <vscale x 1 x ty>
 
                     AddTestFunctor add(*this, bits, total_lanes);
                     Expr index = clamp(cast<int>(in_im(x)), 0, W - 1);
