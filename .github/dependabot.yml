@@ -1,0 +1,16 @@
+version: 2
+
+registries:
+  halide:
+    type: python-index
+    url: https://pypi.halide-lang.org/simple/
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    exclude-paths:
+      - "*.txt"
+    registries:
+      - halide
