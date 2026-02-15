@@ -276,6 +276,7 @@ target_sources(
     Debug.cpp
     DebugArguments.cpp
     DebugToFile.cpp
+    DecomposeVectorShuffle.cpp
     Definition.cpp
     Deinterleave.cpp
     Derivative.cpp
