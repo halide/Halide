@@ -2264,6 +2264,9 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
 }
 
 Value *CodeGen_ARM::shuffle_scalable_vectors_general(Value *a, Value *b, const std::vector<int> &indices) {
+    internal_assert(a) << "Must provide a valid vector operand";
+    internal_assert(!indices.empty()) << "Cannot shuffle with empty indices";
+
     llvm::Type *elt = get_vector_element_type(a->getType());
     const int bits = elt->getScalarSizeInBits();
     const int natural_lanes = natural_vector_size(Int(bits));
