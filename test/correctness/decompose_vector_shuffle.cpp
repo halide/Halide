@@ -1,5 +1,3 @@
-#include "../../src/DecomposeVectorShuffle.h"
-
 #include <Halide.h>
 
 #include <algorithm>
