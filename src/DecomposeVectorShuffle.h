@@ -33,7 +33,10 @@
  *  output: [60, 130, 240, 140, 70, 110, 50, ]
  *
  */
+
+#include "Error.h"
 #include "Util.h"
+
 #include <optional>
 #include <vector>
 
@@ -98,12 +101,13 @@ struct DecomposeVectorShuffle {
         shuffled_dst_slices.reserve(shuffle_plan.size());
 
         for (const auto &steps_for_dst_slice : shuffle_plan) {
-            VecTy dst_slice;
+            std::optional<VecTy> dst_slice = std::nullopt;
             for (const auto &step : steps_for_dst_slice) {
                 // Obtain 1st slice a
                 VecTy a;
                 if (step.slice_a == SLICE_INDEX_CARRY_PREV_RESULT) {
-                    a = dst_slice;
+                    internal_assert(dst_slice.has_value()) << "Tried to carry from undefined previous result";
+                    a = *dst_slice;
                 } else {
                     a = get_vl_slice(step.slice_a);
                 }
@@ -117,7 +121,7 @@ struct DecomposeVectorShuffle {
                 // Perform shuffle where vector length is aligned
                 dst_slice = ops.shuffle_vl_aligned(a, b, step.lane_map, vl);
             }
-            shuffled_dst_slices.push_back(dst_slice);
+            shuffled_dst_slices.push_back(*dst_slice);
         }
 
         return ops.slice_vec(ops.concat_vecs(shuffled_dst_slices), 0, dst_lanes);
