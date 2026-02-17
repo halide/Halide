@@ -188,7 +188,7 @@ ci-base = [
 ]
 ci-llvm-20 = [
     { name = "cmake", specifier = ">=3.28" },
-    { name = "halide-llvm", specifier = "==20.1.8", index = "https://pypi.halide-lang.org/simple" },
+    { name = "halide-llvm", specifier = "~=20.1.0", index = "https://pypi.halide-lang.org/simple" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
     { name = "onnx", specifier = "==1.18.0" },
     { name = "pybind11", specifier = ">=2.11.1" },
@@ -200,7 +200,7 @@ ci-llvm-20 = [
 ]
 ci-llvm-21 = [
     { name = "cmake", specifier = ">=3.28" },
-    { name = "halide-llvm", specifier = "==21.1.8", index = "https://pypi.halide-lang.org/simple" },
+    { name = "halide-llvm", specifier = "~=21.1.0", index = "https://pypi.halide-lang.org/simple" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
     { name = "onnx", specifier = "==1.18.0" },
     { name = "pybind11", specifier = ">=2.11.1" },
@@ -212,7 +212,7 @@ ci-llvm-21 = [
 ]
 ci-llvm-22 = [
     { name = "cmake", specifier = ">=3.28" },
-    { name = "halide-llvm", specifier = "==22.1.0rc3", index = "https://pypi.halide-lang.org/simple" },
+    { name = "halide-llvm", specifier = "~=22.1.0rc0", index = "https://pypi.halide-lang.org/simple" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
     { name = "onnx", specifier = "==1.18.0" },
     { name = "pybind11", specifier = ">=2.11.1" },
@@ -224,7 +224,7 @@ ci-llvm-22 = [
 ]
 ci-llvm-main = [
     { name = "cmake", specifier = ">=3.28" },
-    { name = "halide-llvm", specifier = "==23.0.0.dev0+g80f627e6", index = "https://pypi.halide-lang.org/simple" },
+    { name = "halide-llvm", specifier = "~=23.0.0.dev0", index = "https://pypi.halide-lang.org/simple" },
     { name = "ninja", specifier = ">=1.11,!=1.13.0" },
     { name = "onnx", specifier = "==1.18.0" },
     { name = "pybind11", specifier = ">=2.11.1" },

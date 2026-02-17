@@ -6,6 +6,9 @@ env:
 on:
   pull_request:
     types: [ opened, synchronize, reopened ]
+    paths-ignore:
+      - ".github/**"
+      - "!.github/workflows/testing-make.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
