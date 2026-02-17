@@ -12,16 +12,16 @@ if (halide_target_string.includes("webgpu")) {
     const webgpu_node_bindings = process.env["HL_WEBGPU_NODE_BINDINGS"];
     if (!webgpu_node_bindings) {
         console.log("You must define the env var HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node when running WebGPU tests for Halide");
+        process.exit(1);
     }
     const provider = require(webgpu_node_bindings);
 
     // Expose all WebGPU globals from dawn.node (error classes, etc.)
     Object.assign(globalThis, provider.globals);
 
-    // Not const: we want to redefine the global 'navigator' var
-    navigator = { gpu: provider.create([]) };
-    console.log("navigator is ", navigator)
-
+    // Redefine the global navigator object to include the WebGPU API
+    navigator = (typeof navigator === 'undefined') ? {} : navigator;
+    navigator.gpu = provider.create([]);
 }
 
 require(target_js_path);
