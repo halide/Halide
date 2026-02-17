@@ -2277,7 +2277,15 @@ Value *CodeGen_ARM::shuffle_scalable_vectors_general(Value *a, Value *b, const s
         << "Only deal with vector with natural_lanes\n";
 
     // We select TBL or TBL2 intrinsic depending on indices range
-    bool use_tbl = *std::max_element(indices.begin(), indices.end()) < src_lanes;
+    int highest_lane = *std::max_element(indices.begin(), indices.end());
+    internal_assert(highest_lane >= 0)
+        << "highest_lane was "
+        << (highest_lane == SLICE_INDEX_NONE              ? "SLICE_INDEX_NONE" :
+            highest_lane == SLICE_INDEX_CARRY_PREV_RESULT ? "SLICE_INDEX_CARRY_PREV_RESULT" :
+                                                            "")
+        << " (" << highest_lane << ")";
+
+    bool use_tbl = highest_lane < src_lanes;
     internal_assert(use_tbl || b) << "'b' must be valid in case of tbl2\n";
 
     auto instr = concat_strings("llvm.aarch64.sve.", use_tbl ? "tbl" : "tbl2", mangle_llvm_type(dst_type));
