@@ -47,9 +47,9 @@ public:
         can_run_the_code = is_runtime_compatible(host, target) && is_runtime_compatible(jit_target, target);
 
         if (!can_run_the_code) {
-            cout << "[WARN] To perform verification of realization, "
-                 << R"(the target triple "arm-<bits>-<os>", vector_bits, and feature "sve2")"
-                 << " must be the same between HL_TARGET and HL_JIT_TARGET" << endl;
+            debug(0) << "[WARN] To perform verification of realization, "
+                     << R"(the target triple "arm-<bits>-<os>", vector_bits, and feature "sve2")"
+                     << " must be the same between HL_TARGET and HL_JIT_TARGET" << endl;
         }
     }
 

@@ -275,13 +275,11 @@ protected:
     }
 
     /** Handle general shuffle of vectors. See DecomposeVectorShuffle.h about how it works */
-    struct VectorShuffler : public DecomposeVectorShuffle<VectorShuffler, Value *> {
-        VectorShuffler(Value *src_a, Value *src_b, const vector<int> &indices, int vl, CodeGen_ARM &codegen)
-            : DecomposeVectorShuffle(src_a, src_b, indices, vl), codegen(codegen) {
-        }
+    struct SVE2ShuffleOps {
+        using VecTy = Value *;
 
-        int get_vec_length(Value *v) {
-            return codegen.get_vector_num_elements(v->getType());
+        explicit SVE2ShuffleOps(CodeGen_ARM &codegen)
+            : codegen(codegen) {
         }
 
         Value *align_up_vector(Value *v, int align) {
@@ -297,12 +295,16 @@ protected:
             return codegen.concat_vectors(vecs);
         }
 
-        Value *shuffle_vl_aligned(Value *a, optional<Value *> &b, const vector<int> &indices, int vl) {
+        Value *shuffle_vl_aligned(Value *a, const optional<Value *> &b, const vector<int> &indices, int vl) {
             return codegen.shuffle_scalable_vectors_general(a, b.value_or(nullptr), indices);
         }
 
     private:
         CodeGen_ARM &codegen;
+
+        int get_vec_length(Value *v) const {
+            return codegen.get_vector_num_elements(v->getType());
+        }
     };
 };
 
@@ -2257,9 +2259,9 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
 
     // Perform vector shuffle by decomposing the operation to multiple native shuffle steps
     // which calls shuffle_scalable_vectors_general() which emits TBL/TBL2 instruction
-    VectorShuffler shuffler(a, b, indices, natural_lanes, *this);
-    Value *v = shuffler.shuffle();
-    return v;
+    DecomposeVectorShuffle shuffler(SVE2ShuffleOps{*this},
+                                    a, b, get_vector_num_elements(a->getType()), natural_lanes);
+    return shuffler.codegen(indices);
 }
 
 Value *CodeGen_ARM::shuffle_scalable_vectors_general(Value *a, Value *b, const std::vector<int> &indices) {

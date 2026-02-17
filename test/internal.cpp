@@ -4,7 +4,6 @@
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
 #include "CodeGen_C.h"
-#include "DecomposeVectorShuffle.h"
 #include "Deinterleave.h"
 #include "Func.h"
 #include "Generator.h"
@@ -42,7 +41,6 @@ int main(int argc, const char **argv) {
     propagate_estimate_test();
     uniquify_variable_names_test();
     spirv_ir_test();
-    decompose_vector_shuffle_test();
 
     printf("Success!\n");
     return 0;

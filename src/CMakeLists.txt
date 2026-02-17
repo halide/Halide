@@ -94,6 +94,7 @@ target_sources(
     Debug.h
     DebugArguments.h
     DebugToFile.h
+    DecomposeVectorShuffle.h
     Definition.h
     Deinterleave.h
     Derivative.h
