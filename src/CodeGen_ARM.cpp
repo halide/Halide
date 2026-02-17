@@ -2077,12 +2077,12 @@ Value *CodeGen_ARM::extract_scalable_vector(Value *vec, int start, int extract_s
             int sub_extract_pos = start + i;
             for (int sub_extract_size = extract_size - i; sub_extract_size > 0; --sub_extract_size) {
                 if (sub_extract_pos % sub_extract_size == 0) {
-                    internal_assert(sub_extract_pos % target_vscale() == 0);
                     Value *sub_extracted;
                     if (sub_extract_size == 1) {
                         sub_extracted = builder->CreateExtractElement(vec, sub_extract_pos);
                     } else {
                         // In vector operation, index needs to be normalized by vscale
+                        internal_assert(sub_extract_pos % target_vscale() == 0);
                         Value *idx_val = ConstantInt::get(i64_t, sub_extract_pos / target_vscale(), true);
                         llvm::Type *sub_extract_type = get_vector_type_from_value(vec, sub_extract_size);
                         sub_extracted = builder->CreateExtractVector(sub_extract_type, vec, idx_val);
@@ -2134,14 +2134,13 @@ Value *CodeGen_ARM::insert_scalable_vector(Value *base_vec, Value *new_vec, int 
             extract_index % sub_slice_size == 0 &&              // Requirement of LLVM intrinsic
             insert_index % sub_slice_size == 0) {               // Requirement of LLVM intrinsic
 
-            internal_assert(extract_index % target_vscale() == 0);
-            internal_assert(insert_index % target_vscale() == 0);
-
             if (sub_slice_size == 1) {
                 Value *sub_slice = builder->CreateExtractElement(new_vec, extract_index);
                 ret = builder->CreateInsertElement(ret, sub_slice, insert_index);
             } else {
                 // In vector operation, index needs to be normalized by vscale
+                internal_assert(extract_index % target_vscale() == 0);
+                internal_assert(insert_index % target_vscale() == 0);
                 Value *val_extract_index = ConstantInt::get(i64_t, extract_index / target_vscale(), true);
                 Value *val_insert_index = ConstantInt::get(i64_t, insert_index / target_vscale(), true);
                 llvm::Type *sub_sliced_type = get_vector_type(element_type, sub_slice_size);
