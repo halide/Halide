@@ -186,7 +186,18 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
         bool success = true;
     } results;
 
-    results.instance = wgpuCreateInstance(nullptr);
+    // Check if TimedWaitAny feature is available before requesting it.
+    WGPUBool has_timed_wait = wgpuHasInstanceFeature(WGPUInstanceFeatureName_TimedWaitAny);
+
+    // Create instance with TimedWaitAny feature enabled so we can use
+    // wgpuInstanceWaitAny with non-zero timeouts.
+    WGPUInstanceFeatureName required_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
+    WGPUInstanceDescriptor instance_desc = WGPU_INSTANCE_DESCRIPTOR_INIT;
+    if (has_timed_wait) {
+        instance_desc.requiredFeatureCount = 1;
+        instance_desc.requiredFeatures = required_features;
+    }
+    results.instance = wgpuCreateInstance(&instance_desc);
 
     auto request_adapter_callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView message, void *userdata1, void *userdata2) {
         auto *results = (Results *)userdata1;

@@ -63,7 +63,8 @@ function(add_wasm_executable TARGET)
         set(EMCC_FLAGS
             ${EMCC_FLAGS}
             --use-port=emdawnwebgpu
-            -s ASYNCIFY
+            -s JSPI
+            -Wno-experimental
         )
     endif ()
 
