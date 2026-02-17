@@ -274,12 +274,6 @@ protected:
         }
     }
 
-    /** Pad a vector to a length that is a multiple of align, used by DecomposeVectorShuffle */
-    Value *align_up_vector(Value *v, int align);
-
-    /** Perform a native-width shuffle step, used by DecomposeVectorShuffle */
-    Value *shuffle_vl_aligned(Value *a, const std::optional<Value *> &b, const std::vector<int> &indices, int vl);
-
     friend struct DecomposeVectorShuffle<CodeGen_ARM, Value *>;
 };
 
