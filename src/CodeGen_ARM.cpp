@@ -1982,7 +1982,7 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     } else if (op->is_concat() && op->vectors.size() == 2) {
         // Here, we deal with some specific patterns of concat(a, b).
         // Others are decomposed by CodeGen_LLVM at first,
-        // which in turn calles CodeGen_ARM::concat_vectors().
+        // which in turn calls CodeGen_ARM::concat_vectors().
 
         if (const Broadcast *bc_1 = op->vectors[1].as<Broadcast>()) {
             // Common pattern where padding is appended to align lanes.
