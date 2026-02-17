@@ -63,36 +63,34 @@ struct NativeShuffle {
 std::vector<std::vector<NativeShuffle>> decompose_to_native_shuffles(
     int src_lanes, const std::vector<int> &indices, int vl);
 
-/** Base class for the algorithm logic of shuffle decomposition which is implemented
- * independently from the type of vector and the implementation of primitive vector operations.
- * Therefore, the concrete class must provide the following member functions
- * for the specific vector type it handles.
+/** Algorithm logic for shuffle decomposition, parameterized on vector type
+ * and a codegen-like class that provides primitive vector operations.
  */
-template<typename Ops>
+template<typename CodeGenTy, typename VecTy>
 struct DecomposeVectorShuffle {
-    using VecTy = typename Ops::VecTy;
-
     // TODO: when upgrading to C++20, replace with a concept.
-    static_assert(std::is_invocable_r_v<VecTy, decltype(&Ops::align_up_vector), Ops &, const VecTy &, int>,
-                  "Ops must provide: VecTy align_up_vector(const VecTy &, int)");
-    static_assert(std::is_invocable_r_v<VecTy, decltype(&Ops::concat_vecs), Ops &, const std::vector<VecTy> &>,
-                  "Ops must provide: VecTy concat_vecs(const std::vector<VecTy> &)");
-    static_assert(std::is_invocable_r_v<VecTy, decltype(&Ops::shuffle_vl_aligned), Ops &,
-                                        const VecTy &, const std::optional<VecTy> &, const std::vector<int> &, int>,
-                  "Ops must provide: VecTy shuffle_vl_aligned(const VecTy &, const std::optional<VecTy> &, const std::vector<int> &, int)");
-    static_assert(std::is_invocable_r_v<VecTy, decltype(&Ops::slice_vec), Ops &, const VecTy &, int, size_t>,
-                  "Ops must provide: VecTy slice_vec(const VecTy &, int, size_t)");
+    // get_vector_num_elements may be overloaded (e.g. on Type* and Value*), so use
+    // expression SFINAE rather than a method pointer to handle overload resolution.
+    static_assert(std::is_convertible_v<decltype(std::declval<CodeGenTy &>().get_vector_num_elements(std::declval<VecTy>())), int>,
+                  "CodeGenTy must provide: int get_vector_num_elements(VecTy)");
+    static_assert(std::is_invocable_r_v<VecTy, decltype(&CodeGenTy::slice_vector), CodeGenTy &, const VecTy &, int, int>,
+                  "CodeGenTy must provide: VecTy slice_vector(const VecTy &, int, int)");
+    static_assert(std::is_invocable_r_v<VecTy, decltype(&CodeGenTy::concat_vectors), CodeGenTy &, const std::vector<VecTy> &>,
+                  "CodeGenTy must provide: VecTy concat_vectors(const std::vector<VecTy> &)");
+    static_assert(std::is_invocable_r_v<VecTy, decltype(&CodeGenTy::shuffle_scalable_vectors_general), CodeGenTy &,
+                                        const VecTy &, const VecTy &, const std::vector<int> &>,
+                  "CodeGenTy must provide: VecTy shuffle_scalable_vectors_general(const VecTy &, const VecTy &, const std::vector<int> &)");
 
-    DecomposeVectorShuffle(Ops ops, const VecTy &src_a, const VecTy &src_b, int src_lanes, int vl)
-        : ops(ops),
+    DecomposeVectorShuffle(CodeGenTy &codegen, const VecTy &src_a, const VecTy &src_b, int src_lanes, int vl)
+        : codegen(codegen),
           vl(vl),
-          src_a(ops.align_up_vector(src_a, vl)),
-          src_b(ops.align_up_vector(src_b, vl)),
+          src_a(align_up_vector(src_a, vl)),
+          src_b(align_up_vector(src_b, vl)),
           src_lanes(src_lanes),
           src_lanes_aligned(align_up(src_lanes, vl)) {
     }
 
-    VecTy codegen(const std::vector<int> &indices) {
+    VecTy run(const std::vector<int> &indices) {
         auto shuffle_plan = decompose_to_native_shuffles(src_lanes, indices, vl);
         int dst_lanes = static_cast<int>(indices.size());
 
@@ -119,12 +117,12 @@ struct DecomposeVectorShuffle {
                     b = std::optional<VecTy>(get_vl_slice(step.slice_b));
                 }
                 // Perform shuffle where vector length is aligned
-                dst_slice = ops.shuffle_vl_aligned(a, b, step.lane_map, vl);
+                dst_slice = codegen.shuffle_scalable_vectors_general(a, b.value_or(VecTy{}), step.lane_map);
             }
             shuffled_dst_slices.push_back(*dst_slice);
         }
 
-        return ops.slice_vec(ops.concat_vecs(shuffled_dst_slices), 0, dst_lanes);
+        return codegen.slice_vector(codegen.concat_vectors(shuffled_dst_slices), 0, dst_lanes);
     }
 
 private:
@@ -133,14 +131,19 @@ private:
         const int num_slices_a = src_lanes_aligned / vl;
         int start_index = slice_index * vl;
         if (slice_index < num_slices_a) {
-            return ops.slice_vec(src_a, start_index, vl);
+            return codegen.slice_vector(src_a, start_index, vl);
         } else {
             start_index -= src_lanes_aligned;
-            return ops.slice_vec(src_b, start_index, vl);
+            return codegen.slice_vector(src_b, start_index, vl);
         }
     }
 
-    Ops ops;
+    VecTy align_up_vector(const VecTy &v, int align) {
+        int len = codegen.get_vector_num_elements(v);
+        return codegen.slice_vector(v, 0, align_up(len, align));
+    }
+
+    CodeGenTy &codegen;
     int vl;
     VecTy src_a;
     VecTy src_b;

@@ -5339,6 +5339,10 @@ int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {
     }
 }
 
+int CodeGen_LLVM::get_vector_num_elements(const llvm::Value *v) {
+    return get_vector_num_elements(v->getType());
+}
+
 llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
                                        int effective_vscale) const {
     if (t.lanes() == 1) {

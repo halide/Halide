@@ -274,38 +274,13 @@ protected:
         }
     }
 
-    /** Handle general shuffle of vectors. See DecomposeVectorShuffle.h about how it works */
-    struct SVE2ShuffleOps {
-        using VecTy = Value *;
+    /** Pad a vector to a length that is a multiple of align, used by DecomposeVectorShuffle */
+    Value *align_up_vector(Value *v, int align);
 
-        explicit SVE2ShuffleOps(CodeGen_ARM &codegen)
-            : codegen(codegen) {
-        }
+    /** Perform a native-width shuffle step, used by DecomposeVectorShuffle */
+    Value *shuffle_vl_aligned(Value *a, const std::optional<Value *> &b, const std::vector<int> &indices, int vl);
 
-        Value *align_up_vector(Value *v, int align) {
-            size_t org_len = get_vec_length(v);
-            return codegen.slice_vector(v, 0, align_up(org_len, align));
-        }
-
-        Value *slice_vec(Value *v, int start, size_t lanes) {
-            return codegen.slice_vector(v, start, lanes);
-        }
-
-        Value *concat_vecs(const vector<Value *> &vecs) {
-            return codegen.concat_vectors(vecs);
-        }
-
-        Value *shuffle_vl_aligned(Value *a, const optional<Value *> &b, const vector<int> &indices, int vl) {
-            return codegen.shuffle_scalable_vectors_general(a, b.value_or(nullptr), indices);
-        }
-
-    private:
-        CodeGen_ARM &codegen;
-
-        int get_vec_length(Value *v) const {
-            return codegen.get_vector_num_elements(v->getType());
-        }
-    };
+    friend struct DecomposeVectorShuffle<CodeGen_ARM, Value *>;
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
@@ -2258,9 +2233,8 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
 
     // Perform vector shuffle by decomposing the operation to multiple native shuffle steps
     // which calls shuffle_scalable_vectors_general() which emits TBL/TBL2 instruction
-    DecomposeVectorShuffle shuffler(SVE2ShuffleOps{*this},
-                                    a, b, get_vector_num_elements(a->getType()), natural_lanes);
-    return shuffler.codegen(indices);
+    DecomposeVectorShuffle shuffler(*this, a, b, get_vector_num_elements(a->getType()), natural_lanes);
+    return shuffler.run(indices);
 }
 
 Value *CodeGen_ARM::shuffle_scalable_vectors_general(Value *a, Value *b, const std::vector<int> &indices) {

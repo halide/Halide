@@ -33,21 +33,18 @@ vector<int> shuffle_without_divided(const vector<int> &a, const vector<int> &b, 
     return dst;
 }
 
-struct STLShuffleOps {
-    using VecTy = std::vector<int>;
-
-    vector<int> align_up_vector(const vector<int> &v, int align) {
-        vector<int> aligned_v = v;
-        aligned_v.resize(align_up(v.size(), align), 0);
-        return aligned_v;
+struct STLShuffleCodeGen {
+    int get_vector_num_elements(const vector<int> &v) {
+        return static_cast<int>(v.size());
     }
 
-    vector<int> slice_vec(const vector<int> &v, int start, size_t lanes) {
-        internal_assert(start + lanes <= v.size());
-        return vector<int>(v.begin() + start, v.begin() + start + lanes);
+    vector<int> slice_vector(const vector<int> &v, int start, int lanes) {
+        auto result = vector<int>(v.begin() + start, v.begin() + std::min(start + lanes, static_cast<int>(v.size())));
+        result.resize(lanes);
+        return result;
     }
 
-    vector<int> concat_vecs(const vector<vector<int>> &vecs) {
+    vector<int> concat_vectors(const vector<vector<int>> &vecs) {
         vector<int> out;
         for (const auto &v : vecs) {
             out.insert(out.end(), v.begin(), v.end());
@@ -55,19 +52,16 @@ struct STLShuffleOps {
         return out;
     }
 
-    vector<int> shuffle_vl_aligned(const vector<int> &a, const optional<vector<int>> &b, const vector<int> &indices, int vl) {
-        if (b.has_value()) {
-            internal_assert(a.size() == b->size());
-        }
+    vector<int> shuffle_scalable_vectors_general(const vector<int> &a, const vector<int> &b, const vector<int> &indices) {
         internal_assert(a.size() == indices.size());
-        internal_assert(indices.size() % vl == 0);
 
-        auto result = shuffle_without_divided(a, b.value_or(vector<int>{}), indices);
+        auto result = shuffle_without_divided(a, b, indices);
 
         debug(1) << "slice a: " << PrintSpan{a} << ", "
-                 << "slice b: " << PrintSpan{b.value_or(vector<int>{})} << ", "
+                 << "slice b: " << PrintSpan{b} << ", "
                  << "indices: " << PrintSpan{indices} << "\n"
                  << "\t=> slice output: " << PrintSpan{result} << "\n";
+
         return result;
     }
 };
@@ -113,8 +107,9 @@ void run_single_test(int src_lanes, int dst_lanes, int vl) {
 
     auto expected = shuffle_without_divided(a, b, indices);
 
-    DecomposeVectorShuffle shuffler(STLShuffleOps{}, a, b, src_lanes, vl);
-    auto actual = shuffler.codegen(indices);
+    STLShuffleCodeGen ops;
+    DecomposeVectorShuffle shuffler(ops, a, b, src_lanes, vl);
+    auto actual = shuffler.run(indices);
 
     assert_vectors_equal(expected, actual);
 }
