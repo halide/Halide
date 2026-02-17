@@ -21,7 +21,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::optional;
 using std::ostringstream;
 using std::pair;
 using std::string;
