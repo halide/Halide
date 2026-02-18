@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install dependencies
-        run: brew install flatbuffers lld@21 llvm@21 ninja wabt
+        run: brew install flatbuffers lld@21 llvm@21 ninja pybind11 wabt
 
       - name: Run clang-tidy
         run: ./run-clang-tidy.sh
