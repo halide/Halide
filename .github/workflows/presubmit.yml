@@ -51,9 +51,7 @@ jobs:
       - name: Run clang-tidy
         run: ./run-clang-tidy.sh
         env:
-          CMAKE_TOOLCHAIN_FILE: ${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
-          VCPKG_OVERLAY_PORTS: ${{ github.workspace }}/cmake/vcpkg
-          VCPKG_MANIFEST_FEATURES: developer
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 
   check_cmake_file_lists:
     name: Check CMake file lists
