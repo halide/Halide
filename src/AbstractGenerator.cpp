@@ -218,8 +218,7 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
     if (!asp.name.empty()) {
         auto_schedule_results = grad_pipeline.apply_autoscheduler(context.target(), asp);
     } else {
-        user_warning << "Autoscheduling is not enabled in build_gradient_module(), so the resulting "
-                        "gradient module will be unscheduled; this is very unlikely to be what you want.\n";
+        user_error << "An autoscheduler must be specified when producing a gradient-descent module().\n";
     }
 
     Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, context.target(), linkage_type);

@@ -481,7 +481,9 @@ verbatim.
 If `GRADIENT_DESCENT` is set, then the module will be built suitably for
 gradient descent calculation in TensorFlow or PyTorch. See
 `Generator::build_gradient_module()` for more documentation. This corresponds to
-passing `-d 1` at the generator command line.
+passing `-d 1` at the generator command line. Note that you *must* also specify
+an autoscheduler (via the `AUTOSCHEDULER` argument) when specifying this
+argument.
 
 If the `C_BACKEND` option is set, this command will invoke the configured C++
 compiler on a generated source. Note that a `<target>.runtime` target is _not_
