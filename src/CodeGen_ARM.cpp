@@ -207,6 +207,7 @@ protected:
     llvm::Type *get_vector_type_from_value(llvm::Value *vec_or_scalar, int n);
     Value *concat_vectors(const std::vector<llvm::Value *> &) override;
     Value *slice_vector(Value *vec, int start, int extent) override;
+    Value *create_undef_vector_like(Value *ref_vec, int lanes);
 
     /** Extract a sub vector from a vector, all the elements in the sub vector must be in the src vector.
      * Specialized for scalable vector */
@@ -2027,6 +2028,11 @@ Value *CodeGen_ARM::slice_vector(llvm::Value *vec, int start, int slice_size) {
             return sliced;
         }
     }
+}
+
+Value *CodeGen_ARM::create_undef_vector_like(Value *ref_vec, int lanes) {
+    llvm::Type *elt = get_vector_element_type(ref_vec->getType());
+    return PoisonValue::get(get_vector_type(elt, lanes));
 }
 
 Value *CodeGen_ARM::extract_scalable_vector(Value *vec, int start, int extract_size) {

@@ -80,6 +80,8 @@ struct DecomposeVectorShuffle {
     static_assert(std::is_invocable_r_v<VecTy, decltype(&CodeGenTy::shuffle_scalable_vectors_general), CodeGenTy &,
                                         const VecTy &, const VecTy &, const std::vector<int> &>,
                   "CodeGenTy must provide: VecTy shuffle_scalable_vectors_general(const VecTy &, const VecTy &, const std::vector<int> &)");
+    static_assert(std::is_invocable_r_v<VecTy, decltype(&CodeGenTy::create_undef_vector_like), CodeGenTy &, const VecTy &, int>,
+                  "CodeGenTy must provide: VecTy create_undef_vector_like(const VecTy &, int)");
 
     DecomposeVectorShuffle(CodeGenTy &codegen, const VecTy &src_a, const VecTy &src_b, int src_lanes, int vl)
         : codegen(codegen),
@@ -118,6 +120,10 @@ struct DecomposeVectorShuffle {
                 }
                 // Perform shuffle where vector length is aligned
                 dst_slice = codegen.shuffle_scalable_vectors_general(a, b.value_or(VecTy{}), step.lane_map);
+            }
+            if (!dst_slice.has_value()) {
+                // No shuffle step for this slice, i.e. all the indices are -1
+                dst_slice = codegen.create_undef_vector_like(src_a, vl);
             }
             shuffled_dst_slices.push_back(*dst_slice);
         }

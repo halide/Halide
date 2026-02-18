@@ -14,15 +14,16 @@ using std::vector;
 
 namespace {
 
+constexpr int UNDEF_VALUE = 0xdeadbeef;
+
 vector<int> shuffle_without_divided(const vector<int> &a, const vector<int> &b, const vector<int> &indices) {
     int src_lanes = static_cast<int>(a.size());
-    vector<int> dst(indices.size(), 0xdeadbeef);
+    vector<int> dst(indices.size(), 0x1234abcd);
     for (size_t i = 0; i < indices.size(); ++i) {
         int idx = indices[i];
         if (idx < 0) {
-            continue;
-        }
-        if (idx < src_lanes) {
+            dst[i] = UNDEF_VALUE;
+        } else if (idx < src_lanes) {
             dst[i] = a[idx];
         } else {
             int idx_b = idx - src_lanes;
@@ -64,10 +65,16 @@ struct STLShuffleCodeGen {
 
         return result;
     }
+
+    vector<int> create_undef_vector_like(const vector<int> &ref, int lanes) {
+        return vector<int>(lanes, UNDEF_VALUE);
+    }
 };
 
 void generate_data(int src_lanes, int dst_lanes,
                    vector<int> &a, vector<int> &b, vector<int> &indices) {
+    // Input vector values are fixed for readability.
+    // Indices values are random in range [-1, src_lanes*2) .
     a.resize(src_lanes);
     b.resize(src_lanes);
     for (int i = 0; i < src_lanes; ++i) {
@@ -76,7 +83,7 @@ void generate_data(int src_lanes, int dst_lanes,
     }
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution dist(0, src_lanes * 2 - 1);
+    std::uniform_int_distribution dist(-1, src_lanes * 2 - 1);
     indices.resize(dst_lanes);
     for (int i = 0; i < dst_lanes; ++i) {
         indices[i] = dist(gen);
