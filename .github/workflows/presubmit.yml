@@ -21,35 +21,35 @@ permissions:
 jobs:
   check_clang_format:
     name: Check clang-format and ruff
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install clang-format
         run: brew install llvm@21
 
       - name: Check clang-format
         run: ./run-clang-format.sh -c
-        env:
-          CLANG_FORMAT_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@21
 
       - uses: astral-sh/ruff-action@v3
+
   check_clang_tidy:
     name: Check clang-tidy
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install clang-tidy
-        run: brew install llvm@21 ninja lld@21
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: brew install flatbuffers lld@21 llvm@21 ninja wabt
+
       - name: Run clang-tidy
         run: ./run-clang-tidy.sh
-        env:
-          CLANG_TIDY_LLVM_INSTALL_DIR: /opt/homebrew/opt/llvm@21
+
   check_cmake_file_lists:
     name: Check CMake file lists
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run test sources check
         run: |
           shopt -s nullglob
