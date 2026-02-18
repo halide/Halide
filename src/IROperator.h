@@ -207,6 +207,34 @@ Expr halide_exp(const Expr &a);
 Expr halide_erf(const Expr &a);
 // @}
 
+/** Extended exponential which produces two output values,
+ * each of the same precision as the input, as described in
+ * "The Two-Pass Softmax Algorithm" by Marat Dukhan and
+ * Artsiom Ablavatski [https://arxiv.org/abs/2001.04438].
+ *
+ * The first element of the returned Tuple is a psuedo-mantissa while
+ * the second is an exponent which is an integer. The product of the
+ * pseudo-mantissa and 2 raised to the returned exponent is the
+ * desired result e^a.  For arguments up to slightly greater than
+ * 11629079, the pseudo-mantissa is guaranteed to be within the
+ * interval (-e, e). For larger arguments, the exponent result of the
+ * tuple may not be able to represent the exact integer necessary to
+ * keep the pseudo-mantissa within bounds. Thus it can become
+ * progressively larger in magnitude as the argument increases.
+ *
+ * Ideally this routine will maintain a degree of accuracy through the
+ * entire range and be able to produce results out to the end of the
+ * numeric range. At present neither of these properties are true due to
+ * the following issues:
+ *  - Range reduction may overflow when scaling the argument.
+ *  - Range reduction is increasingly inaccurate in reducing the value
+ *    due to the implementation. This results in overflow in the polynomial
+ *    evaluation.
+ *  - Even if the above to issues were resolved, the approximation polynomial
+ *    would have to run on values outside its intended approximation range.
+ */
+Tuple halide_extended_exp(const Expr &a);
+
 /** Raise an expression to an integer power by repeatedly multiplying
  * it by itself. */
 Expr raise_to_integer_power(Expr a, int64_t b);
