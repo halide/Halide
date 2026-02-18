@@ -123,7 +123,7 @@ if [[ $(${CC} --version) =~ .*Homebrew.* ]]; then
         export CMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
         export VCPKG_TARGET_TRIPLET="${HOMEBREW_TRIPLE}"
         export VCPKG_OVERLAY_TRIPLETS="${ROOT_DIR}/cmake/triples"
-        export VCPKG_OVERLAY_PORTS"${ROOT_DIR}/cmake/vcpkg"
+        export VCPKG_OVERLAY_PORTS="${ROOT_DIR}/cmake/vcpkg"
         export VCPKG_MANIFEST_FEATURES=-developer
     else
         # vcpkg is not active: use the toolchain file directly.
