@@ -1,5 +1,6 @@
 #include "StageStridedLoads.h"
 #include "CSE.h"
+#include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -95,12 +96,15 @@ protected:
                         base = base_add->a;
                         offset = *off;
                     }
+                } else if (auto off = as_const_int(base)) {
+                    base = 0;
+                    offset = *off;
                 }
 
                 // TODO: We do not yet handle nested vectorization here for
                 // ramps which have not already collapsed. We could potentially
                 // handle more interesting types of shuffle than simple flat slices.
-                if (stride >= 2 && stride < r->lanes && r->stride.type().is_scalar()) {
+                if (stride >= 2 && stride <= r->lanes && r->stride.type().is_scalar()) {
                     const IRNode *s = scope;
                     const Allocate *a = nullptr;
                     if (const Allocate *const *a_ptr = allocation_scope.find(op->name)) {
@@ -157,6 +161,19 @@ public:
     std::map<std::pair<const Allocate *, const Load *>, Expr> replacements;
     std::map<const Allocate *, int> padding;
     Scope<const Allocate *> allocation_scope;
+    std::map<Stmt, std::pair<std::string, Expr>> let_injections;
+
+    using IRMutator::mutate;
+
+    Stmt mutate(const Stmt &s) override {
+        auto it = let_injections.find(s);
+        if (it != let_injections.end()) {
+            const auto &[name, value] = it->second;
+            return LetStmt::make(name, value, IRMutator::mutate(s));
+        } else {
+            return IRMutator::mutate(s);
+        }
+    }
 
 protected:
     Expr visit(const Load *op) override {
@@ -191,6 +208,61 @@ protected:
     using IRMutator::visit;
 };
 
+Stmt innermost_containing_stmt(const Stmt &root, const std::set<const Load *> &exprs) {
+    std::vector<Stmt> path, result;
+    mutate_with(root,  //
+                [&](auto *self, const Stmt &s) {
+                    path.push_back(s);
+                    self->mutate_base(s);
+                    path.pop_back();
+                    return s;  //
+                },
+                [&](auto *self, const Expr &e) {
+                    const Load *l = e.as<Load>();
+                    if (l && exprs.count(l)) {
+                        if (result.empty()) {
+                            result = path;
+                        } else {
+                            // Find the common prefix of path and result
+                            size_t i = 0;
+                            while (i < path.size() &&
+                                   i < result.size() &&
+                                   path[i].get() == result[i].get()) {
+                                i++;
+                            }
+                            result.resize(i);
+                        }
+                    };
+                    return self->mutate_base(e);  //
+                });
+    internal_assert(!result.empty()) << "None of the exprs were found\n";
+    return result.back();
+}
+
+bool can_hoist_shared_load(const Stmt &s, const std::string &buf, const Expr &idx) {
+    // Check none of the variables the idx depends on are defined somewhere
+    // within this stmt, and there are no stores to the given buffer in the
+    // stmt.
+    bool result = true;
+    visit_with(s,                                 //
+               [&](auto *self, const Let *let) {  //
+                   result &= !expr_uses_var(idx, let->name);
+               },
+               [&](auto *self, const LetStmt *let) {  //
+                   result &= !expr_uses_var(idx, let->name);
+               },
+               [&](auto *self, const For *loop) {  //
+                   result &= !expr_uses_var(idx, loop->name);
+               },
+               [&](auto *self, const Allocate *alloc) {  //
+                   result &= alloc->name != buf;
+               },
+               [&](auto *self, const Store *store) {  //
+                   result &= store->name != buf;
+               });
+    return result;
+}
+
 }  // namespace
 
 Stmt stage_strided_loads(const Stmt &s) {
@@ -218,6 +290,7 @@ Stmt stage_strided_loads(const Stmt &s) {
             const bool can_lift = l.second.lower_bound(load->first + k.stride - 1) != l.second.end();
 
             if (!can_lift) {
+                debug(0) << "Can't lift: " << Expr(load->second[0]->index) << "\n";
                 load++;
                 continue;
             }
@@ -228,13 +301,39 @@ Stmt stage_strided_loads(const Stmt &s) {
             Expr idx = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), lanes);
             Type t = k.type.with_lanes(lanes);
             const Load *op = load->second[0];
+
+            std::set<const Load *> all_loads;
+            for (auto l = load; l != v.end() && l->first < first_offset + k.stride; l++) {
+                all_loads.insert(l->second.begin(), l->second.end());
+            }
+
             Expr shared_load = Load::make(t, k.buf, idx, op->image, op->param,
                                           const_true(lanes), op->alignment);
             shared_load = common_subexpression_elimination(shared_load);
-            for (; load != v.end() && load->first < first_offset + k.stride; load++) {
-                Expr shuf = Shuffle::make_slice(shared_load, load->first - first_offset, k.stride, k.lanes);
-                for (const Load *l : load->second) {
-                    replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
+
+            // If possible, we do the shuffle as an in-place transpose followed
+            // by a dense slice. This is more efficient when extracting multiple
+            // slices.
+            Stmt let_site = innermost_containing_stmt(alloc ? Stmt(alloc) : s, all_loads);
+            if (can_hoist_shared_load(let_site, k.buf, idx)) {
+                shared_load = Shuffle::make_transpose(shared_load, k.stride);
+                std::string name = unique_name('t');
+                Expr var = Variable::make(shared_load.type(), name);
+                for (; load != v.end() && load->first < first_offset + k.stride; load++) {
+                    int row = load->first - first_offset;
+                    Expr shuf = Shuffle::make_slice(var, row * k.lanes, 1, k.lanes);
+                    for (const Load *l : load->second) {
+                        replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
+                    }
+                }
+                replacer.let_injections.emplace(let_site, std::make_pair(name, shared_load));
+            } else {
+                for (; load != v.end() && load->first < first_offset + k.stride; load++) {
+                    int row = load->first - first_offset;
+                    Expr shuf = Shuffle::make_slice(shared_load, row, k.stride, k.lanes);
+                    for (const Load *l : load->second) {
+                        replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
+                    }
                 }
             }
         }

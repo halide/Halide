@@ -460,6 +460,9 @@ protected:
      * an arbitrary number of vectors.*/
     virtual llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &);
 
+    /** The inverse of interleave_vectors. */
+    virtual std::vector<llvm::Value *> deinterleave_vector(llvm::Value *vec, int num_vecs);
+
     /** A fence to prevent fusion of ops by llvm. Designed for floats, but we
      * abuse it to prevent shufflevector fusion too. */
     llvm::Value *optimization_fence(llvm::Value *);

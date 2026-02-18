@@ -33,13 +33,16 @@ Result test_transpose(int block_width, int block_height, const Target &t) {
     Var xi, yi;
     output.tile(x, y, xi, yi, block_width, block_height, TailStrategy::RoundUp)
         .vectorize(xi)
-        .unroll(yi);
+        .vectorize(yi);
 
-    // Do vectorized loads from the input.
-    input.in().compute_at(output, x).vectorize(x).unroll(y);
+    // Explicitly vectorized loads from the input. Was necessary before we
+    // automatically swizzled the 2D load into dense order.
+    // input.in().compute_at(output, x).vectorize(x).unroll(y);
 
-    // Transpose in registers
-    input.in().in().reorder_storage(y, x).compute_at(output, x).vectorize(x).unroll(y);
+    // Explicit transpose in registers. This used to be the idiom, but is no
+    // longer necessary because stage_strided_loads should detect the strided
+    // loads from input.in() and turn it into a transpose.
+    // input.in().in().reorder_storage(y, x).compute_at(output, x).vectorize(x).unroll(y);
 
     // TODO: Should not be necessary, but prevents licm from doing something dumb.
     output.output_buffer().dim(0).set_bounds(0, 256);

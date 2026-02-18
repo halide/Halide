@@ -76,8 +76,10 @@ Result test_deinterleave(int factor, const Target &t) {
     output(x, y) = in(x * factor + y);
 
     Var xi, yi;
-    output.reorder(y, x).bound(y, 0, factor).unroll(y).vectorize(x, t.natural_vector_size<T>(), TailStrategy::RoundUp);
-    // output.output_buffer().dim(0).set_min(0);
+    output.bound(y, 0, factor)
+        .reorder(y, x)
+        .unroll(y)  // Also works if we vectorize y
+        .vectorize(x, t.natural_vector_size<T>(), TailStrategy::RoundUp);
 
     output.compile_jit();
 
@@ -100,8 +102,8 @@ Result test_deinterleave(int factor, const Target &t) {
     }
 
     // Uncomment to dump asm for inspection
-    output.compile_to_assembly("/dev/stdout",
-    std::vector<Argument>{in}, "interleave", t);
+    // output.compile_to_assembly("/dev/stdout",
+    // std::vector<Argument>{in}, "deinterleave", t);
 
     return Result{(int)sizeof(T), factor, out.size_in_bytes() / (1.0e9 * time)};
 }
@@ -117,14 +119,8 @@ int main(int argc, char **argv) {
     target.set_features({Target::NoRuntime, Target::NoAsserts, Target::NoBoundsQuery});
 
     std::cout << "\nbytes, interleave factor, interleave bandwidth (GB/s), deinterleave bandwidth (GB/s):\n";
-#if 0
     for (int t : {1, 2, 4, 8}) {
         for (int f = 2; f < 16; f++) {
-#else
-     {
-         {
-            int t = 1, f = 4;
-#endif
             Result r1, r2;
             switch (t) {
             case 1:
@@ -150,7 +146,6 @@ int main(int argc, char **argv) {
                       << r1.factor << " "
                       << r1.bandwidth << " "
                       << r2.bandwidth << "\n";
-
         }
     }
 

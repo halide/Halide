@@ -2288,8 +2288,9 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
 
     } else {
         // The number of vectors shares a factor with the length of the
-        // vectors. Pick some large factor of the number of vectors, interleave
-        // in separate groups, and then interleave the results.
+        // vectors. Pick some factor of the number of vectors, interleave in
+        // separate groups, and then interleave the results. Doing the smallest
+        // factor first seems to be fastest.
         const int n = (int)vecs.size();
         int f = 1;
         for (int i = 2; i < n; i++) {
@@ -2314,6 +2315,120 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
 
         // Interleave the result
         return interleave_vectors(interleaved);
+    }
+}
+
+std::vector<Value *> CodeGen_LLVM::deinterleave_vector(Value *vec, int num_vecs) {
+    int vec_elements = get_vector_num_elements(vec->getType());
+    internal_assert(vec_elements % num_vecs == 0);
+    vec_elements /= num_vecs;
+
+    int factor = gcd(vec_elements, num_vecs);
+
+    if (num_vecs == 1) {
+        return {vec};
+    } else if (num_vecs == 2) {
+        std::vector<Value *> result(2);
+        std::vector<int> indices(vec_elements);
+        for (int i = 0; i < vec_elements; i++) {
+            indices[i] = i * 2;
+        }
+        result[0] = shuffle_vectors(vec, vec, indices);
+        for (int i = 0; i < vec_elements; i++) {
+            indices[i]++;
+        }
+        result[1] = shuffle_vectors(vec, vec, indices);
+        return result;
+    } else if (factor == 1) {
+        // Use the inverse of Catanzaro's algorithm from above. We slice into
+        // distinct vectors, then rotate each element into the correct final
+        // vector, then do a unary permutation of each vector.
+        std::vector<int> shuffle(vec_elements);
+
+        // Instead of concatenating, we slice.
+        std::vector<Value *> v(num_vecs);
+        for (int i = 0; i < num_vecs; i++) {
+            v[i] = slice_vector(vec, i * vec_elements, vec_elements);
+        }
+
+        // Compute the same rotation as above
+        std::vector<int> rotation(vec_elements, 0);
+        for (int i = 0; i < vec_elements; i++) {
+            int k = (i * num_vecs) % vec_elements;
+            rotation[k] = (i * num_vecs) / vec_elements;
+        }
+        internal_assert(rotation[0] == 0);
+
+        // We'll handle each bit of the rotation one at a time with a two-way
+        // shuffle.
+        std::vector<Value *> new_v(v.size());
+        int d = 1;
+        while (d < num_vecs) {
+
+            for (int i = 0; i < vec_elements; i++) {
+                shuffle[i] = ((rotation[i] & d) == 0) ? i : (i + vec_elements);
+            }
+
+            for (int i = 0; i < num_vecs; i++) {
+                // The rotation is in the opposite direction to the interleaving
+                // version, so num_vecs - d becomes just d.
+                int j = (i + d) % num_vecs;
+                // An optimization fence here keeps it as a blend and stops it
+                // from getting fused with the unary shuffle below.
+                new_v[i] = optimization_fence(shuffle_vectors(v[i], v[j], shuffle));
+            }
+
+            v.swap(new_v);
+            d *= 2;
+        }
+
+        // Now reorder the vectors in the inverse order to the above.
+        for (int i = 0; i < num_vecs; i++) {
+            int j = (i * vec_elements) % num_vecs;
+            // j and i are swapped below, because we're doing the inverse of the algorithm above
+            new_v[j] = v[i];
+        }
+        v.swap(new_v);
+
+        // The elements are now in the correct vector. Finish up with a unary
+        // shuffle of each.
+        for (int i = 0; i < num_vecs; i++) {
+            for (int j = 0; j < vec_elements; j++) {
+                int k = j * num_vecs + i;
+                // This is the inverse shuffle of the interleaving version, so
+                // the index and the arg of the assignment below are swapped
+                // compared to the above.
+                shuffle[j] = k % vec_elements;
+            }
+
+            v[i] = shuffle_vectors(v[i], v[i], shuffle);
+        }
+
+        return v;
+
+    } else {
+        // Do a lower-factor deinterleave, then deinterleave each result
+        // again. We know there's a non-trivial factor because if it were prime
+        // the gcd above would have been 1. Unlike interleave, doing the largest
+        // factor first seems to be fastest.
+        int f = 1;
+        for (int i = 2; i < num_vecs; i++) {
+            if (num_vecs % i == 0) {
+                f = i;
+            }
+        }
+
+        auto partial = deinterleave_vector(vec, f);
+        std::vector<Value *> result(num_vecs);
+        for (size_t i = 0; i < partial.size(); i++) {
+            Value *v = partial[i];
+            auto vecs = deinterleave_vector(v, num_vecs / f);
+            for (size_t j = 0; j < vecs.size(); j++) {
+                result[j * f + i] = vecs[j];
+            }
+        }
+
+        return result;
     }
 }
 
@@ -4178,6 +4293,24 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
     if (op->is_interleave()) {
         value = interleave_vectors(vecs);
+    } else if (op->is_transpose()) {
+        int cols = op->transpose_factor();
+        int rows = op->vectors[0].type().lanes() / cols;
+        if (is_power_of_two(cols) &&
+            !is_power_of_two(rows)) {
+            // We're doing something like vectorizing over c and x when storing
+            // packed rgb. Best handled as an interleave.
+            std::vector<Value *> slices(rows);
+            for (int i = 0; i < rows; i++) {
+                slices[i] = slice_vector(vecs[0], i * cols, cols);
+            }
+            value = interleave_vectors(slices);
+        } else {
+            // Deinterleave out the cols of the input matrix and concat
+            // them. Occurs when, for example, loading packed RGB and
+            // vectorizing across x.
+            value = concat_vectors(deinterleave_vector(vecs[0], cols));
+        }
     } else if (op->is_concat()) {
         value = concat_vectors(vecs);
     } else {

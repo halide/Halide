@@ -113,6 +113,7 @@ protected:
     void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
     // @}
 
+    std::vector<llvm::Value *> deinterleave_vector(llvm::Value *, int) override;
     llvm::Value *interleave_vectors(const std::vector<llvm::Value *> &) override;
 
 private:
@@ -910,6 +911,30 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
+std::vector<Value *> CodeGen_X86::deinterleave_vector(Value *vec, int num_vecs) {
+    int vec_elements = get_vector_num_elements(vec->getType()) / num_vecs;
+    const size_t element_bits = vec->getType()->getScalarSizeInBits();
+    if (target.has_feature(Target::AVX) &&
+        is_power_of_two(num_vecs) &&
+        is_power_of_two(vec_elements) &&
+        (int)(vec_elements * num_vecs * element_bits) > native_vector_bits()) {
+
+        // Our interleaving logic below supports this case
+        std::vector<Value *> slices(vec_elements);
+        for (int i = 0; i < vec_elements; i++) {
+            slices[i] = slice_vector(vec, i * num_vecs, num_vecs);
+        }
+        vec = interleave_vectors(slices);
+        std::vector<Value *> result(num_vecs);
+        for (int i = 0; i < num_vecs; i++) {
+            result[i] = slice_vector(vec, i * vec_elements, vec_elements);
+        }
+        return result;
+    } else {
+        return CodeGen_Posix::deinterleave_vector(vec, num_vecs);
+    }
+}
+
 Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
     // Only use x86-specific interleaving for AVX and above
     if (vecs.empty() || !target.has_feature(Target::AVX)) {
@@ -1146,6 +1171,24 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
     // Now we define helpers for each instruction we are going to use
 
+    // Useful for debugging or enhancing this algorithm
+    /*
+    auto dump_bits = [&]() {
+        for (int b : l_bits) {
+            debug(0) << b << " ";
+        }
+        debug(0) << "| ";
+        for (int b : s_bits) {
+            debug(0) << b << " ";
+        }
+        debug(0) << "| ";
+        for (int b : v_bits) {
+            debug(0) << b << " ";
+        }
+        debug(0) << "\n";
+    };
+    */
+
     // unpckl/h instruction
     auto unpck = [&](Value *a, Value *b) -> std::pair<Value *, Value *> {
         int n = get_vector_num_elements(a->getType());
@@ -1258,6 +1301,99 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
         s_bits.pop_back();
     }
 
+    // If adjacent vectors are shuffles of the same underlying vector(s),
+    // concatenate pairs, because this is probably free.
+    while ((size_t)vec_elements < elems_per_native_vec && !v_bits.empty()) {
+        std::vector<Value *> new_v;
+        new_v.reserve(v.size() / 2);
+        bool fail = false;
+        std::vector<int> indices;
+        indices.reserve(vec_elements * 2);
+        for (size_t i = 0; i < v.size(); i += 2) {
+            ShuffleVectorInst *a = llvm::dyn_cast<ShuffleVectorInst>(v[i]);
+            ShuffleVectorInst *b = llvm::dyn_cast<ShuffleVectorInst>(v[i + 1]);
+            if (a &&
+                b &&
+                a->getOperand(0) == b->getOperand(0) &&
+                a->getOperand(1) == b->getOperand(1)) {
+
+                // Concatenate the two shuffles
+                indices.clear();
+                for (int j : a->getShuffleMask()) {
+                    indices.push_back(j);
+                }
+                for (int j : b->getShuffleMask()) {
+                    indices.push_back(j);
+                }
+                new_v.push_back(shuffle_vectors(a->getOperand(0), a->getOperand(1), indices));
+            } else {
+                fail = true;
+            }
+        }
+        if (fail) {
+            break;
+        }
+
+        v.swap(new_v);
+        // The lowest vector bit becomes the highest lane or slice bit
+        if ((size_t)vec_elements < elems_per_slice) {
+            l_bits.push_back(v_bits[0]);
+        } else {
+            s_bits.push_back(v_bits[0]);
+        }
+        v_bits.erase(v_bits.begin());
+        vec_elements *= 2;
+    }
+
+    if (final_num_s_bits > 1 &&
+        (size_t)vec_elements == elems_per_native_vec &&
+        (size_t)v_bits[0] >= l_bits.size() - 1) {
+        // A big binary shuffle of adjacent pairs will fix the l bits
+        // entirely. AVX-512 has these. Yes, this will use registers for the
+        // shuffle indices, but the alternative requires very many unpck
+        // operations to completely cycle out the v_bits that are hiding in the
+        // bottom of the l_bits.
+
+        std::vector<int> lo_indices(vec_elements);
+        std::vector<int> hi_indices(vec_elements);
+        std::vector<int> sorted_bits = l_bits;
+        sorted_bits.insert(sorted_bits.end(), s_bits.begin(), s_bits.end());
+        sorted_bits.push_back(v_bits[0]);
+        std::sort(sorted_bits.begin(), sorted_bits.end());
+        std::vector<int> idx_of_bit(l_bits.size() + s_bits.size() + v_bits.size(), 0);
+        for (size_t b = 0; b < sorted_bits.size(); b++) {
+            idx_of_bit[sorted_bits[b]] = b;
+        }
+
+        for (size_t dst_idx = 0; dst_idx < (size_t)vec_elements * 2; dst_idx++) {
+            size_t src_idx = 0;
+            for (size_t b = 0; b < l_bits.size(); b++) {
+                src_idx |= ((dst_idx >> idx_of_bit[l_bits[b]]) & 1) << b;
+            }
+            for (size_t b = 0; b < s_bits.size(); b++) {
+                src_idx |= ((dst_idx >> idx_of_bit[s_bits[b]]) & 1) << (b + l_bits.size());
+            }
+            src_idx |= ((dst_idx >> idx_of_bit[v_bits[0]]) & 1) << (l_bits.size() + s_bits.size());
+            if (dst_idx < (size_t)vec_elements) {
+                lo_indices[dst_idx] = (int)src_idx;
+            } else {
+                hi_indices[dst_idx - vec_elements] = (int)src_idx;
+            }
+        }
+
+        for_all_pairs(0, [&](auto *a, auto *b) {
+            Value *lo = shuffle_vectors(*a, *b, lo_indices);
+            Value *hi = shuffle_vectors(*a, *b, hi_indices);
+            *a = lo;
+            *b = hi;
+        });
+
+        auto first_s_bit = sorted_bits.begin() + l_bits.size();
+        std::copy(sorted_bits.begin(), first_s_bit, l_bits.begin());
+        std::copy(first_s_bit, first_s_bit + s_bits.size(), s_bits.begin());
+        v_bits[0] = sorted_bits.back();
+    }
+
     // Interleave pairs if we have vectors smaller than a single slice. Choosing
     // which pairs to interleave is important because we want to pull down v
     // bits that are destined to end up as l bits, and we want to pull them down
@@ -1300,9 +1436,8 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
 
     // Concatenate/repack to get at least the desired number of slice bits.
     while ((int)s_bits.size() < final_num_s_bits && !v_bits.empty()) {
-        int desired_low_slice_bit = ctz64(elems_per_slice);
-        int desired_high_slice_bit = desired_low_slice_bit + 1;
-
+        const int desired_low_slice_bit = ctz64(elems_per_slice);
+        const int desired_high_slice_bit = desired_low_slice_bit + 1;
         int bit;
         if (!s_bits.empty() &&
             s_bits[0] == desired_low_slice_bit) {
@@ -1340,7 +1475,9 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
     // Now we have at least two whole vectors. Next we try to finalize lane bits using
     // unpck instructions.
     while (l_bits[0] != 0) {
-        int bit = std::min(l_bits[0], (int)ctz64(elems_per_slice)) - 1;
+
+        int first_s_bit = (int)ctz64(elems_per_slice);
+        int bit = std::min(l_bits[0], first_s_bit) - 1;
 
         auto vb_it = std::find(v_bits.begin(), v_bits.end(), bit);
 
@@ -1348,11 +1485,17 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
         if (vb_it == v_bits.end()) {
             // The next bit is not in vector bits. It must be hiding in the
             // slice bits due to earlier concatenation. Move it into the v_bits
-            // with a shufi
+            // with a shufi. We'll need to pick a v bit to take its place,
+            // ideally one destined to end up in the s bits.
+            vb_it = std::find_if(v_bits.begin(), v_bits.end(), [&](int b) { return b >= first_s_bit; });
+            if (vb_it == v_bits.end()) {
+                vb_it = v_bits.begin();
+            }
+
             if (s_bits.back() == bit) {
                 // It's the last (or sole) slice bit. Swap it with the first v bit
-                std::swap(s_bits.back(), v_bits[0]);
-                for_all_pairs(0, [&](auto *a, auto *b) {
+                std::swap(s_bits.back(), *vb_it);
+                for_all_pairs(vb_it - v_bits.begin(), [&](auto *a, auto *b) {
                     auto [lo, hi] = shufi(*a, *b, false);
                     *a = lo;
                     *b = hi;
@@ -1360,17 +1503,16 @@ Value *CodeGen_X86::interleave_vectors(const std::vector<Value *> &vecs) {
             } else {
                 internal_assert(s_bits.size() == 2 && s_bits[0] == bit);
                 // It's the low slice bit. We need shufi with crossover.
-                int v_bit = v_bits[0];
-                v_bits[0] = s_bits[0];
+                int v_bit = *vb_it;
+                *vb_it = s_bits[0];
                 s_bits[0] = s_bits[1];
                 s_bits[1] = v_bit;
-                for_all_pairs(0, [&](auto *a, auto *b) {
+                for_all_pairs(vb_it - v_bits.begin(), [&](auto *a, auto *b) {
                     auto [lo, hi] = shufi(*a, *b, true);
                     *a = lo;
                     *b = hi;
                 });
             }
-            vb_it = v_bits.begin();
         }
 
         int j = vb_it - v_bits.begin();
