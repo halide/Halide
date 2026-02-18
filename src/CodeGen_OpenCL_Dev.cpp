@@ -61,6 +61,7 @@ protected:
         CodeGen_OpenCL_C(std::ostream &s, Target t)
             : CodeGen_GPU_C(s, t) {
             integer_suffix_style = IntegerSuffixStyle::OpenCL;
+            float16_datatype = "half";
             vector_declaration_style = VectorDeclarationStyle::OpenCLSyntax;
             abs_returns_unsigned_type = true;
 
@@ -97,6 +98,20 @@ protected:
             alias("fast_inverse", "native_recip");
             alias("fast_inverse_sqrt", "native_rsqrt");
 #undef alias
+
+            extern_function_name_map["fast_sin_f32"] = "native_sin";
+            extern_function_name_map["fast_cos_f32"] = "native_cos";
+            extern_function_name_map["fast_tan_f32"] = "native_tan";
+            extern_function_name_map["fast_exp_f32"] = "native_exp";
+            extern_function_name_map["fast_log_f32"] = "native_log";
+            extern_function_name_map["fast_pow_f32"] = "native_powr";
+
+            extern_function_name_map["fast_sin_f16"] = "half_sin";
+            extern_function_name_map["fast_cos_f16"] = "half_cos";
+            extern_function_name_map["fast_tan_f16"] = "half_tan";
+            extern_function_name_map["fast_exp_f16"] = "half_exp";
+            extern_function_name_map["fast_log_f16"] = "half_log";
+            extern_function_name_map["fast_pow_f16"] = "half_powr";
         }
         void add_kernel(Stmt stmt,
                         const std::string &name,
@@ -482,6 +497,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::round)) {
         // In OpenCL, rint matches our rounding semantics
         Expr equiv = Call::make(op->type, "rint", op->args, Call::PureExtern);
+        equiv.accept(this);
+    } else if (op->type == Float(16) && op->name == "abs") {
+        // Built-in f16 funcs are not supported on NVIDIA.
+        Expr val = op->args[0];
+        Expr equiv = select(val < make_const(op->type, 0.0), -val, val);
         equiv.accept(this);
     } else {
         CodeGen_GPU_C::visit(op);
@@ -888,11 +908,29 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Max *op) {
-    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+    if (op->type.is_float()) {
+        if (op->type.bits() == 16) {
+            // builtin math functions not supported on NVIDIA.
+            print_expr(select(op->a > op->b, op->a, op->b));
+            return;
+        }
+        print_expr(Call::make(op->type, "fmax", {op->a, op->b}, Call::Extern));
+    } else {
+        print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+    }
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Min *op) {
-    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+    if (op->type.is_float()) {
+        if (op->type.bits() == 16) {
+            // builtin math functions not supported on NVIDIA.
+            print_expr(select(op->a < op->b, op->a, op->b));
+            return;
+        }
+        print_expr(Call::make(op->type, "fmin", {op->a, op->b}, Call::Extern));
+    } else {
+        print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+    }
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
@@ -1129,7 +1167,12 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "inline float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << "inline float nan_f32() { return NAN; }\n"
                << "inline float neg_inf_f32() { return -INFINITY; }\n"
-               << "inline float inf_f32() { return INFINITY; }\n";
+               << "inline float inf_f32() { return INFINITY; }\n"
+               << "inline bool is_nan_f32(float x) {return isnan(x); }\n"
+               << "inline bool is_inf_f32(float x) {return isinf(x); }\n"
+               << "inline bool is_finite_f32(float x) {return isfinite(x); }\n"
+               << "#define fast_inverse_f32 native_recip \n"
+               << "#define fast_inverse_sqrt_f32 native_rsqrt \n";
 
     // There does not appear to be a reliable way to safely ignore unused
     // variables in OpenCL C. See https://github.com/halide/Halide/issues/4918.

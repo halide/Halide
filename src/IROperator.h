@@ -207,6 +207,9 @@ Expr halide_exp(const Expr &a);
 Expr halide_erf(const Expr &a);
 // @}
 
+/** Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5 */
+void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent);
+
 /** Raise an expression to an integer power by repeatedly multiplying
  * it by itself. */
 Expr raise_to_integer_power(Expr a, int64_t b);
@@ -978,39 +981,169 @@ Expr pow(Expr x, Expr y);
  * mantissa. Vectorizes cleanly. */
 Expr erf(const Expr &x);
 
-/** Fast vectorizable approximation to some trigonometric functions for
- * Float(32).  Absolute approximation error is less than 1e-5. Slow on x86 if
- * you don't have at least sse 4.1. */
+/** Struct that allows the user to specify precision requirements for functions
+ * that are approximated. Several functions can be approximated using specialized
+ * hardware instructions. If no hardware instructions are available, approximations
+ * are implemented in Halide using polynomials or potentially Padé approximants.
+ * Both the hardware instructions and the in-house approximations have a certain behavior
+ * and precision. This struct allows you to specify which behavior and precision you
+ * are interested in. Halide will select an appropriate implemenation that satisfies
+ * these requirements.
+ *
+ * There are two main aspects of specifying the precision:
+ *  1. The objective for which the approximation is optimzed. This can be to reduce the
+ *     maximal absolute error (MAE), or to reduce the maximal error measured in
+ *     units in last place (ULP). Some applications tend to naturally require low
+ *     absolute error, whereas others might favor low relative error (for which maximal ULP
+ *     error is a good metric).
+ *  2. The minimal required precision in either MAE, or MULPE.
+ *
+ * Both of these parameters are optional:
+ *
+ *  - When omitting the optimization objective (i.e., AUTO), Halide is free to pick any
+ *    implementation that satisfies the precision requirement. Sometimes, hardware instructions
+ *    have vendor-specific behavior (one vendor might optimize MAE, another might optimize
+ *    MULPE), so requiring a specific behavior might rule out the ability to use the hardware
+ *    instruction if it doesn't behave the way requested. When polynomial approximations are
+ *    selected, and AUTO is requested, Halide will pick a sensible optimization objective for
+ *    each function.
+ *  - When omitting the precision requirements (both \ref constraint_max_ulp_error and
+ *    \ref constraint_max_absolute_error), Halide will try to favor hardware instructions
+ *    when available in order to favor speed. Otherwise, Halide will select a polynomial with
+ *    reasonable precision.
+ *
+ * The default-initialized ApproximationPrecision consists of AUTO-behavior, and default-precision.
+ * In general, when only approximate values are required without hard requirements on their
+ * precision, calling any of the fast_-version functions without specifying the ApproximationPrecision
+ * struct is fine, and will get you most likely the fastest implementation possible.
+ */
+struct ApproximationPrecision {
+    enum OptimizationObjective {
+        AUTO,   //< No preference, but favor speed.
+        MAE,    //< Optimized for Max Absolute Error.
+        MULPE,  //< Optimized for Max ULP Error. ULP is "Units in Last Place", when represented in IEEE 32-bit floats.
+    } optimized_for{AUTO};
+
+    /**
+     * Most function approximations have a range where the approximation works
+     * natively (typically close to zero), without any range reduction tricks
+     * (e.g., exploiting symmetries, repetitions). You may specify a maximal
+     * absolute error or maximal units in last place error, which will be
+     * interpreted as the maximal absolute error within this native range of the
+     * approximation. This will be used as a hint as to which implementation to
+     * use.
+     */
+    // @{
+    uint64_t constraint_max_ulp_error{0};
+    double constraint_max_absolute_error{0.0};
+    // @}
+
+    /**
+     * For most functions, Halide has a built-in table of polynomial
+     * approximations. However, some targets have specialized instructions or
+     * intrinsics available that allow to produce an even faster approximation.
+     * Setting this integer to a non-zero value will force Halide to use the
+     * polynomial with at least this many terms, instead of specialized
+     * device-specific code. This means this is still combinable with the
+     * other constraints.
+     * This is mostly useful for testing and benchmarking.
+     */
+    int force_halide_polynomial{0};
+
+    /** MULPE-optimized, with max ULP error. */
+    static ApproximationPrecision max_ulp_error(uint64_t mulpe) {
+        return ApproximationPrecision{MULPE, mulpe, 0.0f, false};
+    }
+    /** MAE-optimized, with max absolute error. */
+    static ApproximationPrecision max_abs_error(float mae) {
+        return ApproximationPrecision{MAE, 0, mae, false};
+    }
+    /** MULPE-optimized, forced Halide polynomial with given number of terms. */
+    static ApproximationPrecision poly_mulpe(int num_terms) {
+        user_assert(num_terms > 0);
+        return ApproximationPrecision{MULPE, 0, 0.0f, num_terms};
+    }
+    /** MAE-optimized, forced Halide polynomial with given number of terms. */
+    static ApproximationPrecision poly_mae(int num_terms) {
+        user_assert(num_terms > 0);
+        return ApproximationPrecision{MAE, 0, 0.0f, num_terms};
+    }
+};
+
+/** Fast approximation to some trigonometric functions for Float(32).
+ * Slow on x86 if you don't have at least sse 4.1.
+ * Vectorize cleanly when using polynomials.
+ * See \ref ApproximationPrecision for details on specifying precision.
+ */
 // @{
-Expr fast_sin(const Expr &x);
-Expr fast_cos(const Expr &x);
+/** Caution: Might exceed the range (-1, 1) by a tiny bit.
+ * On NVIDIA CUDA: default-precision maps to a dedicated sin.approx.f32 instruction. */
+Expr fast_sin(const Expr &x, ApproximationPrecision precision = {});
+/** Caution: Might exceed the range (-1, 1) by a tiny bit.
+ * On NVIDIA CUDA: default-precision maps to a dedicated cos.approx.f32 instruction. */
+Expr fast_cos(const Expr &x, ApproximationPrecision precision = {});
+/** On NVIDIA CUDA: default-precision maps to a combination of sin.approx.f32,
+ * cos.approx.f32, div.approx.f32 instructions. */
+Expr fast_tan(const Expr &x, ApproximationPrecision precision = {});
+Expr fast_asin(const Expr &x, ApproximationPrecision precision = {});
+Expr fast_acos(const Expr &x, ApproximationPrecision precision = {});
+Expr fast_atan(const Expr &x, ApproximationPrecision precision = {});
+Expr fast_atan2(const Expr &y, const Expr &x, ApproximationPrecision = {});
 // @}
 
-/** Fast approximate cleanly vectorizable log for Float(32). Returns
- * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
- * mantissa. Vectorizes cleanly. Slow on x86 if you don't
- * have at least sse 4.1. */
-Expr fast_log(const Expr &x);
+/** Fast approximate log for Float(32).
+ * Returns nonsense for x <= 0.0f.
+ * Approximation available up to the Max 5 ULP, Mean 2 ULP.
+ * Vectorizes cleanly when using polynomials.
+ * Slow on x86 if you don't have at least sse 4.1.
+ * On NVIDIA CUDA: default-precision maps to a combination of lg2.approx.f32 and a multiplication.
+ * See \ref ApproximationPrecision for details on specifying precision.
+ */
+Expr fast_log(const Expr &x, ApproximationPrecision precision = {});
 
-/** Fast approximate cleanly vectorizable exp for Float(32). Returns
- * nonsense for inputs that would overflow or underflow. Typically
- * accurate up to the last 5 bits of the mantissa. Gets worse when
- * approaching overflow. Vectorizes cleanly. Slow on x86 if you don't
- * have at least sse 4.1. */
-Expr fast_exp(const Expr &x);
+/** Fast approximate exp for Float(32).
+ * Returns nonsense for inputs that would overflow.
+ * Approximation available up to Max 3 ULP, Mean 1 ULP.
+ * Vectorizes cleanly when using polynomials.
+ * Slow on x86 if you don't have at least sse 4.1.
+ * On NVIDIA CUDA: default-precision maps to a combination of ex2.approx.f32 and a multiplication.
+ * See \ref ApproximationPrecision for details on specifying precision.
+ */
+Expr fast_exp(const Expr &x, ApproximationPrecision precision = {});
 
-/** Fast approximate cleanly vectorizable pow for Float(32). Returns
- * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
- * mantissa for typical exponents. Gets worse when approaching
- * overflow. Vectorizes cleanly. Slow on x86 if you don't
- * have at least sse 4.1. */
-Expr fast_pow(Expr x, Expr y);
+/** Fast approximate expm1 for Float(32).
+ * Returns nonsense for inputs that would overflow.
+ * Slow on x86 if you don't have at least sse 4.1.
+ */
+Expr fast_expm1(const Expr &x, ApproximationPrecision precision = {});
+
+/** Fast approximate pow for Float(32).
+ * Returns nonsense for x < 0.0f.
+ * Returns 1 when x == y == 0.0.
+ * Approximations accurate up to Max 53 ULPs, Mean 13 ULPs.
+ * Gets worse when approaching overflow.
+ * Vectorizes cleanly when using polynomials.
+ * Slow on x86 if you don't have at least sse 4.1.
+ * On NVIDIA CUDA: default-precision maps to a combination of ex2.approx.f32 and lg2.approx.f32.
+ * See \ref ApproximationPrecision for details on specifying precision.
+ */
+Expr fast_pow(const Expr &x, const Expr &y, ApproximationPrecision precision = {});
+
+/** Fast approximate pow for Float(32).
+ * Approximations accurate to 2e-7 MAE, and Max 2500 ULPs (on average < 1 ULP) available.
+ * Caution: might exceed the range (-1, 1) by a tiny bit.
+ * Vectorizes cleanly when using polynomials.
+ * Slow on x86 if you don't have at least sse 4.1.
+ * On NVIDIA CUDA: default-precision maps to a combination of ex2.approx.f32 and lg2.approx.f32.
+ * See \ref ApproximationPrecision for details on specifying precision.
+ */
+Expr fast_tanh(const Expr &x, ApproximationPrecision precision = {});
 
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
- * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
- * cleanly. Note that this can produce slightly different results
- * across different implementations of the same architecture (e.g. AMD vs Intel),
- * even when strict_float is enabled. */
+ * instruction on x86, the vrecpe instruction on ARM, and the rcp.approx.f32 instruction on CUDA.
+ * Vectorizes cleanly.
+ * Note that this can produce slightly different results across different implementations
+ * of the same architecture (e.g. AMD vs Intel), even when strict_float is enabled. */
 Expr fast_inverse(Expr x);
 
 /** Fast approximate inverse square root for Float(32). Corresponds to
@@ -1447,6 +1580,22 @@ Expr saturating_cast(Type t, Expr e);
  * generation as it depends on the compiler flags used to compile the
  * generated code. */
 Expr strict_float(const Expr &e);
+
+/**
+ * Helper functions to the strict-float variants of the
+ * basic floating point operators.
+ */
+/// @{
+Expr strict_add(const Expr &a, const Expr &b);
+Expr strict_sub(const Expr &a, const Expr &b);
+Expr strict_mul(const Expr &a, const Expr &b);
+Expr strict_div(const Expr &a, const Expr &b);
+Expr strict_max(const Expr &a, const Expr &b);
+Expr strict_min(const Expr &a, const Expr &b);
+Expr strict_eq(const Expr &a, const Expr &b);
+Expr strict_le(const Expr &a, const Expr &b);
+Expr strict_lt(const Expr &a, const Expr &b);
+/// @}
 
 /** Create an Expr that that promises another Expr is clamped but do
  * not generate code to check the assertion or modify the value. No
