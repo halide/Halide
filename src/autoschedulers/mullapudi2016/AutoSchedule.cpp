@@ -123,6 +123,21 @@ string get_sanitized_name(string name) {
     return name;
 }
 
+// Similar to std::replace, but assuming the vector contains unique values. And
+// if the element is absent, append new value to the end of vector.
+void replace_or_emplace(std::vector<VarOrRVar> &dims_, const VarOrRVar &before, VarOrRVar after) {
+    auto iter = std::find_if(dims_.begin(), dims_.end(),
+                             [before_name = before.name()](const VarOrRVar &d) {
+                                 return d.name() == before_name;
+                             });
+    const bool is_found = (iter != dims_.end());
+    if (is_found) {
+        *iter = std::move(after);
+    } else {
+        dims_.emplace_back(std::move(after));
+    }
+}
+
 // Representation of a function stage in the pipeline.
 struct FStage {
     Function func;
@@ -1353,7 +1368,7 @@ public:
     }
 
     /** Generate Halide GPU schedules. */
-    void apply(AutoSchedule &sched) {
+    void apply(AutoSchedule &sched, const Expr &parallelism) {
         if (!ordering.empty() && !is_initial_order) {
             std::set<std::string> var_list;
             for (const auto &v : ordering) {
@@ -1381,7 +1396,7 @@ public:
         }
 
         GPUTileHelper helper{f, stage_num};
-        Expr threads_budget = max_n_threads;
+        Expr threads_budget = min(parallelism, max_n_threads);
 
         // Maximize GPU thread occupancy with the grid-stride loop.
         //
@@ -1408,14 +1423,8 @@ public:
 
             const auto &[var, entry] = *iter;
 
-            const bool should_unroll = can_prove(entry.factor <= 1);
-            if (should_unroll) {
-                // Skip thread size of 1.
-                continue;
-            }
-
             split_info new_entry{entry};
-            new_entry.factor = simplify(min(threads_budget, new_entry.factor));
+            new_entry.factor = simplify(min(threads_budget, entry.factor));
 
             const bool can_split = helper.try_split(new_entry);
             if (!can_split) {
@@ -1426,8 +1435,11 @@ public:
             threads_budget = simplify(max(threads_budget / new_entry.factor, 1));
         }
 
-        if (!is_already_split) {
-            helper.commit(sched, is_compute_at);
+        helper.commit(sched, is_compute_at);
+        if (is_compute_at) {
+            // There are dimensions that does not need splitting but marked as
+            // vectorizable. Mark them as gpu threads.
+            mark_gpu_threads(sched);
         }
 
         // After calling `gpu_tiles` from `GPUTileHelper::commit()`, a few of
@@ -2192,7 +2204,7 @@ Partitioner::find_best_tile_config(const Group &g) {
     Group no_tile = g;
     no_tile.tile_sizes = no_tile_config;
 
-    bool show_analysis = false;
+    constexpr bool show_analysis = false;
     GroupAnalysis no_tile_analysis = analyze_group(no_tile, show_analysis);
 
     GroupAnalysis best_analysis = no_tile_analysis;
@@ -2215,7 +2227,7 @@ Partitioner::find_best_tile_config(const Group &g) {
         Expr benefit = estimate_benefit(best_analysis, new_analysis,
                                         no_redundant_work, true);
 
-        if (show_analysis) {
+        if constexpr (show_analysis) {
             debug(0) << "Benefit relative to not tiling:" << benefit << "\n";
             debug(0) << "Best analysis:" << new_analysis;
             debug(0) << "No tile analysis:" << no_tile_analysis;
@@ -3423,11 +3435,13 @@ void Partitioner::generate_group_cpu_schedule(
                     }
                 }
                 if (arch_params.is_gpu_schedule) {
-                    auto parallelized_split = gpu_tiling.can_parallelize(v, iter->second);
+                    const Expr gpu_threads = simplify(min(iter->second, arch_params.parallelism / def_par));
+                    auto parallelized_split = gpu_tiling.can_parallelize(v, gpu_threads);
                     if (parallelized_split) {
                         auto split_vars = *parallelized_split;
                         inner_dims.emplace_back(split_vars.inner);
-                        outer_dims.emplace_back(split_vars.outer);
+
+                        replace_or_emplace(outer_dims, v, split_vars.outer);
                     }
                 } else {
                     f_handle.parallel(v);
@@ -3446,7 +3460,7 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     if (arch_params.is_gpu_schedule) {
-        gpu_tiling.apply(sched);
+        gpu_tiling.apply(sched, arch_params.parallelism);
     }
 
     // Find the level at which group members will be computed.
@@ -3535,7 +3549,7 @@ void Partitioner::generate_group_cpu_schedule(
                         mem_rvars, mem_estimates, sched, gpu_tiling2);
 
         if (arch_params.is_gpu_schedule) {
-            gpu_tiling2.apply(sched);
+            gpu_tiling2.apply(sched, arch_params.parallelism);
         }
     }
 }

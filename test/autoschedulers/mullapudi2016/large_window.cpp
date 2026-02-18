@@ -47,7 +47,13 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     Pipeline p(g);
 
-    p.apply_autoscheduler(target, get_mullapudi2016_test_params(target.has_gpu_feature()));
+    constexpr Mullapudi2016TestParams gpu_specifications{
+        /* .last_level_cache_size = */ 35'000,
+        /* .parallelism = */ 128,
+    };
+
+    p.apply_autoscheduler(target,
+                          get_mullapudi2016_test_params(target.has_gpu_feature(), {gpu_specifications}));
 
     // Inspect the schedule (only for debugging))
     // g.print_loop_nest();

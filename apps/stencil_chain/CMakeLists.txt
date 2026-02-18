@@ -14,11 +14,24 @@ find_package(Halide REQUIRED)
 # Generator
 add_halide_generator(stencil_chain.generator SOURCES stencil_chain_generator.cpp)
 
+set(_stencil_chain_autoscheduler_params autoscheduler.experimental_gpu_schedule=1)
+
+if(Halide_TARGET MATCHES "cuda|metal|opencl")
+    # Set last_level_cache per GPU block to an extremely small value. This
+    # eliminates all `.compute_at` in the generated schedules, which in turn
+    # eliminates all GPU shared memory allocations.
+    list(APPEND _stencil_chain_autoscheduler_params
+        autoscheduler.last_level_cache_size=2000
+    )
+endif()
+
 # Filters
 add_halide_library(stencil_chain FROM stencil_chain.generator)
 add_halide_library(stencil_chain_auto_schedule FROM stencil_chain.generator
                    GENERATOR stencil_chain
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS ${_stenctil_chain_autoscheduler_params}
+                   )
 
 # Main executable
 add_executable(stencil_chain_process process.cpp)

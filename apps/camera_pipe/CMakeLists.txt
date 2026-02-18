@@ -16,11 +16,29 @@ add_halide_generator(camera_pipe.generator
                      SOURCES camera_pipe_generator.cpp
                      LINK_LIBRARIES Halide::Tools)
 
+set(_camera_pipe_autoscheduler_params autoscheduler.experimental_gpu_schedule=1)
+
+if(Halide_TARGET MATCHES "cuda|metal")
+    # Last level cache size estimate of the Nvidia GPU on the Buildbot. Hand
+    # tuned to pass the Builbot tests.
+    list(APPEND _camera_pipe_autoscheduler_params
+        autoscheduler.last_level_cache_size=10000
+    )
+elseif(Halide_TARGET MATCHES "opencl|vulkan")
+    # Set last_level_cache per GPU block to an extremely small value. This
+    # eliminates all `.compute_at` in the generated schedules, which in turn
+    # eliminates all GPU shared memory allocations.
+    list(APPEND _camera_pipe_autoscheduler_params
+        autoscheduler.last_level_cache_size=1000
+    )
+endif()
+
 # Filters
 add_halide_library(camera_pipe FROM camera_pipe.generator)
 add_halide_library(camera_pipe_auto_schedule FROM camera_pipe.generator
                    GENERATOR camera_pipe
-                   AUTOSCHEDULER Halide::Mullapudi2016)
+                   AUTOSCHEDULER Halide::Mullapudi2016
+                   PARAMS ${_camera_pipe_autoscheduler_params})
 
 # Main executable
 add_executable(camera_pipe_process process.cpp)
