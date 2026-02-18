@@ -39,6 +39,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "InferArguments.h"
+#include "InjectDmaTransfer.h"
 #include "InjectHostDevBufferCopies.h"
 #include "Inline.h"
 #include "LICM.h"
@@ -443,6 +444,8 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Flattening nested ramps...\n";
     s = flatten_nested_ramps(s);
     log("Lowering after flattening nested ramps:", s);
+
+    s = inject_dma_transfer(s, env);
 
     debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);

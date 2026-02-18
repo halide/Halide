@@ -618,6 +618,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"hexagon", Target::Hexagon},
     {"wasm", Target::WebAssembly},
     {"riscv", Target::RISCV},
+    {"xtensa", Target::Xtensa},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -738,6 +739,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
     {"arm_fp16", Target::ARMFp16},
+    {"xtensa_q8", Target::XtensaQ8},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     {"rvv", Target::RVV},
     {"armv8a", Target::ARMv8a},
@@ -934,6 +936,13 @@ bool merge_string(Target &t, const std::string &target) {
         if (!(arch_specified && t.arch == Target::ArchUnknown) ||
             !(os_specified && t.os == Target::OSUnknown) ||
             features_specified) {
+            return false;
+        }
+    }
+
+    if (t.arch == Target::Xtensa) {
+        // The only legal arch-bits-os for Xtensa is "xtensa-32-noos"
+        if (t.bits != 32 || t.os != Target::NoOS) {
             return false;
         }
     }
@@ -1491,7 +1500,12 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     const bool is_integer = t.is_int() || t.is_uint();
     const int data_size = t.bytes();
 
-    if (arch == Target::ARM) {
+    if (arch == Target::Xtensa) {
+        if (has_feature(Halide::Target::XtensaQ8)) {
+            return 128 / data_size;
+        }
+        return 64 / data_size;
+    } else if (arch == Target::ARM) {
         if (vector_bits != 0 &&
             (has_feature(Halide::Target::SVE2) ||
              (t.is_float() && has_feature(Halide::Target::SVE)))) {

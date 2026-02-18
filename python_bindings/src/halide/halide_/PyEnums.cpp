@@ -93,7 +93,8 @@ void define_enums(py::module &m) {
         .value("Hexagon", Target::Arch::Hexagon)
         .value("POWERPC", Target::Arch::POWERPC)
         .value("RISCV", Target::Arch::RISCV)
-        .value("WebAssembly", Target::Arch::WebAssembly);
+        .value("WebAssembly", Target::Arch::WebAssembly)
+        .value("Xtensa", Target::Arch::Xtensa);
 
     // Please keep sorted.
     py::enum_<Target::Processor>(m, "TargetProcessorTune")
@@ -188,6 +189,7 @@ void define_enums(py::module &m) {
         .value("SVE2", Target::Feature::SVE2)
         .value("ARMDotProd", Target::Feature::ARMDotProd)
         .value("ARMFp16", Target::Feature::ARMFp16)
+        .value("XtensaQ8", Target::Feature::XtensaQ8)
         .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)
         .value("RVV", Target::Feature::RVV)
         .value("ARMv8a", Target::Feature::ARMv8a)
