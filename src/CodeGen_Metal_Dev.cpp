@@ -774,26 +774,19 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
         }
     }
 
-    class FindShared : public IRVisitor {
-        using IRVisitor::visit;
-        void visit(const Allocate *op) override {
-            if (op->memory_type == MemoryType::GPUShared) {
-                internal_assert(alloc == nullptr)
-                    << "Found multiple shared allocations in metal kernel\n";
-                alloc = op;
-            }
+    const Allocate *shared_alloc = nullptr;
+    shared_name = "__shared";
+    visit_with(s, [&](auto *self, const Allocate *op) {
+        if (op->memory_type == MemoryType::GPUShared) {
+            internal_assert(shared_alloc == nullptr)
+                << "Found multiple shared allocations in metal kernel\n";
+            shared_alloc = op;
+            shared_name = op->name;
         }
+        // Recurse just to make sure there aren't multiple nested shared allocs
+        self->visit_base(op);
+    });
 
-    public:
-        const Allocate *alloc = nullptr;
-    } find_shared;
-    s.accept(&find_shared);
-
-    if (find_shared.alloc) {
-        shared_name = find_shared.alloc->name;
-    } else {
-        shared_name = "__shared";
-    }
     // Note that int4 below is an int32x4, not an int4_t. The type
     // is chosen to be large to maximize alignment.
     stream << ",\n"
@@ -890,16 +883,17 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
         // Compile the Metal source to a metallib.
         string metalir = tmpfile + ".ir";
         string metallib = tmpfile + "lib";
-        string cmd = string(metal_compiler) + " -c -o " + metalir + " " + tmpfile;
-        debug(2) << "Running: " << cmd << "\n";
 
-        int ret = system(cmd.c_str());
+        auto cc_cmd = split_string(metal_compiler, " ");
+        cc_cmd.insert(cc_cmd.end(), {"-c", "-o", metalir, tmpfile});
+
+        int ret = run_process(std::move(cc_cmd));
         user_assert(ret == 0) << "Metal compiler set, but failed to compile Metal source to Metal IR.\n";
 
-        cmd = string(metal_linker) + " -o " + metallib + " " + metalir;
-        debug(2) << "Running: " << cmd << "\n";
+        auto ld_cmd = split_string(metal_linker, " ");
+        ld_cmd.insert(ld_cmd.end(), {"-o", metallib, metalir});
 
-        ret = system(cmd.c_str());
+        ret = run_process(std::move(ld_cmd));
         user_assert(ret == 0) << "Metal linker set, but failed to compile Metal IR to Metal library.\n";
 
         // Read the metallib into a buffer.

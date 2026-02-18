@@ -426,7 +426,7 @@ struct Comparer {
                 cmp(&For::device_api);
                 cmp(&For::partition_policy);
                 cmp(&For::min);
-                cmp(&For::extent);
+                cmp(&For::max);
                 cmp(&For::body);
                 break;
             case IRNodeType::Acquire:

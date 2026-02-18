@@ -283,6 +283,21 @@ void CodeGen_LLVM::init_context() {
 
     // Ensure no Value pointers carry over from previous context.
     struct_type_recovery.clear();
+
+    if (any_strict_float) {
+        // Default all operations to strict, and relax any non-strict operations
+        // when possible. This is better than defaulting to relaxed and making
+        // some operations strict, because properties like no-nans are
+        // viral. It's no use having a strict comparison that respects nans if
+        // the source of the inputs was an op tagged with no-nans.
+        set_strict_fp_math();
+        // If the target has the strict_float flag, we act as if we're already
+        // inside a strict_float intrinsic.
+        in_strict_float = target.has_feature(Target::StrictFloat);
+    } else {
+        // Default all operations to relaxed.
+        set_fast_fp_math();
+    }
 }
 
 void CodeGen_LLVM::init_module() {
@@ -443,21 +458,6 @@ void CodeGen_LLVM::init_codegen(const std::string &name) {
 
     semaphore_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_t");
     internal_assert(semaphore_t_type) << "Did not find halide_semaphore_t in initial module";
-
-    if (any_strict_float) {
-        // Default all operations to strict, and relax any non-strict operations
-        // when possible. This is better than defaulting to relaxed and making
-        // some operations strict, because properties like no-nans are
-        // viral. It's no use having a strict comparison that respects nans if
-        // the source of the inputs was an op tagged with no-nans.
-        set_strict_fp_math();
-        // If the target has the strict_float flag, we act as if we're already
-        // inside a strict_float intrinsic.
-        in_strict_float = target.has_feature(Target::StrictFloat);
-    } else {
-        // Default all operations to relaxed.
-        set_fast_fp_math();
-    }
 }
 
 void CodeGen_LLVM::set_fast_fp_math() {
@@ -1362,13 +1362,10 @@ void CodeGen_LLVM::codegen(const Stmt &s) {
     value = nullptr;
     s.accept(this);
 }
-namespace {
 
-bool is_power_of_two(int x) {
+bool CodeGen_LLVM::is_power_of_two(int x) const {
     return (x & (x - 1)) == 0;
 }
-
-}  // namespace
 
 Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
@@ -2101,12 +2098,7 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             Value *flipped = codegen(flipped_load);
 
-            vector<int> indices(ramp->lanes);
-            for (int i = 0; i < ramp->lanes; i++) {
-                indices[i] = ramp->lanes - 1 - i;
-            }
-
-            value = shuffle_vectors(flipped, indices);
+            value = reverse_vector(flipped);
         } else if (ramp) {
             // Gather without generating the indices as a vector
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
@@ -2333,6 +2325,12 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
                                                  {VPArg(slice_val, 0), VPArg(vec_ptr, 1, alignment)})) {
                 store = dyn_cast<Instruction>(value);
             } else {
+                if (!slice_val->getType()->isVectorTy()) {
+                    slice_val = create_broadcast(slice_val, 1);
+                }
+                if (!slice_mask->getType()->isVectorTy()) {
+                    slice_mask = create_broadcast(slice_mask, 1);
+                }
                 store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
             }
             add_tbaa_metadata(store, op->name, slice_index);
@@ -2452,6 +2450,9 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
                 load_inst = dyn_cast<Instruction>(value);
             } else {
                 if (slice_mask != nullptr) {
+                    if (!slice_mask->getType()->isVectorTy()) {
+                        slice_mask = create_broadcast(slice_mask, 1);
+                    }
                     load_inst = builder->CreateMaskedLoad(slice_type, vec_ptr, llvm::Align(align_bytes), slice_mask);
                 } else {
                     load_inst = builder->CreateAlignedLoad(slice_type, vec_ptr, llvm::Align(align_bytes));
@@ -2487,14 +2488,10 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
                                     op->alignment, vpred, true, llvm_stride);
     } else if (ramp && stride && stride->value == -1) {
         debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
-        vector<int> indices(ramp->lanes);
-        for (int i = 0; i < ramp->lanes; i++) {
-            indices[i] = ramp->lanes - 1 - i;
-        }
 
         // Flip the predicate
         Value *vpred = codegen(op->predicate);
-        vpred = shuffle_vectors(vpred, indices);
+        vpred = reverse_vector(vpred);
 
         // Load the vector and then flip it in-place
         Expr flipped_base = ramp->base - ramp->lanes + 1;
@@ -2507,7 +2504,7 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
                                        op->param, const_true(op->type.lanes()), align);
 
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
-        value = shuffle_vectors(flipped, indices);
+        value = reverse_vector(flipped);
     } else {  // It's not dense vector load, we need to scalarize it
         Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
                                     op->param, const_true(op->type.lanes()), op->alignment);
@@ -2857,7 +2854,11 @@ void CodeGen_LLVM::visit(const Call *op) {
             value = phi;
         }
     } else if (op->is_intrinsic(Call::round)) {
-        value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
+        value = call_overloaded_intrin(op->type, "roundeven", op->args);
+        if (!value) {
+            debug(2) << "llvm.roundeven intrinsic not available (Is FP16 enabled?). Using fallback instead.\n";
+            value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
+        }
     } else if (op->is_intrinsic(Call::require)) {
         internal_assert(op->args.size() == 3);
         Expr cond = op->args[0];
@@ -3722,7 +3723,7 @@ void CodeGen_LLVM::visit(const ProducerConsumer *op) {
 
 void CodeGen_LLVM::visit(const For *op) {
     Value *min = codegen(op->min);
-    Value *extent = codegen(op->extent);
+    Value *max = codegen(op->max);
     const Acquire *acquire = op->body.as<Acquire>();
 
     // TODO(zvookin): remove this after validating it doesn't happen
@@ -3732,8 +3733,6 @@ void CodeGen_LLVM::visit(const For *op) {
                        !expr_uses_var(acquire->count, op->name))));
 
     if (op->for_type == ForType::Serial) {
-
-        Value *max = builder->CreateNSWAdd(min, extent);
 
         BasicBlock *preheader_bb = builder->GetInsertBlock();
 
@@ -3745,8 +3744,8 @@ void CodeGen_LLVM::visit(const For *op) {
         BasicBlock *after_bb = BasicBlock::Create(
             *context, std::to_string(for_loop_id) + std::string("_end_for_") + op->name, function);
 
-        // If min < max, fall through to the loop bb
-        Value *enter_condition = builder->CreateICmpSLT(min, max);
+        // If min <= max, fall through to the loop bb
+        Value *enter_condition = builder->CreateICmpSLE(min, max);
         builder->CreateCondBr(enter_condition, loop_bb, after_bb, very_likely_branch);
         builder->SetInsertPoint(loop_bb);
 
@@ -3767,7 +3766,7 @@ void CodeGen_LLVM::visit(const For *op) {
         phi->addIncoming(next_var, builder->GetInsertBlock());
 
         // Maybe exit the loop
-        Value *end_condition = builder->CreateICmpNE(next_var, max);
+        Value *end_condition = builder->CreateICmpSLE(next_var, max);
         builder->CreateCondBr(end_condition, loop_bb, after_bb);
 
         builder->SetInsertPoint(after_bb);
@@ -4139,10 +4138,22 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
     } else if (op->is_concat()) {
         value = concat_vectors(vecs);
     } else {
+        auto can_divide_lanes = [this](int lanes, int factor) -> bool {
+            if (lanes % factor) {
+                return false;
+            }
+            if (effective_vscale == 0) {
+                return true;
+            } else {
+                int divided = lanes / factor;
+                return (divided % effective_vscale) == 0 && (divided / effective_vscale) > 1;
+            }
+        };
+
         // If the even-numbered indices equal the odd-numbered
         // indices, only generate one and then do a self-interleave.
         for (int f : {4, 3, 2}) {
-            bool self_interleave = (op->indices.size() % f) == 0;
+            bool self_interleave = can_divide_lanes(op->indices.size(), f);
             for (size_t i = 0; i < op->indices.size(); i++) {
                 self_interleave &= (op->indices[i] == op->indices[i - (i % f)]);
             }
@@ -4158,8 +4169,8 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             }
 
             // Check for an interleave of slices (i.e. an in-vector transpose)
-            bool interleave_of_slices = op->vectors.size() == 1 && (op->indices.size() % f) == 0;
             int step = op->type.lanes() / f;
+            bool interleave_of_slices = can_divide_lanes(op->indices.size(), f) && step != 1 && op->vectors.size() == 1;
             for (int i = 0; i < step; i++) {
                 for (int j = 0; j < f; j++) {
                     interleave_of_slices &= (op->indices[i * f + j] == j * step + i);
@@ -4173,13 +4184,14 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
                     slices.push_back(slice_vector(value, i * step, step));
                 }
                 value = interleave_vectors(slices);
+                return;
             }
         }
         // If the indices form contiguous aligned runs, do the shuffle
         // on entire sub-vectors by reinterpreting them as a wider
         // type.
         for (int f : {8, 4, 2}) {
-            if (op->type.lanes() % f != 0) {
+            if (!can_divide_lanes(op->type.lanes(), f)) {
                 continue;
             }
 
@@ -4188,7 +4200,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             }
             bool contiguous = true;
             for (const Expr &vec : op->vectors) {
-                contiguous &= ((vec.type().lanes() % f) == 0);
+                contiguous &= can_divide_lanes(vec.type().lanes(), f);
             }
             for (size_t i = 0; i < op->indices.size(); i += f) {
                 contiguous &= (op->indices[i] % f) == 0;
@@ -4991,6 +5003,19 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
     return vecs[0];
 }
 
+Value *CodeGen_LLVM::reverse_vector(llvm::Value *vec) {
+    if (effective_vscale > 0) {
+        return builder->CreateVectorReverse(vec);
+    } else {
+        const int lanes = get_vector_num_elements(vec->getType());
+        vector<int> indices(lanes);
+        for (int i = 0; i < lanes; i++) {
+            indices[i] = lanes - 1 - i;
+        }
+        return shuffle_vectors(vec, indices);
+    }
+}
+
 Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
                                      const std::vector<int> &indices) {
     if (isa<llvm::ScalableVectorType>(a->getType())) {
@@ -5408,6 +5433,10 @@ llvm::Constant *CodeGen_LLVM::get_splat(int lanes, llvm::Constant *value,
     llvm::ElementCount ec = scalable ? llvm::ElementCount::getScalable(lanes) :
                                        llvm::ElementCount::getFixed(lanes);
     return ConstantVector::getSplat(ec, value);
+}
+
+bool CodeGen_LLVM::is_scalable_vector(llvm::Value *v) const {
+    return isa<ScalableVectorType>(v->getType());
 }
 
 std::string CodeGen_LLVM::mangle_llvm_type(llvm::Type *type) {

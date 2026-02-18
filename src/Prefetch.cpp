@@ -246,7 +246,7 @@ private:
 
         Stmt stmt;
         if (!body.same_as(op->body)) {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, std::move(body));
+            stmt = For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, std::move(body));
         } else {
             stmt = op;
         }
@@ -300,7 +300,7 @@ class ReducePrefetchDimension : public IRMutator {
 
             stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
-                stmt = For::make(index_names[i], 0, prefetch->args[(i + max_dim) * 2 + 2],
+                stmt = For::make(index_names[i], 0, prefetch->args[(i + max_dim) * 2 + 2] - 1,
                                  ForType::Serial, Partition::Auto, DeviceAPI::None, stmt);
             }
             debug(5) << "\nReduce prefetch to " << max_dim << " dim:\n"
@@ -371,7 +371,7 @@ class SplitPrefetch : public IRMutator {
             vector<Expr> args = {base, std::move(new_offset), std::move(new_extent), std::move(new_stride)};
             stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
-                stmt = For::make(index_names[i], 0, extents[i],
+                stmt = For::make(index_names[i], 0, extents[i] - 1,
                                  ForType::Serial, Partition::Auto, DeviceAPI::None, stmt);
             }
             debug(5) << "\nSplit prefetch to max of " << max_byte_size << " bytes:\n"

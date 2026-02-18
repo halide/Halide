@@ -1,0 +1,76 @@
+name: Makefile
+
+env:
+  LLVM_VERSION: '21'
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    paths-ignore:
+      - ".github/**"
+      - "!.github/workflows/testing-make.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_make:
+    name: build on ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - macos-15-intel
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+            echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-$LLVM_VERSION main" | sudo tee /etc/apt/sources.list.d/llvm-$LLVM_VERSION.list
+            sudo apt-get update
+            sudo apt-get install -y \
+              build-essential pkg-config libpng-dev libjpeg-turbo8-dev \
+              llvm-$LLVM_VERSION-dev clang-$LLVM_VERSION lld-$LLVM_VERSION liblld-$LLVM_VERSION-dev
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew install llvm@$LLVM_VERSION lld@$LLVM_VERSION libjpeg-turbo libpng pkgconf protobuf
+          fi
+
+      - name: Set up environment
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            echo "LLVM_CONFIG=llvm-config-$LLVM_VERSION" | tee -a "$GITHUB_ENV"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            echo "LLVM_CONFIG=$(brew --prefix llvm@$LLVM_VERSION)/bin/llvm-config" | tee -a "$GITHUB_ENV"
+          fi
+          echo "MAKEFLAGS=-j $(getconf _NPROCESSORS_ONLN)" | tee -a "$GITHUB_ENV"
+
+      - run: make build_tests
+
+      - run: make test_internal
+        continue-on-error: true
+
+      - run: make test_correctness
+        continue-on-error: true
+
+      - run: make test_generator
+        continue-on-error: true
+
+      - run: make test_error
+        continue-on-error: true
+
+      - run: make test_warning
+        continue-on-error: true
+
+      - run: make test_apps
+        continue-on-error: true
+
+      - run: make test_tutorial
+        continue-on-error: true

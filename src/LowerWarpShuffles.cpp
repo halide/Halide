@@ -76,8 +76,8 @@ Expr reduce_expr_helper(Expr e, const Expr &modulus) {
 }
 
 Expr reduce_expr(Expr e, const Expr &modulus, const Scope<Interval> &bounds) {
-    e = reduce_expr_helper(simplify(e, true, bounds), modulus);
-    if (is_const_one(simplify(e >= 0 && e < modulus, true, bounds))) {
+    e = reduce_expr_helper(simplify(e, bounds), modulus);
+    if (is_const_one(simplify(e >= 0 && e < modulus, bounds))) {
         return e;
     } else {
         return e % modulus;
@@ -234,11 +234,11 @@ class DetermineAllocStride : public IRVisitor {
 
     void visit(const For *op) override {
         ScopedBinding<Interval>
-            bind_bounds_if(is_const(op->min) && is_const(op->extent),
-                           bounds, op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+            bind_bounds_if(is_const(op->min) && is_const(op->max),
+                           bounds, op->name, Interval(op->min, op->max));
         ScopedBinding<Expr>
             bound_dependent_if((expr_uses_vars(op->min, dependent_vars) ||
-                                expr_uses_vars(op->extent, dependent_vars)),
+                                expr_uses_vars(op->max, dependent_vars)),
                                dependent_vars, op->name, Expr());
         IRVisitor::visit(op);
     }
@@ -285,7 +285,7 @@ public:
 
     // A version of can_prove which exploits the constant bounds we've been tracking
     bool can_prove(const Expr &e) {
-        return is_const_one(simplify(e, true, bounds));
+        return is_const_one(simplify(e, bounds));
     }
 
     Expr get_stride() {
@@ -372,16 +372,17 @@ class LowerWarpShuffles : public IRMutator {
 
     Stmt visit(const For *op) override {
         ScopedBinding<Interval>
-            bind_if(is_const(op->min) && is_const(op->extent),
-                    bounds, op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
+            bind_if(is_const(op->min) && is_const(op->max),
+                    bounds, op->name, Interval(op->min, op->max));
         if (!this_lane.defined() && op->for_type == ForType::GPULane) {
 
             bool should_mask = false;
             ScopedValue<Expr> old_warp_size(warp_size);
+            Expr extent = simplify(op->extent());
             if (op->for_type == ForType::GPULane) {
-                auto loop_size = as_const_int(op->extent);
+                auto loop_size = as_const_int(extent);
                 user_assert(loop_size && *loop_size <= 32)
-                    << "CUDA gpu lanes loop must have constant extent of at most 32: " << op->extent << "\n";
+                    << "CUDA gpu lanes loop must have constant extent of at most 32: " << extent << "\n";
 
                 // Select a warp size - the smallest power of two that contains the loop size
                 int64_t ws = 1;
@@ -391,7 +392,7 @@ class LowerWarpShuffles : public IRMutator {
                 should_mask = (ws != *loop_size);
                 warp_size = make_const(Int(32), ws);
             } else {
-                warp_size = op->extent;
+                warp_size = extent;
             }
             this_lane_name = op->name;
             this_lane = Variable::make(Int(32), op->name);
@@ -408,8 +409,9 @@ class LowerWarpShuffles : public IRMutator {
                 // with storage striped across the warp lanes, so the
                 // size required per-lane is the old size divided by
                 // the number of lanes (rounded up).
-                Expr new_size = (alloc->extents[0] + op->extent - 1) / op->extent;
-                new_size = simplify(new_size, true, bounds);
+                Expr extent = op->extent();
+                Expr new_size = (alloc->extents[0] + extent - 1) / extent;
+                new_size = simplify(new_size, bounds);
                 new_size = find_constant_bound(new_size, Direction::Upper, bounds);
                 auto sz = as_const_int(new_size);
                 user_assert(sz) << "Warp-level allocation with non-constant size: "
@@ -423,7 +425,7 @@ class LowerWarpShuffles : public IRMutator {
 
             if (should_mask) {
                 // Mask off the excess lanes in the warp
-                body = IfThenElse::make(this_lane < op->extent, body, Stmt());
+                body = IfThenElse::make(this_lane <= op->max, body, Stmt());
             }
 
             // Wrap the hoisted warp-level allocations, at their new
@@ -455,7 +457,7 @@ class LowerWarpShuffles : public IRMutator {
             }
             allocations.clear();
 
-            return For::make(op->name, op->min, warp_size,
+            return For::make(op->name, op->min, op->min + warp_size - 1,
                              op->for_type, op->partition_policy, op->device_api, body);
         } else {
             return IRMutator::visit(op);
@@ -509,7 +511,7 @@ class LowerWarpShuffles : public IRMutator {
             // of the index and shifting the high bits down to cover
             // them. Reassembling the result into a flat address gives
             // the expression below.
-            Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), true, bounds);
+            Expr in_warp_idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), bounds);
             return Store::make(op->name, value, in_warp_idx, op->param, op->predicate, ModulusRemainder());
         } else {
             return IRMutator::visit(op);
@@ -534,7 +536,7 @@ class LowerWarpShuffles : public IRMutator {
                 // Load the right lanes from stripe number i
                 equiv = select(idx >= i, make_warp_load(type, name, make_const(idx.type(), i), lane), equiv);
             }
-            return simplify(equiv, true, bounds);
+            return simplify(equiv, bounds);
         }
 
         // Load the value to be shuffled
@@ -604,7 +606,7 @@ class LowerWarpShuffles : public IRMutator {
         } else if (expr_match((this_lane + wild) % wild, lane, result) &&
                    (bits = is_const_power_of_two_integer(result[1])) &&
                    *bits <= 5) {
-            result[0] = simplify(result[0] % result[1], true, bounds);
+            result[0] = simplify(result[0] % result[1], bounds);
             // Rotate. Mux a shuffle up and a shuffle down. Uses fewer
             // intermediate registers than using a general gather for
             // this.
@@ -615,7 +617,7 @@ class LowerWarpShuffles : public IRMutator {
                                  shfl_args({membermask, base_val, (1 << *bits) - result[0], 0}), Call::PureExtern);
             Expr cond = (this_lane >= (1 << *bits) - result[0]);
             Expr equiv = select(cond, up, down);
-            shuffled = simplify(equiv, true, bounds);
+            shuffled = simplify(equiv, bounds);
         } else {
             // The format of the mask is a pain. The high bits tell
             // you how large the a warp is for this instruction
@@ -645,10 +647,10 @@ class LowerWarpShuffles : public IRMutator {
             Expr stride = alloc->stride;
 
             // Break the index into lane and stripe components
-            Expr lane = simplify(reduce_expr(idx / stride, warp_size, bounds), true, bounds);
-            idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), true, bounds);
+            Expr lane = simplify(reduce_expr(idx / stride, warp_size, bounds), bounds);
+            idx = simplify((idx / (warp_size * stride)) * stride + reduce_expr(idx, stride, bounds), bounds);
             // We don't want the idx to depend on the lane var, so try to eliminate it
-            idx = simplify(solve_expression(idx, this_lane_name).result, true, bounds);
+            idx = simplify(solve_expression(idx, this_lane_name).result, bounds);
             return make_warp_load(op->type, op->name, idx, lane);
         } else {
             return IRMutator::visit(op);
@@ -732,7 +734,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
         } else {
             debug(3) << "Successfully hoisted shuffle out of for loop\n";
         }
-        return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
+        return For::make(op->name, op->min, op->max, op->for_type, op->partition_policy, op->device_api, body);
     }
 
     Stmt visit(const Store *op) override {

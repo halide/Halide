@@ -1250,50 +1250,36 @@ const Call *Function::is_wrapper() const {
     }
 }
 
-namespace {
-
-// Replace all calls to functions listed in 'substitutions' with their wrappers.
-class SubstituteCalls : public IRMutator {
-    using IRMutator::visit;
-
-    const map<FunctionPtr, FunctionPtr> &substitutions;
-
-    Expr visit(const Call *c) override {
-        Expr expr = IRMutator::visit(c);
-        c = expr.as<Call>();
-        internal_assert(c);
-
-        if ((c->call_type == Call::Halide) &&
-            c->func.defined() &&
-            substitutions.count(c->func)) {
-            auto it = substitutions.find(c->func);
-            internal_assert(it != substitutions.end())
-                << "Function not in environment: " << c->func->name << "\n";
-            FunctionPtr subs = it->second;
-            debug(4) << "...Replace call to Func \"" << c->name << "\" with "
-                     << "\"" << subs->name << "\"\n";
-            expr = Call::make(c->type, subs->name, c->args, c->call_type,
-                              subs, c->value_index,
-                              c->image, c->param);
-        }
-        return expr;
-    }
-
-public:
-    SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
-        : substitutions(substitutions) {
-    }
-};
-
-}  // anonymous namespace
-
 Function &Function::substitute_calls(const map<FunctionPtr, FunctionPtr> &substitutions) {
     debug(4) << "Substituting calls in " << name() << "\n";
     if (substitutions.empty()) {
         return *this;
     }
-    SubstituteCalls subs_calls(substitutions);
-    contents->mutate(&subs_calls);
+
+    // Replace all calls to functions listed in 'substitutions' with their wrappers.
+    auto m = LambdaMutator{
+        [&](auto *self, const Call *c) {
+            Expr expr = self->visit_base(c);
+            c = expr.as<Call>();
+            internal_assert(c);
+
+            if ((c->call_type == Call::Halide) &&
+                c->func.defined() &&
+                substitutions.count(c->func)) {
+                auto it = substitutions.find(c->func);
+                internal_assert(it != substitutions.end())
+                    << "Function not in environment: " << c->func->name << "\n";
+                FunctionPtr subs = it->second;
+                debug(4) << "...Replace call to Func \"" << c->name << "\" with "
+                         << "\"" << subs->name << "\"\n";
+                expr = Call::make(c->type, subs->name, c->args, c->call_type,
+                                  subs, c->value_index,
+                                  c->image, c->param);
+            }
+            return expr;
+        }};
+
+    contents->mutate(&m);
     return *this;
 }
 

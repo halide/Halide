@@ -236,7 +236,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after uniquifying variable names:", s);
 
     debug(1) << "Simplifying...\n";
-    s = simplify(s, false);  // Storage folding and allocation bounds inference needs .loop_max symbols
+    s = simplify(s);
     log("Lowering after first simplification:", s);
 
     debug(1) << "Simplifying correlated differences...\n";
@@ -493,7 +493,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_gpu_feature()) {
         debug(1) << "Offloading GPU loops...\n";
-        s = inject_gpu_offload(s, t);
+        s = inject_gpu_offload(s, t, any_strict_float);
         debug(2) << "Lowering after splitting off GPU loops:\n"
                  << s << "\n\n";
     } else {
@@ -583,23 +583,19 @@ void lower_impl(const vector<Function> &output_funcs,
     // We're about to drop the environment and outputs vector, which
     // contain the only strong refs to Functions that may still be
     // pointed to by the IR. So make those refs strong.
-    class StrengthenRefs : public IRMutator {
-        using IRMutator::visit;
-        Expr visit(const Call *c) override {
-            Expr expr = IRMutator::visit(c);
-            c = expr.as<Call>();
-            internal_assert(c);
-            if (c->func.defined()) {
-                FunctionPtr ptr = c->func;
-                ptr.strengthen();
-                expr = Call::make(c->type, c->name, c->args, c->call_type,
-                                  ptr, c->value_index,
-                                  c->image, c->param);
-            }
-            return expr;
+    s = mutate_with(s, [&](auto *self, const Call *c) {
+        Expr expr = self->visit_base(c);
+        c = expr.as<Call>();
+        internal_assert(c);
+        if (c->func.defined()) {
+            FunctionPtr ptr = c->func;
+            ptr.strengthen();
+            expr = Call::make(c->type, c->name, c->args, c->call_type,
+                              ptr, c->value_index,
+                              c->image, c->param);
         }
-    };
-    s = StrengthenRefs().mutate(s);
+        return expr;
+    });
 
     LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
 

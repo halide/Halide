@@ -512,6 +512,9 @@ protected:
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
+    /** Reverse elements in a vector */
+    llvm::Value *reverse_vector(llvm::Value *vec);
+
     /** Create an LLVM shuffle vectors instruction. Takes a combination of
      * fixed or scalable vectors as input, so long as the effective lengths match,
      * but always returns a fixed vector. */
@@ -519,6 +522,10 @@ protected:
                                          const std::vector<int> &indices);
     /** Shorthand for shuffling a single vector. */
     llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
+
+    bool is_power_of_two(int x) const;
+
+    bool is_scalable_vector(llvm::Value *v) const;
 
     /** Go looking for a vector version of a runtime function. Will
      * return the best match. Matches in the following order:

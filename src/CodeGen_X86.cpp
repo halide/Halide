@@ -524,7 +524,8 @@ void CodeGen_X86::visit(const Cast *op) {
     if (target.has_feature(Target::F16C) &&
         dst.code() == Type::Float &&
         src.code() == Type::Float &&
-        (dst.bits() == 16 || src.bits() == 16)) {
+        (dst.bits() == 16 || src.bits() == 16) &&
+        src.bits() <= 32) {  // Don't use for narrowing casts from double - it results in a libm call
         // Node we use code() == Type::Float instead of is_float(), because we
         // don't want to catch bfloat casts.
 
@@ -580,13 +581,6 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
-    if (op->is_intrinsic(Call::round)) {
-        value = call_overloaded_intrin(op->type, "round", op->args);
-        if (value) {
-            return;
-        }
-    }
-
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors beyond this point.
         CodeGen_Posix::visit(op);
